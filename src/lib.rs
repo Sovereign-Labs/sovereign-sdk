@@ -17,10 +17,7 @@ trait Prover {
         da_height: u64,
     ) -> Result<
         (
-            Vec<(
-                <<Self as Prover>::Da as Da>::Blob,
-                <<Self as Prover>::Da as Da>::InclusionProof,
-            )>,
+            Vec<<<Self as Prover>::Da as Da>::BlobWithInclusionProof>,
             <<Self as Prover>::Da as Da>::CompletenessProof,
         ),
         Self::Error,
@@ -35,7 +32,7 @@ trait Prover {
     ) -> Option<<<Self as Prover>::Stf as Stf>::Misbehavior>;
 }
 
-trait DataBlob {
+trait DataBlob: PartialEq + Debug {
     type Metadata;
     // type Data = Vec<u8>;
     type Data;
@@ -54,16 +51,28 @@ trait StateCommitment: PartialEq + Debug + Clone {
 }
 trait Header: PartialEq {
     type Hash;
-
+    /// Get the block height at which this header appears
     fn height(&self) -> u64;
+    /// Get the  hash of this header
     fn hash(&self) -> Self::Hash;
+}
+
+/// A proof that a blob of data is contained in a particular block
+///
+/// The canonical example is a merkle proof of a pay-for-data transaction on Celestia
+trait InclusionProof {
+    type Data: DataBlob;
+    type BlockHash: PartialEq + Debug;
+    type Error;
+    /// Verify this inclusion proof against a blockhash.
+    fn verify(self, blockhash: &Self::BlockHash) -> Result<Self::Data, Self::Error>;
 }
 /// A data availability layer
 trait Da {
     type BlockHash: PartialEq + Debug;
     type Header: Header<Hash = Self::BlockHash>;
     /// A proof that a particular blob of data is included in the Da::Header
-    type InclusionProof;
+    type BlobWithInclusionProof: InclusionProof<Data = Self::Blob>;
     type Blob: DataBlob;
     type CompletenessProof;
     type Error: Debug;
@@ -79,7 +88,7 @@ trait Da {
     // #[risc0::method]
     fn verify_potential_block_list(
         da_header: Self::Header,
-        potential_blocks: Vec<(Self::Blob, Self::InclusionProof)>,
+        potential_blocks: Vec<Self::BlobWithInclusionProof>,
         completeness_proof: Self::CompletenessProof,
     ) -> Result<Vec<Self::Blob>, Self::Error>;
 }
@@ -96,25 +105,26 @@ trait Stf {
     ///
     /// This validation should inspect the blob's metadata
     // #[risc0::method]
-    fn validate_opaque_blob(blob: &Self::DataBlob, prev_state: Self::StateRoot) -> bool;
+    fn validate_opaque_blob(blob: &Self::DataBlob, prev_state: &Self::StateRoot) -> bool;
 
     /// Deserialize a valid blob into a block. Accept an optional proof of misbehavior (for example, an invalid signature)
     /// to short-circuit the block application, returning a new stateroot to account for the slashing of the sequencer
     fn prepare_block(
         blob: Self::DataBlob,
-        prev_state: Self::StateRoot,
+        prev_state: &Self::StateRoot,
         misbehavior_hint: Option<Self::Misbehavior>,
     ) -> Result<Self::Block, Self::StateRoot>;
 
     /// Apply a block
-    fn apply_block(blk: Self::Block, prev_state: Self::StateRoot) -> Self::StateRoot;
+    fn apply_block(blk: Self::Block, prev_state: &Self::StateRoot) -> Self::StateRoot;
 }
 
+/// A succinct proof
 pub trait Proof {
     type VerificationError: std::fmt::Debug;
     type MethodId;
 
-    fn get_log(&self) -> &[u8];
+    fn authenicated_log(&self) -> &[u8];
     fn verify(&self) -> Result<(), Self::VerificationError>;
 }
 
@@ -130,20 +140,26 @@ trait ChainProof: Proof {
 
 trait ExecutionProof: Proof {
     type Rollup: Stf;
-    fn blocks_applied(&self) -> &[<<Self as ExecutionProof>::Rollup as Stf>::Block];
+    type DaLayer: Da;
+    fn blobs_applied(&self) -> &[<<Self as ExecutionProof>::DaLayer as Da>::Blob];
     fn pre_state_root(&self) -> <<Self as ExecutionProof>::Rollup as Stf>::StateRoot;
     // returns the state root after applying
     fn post_state_root(&self) -> <<Self as ExecutionProof>::Rollup as Stf>::StateRoot;
 }
 
-trait ChainProver {}
+pub enum VerificationType<P: Proof> {
+    /// A computation which is done immediately
+    Inline,
+    /// A computation which has already been proven by some other process and should be aggregated into the current execution
+    PreProcessed(P),
+}
 
 trait Chain {
     type DataBlob: DataBlob;
     type DaLayer: Da<Blob = Self::DataBlob>;
     type Rollup: Stf<DataBlob = Self::DataBlob>;
     type ChainProof: ChainProof<DaLayer = Self::DaLayer, Rollup = Self::Rollup>;
-    type ExecutionProof: ExecutionProof<Rollup = Self::Rollup>;
+    type ExecutionProof: ExecutionProof<Rollup = Self::Rollup, DaLayer = Self::DaLayer>;
     // Verifies that prev_head.da_hash is Da_header.prev_hash
     // calculates the set of sequencers, potentially using the previous rollup state
     // and returns an array of rollup blocks from those sequencers
@@ -151,7 +167,6 @@ trait Chain {
     fn extend_da_chain(
         prev_head: Self::ChainProof,
         header: <<Self as Chain>::DaLayer as Da>::Header,
-        rollup_namespace_data: &[<<Self as Chain>::DaLayer as Da>::InclusionProof],
     ) -> Result<Vec<Self::DataBlob>, <<Self as Chain>::DaLayer as Da>::Error> {
         prev_head.verify().expect("proof must be valid");
         assert_eq!(prev_head.da_hash(), header.hash());
@@ -162,51 +177,59 @@ trait Chain {
             potential_blocks,
             completeness_proof,
         )?;
-        let latest_state_commitment = prev_head.state_root();
-        let filtered_blocks = blocks
-            .into_iter()
-            .filter(|blob| {
-                Self::Rollup::validate_opaque_blob(blob, latest_state_commitment.clone())
-            })
-            .collect();
 
-        return Ok(filtered_blocks);
+        return Ok(blocks);
     }
 
-    fn apply_rollup_blocks(
-        blks: Vec<<Self::Rollup as Stf>::Block>,
-        prev_root: <Self::Rollup as Stf>::StateRoot,
+    // #[risc0::method]
+    fn process_blob(
+        blob: Self::DataBlob,
+        current_root: <Self::Rollup as Stf>::StateRoot,
     ) -> <Self::Rollup as Stf>::StateRoot {
-        let mut root = prev_root;
-        for blk in blks.into_iter() {
-            root = <Self::Rollup as Stf>::apply_block(blk, root)
+        if Self::Rollup::validate_opaque_blob(&blob, &current_root) {
+            let misbehavior_hint = env::read_unchecked();
+            match Self::Rollup::prepare_block(blob, &current_root, misbehavior_hint)
+                .map(|block| Self::Rollup::apply_block(block, &current_root))
+            {
+                Ok(root) => root,
+                Err(root) => root,
+            }
+        } else {
+            current_root
         }
-        return root;
     }
 
-    fn execute_or_verify_stf(
+    /// Verify the application of the state transition function to every blob in the provided array, starting from the
+    /// pre-state root.
+    // #[risc0::method]
+    fn verify_stf(
         blobs: Vec<Self::DataBlob>,
         prev_root: <Self::Rollup as Stf>::StateRoot,
     ) -> <Self::Rollup as Stf>::StateRoot {
         let mut current_root = prev_root;
-        let mut blocks = Vec::new();
-        // Deserialize each blob. If deserializing fails, slash the sequencer and update the current state root
-        for blob in blobs.into_iter() {
-            let misbehavior_hint = env::read_unchecked();
-            match Self::Rollup::prepare_block(blob, current_root.clone(), misbehavior_hint) {
-                Ok(blk) => blocks.push(blk),
-                Err(root) => current_root = root,
-            };
+        let mut blobs = blobs.into_iter();
+        while blobs.len() != 0 {
+            let computation_type: VerificationType<Self::ExecutionProof> = env::read_unchecked();
+            match computation_type {
+                VerificationType::Inline => {
+                    current_root = Self::process_blob(
+                        blobs
+                            .next()
+                            .expect("Next blob must exist because of check at top of loop"),
+                        current_root,
+                    )
+                }
+                VerificationType::PreProcessed(proof) => {
+                    assert_eq!(proof.pre_state_root(), current_root);
+                    for blob in proof.blobs_applied() {
+                        assert_eq!(Some(blob), blobs.next().as_ref())
+                    }
+                    proof.verify().expect("proof must be valid");
+                    current_root = proof.post_state_root();
+                }
+            }
         }
-
-        let pf: Option<Self::ExecutionProof> = env::read_unchecked();
-        if let Some(proof) = pf {
-            assert_eq!(proof.blocks_applied(), blocks);
-            assert_eq!(proof.pre_state_root(), current_root);
-            proof.verify().expect("proof must be valid");
-            return proof.post_state_root();
-        }
-        return Self::apply_rollup_blocks(blocks, current_root);
+        current_root
     }
 
     ///
@@ -215,16 +238,15 @@ trait Chain {
     fn extend_chain(
         prev_head: Self::ChainProof,
         da_header: <Self::DaLayer as Da>::Header,
-        rollup_namespace_data: &[<Self::DaLayer as Da>::InclusionProof],
     ) -> (
         <Self::DaLayer as Da>::BlockHash,
         <Self::Rollup as Stf>::StateRoot,
     ) {
         let prev_root = prev_head.state_root();
         let da_hash = da_header.hash();
-        let rollup_blocks = Self::extend_da_chain(prev_head, da_header, rollup_namespace_data)
-            .expect("Prover must be honest");
-        let output_root = Self::execute_or_verify_stf(rollup_blocks, prev_root);
+        let rollup_blocks =
+            Self::extend_da_chain(prev_head, da_header).expect("Prover must be honest");
+        let output_root = Self::verify_stf(rollup_blocks, prev_root);
         return (da_hash, output_root);
     }
 }
