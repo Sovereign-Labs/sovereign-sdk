@@ -1,6 +1,6 @@
 # Bridging
 
-Interoperability is at the core of Stratum's value proposition. To facilitate bridging, we use off-chain proof aggregation. This allows
+Interoperability is at the core of Sovereign's value proposition. To facilitate bridging, we use off-chain proof aggregation. This allows
 each rollup to connect to a large number of peers with very low overhead.
 
 ## Model
