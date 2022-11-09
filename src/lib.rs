@@ -6,7 +6,7 @@ mod env {
     }
 }
 
-trait Prover {
+pub trait Prover {
     type Chain;
     type Da: Da;
     type Stf: Stf;
@@ -17,7 +17,7 @@ trait Prover {
         da_height: u64,
     ) -> Result<
         (
-            Vec<<<Self as Prover>::Da as Da>::BlobWithInclusionProof>,
+            Vec<<<Self as Prover>::Da as Da>::SignedDataWithInclusionProof>,
             <<Self as Prover>::Da as Da>::CompletenessProof,
         ),
         Self::Error,
@@ -28,11 +28,11 @@ trait Prover {
     /// Validate the contents of the blob without reference to the current state of the blockchain.
     /// This probably just means checking that the block deserializes and that all of the signatures are valid.
     fn check_for_misbehavior(
-        blob: <<Self as Prover>::Da as Da>::Blob,
+        blob: <<Self as Prover>::Da as Da>::SignedData,
     ) -> Option<<<Self as Prover>::Stf as Stf>::Misbehavior>;
 }
 
-trait DataBlob: PartialEq + Debug {
+pub trait DataBlob: PartialEq + Debug {
     type Metadata;
     // type Data = Vec<u8>;
     type Data;
@@ -43,13 +43,13 @@ trait DataBlob: PartialEq + Debug {
     fn metadata(&self) -> &Self::Metadata;
 }
 
-trait StateCommitment: PartialEq + Debug + Clone {
+pub trait StateCommitment: PartialEq + Debug + Clone {
     type Key;
     type Value;
     fn get(key: Self::Key) -> Self::Value;
     fn put(key: Self::Key, value: Self::Value) -> Self;
 }
-trait Header: PartialEq {
+pub trait Header: PartialEq {
     type Hash;
     /// Get the block height at which this header appears
     fn height(&self) -> u64;
@@ -60,20 +60,20 @@ trait Header: PartialEq {
 /// A proof that a blob of data is contained in a particular block
 ///
 /// The canonical example is a merkle proof of a pay-for-data transaction on Celestia
-trait InclusionProof {
-    type Data: DataBlob;
+pub trait InclusionProof {
+    type SignedData: DataBlob;
     type BlockHash: PartialEq + Debug;
     type Error;
     /// Verify this inclusion proof against a blockhash.
-    fn verify(self, blockhash: &Self::BlockHash) -> Result<Self::Data, Self::Error>;
+    fn verify(self, blockhash: &Self::BlockHash) -> Result<Self::SignedData, Self::Error>;
 }
 /// A data availability layer
-trait Da {
+pub trait Da {
     type BlockHash: PartialEq + Debug;
     type Header: Header<Hash = Self::BlockHash>;
     /// A proof that a particular blob of data is included in the Da::Header
-    type BlobWithInclusionProof: InclusionProof<Data = Self::Blob>;
-    type Blob: DataBlob;
+    type SignedDataWithInclusionProof: InclusionProof<SignedData = Self::SignedData>;
+    type SignedData: DataBlob;
     type CompletenessProof;
     type Error: Debug;
 
@@ -88,15 +88,15 @@ trait Da {
     // #[risc0::method]
     fn verify_potential_block_list(
         da_header: Self::Header,
-        potential_blocks: Vec<Self::BlobWithInclusionProof>,
+        potential_blocks: Vec<Self::SignedDataWithInclusionProof>,
         completeness_proof: Self::CompletenessProof,
-    ) -> Result<Vec<Self::Blob>, Self::Error>;
+    ) -> Result<Vec<Self::SignedData>, Self::Error>;
 }
 /// A state transition function
-trait Stf {
+pub trait Stf {
     type Block: PartialEq + Debug;
     type StateRoot: StateCommitment;
-    type DataBlob: DataBlob;
+    type SignedData: DataBlob;
     type Misbehavior;
     type Error;
 
@@ -105,12 +105,12 @@ trait Stf {
     ///
     /// This validation should inspect the blob's metadata
     // #[risc0::method]
-    fn validate_opaque_blob(blob: &Self::DataBlob, prev_state: &Self::StateRoot) -> bool;
+    fn validate_opaque_blob(blob: &Self::SignedData, prev_state: &Self::StateRoot) -> bool;
 
     /// Deserialize a valid blob into a block. Accept an optional proof of misbehavior (for example, an invalid signature)
     /// to short-circuit the block application, returning a new stateroot to account for the slashing of the sequencer
     fn prepare_block(
-        blob: Self::DataBlob,
+        blob: Self::SignedData,
         prev_state: &Self::StateRoot,
         misbehavior_hint: Option<Self::Misbehavior>,
     ) -> Result<Self::Block, Self::StateRoot>;
@@ -123,25 +123,26 @@ trait Stf {
 pub trait Proof {
     type VerificationError: std::fmt::Debug;
     type MethodId;
+    const MethodId: Self::MethodId;
 
     fn authenicated_log(&self) -> &[u8];
     fn verify(&self) -> Result<(), Self::VerificationError>;
 }
 
-trait ChainProof: Proof {
-    type DaLayer: Da<Blob = Self::DataBlob>;
-    type Rollup: Stf<DataBlob = Self::DataBlob>;
-    type DataBlob: DataBlob;
+pub trait ChainProof: Proof {
+    type DaLayer: Da<SignedData = Self::SignedData>;
+    type Rollup: Stf<SignedData = Self::SignedData>;
+    type SignedData: DataBlob;
     // returns the hash of the latest DA block
     fn da_hash(&self) -> <<Self as ChainProof>::DaLayer as Da>::BlockHash;
     // returns the rollup state root
     fn state_root(&self) -> <<Self as ChainProof>::Rollup as Stf>::StateRoot;
 }
 
-trait ExecutionProof: Proof {
+pub trait ExecutionProof: Proof {
     type Rollup: Stf;
     type DaLayer: Da;
-    fn blobs_applied(&self) -> &[<<Self as ExecutionProof>::DaLayer as Da>::Blob];
+    fn blobs_applied(&self) -> &[<<Self as ExecutionProof>::DaLayer as Da>::SignedData];
     fn pre_state_root(&self) -> <<Self as ExecutionProof>::Rollup as Stf>::StateRoot;
     // returns the state root after applying
     fn post_state_root(&self) -> <<Self as ExecutionProof>::Rollup as Stf>::StateRoot;
@@ -154,14 +155,14 @@ pub enum VerificationType<P: Proof> {
     PreProcessed(P),
 }
 
-trait Chain {
+pub trait Chain {
     type DataBlob: DataBlob;
-    type DaLayer: Da<Blob = Self::DataBlob>;
-    type Rollup: Stf<DataBlob = Self::DataBlob>;
+    type DaLayer: Da<SignedData = Self::DataBlob>;
+    type Rollup: Stf<SignedData = Self::DataBlob>;
     type ChainProof: ChainProof<DaLayer = Self::DaLayer, Rollup = Self::Rollup>;
     type ExecutionProof: ExecutionProof<Rollup = Self::Rollup, DaLayer = Self::DaLayer>;
     // Verifies that prev_head.da_hash is Da_header.prev_hash
-    // calculates the set of sequencers, potentially using the previous rollup state
+    //  the set of sequencers, potentially using the previous rollup state
     // and returns an array of rollup blocks from those sequencers
     // #[Risc0::magic]
     fn extend_da_chain(
