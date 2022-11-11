@@ -1,1 +1,4 @@
-pub trait StateTransitionFunction {}
+pub trait StateTransitionFunction {
+    type Address;
+    type StateRoot;
+}
