@@ -1,21 +1,16 @@
-use std::default;
-
 use crate::{
-    core::{
-        crypto::hash::Sha2Hash,
-        traits::{Address, AsBytes, Block, Blockheader},
-    },
+    core::traits::{AsBytes, Block, Blockheader},
     da::{DaApp, TxWithSender},
     env,
     stf::StateTransitionFunction,
-    zk_utils::traits::{Proof, RecursiveProof, RecursiveProofInput, ZkVM},
+    zk_utils::traits::{Proof, RecursiveProofInput, ZkVM},
 };
 
-use super::{crypto::hash::DefaultHash, types::RollupHeader};
+use super::types::RollupHeader;
 
 pub struct Rollup<DaLayer: DaApp, App: StateTransitionFunction> {
-    da_layer: DaLayer,
-    app: App,
+    pub da_layer: DaLayer,
+    pub app: App,
 }
 
 pub struct Config<DaLayer: DaApp, App: StateTransitionFunction> {
@@ -44,7 +39,7 @@ pub struct BlockProof<Vm: ZkVM, DaLayer: DaApp, App: StateTransitionFunction> {
     pub code_commitment: Option<Vm::CodeCommitment>,
 }
 
-impl<Vm: ZkVM, DaLayer: DaApp, App: StateTransitionFunction> Proof<Vm>
+impl<Vm: ZkVM<Proof = Self>, DaLayer: DaApp, App: StateTransitionFunction> Proof<Vm>
     for BlockProof<Vm, DaLayer, App>
 {
     type Output = RollupHeader<DaLayer, App>;
@@ -53,38 +48,14 @@ impl<Vm: ZkVM, DaLayer: DaApp, App: StateTransitionFunction> Proof<Vm>
         self,
         code_commitment: &<Vm as ZkVM>::CodeCommitment,
     ) -> Result<Self::Output, <Vm as ZkVM>::Error> {
-        todo!()
+        Vm::verify(self, code_commitment)
     }
 }
 
-impl<Vm: ZkVM, DaLayer: DaApp, App: StateTransitionFunction> RecursiveProof
-    for BlockProof<Vm, DaLayer, App>
-{
-    type Vm = Vm;
-
-    type InOut = RollupHeader<DaLayer, App>;
-    type Error = Vm::Error;
-
-    fn verify_base(input: Self::InOut) -> Result<(), Self::Error> {
-        todo!()
-    }
-
-    fn verify_continuity(previous: Self::InOut) -> Result<(), Self::Error> {
-        todo!()
-        // if previous.latest_header.da_blockhash == self.latest_header. {
-        // 	return Ok(())
-        // }
-        // Err(())
-    }
-
-    fn work(
-        input: Self::InOut,
-    ) -> crate::zk_utils::traits::RecursiveProofOutput<Self::Vm, Self::InOut> {
-        todo!()
-    }
-}
 impl<DaLayer: DaApp, App: StateTransitionFunction> Rollup<DaLayer, App> {
-    fn zk_verify_block<Vm: ZkVM>(&mut self) -> Result<BlockProof<Vm, DaLayer, App>, Vm::Error> {
+    pub fn zk_verify_block<Vm: ZkVM<Proof = BlockProof<Vm, DaLayer, App>>>(
+        &mut self,
+    ) -> Result<BlockProof<Vm, DaLayer, App>, Vm::Error> {
         // let prev_proof: RecursiveProof<Vm, DaLayer, App> = env::read_unchecked();
         let prev_proof: RecursiveProofInput<
             Vm,
