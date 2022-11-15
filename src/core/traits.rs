@@ -1,10 +1,11 @@
 use core::fmt::Debug;
+use std::usize;
 
 use bytes::Bytes;
 
 pub trait Blockheader: PartialEq + Debug {
-    type Hash;
-    fn hash(&self) -> &Self::Hash;
+    type Hash: Clone;
+    fn hash(&self) -> Self::Hash;
     fn prev_hash(&self) -> &Self::Hash;
 }
 
@@ -18,6 +19,13 @@ pub trait Block: PartialEq + Debug {
 
 pub trait Transaction: PartialEq + Debug {}
 
-pub trait Address: PartialEq + Debug {
+pub trait Address: PartialEq + Debug + Clone {}
+
+pub struct InvalidAddress;
+pub trait AsBytes
+where
+    Self: Sized,
+{
     fn as_bytes(&self) -> Bytes;
+    fn from_bytes(addr: &[u8]) -> Result<Self, InvalidAddress>;
 }

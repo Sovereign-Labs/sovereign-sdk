@@ -1,3 +1,5 @@
+use bytes::Bytes;
+
 use crate::{
     da::DaApp,
     stf::{ConsensusSetUpdate, StateTransitionFunction},
@@ -70,6 +72,7 @@ pub struct AugmentedRollupBlock<DaLayer: DaApp, App: StateTransitionFunction> {
     pub completeness_proof: DaLayer::CompletenessProof,
 }
 
+#[derive(Debug, Clone)]
 pub enum ConsensusParticipantRoot<Addr> {
     /// Anyone is allowed to participate in consensus of the rollup
     Anyone,
@@ -88,11 +91,23 @@ impl<Addr: PartialEq> ConsensusParticipantRoot<Addr> {
         }
     }
 
-    pub fn process_updates(&mut self, _updates: Vec<ConsensusSetUpdate<Addr>>) {
+    pub fn process_update(&mut self, _updates: ConsensusSetUpdate<Bytes>) {
         match self {
             ConsensusParticipantRoot::Anyone => todo!(),
             ConsensusParticipantRoot::Centralized(_) => todo!(),
             ConsensusParticipantRoot::Registered(_) => todo!(),
         }
+    }
+    pub fn process_updates(&mut self, _updates: Vec<ConsensusSetUpdate<Bytes>>) {
+        // for item in vec.map(|| to_address).then(...)
+        match self {
+            ConsensusParticipantRoot::Anyone => todo!(),
+            ConsensusParticipantRoot::Centralized(_) => todo!(),
+            ConsensusParticipantRoot::Registered(_) => todo!(),
+        }
+    }
+
+    pub fn finalize(&mut self) {
+        todo!()
     }
 }

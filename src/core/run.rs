@@ -1,5 +1,10 @@
+use std::default;
+
 use crate::{
-    core::traits::{Address, Block, Blockheader},
+    core::{
+        crypto::hash::Sha2Hash,
+        traits::{Address, AsBytes, Block, Blockheader},
+    },
     da::{DaApp, TxWithSender},
     env,
     stf::StateTransitionFunction,
@@ -35,9 +40,8 @@ pub struct BlockProof<Vm: ZkVM, DaLayer: DaApp, App: StateTransitionFunction> {
     phantom: std::marker::PhantomData<Vm>,
     // phantomapp: std::marker::PhantomData<App>,
     // phantomda: std::marker::PhantomData<DaLayer>,
-    pub da_genesis_hash: DaLayer::Blockhash,
     pub latest_header: RollupHeader<DaLayer, App>,
-    pub code_commitment: Vm::CodeCommitment,
+    pub code_commitment: Option<Vm::CodeCommitment>,
 }
 
 impl<Vm: ZkVM, DaLayer: DaApp, App: StateTransitionFunction> Proof<Vm>
@@ -92,16 +96,19 @@ impl<DaLayer: DaApp, App: StateTransitionFunction> Rollup<DaLayer, App> {
         // 2. Tie input to current step
         // 3. Do work
 
-        let prev_header = match prev_proof {
+        let (prev_header, code_commitment) = match prev_proof {
             RecursiveProofInput::Base(purported_genesis) => {
                 assert!(purported_genesis.da_blockhash == DaLayer::RELATIVE_GENESIS);
                 // TODO! more checks
-                purported_genesis
+                (purported_genesis, None)
             }
             RecursiveProofInput::Recursive(proof, _) => {
-                let commitment = proof.code_commitment.clone();
+                let commitment = proof
+                    .code_commitment
+                    .clone()
+                    .unwrap_or_else(|| env::read_unchecked());
                 let prev_header = proof.verify(&commitment)?;
-                prev_header
+                (prev_header, Some(commitment))
             }
         };
         let current_da_header: DaLayer::Header = env::read_unchecked();
@@ -119,32 +126,55 @@ impl<DaLayer: DaApp, App: StateTransitionFunction> Rollup<DaLayer, App> {
             )
             .expect("Host must provide correct data");
 
-        let current_sequencers = prev_header.sequencers_root;
-        let current_provers = prev_header.provers_root;
+        let mut current_sequencers = prev_header.sequencers_root.clone();
+        let mut current_provers = prev_header.provers_root.clone();
 
         self.app.begin_slot();
         for tx in relevant_txs {
             if current_sequencers.allows(tx.sender()) {
-                if let Ok(block) = self.app.parse_block(tx.data(), tx.sender().as_bytes()) {
-                    self.app.begin_block(block.header());
-                    for tx in block.take_transactions() {
-                        self.app.deliver_tx(tx);
+                match self.app.parse_block(tx.data(), tx.sender().as_bytes()) {
+                    Ok(block) => {
+                        if let Err(slashing) =
+                            self.app.begin_block(block.header(), env::read_unchecked())
+                        {
+                            current_sequencers.process_update(slashing);
+                            continue;
+                        }
+                        for tx in block.take_transactions() {
+                            self.app.deliver_tx(tx);
+                        }
+                        let result = self.app.end_block();
+                        current_provers.process_updates(result.prover_updates);
+                        current_sequencers.process_updates(result.sequencer_updates);
                     }
-                    let result = self.app.end_block();
-                    current_provers.process_updates(result.prover_updates)
+                    Err(slashing) => current_sequencers.process_update(slashing),
                 }
             } else if current_provers.allows(tx.sender()) {
-                if let Ok(block) = self.app.parse_block(tx.data(), tx.sender().as_bytes()) {
-                    // self.app.begin_block(block.header());
+                match self.app.parse_proof(tx.data(), tx.sender().as_bytes()) {
+                    Ok(proof) => {
+                        self.app.deliver_proof(proof, tx.sender().as_bytes());
+                    }
+                    Err(slashing) => current_provers.process_update(slashing),
                 }
             }
         }
-        // let current_header: RollupHeader<DaLayer, App> = env::read_unchecked();
-        // assert_eq!(current_da_header.hash(), &current_header.da_blockhash);
+        let app_hash = self.app.end_slot();
+        current_provers.finalize();
+        current_sequencers.finalize();
 
-        todo!()
-
-        // prev_proof.recurse()
+        let header = RollupHeader {
+            da_blockhash: current_da_header.hash(),
+            sequencers_root: current_sequencers,
+            provers_root: current_provers,
+            app_root: app_hash,
+            applied_txs_root: Default::default(), // TODO!,
+            prev_hash: prev_header.hash(),
+        };
+        Ok(BlockProof {
+            phantom: std::marker::PhantomData,
+            latest_header: header,
+            code_commitment,
+        })
     }
     // fn zk_verify_block<Vm: ZkVM<Proof = RecursiveProof<Vm, BlockProofOutput>>>() {
     //     let prev_proof: RecursiveProof<Vm, BlockProofOutput> = env::read_unchecked();

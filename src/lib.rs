@@ -1,3 +1,4 @@
+#![feature(generic_const_exprs)]
 mod env {
     pub fn read_unchecked<T>() -> T {
         todo!()

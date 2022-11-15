@@ -5,7 +5,8 @@ use core::fmt::Debug;
 
 pub trait DaApp {
     type Blockhash: PartialEq + Debug;
-    type Address: traits::Address;
+
+    type Address: traits::Address + traits::AsBytes;
     type Header: Blockheader<Hash = Self::Blockhash>;
     type Transaction: TxWithSender<Self::Address>;
     /// A proof that a particular transaction is included in a block
@@ -18,6 +19,7 @@ pub trait DaApp {
     type CompletenessProof;
     type Error: Debug;
 
+    const ADDRESS_LENGTH: usize;
     /// The hash of the DA layer block which is the genesis of the logical chain defined by this app.
     /// This is *not* necessarily the DA layer's genesis block.
     const RELATIVE_GENESIS: Self::Blockhash;
