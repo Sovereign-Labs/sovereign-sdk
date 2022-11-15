@@ -1,4 +1,8 @@
-use crate::{da::DaApp, stf::StateTransitionFunction};
+use crate::{
+    da::DaApp,
+    stf::{ConsensusSetUpdate, StateTransitionFunction},
+    zk_utils::traits::serde::{Deserialize, Serialize},
+};
 
 use super::crypto::hash::DefaultHash;
 
@@ -23,6 +27,15 @@ pub struct RollupHeader<DaLayer: DaApp, App: StateTransitionFunction> {
     /// The hash of the previous rollup block header
     pub prev_hash: DefaultHash,
 }
+
+impl<DaLayer: DaApp, App: StateTransitionFunction> RollupHeader<DaLayer, App> {
+    pub fn hash(&self) -> DefaultHash {
+        todo!()
+    }
+}
+
+impl<DaLayer: DaApp, App: StateTransitionFunction> Serialize for RollupHeader<DaLayer, App> {}
+impl<DaLayer: DaApp, App: StateTransitionFunction> Deserialize for RollupHeader<DaLayer, App> {}
 
 /// A block of the *logical* chain created by running a particular state transition
 /// function over a particular DA application. A rollup block contains all of the information
@@ -56,6 +69,7 @@ pub struct AugmentedRollupBlock<DaLayer: DaApp, App: StateTransitionFunction> {
     /// An additional witness showing that the list of relevant_txs is complete
     pub completeness_proof: DaLayer::CompletenessProof,
 }
+
 pub enum ConsensusParticipantRoot<Addr> {
     /// Anyone is allowed to participate in consensus of the rollup
     Anyone,
@@ -63,4 +77,22 @@ pub enum ConsensusParticipantRoot<Addr> {
     Centralized(Addr),
     /// The set of allowed participants is registered. It may or may not change over time
     Registered(DefaultHash),
+}
+
+impl<Addr: PartialEq> ConsensusParticipantRoot<Addr> {
+    pub fn allows(&self, participant: &Addr) -> bool {
+        match self {
+            ConsensusParticipantRoot::Anyone => true,
+            ConsensusParticipantRoot::Centralized(allowed_addr) => participant == allowed_addr,
+            ConsensusParticipantRoot::Registered(_) => todo!(),
+        }
+    }
+
+    pub fn process_updates(&mut self, _updates: Vec<ConsensusSetUpdate<Addr>>) {
+        match self {
+            ConsensusParticipantRoot::Anyone => todo!(),
+            ConsensusParticipantRoot::Centralized(_) => todo!(),
+            ConsensusParticipantRoot::Registered(_) => todo!(),
+        }
+    }
 }

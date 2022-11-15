@@ -7,3 +7,5 @@ pub mod core;
 pub mod da;
 pub mod stf;
 pub mod utils;
+
+pub mod zk_utils;
