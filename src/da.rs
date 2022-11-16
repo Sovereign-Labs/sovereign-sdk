@@ -24,8 +24,9 @@ pub trait DaApp {
     /// This is *not* necessarily the DA layer's genesis block.
     const RELATIVE_GENESIS: Self::Blockhash;
 
-    fn get_relevant_txs(blockhash: &Self::Blockhash) -> Vec<Self::Transaction>;
+    fn get_relevant_txs(&self, blockhash: &Self::Blockhash) -> Vec<Self::Transaction>;
     fn get_relevant_txs_with_proof(
+        &self,
         blockhash: &Self::Blockhash,
     ) -> (
         Vec<Self::Transaction>,
