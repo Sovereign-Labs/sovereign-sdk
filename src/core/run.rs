@@ -1,5 +1,5 @@
 use crate::{
-    core::traits::{AsBytes, Block, Blockheader},
+    core::traits::{AsBytes, Block, Blockheader, CanonicalHash},
     da::{DaApp, TxWithSender},
     env,
     stf::StateTransitionFunction,

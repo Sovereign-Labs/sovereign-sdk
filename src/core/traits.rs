@@ -1,12 +1,15 @@
 use core::fmt::Debug;
-use std::usize;
 
 use bytes::Bytes;
 
-pub trait Blockheader: PartialEq + Debug {
+pub trait Blockheader: PartialEq + Debug + CanonicalHash<Output = Self::Hash> {
     type Hash: Clone;
-    fn hash(&self) -> Self::Hash;
     fn prev_hash(&self) -> &Self::Hash;
+}
+
+pub trait CanonicalHash {
+    type Output;
+    fn hash(&self) -> Self::Output;
 }
 
 pub trait Block: PartialEq + Debug {
@@ -14,10 +17,12 @@ pub trait Block: PartialEq + Debug {
     type Transaction: Transaction;
     fn header(&self) -> &Self::Header;
     fn transactions(&self) -> &[Self::Transaction];
-    fn take_transactions(&self) -> Vec<Self::Transaction>;
+    fn take_transactions(self) -> Vec<Self::Transaction>;
 }
 
-pub trait Transaction: PartialEq + Debug {}
+pub trait Transaction: PartialEq + Debug + CanonicalHash<Output = Self::Hash> {
+    type Hash;
+}
 
 pub trait Address: PartialEq + Debug + Clone {}
 
