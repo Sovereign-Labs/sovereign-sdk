@@ -10,3 +10,5 @@ pub mod stf;
 pub mod utils;
 
 pub mod zk_utils;
+
+pub use bytes::Bytes;

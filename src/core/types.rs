@@ -3,7 +3,7 @@ use bytes::Bytes;
 use crate::{
     da::DaApp,
     stf::{ConsensusSetUpdate, StateTransitionFunction},
-    zk_utils::traits::serde::{Deserialize, Serialize},
+    zk_utils::traits::serial::{Deserialize, Serialize},
 };
 
 use super::crypto::hash::DefaultHash;
@@ -36,7 +36,11 @@ impl<DaLayer: DaApp, App: StateTransitionFunction> RollupHeader<DaLayer, App> {
     }
 }
 
-impl<DaLayer: DaApp, App: StateTransitionFunction> Serialize for RollupHeader<DaLayer, App> {}
+impl<DaLayer: DaApp, App: StateTransitionFunction> Serialize for RollupHeader<DaLayer, App> {
+    fn serialize(&self, target: &mut Vec<u8>) {
+        todo!()
+    }
+}
 impl<DaLayer: DaApp, App: StateTransitionFunction> Deserialize for RollupHeader<DaLayer, App> {}
 
 /// A block of the *logical* chain created by running a particular state transition

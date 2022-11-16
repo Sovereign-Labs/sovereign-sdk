@@ -1,6 +1,7 @@
 use core::fmt::Debug;
 
-use serde::{Deserialize, Serialize};
+use bytes::Bytes;
+use serial::{Deserialize, Serialize};
 
 use crate::env;
 
@@ -10,7 +11,7 @@ pub trait ZkVM {
     type Proof: Proof<Self>;
     type Error: Debug;
 
-    fn log<T: serde::Serialize>();
+    fn log<T: serial::Serialize>(item: T);
     fn verify(
         proof: Self::Proof,
         code_commitment: &Self::CodeCommitment,
@@ -36,7 +37,14 @@ pub struct RecursiveProofOutput<Vm: ZkVM, T> {
     pub claimed_method_id: Vm::CodeCommitment,
     pub output: T,
 }
-impl<Vm: ZkVM, T> Serialize for RecursiveProofOutput<Vm, T> {}
+impl<Vm: ZkVM<CodeCommitment = C>, C: Serialize, T: Serialize> Serialize
+    for RecursiveProofOutput<Vm, T>
+{
+    fn serialize(&self, target: &mut Vec<u8>) {
+        self.claimed_method_id.serialize(target);
+        self.output.serialize(target);
+    }
+}
 impl<Vm: ZkVM, T> Deserialize for RecursiveProofOutput<Vm, T> {}
 
 // TODO!
@@ -45,7 +53,25 @@ mod risc0 {
 }
 
 // TODO!
-pub mod serde {
-    pub trait Serialize {}
+pub mod serial {
+
+    // TODO: do this in a sensible/generic way
+    // The objective is to not introduce a forcible serde dependency and potentially
+    // allow implementers to use rykv or another zero-copy framework. But we
+    // need to design that. This will work for now
+    pub trait Serialize {
+        fn serialize(&self, target: &mut Vec<u8>);
+        fn serialize_to_vec(&self) -> Vec<u8> {
+            let mut target = Vec::new();
+            self.serialize(&mut target);
+            target
+        }
+    }
+
+    // impl<T: Serialize> Serialize for &T {
+    //     fn serialize(&self, target: &mut Vec<u8>) {
+    //         (*self).serialize(target);
+    //     }
+    // }
     pub trait Deserialize {}
 }
