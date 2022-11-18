@@ -41,7 +41,13 @@ impl<DaLayer: DaApp, App: StateTransitionFunction> Serialize for RollupHeader<Da
         todo!()
     }
 }
-impl<DaLayer: DaApp, App: StateTransitionFunction> Deserialize for RollupHeader<DaLayer, App> {}
+impl<DaLayer: DaApp, App: StateTransitionFunction> Deserialize for RollupHeader<DaLayer, App> {
+    fn deserialze(
+        target: &[u8],
+    ) -> Result<Self, crate::zk_utils::traits::serial::DeserializationError> {
+        todo!()
+    }
+}
 
 /// A block of the *logical* chain created by running a particular state transition
 /// function over a particular DA application. A rollup block contains all of the information

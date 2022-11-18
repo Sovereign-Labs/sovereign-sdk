@@ -9,6 +9,12 @@ pub type DefaultHash = Sha2Hash;
 #[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
 pub struct Sha2Hash(pub [u8; 32]);
 
+impl AsRef<[u8]> for Sha2Hash {
+    fn as_ref(&self) -> &[u8] {
+        &self.0[..]
+    }
+}
+
 pub fn sha2(item: &[u8]) -> Sha2Hash {
     let mut hasher = Sha256::new();
     hasher.update(item);

@@ -45,7 +45,11 @@ impl<Vm: ZkVM<CodeCommitment = C>, C: Serialize, T: Serialize> Serialize
         self.output.serialize(target);
     }
 }
-impl<Vm: ZkVM, T> Deserialize for RecursiveProofOutput<Vm, T> {}
+impl<Vm: ZkVM, T> Deserialize for RecursiveProofOutput<Vm, T> {
+    fn deserialze(target: &mut &[u8]) -> Result<Self, serial::DeserializationError> {
+        todo!()
+    }
+}
 
 // TODO!
 mod risc0 {
@@ -54,6 +58,9 @@ mod risc0 {
 
 // TODO!
 pub mod serial {
+    pub enum DeserializationError {
+        DataTooShort,
+    }
 
     // TODO: do this in a sensible/generic way
     // The objective is to not introduce a forcible serde dependency and potentially
@@ -73,5 +80,7 @@ pub mod serial {
     //         (*self).serialize(target);
     //     }
     // }
-    pub trait Deserialize {}
+    pub trait Deserialize: Sized {
+        fn deserialze(target: &mut &[u8]) -> Result<Self, DeserializationError>;
+    }
 }

@@ -36,7 +36,7 @@ pub trait DaApp {
 
     fn verify_relevant_tx_list(
         &self,
-        blockhash: &Self::Header,
+        blockheader: &Self::Header,
         txs: &Vec<Self::Transaction>,
         inclusion_proof: &Self::InclusionMultiProof,
         completeness_proof: &Self::CompletenessProof,
