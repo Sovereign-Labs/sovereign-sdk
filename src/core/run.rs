@@ -105,9 +105,11 @@ impl<DaLayer: DaApp, App: StateTransitionFunction> Rollup<DaLayer, App> {
             if current_sequencers.allows(tx.sender()) {
                 match self.app.parse_block(tx.data(), tx.sender().as_bytes()) {
                     Ok(block) => {
-                        if let Err(slashing) =
-                            self.app.begin_block(block.header(), env::read_unchecked())
-                        {
+                        if let Err(slashing) = self.app.begin_block(
+                            &block,
+                            tx.sender().as_bytes(),
+                            env::read_unchecked(),
+                        ) {
                             current_sequencers.process_update(slashing);
                             continue;
                         }
@@ -118,14 +120,23 @@ impl<DaLayer: DaApp, App: StateTransitionFunction> Rollup<DaLayer, App> {
                         current_provers.process_updates(result.prover_updates);
                         current_sequencers.process_updates(result.sequencer_updates);
                     }
-                    Err(slashing) => current_sequencers.process_update(slashing),
+                    Err(slashing) => slashing
+                        .into_iter()
+                        .for_each(|update| current_sequencers.process_update(update)),
                 }
             } else if current_provers.allows(tx.sender()) {
                 match self.app.parse_proof(tx.data(), tx.sender().as_bytes()) {
                     Ok(proof) => {
-                        self.app.deliver_proof(proof, tx.sender().as_bytes());
+                        if let Err(slashing) = self.app.deliver_proof(proof, tx.sender().as_bytes())
+                        {
+                            slashing
+                                .into_iter()
+                                .for_each(|update| current_provers.process_update(update));
+                        }
                     }
-                    Err(slashing) => current_provers.process_update(slashing),
+                    Err(slashing) => slashing
+                        .into_iter()
+                        .for_each(|update| current_provers.process_update(update)),
                 }
             }
         }

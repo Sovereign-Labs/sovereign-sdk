@@ -2,7 +2,7 @@ use core::fmt::Debug;
 
 use bytes::Bytes;
 
-use crate::zk_utils::traits::serial::{Deserialize, Serialize};
+use crate::zk_utils::traits::serial::{Deser, Serialize};
 
 pub trait Blockheader: PartialEq + Debug + CanonicalHash<Output = Self::Hash> {
     type Hash: Clone;
@@ -14,7 +14,7 @@ pub trait CanonicalHash {
     fn hash(&self) -> Self::Output;
 }
 
-pub trait Block: PartialEq + Debug + Serialize + Deserialize {
+pub trait Block: PartialEq + Debug + Serialize + Deser {
     type Header: Blockheader;
     type Transaction: Transaction;
     fn header(&self) -> &Self::Header;

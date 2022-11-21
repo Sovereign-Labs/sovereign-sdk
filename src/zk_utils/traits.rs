@@ -1,7 +1,7 @@
 use core::fmt::Debug;
 
 use bytes::Bytes;
-use serial::{Deserialize, Serialize};
+use serial::{Deser, Serialize};
 
 use crate::env;
 
@@ -19,7 +19,7 @@ pub trait ZkVM {
 }
 
 pub trait Proof<VM: ZkVM + ?Sized> {
-    type Output: Serialize + Deserialize;
+    type Output: Serialize + Deser;
     /// Verify the proof, deserializing the result if successful.
     fn verify(self, code_commitment: &VM::CodeCommitment) -> Result<Self::Output, VM::Error>;
 }
@@ -45,8 +45,8 @@ impl<Vm: ZkVM<CodeCommitment = C>, C: Serialize, T: Serialize> Serialize
         self.output.serialize(target);
     }
 }
-impl<Vm: ZkVM, T> Deserialize for RecursiveProofOutput<Vm, T> {
-    fn deserialze(target: &mut &[u8]) -> Result<Self, serial::DeserializationError> {
+impl<Vm: ZkVM, T> Deser for RecursiveProofOutput<Vm, T> {
+    fn deser(target: &mut &[u8]) -> Result<Self, serial::DeserializationError> {
         todo!()
     }
 }
@@ -80,7 +80,7 @@ pub mod serial {
     //         (*self).serialize(target);
     //     }
     // }
-    pub trait Deserialize: Sized {
-        fn deserialze(target: &mut &[u8]) -> Result<Self, DeserializationError>;
+    pub trait Deser: Sized {
+        fn deser(target: &mut &[u8]) -> Result<Self, DeserializationError>;
     }
 }
