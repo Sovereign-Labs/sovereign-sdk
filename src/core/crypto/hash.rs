@@ -1,7 +1,5 @@
 use sha2::{Digest, Sha256};
 
-use crate::core::traits::AsBytes;
-
 pub type DefaultHash = Sha2Hash;
 
 /// The output of a sha2-256 hash
@@ -18,6 +16,16 @@ impl AsRef<[u8]> for Sha2Hash {
 pub fn sha2(item: &[u8]) -> Sha2Hash {
     let mut hasher = Sha256::new();
     hasher.update(item);
+
+    let mut output = Sha2Hash::default();
+    output.0.copy_from_slice(&hasher.finalize()[..]);
+    output
+}
+
+pub fn sha2_merkle(l: &[u8], r: &[u8]) -> Sha2Hash {
+    let mut hasher = Sha256::new();
+    hasher.update(l);
+    hasher.update(r);
 
     let mut output = Sha2Hash::default();
     output.0.copy_from_slice(&hasher.finalize()[..]);

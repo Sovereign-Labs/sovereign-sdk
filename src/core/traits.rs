@@ -1,7 +1,5 @@
 use core::fmt::Debug;
 
-use bytes::Bytes;
-
 use crate::zk_utils::traits::serial::{Deser, Serialize};
 
 pub trait Blockheader: PartialEq + Debug + CanonicalHash<Output = Self::Hash> {
@@ -26,13 +24,7 @@ pub trait Transaction: PartialEq + Debug + CanonicalHash<Output = Self::Hash> {
     type Hash: AsRef<[u8]>;
 }
 
-pub trait Address: PartialEq + Debug + Clone {}
+pub trait Address: PartialEq + Debug + Clone + AsRef<[u8]> + for<'a> TryFrom<&'a [u8]> {}
 
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub struct InvalidAddress;
-pub trait AsBytes
-where
-    Self: Sized,
-{
-    fn as_bytes(&self) -> Bytes;
-    fn from_bytes(addr: &[u8]) -> Result<Self, InvalidAddress>;
-}

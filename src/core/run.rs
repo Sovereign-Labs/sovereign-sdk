@@ -1,5 +1,5 @@
 use crate::{
-    core::traits::{AsBytes, Block, Blockheader, CanonicalHash},
+    core::traits::{Block, Blockheader, CanonicalHash},
     da::{DaApp, TxWithSender},
     env,
     stf::StateTransitionFunction,
@@ -103,11 +103,11 @@ impl<DaLayer: DaApp, App: StateTransitionFunction> Rollup<DaLayer, App> {
         self.app.begin_slot();
         for tx in relevant_txs {
             if current_sequencers.allows(tx.sender()) {
-                match self.app.parse_block(tx.data(), tx.sender().as_bytes()) {
+                match self.app.parse_block(tx.data(), tx.sender().as_ref()) {
                     Ok(block) => {
                         if let Err(slashing) = self.app.begin_block(
                             &block,
-                            tx.sender().as_bytes(),
+                            tx.sender().as_ref(),
                             env::read_unchecked(),
                         ) {
                             current_sequencers.process_update(slashing);
@@ -125,10 +125,9 @@ impl<DaLayer: DaApp, App: StateTransitionFunction> Rollup<DaLayer, App> {
                         .for_each(|update| current_sequencers.process_update(update)),
                 }
             } else if current_provers.allows(tx.sender()) {
-                match self.app.parse_proof(tx.data(), tx.sender().as_bytes()) {
+                match self.app.parse_proof(tx.data(), tx.sender().as_ref()) {
                     Ok(proof) => {
-                        if let Err(slashing) = self.app.deliver_proof(proof, tx.sender().as_bytes())
-                        {
+                        if let Err(slashing) = self.app.deliver_proof(proof, tx.sender().as_ref()) {
                             slashing
                                 .into_iter()
                                 .for_each(|update| current_provers.process_update(update));

@@ -29,7 +29,7 @@ pub trait StateTransitionFunction {
     fn parse_block(
         &mut self,
         msg: Bytes,
-        sender: Bytes,
+        sender: &[u8],
     ) -> Result<Self::Block, Option<ConsensusSetUpdate<Bytes>>>;
 
     /// Parses a sequence of bytes into a zero-knowledge proof if the message meets some basic validity conditions
@@ -38,7 +38,7 @@ pub trait StateTransitionFunction {
     fn parse_proof(
         &mut self,
         msg: Bytes,
-        sender: Bytes,
+        sender: &[u8],
     ) -> Result<Self::Proof, Option<ConsensusSetUpdate<Bytes>>>;
 
     /// Called once at the beginning of each rollup block (so, potentially many times per DA block).
@@ -51,7 +51,7 @@ pub trait StateTransitionFunction {
     fn begin_block(
         &mut self,
         block: &Self::Block,
-        sender: Bytes,
+        sender: &[u8],
         misbehavior: Option<Self::MisbehaviorProof>,
     ) -> Result<(), ConsensusSetUpdate<Bytes>>;
 
@@ -59,7 +59,10 @@ pub trait StateTransitionFunction {
     ///
     /// TODO: consider simplifying the response to a `MinDeliverTxResponse` for greater efficiency in zkVM
     /// TODO: decide if events/logs need to be included in the zk-proof
-    fn deliver_tx(&mut self, tx: Self::Transaction) -> AugmentedDeliverTxResponse;
+    fn deliver_tx(
+        &mut self,
+        tx: Self::Transaction,
+    ) -> Result<AugmentedDeliverTxResponse, ConsensusSetUpdate<Bytes>>;
 
     /// Called once at the end of each rollup block.
     fn end_block(&mut self) -> EndBlockResponse<Bytes>;
@@ -73,7 +76,7 @@ pub trait StateTransitionFunction {
     fn deliver_proof(
         &mut self,
         proof: Self::Proof,
-        sender: Bytes,
+        sender: &[u8],
     ) -> Result<DeliverProofResponse, Option<ConsensusSetUpdate<Bytes>>>;
 }
 

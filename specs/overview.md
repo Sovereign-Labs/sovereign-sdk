@@ -57,6 +57,10 @@ TODO!
 
 ### Database
 
+The Sovereign SDK provides a database optimized for use in zk state transition functions. In "normal" mode, the database
+acts as a standard key-value store backed by the machine's hard drive. In "verifier" mode, it lazily reads data from
+the host (and verifies each read against the MPT). In "prover" mode it reads data from the host and produces witnesses.
+
 ## Modules
 
 TODO!

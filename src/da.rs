@@ -6,7 +6,7 @@ use core::fmt::Debug;
 pub trait DaApp {
     type Blockhash: PartialEq + Debug;
 
-    type Address: traits::Address + traits::AsBytes;
+    type Address: traits::Address;
     type Header: Blockheader<Hash = Self::Blockhash>;
     type Transaction: TxWithSender<Self::Address>;
     /// A proof that a particular transaction is included in a block
