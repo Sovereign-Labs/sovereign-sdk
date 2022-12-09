@@ -1,9 +1,6 @@
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
 
-use crate::{
-    core::traits::{Address, Block, Blockheader},
-    zk_utils::traits::Proof,
-};
+use crate::core::traits::{Address, Block, Blockheader};
 
 pub trait StateTransitionFunction {
     type Address: Address;
@@ -28,7 +25,7 @@ pub trait StateTransitionFunction {
     /// the rollup may slash the sender
     fn parse_block(
         &mut self,
-        msg: Bytes,
+        msg: impl Buf,
         sender: &[u8],
     ) -> Result<Self::Block, Option<ConsensusSetUpdate<Bytes>>>;
 
@@ -37,7 +34,7 @@ pub trait StateTransitionFunction {
     /// the rollup may slash the sender
     fn parse_proof(
         &mut self,
-        msg: Bytes,
+        msg: impl Buf,
         sender: &[u8],
     ) -> Result<Self::Proof, Option<ConsensusSetUpdate<Bytes>>>;
 
@@ -65,7 +62,7 @@ pub trait StateTransitionFunction {
     ) -> Result<AugmentedDeliverTxResponse, ConsensusSetUpdate<Bytes>>;
 
     /// Called once at the end of each rollup block.
-    fn end_block(&mut self) -> EndBlockResponse<Bytes>;
+    fn end_block(&mut self) -> EndBlockResponse<Bytes, Self::MisbehaviorProof>;
 
     /// Called once at the "end" of each DA layer block (i.e. after all rollup blocks have been processed)
     fn end_slot(&mut self) -> Self::StateRoot;
@@ -115,9 +112,10 @@ pub struct Event {
     pub value: Bytes,
 }
 
-pub struct EndBlockResponse<Addr> {
+pub struct EndBlockResponse<Addr, MisbehaviorProof> {
     pub sequencer_updates: Vec<ConsensusSetUpdate<Addr>>,
     pub prover_updates: Vec<ConsensusSetUpdate<Addr>>,
+    pub misbehavior_proof: Option<MisbehaviorProof>,
 }
 
 pub struct DeliverProofResponse {

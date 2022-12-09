@@ -93,10 +93,10 @@ pub enum ConsensusParticipantRoot<Addr> {
 }
 
 impl<Addr: PartialEq> ConsensusParticipantRoot<Addr> {
-    pub fn allows(&self, participant: &Addr) -> bool {
+    pub fn allows(&self, participant: Addr) -> bool {
         match self {
             ConsensusParticipantRoot::Anyone => true,
-            ConsensusParticipantRoot::Centralized(allowed_addr) => participant == allowed_addr,
+            ConsensusParticipantRoot::Centralized(allowed_addr) => &participant == allowed_addr,
             ConsensusParticipantRoot::Registered(_) => todo!(),
         }
     }
