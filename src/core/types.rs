@@ -61,7 +61,7 @@ pub struct RollupBlock<DaLayer: DaApp, App: StateTransitionFunction> {
     /// The set of allowed provers after this block was processed
     pub provers: Vec<DaLayer::Address>,
     /// The list of transactions applied
-    pub applied_txs: Vec<DaLayer::Transaction>,
+    pub applied_txs: Vec<DaLayer::BlobTransaction>,
 }
 
 /// A block of the *logical* chain, augmented with all of the information necessary
@@ -75,7 +75,7 @@ pub struct AugmentedRollupBlock<DaLayer: DaApp, App: StateTransitionFunction> {
     /// A transaction is deemed "relevant" if its "sender" field needs to be examined
     /// in order to determine whether it applies to the rollup. For example, all transactions
     /// in a given Celestia namespace would be "relevant" to a rollup over that namespace.
-    pub relevant_txs: Vec<DaLayer::Transaction>,
+    pub relevant_txs: Vec<DaLayer::BlobTransaction>,
     /// A witness showing that all of the relevant_txs were included in the DA block
     pub tx_witnesses: DaLayer::InclusionMultiProof,
     /// An additional witness showing that the list of relevant_txs is complete
