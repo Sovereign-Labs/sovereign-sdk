@@ -20,7 +20,9 @@ pub trait Block: PartialEq + Debug + Serialize + Deser {
     fn take_transactions(self) -> Vec<Self::Transaction>;
 }
 
-pub trait Transaction: PartialEq + Debug + CanonicalHash<Output = Self::Hash> {
+pub trait Transaction:
+    PartialEq + Debug + CanonicalHash<Output = Self::Hash> + Serialize + Deser
+{
     type Hash: AsRef<[u8]>;
 }
 

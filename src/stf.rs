@@ -1,12 +1,12 @@
 use bytes::{Buf, Bytes};
 
-use crate::core::traits::{Address, Block, Blockheader};
+use crate::core::traits::{Address, Block, Blockheader, Transaction};
 
 pub trait StateTransitionFunction {
     type Address: Address;
     type StateRoot;
     type ChainParams;
-    type Transaction;
+    type Transaction: Transaction;
     type Block: Block<Header = Self::Header, Transaction = Self::Transaction>;
     type Proof;
     type Error;
