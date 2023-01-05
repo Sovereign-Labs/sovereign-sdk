@@ -1,56 +1,34 @@
 use crate::{
     core::traits::{Block, Blockheader, CanonicalHash},
+    core::types::RollupHeader,
     da::{DaApp, TxWithSender},
     env,
     stf::StateTransitionFunction,
     zk_utils::traits::{Proof, RecursiveProofInput, ZkVM},
 };
 
-use super::types::RollupHeader;
+use super::run::BlockProof;
 
 pub struct Rollup<DaLayer: DaApp, App: StateTransitionFunction> {
     pub da_layer: DaLayer,
     pub app: App,
 }
 
-pub struct Config<DaLayer: DaApp, App: StateTransitionFunction> {
-    /// The hash of the DA block which is considered "genesis" for this blockchain.
-    /// Note that this block is *not* necessarily the genesis block of the DA layer. Rather,
-    /// it's the hash of the first DA block which is allowed to contain rollup blocks.
-    pub da_hash_at_rollup_genesis: DaLayer::Blockhash,
-    /// The height after *rollup* genesis at which the chain will start accepting transactions.
-    ///
-    /// This setting is to aid in setting of the genesis block. We have a period of blocks
-    /// after the genesis block which are forced to be "empty" and can be safely ignored.
-    /// This way, we can set the `da_hash_at_genesis` to be a block from (say) yesterday,
-    /// and be sure that the rollup won't actually start processing transactions until (say) next week,
-    /// giving us some time to distribute the code before the rollup goes live.
-    pub first_allowed_nonempty_block_number: u64,
+// pub struct Runner<
+//     DaProvider: crate::da::DaService,
+//     Db,
+//     DaLogic: DaApp,
+//     App: StateTransitionFunction,
+// > {
+//     pub rollup: Rollup<DaLogic, App>,
+//     pub da_service: DaProvider,
+//     pub db: Db,
+// }
 
-    // TODO:
-    phantom: std::marker::PhantomData<App>,
-}
-
-pub struct BlockProof<Vm: ZkVM, DaLayer: DaApp, App: StateTransitionFunction> {
-    pub phantom: std::marker::PhantomData<Vm>,
-    // phantomapp: std::marker::PhantomData<App>,
-    // phantomda: std::marker::PhantomData<DaLayer>,
-    pub latest_header: RollupHeader<DaLayer, App>,
-    pub code_commitment: Option<Vm::CodeCommitment>,
-}
-
-impl<Vm: ZkVM<Proof = Self>, DaLayer: DaApp, App: StateTransitionFunction> Proof<Vm>
-    for BlockProof<Vm, DaLayer, App>
-{
-    type Output = RollupHeader<DaLayer, App>;
-
-    fn verify(
-        self,
-        code_commitment: &<Vm as ZkVM>::CodeCommitment,
-    ) -> Result<Self::Output, <Vm as ZkVM>::Error> {
-        Vm::verify(self, code_commitment)
-    }
-}
+// impl<DaProvider: crate::da::DaService, Db, DaLogic: DaApp, App: StateTransitionFunction>
+//     Runner<DaProvider, Db, DaLogic, App>
+// {
+// }
 
 impl<DaLayer: DaApp, App: StateTransitionFunction> Rollup<DaLayer, App> {
     pub fn zk_verify_block<Vm: ZkVM<Proof = BlockProof<Vm, DaLayer, App>>>(
