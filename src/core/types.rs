@@ -37,7 +37,7 @@ impl<DaLayer: DaApp, App: StateTransitionFunction> RollupHeader<DaLayer, App> {
 }
 
 impl<DaLayer: DaApp, App: StateTransitionFunction> Serialize for RollupHeader<DaLayer, App> {
-    fn serialize(&self, target: &mut Vec<u8>) {
+    fn serialize(&self, target: &mut impl std::io::Write) {
         todo!()
     }
 }

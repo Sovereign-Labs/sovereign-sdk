@@ -1,6 +1,9 @@
-use bytes::{Buf, Bytes};
+use bytes::Buf;
 
-use crate::core::traits::{self, Block, Blockheader, Transaction};
+use crate::{
+    core::traits::{self, Blockheader},
+    zk_utils::traits::serial::{Deser, Serialize},
+};
 use core::fmt::Debug;
 use std::future::Future;
 
@@ -8,13 +11,11 @@ use std::future::Future;
 /// has been processed. It includes methods for use by both the host (prover) and
 /// the guest (zkVM).
 pub trait DaApp {
-    type Blockhash: PartialEq + Debug;
+    type Blockhash: BlockHash;
 
     type Address: traits::Address;
     type Header: Blockheader<Hash = Self::Blockhash>;
     type BlobTransaction: TxWithSender<Self::Address>;
-    /// A proof that a particular transaction is included in a block
-    type InclusionProof;
     /// A proof that a set of transactions are included in a block
     type InclusionMultiProof;
     /// A proof that a *claimed* set of transactions is complete relative to
@@ -53,7 +54,7 @@ pub trait DaApp {
 /// to allow the sovereign SDK to interact with the DA layer's RPC network.
 pub trait DaService {
     /// An L1 block, possibly excluding some irrelevant information
-    type FilteredBlock;
+    type FilteredBlock: SlotData;
     type Future<T>: Future<Output = Result<T, Self::Error>>;
     // /// A transaction on the L1
     // type Transaction;
@@ -79,3 +80,6 @@ pub trait TxWithSender<Addr> {
     fn sender(&self) -> Addr;
     fn data(&self) -> Self::Data;
 }
+
+pub trait SlotData: Serialize + Deser + PartialEq {}
+pub trait BlockHash: Serialize + Deser + PartialEq + Debug {}

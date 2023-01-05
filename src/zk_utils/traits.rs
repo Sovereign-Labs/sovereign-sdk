@@ -40,7 +40,7 @@ pub struct RecursiveProofOutput<Vm: ZkVM, T> {
 impl<Vm: ZkVM<CodeCommitment = C>, C: Serialize, T: Serialize> Serialize
     for RecursiveProofOutput<Vm, T>
 {
-    fn serialize(&self, target: &mut Vec<u8>) {
+    fn serialize(&self, target: &mut impl std::io::Write) {
         self.claimed_method_id.serialize(target);
         self.output.serialize(target);
     }
@@ -58,16 +58,29 @@ mod risc0 {
 
 // TODO!
 pub mod serial {
+
+    #[derive(Debug)]
     pub enum DeserializationError {
         DataTooShort,
     }
+
+    impl std::fmt::Display for DeserializationError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                DeserializationError::DataTooShort => {
+                    f.write_str("DeserializationError::DataTooShort")
+                }
+            }
+        }
+    }
+    impl std::error::Error for DeserializationError {}
 
     // TODO: do this in a sensible/generic way
     // The objective is to not introduce a forcible serde dependency and potentially
     // allow implementers to use rykv or another zero-copy framework. But we
     // need to design that. This will work for now
     pub trait Serialize {
-        fn serialize(&self, target: &mut Vec<u8>);
+        fn serialize(&self, target: &mut impl std::io::Write);
         fn serialize_to_vec(&self) -> Vec<u8> {
             let mut target = Vec::new();
             self.serialize(&mut target);
