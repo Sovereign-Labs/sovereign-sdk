@@ -2,8 +2,8 @@ use bytes::Bytes;
 
 use crate::{
     da::DaApp,
+    serial::{Deser, Serialize},
     stf::{ConsensusSetUpdate, StateTransitionFunction},
-    zk_utils::traits::serial::{Deser, Serialize},
 };
 
 use super::crypto::hash::DefaultHash;
@@ -42,9 +42,7 @@ impl<DaLayer: DaApp, App: StateTransitionFunction> Serialize for RollupHeader<Da
     }
 }
 impl<DaLayer: DaApp, App: StateTransitionFunction> Deser for RollupHeader<DaLayer, App> {
-    fn deser(
-        target: &mut &[u8],
-    ) -> Result<Self, crate::zk_utils::traits::serial::DeserializationError> {
+    fn deser(target: &mut &[u8]) -> Result<Self, crate::serial::DeserializationError> {
         todo!()
     }
 }

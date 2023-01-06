@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 
-use crate::zk_utils::traits::serial::{Deser, Serialize};
+use crate::serial::{Deser, Serialize};
 
 pub trait Blockheader: PartialEq + Debug + CanonicalHash<Output = Self::Hash> {
     type Hash: Clone;
