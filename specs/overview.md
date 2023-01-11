@@ -43,7 +43,7 @@ to contain any relevant information, but may also choose omit it entirely.
 Following the Cosmos-SDK, we refer to the business logic of our chains as "apps". A rollup consists of two separate apps:
 one which provides the consensus, and one which provides the state transition logic. These apps communicate with the full
 node and via a set of predefined (required) interfaces. The required functionality of these apps is detailed in the
-[Rollup Interface specification](./interfaces/interface.md).
+[Rollup Interface specification](./interfaces).
 
 ## Outer Node
 
