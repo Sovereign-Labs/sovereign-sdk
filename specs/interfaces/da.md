@@ -16,7 +16,7 @@ Let's go through each of these tasks in detail:
 
 Rollups are designed to allow arbitrary state machines to inherit security guarantees
 of an underlying L1 blockchain. In order for these guarantees to hold, the rollup's data must be "available".
-Otherwise, an adversary can freeze the rollup by publish a new state root which incorporates a valid
+Otherwise, an adversary can freeze the rollup by publishing a new state root that incorporates a valid
 but secret state update. Since no one else knows the new state of the system, honest participants will
 be unable to post new blocks.
 
@@ -28,7 +28,7 @@ to choose a chain that provides suitable data availability guarantees for their 
 
 No chain has infinite capacity. So, in order to ensure robust operation, chains need to ensure that transactions
 can be prioritized. Since transactions on the rollup create useful economic activity, we assume that, over time,
-honest sequencers including "real" transactions should be able to generate revenue. They can use this revenue
+honest sequencers, including "real" transactions, should be able to generate revenue. They can use this revenue
 to bid for blockspace on the L1. By contrast, dishonest sequencers sending only "spam" transactions do not generate
 revenue. For DOS resistance, it's vital that these dishonest sequencers not be able to "crowd out" honest sequencers
 permanently. So, sending transactions on the L1 must be costly. In addition, the fee paid on the L1 should be
@@ -75,7 +75,7 @@ bundles containing unpopular transactions. So, the L1 needs to be censorship res
 We allow Sovereign SDK chains to specify any state model of their choosing. So, the underlying DA layer must
 provide a total ordering over rollup batches. For purposes of bridging, it also needs
 to provide an ordering *across* batches on different rollups. (This is only an issue if the underlying
-chain uses a DAG model). This requirement may be relaxed in future.
+chain uses a DAG model). This requirement may be relaxed in the future.
 
 ## Optional Functionality
 
@@ -92,7 +92,7 @@ might use the hash of block 16092246 as its relative genesis.
 
 ## Methods
 
-### Get Relevant Txs
+### `get_relevant_txs`
 
 * **Usage:**
   * The core of the DA interface. Fetches all "relevant" transactions from a given DA layer block.
@@ -100,19 +100,19 @@ The exact criteria that make transactions "relevant" are up to the implementer, 
 defined without reference to the current state of the rollup. For example, a rollup on Celestia
 might define "relevant" to mean, "occurring in namespace 'foo'".
 
-* **Arguments**
+* **Arguments:**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | blockhash   | BLOCKHASH  | The hash of the DA layer block to be parsed |
+ | Name          | Type      | Description                              |
+ |-----------|--------|------------------------------------------|
+ | `blockhash`   | `Blockhash` | The hash of the DA layer block to be parsed |
 
-* **Response**
+* **Response:**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | transactions | repeated TRANSACTION_WITH_SENDER | A list of L1 transactions ("data blobs"), with their senders |
+ | Name          | Type                    | Description                              |
+ |-------------------------|--------|------------------------------------------|
+ | `txs` | `iterable<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
 
-### Get Relevant Txs With Proof
+### `get_relevant_txs_with_proof`
 
 * **Usage:**
   * An adaptation of the `get_relevant_txs` method designed for use by provers. This method
@@ -120,138 +120,78 @@ returns the same list of transactions that would be returned by `get_relevant_tx
 to a witness proving the inclusion of these transactions in the DA layer block, and a witness
 showing the completeness of the provided list.
 
-* **Arguments**
+* **Arguments:**
 
  | Name         | Type       | Description                                 |
- |--------------|------------|---------------------------------------------|
- | blockhash    | blockhash  | The hash of the DA layer block to be parsed |
+ |-------------|------------|---------------------------------------------|
+ | `blockhash`    | `Blockhash` | The hash of the DA layer block to be parsed |
 
-* **Response**
+* **Response:**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | transactions | repeated TRANSACTION_WITH_SENDER | A list of L1 transactions ("data blobs"), with their senders |
- | inclusion_proof | INCLUSION_MULTIPROOF | A witness showing that each transaction was included in the DA layer block |
- | completeness_proof | COMPLETENESS_PROOF | A witness showing that the returned list of transactions is complete |
+ | Name          | Type                      | Description                              |
+ |---------------------------|--------|------------------------------------------|
+ | `txs` | `iterable<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
+ | `inclusion_proof` | `InclusionMultiproof`     | A witness showing that each transaction was included in the DA layer block |
+ | `completeness_proof` | `CompletenessProof`         | A witness showing that the returned list of transactions is complete |
 
-### Verify Relevant Tx List
+### `verify_relevant_tx_list`
 
 * **Usage:**
-  * An adaptation of the `get_relevant_txs` method designed for use by provers. This method
+  * An adaptation of the `get_relevant_txs` method designed for use by verifiers. This method
 returns the same list of transactions that would be returned by `get_relevant_txs`, in addition
 to a witness proving the inclusion of these transactions in the DA layer block, and a witness
 showing the completeness of the provided list.
 
-* **Arguments**
+* **Arguments:**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | header | BLOCKHEADER | The header of the DA layer block including the relevant transactions |
- | transactions | repeated TRANSACTION_WITH_SENDER | A list of L1 transactions ("data blobs"), with their senders |
- | inclusion_proof | INCLUSION_MULTIPROOF | A witness showing that each transaction was included in the DA layer block |
- | completeness_proof | COMPLETENESS_PROOF | A witness showing that the returned list of transactions is complete |
+ | Name          | Type                     | Description                              |
+ |--------------------------|--------|------------------------------------------|
+ | `header` | `Blockheader`            | The header of the DA layer block including the relevant transactions |
+ | `txs` | `iterable<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
+ | `inclusion_proof` | `InclusionMultiproof`     | A witness showing that each transaction was included in the DA layer block |
+ | `completeness_proof` | `CompletenessProof`        | A witness showing that the returned list of transactions is complete |
 
-* **Response**
+* **Response:**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | Ok | _ | No response |
- | Err | ERROR | An error message |
+ | Name          | Type  | Description                              |
+ |-------|--------|------------------------------------------|
+ | `Ok` | `_`     | No response |
+ | `Err` | `Error` | An error message |
 
 * Note: This response is a `Result` type - only one of Ok or Err will be populated
 
 ## Structs
 
-### TRANSACTION WITH SENDER
+### `BlobTransaction`
 
-| Name          | Type   | Description                              |
-|---------------|--------|------------------------------------------|
-| sender        | bytes | The address which sent this transaction |
-| transaction  | TRANSACTION | All of the transactions in this batch |
+| Name   | Type    | Description                              |
+|--------|---------|------------------------------------------|
+| `sender` | `bytes` | The address which sent this transaction |
+| `data`   | `bytes` | Data intended for rollup. Can be a proof, a transaction list, and etc. |
 
-### TRANSACTION
-
-An implementation defined transaction type. Must include some freeform `data` co.ntaining rollup transactions. May include
-additional fields, but these will not be passed along to the rollup.
-
-| Name          | Type   | Description                              |
-|---------------|--------|------------------------------------------|
-| data         | bytes | the data assocaited with this transaction |
-
-* Note: a transaction may include additional fields, but they will *not* delivered to the state transition function
-
-### INCLUSION MULTIPROOF
+### `InclusionMultiproof`
 
 A proof showing that each item in an associated vector is included in some state commitment. For example,
 this could be a list of merkle siblings.
 
-### COMPLETENESS PROOF
+### `CompletenessProof`
 
 A proof showing that each an associated vector does not omit any "relevant" transactions. For example, this could be a
 merkle proof of the items immediately preceding and following a particular Celestia namespace. This type may be
 the unit struct if no completeness proof is required.
 
-### ERROR
+### `Error`
 
-An implementation-defined error type. May be a simple String, an Error code, or anything else.
+May be a simple String, an Error code, or anything else.
 
-### BLOCKHEADER
+### `Blockheader`
 
-An implementation-defined type. Must include a `prev_hash` field and a commitment to the set of transactions.
+Must include a `prev_hash` field.
 
-| Name          | Type   | Description                              |
-|---------------|--------|------------------------------------------|
-| prev_hash     | blockhash | the hash of the previous (L1) block |
-| data_tx_commitment | commit(repeated TRANSACTION_WITH_SENDER)> | A commitment to the set of TRANSACTION_WITH_SENDER included
-in this block |
+| Name          | Type   | Description                                                               |
+|---------------|--------|---------------------------------------------------------------------------|
+| `prev_hash`     | `Blockhash` | the hash of the previous (L1) block                                       |
 
-## Example Code
+## Code
 
-Expressed in Rust, the DA layer interface would be a `trait` that looked something like the following:
-
-```rust
-
-pub trait DaLayer {
-    type Blockhash: PartialEq + Debug;
-
-    type Address: AsRef<[u8]>;
-    type Header: Blockheader<Hash = Self::Blockhash>;
-    type Transaction: TxWithSender<Self::Address>;
-    /// A proof that a particular transaction is included in a block
-    type InclusionProof;
-    /// A proof that a set of transactions are included in a block
-    type InclusionMultiProof;
-    /// A proof that a *claimed* set of transactions is complete relative to
-    /// some selection function supported by the DA layer. For example, this could be a range
-    /// proof for an entire Celestia namespace.
-    type CompletenessProof;
-    type Error: Debug;
-
-    /// The hash of the DA layer block which is the genesis of the logical chain defined by this app.
-    /// This is *not* necessarily the DA layer's genesis block.
-    const RELATIVE_GENESIS: Self::Blockhash;
-
-    fn get_relevant_txs(&self, blockhash: &Self::Blockhash) -> Vec<Self::Transaction>;
-    fn get_relevant_txs_with_proof(
-        &self,
-        blockhash: &Self::Blockhash,
-    ) -> (
-        Vec<Self::Transaction>,
-        Self::InclusionMultiProof,
-        Self::CompletenessProof,
-    );
-
-    fn verify_relevant_tx_list(
-        &self,
-        blockheader: &Self::Header,
-        txs: &Vec<Self::Transaction>,
-        inclusion_proof: &Self::InclusionMultiProof,
-        completeness_proof: &Self::CompletenessProof,
-    ) -> Result<(), Self::Error>;
-}
-
-pub trait TxWithSender<Addr> {
-    fn sender(&self) -> &Addr;
-    fn data(&self) -> Bytes;
-}
-```
+Expressed in Rust, the DA layer interface is  a `trait`. You can find the trait implementation [her](../../src/state_machine/da.rs).

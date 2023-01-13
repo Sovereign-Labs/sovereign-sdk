@@ -13,9 +13,9 @@ pub trait DaApp {
     type Blockhash: BlockHash;
 
     type Address: traits::Address;
-    type Header: Blockheader<Hash = Self::Blockhash>;
-    type BlobTransaction: TxWithSender<Self::Address>;
-    /// A proof that a set of transactions are included in a block
+    type BlockHeader: Blockheader<Hash = Self::Blockhash>;
+    type BlobTransaction: BlobTransaction<Self::Address>;
+    /// A proof that a set of transactions are included in a block.
     type InclusionMultiProof;
     /// A proof that a *claimed* set of transactions is complete relative to
     /// some selection function supported by the DA layer. For example, this could be a range
@@ -40,14 +40,14 @@ pub trait DaApp {
 
     fn verify_relevant_tx_list(
         &self,
-        blockheader: &Self::Header,
+        blockheader: &Self::BlockHeader,
         txs: &Vec<Self::BlobTransaction>,
         inclusion_proof: Self::InclusionMultiProof,
         completeness_proof: Self::CompletenessProof,
     ) -> Result<(), Self::Error>;
 }
 
-pub trait TxWithSender<Addr> {
+pub trait BlobTransaction<Addr> {
     type Data: Buf;
 
     fn sender(&self) -> Addr;

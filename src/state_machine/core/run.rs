@@ -1,6 +1,6 @@
 use crate::{
     core::traits::{Block, Blockheader, CanonicalHash},
-    da::{DaApp, TxWithSender},
+    da::{DaApp, BlobTransaction},
     state_machine::env,
     stf::StateTransitionFunction,
     zk::traits::{Proof, RecursiveProofInput, ZkVM},
@@ -82,7 +82,7 @@ impl<DaLayer: DaApp, App: StateTransitionFunction> Rollup<DaLayer, App> {
                 (prev_header, Some(commitment))
             }
         };
-        let current_da_header: DaLayer::Header = env::read_unchecked();
+        let current_da_header: DaLayer::BlockHeader = env::read_unchecked();
         assert_eq!(&prev_header.da_blockhash, current_da_header.prev_hash());
 
         let relevant_txs = env::read_unchecked();
