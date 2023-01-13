@@ -92,7 +92,7 @@ might use the hash of block 16092246 as its relative genesis.
 
 ## Methods
 
-### Get Relevant Txs
+### `get_relevant_txs`
 
 * **Usage:**
   * The core of the DA interface. Fetches all "relevant" transactions from a given DA layer block.
@@ -102,17 +102,17 @@ might define "relevant" to mean, "occurring in namespace 'foo'".
 
 * **Arguments**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | blockhash   | BLOCKHASH  | The hash of the DA layer block to be parsed |
+ | Name          | Type      | Description                              |
+ |-----------|--------|------------------------------------------|
+ | `blockhash`   | `Blockhash` | The hash of the DA layer block to be parsed |
 
 * **Response**
 
- | Name          | Type                     | Description                              |
- |--------------------------|--------|------------------------------------------|
- | transactions | Vector<BLOB_TRANSACTION> | A list of L1 transactions ("data blobs"), with their senders |
+ | Name          | Type                    | Description                              |
+ |-------------------------|--------|------------------------------------------|
+ | `transactions` | `Vector<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
 
-### Get Relevant Txs With Proof
+### `get_relevant_txs_with_proof`
 
 * **Usage:**
   * An adaptation of the `get_relevant_txs` method designed for use by provers. This method
@@ -123,18 +123,18 @@ showing the completeness of the provided list.
 * **Arguments**
 
  | Name         | Type       | Description                                 |
- |--------------|------------|---------------------------------------------|
- | blockhash    | blockhash  | The hash of the DA layer block to be parsed |
+ |-------------|------------|---------------------------------------------|
+ | `blockhash`    | `Blockhash` | The hash of the DA layer block to be parsed |
 
 * **Response**
 
- | Name          | Type                            | Description                              |
- |---------------------------------|--------|------------------------------------------|
- | transactions | Vector<BLOB_TRANSACTION> | A list of L1 transactions ("data blobs"), with their senders |
- | inclusion_proof | INCLUSION_MULTIPROOF            | A witness showing that each transaction was included in the DA layer block |
- | completeness_proof | COMPLETENESS_PROOF              | A witness showing that the returned list of transactions is complete |
+ | Name          | Type                      | Description                              |
+ |---------------------------|--------|------------------------------------------|
+ | `txs` | `Vector<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
+ | `inclusion_proof` | `InclusionMultiproof`     | A witness showing that each transaction was included in the DA layer block |
+ | `completeness_proof` | `CompletenessProof`         | A witness showing that the returned list of transactions is complete |
 
-### Verify Relevant Tx List
+### `verify_relevant_tx_list`
 
 * **Usage:**
   * An adaptation of the `get_relevant_txs` method designed for use by verifiers. This method
@@ -146,63 +146,63 @@ showing the completeness of the provided list.
 
  | Name          | Type                     | Description                              |
  |--------------------------|--------|------------------------------------------|
- | header | BLOCKHEADER              | The header of the DA layer block including the relevant transactions |
- | transactions | Vector<BLOB_TRANSACTION> | A list of L1 transactions ("data blobs"), with their senders |
- | inclusion_proof | INCLUSION_MULTIPROOF     | A witness showing that each transaction was included in the DA layer block |
- | completeness_proof | COMPLETENESS_PROOF       | A witness showing that the returned list of transactions is complete |
+ | `header` | `Blockheader`            | The header of the DA layer block including the relevant transactions |
+ | `transactions` | `Vector<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
+ | `inclusion_proof` | `InclusionMultiproof`     | A witness showing that each transaction was included in the DA layer block |
+ | `completeness_proof` | `CompletenessProof`        | A witness showing that the returned list of transactions is complete |
 
 * **Response**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | Ok | _ | No response |
- | Err | ERROR | An error message |
+ | Name          | Type  | Description                              |
+ |-------|--------|------------------------------------------|
+ | `Ok` | `_`     | No response |
+ | `Err` | `Error` | An error message |
 
 * Note: This response is a `Result` type - only one of Ok or Err will be populated
 
 ## Structs
 
-### BLOB TRANSACTION
+### `BlobTransaction`
 
 | Name   | Type  | Description                              |
 |--------|-------|------------------------------------------|
-| sender | bytes | The address which sent this transaction |
-| data   | DATA  | All of the transactions in this batch |
+| `sender` | `Bytes` | The address which sent this transaction |
+| `data`   | `Data`  | All of the transactions in this batch |
 
-### DATA
+### `Data`
 
 **An implementation-defined type**. Must include some freeform `data` containing rollup transactions. May include
 additional fields, but these will not be passed along to the rollup.
 
 | Name          | Type   | Description                              |
 |---------------|--------|------------------------------------------|
-| data         | bytes | the data assocaited with this transaction |
+| `data`         | `Bytes` | the data assocaited with this transaction |
 
 * Note: a transaction may include additional fields, but they will *not* delivered to the state transition function
 
-### INCLUSION MULTIPROOF
+### `InclusionMultiproof`
 
 **An implementation-defined type**. A proof showing that each item in an associated vector is included in some state commitment. For example,
 this could be a list of merkle siblings.
 
-### COMPLETENESS PROOF
+### `CompletenessProof`
 
 **An implementation-defined type**. A proof showing that each an associated vector does not omit any "relevant" transactions. For example, this could be a
 merkle proof of the items immediately preceding and following a particular Celestia namespace. This type may be
 the unit struct if no completeness proof is required.
 
-### ERROR
+### `Error`
 
 **An implementation-defined type**. May be a simple String, an Error code, or anything else.
 
-### BLOCKHEADER
+### `Blockheader`
 
 **An implementation-defined type**. Must include a `prev_hash` field.
 
 | Name          | Type   | Description                                                               |
 |---------------|--------|---------------------------------------------------------------------------|
-| prev_hash     | blockhash | the hash of the previous (L1) block                                       |
+| `prev_hash`     | `Blockhash` | the hash of the previous (L1) block                                       |
 
 ## Code
 
-Expressed in Rust, the DA layer interface is  a `trait`. You can find the trait implementation [here](../../src/state_machine/da.rs).
+Expressed in Rust, the DA layer interface is  a `trait`. You can find the trait implementation [her](../../src/state_machine/da.rs).
