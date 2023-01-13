@@ -100,13 +100,13 @@ The exact criteria that make transactions "relevant" are up to the implementer, 
 defined without reference to the current state of the rollup. For example, a rollup on Celestia
 might define "relevant" to mean, "occurring in namespace 'foo'".
 
-* **Arguments**
+* **Arguments:**
 
  | Name          | Type      | Description                              |
  |-----------|--------|------------------------------------------|
  | `blockhash`   | `Blockhash` | The hash of the DA layer block to be parsed |
 
-* **Response**
+* **Response:**
 
  | Name          | Type                    | Description                              |
  |-------------------------|--------|------------------------------------------|
@@ -120,13 +120,13 @@ returns the same list of transactions that would be returned by `get_relevant_tx
 to a witness proving the inclusion of these transactions in the DA layer block, and a witness
 showing the completeness of the provided list.
 
-* **Arguments**
+* **Arguments:**
 
  | Name         | Type       | Description                                 |
  |-------------|------------|---------------------------------------------|
  | `blockhash`    | `Blockhash` | The hash of the DA layer block to be parsed |
 
-* **Response**
+* **Response:**
 
  | Name          | Type                      | Description                              |
  |---------------------------|--------|------------------------------------------|
@@ -142,7 +142,7 @@ returns the same list of transactions that would be returned by `get_relevant_tx
 to a witness proving the inclusion of these transactions in the DA layer block, and a witness
 showing the completeness of the provided list.
 
-* **Arguments**
+* **Arguments:**
 
  | Name          | Type                     | Description                              |
  |--------------------------|--------|------------------------------------------|
@@ -151,7 +151,7 @@ showing the completeness of the provided list.
  | `inclusion_proof` | `InclusionMultiproof`     | A witness showing that each transaction was included in the DA layer block |
  | `completeness_proof` | `CompletenessProof`        | A witness showing that the returned list of transactions is complete |
 
-* **Response**
+* **Response:**
 
  | Name          | Type  | Description                              |
  |-------|--------|------------------------------------------|
@@ -171,7 +171,7 @@ showing the completeness of the provided list.
 
 ### `Data`
 
-**An implementation-defined type**. Must include some freeform `data` containing rollup transactions. May include
+Must include some freeform `data` containing rollup transactions. May include
 additional fields, but these will not be passed along to the rollup.
 
 | Name          | Type   | Description                              |
@@ -182,22 +182,22 @@ additional fields, but these will not be passed along to the rollup.
 
 ### `InclusionMultiproof`
 
-**An implementation-defined type**. A proof showing that each item in an associated vector is included in some state commitment. For example,
+A proof showing that each item in an associated vector is included in some state commitment. For example,
 this could be a list of merkle siblings.
 
 ### `CompletenessProof`
 
-**An implementation-defined type**. A proof showing that each an associated vector does not omit any "relevant" transactions. For example, this could be a
+A proof showing that each an associated vector does not omit any "relevant" transactions. For example, this could be a
 merkle proof of the items immediately preceding and following a particular Celestia namespace. This type may be
 the unit struct if no completeness proof is required.
 
 ### `Error`
 
-**An implementation-defined type**. May be a simple String, an Error code, or anything else.
+May be a simple String, an Error code, or anything else.
 
 ### `Blockheader`
 
-**An implementation-defined type**. Must include a `prev_hash` field.
+Must include a `prev_hash` field.
 
 | Name          | Type   | Description                                                               |
 |---------------|--------|---------------------------------------------------------------------------|
