@@ -68,7 +68,7 @@ pub struct AugmentedRollupBlock<DaLayer: DaApp, App: StateTransitionFunction> {
     /// The state-transition information
     pub block: RollupBlock<DaLayer, App>,
     /// The header of the Da layer block corresponding to this rollup block
-    pub da_header: DaLayer::Header,
+    pub da_header: DaLayer::BlockHeader,
     /// A list of transactions on the DA layer that are "relevant" to this rollup.
     /// A transaction is deemed "relevant" if its "sender" field needs to be examined
     /// in order to determine whether it applies to the rollup. For example, all transactions

@@ -108,9 +108,9 @@ might define "relevant" to mean, "occurring in namespace 'foo'".
 
 * **Response**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | transactions | repeated TRANSACTION_WITH_SENDER | A list of L1 transactions ("data blobs"), with their senders |
+ | Name          | Type                     | Description                              |
+ |--------------------------|--------|------------------------------------------|
+ | transactions | Vector<BLOB_TRANSACTION> | A list of L1 transactions ("data blobs"), with their senders |
 
 ### Get Relevant Txs With Proof
 
@@ -128,11 +128,11 @@ showing the completeness of the provided list.
 
 * **Response**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | transactions | repeated TRANSACTION_WITH_SENDER | A list of L1 transactions ("data blobs"), with their senders |
- | inclusion_proof | INCLUSION_MULTIPROOF | A witness showing that each transaction was included in the DA layer block |
- | completeness_proof | COMPLETENESS_PROOF | A witness showing that the returned list of transactions is complete |
+ | Name          | Type                            | Description                              |
+ |---------------------------------|--------|------------------------------------------|
+ | transactions | Vector<BLOB_TRANSACTION> | A list of L1 transactions ("data blobs"), with their senders |
+ | inclusion_proof | INCLUSION_MULTIPROOF            | A witness showing that each transaction was included in the DA layer block |
+ | completeness_proof | COMPLETENESS_PROOF              | A witness showing that the returned list of transactions is complete |
 
 ### Verify Relevant Tx List
 
@@ -144,12 +144,12 @@ showing the completeness of the provided list.
 
 * **Arguments**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | header | BLOCKHEADER | The header of the DA layer block including the relevant transactions |
- | transactions | repeated TRANSACTION_WITH_SENDER | A list of L1 transactions ("data blobs"), with their senders |
- | inclusion_proof | INCLUSION_MULTIPROOF | A witness showing that each transaction was included in the DA layer block |
- | completeness_proof | COMPLETENESS_PROOF | A witness showing that the returned list of transactions is complete |
+ | Name          | Type                     | Description                              |
+ |--------------------------|--------|------------------------------------------|
+ | header | BLOCKHEADER              | The header of the DA layer block including the relevant transactions |
+ | transactions | Vector<BLOB_TRANSACTION> | A list of L1 transactions ("data blobs"), with their senders |
+ | inclusion_proof | INCLUSION_MULTIPROOF     | A witness showing that each transaction was included in the DA layer block |
+ | completeness_proof | COMPLETENESS_PROOF       | A witness showing that the returned list of transactions is complete |
 
 * **Response**
 
@@ -162,16 +162,16 @@ showing the completeness of the provided list.
 
 ## Structs
 
-### TRANSACTION WITH SENDER
+### BLOB TRANSACTION
 
-| Name          | Type   | Description                              |
-|---------------|--------|------------------------------------------|
-| sender        | bytes | The address which sent this transaction |
-| transaction  | TRANSACTION | All of the transactions in this batch |
+| Name   | Type  | Description                              |
+|--------|-------|------------------------------------------|
+| sender | bytes | The address which sent this transaction |
+| data   | DATA  | All of the transactions in this batch |
 
-### TRANSACTION
+### DATA
 
-An implementation defined transaction type. Must include some freeform `data` containing rollup transactions. May include
+**An implementation-defined type**. Must include some freeform `data` containing rollup transactions. May include
 additional fields, but these will not be passed along to the rollup.
 
 | Name          | Type   | Description                              |
@@ -182,27 +182,26 @@ additional fields, but these will not be passed along to the rollup.
 
 ### INCLUSION MULTIPROOF
 
-A proof showing that each item in an associated vector is included in some state commitment. For example,
+**An implementation-defined type**. A proof showing that each item in an associated vector is included in some state commitment. For example,
 this could be a list of merkle siblings.
 
 ### COMPLETENESS PROOF
 
-A proof showing that each an associated vector does not omit any "relevant" transactions. For example, this could be a
+**An implementation-defined type**. A proof showing that each an associated vector does not omit any "relevant" transactions. For example, this could be a
 merkle proof of the items immediately preceding and following a particular Celestia namespace. This type may be
 the unit struct if no completeness proof is required.
 
 ### ERROR
 
-An implementation-defined error type. May be a simple String, an Error code, or anything else.
+**An implementation-defined type**. May be a simple String, an Error code, or anything else.
 
 ### BLOCKHEADER
 
-An implementation-defined type. Must include a `prev_hash` field and a commitment to the set of transactions.
+**An implementation-defined type**. Must include a `prev_hash` field.
 
 | Name          | Type   | Description                                                               |
 |---------------|--------|---------------------------------------------------------------------------|
 | prev_hash     | blockhash | the hash of the previous (L1) block                                       |
-| data_tx_commitment | commit(repeated TRANSACTION_WITH_SENDER)> | A commitment to the set of TRANSACTION_WITH_SENDER included in this block |
 
 ## Code
 
