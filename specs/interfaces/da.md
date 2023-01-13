@@ -16,7 +16,7 @@ Let's go through each of these tasks in detail:
 
 Rollups are designed to allow arbitrary state machines to inherit security guarantees
 of an underlying L1 blockchain. In order for these guarantees to hold, the rollup's data must be "available".
-Otherwise, an adversary can freeze the rollup by publish a new state root which incorporates a valid
+Otherwise, an adversary can freeze the rollup by publishing a new state root that incorporates a valid
 but secret state update. Since no one else knows the new state of the system, honest participants will
 be unable to post new blocks.
 
@@ -28,7 +28,7 @@ to choose a chain that provides suitable data availability guarantees for their 
 
 No chain has infinite capacity. So, in order to ensure robust operation, chains need to ensure that transactions
 can be prioritized. Since transactions on the rollup create useful economic activity, we assume that, over time,
-honest sequencers including "real" transactions should be able to generate revenue. They can use this revenue
+honest sequencers, including "real" transactions, should be able to generate revenue. They can use this revenue
 to bid for blockspace on the L1. By contrast, dishonest sequencers sending only "spam" transactions do not generate
 revenue. For DOS resistance, it's vital that these dishonest sequencers not be able to "crowd out" honest sequencers
 permanently. So, sending transactions on the L1 must be costly. In addition, the fee paid on the L1 should be
@@ -75,7 +75,7 @@ bundles containing unpopular transactions. So, the L1 needs to be censorship res
 We allow Sovereign SDK chains to specify any state model of their choosing. So, the underlying DA layer must
 provide a total ordering over rollup batches. For purposes of bridging, it also needs
 to provide an ordering *across* batches on different rollups. (This is only an issue if the underlying
-chain uses a DAG model). This requirement may be relaxed in future.
+chain uses a DAG model). This requirement may be relaxed in the future.
 
 ## Optional Functionality
 
@@ -137,7 +137,7 @@ showing the completeness of the provided list.
 ### Verify Relevant Tx List
 
 * **Usage:**
-  * An adaptation of the `get_relevant_txs` method designed for use by provers. This method
+  * An adaptation of the `get_relevant_txs` method designed for use by verifiers. This method
 returns the same list of transactions that would be returned by `get_relevant_txs`, in addition
 to a witness proving the inclusion of these transactions in the DA layer block, and a witness
 showing the completeness of the provided list.
@@ -171,7 +171,7 @@ showing the completeness of the provided list.
 
 ### TRANSACTION
 
-An implementation defined transaction type. Must include some freeform `data` co.ntaining rollup transactions. May include
+An implementation defined transaction type. Must include some freeform `data` containing rollup transactions. May include
 additional fields, but these will not be passed along to the rollup.
 
 | Name          | Type   | Description                              |
@@ -199,11 +199,10 @@ An implementation-defined error type. May be a simple String, an Error code, or 
 
 An implementation-defined type. Must include a `prev_hash` field and a commitment to the set of transactions.
 
-| Name          | Type   | Description                              |
-|---------------|--------|------------------------------------------|
-| prev_hash     | blockhash | the hash of the previous (L1) block |
-| data_tx_commitment | commit(repeated TRANSACTION_WITH_SENDER)> | A commitment to the set of TRANSACTION_WITH_SENDER included
-in this block |
+| Name          | Type   | Description                                                               |
+|---------------|--------|---------------------------------------------------------------------------|
+| prev_hash     | blockhash | the hash of the previous (L1) block                                       |
+| data_tx_commitment | commit(repeated TRANSACTION_WITH_SENDER)> | A commitment to the set of TRANSACTION_WITH_SENDER included in this block |
 
 ## Example Code
 
