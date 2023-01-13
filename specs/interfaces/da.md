@@ -204,53 +204,6 @@ An implementation-defined type. Must include a `prev_hash` field and a commitmen
 | prev_hash     | blockhash | the hash of the previous (L1) block                                       |
 | data_tx_commitment | commit(repeated TRANSACTION_WITH_SENDER)> | A commitment to the set of TRANSACTION_WITH_SENDER included in this block |
 
-## Example Code
+## Code
 
-Expressed in Rust, the DA layer interface would be a `trait` that looked something like the following:
-
-```rust
-
-pub trait DaLayer {
-    type Blockhash: PartialEq + Debug;
-
-    type Address: AsRef<[u8]>;
-    type Header: Blockheader<Hash = Self::Blockhash>;
-    type Transaction: TxWithSender<Self::Address>;
-    /// A proof that a particular transaction is included in a block
-    type InclusionProof;
-    /// A proof that a set of transactions are included in a block
-    type InclusionMultiProof;
-    /// A proof that a *claimed* set of transactions is complete relative to
-    /// some selection function supported by the DA layer. For example, this could be a range
-    /// proof for an entire Celestia namespace.
-    type CompletenessProof;
-    type Error: Debug;
-
-    /// The hash of the DA layer block which is the genesis of the logical chain defined by this app.
-    /// This is *not* necessarily the DA layer's genesis block.
-    const RELATIVE_GENESIS: Self::Blockhash;
-
-    fn get_relevant_txs(&self, blockhash: &Self::Blockhash) -> Vec<Self::Transaction>;
-    fn get_relevant_txs_with_proof(
-        &self,
-        blockhash: &Self::Blockhash,
-    ) -> (
-        Vec<Self::Transaction>,
-        Self::InclusionMultiProof,
-        Self::CompletenessProof,
-    );
-
-    fn verify_relevant_tx_list(
-        &self,
-        blockheader: &Self::Header,
-        txs: &Vec<Self::Transaction>,
-        inclusion_proof: &Self::InclusionMultiProof,
-        completeness_proof: &Self::CompletenessProof,
-    ) -> Result<(), Self::Error>;
-}
-
-pub trait TxWithSender<Addr> {
-    fn sender(&self) -> &Addr;
-    fn data(&self) -> Bytes;
-}
-```
+Expressed in Rust, the DA layer interface is  a `trait`. You can find the trait implementation [here](../../src/state_machine/da.rs).

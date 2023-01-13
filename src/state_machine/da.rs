@@ -15,7 +15,7 @@ pub trait DaApp {
     type Address: traits::Address;
     type Header: Blockheader<Hash = Self::Blockhash>;
     type BlobTransaction: TxWithSender<Self::Address>;
-    /// A proof that a set of transactions are included in a block
+    /// A proof that a set of transactions are included in a block.
     type InclusionMultiProof;
     /// A proof that a *claimed* set of transactions is complete relative to
     /// some selection function supported by the DA layer. For example, this could be a range
