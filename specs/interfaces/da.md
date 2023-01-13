@@ -110,7 +110,7 @@ might define "relevant" to mean, "occurring in namespace 'foo'".
 
  | Name          | Type                    | Description                              |
  |-------------------------|--------|------------------------------------------|
- | `transactions` | `Vector<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
+ | `txs` | `iterable<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
 
 ### `get_relevant_txs_with_proof`
 
@@ -130,7 +130,7 @@ showing the completeness of the provided list.
 
  | Name          | Type                      | Description                              |
  |---------------------------|--------|------------------------------------------|
- | `txs` | `Vector<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
+ | `txs` | `iterable<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
  | `inclusion_proof` | `InclusionMultiproof`     | A witness showing that each transaction was included in the DA layer block |
  | `completeness_proof` | `CompletenessProof`         | A witness showing that the returned list of transactions is complete |
 
@@ -147,7 +147,7 @@ showing the completeness of the provided list.
  | Name          | Type                     | Description                              |
  |--------------------------|--------|------------------------------------------|
  | `header` | `Blockheader`            | The header of the DA layer block including the relevant transactions |
- | `transactions` | `Vector<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
+ | `txs` | `iterable<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
  | `inclusion_proof` | `InclusionMultiproof`     | A witness showing that each transaction was included in the DA layer block |
  | `completeness_proof` | `CompletenessProof`        | A witness showing that the returned list of transactions is complete |
 
@@ -164,21 +164,10 @@ showing the completeness of the provided list.
 
 ### `BlobTransaction`
 
-| Name   | Type  | Description                              |
-|--------|-------|------------------------------------------|
-| `sender` | `Bytes` | The address which sent this transaction |
-| `data`   | `Data`  | All of the transactions in this batch |
-
-### `Data`
-
-Must include some freeform `data` containing rollup transactions. May include
-additional fields, but these will not be passed along to the rollup.
-
-| Name          | Type   | Description                              |
-|---------------|--------|------------------------------------------|
-| `data`         | `Bytes` | the data assocaited with this transaction |
-
-* Note: a transaction may include additional fields, but they will *not* delivered to the state transition function
+| Name   | Type    | Description                              |
+|--------|---------|------------------------------------------|
+| `sender` | `bytes` | The address which sent this transaction |
+| `data`   | `bytes` | Data intended for rollup. Can be a proof, a transaction list, and etc. |
 
 ### `InclusionMultiproof`
 
