@@ -1,17 +1,17 @@
 use bytes::{Buf, Bytes};
 
-use crate::core::traits::{AddressTrait, BlockTrait, BlockheaderTrait, TransactionTrait};
+use crate::core::traits::{AddressTrait, BlockTrait, BlockHeaderTrait, TransactionTrait};
 
 pub trait StateTransitionFunction {
     type Address: AddressTrait;
     type StateRoot;
     type ChainParams;
     type Transaction: TransactionTrait;
-    type Block: BlockTrait<Header = Self::Header, Transaction = Self::Transaction>;
+    type Block: BlockTrait<Header = Self::BlockHeader, Transaction = Self::Transaction>;
     type Proof;
     type Error;
     /// The header of a rollup block
-    type Header: BlockheaderTrait;
+    type BlockHeader: BlockHeaderTrait;
     /// A proof that the sequencer has misbehaved. For example, this could be a merkle proof of a transaction
     /// with an invalid signature
     type MisbehaviorProof;
@@ -39,9 +39,11 @@ pub trait StateTransitionFunction {
     ) -> Result<Self::Proof, Option<ConsensusSetUpdate<Bytes>>>;
 
     /// Called once at the beginning of each rollup block (so, potentially many times per DA block).
-    /// This method has two purposes: to allow the rollup to perform and needed initialiation before
-    /// processing the block, and to process an optional "misbehavior proof" to allow short-circuiting
-    /// in case the block is invalid. (An example misbehavior proof would be a merkle-proof to a transaction)
+    /// This method has two purposes:
+    /// - to allow the rollup to perform any needed initialization before
+    /// processing the block,
+    /// - and to process an optional "misbehavior proof" to allow short-circuiting
+    /// in case the block is invalid. An example misbehavior proof would be a merkle-proof to a transaction
     /// with an invalid signature. In case of misbehavior, this method should slash the block's sender.
     ///
     /// TODO: decide whether to add events

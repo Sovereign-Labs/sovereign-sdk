@@ -5,7 +5,7 @@ use crate::serial::{Deser, Serialize};
 // NOTE: When naming traits, we use the naming convention below:
 // *Trait IFF there's an associated type that would otherwise have the same name
 
-pub trait BlockheaderTrait: PartialEq + Debug + CanonicalHash<Output = Self::Hash> {
+pub trait BlockHeaderTrait: PartialEq + Debug + CanonicalHash<Output = Self::Hash> {
     type Hash: Clone;
     fn prev_hash(&self) -> &Self::Hash;
 }
@@ -16,7 +16,7 @@ pub trait CanonicalHash {
 }
 
 pub trait BlockTrait: PartialEq + Debug + Serialize + Deser {
-    type Header: BlockheaderTrait;
+    type Header: BlockHeaderTrait;
     type Transaction: TransactionTrait;
     fn header(&self) -> &Self::Header;
     fn transactions(&self) -> &[Self::Transaction];

@@ -1,7 +1,7 @@
 use bytes::Buf;
 
 use crate::{
-    core::traits::{self, BlockheaderTrait, AddressTrait},
+    core::traits::{self, BlockHeaderTrait, AddressTrait},
     serial::{Deser, Serialize},
 };
 use core::fmt::Debug;
@@ -13,7 +13,7 @@ pub trait DaApp {
     type Blockhash: BlockHashTrait;
 
     type Address: AddressTrait;
-    type BlockHeader: BlockheaderTrait<Hash = Self::Blockhash>;
+    type BlockHeader: BlockHeaderTrait<Hash = Self::Blockhash>;
     type BlobTransaction: BlobTransactionTrait<Self::Address>;
     /// A proof that a set of transactions are included in a block.
     type InclusionMultiProof;

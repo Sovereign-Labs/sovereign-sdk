@@ -12,5 +12,3 @@ pub mod utils;
 pub mod zk;
 
 pub use bytes::Bytes;
-
-pub use crate::core::Rollup;

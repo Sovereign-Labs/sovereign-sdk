@@ -1,5 +1,5 @@
 use crate::{
-    core::traits::{BlockTrait, BlockheaderTrait, CanonicalHash},
+    core::traits::{BlockTrait, BlockHeaderTrait, CanonicalHash},
     da::{DaApp, BlobTransactionTrait},
     state_machine::env,
     stf::StateTransitionFunction,
