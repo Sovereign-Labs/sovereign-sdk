@@ -22,14 +22,18 @@ adaptive gas pricing depending on prover throughput.
 
 * **Usage:**
   * Called exactly once for each slot (DA layer block), prior to processing any of the batches included in that slot.
+  This method is invoked whether or not the slot contains any data relevant to the rollup
   
 ### Parse Batch
 
 * **Usage:**
-  * SHOULD perform a zero-copy deserialization of a batch into a `header` and a list of `transaction`s. This method may perform
+  * Performs a deserialization of a batch into a `header` and a list of `transaction`s.
+  The deserialization should be zero-copy for efficiency. This method may perform
   additional sanity checks, but is assumed to be computationally
   inexpensive. Expensive checks (such as signatures) SHOULD wait for the
-  `begin_batch` or `deliver_tx` calls.
+  `begin_batch` or `deliver_tx` calls. This method SHOULD slash the
+block proposer if the batch cannot be deserialized
+or is otherwise invalid
 * **Arguments**
 
  | Name          | Type   | Description                              |
@@ -49,7 +53,8 @@ adaptive gas pricing depending on prover throughput.
 ### Parse Proof
 
 * **Usage:**
-  * SHOULD perform a zero-copy deserialization of a blob of bytes into a `proof`. This method may perform
+  * erforms a deserialization of a batch into a `proof`.
+  The deserialization should be zero-copy for efficiency. This method may perform
   additional sanity checks, but is assumed to be computationally
   inexpensive. Expensive checks (such as signatures) SHOULD wait for the
   `deliverproof` calls
@@ -72,7 +77,8 @@ adaptive gas pricing depending on prover throughput.
 ### Begin Batch
 
 * **Usage:**
-  * This method has two purposes: to allow the rollup to perofrm and  needed initialiation before
+  * This method is called once at the beginning of each rollup batch.
+  It has two purposes: to allow the rollup to perofrm and  needed initialiation before
   processing the block, and to process an optional "misbehavior proof" to allow short-circuiting
   in case the block is invalid. (An example misbehavior proof would be a merkle-proof to a transaction
   with an invalid signature). In case of misbehavior, this method should slash the block's sender.
@@ -98,9 +104,9 @@ adaptive gas pricing depending on prover throughput.
 ### Deliver TX
 
 * **Usage:**
-  * The core of the state transition function - called once for each rollup transaction. MUST NOT commit any changes
-  to the rollup's state. Changes may only be persisted by the `end_batch`, `end_slot`, and `deliver_proof` method calls.
-  This allows us to maintain the invariant that transactions contained in invalid batches are never committed,
+  * The core of the state transition function - called once for each rollup transaction. This method must not commit
+  any changes to the rollup's state. Changes may only be persisted by the `end_batch`, `end_slot`, and `deliver_proof`
+  method calls. This allows us to maintain the invariant that transactions contained in invalid batches are never committed,
   even in the face of a malicious prover who fails to supply a misbehavior proof during `begin_block`.
 
 * **Arguments**
@@ -123,10 +129,10 @@ adaptive gas pricing depending on prover throughput.
 ### End Batch
 
 * **Usage:**
-  * Called at the end of each rollup batch, after all transactions in the batch have been delivered
-  to the rollup's state. The rollup may use this call to persist any changes made during the course
-  of the batch. The Sovereign SDK guarantees that no transaction in the batch will be reverted after this call is made
-  unless the underlying DA layer experiences a fork.
+  * Called at the end of each rollup batch, after all transactions in the batch have been delivered.
+  The rollup may use this call to persist any changes made during the course of the batch.
+  The Sovereign SDK guarantees that no transaction in the batch will be reverted after this call is made
+  unless the underlying DA layer experiences a reorg.
 
 * **Arguments**
 
@@ -144,7 +150,7 @@ None
   * Called at the end of each slot, after all batches and proofs have been delivered.
   The rollup may use this call to persist any changes made during the course
   of the slot. The Sovereign SDK guarantees that no batch in the slot will be reverted after this call is made
-  unless the underlying DA layer experiences a fork.
+  unless the underlying DA layer experiences a reorg.
 
 * **Arguments**
 
@@ -161,7 +167,7 @@ None
 * **Usage:**
   * Called between `begin_slot` and `end_slot` to process the completed proving of some prior transactions. May be
   invoked zero or more times per slot. May not be invoked between a `begin_batch` call and its corresponding `end_batch`.
-  Rollups SHOULD use this call to compensate provers and adjust gas prices.
+  Rollups should use this call to compensate provers and adjust gas prices.
 
 * **Arguments**
 
