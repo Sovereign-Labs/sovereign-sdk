@@ -1,10 +1,10 @@
 use crate::{
-    core::traits::{Block, Blockheader, CanonicalHash},
+    core::traits::{BlockTrait, BlockheaderTrait, CanonicalHash},
     core::types::RollupHeader,
-    da::{DaApp, BlobTransaction},
+    da::{DaApp, BlobTransactionTrait},
     state_machine::env,
     stf::StateTransitionFunction,
-    zk::traits::{Proof, RecursiveProofInput, ZkVM},
+    zk::traits::{ProofTrait, RecursiveProofInput, ZkVM},
 };
 
 use super::run::BlockProof;

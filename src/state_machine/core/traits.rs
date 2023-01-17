@@ -2,7 +2,7 @@ use core::fmt::Debug;
 
 use crate::serial::{Deser, Serialize};
 
-pub trait Blockheader: PartialEq + Debug + CanonicalHash<Output = Self::Hash> {
+pub trait BlockheaderTrait: PartialEq + Debug + CanonicalHash<Output = Self::Hash> {
     type Hash: Clone;
     fn prev_hash(&self) -> &Self::Hash;
 }
@@ -12,21 +12,21 @@ pub trait CanonicalHash {
     fn hash(&self) -> Self::Output;
 }
 
-pub trait Block: PartialEq + Debug + Serialize + Deser {
-    type Header: Blockheader;
-    type Transaction: Transaction;
+pub trait BlockTrait: PartialEq + Debug + Serialize + Deser {
+    type Header: BlockheaderTrait;
+    type Transaction: TransactionTrait;
     fn header(&self) -> &Self::Header;
     fn transactions(&self) -> &[Self::Transaction];
     fn take_transactions(self) -> Vec<Self::Transaction>;
 }
 
-pub trait Transaction:
+pub trait TransactionTrait:
     PartialEq + Debug + CanonicalHash<Output = Self::Hash> + Serialize + Deser
 {
     type Hash: AsRef<[u8]>;
 }
 
-pub trait Address: PartialEq + Debug + Clone + AsRef<[u8]> + for<'a> TryFrom<&'a [u8]> {}
+pub trait AddressTrait: PartialEq + Debug + Clone + AsRef<[u8]> + for<'a> TryFrom<&'a [u8]> {}
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct InvalidAddress;

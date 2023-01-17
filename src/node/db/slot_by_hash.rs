@@ -2,7 +2,7 @@ use super::Result;
 use super::{ColumnFamilyName, KeyCodec, Schema, ValueCodec};
 use std::fmt::Debug;
 
-use crate::da::BlockHash;
+use crate::da::BlockHashTrait;
 use crate::{serial::Deser, services::da::SlotData};
 
 pub const SLOT_BY_HASH_CF_NAME: ColumnFamilyName = "slot_by_hash";
@@ -12,7 +12,7 @@ pub struct SlotByHashSchema<K, V>(std::marker::PhantomData<K>, std::marker::Phan
 
 impl<K, V> Schema for SlotByHashSchema<K, V>
 where
-    K: Debug + Send + Sync + 'static + BlockHash,
+    K: Debug + Send + Sync + 'static + BlockHashTrait,
     V: Debug + Send + Sync + 'static + SlotData,
 {
     type Key = K;
@@ -23,7 +23,7 @@ where
 
 impl<K, V> KeyCodec<SlotByHashSchema<K, V>> for K
 where
-    K: Debug + Send + Sync + 'static + BlockHash,
+    K: Debug + Send + Sync + 'static + BlockHashTrait,
     V: Debug + Send + Sync + 'static + SlotData,
 {
     fn encode_key(&self) -> Result<Vec<u8>> {
@@ -37,7 +37,7 @@ where
 
 impl<K, V> ValueCodec<SlotByHashSchema<K, V>> for V
 where
-    K: Debug + Send + Sync + 'static + BlockHash,
+    K: Debug + Send + Sync + 'static + BlockHashTrait,
     V: Debug + Send + Sync + 'static + SlotData,
 {
     fn encode_value(&self) -> Result<Vec<u8>> {
