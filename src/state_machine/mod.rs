@@ -9,8 +9,9 @@ pub mod serial;
 pub mod stf;
 pub mod utils;
 
+mod storage;
 pub mod zk;
 
-pub use bytes::Bytes;
+pub use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 pub use crate::core::Rollup;
