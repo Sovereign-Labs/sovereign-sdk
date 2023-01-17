@@ -1,9 +1,9 @@
 use crate::{
-    core::traits::{Block, Blockheader, CanonicalHash},
-    da::{DaApp, BlobTransaction},
+    core::traits::{BlockTrait, BlockheaderTrait, CanonicalHash},
+    da::{DaApp, BlobTransactionTrait},
     state_machine::env,
     stf::StateTransitionFunction,
-    zk::traits::{Proof, RecursiveProofInput, ZkVM},
+    zk::traits::{ProofTrait, RecursiveProofInput, ZkVM},
 };
 
 use super::types::RollupHeader;
@@ -39,7 +39,7 @@ pub struct BlockProof<Vm: ZkVM, DaLayer: DaApp, App: StateTransitionFunction> {
     pub code_commitment: Option<Vm::CodeCommitment>,
 }
 
-impl<Vm: ZkVM<Proof = Self>, DaLayer: DaApp, App: StateTransitionFunction> Proof<Vm>
+impl<Vm: ZkVM<Proof = Self>, DaLayer: DaApp, App: StateTransitionFunction> ProofTrait<Vm>
     for BlockProof<Vm, DaLayer, App>
 {
     type Output = RollupHeader<DaLayer, App>;

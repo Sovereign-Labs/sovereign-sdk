@@ -1,7 +1,7 @@
 use bytes::Buf;
 
 use crate::{
-    core::traits::{self, Blockheader},
+    core::traits::{self, BlockheaderTrait, AddressTrait},
     serial::{Deser, Serialize},
 };
 use core::fmt::Debug;
@@ -10,11 +10,11 @@ use core::fmt::Debug;
 /// has been processed. It includes methods for use by both the host (prover) and
 /// the guest (zkVM).
 pub trait DaApp {
-    type Blockhash: BlockHash;
+    type Blockhash: BlockHashTrait;
 
-    type Address: traits::Address;
-    type BlockHeader: Blockheader<Hash = Self::Blockhash>;
-    type BlobTransaction: BlobTransaction<Self::Address>;
+    type Address: AddressTrait;
+    type BlockHeader: BlockheaderTrait<Hash = Self::Blockhash>;
+    type BlobTransaction: BlobTransactionTrait<Self::Address>;
     /// A proof that a set of transactions are included in a block.
     type InclusionMultiProof;
     /// A proof that a *claimed* set of transactions is complete relative to
@@ -47,11 +47,11 @@ pub trait DaApp {
     ) -> Result<(), Self::Error>;
 }
 
-pub trait BlobTransaction<Addr> {
+pub trait BlobTransactionTrait<Addr> {
     type Data: Buf;
 
     fn sender(&self) -> Addr;
     fn data(&self) -> Self::Data;
 }
 
-pub trait BlockHash: Serialize + Deser + PartialEq + Debug {}
+pub trait BlockHashTrait: Serialize + Deser + PartialEq + Debug {}

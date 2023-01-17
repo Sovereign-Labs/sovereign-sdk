@@ -1,17 +1,17 @@
 use bytes::{Buf, Bytes};
 
-use crate::core::traits::{Address, Block, Blockheader, Transaction};
+use crate::core::traits::{AddressTrait, BlockTrait, BlockheaderTrait, TransactionTrait};
 
 pub trait StateTransitionFunction {
-    type Address: Address;
+    type Address: AddressTrait;
     type StateRoot;
     type ChainParams;
-    type Transaction: Transaction;
-    type Block: Block<Header = Self::Header, Transaction = Self::Transaction>;
+    type Transaction: TransactionTrait;
+    type Block: BlockTrait<Header = Self::Header, Transaction = Self::Transaction>;
     type Proof;
     type Error;
     /// The header of a rollup block
-    type Header: Blockheader;
+    type Header: BlockheaderTrait;
     /// A proof that the sequencer has misbehaved. For example, this could be a merkle proof of a transaction
     /// with an invalid signature
     type MisbehaviorProof;

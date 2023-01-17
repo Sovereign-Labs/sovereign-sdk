@@ -5,17 +5,17 @@ use crate::serial::{Deser, DeserializationError, Serialize};
 /// A proof that a program was executed in a zkVM.
 pub trait ZkVM {
     type CodeCommitment: Matches<Self::CodeCommitment> + Clone;
-    type Proof: Proof<Self>;
+    type Proof: ProofTrait<Self>;
     type Error: Debug;
 
     fn log<T: Serialize>(item: T);
     fn verify(
         proof: Self::Proof,
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<<<Self as ZkVM>::Proof as Proof<Self>>::Output, Self::Error>;
+    ) -> Result<<<Self as ZkVM>::Proof as ProofTrait<Self>>::Output, Self::Error>;
 }
 
-pub trait Proof<VM: ZkVM + ?Sized> {
+pub trait ProofTrait<VM: ZkVM + ?Sized> {
     type Output: Serialize + Deser;
     /// Verify the proof, deserializing the result if successful.
     fn verify(self, code_commitment: &VM::CodeCommitment) -> Result<Self::Output, VM::Error>;
@@ -25,7 +25,7 @@ pub trait Matches<T> {
     fn matches(&self, other: &T) -> bool;
 }
 
-pub enum RecursiveProofInput<Vm: ZkVM, T, Pf: Proof<Vm, Output = T>> {
+pub enum RecursiveProofInput<Vm: ZkVM, T, Pf: ProofTrait<Vm, Output = T>> {
     Base(T),
     Recursive(Pf, std::marker::PhantomData<Vm>),
 }
