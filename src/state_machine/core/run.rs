@@ -1,6 +1,6 @@
 use crate::{
     core::traits::{BlockTrait, BlockheaderTrait, CanonicalHash},
-    da::{DaApp, BlobTransactionTrait},
+    da::{BlobTransactionTrait, DaLayerTrait},
     state_machine::env,
     stf::StateTransitionFunction,
     zk::traits::{ProofTrait, RecursiveProofInput, ZkVM},
@@ -8,12 +8,12 @@ use crate::{
 
 use super::types::RollupHeader;
 
-pub struct Rollup<DaLayer: DaApp, App: StateTransitionFunction> {
+pub struct Rollup<DaLayer: DaLayerTrait, App: StateTransitionFunction> {
     pub da_layer: DaLayer,
     pub app: App,
 }
 
-pub struct Config<DaLayer: DaApp, App: StateTransitionFunction> {
+pub struct Config<DaLayer: DaLayerTrait, App: StateTransitionFunction> {
     /// The hash of the DA block which is considered "genesis" for this blockchain.
     /// Note that this block is *not* necessarily the genesis block of the DA layer. Rather,
     /// it's the hash of the first DA block which is allowed to contain rollup blocks.
@@ -31,7 +31,7 @@ pub struct Config<DaLayer: DaApp, App: StateTransitionFunction> {
     phantom: std::marker::PhantomData<App>,
 }
 
-pub struct BlockProof<Vm: ZkVM, DaLayer: DaApp, App: StateTransitionFunction> {
+pub struct BlockProof<Vm: ZkVM, DaLayer: DaLayerTrait, App: StateTransitionFunction> {
     pub phantom: std::marker::PhantomData<Vm>,
     // phantomapp: std::marker::PhantomData<App>,
     // phantomda: std::marker::PhantomData<DaLayer>,
@@ -39,7 +39,7 @@ pub struct BlockProof<Vm: ZkVM, DaLayer: DaApp, App: StateTransitionFunction> {
     pub code_commitment: Option<Vm::CodeCommitment>,
 }
 
-impl<Vm: ZkVM<Proof = Self>, DaLayer: DaApp, App: StateTransitionFunction> ProofTrait<Vm>
+impl<Vm: ZkVM<Proof = Self>, DaLayer: DaLayerTrait, App: StateTransitionFunction> ProofTrait<Vm>
     for BlockProof<Vm, DaLayer, App>
 {
     type Output = RollupHeader<DaLayer, App>;
@@ -52,7 +52,7 @@ impl<Vm: ZkVM<Proof = Self>, DaLayer: DaApp, App: StateTransitionFunction> Proof
     }
 }
 
-impl<DaLayer: DaApp, App: StateTransitionFunction> Rollup<DaLayer, App> {
+impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
     pub fn zk_verify_block<Vm: ZkVM<Proof = BlockProof<Vm, DaLayer, App>>>(
         &mut self,
     ) -> Result<BlockProof<Vm, DaLayer, App>, Vm::Error> {

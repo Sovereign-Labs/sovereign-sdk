@@ -1,7 +1,7 @@
 use bytes::Bytes;
 
 use crate::{
-    da::DaApp,
+    da::DaLayerTrait,
     serial::{Deser, Serialize},
     stf::{ConsensusSetUpdate, StateTransitionFunction},
 };
@@ -13,7 +13,7 @@ use super::crypto::hash::DefaultHash;
 ///
 /// In our model, there is a one-to-one correspondence between blocks of the data availability chain
 /// and blocks of the rollup.
-pub struct RollupHeader<DaLayer: DaApp, App: StateTransitionFunction> {
+pub struct RollupHeader<DaLayer: DaLayerTrait, App: StateTransitionFunction> {
     /// The hash of the DA layer block corresponding to this rollup block
     pub da_blockhash: DaLayer::Blockhash,
     /// A commitment to the set of allowed sequencers after executing this block
@@ -30,18 +30,18 @@ pub struct RollupHeader<DaLayer: DaApp, App: StateTransitionFunction> {
     pub prev_hash: DefaultHash,
 }
 
-impl<DaLayer: DaApp, App: StateTransitionFunction> RollupHeader<DaLayer, App> {
+impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> RollupHeader<DaLayer, App> {
     pub fn hash(&self) -> DefaultHash {
         todo!()
     }
 }
 
-impl<DaLayer: DaApp, App: StateTransitionFunction> Serialize for RollupHeader<DaLayer, App> {
+impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Serialize for RollupHeader<DaLayer, App> {
     fn serialize(&self, target: &mut impl std::io::Write) {
         todo!()
     }
 }
-impl<DaLayer: DaApp, App: StateTransitionFunction> Deser for RollupHeader<DaLayer, App> {
+impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Deser for RollupHeader<DaLayer, App> {
     fn deser(target: &mut &[u8]) -> Result<Self, crate::serial::DeserializationError> {
         todo!()
     }
@@ -51,7 +51,7 @@ impl<DaLayer: DaApp, App: StateTransitionFunction> Deser for RollupHeader<DaLaye
 /// function over a particular DA application. A rollup block contains all of the information
 /// needed to re-execute a state transition, but does not contain the auxiliary information
 /// that would be needed to verify the fork-choice rule.
-pub struct RollupBlock<DaLayer: DaApp, App: StateTransitionFunction> {
+pub struct RollupBlock<DaLayer: DaLayerTrait, App: StateTransitionFunction> {
     /// The header of the logical rollup block
     pub header: RollupHeader<DaLayer, App>,
     /// The set of allowed sequencers after this block was processed
@@ -64,7 +64,7 @@ pub struct RollupBlock<DaLayer: DaApp, App: StateTransitionFunction> {
 
 /// A block of the *logical* chain, augmented with all of the information necessary
 /// to execute the rollup's fork choice rule.
-pub struct AugmentedRollupBlock<DaLayer: DaApp, App: StateTransitionFunction> {
+pub struct AugmentedRollupBlock<DaLayer: DaLayerTrait, App: StateTransitionFunction> {
     /// The state-transition information
     pub block: RollupBlock<DaLayer, App>,
     /// The header of the Da layer block corresponding to this rollup block

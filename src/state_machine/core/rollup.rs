@@ -1,7 +1,7 @@
 use crate::{
     core::traits::{BlockTrait, BlockheaderTrait, CanonicalHash},
     core::types::RollupHeader,
-    da::{DaApp, BlobTransactionTrait},
+    da::{BlobTransactionTrait, DaLayerTrait},
     state_machine::env,
     stf::StateTransitionFunction,
     zk::traits::{ProofTrait, RecursiveProofInput, ZkVM},
@@ -9,7 +9,7 @@ use crate::{
 
 use super::run::BlockProof;
 
-pub struct Rollup<DaLayer: DaApp, App: StateTransitionFunction> {
+pub struct Rollup<DaLayer: DaLayerTrait, App: StateTransitionFunction> {
     pub da_layer: DaLayer,
     pub app: App,
 }
@@ -30,7 +30,7 @@ pub struct Rollup<DaLayer: DaApp, App: StateTransitionFunction> {
 // {
 // }
 
-impl<DaLayer: DaApp, App: StateTransitionFunction> Rollup<DaLayer, App> {
+impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
     pub fn zk_verify_block<Vm: ZkVM<Proof = BlockProof<Vm, DaLayer, App>>>(
         &mut self,
     ) -> Result<BlockProof<Vm, DaLayer, App>, Vm::Error> {

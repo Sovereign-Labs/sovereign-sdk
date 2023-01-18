@@ -1,15 +1,18 @@
 use bytes::Buf;
 
 use crate::{
-    core::traits::{self, BlockheaderTrait, AddressTrait},
+    core::traits::{self, AddressTrait, BlockheaderTrait},
     serial::{Deser, Serialize},
 };
 use core::fmt::Debug;
 
-/// A DaApp implements the logic required to create a zk proof that some data
+/// A DaLayer implements the logic required to create a zk proof that some data
 /// has been processed. It includes methods for use by both the host (prover) and
 /// the guest (zkVM).
-pub trait DaApp {
+///
+/// Named DaLayerTrait to avoid confusion with the associated type "DaLayer" used
+/// in top-level rollup definitions
+pub trait DaLayerTrait {
     type Blockhash: BlockHashTrait;
 
     type Address: AddressTrait;
