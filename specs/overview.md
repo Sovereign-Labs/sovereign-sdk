@@ -94,7 +94,7 @@ in writing their business logic. This section will be expanded over time as the 
 
 The Sovereign SDK will provide a storage module optimized for use in zk state transition functions. In "normal" mode,
 the database will act as a standard key-value store backed by RocksDB. In "verifier" mode, it will lazily read data from
-the host and authenticates each read against the output state root of the previous blcok.
+the host and authenticate each read against the output state root of the previous block.
 In "prover" mode it will read both data and witnesses from RocksDB.
 
 The storage module will be implemented using a jellyfish merkle tree (JMT). For efficiency in a variety of zkVMs, the SDK's
