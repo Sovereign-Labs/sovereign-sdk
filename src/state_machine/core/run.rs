@@ -1,5 +1,5 @@
 use crate::{
-    core::traits::{BlockTrait, BlockheaderTrait, CanonicalHash},
+    core::traits::{BatchTrait, BlockheaderTrait, CanonicalHash},
     da::{BlobTransactionTrait, DaLayerTrait},
     state_machine::env,
     stf::StateTransitionFunction,
@@ -103,9 +103,9 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
         self.app.begin_slot();
         for tx in relevant_txs {
             if current_sequencers.allows(tx.sender()) {
-                match self.app.parse_block(tx.data(), tx.sender().as_ref()) {
+                match self.app.parse_batch(tx.data(), tx.sender().as_ref()) {
                     Ok(block) => {
-                        if let Err(slashing) = self.app.begin_block(
+                        if let Err(slashing) = self.app.begin_batch(
                             &block,
                             tx.sender().as_ref(),
                             env::read_unchecked(),
@@ -116,7 +116,7 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
                         for tx in block.take_transactions() {
                             self.app.deliver_tx(tx);
                         }
-                        let result = self.app.end_block();
+                        let result = self.app.end_batch();
                         current_provers.process_updates(result.prover_updates);
                         current_sequencers.process_updates(result.sequencer_updates);
                     }

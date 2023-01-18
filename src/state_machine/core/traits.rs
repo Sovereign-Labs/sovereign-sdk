@@ -15,7 +15,7 @@ pub trait CanonicalHash {
     fn hash(&self) -> Self::Output;
 }
 
-pub trait BlockTrait: PartialEq + Debug + Serialize + Deser {
+pub trait BatchTrait: PartialEq + Debug + Serialize + Deser {
     type Header: BlockheaderTrait;
     type Transaction: TransactionTrait;
     fn header(&self) -> &Self::Header;
@@ -29,7 +29,10 @@ pub trait TransactionTrait:
     type Hash: AsRef<[u8]>;
 }
 
-pub trait AddressTrait: PartialEq + Debug + Clone + AsRef<[u8]> + for<'a> TryFrom<&'a [u8]> {}
+pub trait AddressTrait:
+    PartialEq + Debug + Clone + AsRef<[u8]> + for<'a> TryFrom<&'a [u8]>
+{
+}
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct InvalidAddress;

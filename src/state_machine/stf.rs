@@ -1,13 +1,15 @@
 use bytes::{Buf, Bytes};
 
-use crate::core::traits::{AddressTrait, BlockTrait, BlockheaderTrait, TransactionTrait};
+use crate::core::traits::{AddressTrait, BatchTrait, BlockheaderTrait, TransactionTrait};
 
 pub trait StateTransitionFunction {
     type Address: AddressTrait;
     type StateRoot;
     type ChainParams;
     type Transaction: TransactionTrait;
-    type Block: BlockTrait<Header = Self::Header, Transaction = Self::Transaction>;
+    /// A batch of transactions. Also known as a "block" in most systems: we use
+    /// the term batch in this context to avoid ambiguity with DA layer blocks
+    type Batch: BatchTrait<Header = Self::Header, Transaction = Self::Transaction>;
     type Proof;
     type Error;
     /// The header of a rollup block
@@ -23,11 +25,11 @@ pub trait StateTransitionFunction {
     /// Parses a sequence of bytes into a rollup block if it meets some basic validity conditions
     /// (for example - if the sender is bonded on the rollup). If the sender was bonded but the block is illegal
     /// the rollup may slash the sender
-    fn parse_block(
+    fn parse_batch(
         &mut self,
         msg: impl Buf,
         sender: &[u8],
-    ) -> Result<Self::Block, Option<ConsensusSetUpdate<Bytes>>>;
+    ) -> Result<Self::Batch, Option<ConsensusSetUpdate<Bytes>>>;
 
     /// Parses a sequence of bytes into a zero-knowledge proof if the message meets some basic validity conditions
     /// (for example - if the sender is bonded on the rollup). If the sender was bonded but the message is illegal
@@ -38,16 +40,16 @@ pub trait StateTransitionFunction {
         sender: &[u8],
     ) -> Result<Self::Proof, Option<ConsensusSetUpdate<Bytes>>>;
 
-    /// Called once at the beginning of each rollup block (so, potentially many times per DA block).
+    /// Called once at the beginning of each batch (aka rollup block) - so, potentially many times per DA block.
     /// This method has two purposes: to allow the rollup to perform and needed initialiation before
     /// processing the block, and to process an optional "misbehavior proof" to allow short-circuiting
     /// in case the block is invalid. (An example misbehavior proof would be a merkle-proof to a transaction)
     /// with an invalid signature. In case of misbehavior, this method should slash the block's sender.
     ///
     /// TODO: decide whether to add events
-    fn begin_block(
+    fn begin_batch(
         &mut self,
-        block: &Self::Block,
+        block: &Self::Batch,
         sender: &[u8],
         misbehavior: Option<Self::MisbehaviorProof>,
     ) -> Result<(), ConsensusSetUpdate<Bytes>>;
@@ -61,10 +63,10 @@ pub trait StateTransitionFunction {
         tx: Self::Transaction,
     ) -> Result<AugmentedDeliverTxResponse, ConsensusSetUpdate<Bytes>>;
 
-    /// Called once at the end of each rollup block.
-    fn end_block(&mut self) -> EndBlockResponse<Bytes, Self::MisbehaviorProof>;
+    /// Called once at the end of each slot.
+    fn end_batch(&mut self) -> EndBlockResponse<Bytes, Self::MisbehaviorProof>;
 
-    /// Called once at the "end" of each DA layer block (i.e. after all rollup blocks have been processed)
+    /// Called once at the "end" of each DA layer block (i.e. after all rollup batches have been processed)
     fn end_slot(&mut self) -> Self::StateRoot;
 
     /// Called once to update the state of the rollup with an on-chain proof. This method is useful for
@@ -132,5 +134,5 @@ pub struct ConsensusSetUpdate<Addr> {
 
 pub enum ConsensusMsg<P, B> {
     Proof(P),
-    Block(B),
+    Batch(B),
 }

@@ -13,5 +13,3 @@ mod storage;
 pub mod zk;
 
 pub use bytes::{Buf, BufMut, Bytes, BytesMut};
-
-pub use crate::core::Rollup;
