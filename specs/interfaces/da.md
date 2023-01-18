@@ -6,7 +6,7 @@ The DA layer is responsible for several tasks:
 
 1. Ensuring the availability of rollup data
 1. Rate limiting and prioritizing the inbound batches that a rollup is forced to process
-1. Providing tamper-proof attestations to the sender of batches
+1. Providing tamper-proof attestations to the sender of batches (as long as rate-limiting is enforced, this is optional)
 1. Providing a backstop for censorship resistance
 1. Providing a total ordering of batches within and between rollups on the chain
 
@@ -194,4 +194,4 @@ Must include a `prev_hash` field.
 
 ## Code
 
-Expressed in Rust, the DA layer interface is  a `trait`. You can find the trait implementation [her](../../src/state_machine/da.rs).
+Expressed in Rust, the DA layer interface is  a `trait`. You can find the trait implementation [here](../../src/state_machine/da.rs).
