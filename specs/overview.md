@@ -1,17 +1,19 @@
-# Sovereign SDK
+<div align="center">
+  <h1> Sovereign SDK </h1>
+</div>
 
 ## Overview and Core APIs
 
 The Sovereign SDK is a toolkit for developing zk-rollups. It provides two related sets of functionality: a generalized "full
 node" implementation that is generic over an internal state transition function ("STF"), and a set of default modules
 that can be used within an STF to provide common functionality. The outer "node" implementation is similar to the `tendermint`
-package, except that the Sovereign node also treats the consensus algorithm as an app - which allows it to support many
-different L1s with minimal changes. The set of modules is conceptually similar to the Cosmos SDK, though there are some
-differences in the implementation.
+package, except that the Sovereign node treats the consensus algorithm as a pluggable module - which allows it to support 
+many different L1s with minimal changes. The set of modules is conceptually similar to the Cosmos SDK, though there are 
+some differences in the implementation.
 
 A Sovereign SDK chain defines a *logical* blockchain which is the combination of three distinct elements:
 
-1. An L1 blockchain - which provides DA and consensus
+1. An L1 blockchain - which provides data availability (DA) and consensus
 2. A state transition function (written in Rust), which implements some "business logic" running over the
 data provided by the L1
 3. A zero-knowledge proof system capable of (1) recursion and (2) running arbitrary Rust code
@@ -28,12 +30,12 @@ scanning through the DA block and processing all of the batches in order - produ
 which prover was first to process a given batch).
 Once a proof for a given batch has been posted onchain, the batch is subjectively final to all nodes including light clients.
 
-![Diagram showing batches and proofs posted on an L1](./assets/SovSDK.jpeg)
+![Diagram showing batches and proofs posted on an L1](./assets/SovSDK.png)
 
 ## Glossary
 
 - DA chain: Short for Data Availability chain. The Layer 1 blockchain underlying a Sovereign SDK rollup.
-- Slot: a "block" in the Data Availability layer. May contain many bundles of rollup transactions.
+- Slot: a "block" in the Data Availability layer. May contain many batches of rollup transactions.
 - Header: An overloaded term that may refer to (1) a block header of the *logical* chain defined by the SDK,
  (2) a block header of the underlying L1 ("Data Availability") chain or (3) a batch header.
 - Batch: a group of 1 or more rollup transactions which are submitted as a single data blob on the DA chain.
@@ -60,7 +62,7 @@ for production workflows at this time.
 ## Outer Node
 
 The Sovereign stack can be split into two parts - a logical "state_machine" which is updated in-circuit, and an outer
-"Node" implementation, which replicates that state machine across different computers. This repository is primarily
+"node" implementation, which replicates that state machine across different computers. This repository is primarily
 concerned with the logical state machine, but it does provide a few helper traits which need to be aware of the
 state machine but are not themselves zk-proven. This section describes the outer node in order to give a more
 complete picture of the SDK and its uses. But, keep in mind that the actual implementation of the node does not live
@@ -76,9 +78,9 @@ The node will provide p2p networking by default. Specification to be developed.
 
 ### Database
 
-The Sovereign node currently provides storage backed by RocksDB for persisting state, witnesses (merkle proofs), blocks
+The Sovereign node currently provides storage backed by RocksDB for persisting state, witnesses (merkle proofs), blocks, 
 headers, and events. The current storage implementation is organized around the SDK's `Schema` trait, which describes
-how to convert a byte-oriented key-value store into a typed key-value store using arbitratry serialization logic.
+how to convert a byte-oriented key-value store into a typed key-value store using arbitrary serialization logic.
 Each database column has its own `Schema`, which allows developers to use different encodings to optimize
 their resource consumption.
 
@@ -87,7 +89,7 @@ use case - with application-aware caching for state data, block information, and
 
 ## Modules
 
-In addition to its Core abstractions and node implementation, the SDK provides some helpful modules to aid developers
+In addition to its core abstractions and node implementation, the SDK provides some helpful modules to aid developers
 in writing their business logic. This section will be expanded over time as the SDK's functionality develops.
 
 ### Storage
@@ -130,6 +132,8 @@ have two failure modes:
 
 - Funds can be lost if one chain suffers a long-distance reorg (longer than the supposed finality period).
 - Funds can be lost if a validator set executes an invalid state transition.
+
+Sovereign SDK's bridging protocol inherently protects against these failure modes:
 
 - Funds cannot be lost due to reorgs *as long as both rollups share a DA layer*. This is because the chains
 are no longer asynchronous, so if one reorgs the other is guaranteed to reorg as well.
