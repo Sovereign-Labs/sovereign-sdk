@@ -78,7 +78,7 @@ The node will provide p2p networking by default. Specification to be developed.
 
 ### Database
 
-The Sovereign node currently provides storage backed by RocksDB for persisting state, witnesses (merkle proofs), block
+The Sovereign node currently provides storage backed by RocksDB for persisting state, witnesses (merkle proofs), blocks, 
 headers, and events. The current storage implementation is organized around the SDK's `Schema` trait, which describes
 how to convert a byte-oriented key-value store into a typed key-value store using arbitrary serialization logic.
 Each database column has its own `Schema`, which allows developers to use different encodings to optimize
@@ -121,7 +121,7 @@ light client bridges. However, light-client bridges between two established are 
 weaker of the two validator sets involved. The most prominent light-client bridging protocol is IBC.
 
 The Sovereign SDK's bridging protocol is similar to a light-client bridge. It works rougly like this: Every Sovereign
-rollup is already creating zero-knowledge proofs of its own execution and settlement. By aggregating these proofs (off-chain),
+rollup is already creating zero-knowledge proofs of its own execution. By aggregating these proofs (off-chain),
 we can create a meta-proof which attests to the state of all Sovereign rollups on a given DA layer at a given
 point in time. Then, by verifying this meta-proof on each rollup, we can establish a shared view of the network
 state, which we can use to pass arbitrary messages between rollups. (In practice, we don't need a global view.
