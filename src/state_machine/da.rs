@@ -51,7 +51,7 @@ pub trait DaLayerTrait {
 }
 
 pub trait BlobTransactionTrait<Addr> {
-    type Data: Buf;
+    type Data: AsRef<[u8]>;
 
     fn sender(&self) -> Addr;
     fn data(&self) -> Self::Data;

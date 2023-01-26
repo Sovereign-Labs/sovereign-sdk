@@ -1,8 +1,9 @@
 use crate::{
     core::traits::{BatchTrait, BlockheaderTrait, CanonicalHash},
     da::{BlobTransactionTrait, DaLayerTrait},
+    serial::Deser,
     state_machine::env,
-    stf::StateTransitionFunction,
+    stf::{ConsensusMessage, StateTransitionFunction},
     zk::traits::{ProofTrait, RecursiveProofInput, ZkVM},
 };
 
@@ -100,46 +101,54 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
         let mut current_sequencers = prev_header.sequencers_root.clone();
         let mut current_provers = prev_header.provers_root.clone();
 
-        self.app.begin_slot();
+        let mut state_tracker = self.app.begin_slot();
         for tx in relevant_txs {
-            if current_sequencers.allows(tx.sender()) {
-                match self.app.parse_batch(tx.data(), tx.sender().as_ref()) {
-                    Ok(block) => {
-                        if let Err(slashing) = self.app.begin_batch(
-                            &block,
+            match ConsensusMessage::deser(&mut tx.data().as_ref()).unwrap() {
+                ConsensusMessage::Batch(batch) => {
+                    if current_sequencers.allows(tx.sender()) {
+                        match self.app.apply_batch(
+                            &mut state_tracker,
+                            batch,
                             tx.sender().as_ref(),
-                            env::read_unchecked(),
+                            None,
                         ) {
-                            current_sequencers.process_update(slashing);
-                            continue;
-                        }
-                        for tx in block.take_transactions() {
-                            self.app.deliver_tx(tx);
-                        }
-                        let result = self.app.end_batch();
-                        current_provers.process_updates(result.prover_updates);
-                        current_sequencers.process_updates(result.sequencer_updates);
+                            // TODO: handle events
+                            Ok(_events) => {}
+                            Err(slashing) => current_sequencers.process_update(slashing),
+                        };
                     }
-                    Err(slashing) => slashing
-                        .into_iter()
-                        .for_each(|update| current_sequencers.process_update(update)),
                 }
-            } else if current_provers.allows(tx.sender()) {
-                match self.app.parse_proof(tx.data(), tx.sender().as_ref()) {
-                    Ok(proof) => {
-                        if let Err(slashing) = self.app.deliver_proof(proof, tx.sender().as_ref()) {
-                            slashing
-                                .into_iter()
-                                .for_each(|update| current_provers.process_update(update));
-                        }
+                ConsensusMessage::Proof(p) => {
+                    if current_provers.allows(tx.sender()) {
+                        match self
+                            .app
+                            .apply_proof(&mut state_tracker, p, tx.sender().as_ref())
+                        {
+                            Ok(()) => {}
+                            Err(slashing) => current_provers.process_update(slashing),
+                        };
                     }
-                    Err(slashing) => slashing
-                        .into_iter()
-                        .for_each(|update| current_provers.process_update(update)),
                 }
             }
         }
-        let app_hash = self.app.end_slot();
+        let (app_hash, consensus_updates) = self.app.end_slot(state_tracker);
+        for update in consensus_updates {
+            if let Some(role) = &update.new_role {
+                match role {
+                    crate::stf::ConsensusRole::Prover => {
+                        current_provers.process_update(update);
+                        continue;
+                    }
+                    crate::stf::ConsensusRole::Sequencer => {
+                        current_provers.process_update(update);
+                        continue;
+                    }
+                    crate::stf::ConsensusRole::ProverAndSequencer => {}
+                }
+            }
+            current_provers.process_update(update.clone());
+            current_sequencers.process_update(update);
+        }
         current_provers.finalize();
         current_sequencers.finalize();
 
