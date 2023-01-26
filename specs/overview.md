@@ -13,7 +13,7 @@ some differences in the implementation.
 
 A Sovereign SDK chain defines a *logical* blockchain which is the combination of three distinct elements:
 
-1. An L1 blockchain - which provides DA and consensus
+1. An L1 blockchain - which provides data availability (DA) and consensus
 2. A state transition function (written in Rust), which implements some "business logic" running over the
 data provided by the L1
 3. A zero-knowledge proof system capable of (1) recursion and (2) running arbitrary Rust code
@@ -35,7 +35,7 @@ Once a proof for a given batch has been posted onchain, the batch is subjectivel
 ## Glossary
 
 - DA chain: Short for Data Availability chain. The Layer 1 blockchain underlying a Sovereign SDK rollup.
-- Slot: a "block" in the Data Availability layer. May contain many bundles of rollup transactions.
+- Slot: a "block" in the Data Availability layer. May contain many batches of rollup transactions.
 - Header: An overloaded term that may refer to (1) a block header of the *logical* chain defined by the SDK,
  (2) a block header of the underlying L1 ("Data Availability") chain or (3) a batch header.
 - Batch: a group of 1 or more rollup transactions which are submitted as a single data blob on the DA chain.
@@ -62,7 +62,7 @@ for production workflows at this time.
 ## Outer Node
 
 The Sovereign stack can be split into two parts - a logical "state_machine" which is updated in-circuit, and an outer
-"Node" implementation, which replicates that state machine across different computers. This repository is primarily
+"node" implementation, which replicates that state machine across different computers. This repository is primarily
 concerned with the logical state machine, but it does provide a few helper traits which need to be aware of the
 state machine but are not themselves zk-proven. This section describes the outer node in order to give a more
 complete picture of the SDK and its uses. But, keep in mind that the actual implementation of the node does not live
@@ -78,9 +78,9 @@ The node will provide p2p networking by default. Specification to be developed.
 
 ### Database
 
-The Sovereign node currently provides storage backed by RocksDB for persisting state, witnesses (merkle proofs), blocks
+The Sovereign node currently provides storage backed by RocksDB for persisting state, witnesses (merkle proofs), block
 headers, and events. The current storage implementation is organized around the SDK's `Schema` trait, which describes
-how to convert a byte-oriented key-value store into a typed key-value store using arbitratry serialization logic.
+how to convert a byte-oriented key-value store into a typed key-value store using arbitrary serialization logic.
 Each database column has its own `Schema`, which allows developers to use different encodings to optimize
 their resource consumption.
 
@@ -89,7 +89,7 @@ use case - with application-aware caching for state data, block information, and
 
 ## Modules
 
-In addition to its Core abstractions and node implementation, the SDK provides some helpful modules to aid developers
+In addition to its core abstractions and node implementation, the SDK provides some helpful modules to aid developers
 in writing their business logic. This section will be expanded over time as the SDK's functionality develops.
 
 ### Storage
@@ -121,7 +121,7 @@ light client bridges. However, light-client bridges between two established are 
 weaker of the two validator sets involved. The most prominent light-client bridging protocol is IBC.
 
 The Sovereign SDK's bridging protocol is similar to a light-client bridge. It works rougly like this: Every Sovereign
-rollup is already creating zero-knowledge proofs of its own execution. By aggregating these proofs (off-chain),
+rollup is already creating zero-knowledge proofs of its own execution and settlement. By aggregating these proofs (off-chain),
 we can create a meta-proof which attests to the state of all Sovereign rollups on a given DA layer at a given
 point in time. Then, by verifying this meta-proof on each rollup, we can establish a shared view of the network
 state, which we can use to pass arbitrary messages between rollups. (In practice, we don't need a global view.
@@ -132,6 +132,8 @@ have two failure modes:
 
 - Funds can be lost if one chain suffers a long-distance reorg (longer than the supposed finality period).
 - Funds can be lost if a validator set executes an invalid state transition.
+
+Sovereign SDK's bridging protocol inherently protects against these failure modes:
 
 - Funds cannot be lost due to reorgs *as long as both rollups share a DA layer*. This is because the chains
 are no longer asynchronous, so if one reorgs the other is guaranteed to reorg as well.

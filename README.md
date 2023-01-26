@@ -11,7 +11,7 @@ some differences in the implementation.
 
 A Sovereign SDK chain defines a *logical* blockchain which is the combination of three distinct elements:
 
-1. An L1 blockchain - which provides DA and consensus
+1. An L1 blockchain - which provides data availability (DA) and consensus
 2. A state transition function (written in Rust), which implements some "business logic" running over the
 data provided by the L1
 3. A zero-knowledge proof system capable of (1) recursion and (2) running arbitrary Rust code
