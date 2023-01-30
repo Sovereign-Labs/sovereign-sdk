@@ -15,6 +15,11 @@ The Sovereign SDK is a free and open-source toolkit for building zk-rollups **th
 
 To learn how the Sovereign SDK works, see the ![Sovereign SDK Overview](specs/overview.md).
 
+## Warning
+
+The Sovereign SDK is a research prototype. It has not been audited and should not be used in production under any
+circumstances.
+
 ## License
 
 Licensed under the [Apache License, Version
