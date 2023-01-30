@@ -4,6 +4,8 @@ use thiserror::Error;
 pub enum DeserializationError {
     #[error("Data was too short to deserialize. Expected {expected:}, got {got:}")]
     DataTooShort { expected: usize, got: usize },
+    #[error("Invalid enum tag. Only tags 0-{max_allowed:} are valid, got {got:}")]
+    InvalidTag { max_allowed: u8, got: u8 },
 }
 
 // TODO: do this in a sensible/generic way
