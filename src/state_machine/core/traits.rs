@@ -24,7 +24,11 @@ pub trait BatchTrait: PartialEq + Debug + Encode + Decode<Error = Deserializatio
 }
 
 pub trait TransactionTrait:
-    PartialEq + Debug + CanonicalHash<Output = Self::Hash> + Encode + Decode
+    PartialEq
+    + Debug
+    + CanonicalHash<Output = Self::Hash>
+    + Encode
+    + Decode<Error = DeserializationError>
 {
     type Hash: AsRef<[u8]>;
 }
