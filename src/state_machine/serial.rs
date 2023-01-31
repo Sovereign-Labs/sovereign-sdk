@@ -12,6 +12,8 @@ pub enum DeserializationError {
 // The objective is to not introduce a forcible serde dependency and potentially
 // allow implementers to use rykv or another zero-copy framework. But we
 // need to design that. This will work for now
+
+/// Trait used to express encoding relationships.
 pub trait Encode {
     fn encode(&self, target: &mut impl std::io::Write);
 
@@ -22,7 +24,9 @@ pub trait Encode {
     }
 }
 
+/// Trait used to express decoding relationships.
 pub trait Decode: Sized {
     type Error;
+
     fn decode(target: &mut &[u8]) -> Result<Self, Self::Error>;
 }

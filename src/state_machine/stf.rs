@@ -79,12 +79,10 @@ pub enum ConsensusMessage<B, P> {
     Proof(P),
 }
 
-impl<
-        P: Decode<Error = crate::serial::DeserializationError>,
-        B: Decode<Error = crate::serial::DeserializationError>,
-    > Decode for ConsensusMessage<B, P>
+impl<P: Decode<Error = DeserializationError>, B: Decode<Error = DeserializationError>> Decode
+    for ConsensusMessage<B, P>
 {
-    type Error = crate::serial::DeserializationError;
+    type Error = DeserializationError;
     fn decode(target: &mut &[u8]) -> Result<Self, Self::Error> {
         Ok(
             match *target
