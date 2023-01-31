@@ -1,7 +1,7 @@
 use crate::{
-    core::traits::{BatchTrait, BlockheaderTrait, CanonicalHash},
+    core::traits::{BlockheaderTrait, CanonicalHash},
     da::{BlobTransactionTrait, DaLayerTrait},
-    serial::Deser,
+    serial::Decode,
     state_machine::env,
     stf::{ConsensusMessage, StateTransitionFunction},
     zk::traits::{ProofTrait, RecursiveProofInput, ZkVM},
@@ -103,7 +103,7 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
 
         let mut state_tracker = self.app.begin_slot();
         for tx in relevant_txs {
-            match ConsensusMessage::deser(&mut tx.data().as_ref()).unwrap() {
+            match ConsensusMessage::decode(&mut tx.data().as_ref()).unwrap() {
                 ConsensusMessage::Batch(batch) => {
                     if current_sequencers.allows(tx.sender()) {
                         match self.app.apply_batch(

@@ -2,7 +2,7 @@ use bytes::Bytes;
 
 use crate::{
     da::DaLayerTrait,
-    serial::{Deser, Serialize},
+    serial::{Decode, DeserializationError, Encode},
     stf::{ConsensusSetUpdate, StateTransitionFunction},
 };
 
@@ -36,13 +36,14 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> RollupHeader<DaLayer, 
     }
 }
 
-impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Serialize for RollupHeader<DaLayer, App> {
-    fn serialize(&self, target: &mut impl std::io::Write) {
+impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Encode for RollupHeader<DaLayer, App> {
+    fn encode(&self, _target: &mut impl std::io::Write) {
         todo!()
     }
 }
-impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Deser for RollupHeader<DaLayer, App> {
-    fn deser(target: &mut &[u8]) -> Result<Self, crate::serial::DeserializationError> {
+impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Decode for RollupHeader<DaLayer, App> {
+    type Error = DeserializationError;
+    fn decode(_target: &mut &[u8]) -> Result<Self, Self::Error> {
         todo!()
     }
 }

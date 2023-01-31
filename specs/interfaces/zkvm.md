@@ -59,14 +59,15 @@ when proof verification fails.
 
 Expressed in Rust, zkVM would be a `trait` that looked something like the following:
 
+
 ```rust
 pub trait ZkVM {
     type CodeCommitment: PartialEq + Clone;
-    type Proof: Serialize + Deserialize;
+    type Proof: Encode + Decode<Error = DeserializationError>;
     type Error;
 
-    fn log<T: Serialize>(item: T);
-    fn verify<T: Deserialize>(
+    fn log<T: Encode>(item: T);
+    fn verify<T: Decode>(
         proof: Self::Proof,
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error>;

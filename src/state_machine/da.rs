@@ -1,9 +1,5 @@
-use bytes::Buf;
-
-use crate::{
-    core::traits::{self, AddressTrait, BlockheaderTrait},
-    serial::{Deser, Serialize},
-};
+use crate::core::traits::{AddressTrait, BlockheaderTrait};
+use crate::serial::{Decode, DeserializationError, Encode};
 use core::fmt::Debug;
 
 /// A DaLayer implements the logic required to create a zk proof that some data
@@ -57,4 +53,7 @@ pub trait BlobTransactionTrait<Addr> {
     fn data(&self) -> Self::Data;
 }
 
-pub trait BlockHashTrait: Serialize + Deser + PartialEq + Debug {}
+pub trait BlockHashTrait:
+    Encode + Decode<Error = DeserializationError> + PartialEq + Debug
+{
+}

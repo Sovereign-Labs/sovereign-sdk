@@ -3,7 +3,7 @@ use super::{ColumnFamilyName, KeyCodec, Schema, ValueCodec};
 use std::fmt::Debug;
 
 use crate::da::BlockHashTrait;
-use crate::{serial::Deser, services::da::SlotData};
+use crate::{serial::Decode, services::da::SlotData};
 
 pub const SLOT_BY_HASH_CF_NAME: ColumnFamilyName = "slot_by_hash";
 
@@ -27,11 +27,11 @@ where
     V: Debug + Send + Sync + 'static + SlotData,
 {
     fn encode_key(&self) -> Result<Vec<u8>> {
-        Ok(self.serialize_to_vec())
+        Ok(self.encode_to_vec())
     }
 
     fn decode_key(mut data: &[u8]) -> Result<Self> {
-        Ok(K::deser(&mut data)?)
+        Ok(K::decode(&mut data)?)
     }
 }
 
@@ -41,10 +41,10 @@ where
     V: Debug + Send + Sync + 'static + SlotData,
 {
     fn encode_value(&self) -> Result<Vec<u8>> {
-        Ok(self.serialize_to_vec())
+        Ok(self.encode_to_vec())
     }
 
     fn decode_value(mut data: &[u8]) -> Result<Self> {
-        Ok(<V as Deser>::deser(&mut data)?)
+        Ok(<V as Decode>::decode(&mut data)?)
     }
 }
