@@ -37,12 +37,13 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> RollupHeader<DaLayer, 
 }
 
 impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Encode for RollupHeader<DaLayer, App> {
-    fn encode(&self, target: &mut impl std::io::Write) {
+    fn encode(&self, _target: &mut impl std::io::Write) {
         todo!()
     }
 }
 impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Decode for RollupHeader<DaLayer, App> {
-    fn decode(target: &mut &[u8]) -> Result<Self, crate::serial::DeserializationError> {
+    type Error = crate::serial::DeserializationError;
+    fn decode(_target: &mut &[u8]) -> Result<Self, Self::Error> {
         todo!()
     }
 }

@@ -41,7 +41,8 @@ impl<Vm: ZkVM<CodeCommitment = C>, C: Encode, T: Encode> Encode for RecursivePro
     }
 }
 impl<Vm: ZkVM, T> Decode for RecursiveProofOutput<Vm, T> {
-    fn decode(target: &mut &[u8]) -> Result<Self, DeserializationError> {
+    type Error = DeserializationError;
+    fn decode(_target: &mut &[u8]) -> Result<Self, DeserializationError> {
         todo!()
     }
 }

@@ -23,5 +23,6 @@ pub trait Encode {
 }
 
 pub trait Decode: Sized {
-    fn decode(target: &mut &[u8]) -> Result<Self, DeserializationError>;
+    type Error;
+    fn decode(target: &mut &[u8]) -> Result<Self, Self::Error>;
 }

@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 
-use crate::serial::{Decode, Encode};
+use crate::serial::{Decode, DeserializationError, Encode};
 
 // NOTE: When naming traits, we use the naming convention below:
 // *Trait IFF there's an associated type that would otherwise have the same name
@@ -15,7 +15,7 @@ pub trait CanonicalHash {
     fn hash(&self) -> Self::Output;
 }
 
-pub trait BatchTrait: PartialEq + Debug + Encode + Decode {
+pub trait BatchTrait: PartialEq + Debug + Encode + Decode<Error = DeserializationError> {
     type Header: BlockheaderTrait;
     type Transaction: TransactionTrait;
     fn header(&self) -> &Self::Header;

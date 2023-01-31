@@ -16,7 +16,7 @@ pub trait StateTransitionFunction {
     /// A batch of transactions. Also known as a "block" in most systems: we use
     /// the term batch in this context to avoid ambiguity with DA layer blocks
     type Batch: BatchTrait<Transaction = Self::Transaction>;
-    type Proof: Decode;
+    type Proof: Decode<Error = DeserializationError>;
 
     /// A proof that the sequencer has misbehaved. For example, this could be a merkle proof of a transaction
     /// with an invalid signature
@@ -79,8 +79,13 @@ pub enum ConsensusMessage<B, P> {
     Proof(P),
 }
 
-impl<P: Decode, B: Decode> Decode for ConsensusMessage<B, P> {
-    fn decode(target: &mut &[u8]) -> Result<Self, crate::serial::DeserializationError> {
+impl<
+        P: Decode<Error = crate::serial::DeserializationError>,
+        B: Decode<Error = crate::serial::DeserializationError>,
+    > Decode for ConsensusMessage<B, P>
+{
+    type Error = crate::serial::DeserializationError;
+    fn decode(target: &mut &[u8]) -> Result<Self, Self::Error> {
         Ok(
             match *target
                 .iter()

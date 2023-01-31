@@ -3,10 +3,7 @@ use super::{ColumnFamilyName, KeyCodec, Schema, ValueCodec};
 use std::fmt::Debug;
 
 use crate::da::BlockHashTrait;
-use crate::{
-    serial::{Decode, Encode},
-    services::da::SlotData,
-};
+use crate::{serial::Decode, services::da::SlotData};
 
 pub const SLOT_BY_HASH_CF_NAME: ColumnFamilyName = "slot_by_hash";
 
