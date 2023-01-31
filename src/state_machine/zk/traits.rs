@@ -16,7 +16,7 @@ pub trait ZkVM {
 }
 
 pub trait ProofTrait<VM: ZkVM + ?Sized> {
-    type Output: Encode + Decode;
+    type Output: Encode + Decode<Error = DeserializationError>;
     /// Verify the proof, deserializing the result if successful.
     fn verify(self, code_commitment: &VM::CodeCommitment) -> Result<Self::Output, VM::Error>;
 }

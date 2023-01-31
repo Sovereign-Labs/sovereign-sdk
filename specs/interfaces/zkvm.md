@@ -63,7 +63,7 @@ Expressed in Rust, zkVM would be a `trait` that looked something like the follow
 ```rust
 pub trait ZkVM {
     type CodeCommitment: PartialEq + Clone;
-    type Proof: Encode + Decode;
+    type Proof: Encode + Decode<Error = DeserializationError>;
     type Error;
 
     fn log<T: Encode>(item: T);
