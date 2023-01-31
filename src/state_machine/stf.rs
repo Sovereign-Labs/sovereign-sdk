@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
-use bytes::{Buf, Bytes};
+use bytes::Bytes;
 
 use crate::{
-    core::traits::{AddressTrait, BatchTrait, BlockheaderTrait, TransactionTrait},
-    serial::{Deser, DeserializationError},
+    core::traits::{BatchTrait, TransactionTrait},
+    serial::{Decode, DeserializationError},
 };
 
 /// An address on the DA layer. Opaque to the StateTransitionFunction
@@ -18,7 +16,7 @@ pub trait StateTransitionFunction {
     /// A batch of transactions. Also known as a "block" in most systems: we use
     /// the term batch in this context to avoid ambiguity with DA layer blocks
     type Batch: BatchTrait<Transaction = Self::Transaction>;
-    type Proof: Deser;
+    type Proof: Decode;
 
     /// A proof that the sequencer has misbehaved. For example, this could be a merkle proof of a transaction
     /// with an invalid signature
@@ -81,8 +79,8 @@ pub enum ConsensusMessage<B, P> {
     Proof(P),
 }
 
-impl<P: Deser, B: Deser> Deser for ConsensusMessage<B, P> {
-    fn deser(target: &mut &[u8]) -> Result<Self, crate::serial::DeserializationError> {
+impl<P: Decode, B: Decode> Decode for ConsensusMessage<B, P> {
+    fn decode(target: &mut &[u8]) -> Result<Self, crate::serial::DeserializationError> {
         Ok(
             match *target
                 .iter()
@@ -91,8 +89,8 @@ impl<P: Deser, B: Deser> Deser for ConsensusMessage<B, P> {
                     expected: 1,
                     got: 0,
                 })? {
-                0 => Self::Batch(B::deser(&mut &target[1..])?),
-                1 => Self::Proof(P::deser(&mut &target[1..])?),
+                0 => Self::Batch(B::decode(&mut &target[1..])?),
+                1 => Self::Proof(P::decode(&mut &target[1..])?),
                 _ => Err(DeserializationError::InvalidTag {
                     max_allowed: 1,
                     got: target[0],

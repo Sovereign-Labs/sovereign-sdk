@@ -2,7 +2,7 @@ use super::Result;
 use super::{errors::CodecError, ColumnFamilyName, KeyCodec, Schema, ValueCodec};
 use std::fmt::Debug;
 
-use crate::{serial::Deser, services::da::SlotData};
+use crate::{serial::Decode, services::da::SlotData};
 
 pub const SLOT_CF_NAME: ColumnFamilyName = "slot";
 pub type SlotNumber = u64;
@@ -42,10 +42,10 @@ where
     T: SlotData,
 {
     fn encode_value(&self) -> Result<Vec<u8>> {
-        Ok(self.serialize_to_vec())
+        Ok(self.encode_to_vec())
     }
 
     fn decode_value(mut data: &[u8]) -> Result<Self> {
-        Ok(<T as Deser>::deser(&mut data)?)
+        Ok(<T as Decode>::decode(&mut data)?)
     }
 }

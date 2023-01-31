@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use crate::serial::{Deser, Serialize};
+use crate::serial::{Decode, Encode};
 
 // TODO: Rename to clarify distinction with DaApp
 /// A DaService is the local side of an RPC connection talking to node of the DA layer
@@ -27,4 +27,4 @@ pub trait DaService {
     // TODO: Consider adding the send_transaction method
     // fn send_transaction(tx: Self::Transaction, sender: Self::Address)
 }
-pub trait SlotData: Serialize + Deser + PartialEq {}
+pub trait SlotData: Encode + Decode + PartialEq {}

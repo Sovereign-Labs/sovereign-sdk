@@ -1,6 +1,6 @@
 use core::fmt::Debug;
 
-use crate::serial::{Deser, DeserializationError, Serialize};
+use crate::serial::{Decode, DeserializationError, Encode};
 
 /// A proof that a program was executed in a zkVM.
 pub trait ZkVM {
@@ -8,7 +8,7 @@ pub trait ZkVM {
     type Proof: ProofTrait<Self>;
     type Error: Debug;
 
-    fn log<T: Serialize>(item: T);
+    fn log<T: Encode>(item: T);
     fn verify(
         proof: Self::Proof,
         code_commitment: &Self::CodeCommitment,
@@ -16,7 +16,7 @@ pub trait ZkVM {
 }
 
 pub trait ProofTrait<VM: ZkVM + ?Sized> {
-    type Output: Serialize + Deser;
+    type Output: Encode + Decode;
     /// Verify the proof, deserializing the result if successful.
     fn verify(self, code_commitment: &VM::CodeCommitment) -> Result<Self::Output, VM::Error>;
 }
@@ -34,16 +34,14 @@ pub struct RecursiveProofOutput<Vm: ZkVM, T> {
     pub claimed_method_id: Vm::CodeCommitment,
     pub output: T,
 }
-impl<Vm: ZkVM<CodeCommitment = C>, C: Serialize, T: Serialize> Serialize
-    for RecursiveProofOutput<Vm, T>
-{
-    fn serialize(&self, target: &mut impl std::io::Write) {
-        self.claimed_method_id.serialize(target);
-        self.output.serialize(target);
+impl<Vm: ZkVM<CodeCommitment = C>, C: Encode, T: Encode> Encode for RecursiveProofOutput<Vm, T> {
+    fn encode(&self, target: &mut impl std::io::Write) {
+        self.claimed_method_id.encode(target);
+        self.output.encode(target);
     }
 }
-impl<Vm: ZkVM, T> Deser for RecursiveProofOutput<Vm, T> {
-    fn deser(target: &mut &[u8]) -> Result<Self, DeserializationError> {
+impl<Vm: ZkVM, T> Decode for RecursiveProofOutput<Vm, T> {
+    fn decode(target: &mut &[u8]) -> Result<Self, DeserializationError> {
         todo!()
     }
 }
