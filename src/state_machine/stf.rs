@@ -67,11 +67,29 @@ pub struct Event {
     pub key: EventKey,
     pub value: EventValue,
 }
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+
+impl Encode for Event {
+    fn encode(&self, target: &mut impl std::io::Write) {
+        self.key.encode(target);
+        self.value.encode(target);
+    }
+}
+
+impl Decode for Event {
+    type Error = DeserializationError;
+
+    fn decode(target: &mut &[u8]) -> Result<Self, Self::Error> {
+        Ok(Self {
+            key: EventKey::decode(target)?,
+            value: EventValue::decode(target)?,
+        })
+    }
+}
+
 pub struct EventKey(Bytes);
 
 impl Encode for EventKey {
-    fn encode(&self, target: &mut impl std::io::Write) {
+    fn encode(&self, _target: &mut impl std::io::Write) {
         todo!()
     }
 }
@@ -79,7 +97,7 @@ impl Encode for EventKey {
 impl Decode for EventKey {
     type Error = DeserializationError;
 
-    fn decode(target: &mut &[u8]) -> Result<Self, Self::Error> {
+    fn decode(_target: &mut &[u8]) -> Result<Self, Self::Error> {
         todo!()
     }
 }
@@ -88,7 +106,7 @@ impl Decode for EventKey {
 pub struct EventValue(Bytes);
 
 impl Encode for EventValue {
-    fn encode(&self, target: &mut impl std::io::Write) {
+    fn encode(&self, _target: &mut impl std::io::Write) {
         todo!()
     }
 }
@@ -96,7 +114,7 @@ impl Encode for EventValue {
 impl Decode for EventValue {
     type Error = DeserializationError;
 
-    fn decode(target: &mut &[u8]) -> Result<Self, Self::Error> {
+    fn decode(_target: &mut &[u8]) -> Result<Self, Self::Error> {
         todo!()
     }
 }
