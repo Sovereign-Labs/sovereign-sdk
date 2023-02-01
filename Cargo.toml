@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 bytes = "1.2.1"
 sha2 = "0.10.6"
-jmt = { git  = "https://github.com/penumbra-zone/jmt.git", rev = "18eb03cf053d15799ee3aa0c09b56c9f44485175" }
 
 anyhow = "1.0.68"
 thiserror = "1.0.38"
