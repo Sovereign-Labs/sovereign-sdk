@@ -18,3 +18,4 @@ proptest =  { version = "1.0.0", optional = true }
 
 [features]
 fuzzing = ["proptest"]
+sync = []

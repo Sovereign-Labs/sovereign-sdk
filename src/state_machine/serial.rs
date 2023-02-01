@@ -1,3 +1,7 @@
+#[cfg(feature = "sync")]
+use std::sync::Arc;
+use std::{ops::Deref, rc::Rc};
+
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Error)]
@@ -29,4 +33,38 @@ pub trait Decode: Sized {
     type Error;
 
     fn decode(target: &mut &[u8]) -> Result<Self, Self::Error>;
+}
+
+// Automatically implement encode for smart pointers
+impl<T, U> Encode for T
+where
+    T: Deref<Target = U>,
+    U: Encode,
+{
+    fn encode(&self, target: &mut impl std::io::Write) {
+        self.deref().encode(target)
+    }
+}
+
+#[cfg(feature = "sync")]
+impl<T, E> Decode for Arc<T>
+where
+    T: Decode<Error = E>,
+{
+    type Error = E;
+
+    fn decode(target: &mut &[u8]) -> Result<Self, Self::Error> {
+        Ok(Arc::new(T::decode(target)?))
+    }
+}
+
+impl<T, E> Decode for Rc<T>
+where
+    T: Decode<Error = E>,
+{
+    type Error = E;
+
+    fn decode(target: &mut &[u8]) -> Result<Self, Self::Error> {
+        Ok(Rc::new(T::decode(target)?))
+    }
 }
