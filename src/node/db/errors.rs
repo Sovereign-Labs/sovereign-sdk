@@ -10,6 +10,8 @@ pub enum CodecError {
     DeserializationError(#[from] DeserializationError),
     #[error(transparent)]
     Wrapped(#[from] anyhow::Error),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 pub fn convert_to_codec_error(e: impl Into<anyhow::Error>) -> CodecError {
