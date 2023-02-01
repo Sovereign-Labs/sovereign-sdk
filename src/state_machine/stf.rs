@@ -63,6 +63,7 @@ pub enum ConsensusRole {
 }
 
 /// A key-value pair representing a change to the rollup state
+#[derive(Debug, PartialEq)]
 pub struct Event {
     pub key: EventKey,
     pub value: EventValue,
@@ -86,6 +87,7 @@ impl Decode for Event {
     }
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EventKey(Bytes);
 
 impl Encode for EventKey {
