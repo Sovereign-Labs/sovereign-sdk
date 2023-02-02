@@ -1,3 +1,5 @@
+use bytes::Buf;
+
 use crate::core::traits::{AddressTrait, BlockheaderTrait};
 use crate::serial::{Decode, DeserializationError, Encode};
 use core::fmt::Debug;
@@ -47,7 +49,7 @@ pub trait DaLayerTrait {
 }
 
 pub trait BlobTransactionTrait<Addr> {
-    type Data: AsRef<[u8]>;
+    type Data: Buf;
 
     fn sender(&self) -> Addr;
     fn data(&self) -> Self::Data;
