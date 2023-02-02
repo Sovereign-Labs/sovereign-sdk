@@ -2,7 +2,7 @@ use bytes::Bytes;
 
 use crate::{
     core::traits::{BatchTrait, TransactionTrait},
-    serial::{Decode, DeserializationError},
+    serial::{Decode, DeserializationError, Encode},
 };
 
 /// An address on the DA layer. Opaque to the StateTransitionFunction
@@ -63,9 +63,62 @@ pub enum ConsensusRole {
 }
 
 /// A key-value pair representing a change to the rollup state
+#[derive(Debug, PartialEq)]
 pub struct Event {
-    pub key: Bytes,
-    pub value: Bytes,
+    pub key: EventKey,
+    pub value: EventValue,
+}
+
+impl Encode for Event {
+    fn encode(&self, target: &mut impl std::io::Write) {
+        self.key.encode(target);
+        self.value.encode(target);
+    }
+}
+
+impl Decode for Event {
+    type Error = DeserializationError;
+
+    fn decode(target: &mut &[u8]) -> Result<Self, Self::Error> {
+        Ok(Self {
+            key: EventKey::decode(target)?,
+            value: EventValue::decode(target)?,
+        })
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct EventKey(Bytes);
+
+impl Encode for EventKey {
+    fn encode(&self, _target: &mut impl std::io::Write) {
+        todo!()
+    }
+}
+
+impl Decode for EventKey {
+    type Error = DeserializationError;
+
+    fn decode(_target: &mut &[u8]) -> Result<Self, Self::Error> {
+        todo!()
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct EventValue(Bytes);
+
+impl Encode for EventValue {
+    fn encode(&self, _target: &mut impl std::io::Write) {
+        todo!()
+    }
+}
+
+impl Decode for EventValue {
+    type Error = DeserializationError;
+
+    fn decode(_target: &mut &[u8]) -> Result<Self, Self::Error> {
+        todo!()
+    }
 }
 
 #[derive(Debug, Clone)]
