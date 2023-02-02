@@ -1,3 +1,5 @@
+use bytes::Buf;
+
 use crate::{
     core::traits::{BlockheaderTrait, CanonicalHash},
     da::{BlobTransactionTrait, DaLayerTrait},
@@ -103,7 +105,10 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
 
         let mut state_tracker = self.app.begin_slot();
         for tx in relevant_txs {
-            match ConsensusMessage::decode(&mut tx.data().as_ref()).unwrap() {
+            let mut data = tx.data();
+            let len = data.remaining();
+            let data = data.copy_to_bytes(len);
+            match ConsensusMessage::decode(&mut &data[..]).unwrap() {
                 ConsensusMessage::Batch(batch) => {
                     if current_sequencers.allows(tx.sender()) {
                         match self.app.apply_batch(
