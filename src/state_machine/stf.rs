@@ -1,12 +1,13 @@
-use bytes::Bytes;
+use crate::maybestd::rc::Rc;
+use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::{
     core::traits::{BatchTrait, TransactionTrait},
-    serial::{Decode, DeserializationError, Encode},
+    serial::{Decode, DecodeBorrowed, DeserializationError, Encode},
 };
 
 /// An address on the DA layer. Opaque to the StateTransitionFunction
-type OpaqueAddress = Bytes;
+type OpaqueAddress = Rc<Vec<u8>>;
 
 // TODO(@preston-evans98): update spec with simplified API
 pub trait StateTransitionFunction {
@@ -55,7 +56,7 @@ pub trait StateTransitionFunction {
 // TODO(@bkolad): replace with first-read-last-write cache
 pub struct StateUpdate {}
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, BorshSerialize, BorshDeserialize)]
 pub enum ConsensusRole {
     Prover,
     Sequencer,
@@ -63,91 +64,58 @@ pub enum ConsensusRole {
 }
 
 /// A key-value pair representing a change to the rollup state
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct Event {
     pub key: EventKey,
     pub value: EventValue,
 }
 
-impl Encode for Event {
-    fn encode(&self, target: &mut impl std::io::Write) {
-        self.key.encode(target);
-        self.value.encode(target);
-    }
-}
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, BorshSerialize, BorshDeserialize)]
+pub struct EventKey(Rc<Vec<u8>>);
 
-impl Decode for Event {
-    type Error = DeserializationError;
+#[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub struct EventValue(Rc<Vec<u8>>);
 
-    fn decode(target: &mut &[u8]) -> Result<Self, Self::Error> {
-        Ok(Self {
-            key: EventKey::decode(target)?,
-            value: EventValue::decode(target)?,
-        })
-    }
-}
-
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct EventKey(Bytes);
-
-impl Encode for EventKey {
-    fn encode(&self, _target: &mut impl std::io::Write) {
-        todo!()
-    }
-}
-
-impl Decode for EventKey {
-    type Error = DeserializationError;
-
-    fn decode(_target: &mut &[u8]) -> Result<Self, Self::Error> {
-        todo!()
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-pub struct EventValue(Bytes);
-
-impl Encode for EventValue {
-    fn encode(&self, _target: &mut impl std::io::Write) {
-        todo!()
-    }
-}
-
-impl Decode for EventValue {
-    type Error = DeserializationError;
-
-    fn decode(_target: &mut &[u8]) -> Result<Self, Self::Error> {
-        todo!()
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct ConsensusSetUpdate<Address> {
     pub address: Address,
     pub new_role: Option<ConsensusRole>,
 }
 
+#[derive(Debug, PartialEq, Clone)]
 pub enum ConsensusMessage<B, P> {
     Batch(B),
     Proof(P),
 }
 
-impl<P: Decode<Error = DeserializationError>, B: Decode<Error = DeserializationError>> Decode
+#[derive(Debug, PartialEq, Clone)]
+pub enum ConsensusMessageDecodeError<BatchErr, ProofErr> {
+    Batch(BatchErr),
+    Proof(ProofErr),
+    NoTag,
+    InvalidTag { max_allowed: u8, got: u8 },
+}
+
+impl<'de, P: DecodeBorrowed<'de>, B: DecodeBorrowed<'de>> DecodeBorrowed<'de>
     for ConsensusMessage<B, P>
 {
-    type Error = DeserializationError;
-    fn decode(target: &mut &[u8]) -> Result<Self, Self::Error> {
+    type Error = ConsensusMessageDecodeError<B::Error, P::Error>;
+    fn decode_from_slice(target: &'de [u8]) -> Result<Self, Self::Error> {
         Ok(
             match *target
                 .iter()
                 .next()
-                .ok_or(DeserializationError::DataTooShort {
-                    expected: 1,
-                    got: 0,
-                })? {
-                0 => Self::Batch(B::decode(&mut &target[1..])?),
-                1 => Self::Proof(P::decode(&mut &target[1..])?),
-                _ => Err(DeserializationError::InvalidTag {
+                .ok_or(ConsensusMessageDecodeError::NoTag)?
+            {
+                0 => Self::Batch(
+                    B::decode_from_slice(&mut &target[1..])
+                        .map_err(|e| ConsensusMessageDecodeError::Batch(e))?,
+                ),
+                1 => Self::Proof(
+                    P::decode_from_slice(&mut &target[1..])
+                        .map_err(|e| ConsensusMessageDecodeError::Proof(e))?,
+                ),
+                _ => Err(ConsensusMessageDecodeError::InvalidTag {
                     max_allowed: 1,
                     got: target[0],
                 })?,

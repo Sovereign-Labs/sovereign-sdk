@@ -1,10 +1,11 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use sha2::{Digest, Sha256};
 
 pub type DefaultHash = Sha2Hash;
 
 /// The output of a sha2-256 hash
 ///
-#[derive(Debug, Default, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize)]
 pub struct Sha2Hash(pub [u8; 32]);
 
 impl AsRef<[u8]> for Sha2Hash {

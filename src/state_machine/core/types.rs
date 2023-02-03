@@ -1,8 +1,10 @@
-use bytes::Bytes;
+use borsh::{BorshDeserialize, BorshSerialize};
+use bytes::{Buf, Bytes};
 
 use crate::{
     da::DaLayerTrait,
-    serial::{Decode, DeserializationError, Encode},
+    maybestd::rc::Rc,
+    serial::{Decode, DecodeBorrowed, DeserializationError, Encode},
     stf::{ConsensusSetUpdate, StateTransitionFunction},
 };
 
@@ -30,20 +32,30 @@ pub struct RollupHeader<DaLayer: DaLayerTrait, App: StateTransitionFunction> {
     pub prev_hash: DefaultHash,
 }
 
-impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> RollupHeader<DaLayer, App> {
-    pub fn hash(&self) -> DefaultHash {
+impl<D: DaLayerTrait, A: StateTransitionFunction> Encode for RollupHeader<D, A> {
+    fn encode(&self, target: &mut impl std::io::Write) {
         todo!()
     }
 }
 
-impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Encode for RollupHeader<DaLayer, App> {
-    fn encode(&self, _target: &mut impl std::io::Write) {
+impl<D: DaLayerTrait, A: StateTransitionFunction> Decode for RollupHeader<D, A> {
+    type Error = ();
+
+    fn decode<R: std::io::Read>(target: &mut R) -> Result<Self, <Self as Decode>::Error> {
         todo!()
     }
 }
-impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Decode for RollupHeader<DaLayer, App> {
-    type Error = DeserializationError;
-    fn decode(_target: &mut &[u8]) -> Result<Self, Self::Error> {
+
+impl<'de, D: DaLayerTrait, A: StateTransitionFunction> DecodeBorrowed<'de> for RollupHeader<D, A> {
+    type Error = ();
+
+    fn decode_from_slice(target: &'de [u8]) -> Result<Self, Self::Error> {
+        todo!()
+    }
+}
+
+impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> RollupHeader<DaLayer, App> {
+    pub fn hash(&self) -> DefaultHash {
         todo!()
     }
 }
@@ -100,14 +112,14 @@ impl<Addr: PartialEq> ConsensusParticipantRoot<Addr> {
         }
     }
 
-    pub fn process_update(&mut self, _updates: ConsensusSetUpdate<Bytes>) {
+    pub fn process_update(&mut self, _updates: ConsensusSetUpdate<Rc<Vec<u8>>>) {
         match self {
             ConsensusParticipantRoot::Anyone => todo!(),
             ConsensusParticipantRoot::Centralized(_) => todo!(),
             ConsensusParticipantRoot::Registered(_) => todo!(),
         }
     }
-    pub fn process_updates(&mut self, _updates: Vec<ConsensusSetUpdate<Bytes>>) {
+    pub fn process_updates(&mut self, _updates: Vec<ConsensusSetUpdate<Rc<Vec<u8>>>>) {
         // for item in vec.map(|| to_address).then(...)
         match self {
             ConsensusParticipantRoot::Anyone => todo!(),

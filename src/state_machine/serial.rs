@@ -8,10 +8,6 @@ use borsh::{
     BorshDeserialize,
 };
 
-use serde::{
-    de::{DeserializeOwned, Visitor},
-    Deserialize,
-};
 use thiserror::Error;
 
 #[derive(Debug, PartialEq, Error)]
@@ -50,7 +46,7 @@ pub trait Encode {
 /// }
 /// ```
 pub trait Decode: Sized + for<'de> DecodeBorrowed<'de> {
-    type Error;
+    type Error: core::fmt::Debug;
     fn decode<R: Read>(target: &mut R) -> Result<Self, <Self as Decode>::Error>;
 }
 
@@ -69,7 +65,7 @@ pub trait Decode: Sized + for<'de> DecodeBorrowed<'de> {
 /// }
 /// ```
 pub trait DecodeBorrowed<'de>: Sized {
-    type Error;
+    type Error: core::fmt::Debug;
     fn decode_from_slice(target: &'de [u8]) -> Result<Self, Self::Error>;
 }
 
@@ -77,7 +73,7 @@ impl<T: BorshDeserialize> Decode for T {
     type Error = maybestd::io::Error;
 
     fn decode<R: Read>(target: &mut R) -> Result<Self, <Self as Decode>::Error> {
-        T::deserialize_reader(&mut target)
+        T::deserialize_reader(target)
     }
 }
 
@@ -85,6 +81,6 @@ impl<'de, T: BorshDeserialize> DecodeBorrowed<'de> for T {
     type Error = maybestd::io::Error;
 
     fn decode_from_slice(target: &'de [u8]) -> Result<Self, Self::Error> {
-        T::deserialize(&mut &target)
+        T::deserialize(&mut &target[..])
     }
 }
