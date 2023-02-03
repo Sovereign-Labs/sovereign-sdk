@@ -3,7 +3,7 @@ use bytes::Buf;
 use crate::{
     core::traits::{BlockheaderTrait, CanonicalHash},
     da::{BlobTransactionTrait, DaLayerTrait},
-    serial::Decode,
+    serial::DecodeBorrowed,
     state_machine::env,
     stf::{ConsensusMessage, StateTransitionFunction},
     zk::traits::{ProofTrait, RecursiveProofInput, ZkVM},
@@ -108,7 +108,7 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
             let mut data = tx.data();
             let len = data.remaining();
             let data = data.copy_to_bytes(len);
-            match ConsensusMessage::decode(&mut &data[..]).unwrap() {
+            match ConsensusMessage::decode_from_slice(&mut &data[..]).unwrap() {
                 ConsensusMessage::Batch(batch) => {
                     if current_sequencers.allows(tx.sender()) {
                         match self.app.apply_batch(

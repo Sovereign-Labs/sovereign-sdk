@@ -1,6 +1,8 @@
 use core::fmt::Debug;
 
-use crate::serial::{Decode, DeserializationError, Encode};
+use borsh::{BorshDeserialize, BorshSerialize};
+
+use crate::serial::{Decode, Encode};
 
 /// A proof that a program was executed in a zkVM.
 pub trait ZkVM {
@@ -16,7 +18,7 @@ pub trait ZkVM {
 }
 
 pub trait ProofTrait<VM: ZkVM + ?Sized> {
-    type Output: Encode + Decode<Error = DeserializationError>;
+    type Output: Encode + Decode;
     /// Verify the proof, deserializing the result if successful.
     fn verify(self, code_commitment: &VM::CodeCommitment) -> Result<Self::Output, VM::Error>;
 }
@@ -30,24 +32,14 @@ pub enum RecursiveProofInput<Vm: ZkVM, T, Pf: ProofTrait<Vm, Output = T>> {
     Recursive(Pf, std::marker::PhantomData<Vm>),
 }
 
+#[derive(BorshSerialize, BorshDeserialize)]
 pub struct RecursiveProofOutput<Vm: ZkVM, T> {
     pub claimed_method_id: Vm::CodeCommitment,
     pub output: T,
 }
-impl<Vm: ZkVM<CodeCommitment = C>, C: Encode, T: Encode> Encode for RecursiveProofOutput<Vm, T> {
-    fn encode(&self, target: &mut impl std::io::Write) {
-        self.claimed_method_id.encode(target);
-        self.output.encode(target);
-    }
-}
-impl<Vm: ZkVM, T> Decode for RecursiveProofOutput<Vm, T> {
-    type Error = DeserializationError;
-    fn decode(_target: &mut &[u8]) -> Result<Self, DeserializationError> {
-        todo!()
-    }
-}
 
 // TODO!
 mod risc0 {
+    #[allow(unused)]
     struct MethodId([u8; 32]);
 }

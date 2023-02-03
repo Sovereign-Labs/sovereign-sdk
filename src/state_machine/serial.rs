@@ -1,6 +1,11 @@
 #[cfg(feature = "sync")]
 use std::sync::Arc;
-use std::{ops::Deref, rc::Rc};
+
+// use borsh::maybestd::io::Error as StdError;
+use borsh::{
+    maybestd::{self, io::Read},
+    BorshDeserialize, BorshSerialize,
+};
 
 use thiserror::Error;
 
@@ -11,11 +16,6 @@ pub enum DeserializationError {
     #[error("Invalid enum tag. Only tags 0-{max_allowed:} are valid, got {got:}")]
     InvalidTag { max_allowed: u8, got: u8 },
 }
-
-// TODO: do this in a sensible/generic way
-// The objective is to not introduce a forcible serde dependency and potentially
-// allow implementers to use rykv or another zero-copy framework. But we
-// need to design that. This will work for now
 
 /// Trait used to express encoding relationships.
 pub trait Encode {
@@ -28,43 +28,64 @@ pub trait Encode {
     }
 }
 
-/// Trait used to express decoding relationships.
-pub trait Decode: Sized {
-    type Error;
-
-    fn decode(target: &mut &[u8]) -> Result<Self, Self::Error>;
+/// Decode a type from an arbitrary reader.
+///
+/// Decoding cannot be zero-copy, since zero-copy deserialization depends on the liftime of the input.
+/// Types that support zero-copy deserialization implement `DecodeBorrowed` only.
+///
+///
+/// For example, one could implement Decode using serde_json:
+///```ignore
+/// impl<T> Decode for T where T: DeserializeOwned + for<'de> DecodeBorrowed<'de>  {
+///     type Error = serde_json::Error;
+///
+///     fn decode<R: Read>(target: R) -> Result<Self, Self::Error> {
+///         serde_json::from_reader(target)
+///     }
+/// }
+/// ```
+pub trait Decode: Sized + for<'de> DecodeBorrowed<'de> {
+    type Error: core::fmt::Debug;
+    fn decode<R: Read>(target: &mut R) -> Result<Self, <Self as Decode>::Error>;
 }
 
-// Automatically implement encode for smart pointers
-impl<T, U> Encode for T
-where
-    T: Deref<Target = U>,
-    U: Encode,
-{
+/// Decode a type from a slice of bytes with a known lifetime, tying
+/// the lifetime of the deserialized value to the lifetime of the input.
+/// Supports zero-copy deserialization.
+///
+/// For example, one could implement DecodeBorrowed using serde_json:
+/// ```ignore
+/// impl<'de, T> DecodeBorrowed<'de> for T where T: Deserialize<'de> {
+///     type Error = serde_json::Error;
+///
+///     fn decode_from_slice(target: &'de [u8]) -> Result<Self, Self::Error> {
+///         serde_json::from_slice(target)
+///     }
+/// }
+/// ```
+pub trait DecodeBorrowed<'de>: Sized {
+    type Error: core::fmt::Debug;
+    fn decode_from_slice(target: &'de [u8]) -> Result<Self, Self::Error>;
+}
+
+impl<T: BorshSerialize> Encode for T {
     fn encode(&self, target: &mut impl std::io::Write) {
-        self.deref().encode(target)
+        self.serialize(target).expect("Serialization is infallible");
     }
 }
 
-#[cfg(feature = "sync")]
-impl<T, E> Decode for Arc<T>
-where
-    T: Decode<Error = E>,
-{
-    type Error = E;
+impl<T: BorshDeserialize> Decode for T {
+    type Error = maybestd::io::Error;
 
-    fn decode(target: &mut &[u8]) -> Result<Self, Self::Error> {
-        Ok(Arc::new(T::decode(target)?))
+    fn decode<R: Read>(target: &mut R) -> Result<Self, <Self as Decode>::Error> {
+        T::deserialize_reader(target)
     }
 }
 
-impl<T, E> Decode for Rc<T>
-where
-    T: Decode<Error = E>,
-{
-    type Error = E;
+impl<'de, T: BorshDeserialize> DecodeBorrowed<'de> for T {
+    type Error = maybestd::io::Error;
 
-    fn decode(target: &mut &[u8]) -> Result<Self, Self::Error> {
-        Ok(Rc::new(T::decode(target)?))
+    fn decode_from_slice(target: &'de [u8]) -> Result<Self, Self::Error> {
+        T::deserialize(&mut &target[..])
     }
 }
