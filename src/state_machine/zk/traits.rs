@@ -2,7 +2,7 @@ use core::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use crate::serial::{Decode, DeserializationError, Encode};
+use crate::serial::{Decode, Encode};
 
 /// A proof that a program was executed in a zkVM.
 pub trait ZkVM {
@@ -40,5 +40,6 @@ pub struct RecursiveProofOutput<Vm: ZkVM, T> {
 
 // TODO!
 mod risc0 {
+    #[allow(unused)]
     struct MethodId([u8; 32]);
 }

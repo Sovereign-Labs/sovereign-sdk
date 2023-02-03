@@ -1,6 +1,5 @@
 #[cfg(feature = "sync")]
 use std::sync::Arc;
-use std::{ops::Deref, rc::Rc};
 
 // use borsh::maybestd::io::Error as StdError;
 use borsh::{

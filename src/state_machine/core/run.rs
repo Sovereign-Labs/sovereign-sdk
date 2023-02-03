@@ -3,7 +3,7 @@ use bytes::Buf;
 use crate::{
     core::traits::{BlockheaderTrait, CanonicalHash},
     da::{BlobTransactionTrait, DaLayerTrait},
-    serial::{Decode, DecodeBorrowed},
+    serial::DecodeBorrowed,
     state_machine::env,
     stf::{ConsensusMessage, StateTransitionFunction},
     zk::traits::{ProofTrait, RecursiveProofInput, ZkVM},

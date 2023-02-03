@@ -1,10 +1,7 @@
-use borsh::{BorshDeserialize, BorshSerialize};
-use bytes::{Buf, Bytes};
-
 use crate::{
     da::DaLayerTrait,
     maybestd::rc::Rc,
-    serial::{Decode, DecodeBorrowed, DeserializationError, Encode},
+    serial::{Decode, DecodeBorrowed, Encode},
     stf::{ConsensusSetUpdate, StateTransitionFunction},
 };
 
@@ -33,7 +30,7 @@ pub struct RollupHeader<DaLayer: DaLayerTrait, App: StateTransitionFunction> {
 }
 
 impl<D: DaLayerTrait, A: StateTransitionFunction> Encode for RollupHeader<D, A> {
-    fn encode(&self, target: &mut impl std::io::Write) {
+    fn encode(&self, _target: &mut impl std::io::Write) {
         todo!()
     }
 }
@@ -41,7 +38,7 @@ impl<D: DaLayerTrait, A: StateTransitionFunction> Encode for RollupHeader<D, A> 
 impl<D: DaLayerTrait, A: StateTransitionFunction> Decode for RollupHeader<D, A> {
     type Error = ();
 
-    fn decode<R: std::io::Read>(target: &mut R) -> Result<Self, <Self as Decode>::Error> {
+    fn decode<R: std::io::Read>(_target: &mut R) -> Result<Self, <Self as Decode>::Error> {
         todo!()
     }
 }
@@ -49,7 +46,7 @@ impl<D: DaLayerTrait, A: StateTransitionFunction> Decode for RollupHeader<D, A> 
 impl<'de, D: DaLayerTrait, A: StateTransitionFunction> DecodeBorrowed<'de> for RollupHeader<D, A> {
     type Error = ();
 
-    fn decode_from_slice(target: &'de [u8]) -> Result<Self, Self::Error> {
+    fn decode_from_slice(_target: &'de [u8]) -> Result<Self, Self::Error> {
         todo!()
     }
 }

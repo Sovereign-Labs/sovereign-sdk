@@ -3,7 +3,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::{
     core::traits::{BatchTrait, TransactionTrait},
-    serial::{Decode, DecodeBorrowed, DeserializationError, Encode},
+    serial::{Decode, DecodeBorrowed, DeserializationError},
 };
 
 /// An address on the DA layer. Opaque to the StateTransitionFunction
