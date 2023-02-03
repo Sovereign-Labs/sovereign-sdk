@@ -8,7 +8,7 @@ edition = "2021"
 [dependencies]
 bytes = "1.2.1"
 sha2 = "0.10.6"
-borsh = "0.10.0"
+borsh = { version = "0.10.0", features = ["rc"]}
 
 anyhow = "1.0.68"
 thiserror = "1.0.38"
