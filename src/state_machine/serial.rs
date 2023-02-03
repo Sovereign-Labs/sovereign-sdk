@@ -4,7 +4,7 @@ use std::sync::Arc;
 // use borsh::maybestd::io::Error as StdError;
 use borsh::{
     maybestd::{self, io::Read},
-    BorshDeserialize,
+    BorshDeserialize, BorshSerialize,
 };
 
 use thiserror::Error;
@@ -35,7 +35,7 @@ pub trait Encode {
 ///
 ///
 /// For example, one could implement Decode using serde_json:
-///```no_run
+///```ignore
 /// impl<T> Decode for T where T: DeserializeOwned + for<'de> DecodeBorrowed<'de>  {
 ///     type Error = serde_json::Error;
 ///
@@ -54,7 +54,7 @@ pub trait Decode: Sized + for<'de> DecodeBorrowed<'de> {
 /// Supports zero-copy deserialization.
 ///
 /// For example, one could implement DecodeBorrowed using serde_json:
-/// ```no_run
+/// ```ignore
 /// impl<'de, T> DecodeBorrowed<'de> for T where T: Deserialize<'de> {
 ///     type Error = serde_json::Error;
 ///
@@ -66,6 +66,12 @@ pub trait Decode: Sized + for<'de> DecodeBorrowed<'de> {
 pub trait DecodeBorrowed<'de>: Sized {
     type Error: core::fmt::Debug;
     fn decode_from_slice(target: &'de [u8]) -> Result<Self, Self::Error>;
+}
+
+impl<T: BorshSerialize> Encode for T {
+    fn encode(&self, target: &mut impl std::io::Write) {
+        self.serialize(target).expect("Serialization is infallible");
+    }
 }
 
 impl<T: BorshDeserialize> Decode for T {
