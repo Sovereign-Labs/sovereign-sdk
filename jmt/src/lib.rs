@@ -1105,7 +1105,6 @@ pub mod test_utils {
 mod test {
     use borsh::BorshSerialize;
     use proptest::prelude::Arbitrary;
-    use serde::ser;
 
     use crate::{hash::HashOutput, types::nibble::Nibble, Key};
 
