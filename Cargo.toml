@@ -3,6 +3,7 @@ resolver = "2"
 members = [
 	"sdk",
 	"jmt",
+	"first-read-last-write-cache",
 ]
 
 
