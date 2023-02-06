@@ -20,10 +20,14 @@ use crate::errors::CodecError;
 
 use super::Nibble;
 
-#[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Debug)]
-#[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
 /// A type-erased [`NibblePath`] with no knowledged of the JMTs digest size.
 /// Useful for creating DB abstractions with fewer generics
+#[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize, Debug)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
+#[cfg_attr(
+    any(test, feature = "borsh"),
+    derive(::borsh::BorshDeserialize, ::borsh::BorshSerialize)
+)]
 pub struct PhysicalNibblePath {
     /// Indicates the total number of nibbles in bytes. Either `bytes.len() * 2 - 1` or
     /// `bytes.len() * 2`.

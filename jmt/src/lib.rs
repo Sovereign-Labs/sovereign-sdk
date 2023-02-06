@@ -1103,6 +1103,7 @@ pub mod test_utils {
 
 #[cfg(test)]
 mod test {
+    use borsh::BorshSerialize;
     use proptest::prelude::Arbitrary;
     use serde::ser;
 
@@ -1129,9 +1130,9 @@ mod test {
         fn test_only_hash(&self) -> TestHashValue;
     }
 
-    impl<T: ser::Serialize + ?Sized> TestOnlyHash for T {
+    impl<T: BorshSerialize + ?Sized> TestOnlyHash for T {
         fn test_only_hash(&self) -> TestHashValue {
-            let bytes = bcs::to_bytes(self).expect("serialize failed during hash.");
+            let bytes = borsh::to_vec(self).expect("serialize failed during hash.");
             HashOutput::sha3_256_of(&bytes)
         }
     }

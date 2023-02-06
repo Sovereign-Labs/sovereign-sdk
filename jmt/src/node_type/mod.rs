@@ -46,6 +46,10 @@ pub struct NodeKey<const N: usize> {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
+#[cfg_attr(
+    any(test, feature = "borsh"),
+    derive(::borsh::BorshDeserialize, ::borsh::BorshSerialize)
+)]
 /// A type-erased [`NodeKey`] - with no knowledge of the JMTs hash function or digest size.
 /// Allows the creation of database abstractions without excessive generics.
 pub struct PhysicalNodeKey {
@@ -173,6 +177,10 @@ impl<const N: usize> NodeKey<N> {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(
+    any(test, feature = "borsh"),
+    derive(::borsh::BorshDeserialize, ::borsh::BorshSerialize)
+)]
 pub enum NodeType {
     Leaf,
     Null,
@@ -212,12 +220,16 @@ pub struct Child<const N: usize> {
     pub node_type: NodeType,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
 /// A type-erased [`Child`] - with no knowledge of the JMTs hash function or digest size.
 /// Allows the creation of database abstractions without excessive generics.
 ///
 /// Introduces a slight inefficiency, since "hash" values have to be copied to transform from
 /// Vec to array types on conversion to [`Child`], but the performance impace should be negligble.
+#[derive(Debug, Eq, PartialEq, Clone)]
+#[cfg_attr(
+    any(test, feature = "borsh"),
+    derive(::borsh::BorshDeserialize, ::borsh::BorshSerialize)
+)]
 pub struct PartialChild {
     /// The hash value of this child node.
     hash: Vec<u8>,
@@ -295,9 +307,13 @@ impl<H, const N: usize> Clone for InternalNode<H, N> {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
 /// A type-erased [`InternalNode`] - with no knowledge of the JMTs hash function or digest size.
 /// Allows the creation of database abstractions without excessive generics.
+#[derive(Debug, Eq, PartialEq, Clone)]
+#[cfg_attr(
+    any(test, feature = "borsh"),
+    derive(::borsh::BorshDeserialize, ::borsh::BorshSerialize)
+)]
 pub struct PartialInternalNode {
     /// Up to 16 children.
     children: PartialChildren,
@@ -1050,9 +1066,13 @@ where
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
 /// A type-erased [`Node`] - with no knowledge of the JMTs hash function or digest size.
 /// Allows the creation of database abstractions without excessive generics.
+#[derive(Debug, Eq, PartialEq, Clone)]
+#[cfg_attr(
+    any(test, feature = "borsh"),
+    derive(::borsh::BorshDeserialize, ::borsh::BorshSerialize)
+)]
 pub enum PhysicalNode<K> {
     /// A wrapper of [`InternalNode`].
     Internal(PartialInternalNode),
