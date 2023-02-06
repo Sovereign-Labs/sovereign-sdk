@@ -1,0 +1,10 @@
+[package]
+name = "sov-state"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+first-read-last-write-cache = { git = "https://github.com/Sovereign-Labs/first-read-last-write-cache" }
+jellyfish-merkle-generic = { git = "https://github.com/Sovereign-Labs/jellyfish-merkle-generic" }
+

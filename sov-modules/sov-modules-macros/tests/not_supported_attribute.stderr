@@ -1,0 +1,11 @@
+error: Only `#[module]` or `#[state]` attributes are supported.
+ --> tests/not_supported_attribute.rs:8:5
+  |
+8 |     test_state1: TestState<C::Storage>,
+  |     ^^^^^^^^^^^
+
+error: cannot find attribute `other` in this scope
+ --> tests/not_supported_attribute.rs:7:7
+  |
+7 |     #[other]
+  |       ^^^^^

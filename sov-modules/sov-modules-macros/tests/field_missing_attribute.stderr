@@ -1,0 +1,5 @@
+error: This field is missing an attribute: add `#[module]` or `#[state]`.
+ --> tests/field_missing_attribute.rs:7:5
+  |
+7 |     test_state1: TestState<C::Storage>,
+  |     ^^^^^^^^^^^
