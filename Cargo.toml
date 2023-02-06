@@ -1,21 +1,15 @@
-[package]
-name = "sovereign-sdk"
-version = "0.1.0"
-edition = "2021"
+[workspace]
+resolver = "2"
+members = [
+	"sdk"
+]
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[dependencies]
-bytes = "1.2.1"
-sha2 = "0.10.6"
-borsh = { version = "0.10.0", features = ["rc"]}
-
+[workspace.dependencies]
+# External dependencies
 anyhow = "1.0.68"
+borsh = { version = "0.10.0", features = ["rc"]}
+bytes = "1.2.1"
+proptest = "1.0.0"  
+sha2 = "0.10.6"
 thiserror = "1.0.38"
-
-# Proptest should be a dev-dependency, but those can't be optional
-proptest =  { version = "1.0.0", optional = true } 
-
-[features]
-fuzzing = ["proptest"]
-sync = []
