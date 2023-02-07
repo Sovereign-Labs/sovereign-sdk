@@ -13,14 +13,14 @@ impl MockPublicKey {
     }
 }
 
-#[derive(borsh::BorshDeserialize)]
+#[derive(borsh::BorshDeserialize, PartialEq, Eq)]
 pub struct MockSignature {
-    _sig: Vec<u8>,
+    sig: Vec<u8>,
 }
 
 impl MockSignature {
     pub fn new(sig: Vec<u8>) -> Self {
-        Self { _sig: sig }
+        Self { sig }
     }
 }
 
