@@ -1,7 +1,6 @@
-mod utils;
-
+use sov_modules_api::Context;
 use sov_modules_macros::ModuleInfo;
-use utils::{Context, TestState};
+use sov_state::StateMap;
 
 #[derive(ModuleInfo)]
 struct TestStruct<C: Context> {
@@ -9,7 +8,7 @@ struct TestStruct<C: Context> {
     test_state1: [usize; 22],
 
     #[state]
-    test_state2: TestState<C::Storage>,
+    test_state2: StateMap<u32, u32, C::Storage>,
 }
 
 fn main() {}

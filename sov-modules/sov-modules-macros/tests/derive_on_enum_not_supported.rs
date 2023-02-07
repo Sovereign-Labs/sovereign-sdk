@@ -1,14 +1,14 @@
-mod utils;
+use sov_modules_api::Context;
 use sov_modules_macros::ModuleInfo;
-use utils::{Context, TestState};
+use sov_state::StateMap;
 
 #[derive(ModuleInfo)]
 enum TestStruct<C: Context> {
     #[state]
-    TestState1(TestState<C::Storage>),
+    TestState1(StateMap<String, String, C::Storage>),
 
     #[state]
-    TestState2(TestState<C::Storage>),
+    TestState2(StateMap<String, String, C::Storage>),
 }
 
 fn main() {}

@@ -6,7 +6,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         transfer: Transfer<C>,
         context: C,
     ) -> Result<sov_modules_api::CallResponse, <Self as sov_modules_api::Module>::CallError> {
-        if transfer.from != context.sender() {
+        if &transfer.from != context.sender() {
             todo!()
         }
 
@@ -18,7 +18,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         delete: Delete<C>,
         context: C,
     ) -> Result<sov_modules_api::CallResponse, <Self as sov_modules_api::Module>::CallError> {
-        if delete.id != context.sender() {
+        if &delete.id != context.sender() {
             todo!()
         }
 

@@ -1,4 +1,8 @@
 #![feature(associated_type_defaults)]
+
+#[cfg(feature = "mocks")]
+pub mod mocks;
+
 use sov_state::Storage;
 use sovereign_sdk::{
     serial::{Decode, DecodeBorrowed},
@@ -9,24 +13,32 @@ use std::{convert::Infallible, io::Read};
 // A unique identifier for each state variable in a module.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Prefix {
-    storage_name: String,
     module_path: String,
     module_name: String,
+    storage_name: String,
 }
 
 impl Prefix {
     pub fn new(module_path: String, module_name: String, storage_name: String) -> Self {
         Self {
-            storage_name,
             module_path,
             module_name,
+            storage_name,
         }
     }
 }
 
 impl From<Prefix> for sov_state::Prefix {
-    fn from(_value: Prefix) -> Self {
-        todo!()
+    fn from(prefix: Prefix) -> Self {
+        let mut combined_prefix = Vec::with_capacity(
+            prefix.module_path.len() + prefix.module_name.len() + prefix.storage_name.len(),
+        );
+
+        combined_prefix.extend(prefix.module_path.as_bytes());
+        combined_prefix.extend(prefix.module_name.as_bytes());
+        combined_prefix.extend(prefix.storage_name.as_bytes());
+
+        sov_state::Prefix::new(combined_prefix)
     }
 }
 
@@ -47,7 +59,7 @@ pub trait Context {
     type PublicKey: Decode + Eq;
 
     // Sender of the transaction.
-    fn sender(&self) -> Self::PublicKey;
+    fn sender(&self) -> &Self::PublicKey;
 }
 
 // A type that can't be instantiated.

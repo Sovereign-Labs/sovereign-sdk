@@ -1,7 +1,7 @@
-pub mod utils;
-
+use sov_modules_api::mocks::{MockContext, MockStorage};
+use sov_modules_api::Context;
 use sov_modules_macros::ModuleInfo;
-use utils::{Context, TestContext, TestState, TestStorage};
+use sov_state::StateMap;
 
 pub mod first_test_module {
     use super::*;
@@ -9,10 +9,10 @@ pub mod first_test_module {
     #[derive(ModuleInfo)]
     pub(crate) struct FirstTestStruct<C: Context> {
         #[state]
-        pub state_in_first_struct_1: TestState<C::Storage>,
+        pub state_in_first_struct_1: StateMap<C::PublicKey, u32, C::Storage>,
 
         #[state]
-        pub state_in_first_struct_2: TestState<C::Storage>,
+        pub state_in_first_struct_2: StateMap<String, String, C::Storage>,
     }
 }
 
@@ -22,7 +22,7 @@ mod second_test_module {
     #[derive(ModuleInfo)]
     pub(crate) struct SecondTestStruct<C: Context> {
         #[state]
-        pub state_in_second_struct_1: TestState<C::Storage>,
+        pub state_in_second_struct_1: StateMap<String, u32, C::Storage>,
 
         #[module]
         pub module_in_second_struct_1: first_test_module::FirstTestStruct<C>,
@@ -30,33 +30,36 @@ mod second_test_module {
 }
 
 fn main() {
-    let test_storage = TestStorage {};
-    let second_test_struct =
-        second_test_module::SecondTestStruct::<TestContext>::_new(test_storage);
+    let test_storage = MockStorage {};
 
-    let prefix2 = second_test_struct.state_in_second_struct_1.prefix;
+    let second_test_struct =
+        second_test_module::SecondTestStruct::<MockContext>::_new(test_storage);
+
+    let prefix2 = second_test_struct.state_in_second_struct_1.prefix();
     assert_eq!(
-        prefix2,
+        *prefix2,
         sov_modules_api::Prefix::new(
             // The tests compile inside trybuild.
             "trybuild001::second_test_module".to_owned(),
             "SecondTestStruct".to_owned(),
             "state_in_second_struct_1".to_owned()
         )
+        .into()
     );
 
     let prefix1 = second_test_struct
         .module_in_second_struct_1
         .state_in_first_struct_1
-        .prefix;
+        .prefix();
 
     assert_eq!(
-        prefix1,
+        *prefix1,
         sov_modules_api::Prefix::new(
             // The tests compile inside trybuild.
             "trybuild001::first_test_module".to_owned(),
             "FirstTestStruct".to_owned(),
             "state_in_first_struct_1".to_owned()
         )
+        .into()
     );
 }
