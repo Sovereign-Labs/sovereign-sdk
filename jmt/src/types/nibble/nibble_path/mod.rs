@@ -64,6 +64,12 @@ impl<const N: usize> TryFrom<PhysicalNibblePath> for NibblePath<N> {
 #[derive(Clone, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
 pub struct NibblePath<const N: usize>(PhysicalNibblePath);
 
+impl<const N: usize> Into<PhysicalNibblePath> for NibblePath<N> {
+    fn into(self) -> PhysicalNibblePath {
+        self.0
+    }
+}
+
 /// Supports debug format by concatenating nibbles literally. For example, [0x12, 0xa0] with 3
 /// nibbles will be printed as "12a".
 impl<const N: usize> fmt::Debug for NibblePath<N> {

@@ -82,7 +82,9 @@ use std::{
 use errors::CodecError;
 use hash::{HashOutput, HashValueBitIterator, TreeHash};
 use metrics::{inc_deletion_count_if_enabled, set_leaf_count_if_enabled};
-use node_type::{Child, Children, InternalNode, LeafNode, Node, NodeKey};
+use node_type::{
+    Child, Children, InternalNode, LeafNode, Node, NodeKey, PhysicalNode, PhysicalNodeKey,
+};
 use parallel::{parallel_process_range_if_enabled, run_on_io_pool_if_enabled};
 use proof::{SparseMerkleProof, SparseMerkleProofExt, SparseMerkleRangeProof};
 #[cfg(any(test, feature = "fuzzing"))]
@@ -101,6 +103,8 @@ pub mod mock_tree_store;
 pub mod node_type;
 pub mod parallel;
 pub mod proof;
+mod read_write;
+pub use read_write::*;
 #[cfg(any(test, feature = "fuzzing"))]
 pub mod test_helper;
 pub mod types;
@@ -129,37 +133,11 @@ pub trait Key:
     fn key_size(&self) -> usize;
 }
 
-/// `TreeReader` defines the interface between
-/// [`JellyfishMerkleTree`](struct.JellyfishMerkleTree.html)
-/// and underlying storage holding nodes.
-pub trait TreeReader<K, H, const N: usize> {
-    type Error: Into<anyhow::Error> + Send + Sync + 'static;
-    /// Gets node given a node key. Returns error if the node does not exist.
-    ///
-    /// Recommended impl:
-    /// ```ignore
-    /// self.get_node_option(node_key)?.ok_or_else(|| Self::Error::from(format!("Missing node at {:?}.", node_key)))
-    /// ```
-    fn get_node(&self, node_key: &NodeKey<N>) -> Result<Node<K, H, N>, Self::Error>;
-
-    /// Gets node given a node key. Returns `None` if the node does not exist.
-    fn get_node_option(&self, node_key: &NodeKey<N>) -> Result<Option<Node<K, H, N>>, Self::Error>;
-
-    /// Gets the rightmost leaf at a version. Note that this assumes we are in the process of
-    /// restoring the tree and all nodes are at the same version.
-    fn get_rightmost_leaf(
-        &self,
-        version: Version,
-    ) -> Result<Option<(NodeKey<N>, LeafNode<K, H, N>)>, Self::Error>;
-}
-
 /// Node batch that will be written into db atomically with other batches.
 pub type NodeBatch<K, H, const N: usize> = HashMap<NodeKey<N>, Node<K, H, N>>;
 
-pub trait TreeWriter<K, H, const N: usize>: Send + Sync {
-    type Error: std::error::Error + Send + Sync;
-    fn write_node_batch(&self, node_batch: &NodeBatch<K, H, N>) -> Result<(), Self::Error>;
-}
+/// A type-erased batch that will be written into db atomically with other batches.
+pub type PhysicalNodeBatch<K> = HashMap<PhysicalNodeKey, PhysicalNode<K>>;
 
 /// The hash of a key
 #[derive(Clone, Copy, Eq, Hash, PartialEq, PartialOrd, Ord, Debug, Serialize, Deserialize)]
