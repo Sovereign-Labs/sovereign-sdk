@@ -12,6 +12,13 @@ members = [
 
 
 [workspace.dependencies]
+sovereign-sdk = {path= "sdk" }
+jellyfish-merkle-generic = {path= "jmt" }
+first-read-last-write-cache = {path = "first-read-last-write-cache"}
+sov-state = {path = "sov-modules/sov-state"}
+sov-modules-api = {path = "sov-modules/sov-modules-api"}
+sov-modules-macros = {path = "sov-modules/sov-modules-macros"}
+
 # External dependencies
 anyhow = "1.0.68"
 bcs = { git = "https://github.com/aptos-labs/bcs", rev = "2cde3e8446c460cb17b0c1d6bac7e27e964ac169" } 
