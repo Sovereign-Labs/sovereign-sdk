@@ -82,7 +82,10 @@ use std::{
 use errors::CodecError;
 use hash::{HashOutput, HashValueBitIterator, TreeHash};
 use metrics::{inc_deletion_count_if_enabled, set_leaf_count_if_enabled};
-use node_type::{Child, Children, InternalNode, LeafNode, Node, NodeKey};
+use node_type::{
+    Child, Children, InternalNode, LeafNode, Node, NodeKey, PhysicalLeafNode, PhysicalNode,
+    PhysicalNodeKey,
+};
 use parallel::{parallel_process_range_if_enabled, run_on_io_pool_if_enabled};
 use proof::{SparseMerkleProof, SparseMerkleProofExt, SparseMerkleRangeProof};
 #[cfg(any(test, feature = "fuzzing"))]
@@ -145,12 +148,37 @@ pub trait TreeReader<K, H, const N: usize> {
     /// Gets node given a node key. Returns `None` if the node does not exist.
     fn get_node_option(&self, node_key: &NodeKey<N>) -> Result<Option<Node<K, H, N>>, Self::Error>;
 
+    /// Gets a value given a key. Returns `None` if the value does not exist.
+    // TODO(@preston-evans98): Make the return type cheaply cloneable
+    fn get_value(&self, key: &(Version, K)) -> Result<Option<Vec<u8>>, Self::Error>;
+
     /// Gets the rightmost leaf at a version. Note that this assumes we are in the process of
     /// restoring the tree and all nodes are at the same version.
     fn get_rightmost_leaf(
         &self,
         version: Version,
     ) -> Result<Option<(NodeKey<N>, LeafNode<K, H, N>)>, Self::Error>;
+}
+
+pub trait PhysicalTreeReader<K> {
+    type Error: Into<anyhow::Error> + Send + Sync + 'static;
+    fn get_physical_node(&self, node_key: &PhysicalNodeKey)
+        -> Result<PhysicalNode<K>, Self::Error>;
+
+    fn get_physical_node_option(
+        &self,
+        node_key: &PhysicalNodeKey,
+    ) -> Result<Option<PhysicalNode<K>>, Self::Error>;
+
+    // TODO(@preston-evans98): Make the return type cheaply cloneable
+    fn get_value(&self, key: &(Version, K)) -> Result<Option<Vec<u8>>, Self::Error>;
+
+    /// Gets the rightmost leaf at a version. Note that this assumes we are in the process of
+    /// restoring the tree and all nodes are at the same version.
+    fn get_rightmost_physical_leaf(
+        &self,
+        version: Version,
+    ) -> Result<Option<(PhysicalNodeKey, PhysicalLeafNode<K>)>, Self::Error>;
 }
 
 /// Node batch that will be written into db atomically with other batches.

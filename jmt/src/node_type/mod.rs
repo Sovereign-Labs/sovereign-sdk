@@ -44,6 +44,15 @@ pub struct NodeKey<const N: usize> {
     nibble_path: NibblePath<N>,
 }
 
+impl<const N: usize> Into<PhysicalNodeKey> for NodeKey<N> {
+    fn into(self) -> PhysicalNodeKey {
+        PhysicalNodeKey {
+            version: self.version,
+            nibble_path: self.nibble_path.into(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
 #[cfg_attr(
