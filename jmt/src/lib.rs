@@ -133,7 +133,7 @@ pub trait Key:
 /// [`JellyfishMerkleTree`](struct.JellyfishMerkleTree.html)
 /// and underlying storage holding nodes.
 pub trait TreeReader<K, H, const N: usize> {
-    type Error: std::error::Error + Send + Sync + 'static;
+    type Error: Into<anyhow::Error> + Send + Sync + 'static;
     /// Gets node given a node key. Returns error if the node does not exist.
     ///
     /// Recommended impl:
@@ -356,6 +356,8 @@ pub enum JmtError<E> {
     MissingRoot { version: u64 },
     #[error(transparent)]
     CodecError(CodecError),
+    #[error(transparent)]
+    AnyhowError(anyhow::Error),
 }
 
 /// The Jellyfish Merkle tree data structure. See [`crate`] for description.
@@ -882,7 +884,7 @@ where
                 if nibble_depth == 0 {
                     JmtError::MissingRoot { version }
                 } else {
-                    err.into()
+                    JmtError::AnyhowError(err.into())
                 }
             })?;
             match next_node {
@@ -982,7 +984,7 @@ where
         let root_node_key = NodeKey::new_empty_path(version);
         self.reader
             .get_node_option(&root_node_key)
-            .map_err(|e| e.into())
+            .map_err(|e| JmtError::AnyhowError(e.into()))
     }
 
     pub fn get_root_hash(&self, version: Version) -> Result<NodeHash<N>, JmtError<R::Error>> {
