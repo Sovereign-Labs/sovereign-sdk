@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 sov-state = { workspace = true }
 sovereign-sdk = { workspace = true }
-borsh = { workspace = true}
+borsh = { workspace = true, optional = true}
 
 [features]
-mocks = []
+mocks = ["dep:borsh"]
