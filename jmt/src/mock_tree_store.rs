@@ -59,15 +59,15 @@ where
     K: crate::test_utils::TestKey,
     H: TreeHash<N>,
 {
-    type Error = BoxError;
-    fn get_node_option(&self, node_key: &NodeKey<N>) -> Result<Option<Node<K, H, N>>, BoxError> {
+    type Error = anyhow::Error;
+    fn get_node_option(&self, node_key: &NodeKey<N>) -> Result<Option<Node<K, H, N>>, Self::Error> {
         Ok(self.data.read().unwrap().0.get(node_key).cloned())
     }
 
     fn get_rightmost_leaf(
         &self,
         version: Version,
-    ) -> Result<Option<(NodeKey<N>, LeafNode<K, H, N>)>, BoxError> {
+    ) -> Result<Option<(NodeKey<N>, LeafNode<K, H, N>)>, Self::Error> {
         let locked = self.data.read().unwrap();
         let mut node_key_and_node: Option<(NodeKey<N>, LeafNode<K, H, N>)> = None;
 
@@ -88,7 +88,7 @@ where
 
     fn get_node(&self, node_key: &NodeKey<N>) -> std::result::Result<Node<K, H, N>, Self::Error> {
         self.get_node_option(node_key)?
-            .ok_or_else(|| BoxError(Box::new(TestTreeError::MissingNode)))
+            .ok_or_else(|| TestTreeError::MissingNode.into())
     }
 }
 
