@@ -636,6 +636,7 @@ impl<H: TreeHash<N>, const N: usize> InternalNode<H, N> {
                 let only_child_node_key =
                     node_key.gen_child_node_key(only_child.version, only_child_index);
                 match tree_reader.get_node(&only_child_node_key).map_err(|e| {
+                    let e: anyhow::Error = e.into();
                     CodecError::NodeFetchError {
                         key: format!("{:?}", &only_child_node_key),
                         err: e.to_string(),
