@@ -17,6 +17,10 @@ use std::fmt;
 // pub const ROOT_NIBBLE_HEIGHT: usize = HashValue::LENGTH * 2;
 
 #[derive(Clone, Copy, Debug, Hash, Eq, PartialEq, Ord, PartialOrd, Serialize, Deserialize)]
+#[cfg_attr(
+    any(test, feature = "borsh"),
+    derive(::borsh::BorshDeserialize, ::borsh::BorshSerialize)
+)]
 pub struct Nibble(u8);
 
 impl From<u8> for Nibble {

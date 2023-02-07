@@ -15,15 +15,17 @@ thiserror = { workspace = true }
 prometheus = { workspace = true, default-features = false, optional = true }
 once_cell = { workspace = true, optional = true }
 
-# Dependencies for "fuzzing" feature. Also relies on "metrics"
+# Dependencies for "fuzzing" feature. Also relies on "metrics" and "borsh"
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
 rand = { workspace = true, features = ["min_const_gen"], optional = true}
-bcs = { workspace = true, optional = true } 
 tiny-keccak = { workspace = true, features = ["keccak", "sha3"], optional = true }
 
 # Dependencies for "rayon" feature
 rayon = { workspace = true, optional = true }
+
+# Dependencies for "borsh" feature
+borsh = { workspace = true, optional = true }
 
 [dev-dependencies]
 proptest = "1.0.0"
@@ -33,10 +35,11 @@ tiny-keccak = { version = "2.0.2", features = ["keccak", "sha3"] }
 prometheus = { version = "0.13.3", default-features = false }
 once_cell = "1.10.0" 
 rayon =  "1.5.2"
-bcs = { git = "https://github.com/aptos-labs/bcs", rev = "2cde3e8446c460cb17b0c1d6bac7e27e964ac169" } # Used to make all serializable types hashable
+borsh = { workspace = true }
 
 [features]
 default = []
-fuzzing = ["dep:proptest", "dep:proptest-derive", "dep:rand", "dep:bcs", "dep:tiny-keccak"]
+fuzzing = ["borsh", "dep:proptest", "dep:proptest-derive", "dep:rand", "dep:tiny-keccak"]
 metrics = ["dep:prometheus", "dep:once_cell"]
 rayon = ["dep:rayon", "dep:once_cell"]
+borsh = ["dep:borsh"]

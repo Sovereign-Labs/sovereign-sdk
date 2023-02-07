@@ -46,6 +46,10 @@ pub struct NodeKey<const N: usize> {
 
 #[derive(Clone, Debug, Hash, Eq, PartialEq, Ord, PartialOrd)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
+#[cfg_attr(
+    any(test, feature = "borsh"),
+    derive(::borsh::BorshDeserialize, ::borsh::BorshSerialize)
+)]
 /// A type-erased [`NodeKey`] - with no knowledge of the JMTs hash function or digest size.
 /// Allows the creation of database abstractions without excessive generics.
 pub struct PhysicalNodeKey {
@@ -173,6 +177,10 @@ impl<const N: usize> NodeKey<N> {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+#[cfg_attr(
+    any(test, feature = "borsh"),
+    derive(::borsh::BorshDeserialize, ::borsh::BorshSerialize)
+)]
 pub enum NodeType {
     Leaf,
     Null,
@@ -212,12 +220,16 @@ pub struct Child<const N: usize> {
     pub node_type: NodeType,
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
 /// A type-erased [`Child`] - with no knowledge of the JMTs hash function or digest size.
 /// Allows the creation of database abstractions without excessive generics.
 ///
 /// Introduces a slight inefficiency, since "hash" values have to be copied to transform from
 /// Vec to array types on conversion to [`Child`], but the performance impace should be negligble.
+#[derive(Debug, Eq, PartialEq, Clone)]
+#[cfg_attr(
+    any(test, feature = "borsh"),
+    derive(::borsh::BorshDeserialize, ::borsh::BorshSerialize)
+)]
 pub struct PartialChild {
     /// The hash value of this child node.
     hash: Vec<u8>,
@@ -295,20 +307,24 @@ impl<H, const N: usize> Clone for InternalNode<H, N> {
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
 /// A type-erased [`InternalNode`] - with no knowledge of the JMTs hash function or digest size.
 /// Allows the creation of database abstractions without excessive generics.
-pub struct PartialInternalNode {
+#[derive(Debug, Eq, PartialEq, Clone)]
+#[cfg_attr(
+    any(test, feature = "borsh"),
+    derive(::borsh::BorshDeserialize, ::borsh::BorshSerialize)
+)]
+pub struct PhysicalInternalNode {
     /// Up to 16 children.
     children: PartialChildren,
     /// Total number of leaves under this internal node
     leaf_count: usize,
 }
 
-impl<H, const N: usize> TryFrom<PartialInternalNode> for InternalNode<H, N> {
+impl<H, const N: usize> TryFrom<PhysicalInternalNode> for InternalNode<H, N> {
     type Error = CodecError;
 
-    fn try_from(value: PartialInternalNode) -> Result<Self, Self::Error> {
+    fn try_from(value: PhysicalInternalNode) -> Result<Self, Self::Error> {
         let children: Result<HashMap<Nibble, Child<N>>, CodecError> = value
             .children
             .into_iter()
@@ -763,19 +779,23 @@ pub struct LeafNode<K, H, const N: usize> {
     phantom_hasher: std::marker::PhantomData<H>,
 }
 
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
 /// A type-erased [`LeafNode`] - with no knowledge of the JMTs hash function or digest size.
 /// Allows the creation of database abstractions without excessive generics.
-pub struct PartialLeafNode<K> {
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
+#[cfg_attr(
+    any(test, feature = "borsh"),
+    derive(::borsh::BorshDeserialize, ::borsh::BorshSerialize)
+)]
+pub struct PhysicalLeafNode<K> {
     account_key: Vec<u8>,
     value_hash: Vec<u8>,
     value_index: (K, Version),
 }
 
-impl<K, H, const N: usize> TryFrom<PartialLeafNode<K>> for LeafNode<K, H, N> {
+impl<K, H, const N: usize> TryFrom<PhysicalLeafNode<K>> for LeafNode<K, H, N> {
     type Error = errors::CodecError;
 
-    fn try_from(value: PartialLeafNode<K>) -> Result<Self, Self::Error> {
+    fn try_from(value: PhysicalLeafNode<K>) -> Result<Self, Self::Error> {
         let account_key = KeyHash(HashOutput::from_slice(value.account_key)?);
         let value_hash = ValueHash(HashOutput::from_slice(value.value_hash)?);
         Ok(Self {
@@ -1050,14 +1070,18 @@ where
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone)]
 /// A type-erased [`Node`] - with no knowledge of the JMTs hash function or digest size.
 /// Allows the creation of database abstractions without excessive generics.
+#[derive(Debug, Eq, PartialEq, Clone)]
+#[cfg_attr(
+    any(test, feature = "borsh"),
+    derive(::borsh::BorshDeserialize, ::borsh::BorshSerialize)
+)]
 pub enum PhysicalNode<K> {
     /// A wrapper of [`InternalNode`].
-    Internal(PartialInternalNode),
+    Internal(PhysicalInternalNode),
     /// A wrapper of [`LeafNode`].
-    Leaf(PartialLeafNode<K>),
+    Leaf(PhysicalLeafNode<K>),
     /// Represents empty tree only
     Null,
 }
