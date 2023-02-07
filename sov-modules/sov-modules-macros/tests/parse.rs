@@ -17,7 +17,7 @@ mod test_module {
 }
 
 fn main() {
-    let test_storage = MockStorage {};
+    let test_storage = MockStorage::default();
     let test_struct = test_module::TestStruct::<MockContext>::_new(test_storage);
 
     let prefix1 = test_struct.test_state1.prefix();

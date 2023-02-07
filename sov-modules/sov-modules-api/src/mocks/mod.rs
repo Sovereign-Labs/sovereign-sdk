@@ -1,4 +1,6 @@
 use crate::Context;
+use sov_state::storage::{StorageKey, StorageValue};
+use std::{collections::HashMap, sync::Arc};
 
 #[derive(borsh::BorshDeserialize, PartialEq, Eq)]
 pub struct MockPublicKey {
@@ -22,29 +24,24 @@ impl MockSignature {
     }
 }
 
-#[derive(Clone)]
-pub struct MockStorage {}
+#[derive(Clone, Default)]
+pub struct MockStorage {
+    storage: HashMap<Arc<Vec<u8>>, Arc<Vec<u8>>>,
+}
 
 impl sov_state::Storage for MockStorage {
-    fn get(
-        &mut self,
-        _key: sov_state::storage::StorageKey,
-        _version: u64,
-    ) -> Option<sov_state::storage::StorageValue> {
-        todo!()
+    fn get(&mut self, key: StorageKey, _version: u64) -> Option<StorageValue> {
+        self.storage
+            .get(&key.key)
+            .map(|v| StorageValue { value: v.clone() })
     }
 
-    fn set(
-        &mut self,
-        _key: sov_state::storage::StorageKey,
-        _version: u64,
-        _value: sov_state::storage::StorageValue,
-    ) {
-        todo!()
+    fn set(&mut self, key: StorageKey, _version: u64, value: StorageValue) {
+        self.storage.insert(key.key, value.value);
     }
 
-    fn delete(&mut self, _key: sov_state::storage::StorageKey, _version: u64) {
-        todo!()
+    fn delete(&mut self, key: StorageKey, _version: u64) {
+        self.storage.remove(&key.key);
     }
 }
 

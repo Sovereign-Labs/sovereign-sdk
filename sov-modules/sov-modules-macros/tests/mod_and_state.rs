@@ -30,7 +30,7 @@ mod second_test_module {
 }
 
 fn main() {
-    let test_storage = MockStorage {};
+    let test_storage = MockStorage::default();
 
     let second_test_struct =
         second_test_module::SecondTestStruct::<MockContext>::_new(test_storage);
