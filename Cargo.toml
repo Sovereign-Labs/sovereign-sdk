@@ -12,6 +12,14 @@ members = [
 
 
 [workspace.dependencies]
+# Internal dependencies
+sovereign-sdk = {path= "sdk" }
+jellyfish-merkle-generic = {path= "jmt" }
+first-read-last-write-cache = {path = "first-read-last-write-cache"}
+sov-state = {path = "sov-modules/sov-state"}
+sov-modules-api = {path = "sov-modules/sov-modules-api"}
+sov-modules-macros = {path = "sov-modules/sov-modules-macros"}
+
 # External dependencies
 anyhow = "1.0.68"
 borsh = { version = "0.10.0", features = ["rc"]}

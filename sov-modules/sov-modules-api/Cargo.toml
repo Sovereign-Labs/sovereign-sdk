@@ -3,7 +3,10 @@ name = "sov-modules-api"
 version = "0.1.0"
 edition = "2021"
 
-
 [dependencies]
-sov-state = { path = "../sov-state" }
-sovereign-sdk = { git = "https://github.com/Sovereign-Labs/sovereign-sdk" }
+sov-state = { workspace = true }
+sovereign-sdk = { workspace = true }
+borsh = { workspace = true, optional = true}
+
+[features]
+mocks = ["dep:borsh"]

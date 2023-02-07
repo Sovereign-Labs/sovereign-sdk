@@ -1,11 +1,13 @@
 use std::sync::Arc;
 
 // `Key` type for the `Storage`
+#[derive(Clone, PartialEq, Eq)]
 pub struct StorageKey {
     pub key: Arc<Vec<u8>>,
 }
 
 // `Value` type for the `Storage`
+#[derive(Clone)]
 pub struct StorageValue {
     pub value: Arc<Vec<u8>>,
 }

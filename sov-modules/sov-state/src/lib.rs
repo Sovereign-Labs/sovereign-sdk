@@ -2,6 +2,7 @@ mod jmt_storage;
 mod map;
 pub mod storage;
 
+pub use jmt_storage::JmtStorage;
 pub use map::StateMap;
 pub use storage::Storage;
 
@@ -9,6 +10,13 @@ pub use storage::Storage;
 // All the collection types in this crate are backed by the same storage instance, this means that insertions of the same key
 // to two different `StorageMaps` would collide with each other. We solve it by instantiating every collection type with a unique
 // prefix that is prepended to each key.
+#[derive(Debug, PartialEq, Eq)]
+pub struct Prefix {
+    prefix: Vec<u8>,
+}
 
-#[derive(Debug)]
-pub struct Prefix {}
+impl Prefix {
+    pub fn new(prefix: Vec<u8>) -> Self {
+        Self { prefix }
+    }
+}

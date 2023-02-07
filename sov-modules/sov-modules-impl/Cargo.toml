@@ -3,11 +3,9 @@ name = "sov-modules-impl"
 version = "0.1.0"
 edition = "2021"
 
-
-
 [dependencies]
-sov-modules-api = { path = "../sov-modules-api" }
-sov-modules-macros = { path = "../sov-modules-macros" }
-sov-state = { path = "../sov-state" }
-sovereign-sdk = { git = "https://github.com/Sovereign-Labs/sovereign-sdk" }
+sov-modules-api = { workspace = true }
+sov-modules-macros = { workspace = true }
+sov-state = { workspace = true }
+sovereign-sdk = { workspace = true }
 
