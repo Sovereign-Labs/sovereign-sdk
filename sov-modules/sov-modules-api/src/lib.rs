@@ -37,7 +37,6 @@ impl From<Prefix> for sov_state::Prefix {
         combined_prefix.extend(prefix.module_path.as_bytes());
         combined_prefix.extend(prefix.module_name.as_bytes());
         combined_prefix.extend(prefix.storage_name.as_bytes());
-
         sov_state::Prefix::new(combined_prefix)
     }
 }

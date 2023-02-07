@@ -2,6 +2,7 @@ use crate::Context;
 use sov_state::storage::{StorageKey, StorageValue};
 use std::{collections::HashMap, sync::Arc};
 
+/// Mock for PublicKey, useful for testing.
 #[derive(borsh::BorshDeserialize, PartialEq, Eq)]
 pub struct MockPublicKey {
     pub_key: Vec<u8>,
@@ -13,6 +14,7 @@ impl MockPublicKey {
     }
 }
 
+/// Mock for Signature, useful for testing.
 #[derive(borsh::BorshDeserialize, PartialEq, Eq)]
 pub struct MockSignature {
     sig: Vec<u8>,
@@ -24,6 +26,9 @@ impl MockSignature {
     }
 }
 
+/// Mock for Storage, useful for testing.
+// TODO: as soon as we have JMT storage implemented, we should remove this mock and use a real db even in tests.
+// see https://github.com/Sovereign-Labs/sovereign/issues/40
 #[derive(Clone, Default)]
 pub struct MockStorage {
     storage: HashMap<Arc<Vec<u8>>, Arc<Vec<u8>>>,
@@ -45,6 +50,7 @@ impl sov_state::Storage for MockStorage {
     }
 }
 
+/// Mock for Context, useful for testing.
 pub struct MockContext {
     sender: MockPublicKey,
 }
