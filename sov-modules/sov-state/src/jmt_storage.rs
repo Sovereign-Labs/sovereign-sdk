@@ -1,14 +1,11 @@
-use std::{cell::RefCell, rc::Rc};
-
 use crate::storage::{Storage, StorageKey, StorageValue};
 use first_read_last_write_cache::cache::CacheLog;
 use jellyfish_merkle_generic::Version;
 
 // Storage backed by JMT.
-#[derive(Clone)]
 pub struct JmtStorage {
     // Caches first read and last write for a particular key.
-    _cache: Rc<RefCell<CacheLog>>,
+    _cache: CacheLog,
 }
 
 impl Storage for JmtStorage {
