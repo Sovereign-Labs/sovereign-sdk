@@ -18,7 +18,7 @@ use crate::{
         nibble_path::{NibblePath, PhysicalNibblePath},
         Nibble,
     },
-    Key, KeyHash, TreeReader, ValueHash, Version,
+    KeyHash, TreeReader, ValueHash, Version,
 };
 
 use byteorder::{BigEndian, LittleEndian, ReadBytesExt, WriteBytesExt};
@@ -229,6 +229,16 @@ pub struct Child<const N: usize> {
     pub node_type: NodeType,
 }
 
+impl<const N: usize> Into<PhysicalChild> for Child<N> {
+    fn into(self) -> PhysicalChild {
+        PhysicalChild {
+            hash: self.hash.to_vec(),
+            version: self.version,
+            node_type: self.node_type,
+        }
+    }
+}
+
 /// A type-erased [`Child`] - with no knowledge of the JMTs hash function or digest size.
 /// Allows the creation of database abstractions without excessive generics.
 ///
@@ -239,7 +249,7 @@ pub struct Child<const N: usize> {
     any(test, feature = "borsh"),
     derive(::borsh::BorshDeserialize, ::borsh::BorshSerialize)
 )]
-pub struct PartialChild {
+pub struct PhysicalChild {
     /// The hash value of this child node.
     hash: Vec<u8>,
     /// `version`, the `nibble_path` of the [`NodeKey`] of this [`InternalNode`] the child belongs
@@ -251,10 +261,10 @@ pub struct PartialChild {
     node_type: NodeType,
 }
 
-impl<const N: usize> TryFrom<PartialChild> for Child<N> {
+impl<const N: usize> TryFrom<PhysicalChild> for Child<N> {
     type Error = CodecError;
 
-    fn try_from(value: PartialChild) -> Result<Self, Self::Error> {
+    fn try_from(value: PhysicalChild) -> Result<Self, Self::Error> {
         Ok(Self {
             hash: HashOutput::from_slice(value.hash)?,
             version: value.version,
@@ -289,7 +299,7 @@ impl<const N: usize> Child<N> {
 /// 15, inclusive.
 // TODO(preston-evans98): change this to a Vec of tuples for better performance
 pub(crate) type Children<const N: usize> = HashMap<Nibble, Child<N>>;
-pub(crate) type PartialChildren = HashMap<Nibble, PartialChild>;
+pub(crate) type PartialChildren = HashMap<Nibble, PhysicalChild>;
 
 /// Represents a 4-level subtree with 16 children at the bottom level. Theoretically, this reduces
 /// IOPS to query a tree by 4x since we compress 4 levels in a standard Merkle tree into 1 node.
@@ -303,6 +313,19 @@ pub struct InternalNode<H, const N: usize> {
     /// Total number of leaves under this internal node
     leaf_count: usize,
     phantom_hasher: std::marker::PhantomData<H>,
+}
+
+impl<H, const N: usize> Into<PhysicalInternalNode> for InternalNode<H, N> {
+    fn into(self) -> PhysicalInternalNode {
+        PhysicalInternalNode {
+            children: self
+                .children
+                .into_iter()
+                .map(|(k, v)| (k, v.into()))
+                .collect(),
+            leaf_count: self.leaf_count,
+        }
+    }
 }
 
 // Derive is broken. See comment on SparseMerkleLeafNode<H, const N: usize>
@@ -338,7 +361,7 @@ impl<H, const N: usize> TryFrom<PhysicalInternalNode> for InternalNode<H, N> {
             .children
             .into_iter()
             .map::<Result<(Nibble, Child<N>), CodecError>, _>(|(k, v)| {
-                Ok((k, <PartialChild as TryInto<Child<N>>>::try_into(v)?))
+                Ok((k, <PhysicalChild as TryInto<Child<N>>>::try_into(v)?))
             })
             .collect();
         Ok(Self {
@@ -789,6 +812,16 @@ pub struct LeafNode<K, H, const N: usize> {
     phantom_hasher: std::marker::PhantomData<H>,
 }
 
+impl<K, H, const N: usize> Into<PhysicalLeafNode<K>> for LeafNode<K, H, N> {
+    fn into(self) -> PhysicalLeafNode<K> {
+        PhysicalLeafNode {
+            account_key: self.account_key.0.to_vec(),
+            value_hash: self.value_hash.0.to_vec(),
+            value_index: self.value_index,
+        }
+    }
+}
+
 /// A type-erased [`LeafNode`] - with no knowledge of the JMTs hash function or digest size.
 /// Allows the creation of database abstractions without excessive generics.
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
@@ -818,7 +851,7 @@ impl<K, H, const N: usize> TryFrom<PhysicalLeafNode<K>> for LeafNode<K, H, N> {
 }
 
 // Derive is broken. See comment on SparseMerkleLeafNode<H, const N: usize>
-impl<K: Key, H, const N: usize> Clone for LeafNode<K, H, N> {
+impl<K: Clone, H, const N: usize> Clone for LeafNode<K, H, N> {
     fn clone(&self) -> Self {
         Self {
             account_key: self.account_key.clone(),
@@ -958,9 +991,19 @@ pub enum Node<K, H, const N: usize> {
     Null,
 }
 
+impl<K, H, const N: usize> Into<PhysicalNode<K>> for Node<K, H, N> {
+    fn into(self) -> PhysicalNode<K> {
+        match self {
+            Node::Internal(internal) => PhysicalNode::Internal(internal.into()),
+            Node::Leaf(leaf) => PhysicalNode::Leaf(leaf.into()),
+            Node::Null => PhysicalNode::Null,
+        }
+    }
+}
+
 // Derive is broken. See comment on SparseMerkleLeafNode<H, const N: usize>
 // TODO: Add a proptest to enforce correctness.
-impl<K: Key, H, const N: usize> Clone for Node<K, H, N> {
+impl<K: Clone, H, const N: usize> Clone for Node<K, H, N> {
     fn clone(&self) -> Self {
         match self {
             Self::Internal(arg0) => Self::Internal(arg0.clone()),

@@ -3,9 +3,10 @@
 
 use crate::{
     hash::TreeHash,
-    node_type::{LeafNode, Node, NodeKey},
+    node_type::{LeafNode, Node, NodeKey, PhysicalNode, PhysicalNodeKey},
     test_utils::TestKey,
-    Key, NodeBatch, StaleNodeIndex, TreeReader, TreeUpdateBatch, TreeWriter, Version,
+    Key, NodeBatch, PhysicalTreeReader, PhysicalTreeWriter, StaleNodeIndex, TreeReader,
+    TreeUpdateBatch, TreeWriter, TypedStore, Version,
 };
 use std::{
     collections::{hash_map::Entry, BTreeSet, HashMap},
@@ -14,7 +15,13 @@ use std::{
     sync::RwLock,
 };
 
+pub struct MemTreeStore<K> {
+    data: RwLock<HashMap<PhysicalNodeKey, PhysicalNode<K>>>,
+}
 pub struct MockTreeStore<K, H, const N: usize> {
+    /// A redundant TreeReader implementation to test out the TypedStore struct
+    wrapped_physical_store: TypedStore<MemTreeStore<K>, H, N>,
+    /// The primary backing store for MockTreeStore
     data: RwLock<(
         HashMap<NodeKey<N>, Node<K, H, N>>,
         BTreeSet<StaleNodeIndex<N>>,
@@ -22,9 +29,65 @@ pub struct MockTreeStore<K, H, const N: usize> {
     allow_overwrite: bool,
 }
 
+impl<K: Clone> PhysicalTreeReader<K> for MemTreeStore<K> {
+    type Error = anyhow::Error;
+
+    fn get_physical_node(
+        &self,
+        node_key: &PhysicalNodeKey,
+    ) -> std::result::Result<PhysicalNode<K>, Self::Error> {
+        self.get_physical_node_option(node_key)?
+            .ok_or_else(|| TestTreeError::MissingNode.into())
+    }
+
+    fn get_physical_node_option(
+        &self,
+        node_key: &PhysicalNodeKey,
+    ) -> std::result::Result<Option<PhysicalNode<K>>, Self::Error> {
+        Ok(self
+            .data
+            .read()
+            .expect("Lock must not be poisoned")
+            .get(node_key)
+            .cloned())
+    }
+
+    fn get_value(&self, _key: &(Version, K)) -> std::result::Result<Option<Vec<u8>>, Self::Error> {
+        todo!()
+    }
+
+    fn get_rightmost_physical_leaf(
+        &self,
+        _version: Version,
+    ) -> std::result::Result<
+        Option<(PhysicalNodeKey, crate::node_type::PhysicalLeafNode<K>)>,
+        Self::Error,
+    > {
+        todo!()
+    }
+}
+
+impl<K: Clone + Send + Sync> PhysicalTreeWriter<K> for MemTreeStore<K> {
+    type Error = anyhow::Error;
+
+    fn write_physical_node_batch(
+        &self,
+        node_batch: &crate::PhysicalNodeBatch<K>,
+    ) -> std::result::Result<(), Self::Error> {
+        let mut store = self.data.write().unwrap();
+        for (node_key, node) in node_batch.clone() {
+            store.insert(node_key, node);
+        }
+        Ok(())
+    }
+}
+
 impl<K, H, const N: usize> Default for MockTreeStore<K, H, N> {
     fn default() -> Self {
         Self {
+            wrapped_physical_store: TypedStore::new(MemTreeStore {
+                data: Default::default(),
+            }),
             data: RwLock::new((HashMap::new(), BTreeSet::new())),
             allow_overwrite: false,
         }
@@ -35,24 +98,6 @@ impl<K, H, const N: usize> Default for MockTreeStore<K, H, N> {
 #[error(transparent)]
 pub struct BoxError(#[from] Box<dyn Error + Send + Sync + 'static>);
 
-// #[derive(Debug, thiserror::Error)]
-// struct InvalidNullError;
-
-// impl std::fmt::Display for InvalidNullError {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.write_str("invalid null")
-//     }
-// }
-
-// #[derive(Debug, thiserror::Error)]
-// struct MissingNodeError;
-
-// impl std::fmt::Display for MissingNodeError {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.write_str("missing node")
-//     }
-// }
-
 type Result<T, E = BoxError> = core::result::Result<T, E>;
 impl<K, H, const N: usize> TreeReader<K, H, N> for MockTreeStore<K, H, N>
 where
@@ -61,10 +106,15 @@ where
 {
     type Error = anyhow::Error;
     fn get_node_option(&self, node_key: &NodeKey<N>) -> Result<Option<Node<K, H, N>>, Self::Error> {
-        Ok(self.data.read().unwrap().0.get(node_key).cloned())
+        // For every query, fetch the node from both backing stores and ensure that they agree
+        let raw_node = self.data.read().unwrap().0.get(node_key).cloned();
+        let transformed_node = self.wrapped_physical_store.get_node_option(node_key)?;
+        assert_eq!(&raw_node, &transformed_node);
+
+        Ok(raw_node)
     }
 
-    fn get_value(&self, key: &(Version, K)) -> std::result::Result<Option<Vec<u8>>, Self::Error> {
+    fn get_value(&self, _key: &(Version, K)) -> std::result::Result<Option<Vec<u8>>, Self::Error> {
         unimplemented!()
     }
 
@@ -101,6 +151,7 @@ where
     K: TestKey,
 {
     fn write_node_batch(&self, node_batch: &NodeBatch<K, H, N>) -> Result<(), BoxError> {
+        // Store each item in the primary store
         let mut locked = self.data.write().unwrap();
         for (node_key, node) in node_batch.clone() {
             let replaced = locked.0.insert(node_key, node);
@@ -108,6 +159,10 @@ where
                 assert_eq!(replaced, None);
             }
         }
+
+        self.wrapped_physical_store
+            .write_node_batch(node_batch)
+            .expect("insertion to btree must succeed");
         Ok(())
     }
 
@@ -138,7 +193,7 @@ where
     }
 
     pub fn put_node(&self, node_key: NodeKey<N>, node: Node<K, H, N>) -> Result<()> {
-        match self.data.write().unwrap().0.entry(node_key) {
+        match self.data.write().unwrap().0.entry(node_key.clone()) {
             Entry::Occupied(o) => {
                 return Err(BoxError(Box::new(TestTreeError::ErrKeyExists(format!(
                     "{:?}",
@@ -146,9 +201,16 @@ where
                 )))));
             }
             Entry::Vacant(v) => {
-                v.insert(node);
+                v.insert(node.clone());
             }
         }
+
+        self.wrapped_physical_store
+            .inner
+            .data
+            .write()
+            .unwrap()
+            .insert(node_key.into(), node.into());
         Ok(())
     }
 
