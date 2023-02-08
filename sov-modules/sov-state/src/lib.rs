@@ -1,10 +1,12 @@
 mod jmt_storage;
 mod map;
 pub mod storage;
+mod utils;
 
 pub use jmt_storage::JmtStorage;
 pub use map::StateMap;
 pub use storage::Storage;
+use utils::AlignedVec;
 
 // A prefix prepended to each key before insertion and retrieval from the storage.
 // All the collection types in this crate are backed by the same storage instance, this means that insertions of the same key
@@ -12,15 +14,17 @@ pub use storage::Storage;
 // prefix that is prepended to each key.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Prefix {
-    prefix: Vec<u8>,
+    prefix: AlignedVec,
 }
 
 impl Prefix {
     pub fn new(prefix: Vec<u8>) -> Self {
-        Self { prefix }
+        Self {
+            prefix: AlignedVec::new(prefix),
+        }
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
+    pub fn as_aligned_vec(&self) -> &AlignedVec {
         &self.prefix
     }
 

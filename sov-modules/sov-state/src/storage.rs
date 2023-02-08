@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use sovereign_sdk::serial::Encode;
 
-use crate::Prefix;
+use crate::{utils::AlignedVec, Prefix};
 
 // `Key` type for the `Storage`
 #[derive(Clone, PartialEq, Eq)]
@@ -27,12 +27,16 @@ impl StorageKey {
         let mut encoded_key = Vec::default();
         key.encode(&mut encoded_key);
 
-        let mut full_key = Vec::<u8>::default();
-        full_key.extend(prefix.as_bytes());
-        full_key.extend(encoded_key);
+        let encoded_key = AlignedVec::new(encoded_key);
+
+        let mut full_key =
+            AlignedVec::new(Vec::<u8>::with_capacity(prefix.len() + encoded_key.len()));
+
+        full_key.extend(prefix.as_aligned_vec());
+        full_key.extend(&encoded_key);
 
         Self {
-            key: Arc::new(full_key),
+            key: Arc::new(full_key.into_inner()),
         }
     }
 }
@@ -43,8 +47,8 @@ pub struct StorageValue {
     pub value: Arc<Vec<u8>>,
 }
 
-impl<T: Encode> From<T> for StorageValue {
-    fn from(value: T) -> Self {
+impl StorageValue {
+    pub fn new<V: Encode>(value: V) -> Self {
         let mut encoded_value = Vec::default();
         value.encode(&mut encoded_value);
         Self {

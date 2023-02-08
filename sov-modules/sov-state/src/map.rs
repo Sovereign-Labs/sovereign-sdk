@@ -1,4 +1,7 @@
-use crate::{storage::StorageKey, Prefix, Storage};
+use crate::{
+    storage::{StorageKey, StorageValue},
+    Prefix, Storage,
+};
 use sovereign_sdk::serial::{Decode, Encode};
 use std::marker::PhantomData;
 
@@ -24,8 +27,7 @@ impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
     // Inserts a key-value pair into the map.
     pub fn set(&self, key: K, value: V) {
         let storage_key = StorageKey::new(&self.prefix, key);
-
-        let storage_value = value.into();
+        let storage_value = StorageValue::new(value);
         self.storage.set(storage_key, storage_value);
     }
 

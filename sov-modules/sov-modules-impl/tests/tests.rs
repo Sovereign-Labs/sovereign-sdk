@@ -3,7 +3,6 @@ use sov_modules_api::{Context, Prefix};
 use sov_modules_macros::ModuleInfo;
 use sov_state::storage::{StorageKey, StorageValue};
 use sov_state::{StateMap, Storage};
-use sovereign_sdk::serial::{Decode, Encode};
 
 pub mod module_a {
     use super::*;
@@ -36,7 +35,7 @@ pub mod module_b {
     impl<C: Context> ModuleB<C> {
         pub fn update(&self, key: &str, value: &str) {
             self.state_1_b.set(key.to_owned(), value.to_owned());
-            self.mod_1_a.update("insert_from_c", value);
+            self.mod_1_a.update("key_from_b", value);
         }
     }
 }
@@ -61,18 +60,16 @@ mod module_c {
         }
     }
 }
-
 #[test]
-fn test() {
+fn nested_module_call_test() {
     let test_storage = MockStorage::default();
     let module = &mut module_c::ModuleC::<MockContext>::_new(test_storage.clone());
+    module.update("some_key", "some_value");
 
-    module.update("key", "some_value");
+    let expected_value = StorageValue::new("some_value");
 
-    //  "".encode(target)
-    //let s = String::decode("some_value")
-    let value = StorageValue::from("some_value");
-
+    // TODO remove all .to_owned() calls;
+    // https://github.com/Sovereign-Labs/sovereign/issues/46
     {
         let prefix = Prefix::new(
             "tests::module_a".to_owned(),
@@ -80,9 +77,9 @@ fn test() {
             "state_1_a".to_owned(),
         );
 
-        let key = StorageKey::new(&prefix.into(), "key");
-        let v = test_storage.get(key).unwrap();
-        assert_eq!(value, v);
+        let key = StorageKey::new(&prefix.into(), "some_key");
+        let value = test_storage.get(key).unwrap();
+        assert_eq!(expected_value, value);
     }
 
     {
@@ -92,9 +89,9 @@ fn test() {
             "state_1_b".to_owned(),
         );
 
-        let key = StorageKey::new(&prefix.into(), "key");
-        let v = test_storage.get(key).unwrap();
-        assert_eq!(value, v);
+        let key = StorageKey::new(&prefix.into(), "some_key");
+        let value = test_storage.get(key).unwrap();
+        assert_eq!(expected_value, value);
     }
 
     {
@@ -104,8 +101,8 @@ fn test() {
             "state_1_a".to_owned(),
         );
 
-        let key = StorageKey::new(&prefix.into(), "insert_from_c");
-        let v = test_storage.get(key).unwrap();
-        assert_eq!(value, v);
+        let key = StorageKey::new(&prefix.into(), "key_from_b");
+        let value = test_storage.get(key).unwrap();
+        assert_eq!(expected_value, value);
     }
 }
