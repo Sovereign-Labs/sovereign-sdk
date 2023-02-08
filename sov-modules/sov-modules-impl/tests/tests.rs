@@ -68,7 +68,7 @@ fn nested_module_call_test() {
 
     let expected_value = StorageValue::new("some_value");
 
-    // TODO remove all .to_owned() calls;
+    // TODO remove all ".to_owned()" calls;
     // https://github.com/Sovereign-Labs/sovereign/issues/46
     {
         let prefix = Prefix::new(

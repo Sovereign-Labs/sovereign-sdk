@@ -1,14 +1,22 @@
+// AlignedVec keeps a vec whose length is guaranteed to be aligned to 4 bytes.
+// This makes certain operations cheaper in zk-context (concatenation)
+// TODO: Currently the implementation defaults to `stc::vec::Vec` see:
+// https://github.com/Sovereign-Labs/sovereign/issues/47
 #[derive(Debug, PartialEq, Eq)]
 pub struct AlignedVec {
     inner: Vec<u8>,
 }
 
 impl AlignedVec {
+    // Creates a new AlignedVec whose length is aligned to 4 bytes.
     pub fn new(vector: Vec<u8>) -> Self {
+        // TODO pad the vector to
         Self { inner: vector }
     }
 
+    // Extends self with the contents of the other AlignedVec.
     pub fn extend(&mut self, other: &Self) {
+        // TODO check if the standard extend method do the right thing on
         self.inner.extend(&other.inner);
     }
 
