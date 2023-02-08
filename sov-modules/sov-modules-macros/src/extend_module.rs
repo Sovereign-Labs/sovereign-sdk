@@ -187,8 +187,8 @@ fn make_prefix_func(
 
     // generates prefix functions:
     //   fn _prefix_field_ident() -> sov_modules_api::Prefix {
-    //      let module_path = "some_module".to_owned();
-    //      sov_modules_api::Prefix::new(module_path, module_name, field_ident.to_owned())
+    //      let module_path = "some_module";
+    //      sov_modules_api::Prefix::new(module_path, module_name, field_ident)
     //   }
     quote::quote! {
         fn #prefix_func_ident() -> sov_modules_api::Prefix {
