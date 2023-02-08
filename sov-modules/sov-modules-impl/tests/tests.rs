@@ -1,8 +1,9 @@
 use sov_modules_api::mocks::{MockContext, MockStorage};
 use sov_modules_api::{Context, Prefix};
 use sov_modules_macros::ModuleInfo;
-use sov_state::storage::StorageKey;
+use sov_state::storage::{StorageKey, StorageValue};
 use sov_state::{StateMap, Storage};
+use sovereign_sdk::serial::{Decode, Encode};
 
 pub mod module_a {
     use super::*;
@@ -68,6 +69,10 @@ fn test() {
 
     module.update("key", "some_value");
 
+    //  "".encode(target)
+    //let s = String::decode("some_value")
+    let value = StorageValue::from("some_value");
+
     {
         let prefix = Prefix::new(
             "tests::module_a".to_owned(),
@@ -77,6 +82,7 @@ fn test() {
 
         let key = StorageKey::new(&prefix.into(), "key");
         let v = test_storage.get(key).unwrap();
+        assert_eq!(value, v);
     }
 
     {
@@ -88,6 +94,7 @@ fn test() {
 
         let key = StorageKey::new(&prefix.into(), "key");
         let v = test_storage.get(key).unwrap();
+        assert_eq!(value, v);
     }
 
     {
@@ -99,5 +106,6 @@ fn test() {
 
         let key = StorageKey::new(&prefix.into(), "insert_from_c");
         let v = test_storage.get(key).unwrap();
+        assert_eq!(value, v);
     }
 }

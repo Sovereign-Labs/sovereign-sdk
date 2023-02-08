@@ -37,24 +37,18 @@ impl StorageKey {
     }
 }
 
-impl From<&'static str> for StorageKey {
-    fn from(value: &'static str) -> Self {
-        Self {
-            key: Arc::new(value.as_bytes().to_vec()),
-        }
-    }
-}
-
 // `Value` type for the `Storage`
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StorageValue {
     pub value: Arc<Vec<u8>>,
 }
 
-impl From<&'static str> for StorageValue {
-    fn from(value: &'static str) -> Self {
+impl<T: Encode> From<T> for StorageValue {
+    fn from(value: T) -> Self {
+        let mut encoded_value = Vec::default();
+        value.encode(&mut encoded_value);
         Self {
-            value: Arc::new(value.as_bytes().to_vec()),
+            value: Arc::new(encoded_value),
         }
     }
 }

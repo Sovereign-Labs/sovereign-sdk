@@ -89,7 +89,7 @@ impl Encode for AccountData {
 impl<'de> DecodeBorrowed<'de> for AccountData {
     type Error = ();
 
-    fn decode_from_slice(target: &'de [u8]) -> Result<Self, Self::Error> {
+    fn decode_from_slice(_target: &'de [u8]) -> Result<Self, Self::Error> {
         todo!()
     }
 }
@@ -98,7 +98,7 @@ impl<'de> DecodeBorrowed<'de> for AccountData {
 impl Decode for AccountData {
     type Error = ();
 
-    fn decode<R: std::io::Read>(target: &mut R) -> Result<Self, <Self as Decode>::Error> {
+    fn decode<R: std::io::Read>(_target: &mut R) -> Result<Self, <Self as Decode>::Error> {
         todo!()
     }
 }
