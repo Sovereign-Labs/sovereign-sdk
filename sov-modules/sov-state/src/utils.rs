@@ -16,7 +16,7 @@ impl AlignedVec {
 
     // Extends self with the contents of the other AlignedVec.
     pub fn extend(&mut self, other: &Self) {
-        // TODO check if the standard extend method do the right thing on
+        // TODO check if the standard extend method does the right thing.
         self.inner.extend(&other.inner);
     }
 

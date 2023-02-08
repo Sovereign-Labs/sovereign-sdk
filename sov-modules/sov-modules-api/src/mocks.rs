@@ -26,12 +26,14 @@ impl MockSignature {
     }
 }
 
+type Storage = Rc<RefCell<HashMap<Arc<Vec<u8>>, Arc<Vec<u8>>>>>;
+
 /// Mock for Context::Storage, useful for testing.
 // TODO: as soon as we have JMT storage implemented, we should remove this mock and use a real db even in tests.
 // see https://github.com/Sovereign-Labs/sovereign/issues/40
 #[derive(Clone, Default, Debug)]
 pub struct MockStorage {
-    pub storage: Rc<RefCell<HashMap<Arc<Vec<u8>>, Arc<Vec<u8>>>>>,
+    storage: Storage,
 }
 
 impl sov_state::Storage for MockStorage {
@@ -42,11 +44,11 @@ impl sov_state::Storage for MockStorage {
             .map(|v| StorageValue { value: v.clone() })
     }
 
-    fn set(&self, key: StorageKey, value: StorageValue) {
+    fn set(&mut self, key: StorageKey, value: StorageValue) {
         self.storage.borrow_mut().insert(key.key(), value.value);
     }
 
-    fn delete(&self, key: StorageKey) {
+    fn delete(&mut self, key: StorageKey) {
         self.storage.borrow_mut().remove(&key.key());
     }
 }

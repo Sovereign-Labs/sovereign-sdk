@@ -25,20 +25,23 @@ impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
     }
 
     // Inserts a key-value pair into the map.
-    pub fn set(&self, key: K, value: V) {
+    pub fn set(&mut self, key: K, value: V) {
         let storage_key = StorageKey::new(&self.prefix, key);
         let storage_value = StorageValue::new(value);
         self.storage.set(storage_key, storage_value);
     }
 
     // Returns the value corresponding to the key or None if key is absent in the StateMap.
-    pub fn get(&mut self, key: K) -> Option<V> {
+    pub fn get(&self, key: K) -> Option<V> {
         let storage_key = StorageKey::new(&self.prefix, key);
         let storage_value = self.storage.get(storage_key)?.value;
-        let mut storage_reader: &[u8] = &storage_value;
 
-        // TODO panic
-        Some(V::decode(&mut storage_reader).unwrap())
+        let mut storage_reader: &[u8] = &storage_value;
+        // It is ok to panic here. Deserialization problem means that something is terribly wrong.
+        Some(
+            V::decode(&mut storage_reader)
+                .unwrap_or_else(|e| panic!("Unable to deserialize storage value {e:?}")),
+        )
     }
 
     pub fn prefix(&self) -> &Prefix {

@@ -37,7 +37,7 @@ impl From<Prefix> for sov_state::Prefix {
         // separator == "/""
         let separator = [47];
 
-        // We call this logic for every state variable but only once per module instantiation, so not padding the vecs should be fine.
+        // We call this logic only once per module instantiation, so we don't have to use AlignedVec here.
         combined_prefix.extend(prefix.module_path.as_bytes());
         combined_prefix.extend(separator);
         combined_prefix.extend(prefix.module_name.as_bytes());

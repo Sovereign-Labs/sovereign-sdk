@@ -23,15 +23,15 @@ impl AsRef<Vec<u8>> for StorageKey {
 }
 
 impl StorageKey {
+    // Creates a new prefixed StorageKey.
     pub fn new<K: Encode>(prefix: &Prefix, key: K) -> Self {
         let mut encoded_key = Vec::default();
         key.encode(&mut encoded_key);
 
         let encoded_key = AlignedVec::new(encoded_key);
 
-        let mut full_key =
-            AlignedVec::new(Vec::<u8>::with_capacity(prefix.len() + encoded_key.len()));
-
+        let full_key = Vec::<u8>::with_capacity(prefix.len() + encoded_key.len());
+        let mut full_key = AlignedVec::new(full_key);
         full_key.extend(prefix.as_aligned_vec());
         full_key.extend(&encoded_key);
 
@@ -63,8 +63,8 @@ pub trait Storage {
     fn get(&self, key: StorageKey) -> Option<StorageValue>;
 
     // Inserts a key-value pair into the storage.
-    fn set(&self, key: StorageKey, value: StorageValue);
+    fn set(&mut self, key: StorageKey, value: StorageValue);
 
     // Deletes a key from the storage.
-    fn delete(&self, key: StorageKey);
+    fn delete(&mut self, key: StorageKey);
 }

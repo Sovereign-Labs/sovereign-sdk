@@ -86,6 +86,7 @@ impl Encode for AccountData {
     }
 }
 
+// Generated
 impl<'de> DecodeBorrowed<'de> for AccountData {
     type Error = ();
 

@@ -14,7 +14,7 @@ pub mod module_a {
     }
 
     impl<C: Context> ModuleA<C> {
-        pub fn update(&self, key: &str, value: &str) {
+        pub fn update(&mut self, key: &str, value: &str) {
             self.state_1_a.set(key.to_owned(), value.to_owned())
         }
     }
@@ -33,7 +33,7 @@ pub mod module_b {
     }
 
     impl<C: Context> ModuleB<C> {
-        pub fn update(&self, key: &str, value: &str) {
+        pub fn update(&mut self, key: &str, value: &str) {
             self.state_1_b.set(key.to_owned(), value.to_owned());
             self.mod_1_a.update("key_from_b", value);
         }
@@ -53,7 +53,7 @@ mod module_c {
     }
 
     impl<C: Context> ModuleC<C> {
-        pub fn update(&self, key: &str, value: &str) {
+        pub fn update(&mut self, key: &str, value: &str) {
             self.mod_1_a.update(key, value);
             self.mod_1_b.update(key, value);
             self.mod_1_a.update(key, value);

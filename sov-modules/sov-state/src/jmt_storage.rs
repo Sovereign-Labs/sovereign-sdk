@@ -14,11 +14,11 @@ impl Storage for JmtStorage {
         todo!()
     }
 
-    fn set(&self, _key: StorageKey, _value: StorageValue) {
+    fn set(&mut self, _key: StorageKey, _value: StorageValue) {
         todo!()
     }
 
-    fn delete(&self, _key: StorageKey) {
+    fn delete(&mut self, _key: StorageKey) {
         todo!()
     }
 }
