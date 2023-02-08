@@ -2,7 +2,7 @@ mod call;
 mod query;
 
 use sov_modules_macros::ModuleInfo;
-use sovereign_sdk::serial::{Decode, DecodeBorrowed};
+use sovereign_sdk::serial::{Decode, DecodeBorrowed, Encode};
 
 pub struct AccountData {}
 
@@ -75,6 +75,30 @@ impl<C: sov_modules_api::Context> Decode for CallMessage<C> {
     type Error = CustomError;
 
     fn decode<R: std::io::Read>(_: &mut R) -> Result<Self, <Self as Decode>::Error> {
+        todo!()
+    }
+}
+
+// Generated
+impl Encode for AccountData {
+    fn encode(&self, _target: &mut impl std::io::Write) {
+        todo!()
+    }
+}
+
+impl<'de> DecodeBorrowed<'de> for AccountData {
+    type Error = ();
+
+    fn decode_from_slice(target: &'de [u8]) -> Result<Self, Self::Error> {
+        todo!()
+    }
+}
+
+// Generated
+impl Decode for AccountData {
+    type Error = ();
+
+    fn decode<R: std::io::Read>(target: &mut R) -> Result<Self, <Self as Decode>::Error> {
         todo!()
     }
 }

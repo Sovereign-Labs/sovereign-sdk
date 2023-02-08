@@ -19,4 +19,12 @@ impl Prefix {
     pub fn new(prefix: Vec<u8>) -> Self {
         Self { prefix }
     }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.prefix
+    }
+
+    pub fn len(&self) -> usize {
+        self.prefix.len()
+    }
 }

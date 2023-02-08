@@ -18,6 +18,7 @@ use std::{
 pub struct MemTreeStore<K> {
     data: RwLock<HashMap<PhysicalNodeKey, PhysicalNode<K>>>,
 }
+
 pub struct MockTreeStore<K, H, const N: usize> {
     /// A redundant TreeReader implementation to test out the TypedStore struct
     wrapped_physical_store: TypedStore<MemTreeStore<K>, H, N>,

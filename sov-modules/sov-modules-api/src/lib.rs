@@ -5,7 +5,7 @@ pub mod mocks;
 
 use sov_state::Storage;
 use sovereign_sdk::{
-    serial::{Decode, DecodeBorrowed},
+    serial::{Decode, DecodeBorrowed, Encode},
     stf::Event,
 };
 use std::{convert::Infallible, io::Read};
@@ -31,12 +31,18 @@ impl Prefix {
 impl From<Prefix> for sov_state::Prefix {
     fn from(prefix: Prefix) -> Self {
         let mut combined_prefix = Vec::with_capacity(
-            prefix.module_path.len() + prefix.module_name.len() + prefix.storage_name.len(),
+            prefix.module_path.len() + prefix.module_name.len() + prefix.storage_name.len() + 3,
         );
 
+        // separator == "/""
+        let separator = [47];
+
         combined_prefix.extend(prefix.module_path.as_bytes());
+        combined_prefix.extend(separator);
         combined_prefix.extend(prefix.module_name.as_bytes());
+        combined_prefix.extend(separator);
         combined_prefix.extend(prefix.storage_name.as_bytes());
+        combined_prefix.extend(separator);
         sov_state::Prefix::new(combined_prefix)
     }
 }
@@ -55,7 +61,7 @@ impl From<Infallible> for DecodingError {
 pub trait Context {
     type Storage: Storage + Clone;
     type Signature: Decode;
-    type PublicKey: Decode + Eq;
+    type PublicKey: Decode + Encode + Eq;
 
     // Sender of the transaction.
     fn sender(&self) -> &Self::PublicKey;

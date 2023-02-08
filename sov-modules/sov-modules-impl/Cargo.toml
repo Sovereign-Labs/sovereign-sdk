@@ -3,6 +3,9 @@ name = "sov-modules-impl"
 version = "0.1.0"
 edition = "2021"
 
+[dev-dependencies]
+sov-modules-api = { workspace = true ,  features = ["mocks"]}
+
 [dependencies]
 sov-modules-api = { workspace = true }
 sov-modules-macros = { workspace = true }

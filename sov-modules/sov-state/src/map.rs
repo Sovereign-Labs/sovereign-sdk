@@ -1,34 +1,72 @@
-use crate::Prefix;
-use std::marker::PhantomData;
+use crate::{
+    storage::{StorageKey, StorageValue},
+    Prefix, Storage,
+};
+use sovereign_sdk::serial::{Decode, Encode};
+use std::{marker::PhantomData, sync::Arc};
 
 // A container that maps keys to values.
 #[derive(Debug)]
 pub struct StateMap<K, V, S> {
     _phantom: (PhantomData<K>, PhantomData<V>),
-    _storage: S,
+    storage: S,
     // Every instance of the `StateMap` contains a unique prefix.
     // The prefix is prepended to each key before insertion and retrieval from the storage.
     prefix: Prefix,
 }
 
-impl<K, V, S> StateMap<K, V, S> {
-    pub fn new(_storage: S, prefix: Prefix) -> Self {
+impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
+    pub fn new(storage: S, prefix: Prefix) -> Self {
         Self {
             _phantom: (PhantomData, PhantomData),
-            _storage,
+            storage,
             prefix,
         }
     }
 
     // Inserts a key-value pair into the map.
-    pub fn set(&mut self, _k: K, _v: V) {}
+    pub fn set(&self, key: K, value: V) {
+        let storage_key = self.make_full_key(key);
+
+        let mut encoded_value = Vec::default();
+        value.encode(&mut encoded_value);
+
+        let storage_value = StorageValue {
+            value: encoded_value.into(),
+        };
+
+        self.storage.set(storage_key, storage_value);
+    }
 
     // Returns the value corresponding to the key or None if key is absent in the StateMap.
-    pub fn get(&mut self, _k: K) -> Option<V> {
-        todo!()
+    pub fn get(&mut self, key: K) -> Option<V> {
+        let storage_key = self.make_full_key(key);
+        let value = self.storage.get(storage_key).unwrap();
+
+        let y = value.value;
+        let mut ll: &[u8] = &y;
+
+        V::decode(&mut ll).ok()
     }
 
     pub fn prefix(&self) -> &Prefix {
         &self.prefix
+    }
+
+    fn make_full_key(&self, key: K) -> StorageKey {
+        let mut encoded_key = Vec::default();
+        key.encode(&mut encoded_key);
+
+        let mut full_key = Vec::<u8>::default();
+        full_key.extend(self.prefix.as_bytes());
+        full_key.extend(encoded_key);
+
+        let mut encoded_full_key = Vec::default();
+
+        full_key.encode(&mut encoded_full_key);
+
+        StorageKey {
+            key: Arc::new(encoded_full_key),
+        }
     }
 }

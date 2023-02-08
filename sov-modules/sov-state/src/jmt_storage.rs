@@ -6,18 +6,19 @@ use jellyfish_merkle_generic::Version;
 pub struct JmtStorage {
     // Caches first read and last write for a particular key.
     _cache: CacheLog,
+    _version: Version,
 }
 
 impl Storage for JmtStorage {
-    fn get(&mut self, _key: StorageKey, _version: Version) -> Option<StorageValue> {
+    fn get(&self, _key: StorageKey) -> Option<StorageValue> {
         todo!()
     }
 
-    fn set(&mut self, _key: StorageKey, _version: Version, _value: StorageValue) {
+    fn set(&self, _key: StorageKey, _value: StorageValue) {
         todo!()
     }
 
-    fn delete(&mut self, _key: StorageKey, _version: u64) {
+    fn delete(&self, _key: StorageKey) {
         todo!()
     }
 }
