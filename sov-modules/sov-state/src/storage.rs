@@ -1,9 +1,40 @@
 use std::sync::Arc;
 
+use sovereign_sdk::serial::Encode;
+
+use crate::Prefix;
+
 // `Key` type for the `Storage`
 #[derive(Clone, PartialEq, Eq)]
 pub struct StorageKey {
-    pub key: Arc<Vec<u8>>,
+    key: Arc<Vec<u8>>,
+}
+
+impl StorageKey {
+    pub fn key(&self) -> Arc<Vec<u8>> {
+        self.key.clone()
+    }
+}
+
+impl AsRef<Vec<u8>> for StorageKey {
+    fn as_ref(&self) -> &Vec<u8> {
+        &self.key
+    }
+}
+
+impl StorageKey {
+    pub fn new<K: Encode>(prefix: &Prefix, key: K) -> Self {
+        let mut encoded_key = Vec::default();
+        key.encode(&mut encoded_key);
+
+        let mut full_key = Vec::<u8>::default();
+        full_key.extend(prefix.as_bytes());
+        full_key.extend(encoded_key);
+
+        Self {
+            key: Arc::new(full_key),
+        }
+    }
 }
 
 impl From<&'static str> for StorageKey {

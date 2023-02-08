@@ -54,19 +54,6 @@ impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
     }
 
     fn make_full_key(&self, key: K) -> StorageKey {
-        let mut encoded_key = Vec::default();
-        key.encode(&mut encoded_key);
-
-        let mut full_key = Vec::<u8>::default();
-        full_key.extend(self.prefix.as_bytes());
-        full_key.extend(encoded_key);
-
-        let mut encoded_full_key = Vec::default();
-
-        full_key.encode(&mut encoded_full_key);
-
-        StorageKey {
-            key: Arc::new(encoded_full_key),
-        }
+        StorageKey::new(&self.prefix, key)
     }
 }

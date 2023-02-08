@@ -1,11 +1,8 @@
-use std::sync::Arc;
-
 use sov_modules_api::mocks::{MockContext, MockStorage};
-use sov_modules_api::Context;
+use sov_modules_api::{Context, Prefix};
 use sov_modules_macros::ModuleInfo;
-use sov_state::storage::{StorageKey, StorageValue};
+use sov_state::storage::StorageKey;
 use sov_state::{StateMap, Storage};
-use sovereign_sdk::serial::Decode;
 
 pub mod module_a {
     use super::*;
@@ -37,7 +34,7 @@ pub mod module_b {
 
     impl<C: Context> ModuleB<C> {
         pub fn update(&self, key: &str, value: &str) {
-            //   self.state_1_b.set(key.to_owned(), value.to_owned());
+            self.state_1_b.set(key.to_owned(), value.to_owned());
             self.mod_1_a.update("insert_from_c", value);
         }
     }
@@ -59,7 +56,7 @@ mod module_c {
         pub fn update(&self, key: &str, value: &str) {
             self.mod_1_a.update(key, value);
             self.mod_1_b.update(key, value);
-            //    self.mod_1_a.update(key, value);
+            self.mod_1_a.update(key, value);
         }
     }
 }
@@ -71,44 +68,36 @@ fn test() {
 
     module.update("key", "some_value");
 
-    for (k, v) in test_storage.storage.borrow().iter() {
-        let mut ll: &[u8] = k;
+    {
+        let prefix = Prefix::new(
+            "tests::module_a".to_owned(),
+            "ModuleA".to_owned(),
+            "state_1_a".to_owned(),
+        );
 
-        let key = String::decode(&mut ll);
-
-        println!("{:?}", key);
-
-        //  let mut ll: &[u8] = v;
-        //  let x = String::decode(&mut ll);
-        //  println!("{:?}", x);
+        let key = StorageKey::new(&prefix.into(), "key");
+        let v = test_storage.get(key).unwrap();
     }
 
-    let key = StorageKey::from("tests::module_a/ModuleA/state_1_a/key");
+    {
+        let prefix = Prefix::new(
+            "tests::module_b".to_owned(),
+            "ModuleB".to_owned(),
+            "state_1_b".to_owned(),
+        );
 
-    let v = test_storage.get(key);
-    println!("{:?}", v);
-    /*
-    let key1 = StorageKey {
-        key: Arc::new("tests::module_a/ModuleA/state_1_a/key".as_bytes().to_vec()),
-    };
+        let key = StorageKey::new(&prefix.into(), "key");
+        let v = test_storage.get(key).unwrap();
+    }
 
-    let value = StorageValue {
-        value: Arc::new("some_value".as_bytes().to_vec()),
-    };
+    {
+        let prefix = Prefix::new(
+            "tests::module_a".to_owned(),
+            "ModuleA".to_owned(),
+            "state_1_a".to_owned(),
+        );
 
-    let g = test_storage.get(key1);
-    let mut g = g.clone().unwrap();
-    let v: Arc<Vec<u8>> = g.value;
-
-    let mut ll: &[u8] = &v;
-
-    let x = String::decode(&mut ll);
-
-    println!("{:?}", x);
-
-    let yy = "/";
-
-    println!("{:?}", yy.as_bytes());
-
-    */
+        let key = StorageKey::new(&prefix.into(), "insert_from_c");
+        let v = test_storage.get(key).unwrap();
+    }
 }

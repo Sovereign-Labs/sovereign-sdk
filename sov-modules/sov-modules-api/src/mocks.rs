@@ -38,16 +38,16 @@ impl sov_state::Storage for MockStorage {
     fn get(&self, key: StorageKey) -> Option<StorageValue> {
         self.storage
             .borrow()
-            .get(&key.key)
+            .get(key.as_ref())
             .map(|v| StorageValue { value: v.clone() })
     }
 
     fn set(&self, key: StorageKey, value: StorageValue) {
-        self.storage.borrow_mut().insert(key.key, value.value);
+        self.storage.borrow_mut().insert(key.key(), value.value);
     }
 
     fn delete(&self, key: StorageKey) {
-        self.storage.borrow_mut().remove(&key.key);
+        self.storage.borrow_mut().remove(&key.key());
     }
 }
 
