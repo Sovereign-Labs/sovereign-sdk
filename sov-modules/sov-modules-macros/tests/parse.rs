@@ -26,9 +26,9 @@ fn main() {
         *prefix1,
         sov_modules_api::Prefix::new(
             // The tests compile inside trybuild.
-            "trybuild000::test_module".to_owned(),
-            "TestStruct".to_owned(),
-            "test_state1".to_owned(),
+            "trybuild000::test_module",
+            "TestStruct",
+            "test_state1"
         )
         .into()
     );
@@ -38,9 +38,9 @@ fn main() {
         *prefix2,
         sov_modules_api::Prefix::new(
             // The tests compile inside trybuild.
-            "trybuild000::test_module".to_owned(),
-            "TestStruct".to_owned(),
-            "test_state2".to_owned()
+            "trybuild000::test_module",
+            "TestStruct",
+            "test_state2"
         )
         .into()
     );

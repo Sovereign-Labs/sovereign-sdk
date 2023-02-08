@@ -192,8 +192,8 @@ fn make_prefix_func(
     //   }
     quote::quote! {
         fn #prefix_func_ident() -> sov_modules_api::Prefix {
-            let module_path = module_path!().to_owned();
-            sov_modules_api::Prefix::new(module_path, stringify!(#module_ident).to_owned(), stringify!(#field_ident).to_owned())
+            let module_path = module_path!();
+            sov_modules_api::Prefix::new(module_path, stringify!(#module_ident), stringify!(#field_ident))
         }
     }
 }
