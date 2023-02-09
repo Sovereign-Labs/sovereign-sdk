@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 
 /// SingletonKey is very similar to the unit type `()` i.e. it has only one value.
 /// We provide a custom efficient Encode implementation for SingletonKey while Encode for `()`
-/// is likely implemented by an external library which is outside of our control.
+/// is likely already implemented by an external library (like borsh) which is outside of our control.
 #[derive(Debug)]
 pub struct SingletonKey;
 
@@ -18,6 +18,7 @@ impl Encode for SingletonKey {
 #[derive(Debug)]
 pub struct StateValue<V, S> {
     _phantom: PhantomData<V>,
+    // StateValue is equivalent to a StateMap with a single key.
     map: StateMap<SingletonKey, V, S>,
 }
 
