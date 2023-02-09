@@ -1,7 +1,7 @@
-use sov_modules_api::mocks::{MockContext, MockStorage};
+use sov_modules_api::mocks::MockContext;
 use sov_modules_api::Context;
 use sov_modules_macros::ModuleInfo;
-use sov_state::StateMap;
+use sov_state::{JmtStorage, StateMap};
 
 pub mod first_test_module {
     use super::*;
@@ -30,7 +30,7 @@ mod second_test_module {
 }
 
 fn main() {
-    let test_storage = MockStorage::default();
+    let test_storage = JmtStorage::default();
 
     let second_test_struct =
         second_test_module::SecondTestStruct::<MockContext>::_new(test_storage);

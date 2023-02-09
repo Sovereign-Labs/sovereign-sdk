@@ -1,5 +1,4 @@
 use sov_modules_api::Module;
-
 mod example;
 
 pub struct Transaction<C: sov_modules_api::Context> {
