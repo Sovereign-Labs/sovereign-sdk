@@ -9,8 +9,8 @@ use std::marker::PhantomData;
 pub(crate) struct Backend<K, V, S> {
     _phantom: (PhantomData<K>, PhantomData<V>),
     storage: S,
-    // Every instance of the `Backend` contains a unique prefix.
-    // The prefix is prepended to each key before insertion and retrieval from the storage.
+    /// Every instance of the `Backend` contains a unique prefix.
+    /// The prefix is prepended to each key before insertion and retrieval from the storage.
     prefix: Prefix,
 }
 
