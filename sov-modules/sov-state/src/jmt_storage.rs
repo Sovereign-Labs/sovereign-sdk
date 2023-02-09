@@ -21,19 +21,15 @@ impl Storage for JmtStorage {
         let cache_value = self.cache.borrow().get_value(&cache_key);
 
         match cache_value {
-            cache::ExistsInCache::Yes(cache_value_exists) => match cache_value_exists.value.clone()
-            {
-                Some(value) => {
-                    self.cache
-                        .borrow_mut()
-                        .add_read(cache_key, cache_value_exists)
-                        // It is ok to panic here, we must guarantee that the cache is consistent.
-                        .unwrap_or_else(|e| panic!("Inconsistent read from the cache: {e:?}"));
+            cache::ExistsInCache::Yes(cache_value_exists) => {
+                self.cache
+                    .borrow_mut()
+                    .add_read(cache_key, cache_value_exists.clone())
+                    // It is ok to panic here, we must guarantee that the cache is consistent.
+                    .unwrap_or_else(|e| panic!("Inconsistent read from the cache: {e:?}"));
 
-                    Some(StorageValue { value })
-                }
-                None => None,
-            },
+                cache_value_exists.value.map(|value| StorageValue { value })
+            }
             // TODO If the value does not exist in the cache, then fetch it from the JMT.
             cache::ExistsInCache::No => todo!(),
         }
