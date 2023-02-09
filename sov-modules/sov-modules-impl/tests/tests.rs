@@ -1,9 +1,8 @@
-
 use sov_modules_api::mocks::MockContext;
 use sov_modules_api::{Context, Prefix};
 use sov_modules_macros::ModuleInfo;
 use sov_state::storage::{StorageKey, StorageValue};
-use sov_state::{JmtStorage, SingletonKey, StateMap, StateValue, Storage};
+use sov_state::{JmtStorage, StateMap, StateValue, Storage};
 
 pub mod module_a {
     use super::*;
@@ -11,10 +10,10 @@ pub mod module_a {
     #[derive(ModuleInfo)]
     pub(crate) struct ModuleA<C: Context> {
         #[state]
-        state_1_a: StateMap<String, String, C::Storage>,
+        pub(crate) state_1_a: StateMap<String, String, C::Storage>,
 
         #[state]
-        state_2_a: StateValue<String, C::Storage>,
+        pub(crate) state_2_a: StateValue<String, C::Storage>,
     }
 
     impl<C: Context> ModuleA<C> {
@@ -34,7 +33,7 @@ pub mod module_b {
         state_1_b: StateMap<String, String, C::Storage>,
 
         #[module]
-        mod_1_a: module_a::ModuleA<C>,
+        pub(crate) mod_1_a: module_a::ModuleA<C>,
     }
 
     impl<C: Context> ModuleB<C> {
@@ -51,7 +50,7 @@ mod module_c {
     #[derive(ModuleInfo)]
     pub(crate) struct ModuleC<C: Context> {
         #[module]
-        mod_1_a: module_a::ModuleA<C>,
+        pub(crate) mod_1_a: module_a::ModuleA<C>,
 
         #[module]
         mod_1_b: module_b::ModuleB<C>,
@@ -98,10 +97,7 @@ fn nested_module_call_test() {
     }
 
     {
-        let prefix = Prefix::new("tests::module_a", "ModuleA", "state_2_a");
-        let key = StorageKey::new(&prefix.into(), SingletonKey);
-        let value = test_storage.get(key).unwrap();
-
-        assert_eq!(expected_value, value);
+        let value = module.mod_1_a.state_2_a.get().unwrap();
+        assert_eq!("some_value".to_owned(), value);
     }
 }

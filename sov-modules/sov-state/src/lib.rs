@@ -1,15 +1,18 @@
+mod backend;
 mod jmt_storage;
 mod map;
 pub mod storage;
 mod utils;
 mod value;
-
 pub use jmt_storage::JmtStorage;
 pub use map::StateMap;
 pub use storage::Storage;
 use utils::AlignedVec;
-pub use value::SingletonKey;
+
 pub use value::StateValue;
+
+#[cfg(test)]
+pub use value::SingletonKey;
 
 // A prefix prepended to each key before insertion and retrieval from the storage.
 // All the collection types in this crate are backed by the same storage instance, this means that insertions of the same key

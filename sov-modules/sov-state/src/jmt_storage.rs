@@ -17,7 +17,7 @@ pub struct JmtStorage {
 
 impl Storage for JmtStorage {
     fn get(&self, key: StorageKey) -> Option<StorageValue> {
-        let cache_key = key.into();
+        let cache_key = key.as_cache_key();
         let cache_value = self.cache.borrow().get_value(&cache_key);
 
         match cache_value {
@@ -36,13 +36,13 @@ impl Storage for JmtStorage {
     }
 
     fn set(&mut self, key: StorageKey, value: StorageValue) {
-        let cache_key = key.into();
-        let cache_value = value.into();
+        let cache_key = key.as_cache_key();
+        let cache_value = value.as_cache_value();
         self.cache.borrow_mut().add_write(cache_key, cache_value);
     }
 
     fn delete(&mut self, key: StorageKey) {
-        let cache_key = key.into();
+        let cache_key = key.as_cache_key();
         self.cache
             .borrow_mut()
             .add_write(cache_key, CacheValue::empty());

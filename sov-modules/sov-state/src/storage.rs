@@ -15,17 +15,15 @@ impl StorageKey {
     pub fn key(&self) -> Arc<Vec<u8>> {
         self.key.clone()
     }
+
+    pub fn as_cache_key(self) -> CacheKey {
+        CacheKey { key: self.key }
+    }
 }
 
 impl AsRef<Vec<u8>> for StorageKey {
     fn as_ref(&self) -> &Vec<u8> {
         &self.key
-    }
-}
-
-impl From<StorageKey> for CacheKey {
-    fn from(key: StorageKey) -> Self {
-        Self { key: key.key }
     }
 }
 
@@ -54,19 +52,18 @@ pub struct StorageValue {
     pub value: Arc<Vec<u8>>,
 }
 
-impl From<StorageValue> for CacheValue {
-    fn from(value: StorageValue) -> Self {
-        Self {
-            value: Some(value.value),
-        }
-    }
-}
 impl StorageValue {
     pub fn new<V: Encode>(value: V) -> Self {
         let mut encoded_value = Vec::default();
         value.encode(&mut encoded_value);
         Self {
             value: Arc::new(encoded_value),
+        }
+    }
+
+    pub fn as_cache_value(self) -> CacheValue {
+        CacheValue {
+            value: Some(self.value),
         }
     }
 }
