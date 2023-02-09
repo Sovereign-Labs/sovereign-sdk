@@ -1,7 +1,7 @@
 use sov_modules_api::mocks::MockContext;
 use sov_modules_api::Context;
 use sov_modules_macros::ModuleInfo;
-use sov_state::{JmtStorage, StateMap};
+use sov_state::{JmtStorage, StateMap, StateValue};
 
 mod test_module {
     use super::*;
@@ -13,6 +13,9 @@ mod test_module {
 
         #[state]
         pub test_state2: StateMap<String, String, C::Storage>,
+
+        #[state]
+        pub test_state3: StateValue<String, C::Storage>,
     }
 }
 
@@ -41,6 +44,18 @@ fn main() {
             "trybuild000::test_module",
             "TestStruct",
             "test_state2"
+        )
+        .into()
+    );
+
+    let prefix2 = test_struct.test_state3.prefix();
+    assert_eq!(
+        *prefix2,
+        sov_modules_api::Prefix::new(
+            // The tests compile inside trybuild.
+            "trybuild000::test_module",
+            "TestStruct",
+            "test_state3"
         )
         .into()
     );

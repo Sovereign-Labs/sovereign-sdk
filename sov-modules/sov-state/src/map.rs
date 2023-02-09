@@ -27,13 +27,25 @@ impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
     // Inserts a key-value pair into the map.
     pub fn set(&mut self, key: K, value: V) {
         let storage_key = StorageKey::new(&self.prefix, key);
-        let storage_value = StorageValue::new(value);
-        self.storage.set(storage_key, storage_value);
+        self.set_value(storage_key, value)
     }
 
     // Returns the value corresponding to the key or None if key is absent in the StateMap.
     pub fn get(&self, key: K) -> Option<V> {
         let storage_key = StorageKey::new(&self.prefix, key);
+        self.get_value(storage_key)
+    }
+
+    pub fn prefix(&self) -> &Prefix {
+        &self.prefix
+    }
+
+    pub(crate) fn set_value(&mut self, storage_key: StorageKey, value: V) {
+        let storage_value = StorageValue::new(value);
+        self.storage.set(storage_key, storage_value);
+    }
+
+    pub(crate) fn get_value(&self, storage_key: StorageKey) -> Option<V> {
         let storage_value = self.storage.get(storage_key)?.value;
 
         let mut storage_reader: &[u8] = &storage_value;
@@ -42,9 +54,5 @@ impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
             V::decode(&mut storage_reader)
                 .unwrap_or_else(|e| panic!("Unable to deserialize storage value {e:?}")),
         )
-    }
-
-    pub fn prefix(&self) -> &Prefix {
-        &self.prefix
     }
 }

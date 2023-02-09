@@ -46,6 +46,12 @@ impl StorageKey {
             key: Arc::new(full_key.into_inner()),
         }
     }
+
+    pub fn new_with_empty_state_key(prefix: &Prefix) -> Self {
+        Self {
+            key: Arc::new(prefix.as_aligned_vec().clone().into_inner()),
+        }
+    }
 }
 
 // `Value` type for the `Storage`
