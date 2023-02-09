@@ -30,7 +30,7 @@ impl From<StorageKey> for CacheKey {
 }
 
 impl StorageKey {
-    /// Creates a new StorageKey that combines prefix and key.
+    /// Creates a new StorageKey that combines a prefix and a key.
     pub fn new<K: Encode>(prefix: &Prefix, key: K) -> Self {
         let mut encoded_key = Vec::default();
         key.encode(&mut encoded_key);

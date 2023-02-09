@@ -34,7 +34,7 @@ impl Storage for JmtStorage {
                 }
                 None => None,
             },
-            // TODO If value does not exist in the cache, then fetch it from the JMT
+            // TODO If the value does not exist in the cache, then fetch it from the JMT.
             cache::ExistsInCache::No => todo!(),
         }
     }
