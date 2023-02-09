@@ -24,6 +24,12 @@ pub struct CacheValue {
     pub value: Option<Arc<Vec<u8>>>,
 }
 
+impl CacheValue {
+    pub fn empty() -> Self {
+        Self { value: None }
+    }
+}
+
 impl Display for CacheValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // TODO revisit how we display values

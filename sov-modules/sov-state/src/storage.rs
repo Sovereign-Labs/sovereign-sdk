@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use first_read_last_write_cache::{CacheKey, CacheValue};
 use sovereign_sdk::serial::Encode;
 
 use crate::{utils::AlignedVec, Prefix};
@@ -19,6 +20,12 @@ impl StorageKey {
 impl AsRef<Vec<u8>> for StorageKey {
     fn as_ref(&self) -> &Vec<u8> {
         &self.key
+    }
+}
+
+impl From<StorageKey> for CacheKey {
+    fn from(key: StorageKey) -> Self {
+        Self { key: key.key }
     }
 }
 
@@ -47,6 +54,13 @@ pub struct StorageValue {
     pub value: Arc<Vec<u8>>,
 }
 
+impl From<StorageValue> for CacheValue {
+    fn from(value: StorageValue) -> Self {
+        Self {
+            value: Some(value.value),
+        }
+    }
+}
 impl StorageValue {
     pub fn new<V: Encode>(value: V) -> Self {
         let mut encoded_value = Vec::default();
