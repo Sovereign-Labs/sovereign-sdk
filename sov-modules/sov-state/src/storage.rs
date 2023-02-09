@@ -30,7 +30,7 @@ impl From<StorageKey> for CacheKey {
 }
 
 impl StorageKey {
-    // Creates a new prefixed StorageKey.
+    /// Creates a new StorageKey that combines prefix and key.
     pub fn new<K: Encode>(prefix: &Prefix, key: K) -> Self {
         let mut encoded_key = Vec::default();
         key.encode(&mut encoded_key);
@@ -44,12 +44,6 @@ impl StorageKey {
 
         Self {
             key: Arc::new(full_key.into_inner()),
-        }
-    }
-
-    pub fn new_with_empty_state_key(prefix: &Prefix) -> Self {
-        Self {
-            key: Arc::new(prefix.as_aligned_vec().clone().into_inner()),
         }
     }
 }

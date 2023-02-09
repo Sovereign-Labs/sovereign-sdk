@@ -2,11 +2,23 @@ use crate::{storage::StorageKey, Prefix, StateMap, Storage};
 use sovereign_sdk::serial::{Decode, Encode};
 use std::marker::PhantomData;
 
+/// SingletonKey is very similar to the unit type `()` i.e. it has only one value.
+/// We provide a custom efficient Encode implementation for SingletonKey while Encode for `()`
+/// is likely implemented by an external library which is outside of our control.
+#[derive(Debug)]
+pub struct SingletonKey;
+
+impl Encode for SingletonKey {
+    fn encode(&self, _: &mut impl std::io::Write) {
+        // Do nothing.
+    }
+}
+
+/// Container for a single value.
 #[derive(Debug)]
 pub struct StateValue<V, S> {
     _phantom: PhantomData<V>,
-    // TODO comment
-    map: StateMap<(), V, S>,
+    map: StateMap<SingletonKey, V, S>,
 }
 
 impl<V: Encode + Decode, S: Storage> StateValue<V, S> {
@@ -17,13 +29,17 @@ impl<V: Encode + Decode, S: Storage> StateValue<V, S> {
         }
     }
 
+    /// Sets a value in the StateValue.
     pub fn set(&mut self, value: V) {
-        let storage_key = StorageKey::new_with_empty_state_key(self.map.prefix());
+        // `StorageKey::new` will serialize the SingletonKey, but that's fine because we provided
+        //  efficient Encode implementation.
+        let storage_key = StorageKey::new(self.map.prefix(), SingletonKey);
         self.map.set_value(storage_key, value)
     }
 
+    /// Gets a value from the StateValue.
     pub fn get(&self) -> Option<V> {
-        let storage_key = StorageKey::new_with_empty_state_key(self.map.prefix());
+        let storage_key = StorageKey::new(self.map.prefix(), SingletonKey);
         self.map.get_value(storage_key)
     }
 

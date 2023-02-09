@@ -1,8 +1,9 @@
+
 use sov_modules_api::mocks::MockContext;
 use sov_modules_api::{Context, Prefix};
 use sov_modules_macros::ModuleInfo;
 use sov_state::storage::{StorageKey, StorageValue};
-use sov_state::{JmtStorage, StateMap, Storage};
+use sov_state::{JmtStorage, SingletonKey, StateMap, StateValue, Storage};
 
 pub mod module_a {
     use super::*;
@@ -11,11 +12,15 @@ pub mod module_a {
     pub(crate) struct ModuleA<C: Context> {
         #[state]
         state_1_a: StateMap<String, String, C::Storage>,
+
+        #[state]
+        state_2_a: StateValue<String, C::Storage>,
     }
 
     impl<C: Context> ModuleA<C> {
         pub fn update(&mut self, key: &str, value: &str) {
-            self.state_1_a.set(key.to_owned(), value.to_owned())
+            self.state_1_a.set(key.to_owned(), value.to_owned());
+            self.state_2_a.set(value.to_owned())
         }
     }
 }
@@ -87,6 +92,14 @@ fn nested_module_call_test() {
     {
         let prefix = Prefix::new("tests::module_a", "ModuleA", "state_1_a");
         let key = StorageKey::new(&prefix.into(), "key_from_b");
+        let value = test_storage.get(key).unwrap();
+
+        assert_eq!(expected_value, value);
+    }
+
+    {
+        let prefix = Prefix::new("tests::module_a", "ModuleA", "state_2_a");
+        let key = StorageKey::new(&prefix.into(), SingletonKey);
         let value = test_storage.get(key).unwrap();
 
         assert_eq!(expected_value, value);

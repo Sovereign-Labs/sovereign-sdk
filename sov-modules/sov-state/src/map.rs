@@ -5,7 +5,7 @@ use crate::{
 use sovereign_sdk::serial::{Decode, Encode};
 use std::marker::PhantomData;
 
-// A container that maps keys to values.
+/// A container that maps keys to values.
 #[derive(Debug)]
 pub struct StateMap<K, V, S> {
     _phantom: (PhantomData<K>, PhantomData<V>),
@@ -24,13 +24,13 @@ impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
         }
     }
 
-    // Inserts a key-value pair into the map.
+    /// Inserts a key-value pair into the map.
     pub fn set(&mut self, key: K, value: V) {
         let storage_key = StorageKey::new(&self.prefix, key);
         self.set_value(storage_key, value)
     }
 
-    // Returns the value corresponding to the key or None if key is absent in the StateMap.
+    /// Returns the value corresponding to the key or None if key is absent in the StateMap.
     pub fn get(&self, key: K) -> Option<V> {
         let storage_key = StorageKey::new(&self.prefix, key);
         self.get_value(storage_key)
