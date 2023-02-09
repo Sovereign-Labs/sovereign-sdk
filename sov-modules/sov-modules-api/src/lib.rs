@@ -16,13 +16,17 @@ const DOMAIN_SEPARATOR: [u8; 1] = [47];
 // A unique identifier for each state variable in a module.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Prefix {
-    module_path: String,
-    module_name: String,
-    storage_name: String,
+    module_path: &'static str,
+    module_name: &'static str,
+    storage_name: &'static str,
 }
 
 impl Prefix {
-    pub fn new(module_path: String, module_name: String, storage_name: String) -> Self {
+    pub fn new(
+        module_path: &'static str,
+        module_name: &'static str,
+        storage_name: &'static str,
+    ) -> Self {
         Self {
             module_path,
             module_name,

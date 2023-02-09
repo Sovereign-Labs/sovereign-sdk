@@ -68,41 +68,27 @@ fn nested_module_call_test() {
 
     let expected_value = StorageValue::new("some_value");
 
-    // TODO remove all ".to_owned()" calls;
-    // https://github.com/Sovereign-Labs/sovereign/issues/46
     {
-        let prefix = Prefix::new(
-            "tests::module_a".to_owned(),
-            "ModuleA".to_owned(),
-            "state_1_a".to_owned(),
-        );
-
+        let prefix = Prefix::new("tests::module_a", "ModuleA", "state_1_a");
         let key = StorageKey::new(&prefix.into(), "some_key");
         let value = test_storage.get(key).unwrap();
+
         assert_eq!(expected_value, value);
     }
 
     {
-        let prefix = Prefix::new(
-            "tests::module_b".to_owned(),
-            "ModuleB".to_owned(),
-            "state_1_b".to_owned(),
-        );
-
+        let prefix = Prefix::new("tests::module_b", "ModuleB", "state_1_b");
         let key = StorageKey::new(&prefix.into(), "some_key");
         let value = test_storage.get(key).unwrap();
+
         assert_eq!(expected_value, value);
     }
 
     {
-        let prefix = Prefix::new(
-            "tests::module_a".to_owned(),
-            "ModuleA".to_owned(),
-            "state_1_a".to_owned(),
-        );
-
+        let prefix = Prefix::new("tests::module_a", "ModuleA", "state_1_a");
         let key = StorageKey::new(&prefix.into(), "key_from_b");
         let value = test_storage.get(key).unwrap();
+
         assert_eq!(expected_value, value);
     }
 }
