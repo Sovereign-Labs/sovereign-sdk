@@ -57,7 +57,7 @@ mod module_c {
     }
 
     impl<C: Context> ModuleC<C> {
-        pub fn update(&mut self, key: &str, value: &str) {
+        pub fn execute(&mut self, key: &str, value: &str) {
             self.mod_1_a.update(key, value);
             self.mod_1_b.update(key, value);
             self.mod_1_a.update(key, value);
@@ -67,22 +67,32 @@ mod module_c {
 #[test]
 fn nested_module_call_test() {
     let native_storage = JmtStorage::default();
-    test::<MockContext>(native_storage.clone());
+    {
+        execute_module_logic::<MockContext>(native_storage.clone());
+        test_state_update::<MockContext>(native_storage.clone());
+    }
 
-    let zk_storage = ZkStorage::new(native_storage.reads());
-    test::<ZkMockContext>(zk_storage);
+    {
+        let zk_storage = ZkStorage::new(native_storage.reads());
+        execute_module_logic::<ZkMockContext>(zk_storage.clone());
+        test_state_update::<ZkMockContext>(zk_storage);
+    }
 }
 
-fn test<C: Context>(test_storage: C::Storage) {
-    let module = &mut module_c::ModuleC::<C>::_new(test_storage.clone());
-    module.update("some_key", "some_value");
+fn execute_module_logic<C: Context>(storage: C::Storage) {
+    let module = &mut module_c::ModuleC::<C>::_new(storage);
+    module.execute("some_key", "some_value");
+}
+
+fn test_state_update<C: Context>(storage: C::Storage) {
+    let module = module_c::ModuleC::<C>::_new(storage.clone());
 
     let expected_value = StorageValue::new("some_value");
 
     {
         let prefix = Prefix::new("tests::module_a", "ModuleA", "state_1_a");
         let key = StorageKey::new(&prefix.into(), "some_key");
-        let value = test_storage.get(key).unwrap();
+        let value = storage.get(key).unwrap();
 
         assert_eq!(expected_value, value);
     }
@@ -90,7 +100,7 @@ fn test<C: Context>(test_storage: C::Storage) {
     {
         let prefix = Prefix::new("tests::module_b", "ModuleB", "state_1_b");
         let key = StorageKey::new(&prefix.into(), "some_key");
-        let value = test_storage.get(key).unwrap();
+        let value = storage.get(key).unwrap();
 
         assert_eq!(expected_value, value);
     }
@@ -98,7 +108,7 @@ fn test<C: Context>(test_storage: C::Storage) {
     {
         let prefix = Prefix::new("tests::module_a", "ModuleA", "state_1_a");
         let key = StorageKey::new(&prefix.into(), "key_from_b");
-        let value = test_storage.get(key).unwrap();
+        let value = storage.get(key).unwrap();
 
         assert_eq!(expected_value, value);
     }
