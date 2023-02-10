@@ -1,8 +1,8 @@
-use sov_modules_api::mocks::MockContext;
+use sov_modules_api::mocks::{MockContext, ZkMockContext};
 use sov_modules_api::{Context, Prefix};
 use sov_modules_macros::ModuleInfo;
 use sov_state::storage::{StorageKey, StorageValue};
-use sov_state::{JmtStorage, StateMap, StateValue, Storage};
+use sov_state::{JmtStorage, StateMap, StateValue, Storage, ZkStorage};
 
 pub mod module_a {
     use super::*;
@@ -66,8 +66,15 @@ mod module_c {
 }
 #[test]
 fn nested_module_call_test() {
-    let test_storage = JmtStorage::default();
-    let module = &mut module_c::ModuleC::<MockContext>::_new(test_storage.clone());
+    let native_storage = JmtStorage::default();
+    test::<MockContext>(native_storage.clone());
+
+    let zk_storage = ZkStorage::new(native_storage.reads());
+    test::<ZkMockContext>(zk_storage);
+}
+
+fn test<C: Context>(test_storage: C::Storage) {
+    let module = &mut module_c::ModuleC::<C>::_new(test_storage.clone());
     module.update("some_key", "some_value");
 
     let expected_value = StorageValue::new("some_value");

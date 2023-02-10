@@ -11,7 +11,7 @@ pub(crate) trait ValueReader {
 
 #[derive(Default, Clone)]
 pub(crate) struct Cache {
-    cache: Rc<RefCell<CacheLog>>,
+    pub(crate) cache: Rc<RefCell<CacheLog>>,
 }
 
 impl Cache {

@@ -2,6 +2,7 @@ use crate::{
     internal_cache::{Cache, ValueReader},
     storage::{Storage, StorageKey, StorageValue},
 };
+use first_read_last_write_cache::cache::{CacheLog, FirstReads};
 use jellyfish_merkle_generic::Version;
 
 #[derive(Default, Clone)]
@@ -20,6 +21,13 @@ pub struct JmtStorage {
     cache: Cache,
     jmt: JMT,
     _version: Version,
+}
+
+impl JmtStorage {
+    pub fn reads(&self) -> FirstReads {
+        let cache: &CacheLog = &self.cache.cache.borrow();
+        cache.get_first_reads()
+    }
 }
 
 impl Storage for JmtStorage {
