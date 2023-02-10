@@ -1,9 +1,12 @@
 mod backend;
+mod internal_cache;
 mod jmt_storage;
 mod map;
 pub mod storage;
 mod utils;
 mod value;
+mod zk_storage;
+
 pub use jmt_storage::JmtStorage;
 pub use map::StateMap;
 pub use storage::Storage;

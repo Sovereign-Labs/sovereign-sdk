@@ -1,6 +1,7 @@
 use crate::access::{Access, MergeError};
 use crate::{CacheKey, CacheValue};
 use std::collections::{hash_map::Entry, HashMap};
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Error, Debug, Eq, PartialEq)]
@@ -30,6 +31,20 @@ pub struct CacheLog {
     log: HashMap<CacheKey, Access>,
 }
 
+#[derive(Default, Clone)]
+pub struct FirstReads {
+    reads: Arc<HashMap<CacheKey, CacheValue>>,
+}
+
+impl FirstReads {
+    pub fn read(&self, key: &CacheKey) -> ExistsInCache {
+        match self.reads.get(key) {
+            Some(read) => ExistsInCache::Yes(read.clone()),
+            None => ExistsInCache::No,
+        }
+    }
+}
+
 impl CacheLog {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
@@ -39,6 +54,18 @@ impl CacheLog {
 }
 
 impl CacheLog {
+    pub fn get_first_reads(&self) -> FirstReads {
+        let reads = self
+            .log
+            .iter()
+            .filter_map(|(k, v)| filter_first_reads(k.clone(), v.clone()))
+            .collect::<HashMap<_, _>>();
+
+        FirstReads {
+            reads: Arc::new(reads),
+        }
+    }
+
     /// Gets value form the cache.
     pub fn get_value(&self, key: &CacheKey) -> ExistsInCache {
         match self.log.get(key) {
@@ -114,6 +141,14 @@ impl CacheLog {
         // Insert remaining entries from the rhs to the new_cache.
         new_cache.log.extend(rhs.log);
         Ok(new_cache)
+    }
+}
+
+fn filter_first_reads(k: CacheKey, access: Access) -> Option<(CacheKey, CacheValue)> {
+    match access {
+        Access::Read(read) => Some((k, read)),
+        Access::ReadThenWrite { original, .. } => Some((k, original)),
+        Access::Write(_) => None,
     }
 }
 
