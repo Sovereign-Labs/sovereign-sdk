@@ -1,13 +1,13 @@
 use first_read_last_write_cache::cache::{self, FirstReads};
 
 use crate::{
-    internal_cache::{Cache, GetValue},
+    internal_cache::{Cache, ValueReader},
     storage::{StorageKey, StorageValue},
     Storage,
 };
 
-impl GetValue for FirstReads {
-    fn get_value(&self, key: StorageKey) -> Option<StorageValue> {
+impl ValueReader for FirstReads {
+    fn read_value(&self, key: StorageKey) -> Option<StorageValue> {
         let key = key.as_cache_key();
         match self.read(&key) {
             cache::ExistsInCache::Yes(read) => read.value.map(|v| StorageValue { value: v }),

@@ -1,5 +1,5 @@
 use crate::{
-    internal_cache::{Cache, GetValue},
+    internal_cache::{Cache, ValueReader},
     storage::{Storage, StorageKey, StorageValue},
 };
 use jellyfish_merkle_generic::Version;
@@ -7,8 +7,8 @@ use jellyfish_merkle_generic::Version;
 #[derive(Default, Clone)]
 struct JMT {}
 
-impl GetValue for JMT {
-    fn get_value(&self, key: StorageKey) -> Option<StorageValue> {
+impl ValueReader for JMT {
+    fn read_value(&self, key: StorageKey) -> Option<StorageValue> {
         todo!()
     }
 }

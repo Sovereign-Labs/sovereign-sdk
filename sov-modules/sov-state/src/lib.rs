@@ -11,6 +11,7 @@ pub use jmt_storage::JmtStorage;
 pub use map::StateMap;
 pub use storage::Storage;
 use utils::AlignedVec;
+pub use zk_storage::ZkStorage;
 
 pub use value::StateValue;
 

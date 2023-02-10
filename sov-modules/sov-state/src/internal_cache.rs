@@ -5,8 +5,8 @@ use first_read_last_write_cache::{
 };
 use std::{cell::RefCell, rc::Rc};
 
-pub(crate) trait GetValue {
-    fn get_value(&self, key: StorageKey) -> Option<StorageValue>;
+pub(crate) trait ValueReader {
+    fn read_value(&self, key: StorageKey) -> Option<StorageValue>;
 }
 
 #[derive(Default, Clone)]
@@ -15,10 +15,10 @@ pub(crate) struct Cache {
 }
 
 impl Cache {
-    pub(crate) fn get<G: GetValue>(
+    pub(crate) fn get<VR: ValueReader>(
         &self,
         key: StorageKey,
-        value_getter: &G,
+        value_getter: &VR,
     ) -> Option<StorageValue> {
         let cache_key = key.clone().as_cache_key();
         let cache_value = self.cache.borrow().get_value(&cache_key);
@@ -34,7 +34,7 @@ impl Cache {
                 cache_value_exists.value.map(|value| StorageValue { value })
             }
             // TODO If the value does not exist in the cache, then fetch it from the JMT.
-            cache::ExistsInCache::No => value_getter.get_value(key),
+            cache::ExistsInCache::No => value_getter.read_value(key),
         }
     }
 
