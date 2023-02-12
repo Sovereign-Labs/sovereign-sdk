@@ -5,28 +5,31 @@ use first_read_last_write_cache::{
 };
 use std::{cell::RefCell, rc::Rc};
 
-///
+/// `ValueReader` Reads a value from an external data source.
 pub(crate) trait ValueReader {
     fn read_value(&self, key: StorageKey) -> Option<StorageValue>;
 }
 
-///
+/// Caches reads and writes for a (key, value) pair. On the first read the value is fetched
+/// from an external source represented by the `ValueReader` trait. On following reads,
+/// the cache checks if the value we read was inserted before.
 #[derive(Default, Clone)]
-pub(crate) struct Cache {
+pub(crate) struct StorageInternalCache {
     pub(crate) cache: Rc<RefCell<CacheLog>>,
 }
 
-impl Cache {
-    pub(crate) fn get<VR: ValueReader>(
+impl StorageInternalCache {
+    /// Gets a value from the cache or reads it from the provided `ValueReader`.
+    pub(crate) fn get_or_fetch<VR: ValueReader>(
         &self,
         key: StorageKey,
-        value_getter: &VR,
+        value_reader: &VR,
     ) -> Option<StorageValue> {
         let cache_key = key.clone().as_cache_key();
         let cache_value = self.cache.borrow().get_value(&cache_key);
 
         match cache_value {
-            cache::ExistsInCache::Yes(cache_value_exists) => {
+            cache::ValueExists::Yes(cache_value_exists) => {
                 self.cache
                     .borrow_mut()
                     .add_read(cache_key, cache_value_exists.clone())
@@ -35,8 +38,8 @@ impl Cache {
 
                 cache_value_exists.value.map(|value| StorageValue { value })
             }
-            // TODO If the value does not exist in the cache, then fetch it from the external source.
-            cache::ExistsInCache::No => value_getter.read_value(key),
+            // TODO If the value does not exist in the cache, then fetch it from an external source.
+            cache::ValueExists::No => value_reader.read_value(key),
         }
     }
 

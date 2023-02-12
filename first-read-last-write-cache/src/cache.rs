@@ -15,12 +15,12 @@ pub enum ReadError {
 
 /// Cache entry can be in three states:
 /// - Does not exists, a given key was never inserted in the cache:             
-///     ExistsInCache::No
+///     ValueExists::No
 /// - Exists but the value is empty.
-///      ExistsInCache::Yes(None)
+///      ValueExists::Yes(None)
 /// - Exists and contains a value:
-///     ExistsInCache::Yes(Some(value))
-pub enum ExistsInCache {
+///     ValueExists::Yes(Some(value))
+pub enum ValueExists {
     Yes(CacheValue),
     No,
 }
@@ -31,6 +31,7 @@ pub struct CacheLog {
     log: HashMap<CacheKey, Access>,
 }
 
+/// Represents all reads form a CacheLog.
 #[derive(Default, Clone, Debug)]
 pub struct FirstReads {
     reads: Arc<HashMap<CacheKey, CacheValue>>,
@@ -42,10 +43,12 @@ impl FirstReads {
             reads: Arc::new(reads),
         }
     }
-    pub fn read(&self, key: &CacheKey) -> ExistsInCache {
+
+    /// Returns a value corresponding to the key.
+    pub fn get(&self, key: &CacheKey) -> ValueExists {
         match self.reads.get(key) {
-            Some(read) => ExistsInCache::Yes(read.clone()),
-            None => ExistsInCache::No,
+            Some(read) => ValueExists::Yes(read.clone()),
+            None => ValueExists::No,
         }
     }
 }
@@ -59,6 +62,7 @@ impl CacheLog {
 }
 
 impl CacheLog {
+    /// Returns all reads from the CacheLog.
     pub fn get_first_reads(&self) -> FirstReads {
         let reads = self
             .log
@@ -69,11 +73,11 @@ impl CacheLog {
         FirstReads::new(reads)
     }
 
-    /// Gets value form the cache.
-    pub fn get_value(&self, key: &CacheKey) -> ExistsInCache {
+    // Returns a value corresponding to the key.
+    pub fn get_value(&self, key: &CacheKey) -> ValueExists {
         match self.log.get(key) {
-            Some(value) => ExistsInCache::Yes(value.last_value().clone()),
-            None => ExistsInCache::No,
+            Some(value) => ValueExists::Yes(value.last_value().clone()),
+            None => ValueExists::No,
         }
     }
 
@@ -160,11 +164,11 @@ mod tests {
     use super::*;
     use crate::utils::test_util::{create_key, create_value};
 
-    impl ExistsInCache {
+    impl ValueExists {
         fn get(self) -> CacheValue {
             match self {
-                ExistsInCache::Yes(value) => value,
-                ExistsInCache::No => unreachable!(),
+                ValueExists::Yes(value) => value,
+                ValueExists::No => unreachable!(),
             }
         }
     }

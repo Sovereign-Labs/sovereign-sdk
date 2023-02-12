@@ -1,34 +1,33 @@
 use crate::{
-    internal_cache::{Cache, ValueReader},
+    internal_cache::{StorageInternalCache, ValueReader},
     storage::{Storage, StorageKey, StorageValue},
 };
 use first_read_last_write_cache::cache::{CacheLog, FirstReads};
 use jellyfish_merkle_generic::Version;
 
 #[derive(Default, Clone)]
-pub struct Jmt {}
+pub struct JmtDb {}
 
-///
-impl ValueReader for Jmt {
+impl ValueReader for JmtDb {
     fn read_value(&self, _key: StorageKey) -> Option<StorageValue> {
         todo!()
     }
 }
 
-// Storage backed by Jmt.
+/// Storage backed by JmtDb.
 #[derive(Default, Clone)]
 pub struct JmtStorage {
     // Caches first read and last write for a particular key.
-    cache: Cache,
-    jmt: Jmt,
+    internal_cache: StorageInternalCache,
+    jmt: JmtDb,
     _version: Version,
 }
 
 impl JmtStorage {
     ///
-    pub fn new(jmt: Jmt, _version: Version) -> Self {
+    pub fn new(jmt: JmtDb, _version: Version) -> Self {
         Self {
-            cache: Cache::default(),
+            internal_cache: StorageInternalCache::default(),
             jmt,
             _version,
         }
@@ -36,21 +35,21 @@ impl JmtStorage {
 
     ///
     pub fn reads(&self) -> FirstReads {
-        let cache: &CacheLog = &self.cache.cache.borrow();
+        let cache: &CacheLog = &self.internal_cache.cache.borrow();
         cache.get_first_reads()
     }
 }
 
 impl Storage for JmtStorage {
     fn get(&self, key: StorageKey) -> Option<StorageValue> {
-        self.cache.get(key, &self.jmt)
+        self.internal_cache.get_or_fetch(key, &self.jmt)
     }
 
     fn set(&mut self, key: StorageKey, value: StorageValue) {
-        self.cache.set(key, value)
+        self.internal_cache.set(key, value)
     }
 
     fn delete(&mut self, key: StorageKey) {
-        self.cache.delete(key)
+        self.internal_cache.delete(key)
     }
 }
