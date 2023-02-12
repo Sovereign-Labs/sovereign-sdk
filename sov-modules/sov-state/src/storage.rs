@@ -79,3 +79,22 @@ pub trait Storage {
     // Deletes a key from the storage.
     fn delete(&mut self, key: StorageKey);
 }
+
+// ==== Used only for tests ====
+#[cfg(test)]
+impl From<&'static str> for StorageKey {
+    fn from(key: &'static str) -> Self {
+        Self {
+            key: Arc::new(key.as_bytes().to_vec()),
+        }
+    }
+}
+
+#[cfg(test)]
+impl From<&'static str> for StorageValue {
+    fn from(value: &'static str) -> Self {
+        Self {
+            value: Arc::new(value.as_bytes().to_vec()),
+        }
+    }
+}

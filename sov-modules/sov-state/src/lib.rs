@@ -7,6 +7,9 @@ mod utils;
 mod value;
 mod zk_storage;
 
+#[cfg(test)]
+mod storage_test;
+
 pub use jmt_storage::JmtStorage;
 pub use map::StateMap;
 pub use storage::Storage;

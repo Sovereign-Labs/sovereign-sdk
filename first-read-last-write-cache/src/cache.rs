@@ -31,12 +31,17 @@ pub struct CacheLog {
     log: HashMap<CacheKey, Access>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct FirstReads {
     reads: Arc<HashMap<CacheKey, CacheValue>>,
 }
 
 impl FirstReads {
+    pub fn new(reads: HashMap<CacheKey, CacheValue>) -> Self {
+        Self {
+            reads: Arc::new(reads),
+        }
+    }
     pub fn read(&self, key: &CacheKey) -> ExistsInCache {
         match self.reads.get(key) {
             Some(read) => ExistsInCache::Yes(read.clone()),
@@ -61,9 +66,7 @@ impl CacheLog {
             .filter_map(|(k, v)| filter_first_reads(k.clone(), v.clone()))
             .collect::<HashMap<_, _>>();
 
-        FirstReads {
-            reads: Arc::new(reads),
-        }
+        FirstReads::new(reads)
     }
 
     /// Gets value form the cache.

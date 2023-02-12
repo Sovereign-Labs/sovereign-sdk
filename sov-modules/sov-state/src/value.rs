@@ -4,7 +4,6 @@ use sovereign_sdk::serial::{Decode, Encode};
 // SingletonKey is very similar to the unit type `()` i.e. it has only one value.
 // We provide a custom efficient Encode implementation for SingletonKey while Encode for `()`
 // is likely already implemented by an external library (like borsh), which is outside of our control.
-
 #[derive(Debug)]
 pub struct SingletonKey;
 
