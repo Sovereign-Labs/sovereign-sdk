@@ -1,3 +1,5 @@
+use std::convert::Infallible;
+
 use crate::Context;
 use sov_state::{JmtStorage, ZkStorage};
 
@@ -10,6 +12,14 @@ pub struct MockPublicKey {
 impl MockPublicKey {
     pub fn new(pub_key: Vec<u8>) -> Self {
         Self { pub_key }
+    }
+}
+
+impl TryFrom<Vec<u8>> for MockPublicKey {
+    type Error = Infallible;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        Ok(Self { pub_key: value })
     }
 }
 

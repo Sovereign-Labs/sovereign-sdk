@@ -17,6 +17,9 @@ use sov_modules_macros::ModuleInfo;
 pub struct ValueAdderModule<C: sov_modules_api::Context> {
     #[state]
     pub value: sov_state::StateValue<u32, C::Storage>,
+
+    #[state]
+    pub admin: sov_state::StateValue<C::PublicKey, C::Storage>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueAdderModule<C> {
@@ -26,6 +29,8 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueAdderModule<C
 
     #[cfg(feature = "native")]
     type QueryMessage = QueryMessage;
+
+    fn genesis(&mut self) {}
 
     fn call(
         &mut self,

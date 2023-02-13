@@ -7,6 +7,7 @@ use sov_state::Storage;
 use sovereign_sdk::{
     serial::{Decode, DecodeBorrowed, Encode},
     stf::Event,
+    Bytes,
 };
 use std::{convert::Infallible, fmt::Debug, io::Read};
 
@@ -85,7 +86,7 @@ pub struct QueryError {
 pub trait Context {
     type Storage: Storage + Clone;
     type Signature: Decode;
-    type PublicKey: Decode + Encode + Eq;
+    type PublicKey: Decode + Encode + Eq + TryFrom<Vec<u8>>;
 
     /// Sender of the transaction.
     fn sender(&self) -> &Self::PublicKey;
@@ -143,6 +144,8 @@ pub trait Module {
 
     /// Module defined argument to the query method.
     type QueryMessage: Decode = NonInstantiable;
+
+    fn genesis(&mut self) {}
 
     /// Call allows interaction with the module and invokes state changes.
     /// It takes a module defined type and a context as parameters.
