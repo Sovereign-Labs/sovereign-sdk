@@ -1,6 +1,7 @@
 use crate::access::{Access, MergeError};
 use crate::{CacheKey, CacheValue};
 use std::collections::{hash_map::Entry, HashMap};
+use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Error, Debug, Eq, PartialEq)]
@@ -14,12 +15,12 @@ pub enum ReadError {
 
 /// Cache entry can be in three states:
 /// - Does not exists, a given key was never inserted in the cache:             
-///     ExistsInCache::No
+///     ValueExists::No
 /// - Exists but the value is empty.
-///      ExistsInCache::Yes(None)
+///      ValueExists::Yes(None)
 /// - Exists and contains a value:
-///     ExistsInCache::Yes(Some(value))
-pub enum ExistsInCache {
+///     ValueExists::Yes(Some(value))
+pub enum ValueExists {
     Yes(CacheValue),
     No,
 }
@@ -28,6 +29,28 @@ pub enum ExistsInCache {
 #[derive(Default)]
 pub struct CacheLog {
     log: HashMap<CacheKey, Access>,
+}
+
+/// Represents all reads from a CacheLog.
+#[derive(Default, Clone, Debug)]
+pub struct FirstReads {
+    reads: Arc<HashMap<CacheKey, CacheValue>>,
+}
+
+impl FirstReads {
+    pub fn new(reads: HashMap<CacheKey, CacheValue>) -> Self {
+        Self {
+            reads: Arc::new(reads),
+        }
+    }
+
+    /// Returns a value corresponding to the key.
+    pub fn get(&self, key: &CacheKey) -> ValueExists {
+        match self.reads.get(key) {
+            Some(read) => ValueExists::Yes(read.clone()),
+            None => ValueExists::No,
+        }
+    }
 }
 
 impl CacheLog {
@@ -39,11 +62,22 @@ impl CacheLog {
 }
 
 impl CacheLog {
-    /// Gets value form the cache.
-    pub fn get_value(&self, key: &CacheKey) -> ExistsInCache {
+    /// Returns all reads from the CacheLog.
+    pub fn get_first_reads(&self) -> FirstReads {
+        let reads = self
+            .log
+            .iter()
+            .filter_map(|(k, v)| filter_first_reads(k.clone(), v.clone()))
+            .collect::<HashMap<_, _>>();
+
+        FirstReads::new(reads)
+    }
+
+    /// Returns a value corresponding to the key.
+    pub fn get_value(&self, key: &CacheKey) -> ValueExists {
         match self.log.get(key) {
-            Some(value) => ExistsInCache::Yes(value.last_value().clone()),
-            None => ExistsInCache::No,
+            Some(value) => ValueExists::Yes(value.last_value().clone()),
+            None => ValueExists::No,
         }
     }
 
@@ -117,16 +151,24 @@ impl CacheLog {
     }
 }
 
+fn filter_first_reads(k: CacheKey, access: Access) -> Option<(CacheKey, CacheValue)> {
+    match access {
+        Access::Read(read) => Some((k, read)),
+        Access::ReadThenWrite { original, .. } => Some((k, original)),
+        Access::Write(_) => None,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::utils::test_util::{create_key, create_value};
 
-    impl ExistsInCache {
+    impl ValueExists {
         fn get(self) -> CacheValue {
             match self {
-                ExistsInCache::Yes(value) => value,
-                ExistsInCache::No => unreachable!(),
+                ValueExists::Yes(value) => value,
+                ValueExists::No => unreachable!(),
             }
         }
     }
@@ -360,6 +402,29 @@ mod tests {
 
             // Assert that merge failed
             assert!(result.is_err());
+        }
+    }
+
+    #[test]
+    fn test_first_reads() {
+        let mut cache = CacheLog::default();
+        let entries = vec![
+            new_cache_entry(1, 11),
+            new_cache_entry(2, 22),
+            new_cache_entry(3, 33),
+        ];
+
+        for entry in entries.clone() {
+            cache.add_read(entry.key, entry.value).unwrap();
+        }
+
+        let first_reads = cache.get_first_reads();
+
+        for entry in entries {
+            match first_reads.get(&entry.key) {
+                ValueExists::Yes(value) => assert_eq!(entry.value, value),
+                ValueExists::No => unreachable!(),
+            }
         }
     }
 }

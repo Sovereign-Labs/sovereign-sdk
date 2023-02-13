@@ -1,8 +1,8 @@
-use sov_modules_api::mocks::MockContext;
+use sov_modules_api::mocks::{MockContext, ZkMockContext};
 use sov_modules_api::{Context, ModuleInfo, Prefix};
 use sov_modules_macros::ModuleInfo;
 use sov_state::storage::{StorageKey, StorageValue};
-use sov_state::{JmtStorage, StateMap, StateValue, Storage};
+use sov_state::{JmtStorage, StateMap, StateValue, Storage, ZkStorage};
 
 pub mod module_a {
     use super::*;
@@ -57,7 +57,7 @@ mod module_c {
     }
 
     impl<C: Context> ModuleC<C> {
-        pub fn update(&mut self, key: &str, value: &str) {
+        pub fn execute(&mut self, key: &str, value: &str) {
             self.mod_1_a.update(key, value);
             self.mod_1_b.update(key, value);
             self.mod_1_a.update(key, value);
@@ -67,18 +67,36 @@ mod module_c {
 
 #[test]
 fn nested_module_call_test() {
-    type C = MockContext;
-    let test_storage = JmtStorage::default();
+    let native_storage = JmtStorage::default();
 
-    let module = &mut <module_c::ModuleC<C> as ModuleInfo<C>>::new(test_storage.clone());
-    module.update("some_key", "some_value");
+    // Test the `native` execution.
+    {
+        execute_module_logic::<MockContext>(native_storage.clone());
+        test_state_update::<MockContext>(native_storage.clone());
+    }
+
+    // Test the `zk` execution.
+    {
+        let zk_storage = ZkStorage::new(native_storage.get_first_reads());
+        execute_module_logic::<ZkMockContext>(zk_storage.clone());
+        test_state_update::<ZkMockContext>(zk_storage);
+    }
+}
+
+fn execute_module_logic<C: Context>(storage: C::Storage) {
+    let module = &mut module_c::ModuleC::<C>::new(storage);
+    module.execute("some_key", "some_value");
+}
+
+fn test_state_update<C: Context>(storage: C::Storage) {
+    let module = <module_c::ModuleC<C> as ModuleInfo<C>>::new(storage.clone());
 
     let expected_value = StorageValue::new("some_value");
 
     {
         let prefix = Prefix::new("tests::module_a", "ModuleA", "state_1_a");
         let key = StorageKey::new(&prefix.into(), "some_key");
-        let value = test_storage.get(key).unwrap();
+        let value = storage.get(key).unwrap();
 
         assert_eq!(expected_value, value);
     }
@@ -86,7 +104,7 @@ fn nested_module_call_test() {
     {
         let prefix = Prefix::new("tests::module_b", "ModuleB", "state_1_b");
         let key = StorageKey::new(&prefix.into(), "some_key");
-        let value = test_storage.get(key).unwrap();
+        let value = storage.get(key).unwrap();
 
         assert_eq!(expected_value, value);
     }
@@ -94,7 +112,7 @@ fn nested_module_call_test() {
     {
         let prefix = Prefix::new("tests::module_a", "ModuleA", "state_1_a");
         let key = StorageKey::new(&prefix.into(), "key_from_b");
-        let value = test_storage.get(key).unwrap();
+        let value = storage.get(key).unwrap();
 
         assert_eq!(expected_value, value);
     }

@@ -3,7 +3,11 @@ use std::sync::Arc;
 use first_read_last_write_cache::{CacheKey, CacheValue};
 use sovereign_sdk::serial::Encode;
 
-use crate::{utils::AlignedVec, Prefix};
+use crate::{
+    internal_cache::{StorageInternalCache, ValueReader},
+    utils::AlignedVec,
+    Prefix,
+};
 
 // `Key` type for the `Storage`
 #[derive(Clone, PartialEq, Eq)]
@@ -78,4 +82,45 @@ pub trait Storage {
 
     // Deletes a key from the storage.
     fn delete(&mut self, key: StorageKey);
+}
+
+#[derive(Default, Clone)]
+pub struct GenericStorage<VR: ValueReader> {
+    pub(crate) value_reader: VR,
+    // Caches first read and last write for a particular key.
+    pub(crate) internal_cache: StorageInternalCache,
+}
+
+impl<VR: ValueReader> Storage for GenericStorage<VR> {
+    fn get(&self, key: StorageKey) -> Option<StorageValue> {
+        self.internal_cache.get_or_fetch(key, &self.value_reader)
+    }
+
+    fn set(&mut self, key: StorageKey, value: StorageValue) {
+        self.internal_cache.set(key, value)
+    }
+
+    fn delete(&mut self, key: StorageKey) {
+        self.internal_cache.delete(key)
+    }
+}
+
+// Used only in tests.
+#[cfg(test)]
+impl From<&'static str> for StorageKey {
+    fn from(key: &'static str) -> Self {
+        Self {
+            key: Arc::new(key.as_bytes().to_vec()),
+        }
+    }
+}
+
+// Used only in tests.
+#[cfg(test)]
+impl From<&'static str> for StorageValue {
+    fn from(value: &'static str) -> Self {
+        Self {
+            value: Arc::new(value.as_bytes().to_vec()),
+        }
+    }
 }

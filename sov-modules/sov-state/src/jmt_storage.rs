@@ -1,50 +1,36 @@
-use std::{cell::RefCell, rc::Rc};
-
-use crate::storage::{Storage, StorageKey, StorageValue};
-use first_read_last_write_cache::{
-    cache::{self, CacheLog},
-    CacheValue,
+use crate::{
+    internal_cache::{StorageInternalCache, ValueReader},
+    storage::{GenericStorage, StorageKey, StorageValue},
 };
+use first_read_last_write_cache::cache::{CacheLog, FirstReads};
 use jellyfish_merkle_generic::Version;
 
-// Storage backed by JMT.
 #[derive(Default, Clone)]
-pub struct JmtStorage {
-    // Caches first read and last write for a particular key.
-    cache: Rc<RefCell<CacheLog>>,
+pub struct JmtDb {
     _version: Version,
 }
 
-impl Storage for JmtStorage {
-    fn get(&self, key: StorageKey) -> Option<StorageValue> {
-        let cache_key = key.as_cache_key();
-        let cache_value = self.cache.borrow().get_value(&cache_key);
+impl ValueReader for JmtDb {
+    fn read_value(&self, _key: StorageKey) -> Option<StorageValue> {
+        todo!()
+    }
+}
 
-        match cache_value {
-            cache::ExistsInCache::Yes(cache_value_exists) => {
-                self.cache
-                    .borrow_mut()
-                    .add_read(cache_key, cache_value_exists.clone())
-                    // It is ok to panic here, we must guarantee that the cache is consistent.
-                    .unwrap_or_else(|e| panic!("Inconsistent read from the cache: {e:?}"));
+/// Storage backed by JmtDb.
+pub type JmtStorage = GenericStorage<JmtDb>;
 
-                cache_value_exists.value.map(|value| StorageValue { value })
-            }
-            // TODO If the value does not exist in the cache, then fetch it from the JMT.
-            cache::ExistsInCache::No => todo!(),
+impl JmtStorage {
+    /// Creates a new JmtStorage.
+    pub fn new(jmt: JmtDb) -> Self {
+        Self {
+            internal_cache: StorageInternalCache::default(),
+            value_reader: jmt,
         }
     }
 
-    fn set(&mut self, key: StorageKey, value: StorageValue) {
-        let cache_key = key.as_cache_key();
-        let cache_value = value.as_cache_value();
-        self.cache.borrow_mut().add_write(cache_key, cache_value);
-    }
-
-    fn delete(&mut self, key: StorageKey) {
-        let cache_key = key.as_cache_key();
-        self.cache
-            .borrow_mut()
-            .add_write(cache_key, CacheValue::empty());
+    /// Gets the first reads from the JmtStorage.
+    pub fn get_first_reads(&self) -> FirstReads {
+        let cache: &CacheLog = &self.internal_cache.cache.borrow();
+        cache.get_first_reads()
     }
 }
