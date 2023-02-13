@@ -67,11 +67,14 @@ mod module_c {
 #[test]
 fn nested_module_call_test() {
     let native_storage = JmtStorage::default();
+
+    // Test the `native` execution.
     {
         execute_module_logic::<MockContext>(native_storage.clone());
         test_state_update::<MockContext>(native_storage.clone());
     }
 
+    // Test the `zk` execution.
     {
         let zk_storage = ZkStorage::new(native_storage.reads());
         execute_module_logic::<ZkMockContext>(zk_storage.clone());

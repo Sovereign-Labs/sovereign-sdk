@@ -6,7 +6,9 @@ use first_read_last_write_cache::cache::{CacheLog, FirstReads};
 use jellyfish_merkle_generic::Version;
 
 #[derive(Default, Clone)]
-pub struct JmtDb {}
+pub struct JmtDb {
+    _version: Version,
+}
 
 impl ValueReader for JmtDb {
     fn read_value(&self, _key: StorageKey) -> Option<StorageValue> {
@@ -20,21 +22,19 @@ pub struct JmtStorage {
     // Caches first read and last write for a particular key.
     internal_cache: StorageInternalCache,
     jmt: JmtDb,
-    _version: Version,
 }
 
 impl JmtStorage {
-    ///
-    pub fn new(jmt: JmtDb, _version: Version) -> Self {
+    /// Creates a new JmtStorage.
+    pub fn new(jmt: JmtDb) -> Self {
         Self {
             internal_cache: StorageInternalCache::default(),
             jmt,
-            _version,
         }
     }
 
-    ///
-    pub fn reads(&self) -> FirstReads {
+    /// Gets the first reads from the JmtStorage.
+    pub fn get_first_reads(&self) -> FirstReads {
         let cache: &CacheLog = &self.internal_cache.cache.borrow();
         cache.get_first_reads()
     }

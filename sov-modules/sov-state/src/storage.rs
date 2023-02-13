@@ -80,7 +80,7 @@ pub trait Storage {
     fn delete(&mut self, key: StorageKey);
 }
 
-// ==== Used only for tests ====
+// Used only in tests.
 #[cfg(test)]
 impl From<&'static str> for StorageKey {
     fn from(key: &'static str) -> Self {
@@ -90,6 +90,7 @@ impl From<&'static str> for StorageKey {
     }
 }
 
+// Used only in tests.
 #[cfg(test)]
 impl From<&'static str> for StorageValue {
     fn from(value: &'static str) -> Self {

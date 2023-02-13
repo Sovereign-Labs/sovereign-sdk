@@ -73,7 +73,7 @@ impl CacheLog {
         FirstReads::new(reads)
     }
 
-    // Returns a value corresponding to the key.
+    /// Returns a value corresponding to the key.
     pub fn get_value(&self, key: &CacheKey) -> ValueExists {
         match self.log.get(key) {
             Some(value) => ValueExists::Yes(value.last_value().clone()),

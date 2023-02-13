@@ -8,7 +8,7 @@ use crate::{
 
 // Implementation of `ValueReader` trait for the zk-context. FirstReads is backed by a HashMap internally,
 // this is a good default choice. Once we start integrating with a proving system
-// we might want to explore other alternatives. For example in Risc0 we could implement `ValueReader`
+// we might want to explore other alternatives. For example, in Risc0 we could implement `ValueReader`
 // in terms of `env::read()` and fetch values lazily from the host.
 impl ValueReader for FirstReads {
     fn read_value(&self, key: StorageKey) -> Option<StorageValue> {
@@ -21,7 +21,7 @@ impl ValueReader for FirstReads {
     }
 }
 
-/// Storage that can be used in Zk context.
+/// Storage that can be used in zk-context.
 #[derive(Default, Clone)]
 pub struct ZkStorage {
     // Caches first read and last write for a particular key.
