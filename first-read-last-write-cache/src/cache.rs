@@ -31,7 +31,7 @@ pub struct CacheLog {
     log: HashMap<CacheKey, Access>,
 }
 
-/// Represents all reads form a CacheLog.
+/// Represents all reads from a CacheLog.
 #[derive(Default, Clone, Debug)]
 pub struct FirstReads {
     reads: Arc<HashMap<CacheKey, CacheValue>>,
