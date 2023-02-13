@@ -154,3 +154,7 @@ pub trait Module {
         unreachable!()
     }
 }
+
+pub trait ModuleInfo<C: Context> {
+    fn new(storage: C::Storage) -> Self;
+}

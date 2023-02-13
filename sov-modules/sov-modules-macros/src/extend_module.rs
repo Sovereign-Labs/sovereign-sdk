@@ -73,7 +73,7 @@ impl<'a> StructDef<'a> {
         })
     }
 
-    // Creates a `_new` method for the underlying structure and initializes each field.
+    // Creates a `new` method for the underlying structure and initializes each field.
     fn impl_new(&self) -> Result<proc_macro2::TokenStream, syn::Error> {
         let fields = self.fields.clone()?;
 
@@ -86,9 +86,8 @@ impl<'a> StructDef<'a> {
                     impl_self_init.push(make_init_state(field)?);
                     impl_self_body.push(&field.ident);
                 }
-                // Will be handled in the next PR
                 FieldKind::Module(field) => {
-                    impl_self_init.push(make_init_module(field)?);
+                    impl_self_init.push(make_init_module(field, &self.type_generics)?);
                     impl_self_body.push(&field.ident);
                 }
             };
@@ -98,16 +97,11 @@ impl<'a> StructDef<'a> {
         let ident = &self.ident;
         let type_generics = &self.type_generics;
 
-        // generates the `_new` function like:
-        //  pub fn _new(storage: type_generics::Storage) -> Self {
-        //      let state_prefix = Self::_prefix_field_ident1().into();
-        //      let field_ident1 = path::StateType::new(storage.clone(), state_prefix);
-        //      ..
-        //      Self { field_ident1, field_ident2, .. }
-        //  }
+        // Implements sov_modules_api::ModuleInfo trait
         Ok(quote::quote! {
-            impl #impl_generics #ident #type_generics {
-                pub fn _new(storage: #type_generics::Storage) -> Self {
+            impl #impl_generics sov_modules_api::ModuleInfo #type_generics for #ident #type_generics {
+
+                fn new(storage: #type_generics::Storage) -> Self {
                     #(#impl_self_init)*
 
                     Self{
@@ -233,7 +227,10 @@ fn make_init_state(field: &StructNamedField) -> Result<proc_macro2::TokenStream,
     })
 }
 
-fn make_init_module(field: &StructNamedField) -> Result<proc_macro2::TokenStream, syn::Error> {
+fn make_init_module<'a>(
+    field: &StructNamedField,
+    type_generics: &'a TypeGenerics<'a>,
+) -> Result<proc_macro2::TokenStream, syn::Error> {
     let field_ident = &field.ident;
     let ty = &field.ty;
 
@@ -259,9 +256,8 @@ fn make_init_module(field: &StructNamedField) -> Result<proc_macro2::TokenStream
     };
 
     // generates code for the state initialization:
-    //  let state_prefix = Self::_prefix_field_ident().into();
-    //  let field_ident = path::Module::_new(storage.clone());
+    //  let field_ident = <path::Module<C> as sov_modules_api::ModuleInfo<C>>::new(storage.clone());
     Ok(quote::quote! {
-        let #field_ident = #ty::_new(storage.clone());
+        let #field_ident = <#ty #type_generics as sov_modules_api::ModuleInfo #type_generics>::new(storage.clone());
     })
 }
