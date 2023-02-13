@@ -97,7 +97,6 @@ impl<'a> StructDef<'a> {
         let ident = &self.ident;
         let type_generics = &self.type_generics;
 
-        // Implements sov_modules_api::ModuleInfo trait
         Ok(quote::quote! {
             impl #impl_generics sov_modules_api::ModuleInfo #type_generics for #ident #type_generics {
 
@@ -255,8 +254,6 @@ fn make_init_module<'a>(
         }
     };
 
-    // generates code for the state initialization:
-    //  let field_ident = <path::Module<C> as sov_modules_api::ModuleInfo<C>>::new(storage.clone());
     Ok(quote::quote! {
         let #field_ident = <#ty #type_generics as sov_modules_api::ModuleInfo #type_generics>::new(storage.clone());
     })
