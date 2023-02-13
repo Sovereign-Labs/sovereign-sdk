@@ -41,7 +41,7 @@ pub(crate) fn module(input: DeriveInput) -> Result<proc_macro::TokenStream, syn:
     };
 
     let impl_prefix_functions = struct_def.impl_prefix_functions()?;
-    let impl_new = struct_def.impl_new()?;
+    let impl_new = struct_def.impl_module_info()?;
 
     Ok(quote::quote! {
         #impl_prefix_functions
@@ -73,8 +73,8 @@ impl<'a> StructDef<'a> {
         })
     }
 
-    // Creates a `new` method for the underlying structure and initializes each field.
-    fn impl_new(&self) -> Result<proc_macro2::TokenStream, syn::Error> {
+    // Implements the `ModuleInfo` trait.
+    fn impl_module_info(&self) -> Result<proc_macro2::TokenStream, syn::Error> {
         let fields = self.fields.clone()?;
 
         let mut impl_self_init = Vec::default();
