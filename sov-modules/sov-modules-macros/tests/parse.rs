@@ -1,5 +1,5 @@
 use sov_modules_api::mocks::MockContext;
-use sov_modules_api::Context;
+use sov_modules_api::{Context, ModuleInfo};
 use sov_modules_macros::ModuleInfo;
 use sov_state::{JmtStorage, StateMap, StateValue};
 
@@ -20,8 +20,9 @@ mod test_module {
 }
 
 fn main() {
+    type C = MockContext;
     let test_storage = JmtStorage::default();
-    let test_struct = test_module::TestStruct::<MockContext>::_new(test_storage);
+    let test_struct = <test_module::TestStruct<C> as ModuleInfo<C>>::new(test_storage);
 
     let prefix1 = test_struct.test_state1.prefix();
 
