@@ -1,13 +1,20 @@
 mod backend;
+mod internal_cache;
 mod jmt_storage;
 mod map;
 pub mod storage;
 mod utils;
 mod value;
+mod zk_storage;
+
+#[cfg(test)]
+mod storage_test;
+
 pub use jmt_storage::JmtStorage;
 pub use map::StateMap;
 pub use storage::Storage;
 use utils::AlignedVec;
+pub use zk_storage::ZkStorage;
 
 pub use value::StateValue;
 

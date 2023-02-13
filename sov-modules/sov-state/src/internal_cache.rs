@@ -6,7 +6,7 @@ use first_read_last_write_cache::{
 use std::{cell::RefCell, rc::Rc};
 
 /// `ValueReader` Reads a value from an external data source.
-pub(crate) trait ValueReader {
+pub trait ValueReader {
     fn read_value(&self, key: StorageKey) -> Option<StorageValue>;
 }
 

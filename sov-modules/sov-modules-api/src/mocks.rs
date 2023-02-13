@@ -1,5 +1,5 @@
 use crate::Context;
-use sov_state::JmtStorage;
+use sov_state::{JmtStorage, ZkStorage};
 
 /// Mock for Context::PublicKey, useful for testing.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, PartialEq, Eq)]
@@ -32,6 +32,22 @@ pub struct MockContext {
 
 impl Context for MockContext {
     type Storage = JmtStorage;
+
+    type Signature = MockSignature;
+
+    type PublicKey = MockPublicKey;
+
+    fn sender(&self) -> &Self::PublicKey {
+        &self.sender
+    }
+}
+
+pub struct ZkMockContext {
+    sender: MockPublicKey,
+}
+
+impl Context for ZkMockContext {
+    type Storage = ZkStorage;
 
     type Signature = MockSignature;
 
