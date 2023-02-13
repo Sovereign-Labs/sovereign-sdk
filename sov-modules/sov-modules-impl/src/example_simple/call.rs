@@ -1,6 +1,7 @@
 use std::fmt::Debug;
 
 use sov_modules_api::{CallError, CallResponse};
+use sovereign_sdk::serial::{Decode, DecodeBorrowed};
 
 use super::ValueAdderModule;
 
@@ -57,5 +58,23 @@ impl<C: sov_modules_api::Context> ValueAdderModule<C> {
         response.add_event("key", "value");
 
         Ok(response)
+    }
+}
+
+// Generated
+impl<'de, C: sov_modules_api::Context> DecodeBorrowed<'de> for CallMessage<C> {
+    type Error = ();
+
+    fn decode_from_slice(_: &'de [u8]) -> Result<Self, Self::Error> {
+        todo!()
+    }
+}
+
+// Generated
+impl<C: sov_modules_api::Context> Decode for CallMessage<C> {
+    type Error = ();
+
+    fn decode<R: std::io::Read>(_: &mut R) -> Result<Self, <Self as Decode>::Error> {
+        todo!()
     }
 }

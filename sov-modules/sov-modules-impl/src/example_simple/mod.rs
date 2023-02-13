@@ -1,10 +1,14 @@
 mod call;
+
+#[cfg(feature = "native")]
 mod query;
 
-use self::{call::CallMessage, query::QueryMessage};
+#[cfg(feature = "native")]
+use self::query::QueryMessage;
+
+use self::call::CallMessage;
 use sov_modules_api::{CallError, QueryError};
 use sov_modules_macros::ModuleInfo;
-use sovereign_sdk::serial::{Decode, DecodeBorrowed};
 
 #[derive(ModuleInfo)]
 pub struct ValueAdderModule<C: sov_modules_api::Context> {
@@ -16,6 +20,8 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueAdderModule<C
     type Context = C;
 
     type CallMessage = CallMessage<C>;
+
+    #[cfg(feature = "native")]
     type QueryMessage = QueryMessage;
 
     fn call(
@@ -29,49 +35,10 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueAdderModule<C
         }
     }
 
+    #[cfg(feature = "native")]
     fn query(&self, msg: Self::QueryMessage) -> Result<sov_modules_api::QueryResponse, QueryError> {
         match msg {
             QueryMessage::GetValue => self.query_value(),
         }
-    }
-}
-
-//
-#[derive(Debug)]
-pub struct CustomError {}
-
-// Generated
-impl<'de, C: sov_modules_api::Context> DecodeBorrowed<'de> for CallMessage<C> {
-    type Error = CustomError;
-
-    fn decode_from_slice(_: &'de [u8]) -> Result<Self, Self::Error> {
-        todo!()
-    }
-}
-
-// Generated
-impl<C: sov_modules_api::Context> Decode for CallMessage<C> {
-    type Error = CustomError;
-
-    fn decode<R: std::io::Read>(_: &mut R) -> Result<Self, <Self as Decode>::Error> {
-        todo!()
-    }
-}
-
-// Generated
-impl<'de> DecodeBorrowed<'de> for QueryMessage {
-    type Error = CustomError;
-
-    fn decode_from_slice(_: &'de [u8]) -> Result<Self, Self::Error> {
-        todo!()
-    }
-}
-
-// Generated
-impl Decode for QueryMessage {
-    type Error = CustomError;
-
-    fn decode<R: std::io::Read>(_: &mut R) -> Result<Self, <Self as Decode>::Error> {
-        todo!()
     }
 }
