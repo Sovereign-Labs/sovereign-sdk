@@ -1,5 +1,8 @@
 mod call;
 
+#[cfg(test)]
+mod tests;
+
 #[cfg(feature = "native")]
 mod query;
 

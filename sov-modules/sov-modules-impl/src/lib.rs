@@ -1,5 +1,5 @@
 use sov_modules_api::Module;
-mod example_simple;
+mod example_simple_module;
 
 pub struct Transaction<C: sov_modules_api::Context> {
     pub message: _GenModuleEnumCall<C>,
@@ -9,12 +9,12 @@ pub struct Transaction<C: sov_modules_api::Context> {
 
 // Generated
 pub enum _GenModuleEnumCall<C: sov_modules_api::Context> {
-    _Bank(<example_simple::ValueAdderModule<C> as Module>::CallMessage),
+    _Bank(<example_simple_module::ValueAdderModule<C> as Module>::CallMessage),
 }
 
 // Generated
 pub enum _GenModuleEnumQuery<C: sov_modules_api::Context> {
-    _Bank(<example_simple::ValueAdderModule<C> as Module>::QueryMessage),
+    _Bank(<example_simple_module::ValueAdderModule<C> as Module>::QueryMessage),
 }
 
 // Generated
@@ -26,7 +26,7 @@ impl<C: sov_modules_api::Context> _GenModuleEnumCall<C> {
     ) -> Result<sov_modules_api::CallResponse, sov_modules_api::CallError> {
         match self {
             _GenModuleEnumCall::_Bank(call_msg) => {
-                let mut bank = example_simple::ValueAdderModule::<C>::_new(storage);
+                let mut bank = example_simple_module::ValueAdderModule::<C>::_new(storage);
                 bank.call(call_msg, context)
             }
         }
@@ -41,7 +41,7 @@ impl<C: sov_modules_api::Context> _GenModuleEnumQuery<C> {
     ) -> Result<sov_modules_api::QueryResponse, sov_modules_api::QueryError> {
         match self {
             _GenModuleEnumQuery::_Bank(query_msg) => {
-                let bank = example_simple::ValueAdderModule::<C>::_new(storage);
+                let bank = example_simple_module::ValueAdderModule::<C>::_new(storage);
                 bank.query(query_msg)
             }
         }
