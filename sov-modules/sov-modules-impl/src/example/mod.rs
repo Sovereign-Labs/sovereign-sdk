@@ -44,13 +44,6 @@ pub struct Bank<C: sov_modules_api::Context> {
     pub accounts2: sov_state::StateMap<C::PublicKey, AccountData, C::Storage>,
 }
 
-/*
-impl<C: sov_modules_api::Context> ModuleInfo<C> for Bank<C> {
-    fn new(storage: C::Storage) -> Self {
-        todo!()
-    }
-}*/
-
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
     type CallMessage = CallMessage<C>;
     type CallError = CallError;
