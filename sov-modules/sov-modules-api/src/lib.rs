@@ -8,7 +8,7 @@ use sovereign_sdk::{
     serial::{Decode, DecodeBorrowed, Encode},
     stf::Event,
 };
-use std::{convert::Infallible, io::Read};
+use std::{convert::Infallible, fmt::Debug, io::Read};
 
 // separator == "/"
 const DOMAIN_SEPARATOR: [u8; 1] = [47];
@@ -59,10 +59,26 @@ impl From<Prefix> for sov_state::Prefix {
 #[derive(Debug)]
 pub struct DecodingError {}
 
+pub struct CallError {
+    pub err: String,
+}
+
+impl<T: Debug> From<T> for CallError {
+    fn from(t: T) -> Self {
+        Self {
+            err: format!("{t:?}"),
+        }
+    }
+}
+
 impl From<Infallible> for DecodingError {
     fn from(_value: Infallible) -> Self {
         unreachable!()
     }
+}
+
+pub struct QueryError {
+    pub err: String,
 }
 
 // Context contains types and functionality common for all modules.
@@ -97,12 +113,21 @@ impl Decode for NonInstantiable {
 #[derive(Default)]
 pub struct CallResponse {
     // Lists of events emitted by a call to a module.
-    pub events: Vec<Event>,
+    events: Vec<Event>,
+}
+
+impl CallResponse {
+    pub fn add_event(&mut self, key: &str, value: &str) {
+        //self.events.push(event)
+        todo!()
+    }
 }
 
 // Response type for the `Module::query` method. The response is returned by the relevant RPC call.
 #[derive(Default)]
-pub struct QueryResponse {}
+pub struct QueryResponse {
+    pub response: Vec<u8>,
+}
 
 // Every module has to implement this trait.
 // All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
@@ -114,30 +139,11 @@ pub trait Module {
 
     // Types and functionality defined per module:
 
-    // Module defined argument to the init method.
-    type InitMessage: Decode = NonInstantiable;
-
     // Module defined argument to the call method.
     type CallMessage: Decode = NonInstantiable;
 
     // Module defined argument to the query method.
     type QueryMessage: Decode = NonInstantiable;
-
-    // Error type for the call method.
-    type CallError: Into<DecodingError> = Infallible;
-
-    // Error type for the query method.
-    type QueryError: Into<DecodingError> = Infallible;
-
-    // Init is called once per module liftime and can be used to set initial state values in the module.
-    // It takes a module defined type and a context as parameters.
-    fn init(
-        &mut self,
-        _message: Self::InitMessage,
-        _context: Self::Context,
-    ) -> Result<CallResponse, Self::CallError> {
-        unreachable!()
-    }
 
     // Call allows interaction with the module and invokes state changes.
     // It takes a module defined type and a context as parameters.
@@ -145,12 +151,12 @@ pub trait Module {
         &mut self,
         _message: Self::CallMessage,
         _context: Self::Context,
-    ) -> Result<CallResponse, Self::CallError> {
+    ) -> Result<CallResponse, CallError> {
         unreachable!()
     }
 
     // Query allows querying the module's state.
-    fn query(&self, _message: Self::QueryMessage) -> Result<QueryResponse, Self::QueryError> {
+    fn query(&self, _message: Self::QueryMessage) -> Result<QueryResponse, QueryError> {
         unreachable!()
     }
 }
