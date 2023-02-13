@@ -404,4 +404,27 @@ mod tests {
             assert!(result.is_err());
         }
     }
+
+    #[test]
+    fn test_first_reads() {
+        let mut cache = CacheLog::default();
+        let entries = vec![
+            new_cache_entry(1, 11),
+            new_cache_entry(2, 22),
+            new_cache_entry(3, 33),
+        ];
+
+        for entry in entries.clone() {
+            cache.add_read(entry.key, entry.value).unwrap();
+        }
+
+        let first_reads = cache.get_first_reads();
+
+        for entry in entries {
+            match first_reads.get(&entry.key) {
+                ValueExists::Yes(value) => assert_eq!(entry.value, value),
+                ValueExists::No => unreachable!(),
+            }
+        }
+    }
 }
