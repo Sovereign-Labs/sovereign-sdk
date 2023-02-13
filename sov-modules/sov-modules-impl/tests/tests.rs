@@ -76,7 +76,7 @@ fn nested_module_call_test() {
 
     // Test the `zk` execution.
     {
-        let zk_storage = ZkStorage::new(native_storage.reads());
+        let zk_storage = ZkStorage::new(native_storage.get_first_reads());
         execute_module_logic::<ZkMockContext>(zk_storage.clone());
         test_state_update::<ZkMockContext>(zk_storage);
     }
