@@ -13,7 +13,7 @@ use std::{convert::Infallible, fmt::Debug, io::Read};
 // separator == "/"
 const DOMAIN_SEPARATOR: [u8; 1] = [47];
 
-// A unique identifier for each state variable in a module.
+/// A unique identifier for each state variable in a module.
 #[derive(Debug, PartialEq, Eq)]
 pub struct Prefix {
     module_path: &'static str,
@@ -55,7 +55,7 @@ impl From<Prefix> for sov_state::Prefix {
     }
 }
 
-// Any kind of error during value decoding.
+/// Any kind of error during value decoding.
 #[derive(Debug)]
 pub struct DecodingError {}
 
@@ -81,17 +81,17 @@ pub struct QueryError {
     pub err: String,
 }
 
-// Context contains types and functionality common for all modules.
+/// Context contains types and functionality common for all modules.
 pub trait Context {
     type Storage: Storage + Clone;
     type Signature: Decode;
     type PublicKey: Decode + Encode + Eq;
 
-    // Sender of the transaction.
+    /// Sender of the transaction.
     fn sender(&self) -> &Self::PublicKey;
 }
 
-// A type that can't be instantiated.
+/// A type that can't be instantiated.
 pub enum NonInstantiable {}
 
 impl<'de> DecodeBorrowed<'de> for NonInstantiable {
@@ -109,10 +109,10 @@ impl Decode for NonInstantiable {
         unreachable!()
     }
 }
-// Response type for the `Module::call` method.
+/// Response type for the `Module::call` method.
 #[derive(Default)]
 pub struct CallResponse {
-    // Lists of events emitted by a call to a module.
+    /// Lists of events emitted by a call to a module.
     events: Vec<Event>,
 }
 
@@ -123,30 +123,29 @@ impl CallResponse {
     }
 }
 
-// Response type for the `Module::query` method. The response is returned by the relevant RPC call.
+/// Response type for the `Module::query` method. The response is returned by the relevant RPC call.
 #[derive(Default)]
 pub struct QueryResponse {
     pub response: Vec<u8>,
 }
 
-// Every module has to implement this trait.
-// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
-// This allows developers to override only some of the methods in their implementation and safely ignore the others.
-
+/// Every module has to implement this trait.
+/// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
+/// This allows developers to override only some of the methods in their implementation and safely ignore the others.
 pub trait Module {
-    // Types and functionality common for all modules:
+    /// Types and functionality common for all modules:
     type Context: Context;
 
-    // Types and functionality defined per module:
+    /// Types and functionality defined per module:
 
-    // Module defined argument to the call method.
+    /// Module defined argument to the call method.
     type CallMessage: Decode = NonInstantiable;
 
-    // Module defined argument to the query method.
+    /// Module defined argument to the query method.
     type QueryMessage: Decode = NonInstantiable;
 
-    // Call allows interaction with the module and invokes state changes.
-    // It takes a module defined type and a context as parameters.
+    /// Call allows interaction with the module and invokes state changes.
+    /// It takes a module defined type and a context as parameters.
     fn call(
         &mut self,
         _message: Self::CallMessage,
@@ -155,8 +154,14 @@ pub trait Module {
         unreachable!()
     }
 
-    // Query allows querying the module's state.
+    /// Query allows querying the module's state.
     fn query(&self, _message: Self::QueryMessage) -> Result<QueryResponse, QueryError> {
         unreachable!()
     }
+}
+
+/// Every module has to implement this trait.
+/// It defines the `new` method for now and can be extended with some other metadata in the future.
+pub trait ModuleInfo<C: Context> {
+    fn new(storage: C::Storage) -> Self;
 }
