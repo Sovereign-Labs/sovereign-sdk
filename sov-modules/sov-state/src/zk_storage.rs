@@ -2,8 +2,7 @@ use first_read_last_write_cache::cache::{self, FirstReads};
 
 use crate::{
     internal_cache::{StorageInternalCache, ValueReader},
-    storage::{StorageKey, StorageValue},
-    Storage,
+    storage::{GenericStorage, StorageKey, StorageValue},
 };
 
 // Implementation of `ValueReader` trait for the zk-context. FirstReads is backed by a HashMap internally,
@@ -22,32 +21,13 @@ impl ValueReader for FirstReads {
 }
 
 /// Storage that can be used in zk-context.
-#[derive(Default, Clone)]
-pub struct ZkStorage {
-    // Caches first read and last write for a particular key.
-    internal_cache: StorageInternalCache,
-    first_reads: FirstReads,
-}
+pub type ZkStorage = GenericStorage<FirstReads>;
 
 impl ZkStorage {
     pub fn new(first_reads: FirstReads) -> Self {
         Self {
             internal_cache: StorageInternalCache::default(),
-            first_reads,
+            value_reader: first_reads,
         }
-    }
-}
-
-impl Storage for ZkStorage {
-    fn get(&self, key: StorageKey) -> Option<StorageValue> {
-        self.internal_cache.get_or_fetch(key, &self.first_reads)
-    }
-
-    fn set(&mut self, key: StorageKey, value: StorageValue) {
-        self.internal_cache.set(key, value)
-    }
-
-    fn delete(&mut self, key: StorageKey) {
-        self.internal_cache.delete(key)
     }
 }
