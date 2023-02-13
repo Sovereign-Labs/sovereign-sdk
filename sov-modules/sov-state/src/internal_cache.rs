@@ -38,7 +38,7 @@ impl StorageInternalCache {
 
                 cache_value_exists.value.map(|value| StorageValue { value })
             }
-            // TODO If the value does not exist in the cache, then fetch it from an external source.
+            // If the value does not exist in the cache, then fetch it from an external source.
             cache::ValueExists::No => value_reader.read_value(key),
         }
     }
