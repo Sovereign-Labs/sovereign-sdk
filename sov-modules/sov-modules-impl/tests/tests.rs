@@ -1,5 +1,5 @@
 use sov_modules_api::mocks::MockContext;
-use sov_modules_api::{Context, Prefix};
+use sov_modules_api::{Context, ModuleInfo, Prefix};
 use sov_modules_macros::ModuleInfo;
 use sov_state::storage::{StorageKey, StorageValue};
 use sov_state::{JmtStorage, StateMap, StateValue, Storage};
@@ -64,10 +64,13 @@ mod module_c {
         }
     }
 }
+
 #[test]
 fn nested_module_call_test() {
+    type C = MockContext;
     let test_storage = JmtStorage::default();
-    let module = &mut module_c::ModuleC::<MockContext>::_new(test_storage.clone());
+
+    let module = &mut <module_c::ModuleC<C> as ModuleInfo<C>>::new(test_storage.clone());
     module.update("some_key", "some_value");
 
     let expected_value = StorageValue::new("some_value");
