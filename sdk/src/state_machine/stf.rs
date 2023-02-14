@@ -80,10 +80,10 @@ impl Event {
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, BorshSerialize, BorshDeserialize)]
-pub struct EventKey(pub Rc<Vec<u8>>);
+pub struct EventKey(Rc<Vec<u8>>);
 
 #[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
-pub struct EventValue(pub Rc<Vec<u8>>);
+pub struct EventValue(Rc<Vec<u8>>);
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct ConsensusSetUpdate<Address> {
