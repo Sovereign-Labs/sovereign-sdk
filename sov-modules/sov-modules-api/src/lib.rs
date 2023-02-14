@@ -8,7 +8,11 @@ use sovereign_sdk::{
     serial::{Decode, DecodeBorrowed, Encode},
     stf::Event,
 };
-use std::{convert::Infallible, fmt::Debug, io::Read};
+use std::{
+    convert::Infallible,
+    fmt::{Debug, Display},
+    io::Read,
+};
 
 // separator == "/"
 const DOMAIN_SEPARATOR: [u8; 1] = [47];
@@ -59,11 +63,29 @@ impl From<Prefix> for sov_state::Prefix {
 #[derive(Debug)]
 pub struct DecodingError {}
 
-pub struct Error {
+pub enum DispatchError {
+    Module(ModuleError),
+}
+
+impl Debug for DispatchError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Module(e) => f.debug_tuple("Module").field(&e.err).finish(),
+        }
+    }
+}
+
+pub struct ModuleError {
     pub err: String,
 }
 
-impl<T: Debug> From<T> for Error {
+impl From<ModuleError> for DispatchError {
+    fn from(err: ModuleError) -> Self {
+        Self::Module(err)
+    }
+}
+
+impl<T: Debug> From<T> for ModuleError {
     fn from(t: T) -> Self {
         Self {
             err: format!("{t:?}"),
@@ -113,7 +135,7 @@ pub struct CallResponse {
 }
 
 impl CallResponse {
-    pub fn add_event(&mut self, key: &str, value: &str) {
+    pub fn add_event(&mut self, _key: &str, _value: &str) {
         //self.events.push(event)
         todo!()
     }
@@ -140,7 +162,7 @@ pub trait Module {
     /// Module defined argument to the query method.
     type QueryMessage: Decode = NonInstantiable;
 
-    fn genesis(&mut self) -> Result<(), Error> {
+    fn genesis(&mut self) -> Result<(), ModuleError> {
         Ok(())
     }
 
@@ -150,7 +172,7 @@ pub trait Module {
         &mut self,
         _message: Self::CallMessage,
         _context: Self::Context,
-    ) -> Result<CallResponse, Error> {
+    ) -> Result<CallResponse, ModuleError> {
         unreachable!()
     }
 

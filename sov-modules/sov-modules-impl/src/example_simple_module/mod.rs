@@ -11,7 +11,7 @@ mod query;
 use self::query::QueryMessage;
 
 use self::call::CallMessage;
-use sov_modules_api::Error;
+use sov_modules_api::ModuleError;
 use sov_modules_macros::ModuleInfo;
 
 #[derive(ModuleInfo)]
@@ -26,12 +26,12 @@ pub struct ValueAdderModule<C: sov_modules_api::Context> {
 impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueAdderModule<C> {
     type Context = C;
 
-    type CallMessage = CallMessage<C>;
+    type CallMessage = CallMessage;
 
     #[cfg(feature = "native")]
     type QueryMessage = QueryMessage;
 
-    fn genesis(&mut self) -> Result<(), Error> {
+    fn genesis(&mut self) -> Result<(), ModuleError> {
         self.genesis()
     }
 
@@ -39,9 +39,9 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueAdderModule<C
         &mut self,
         msg: Self::CallMessage,
         context: Self::Context,
-    ) -> Result<sov_modules_api::CallResponse, Error> {
+    ) -> Result<sov_modules_api::CallResponse, ModuleError> {
         match msg {
-            CallMessage::DoSetValue(set_value) => self.set_value(set_value, context),
+            CallMessage::DoSetValue(set_value) => self.set_value(set_value.new_value, context),
         }
     }
 

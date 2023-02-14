@@ -38,7 +38,7 @@ impl MockSignature {
 
 /// Mock for Context, useful for testing.
 pub struct MockContext {
-    sender: MockPublicKey,
+    pub sender: MockPublicKey,
 }
 
 impl Context for MockContext {

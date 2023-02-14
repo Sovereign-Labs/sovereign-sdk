@@ -1,17 +1,16 @@
 use std::fmt::Debug;
 
-use sov_modules_api::{CallResponse, Error};
+use sov_modules_api::{CallResponse, ModuleError};
 use sovereign_sdk::serial::{Decode, DecodeBorrowed};
 
 use super::ValueAdderModule;
 
-pub struct SetValue<C: sov_modules_api::Context> {
-    from: C::PublicKey,
-    new_value: u32,
+pub struct SetValue {
+    pub(crate) new_value: u32,
 }
 
-pub enum CallMessage<C: sov_modules_api::Context> {
-    DoSetValue(SetValue<C>),
+pub enum CallMessage {
+    DoSetValue(SetValue),
 }
 
 #[derive(Debug)]
@@ -22,23 +21,29 @@ enum SetValueError {
 impl<C: sov_modules_api::Context> ValueAdderModule<C> {
     pub(crate) fn set_value(
         &mut self,
-        set_value: SetValue<C>,
+        new_value: u32,
         context: C,
-    ) -> Result<sov_modules_api::CallResponse, Error> {
-        if &set_value.from != context.sender() {
+    ) -> Result<sov_modules_api::CallResponse, ModuleError> {
+        let mut response = CallResponse::default();
+
+        let admin = match self.admin.get() {
+            Some(admin) => admin,
+            None => Err("")?,
+        };
+
+        if &admin != context.sender() {
             Err(SetValueError::BadSender("bad sender"))?;
         }
 
-        if set_value.new_value >= 1000 {
-            Err("New value should be smaller than 1000")?;
-        }
+        self.value.set(new_value);
+        response.add_event("", "");
 
-        Ok(CallResponse::default())
+        Ok(response)
     }
 }
 
 // Generated
-impl<'de, C: sov_modules_api::Context> DecodeBorrowed<'de> for CallMessage<C> {
+impl<'de> DecodeBorrowed<'de> for CallMessage {
     type Error = ();
 
     fn decode_from_slice(_: &'de [u8]) -> Result<Self, Self::Error> {
@@ -47,7 +52,7 @@ impl<'de, C: sov_modules_api::Context> DecodeBorrowed<'de> for CallMessage<C> {
 }
 
 // Generated
-impl<C: sov_modules_api::Context> Decode for CallMessage<C> {
+impl Decode for CallMessage {
     type Error = ();
 
     fn decode<R: std::io::Read>(_: &mut R) -> Result<Self, <Self as Decode>::Error> {
