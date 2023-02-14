@@ -1,20 +1,19 @@
 use sov_modules_api::{Module, ModuleInfo};
-mod example;
+mod example_simple_module;
 
 pub struct Transaction<C: sov_modules_api::Context> {
     pub message: _GenModuleEnumCall<C>,
     pub sender: C::PublicKey,
-    pub signature: C::Signature,
 }
 
 // Generated
 pub enum _GenModuleEnumCall<C: sov_modules_api::Context> {
-    _Bank(<example::Bank<C> as Module>::CallMessage),
+    _Bank(<example_simple_module::ValueAdderModule<C> as Module>::CallMessage),
 }
 
 // Generated
 pub enum _GenModuleEnumQuery<C: sov_modules_api::Context> {
-    _Bank(<example::Bank<C> as Module>::QueryMessage),
+    _Bank(<example_simple_module::ValueAdderModule<C> as Module>::QueryMessage),
 }
 
 // Generated
@@ -23,10 +22,11 @@ impl<C: sov_modules_api::Context> _GenModuleEnumCall<C> {
         self,
         storage: C::Storage,
         context: C,
-    ) -> Result<sov_modules_api::CallResponse, sov_modules_api::DecodingError> {
+    ) -> Result<sov_modules_api::CallResponse, sov_modules_api::ModuleError> {
         match self {
             _GenModuleEnumCall::_Bank(call_msg) => {
-                let mut bank = <example::Bank<C> as ModuleInfo<C>>::new(storage);
+                let mut bank =
+                    <example_simple_module::ValueAdderModule<C> as ModuleInfo<C>>::new(storage);
                 Ok(bank.call(call_msg, context)?)
             }
         }
@@ -35,14 +35,12 @@ impl<C: sov_modules_api::Context> _GenModuleEnumCall<C> {
 
 // Generated
 impl<C: sov_modules_api::Context> _GenModuleEnumQuery<C> {
-    pub fn dispatch_query(
-        self,
-        storage: C::Storage,
-    ) -> Result<sov_modules_api::QueryResponse, sov_modules_api::DecodingError> {
+    pub fn dispatch_query(self, storage: C::Storage) -> sov_modules_api::QueryResponse {
         match self {
             _GenModuleEnumQuery::_Bank(query_msg) => {
-                let bank = <example::Bank<C> as ModuleInfo<C>>::new(storage);
-                Ok(bank.query(query_msg)?)
+                let bank =
+                    <example_simple_module::ValueAdderModule<C> as ModuleInfo<C>>::new(storage);
+                bank.query(query_msg)
             }
         }
     }

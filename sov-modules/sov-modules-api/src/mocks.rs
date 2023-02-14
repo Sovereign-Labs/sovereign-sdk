@@ -1,8 +1,10 @@
+use std::convert::Infallible;
+
 use crate::Context;
 use sov_state::{JmtStorage, ZkStorage};
 
 /// Mock for Context::PublicKey, useful for testing.
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, PartialEq, Eq)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, PartialEq, Eq, Clone)]
 pub struct MockPublicKey {
     pub_key: Vec<u8>,
 }
@@ -10,6 +12,15 @@ pub struct MockPublicKey {
 impl MockPublicKey {
     pub fn new(pub_key: Vec<u8>) -> Self {
         Self { pub_key }
+    }
+}
+
+impl TryFrom<&'static str> for MockPublicKey {
+    type Error = Infallible;
+
+    fn try_from(key: &'static str) -> Result<Self, Self::Error> {
+        let key = key.as_bytes().to_vec();
+        Ok(Self { pub_key: key })
     }
 }
 
@@ -27,13 +38,11 @@ impl MockSignature {
 
 /// Mock for Context, useful for testing.
 pub struct MockContext {
-    sender: MockPublicKey,
+    pub sender: MockPublicKey,
 }
 
 impl Context for MockContext {
     type Storage = JmtStorage;
-
-    type Signature = MockSignature;
 
     type PublicKey = MockPublicKey;
 
@@ -43,13 +52,11 @@ impl Context for MockContext {
 }
 
 pub struct ZkMockContext {
-    sender: MockPublicKey,
+    pub sender: MockPublicKey,
 }
 
 impl Context for ZkMockContext {
     type Storage = ZkStorage;
-
-    type Signature = MockSignature;
 
     type PublicKey = MockPublicKey;
 
