@@ -19,6 +19,7 @@ enum SetValueError {
 }
 
 impl<C: sov_modules_api::Context> ValueAdderModule<C> {
+    /// Sets `value` field to the `new_value`, only admin is authorized to call this method.
     pub(crate) fn set_value(
         &mut self,
         new_value: u32,

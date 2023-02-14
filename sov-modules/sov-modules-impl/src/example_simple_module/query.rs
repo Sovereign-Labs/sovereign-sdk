@@ -13,6 +13,7 @@ pub struct Response {
 }
 
 impl<C: sov_modules_api::Context> ValueAdderModule<C> {
+    /// Queries the state of the module.
     pub fn query_value(&self) -> QueryResponse {
         let response = Response {
             value: self.value.get(),

@@ -7,7 +7,7 @@ mod error;
 mod prefix;
 mod response;
 
-pub use error::{DecodingError, DispatchError, ModuleError};
+pub use error::{DecodingError, Error, ModuleError};
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
 
@@ -42,8 +42,8 @@ pub trait Module {
     /// Module defined argument to the query method.
     type QueryMessage: Decode = NonInstantiable;
 
-    ///
-    fn genesis(&mut self) -> Result<(), DispatchError> {
+    /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
+    fn genesis(&mut self) -> Result<(), Error> {
         Ok(())
     }
 
@@ -53,7 +53,7 @@ pub trait Module {
         &mut self,
         _message: Self::CallMessage,
         _context: Self::Context,
-    ) -> Result<CallResponse, DispatchError> {
+    ) -> Result<CallResponse, Error> {
         unreachable!()
     }
 
