@@ -1,7 +1,8 @@
-use std::fmt::Debug;
-
-use sov_modules_api::{CallResponse, ModuleError};
+use anyhow::{bail, Result};
+use sov_modules_api::CallResponse;
 use sovereign_sdk::serial::{Decode, DecodeBorrowed};
+use std::fmt::Debug;
+use thiserror::Error;
 
 use super::ValueAdderModule;
 
@@ -13,9 +14,10 @@ pub enum CallMessage {
     DoSetValue(SetValue),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 enum SetValueError {
-    WrongSender(&'static str),
+    #[error("Only admin can change the value")]
+    WrongSender,
 }
 
 impl<C: sov_modules_api::Context> ValueAdderModule<C> {
@@ -24,20 +26,18 @@ impl<C: sov_modules_api::Context> ValueAdderModule<C> {
         &mut self,
         new_value: u32,
         context: C,
-    ) -> Result<sov_modules_api::CallResponse, ModuleError> {
+    ) -> Result<sov_modules_api::CallResponse> {
         let mut response = CallResponse::default();
 
         let admin = match self.admin.get() {
             Some(admin) => admin,
             // Here we use &str as an error.
-            None => Err("Admin is not set")?,
+            None => bail!("Admin is not set"),
         };
 
         if &admin != context.sender() {
             // Here we use a custom error type.
-            Err(SetValueError::WrongSender(
-                "Only admin can change the value.",
-            ))?;
+            Err(SetValueError::WrongSender)?;
         }
 
         self.value.set(new_value);

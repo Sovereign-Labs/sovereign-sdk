@@ -4,9 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+anyhow = { workspace = true }
 sov-state = { workspace = true }
 sovereign-sdk = { workspace = true }
 borsh = { workspace = true, optional = true}
+thiserror = { workspace = true }
 
 [features]
 mocks = ["dep:borsh"]
