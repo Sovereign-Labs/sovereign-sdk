@@ -7,7 +7,7 @@ mod error;
 mod prefix;
 mod response;
 
-pub use error::{DecodingError, Error, ModuleError};
+pub use error::Error;
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
 

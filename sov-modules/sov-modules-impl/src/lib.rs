@@ -22,7 +22,7 @@ impl<C: sov_modules_api::Context> _GenModuleEnumCall<C> {
         self,
         storage: C::Storage,
         context: C,
-    ) -> Result<sov_modules_api::CallResponse, sov_modules_api::ModuleError> {
+    ) -> Result<sov_modules_api::CallResponse, sov_modules_api::Error> {
         match self {
             _GenModuleEnumCall::_Bank(call_msg) => {
                 let mut bank =
