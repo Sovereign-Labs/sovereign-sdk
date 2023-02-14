@@ -4,7 +4,7 @@ use crate::Context;
 use sov_state::{JmtStorage, ZkStorage};
 
 /// Mock for Context::PublicKey, useful for testing.
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, PartialEq, Eq)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, PartialEq, Eq, Clone)]
 pub struct MockPublicKey {
     pub_key: Vec<u8>,
 }
@@ -52,7 +52,7 @@ impl Context for MockContext {
 }
 
 pub struct ZkMockContext {
-    sender: MockPublicKey,
+    pub sender: MockPublicKey,
 }
 
 impl Context for ZkMockContext {

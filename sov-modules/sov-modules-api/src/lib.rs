@@ -137,12 +137,12 @@ pub struct CallResponse {
 impl CallResponse {
     pub fn add_event(&mut self, _key: &str, _value: &str) {
         //self.events.push(event)
-        todo!()
+        //todo!()
     }
 }
 
 /// Response type for the `Module::query` method. The response is returned by the relevant RPC call.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct QueryResponse {
     pub response: Vec<u8>,
 }
@@ -162,7 +162,7 @@ pub trait Module {
     /// Module defined argument to the query method.
     type QueryMessage: Decode = NonInstantiable;
 
-    fn genesis(&mut self) -> Result<(), ModuleError> {
+    fn genesis(&mut self) -> Result<(), DispatchError> {
         Ok(())
     }
 
@@ -172,7 +172,7 @@ pub trait Module {
         &mut self,
         _message: Self::CallMessage,
         _context: Self::Context,
-    ) -> Result<CallResponse, ModuleError> {
+    ) -> Result<CallResponse, DispatchError> {
         unreachable!()
     }
 
