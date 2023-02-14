@@ -1,103 +1,19 @@
 #![feature(associated_type_defaults)]
 
+mod encode;
+mod error;
 #[cfg(feature = "mocks")]
 pub mod mocks;
+mod prefix;
 
+pub use error::{DecodingError, DispatchError, ModuleError};
+pub use prefix::Prefix;
 use sov_state::Storage;
 use sovereign_sdk::{
-    serial::{Decode, DecodeBorrowed, Encode},
-    stf::Event,
+    serial::{Decode, Encode},
+    stf::{Event, EventKey, EventValue},
 };
-use std::{
-    convert::Infallible,
-    fmt::{Debug, Display},
-    io::Read,
-};
-
-// separator == "/"
-const DOMAIN_SEPARATOR: [u8; 1] = [47];
-
-/// A unique identifier for each state variable in a module.
-#[derive(Debug, PartialEq, Eq)]
-pub struct Prefix {
-    module_path: &'static str,
-    module_name: &'static str,
-    storage_name: &'static str,
-}
-
-impl Prefix {
-    pub fn new(
-        module_path: &'static str,
-        module_name: &'static str,
-        storage_name: &'static str,
-    ) -> Self {
-        Self {
-            module_path,
-            module_name,
-            storage_name,
-        }
-    }
-}
-
-impl From<Prefix> for sov_state::Prefix {
-    fn from(prefix: Prefix) -> Self {
-        let mut combined_prefix = Vec::with_capacity(
-            prefix.module_path.len()
-                + prefix.module_name.len()
-                + prefix.storage_name.len()
-                + 3 * DOMAIN_SEPARATOR.len(),
-        );
-
-        // We call this logic only once per module instantiation, so we don't have to use AlignedVec here.
-        combined_prefix.extend(prefix.module_path.as_bytes());
-        combined_prefix.extend(DOMAIN_SEPARATOR);
-        combined_prefix.extend(prefix.module_name.as_bytes());
-        combined_prefix.extend(DOMAIN_SEPARATOR);
-        combined_prefix.extend(prefix.storage_name.as_bytes());
-        combined_prefix.extend(DOMAIN_SEPARATOR);
-        sov_state::Prefix::new(combined_prefix)
-    }
-}
-
-/// Any kind of error during value decoding.
-#[derive(Debug)]
-pub struct DecodingError {}
-
-pub enum DispatchError {
-    Module(ModuleError),
-}
-
-impl Debug for DispatchError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::Module(e) => f.debug_tuple("Module").field(&e.err).finish(),
-        }
-    }
-}
-
-pub struct ModuleError {
-    pub err: String,
-}
-
-impl From<ModuleError> for DispatchError {
-    fn from(err: ModuleError) -> Self {
-        Self::Module(err)
-    }
-}
-
-impl<T: Debug> From<T> for ModuleError {
-    fn from(t: T) -> Self {
-        Self {
-            err: format!("{t:?}"),
-        }
-    }
-}
-
-impl From<Infallible> for DecodingError {
-    fn from(_value: Infallible) -> Self {
-        unreachable!()
-    }
-}
+use std::{fmt::Debug, rc::Rc};
 
 /// Context contains types and functionality common for all modules.
 pub trait Context {
@@ -112,21 +28,6 @@ pub trait Context {
 /// A type that can't be instantiated.
 pub enum NonInstantiable {}
 
-impl<'de> DecodeBorrowed<'de> for NonInstantiable {
-    type Error = DecodingError;
-
-    fn decode_from_slice(_: &'de [u8]) -> Result<Self, Self::Error> {
-        unreachable!()
-    }
-}
-
-impl Decode for NonInstantiable {
-    type Error = DecodingError;
-
-    fn decode<R: Read>(_: &mut R) -> Result<Self, <Self as Decode>::Error> {
-        unreachable!()
-    }
-}
 /// Response type for the `Module::call` method.
 #[derive(Default)]
 pub struct CallResponse {
@@ -135,9 +36,13 @@ pub struct CallResponse {
 }
 
 impl CallResponse {
-    pub fn add_event(&mut self, _key: &str, _value: &str) {
-        //self.events.push(event)
-        //todo!()
+    pub fn add_event(&mut self, key: &str, value: &str) {
+        let event = Event {
+            key: EventKey(Rc::new(key.as_bytes().to_vec())),
+            value: EventValue(Rc::new(value.as_bytes().to_vec())),
+        };
+
+        self.events.push(event)
     }
 }
 
