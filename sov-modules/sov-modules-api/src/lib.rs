@@ -7,7 +7,6 @@ use sov_state::Storage;
 use sovereign_sdk::{
     serial::{Decode, DecodeBorrowed, Encode},
     stf::Event,
-    Bytes,
 };
 use std::{convert::Infallible, fmt::Debug, io::Read};
 
@@ -60,11 +59,11 @@ impl From<Prefix> for sov_state::Prefix {
 #[derive(Debug)]
 pub struct DecodingError {}
 
-pub struct CallError {
+pub struct Error {
     pub err: String,
 }
 
-impl<T: Debug> From<T> for CallError {
+impl<T: Debug> From<T> for Error {
     fn from(t: T) -> Self {
         Self {
             err: format!("{t:?}"),
@@ -78,15 +77,11 @@ impl From<Infallible> for DecodingError {
     }
 }
 
-pub struct QueryError {
-    pub err: String,
-}
-
 /// Context contains types and functionality common for all modules.
 pub trait Context {
     type Storage: Storage + Clone;
-    type Signature: Decode;
-    type PublicKey: Decode + Encode + Eq + TryFrom<Vec<u8>>;
+
+    type PublicKey: Decode + Encode + Eq + TryFrom<&'static str>;
 
     /// Sender of the transaction.
     fn sender(&self) -> &Self::PublicKey;
@@ -145,7 +140,9 @@ pub trait Module {
     /// Module defined argument to the query method.
     type QueryMessage: Decode = NonInstantiable;
 
-    fn genesis(&mut self) {}
+    fn genesis(&mut self) -> Result<(), Error> {
+        Ok(())
+    }
 
     /// Call allows interaction with the module and invokes state changes.
     /// It takes a module defined type and a context as parameters.
@@ -153,12 +150,12 @@ pub trait Module {
         &mut self,
         _message: Self::CallMessage,
         _context: Self::Context,
-    ) -> Result<CallResponse, CallError> {
+    ) -> Result<CallResponse, Error> {
         unreachable!()
     }
 
     /// Query allows querying the module's state.
-    fn query(&self, _message: Self::QueryMessage) -> Result<QueryResponse, QueryError> {
+    fn query(&self, _message: Self::QueryMessage) -> QueryResponse {
         unreachable!()
     }
 }

@@ -15,11 +15,12 @@ impl MockPublicKey {
     }
 }
 
-impl TryFrom<Vec<u8>> for MockPublicKey {
+impl TryFrom<&'static str> for MockPublicKey {
     type Error = Infallible;
 
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        Ok(Self { pub_key: value })
+    fn try_from(key: &'static str) -> Result<Self, Self::Error> {
+        let key = key.as_bytes().to_vec();
+        Ok(Self { pub_key: key })
     }
 }
 
@@ -43,8 +44,6 @@ pub struct MockContext {
 impl Context for MockContext {
     type Storage = JmtStorage;
 
-    type Signature = MockSignature;
-
     type PublicKey = MockPublicKey;
 
     fn sender(&self) -> &Self::PublicKey {
@@ -58,8 +57,6 @@ pub struct ZkMockContext {
 
 impl Context for ZkMockContext {
     type Storage = ZkStorage;
-
-    type Signature = MockSignature;
 
     type PublicKey = MockPublicKey;
 

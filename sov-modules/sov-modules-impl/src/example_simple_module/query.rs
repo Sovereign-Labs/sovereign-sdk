@@ -1,5 +1,5 @@
 use super::ValueAdderModule;
-use sov_modules_api::{QueryError, QueryResponse};
+use sov_modules_api::QueryResponse;
 use sovereign_sdk::serial::{Decode, DecodeBorrowed};
 
 pub enum QueryMessage {
@@ -7,11 +7,11 @@ pub enum QueryMessage {
 }
 
 impl<C: sov_modules_api::Context> ValueAdderModule<C> {
-    pub fn query_value(&self) -> Result<QueryResponse, QueryError> {
+    pub fn query_value(&self) -> QueryResponse {
         let value = self.value.get();
 
         let response = serde_json::to_vec(&value).unwrap();
-        Ok(QueryResponse { response })
+        QueryResponse { response }
     }
 }
 
