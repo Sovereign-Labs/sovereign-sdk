@@ -1,6 +1,5 @@
 use super::ValueAdderModule;
 use serde::{Deserialize, Serialize};
-use sov_modules_api::QueryResponse;
 use sovereign_sdk::serial::{Decode, DecodeBorrowed};
 
 pub enum QueryMessage {
@@ -14,13 +13,10 @@ pub struct Response {
 
 impl<C: sov_modules_api::Context> ValueAdderModule<C> {
     /// Queries the state of the module.
-    pub fn query_value(&self) -> QueryResponse {
-        let response = Response {
+    pub fn query_value(&self) -> Response {
+        Response {
             value: self.value.get(),
-        };
-
-        let response = serde_json::to_vec(&response).unwrap();
-        QueryResponse { response }
+        }
     }
 }
 

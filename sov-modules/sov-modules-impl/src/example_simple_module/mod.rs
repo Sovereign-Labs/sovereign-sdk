@@ -48,7 +48,10 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueAdderModule<C
     #[cfg(feature = "native")]
     fn query(&self, msg: Self::QueryMessage) -> sov_modules_api::QueryResponse {
         match msg {
-            QueryMessage::GetValue => self.query_value(),
+            QueryMessage::GetValue => {
+                let response = serde_json::to_vec(&self.query_value()).unwrap();
+                sov_modules_api::QueryResponse { response }
+            }
         }
     }
 }
