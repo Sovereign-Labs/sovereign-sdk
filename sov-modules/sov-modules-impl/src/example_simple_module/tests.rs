@@ -39,10 +39,9 @@ fn test_module<C: Context>(context: C, storage: C::Storage) {
     let new_value = 99;
     let call_msg = call::CallMessage::DoSetValue(call::SetValue { new_value });
 
-    let call_response = module.call(call_msg, context).unwrap();
-
     // Test events
     {
+        let call_response = module.call(call_msg, context).unwrap();
         let event = &call_response.events[0];
         assert_eq!(event, &Event::new("add_event", "value_set: 99"));
     }
