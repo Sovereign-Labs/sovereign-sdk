@@ -7,7 +7,7 @@ impl<C: sov_modules_api::Context> ValueAdderModule<C> {
 
         let admin = match maybe_admin {
             Ok(admin) => admin,
-            Err(_) => return Err("Bad public key for admin")?,
+            Err(_) => return Err("Admin initialization failed")?,
         };
 
         self.admin.set(admin);

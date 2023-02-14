@@ -15,7 +15,7 @@ pub enum CallMessage {
 
 #[derive(Debug)]
 enum SetValueError {
-    BadSender(&'static str),
+    WrongSender(&'static str),
 }
 
 impl<C: sov_modules_api::Context> ValueAdderModule<C> {
@@ -28,15 +28,19 @@ impl<C: sov_modules_api::Context> ValueAdderModule<C> {
 
         let admin = match self.admin.get() {
             Some(admin) => admin,
-            None => Err("")?,
+            // Here we use &str as an error.
+            None => Err("Admin is not set")?,
         };
 
         if &admin != context.sender() {
-            Err(SetValueError::BadSender("bad sender"))?;
+            // Here we use a custom error type.
+            Err(SetValueError::WrongSender(
+                "Only admin can change the value.",
+            ))?;
         }
 
         self.value.set(new_value);
-        response.add_event("", "");
+        response.add_event("add_event", &format!("value_set: {new_value:?}"));
 
         Ok(response)
     }

@@ -32,7 +32,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueAdderModule<C
     type QueryMessage = QueryMessage;
 
     fn genesis(&mut self) -> Result<(), DispatchError> {
-        self.init_module().map_err(|e| e.into())
+        Ok(self.init_module()?)
     }
 
     fn call(
@@ -41,9 +41,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueAdderModule<C
         context: Self::Context,
     ) -> Result<sov_modules_api::CallResponse, DispatchError> {
         match msg {
-            CallMessage::DoSetValue(set_value) => self
-                .set_value(set_value.new_value, context)
-                .map_err(|e| e.into()),
+            CallMessage::DoSetValue(set_value) => Ok(self.set_value(set_value.new_value, context)?),
         }
     }
 

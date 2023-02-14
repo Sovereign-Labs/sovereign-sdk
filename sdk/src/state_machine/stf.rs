@@ -70,6 +70,15 @@ pub struct Event {
     pub value: EventValue,
 }
 
+impl Event {
+    pub fn new(key: &str, value: &str) -> Self {
+        Self {
+            key: EventKey(Rc::new(key.as_bytes().to_vec())),
+            value: EventValue(Rc::new(value.as_bytes().to_vec())),
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, BorshSerialize, BorshDeserialize)]
 pub struct EventKey(pub Rc<Vec<u8>>);
 

@@ -7,44 +7,58 @@ use sov_modules_api::Context;
 use sov_modules_api::{Module, ModuleInfo};
 use sov_state::JmtStorage;
 use sov_state::ZkStorage;
+use sovereign_sdk::stf::Event;
 
 #[test]
 fn test_simple_module() {
     let sender = MockPublicKey::try_from("admin").unwrap();
-    // Test Native-Context
-    let context = MockContext {
-        sender: sender.clone(),
-    };
-
     let storage = JmtStorage::default();
-    test_module(context, storage.clone());
+
+    // Test Native-Context
+    {
+        let context = MockContext {
+            sender: sender.clone(),
+        };
+
+        test_module(context, storage.clone());
+    }
 
     // Test Zk-Context
-    let zk_context = ZkMockContext { sender };
+    {
+        let zk_context = ZkMockContext { sender };
 
-    let zk_storage = ZkStorage::new(storage.get_first_reads());
-    test_module(zk_context, zk_storage);
+        let zk_storage = ZkStorage::new(storage.get_first_reads());
+        test_module(zk_context, zk_storage);
+    }
 }
 
 fn test_module<C: Context>(context: C, storage: C::Storage) {
     let mut module = ValueAdderModule::<C>::new(storage);
-
     module.genesis().unwrap();
 
     let new_value = 99;
     let call_msg = call::CallMessage::DoSetValue(call::SetValue { new_value });
 
-    let _resp = module.call(call_msg, context).unwrap();
+    let call_response = module.call(call_msg, context).unwrap();
+
+    // Test events
+    {
+        let event = &call_response.events[0];
+        assert_eq!(event, &Event::new("add_event", "value_set: 99"));
+    }
 
     let query_msg = query::QueryMessage::GetValue;
     let query = module.query(query_msg);
 
-    let query_response: Result<query::Response, _> = serde_json::from_slice(&query.response);
+    // Test query
+    {
+        let query_response: Result<query::Response, _> = serde_json::from_slice(&query.response);
 
-    assert_eq!(
-        query::Response {
-            value: Some(new_value)
-        },
-        query_response.unwrap()
-    )
+        assert_eq!(
+            query::Response {
+                value: Some(new_value)
+            },
+            query_response.unwrap()
+        )
+    }
 }

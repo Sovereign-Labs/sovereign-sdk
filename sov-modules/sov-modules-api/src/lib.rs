@@ -42,6 +42,7 @@ pub trait Module {
     /// Module defined argument to the query method.
     type QueryMessage: Decode = NonInstantiable;
 
+    ///
     fn genesis(&mut self) -> Result<(), DispatchError> {
         Ok(())
     }
