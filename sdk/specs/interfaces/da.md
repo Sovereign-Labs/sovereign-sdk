@@ -138,9 +138,9 @@ showing the completeness of the provided list.
 
 * **Usage:**
   * An adaptation of the `get_relevant_txs` method designed for use by verifiers. This method
-returns the same list of transactions that would be returned by `get_relevant_txs`, in addition
-to a witness proving the inclusion of these transactions in the DA layer block, and a witness
-showing the completeness of the provided list.
+returns a `Result` containing the unit type on success, and an error message on failure. An invocation
+succeeds if and only if the provided set of `txs` was included on the L1 (as demonstrated by `inclusion_proof`)
+and is complete.
 
 * **Arguments:**
 
