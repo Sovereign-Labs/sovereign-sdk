@@ -15,7 +15,7 @@ look at the contents of the [`sdk`](sdk) folder
 
 ## How does it work?
 
-To learn how the Sovereign SDK works, see the ![Sovereign SDK Overview](sdk/specs/overview.md).
+To learn how the Sovereign SDK works, see the [Sovereign SDK Overview](sdk/specs/overview.md).
 
 ## Warning
 
