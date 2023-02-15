@@ -117,7 +117,7 @@ third parties are often vulnerable. Examples of trusted bridges include Wormhole
 and many more.
 - Light-client bridges: As the name suggests, light-client bridges require two chains to run light-clients of each
 other in order to communicate. These bridges are typically expensive, so chains typically only participate in a few
-light client bridges. However, light-client bridges between two established are very secure - as secure as the
+light client bridges. However, light-client bridges between two established chains are very secure - as secure as the
 weaker of the two validator sets involved. The most prominent light-client bridging protocol is IBC.
 
 The Sovereign SDK's bridging protocol is similar to a light-client bridge. It works rougly like this: Every Sovereign
