@@ -43,7 +43,9 @@ impl StorageInternalCache {
                 let value = value_reader.read_value(key);
 
                 let cache_value = CacheValue {
-                    value: value.clone().map(|storage_value| storage_value.value),
+                    value: value
+                        .as_ref()
+                        .map(|storage_value| storage_value.value.clone()),
                 };
 
                 self.cache

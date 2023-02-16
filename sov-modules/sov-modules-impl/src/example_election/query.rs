@@ -21,7 +21,7 @@ impl<C: sov_modules_api::Context> Election<C> {
         if is_frozen {
             let candidates = self.candidates.get().unwrap_or(Vec::default());
 
-            // In case of tie, returns the candidate with the higher index in the vec.
+            // In case of tie, returns the candidate with the higher index in the vec, it is ok for the example.
             let candidate = candidates
                 .into_iter()
                 .max_by(|c1, c2| c1.count.cmp(&c2.count));

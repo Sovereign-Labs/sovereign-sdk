@@ -74,9 +74,8 @@ impl<C: sov_modules_api::Context> Election<C> {
 
                 // Check if a candidate exist.
                 let mut candidate = candidates
-                    .get(candidate_index)
-                    .ok_or(anyhow!("Candidate doesn't exist"))?
-                    .clone();
+                    .get_mut(candidate_index)
+                    .ok_or(anyhow!("Candidate doesn't exist"))?;
 
                 candidate.count = candidate
                     .count
@@ -84,7 +83,7 @@ impl<C: sov_modules_api::Context> Election<C> {
                     .ok_or(anyhow!("Vote count overflow"))?;
 
                 // We already checked that the candidate_index exists.
-                candidates[candidate_index] = candidate;
+                candidates[candidate_index] = candidate.clone();
                 self.candidates.set(candidates);
 
                 Ok(CallResponse::default())
