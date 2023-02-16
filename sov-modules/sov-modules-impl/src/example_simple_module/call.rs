@@ -15,7 +15,7 @@ pub enum CallMessage {
 }
 
 #[derive(Debug, Error)]
-enum SetValueError {
+pub enum SetValueError {
     #[error("Only admin can change the value")]
     WrongSender,
 }
