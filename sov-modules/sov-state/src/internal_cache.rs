@@ -39,7 +39,19 @@ impl StorageInternalCache {
                 cache_value_exists.value.map(|value| StorageValue { value })
             }
             // If the value does not exist in the cache, then fetch it from an external source.
-            cache::ValueExists::No => value_reader.read_value(key),
+            cache::ValueExists::No => {
+                let value = value_reader.read_value(key);
+
+                let cache_value = CacheValue {
+                    value: value.clone().map(|storage_value| storage_value.value),
+                };
+
+                self.cache
+                    .borrow_mut()
+                    .add_read(cache_key, cache_value)
+                    .unwrap_or_else(|e| panic!("Inconsistent read from the cache: {e:?}"));
+                value
+            }
         }
     }
 

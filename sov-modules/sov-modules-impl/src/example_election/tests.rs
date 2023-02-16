@@ -5,15 +5,18 @@ use super::{
     Election,
 };
 use sov_modules_api::{
-    mocks::{MockContext, MockPublicKey},
+    mocks::{MockContext, MockPublicKey, ZkMockContext},
     Context, Module, ModuleInfo,
 };
-use sov_state::JmtStorage;
+use sov_state::{JmtStorage, ZkStorage};
 
 #[test]
 fn test_election() {
     let storage = JmtStorage::default();
-    test_module::<MockContext>(storage)
+    test_module::<MockContext>(storage.clone());
+
+    let zk_storage = ZkStorage::new(storage.get_first_reads());
+    test_module::<ZkMockContext>(zk_storage);
 }
 
 fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: C::Storage) {
@@ -69,7 +72,8 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: C::Storage) {
     ellection
         .call(CallMessage::FreezeElection, &admin_context)
         .unwrap();
-    // Get winner
+
+    // Get result
     {
         let query = QueryMessage::Result;
         let query = ellection.query(query);
