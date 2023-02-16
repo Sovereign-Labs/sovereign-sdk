@@ -10,9 +10,9 @@ pub mod test_util {
         }
     }
 
-    pub(crate) fn create_value(v: u8) -> CacheValue {
-        CacheValue {
-            value: Some(Arc::new(vec![v])),
-        }
+    pub(crate) fn create_value(v: u8) -> Option<CacheValue> {
+        Some(CacheValue {
+            value: Arc::new(vec![v]),
+        })
     }
 }

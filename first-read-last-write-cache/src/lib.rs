@@ -21,13 +21,7 @@ impl Display for CacheKey {
 
 #[derive(Error, Debug, Eq, PartialEq, Clone)]
 pub struct CacheValue {
-    pub value: Option<Arc<Vec<u8>>>,
-}
-
-impl CacheValue {
-    pub fn empty() -> Self {
-        Self { value: None }
-    }
+    pub value: Arc<Vec<u8>>,
 }
 
 impl Display for CacheValue {
