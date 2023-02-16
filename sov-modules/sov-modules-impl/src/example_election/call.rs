@@ -82,10 +82,7 @@ impl<C: sov_modules_api::Context> Election<C> {
                     .checked_add(1)
                     .ok_or(anyhow!("Vote count overflow"))?;
 
-                // We already checked that the candidate_index exists.
-                candidates[candidate_index] = candidate.clone();
                 self.candidates.set(candidates);
-
                 Ok(CallResponse::default())
             }
         }
