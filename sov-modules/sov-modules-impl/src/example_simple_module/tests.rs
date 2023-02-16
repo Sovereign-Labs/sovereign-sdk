@@ -88,7 +88,7 @@ fn test_simple_module_err_on_no_admin() {
             sender: sender.clone(),
         };
 
-        test_module_no_context(context, storage.clone());
+        test_module_err_no_context(context, storage.clone());
     }
 
 }
@@ -102,7 +102,7 @@ fn test_module_err<C: Context>(context: C, storage: C::Storage) {
 }
 
 
-fn test_module_no_context<C: Context>(context: C, storage: C::Storage) {
+fn test_module_err_no_context<C: Context>(context: C, storage: C::Storage) {
     let mut module = ValueAdderModule::new(storage);
     let resp = module.set_value(11, context);
 
@@ -110,8 +110,12 @@ fn test_module_no_context<C: Context>(context: C, storage: C::Storage) {
 }
 
 #[test]
-fn test_failed_genesis<C: Context>(context: C, storage: C::Storage) {
-    let mut module = ValueAdderModule::<C>::new(storage);
-    assert!(module.init_module().is_err());
+fn test_failed_genesis() {
+    let sender = MockPublicKey::try_from("admin").unwrap();
+    let context = MockContext {
+        sender: sender.clone(),
+    };
+    let storage = JmtStorage::default();
+    test_failed_genesis_helper(context, storage);
 }
 
