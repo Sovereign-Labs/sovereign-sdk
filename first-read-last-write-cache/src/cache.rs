@@ -3,6 +3,7 @@ use crate::{CacheKey, CacheValue};
 use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Arc;
 use thiserror::Error;
+use proptest::prelude::*;
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum ReadError {
@@ -14,7 +15,7 @@ pub enum ReadError {
 }
 
 /// Cache entry can be in three states:
-/// - Does not exists, a given key was never inserted in the cache:             
+/// - Does not exists, a given key was never inserted in the cache:
 ///     ValueExists::No
 /// - Exists but the value is empty.
 ///      ValueExists::Yes(None)
@@ -103,7 +104,7 @@ impl CacheLog {
         }
     }
 
-    /// Adds a write entry to the cache.  
+    /// Adds a write entry to the cache.
     pub fn add_write(&mut self, key: CacheKey, value: CacheValue) {
         match self.log.entry(key) {
             Entry::Occupied(mut existing) => {
@@ -122,7 +123,7 @@ impl CacheLog {
     ///
     /// Example:
     ///
-    /// Cache1:        Cache2:         
+    /// Cache1:        Cache2:
     ///     k1 => v1       k1 => v1'
     ///     k2 => v2       k3 => v3
     ///
@@ -425,6 +426,44 @@ mod tests {
                 ValueExists::Yes(value) => assert_eq!(entry.value, value),
                 ValueExists::No => unreachable!(),
             }
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn merge_doesnt_crash(a: u8, b: u8) {
+
+            let test_cases = vec![
+                TestCase {
+                    left: Some(ReadWrite::Read(new_cache_entry(a, b))),
+                    right: Some(ReadWrite::Read(new_cache_entry(a, b))),
+                },
+                TestCase {
+                    left: Some(ReadWrite::Read(new_cache_entry(a, b))),
+                    right: Some(ReadWrite::Write(new_cache_entry(a, b))),
+                },
+                TestCase {
+                    left: Some(ReadWrite::Write(new_cache_entry(a, b))),
+                    right: Some(ReadWrite::Write(new_cache_entry(a, b))),
+                },
+                TestCase {
+                    left: Some(ReadWrite::Write(new_cache_entry(a, b))),
+                    right: None,
+                },
+                TestCase {
+                    left: None,
+                    right: Some(ReadWrite::Read(new_cache_entry(a, b))),
+                },
+                TestCase {
+                    left: None,
+                    right: Some(ReadWrite::Write(new_cache_entry(a, b))),
+                },
+                TestCase {
+                    left: Some(ReadWrite::Write(new_cache_entry(a, b))),
+                    right: Some(ReadWrite::Read(new_cache_entry(a, b))),
+                },
+            ];
+
         }
     }
 }

@@ -6,3 +6,4 @@ edition = "2021"
 
 [dependencies]
 thiserror = { workspace = true }
+proptest = "1.1.0"
