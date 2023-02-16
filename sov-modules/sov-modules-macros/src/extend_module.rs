@@ -146,23 +146,25 @@ fn get_fields_from_data_struct(data_struct: &DataStruct) -> Result<Vec<FieldKind
             ));
         }
 
-        let attribute = &original_field.attrs[0];
+        for attribute in &original_field.attrs {
+            let field = StructNamedField {
+                ident: field_ident.clone(),
+                ty: original_field.ty.clone(),
+            };
 
-        let field = StructNamedField {
-            ident: field_ident.clone(),
-            ty: original_field.ty.clone(),
-        };
-
-        if attribute.path.segments[0].ident == "state" {
-            output_fields.push(FieldKind::State(field));
-        } else if attribute.path.segments[0].ident == "module" {
-            output_fields.push(FieldKind::Module(field))
-        } else {
-            return Err(syn::Error::new_spanned(
-                field_ident,
-                "Only `#[module]` or `#[state]` attributes are supported.",
-            ));
-        };
+            if attribute.path.segments[0].ident == "state" {
+                output_fields.push(FieldKind::State(field));
+            } else if attribute.path.segments[0].ident == "module" {
+                output_fields.push(FieldKind::Module(field))
+            } else if attribute.path.segments[0].ident == "doc" {
+                // Skip doc comments.
+            } else {
+                return Err(syn::Error::new_spanned(
+                    field_ident,
+                    "Only `#[module]` or `#[state]` attributes are supported.",
+                ));
+            };
+        }
     }
     Ok(output_fields)
 }
