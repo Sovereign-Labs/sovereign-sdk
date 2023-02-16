@@ -31,6 +31,7 @@ pub trait Context: Clone {
     /// Sender of the transaction.
     fn sender(&self) -> &Self::PublicKey;
 
+    /// Constructor for the context.
     fn new(sender: Self::PublicKey) -> Self;
 }
 
