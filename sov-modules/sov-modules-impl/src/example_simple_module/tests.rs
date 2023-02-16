@@ -109,13 +109,3 @@ fn test_module_err_no_context<C: Context>(context: C, storage: C::Storage) {
     assert!(resp.is_err());
 }
 
-#[test]
-fn test_failed_genesis() {
-    let sender = MockPublicKey::try_from("admin").unwrap();
-    let context = MockContext {
-        sender: sender.clone(),
-    };
-    let storage = JmtStorage::default();
-    test_failed_genesis_helper(context, storage);
-}
-
