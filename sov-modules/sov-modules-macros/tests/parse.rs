@@ -8,9 +8,11 @@ mod test_module {
 
     #[derive(ModuleInfo)]
     pub(crate) struct TestStruct<C: Context> {
+        // Comment
         #[state]
         pub test_state1: StateMap<C::PublicKey, u32, C::Storage>,
 
+        /// Doc comment
         #[state]
         pub test_state2: StateMap<String, String, C::Storage>,
 

@@ -28,6 +28,8 @@ use syn::parse_macro_input;
 ///  * `module` - attribute for module members
 #[proc_macro_derive(ModuleInfo, attributes(state, module))]
 pub fn module(input: TokenStream) -> TokenStream {
+    //eprintln!("{input:?}");
+
     let input = parse_macro_input!(input);
 
     match extend_module::module(input) {
