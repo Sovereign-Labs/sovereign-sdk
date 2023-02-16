@@ -64,8 +64,8 @@ fn test_module<C: Context>(context: C, storage: C::Storage) {
 
 
 #[test]
-fn test_simple_module_err_on_sender_is_not_admin() {
-    let sender = MockPublicKey::try_from("admin").unwrap();
+fn test_err_on_sender_is_not_admin() {
+    let sender = MockPublicKey::try_from("not_admin").unwrap();
     let storage = JmtStorage::default();
 
     // Test Native-Context
@@ -74,38 +74,15 @@ fn test_simple_module_err_on_sender_is_not_admin() {
             sender: sender.clone(),
         };
 
-        test_module_err(context, storage.clone());
+        test_err_on_sender_is_not_admin_helper(context, storage.clone());
     }
 }
 
-#[test]
-fn test_simple_module_err_on_no_admin() {
-    let sender = MockPublicKey::try_from("admin").unwrap();
-    let storage = JmtStorage::default();
 
-    {
-        let context = MockContext {
-            sender: sender.clone(),
-        };
-
-        test_module_err_no_context(context, storage.clone());
-    }
-
-}
-
-
-fn test_module_err<C: Context>(context: C, storage: C::Storage) {
+fn test_err_on_sender_is_not_admin_helper<C: Context>(context: C, storage: C::Storage) {
     let mut module = ValueAdderModule::<C>::new(storage);
+    module.genesis().unwrap();
     let resp = module.set_value(11, context);
 
     assert!(resp.is_err());
 }
-
-
-fn test_module_err_no_context<C: Context>(context: C, storage: C::Storage) {
-    let mut module = ValueAdderModule::new(storage);
-    let resp = module.set_value(11, context);
-
-    assert!(resp.is_err());
-}
-
