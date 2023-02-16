@@ -73,7 +73,7 @@ impl<C: sov_modules_api::Context> Election<C> {
                 let mut candidates = self.get_candidates()?;
 
                 // Check if a candidate exist.
-                let mut candidate = candidates
+                let candidate = candidates
                     .get_mut(candidate_index)
                     .ok_or(anyhow!("Candidate doesn't exist"))?;
 
