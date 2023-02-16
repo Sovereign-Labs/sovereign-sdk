@@ -14,7 +14,7 @@ pub enum CallMessage<C: sov_modules_api::Context> {
     AddVoter(C::PublicKey),
     Vote(usize),
     ClearElection,
-    Freeze,
+    FreezeElection,
 }
 
 impl<C: sov_modules_api::Context> Election<C> {

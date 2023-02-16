@@ -63,7 +63,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
 
             Self::CallMessage::ClearElection => Ok(self.clear()?),
 
-            Self::CallMessage::Freeze => Ok(self.freeze_election(context)?),
+            Self::CallMessage::FreezeElection => Ok(self.freeze_election(context)?),
         }
     }
 

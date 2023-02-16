@@ -66,7 +66,9 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: C::Storage) {
         ellection.call(vote, &sender_context).unwrap();
     }
 
-    ellection.call(CallMessage::Freeze, &admin_context).unwrap();
+    ellection
+        .call(CallMessage::FreezeElection, &admin_context)
+        .unwrap();
     // Get winner
     {
         let query = QueryMessage::Result;
