@@ -38,7 +38,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueAdderModule<C
     fn call(
         &mut self,
         msg: Self::CallMessage,
-        context: Self::Context,
+        context: &Self::Context,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
             CallMessage::DoSetValue(set_value) => Ok(self.set_value(set_value.new_value, context)?),

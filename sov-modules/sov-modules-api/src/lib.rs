@@ -12,19 +12,27 @@ pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
 
 use sov_state::Storage;
-use sovereign_sdk::serial::{Decode, Encode};
-
+use sovereign_sdk::serial::Decode;
+use std::fmt::Debug;
 /// A type that can't be instantiated.
 pub enum NonInstantiable {}
 
 /// Context contains types and functionality common for all modules.
-pub trait Context {
+pub trait Context: Clone {
     type Storage: Storage + Clone;
 
-    type PublicKey: Decode + Encode + Eq + TryFrom<&'static str>;
+    type PublicKey: borsh::BorshDeserialize
+        + borsh::BorshSerialize
+        + Eq
+        + TryFrom<&'static str>
+        + Clone
+        + Debug;
 
     /// Sender of the transaction.
     fn sender(&self) -> &Self::PublicKey;
+
+    /// Constructor for the Context.
+    fn new(sender: Self::PublicKey) -> Self;
 }
 
 /// Every module has to implement this trait.
@@ -52,7 +60,7 @@ pub trait Module {
     fn call(
         &mut self,
         _message: Self::CallMessage,
-        _context: Self::Context,
+        _context: &Self::Context,
     ) -> Result<CallResponse, Error> {
         unreachable!()
     }

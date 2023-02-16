@@ -31,13 +31,13 @@ impl<V: Encode + Decode, S: Storage> StateValue<V, S> {
     pub fn set(&mut self, value: V) {
         // `StorageKey::new` will serialize the SingletonKey, but that's fine because we provided
         //  efficient Encode implementation.
-        let storage_key = StorageKey::new(self.backend.prefix(), SingletonKey);
+        let storage_key = StorageKey::new(self.backend.prefix(), &SingletonKey);
         self.backend.set_value(storage_key, value)
     }
 
     /// Gets a value from the StateValue.
     pub fn get(&self) -> Option<V> {
-        let storage_key = StorageKey::new(self.backend.prefix(), SingletonKey);
+        let storage_key = StorageKey::new(self.backend.prefix(), &SingletonKey);
         self.backend.get_value(storage_key)
     }
 

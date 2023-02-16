@@ -18,7 +18,7 @@ pub mod module_a {
 
     impl<C: Context> ModuleA<C> {
         pub fn update(&mut self, key: &str, value: &str) {
-            self.state_1_a.set(key.to_owned(), value.to_owned());
+            self.state_1_a.set(&key.to_owned(), value.to_owned());
             self.state_2_a.set(value.to_owned())
         }
     }
@@ -38,7 +38,7 @@ pub mod module_b {
 
     impl<C: Context> ModuleB<C> {
         pub fn update(&mut self, key: &str, value: &str) {
-            self.state_1_b.set(key.to_owned(), value.to_owned());
+            self.state_1_b.set(&key.to_owned(), value.to_owned());
             self.mod_1_a.update("key_from_b", value);
         }
     }
@@ -95,7 +95,7 @@ fn test_state_update<C: Context>(storage: C::Storage) {
 
     {
         let prefix = Prefix::new("tests::module_a", "ModuleA", "state_1_a");
-        let key = StorageKey::new(&prefix.into(), "some_key");
+        let key = StorageKey::new(&prefix.into(), &"some_key");
         let value = storage.get(key).unwrap();
 
         assert_eq!(expected_value, value);
@@ -103,7 +103,7 @@ fn test_state_update<C: Context>(storage: C::Storage) {
 
     {
         let prefix = Prefix::new("tests::module_b", "ModuleB", "state_1_b");
-        let key = StorageKey::new(&prefix.into(), "some_key");
+        let key = StorageKey::new(&prefix.into(), &"some_key");
         let value = storage.get(key).unwrap();
 
         assert_eq!(expected_value, value);
@@ -111,7 +111,7 @@ fn test_state_update<C: Context>(storage: C::Storage) {
 
     {
         let prefix = Prefix::new("tests::module_a", "ModuleA", "state_1_a");
-        let key = StorageKey::new(&prefix.into(), "key_from_b");
+        let key = StorageKey::new(&prefix.into(), &"key_from_b");
         let value = storage.get(key).unwrap();
 
         assert_eq!(expected_value, value);

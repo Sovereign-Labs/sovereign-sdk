@@ -7,8 +7,8 @@ edition = "2021"
 anyhow = { workspace = true }
 sov-state = { workspace = true }
 sovereign-sdk = { workspace = true }
-borsh = { workspace = true, optional = true}
+borsh = { workspace = true}
 thiserror = { workspace = true }
 
 [features]
-mocks = ["dep:borsh"]
+mocks = []

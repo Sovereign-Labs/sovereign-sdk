@@ -1,15 +1,17 @@
 use anyhow::{bail, Result};
+use borsh::BorshDeserialize;
 use sov_modules_api::CallResponse;
-use sovereign_sdk::serial::{Decode, DecodeBorrowed};
 use std::fmt::Debug;
 use thiserror::Error;
 
 use super::ValueAdderModule;
 
+#[derive(BorshDeserialize)]
 pub struct SetValue {
     pub(crate) new_value: u32,
 }
 
+#[derive(BorshDeserialize)]
 pub enum CallMessage {
     DoSetValue(SetValue),
 }
@@ -25,7 +27,7 @@ impl<C: sov_modules_api::Context> ValueAdderModule<C> {
     pub(crate) fn set_value(
         &mut self,
         new_value: u32,
-        context: C,
+        context: &C,
     ) -> Result<sov_modules_api::CallResponse> {
         let mut response = CallResponse::default();
 
@@ -44,23 +46,5 @@ impl<C: sov_modules_api::Context> ValueAdderModule<C> {
         response.add_event("add_event", &format!("value_set: {new_value:?}"));
 
         Ok(response)
-    }
-}
-
-// Generated
-impl<'de> DecodeBorrowed<'de> for CallMessage {
-    type Error = ();
-
-    fn decode_from_slice(_: &'de [u8]) -> Result<Self, Self::Error> {
-        todo!()
-    }
-}
-
-// Generated
-impl Decode for CallMessage {
-    type Error = ();
-
-    fn decode<R: std::io::Read>(_: &mut R) -> Result<Self, <Self as Decode>::Error> {
-        todo!()
     }
 }

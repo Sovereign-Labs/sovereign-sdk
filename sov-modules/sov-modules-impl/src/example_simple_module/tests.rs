@@ -41,7 +41,7 @@ fn test_module<C: Context>(context: C, storage: C::Storage) {
 
     // Test events
     {
-        let call_response = module.call(call_msg, context).unwrap();
+        let call_response = module.call(call_msg, &context).unwrap();
         let event = &call_response.events[0];
         assert_eq!(event, &Event::new("add_event", "value_set: 99"));
     }
