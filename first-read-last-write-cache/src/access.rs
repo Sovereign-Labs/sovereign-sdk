@@ -190,7 +190,7 @@ mod tests {
                 access,
                 Access::ReadThenWrite {
                     original: original_value.clone(),
-                    modified: new_value
+                    modified: new_value,
                 }
             );
         }
@@ -205,7 +205,7 @@ mod tests {
                 access,
                 Access::ReadThenWrite {
                     original: original_value,
-                    modified: new_value
+                    modified: new_value,
                 }
             );
         }
@@ -244,8 +244,119 @@ mod tests {
             left,
             Access::ReadThenWrite {
                 original: create_value(first_read),
-                modified: create_value(last_write)
+                modified: create_value(last_write),
             }
+        )
+    }
+
+    #[test]
+    fn test_err_merge_left_read_neq_right_read() {
+        let first_read = 1;
+        let mut value = create_value(first_read);
+        let mut left = Access::Read(value.clone());
+
+        let second_read = 2;
+        let mut value2 = create_value(second_read);
+
+        assert_eq!(left.merge(Access::Read(value2.clone())),
+                   Err(MergeError::ReadThenRead {
+                       left: value.clone(),
+                       right: value2.clone(),
+                   })
+        );
+    }
+
+    #[test]
+    fn test_err_merge_left_read_neq_right_orig() {
+        let first_read = 1;
+        let mut value = create_value(first_read);
+        let mut left = Access::Read(value.clone());
+
+        let second_read = 2;
+        let mut value2 = create_value(second_read);
+        let mut right = Access::ReadThenWrite {
+            original: value2.clone(),
+            modified: value.clone(),
+        };
+
+        assert_eq!(left.merge(right),
+                   Err(MergeError::ReadThenRead {
+                       left: value.clone(),
+                       right: value2.clone(),
+                   })
+        );
+    }
+
+    #[test]
+    fn test_err_merge_left_mod_neq_right_read() {
+        let first_read = 1;
+        let mut value = create_value(first_read);
+
+        let second_read = 2;
+        let mut value2 = create_value(second_read);
+
+        let mut left = Access::ReadThenWrite {
+            original: value2.clone(),
+            modified: value.clone(),
+        };
+
+
+        let mut right = Access::Read(value2.clone());
+
+        assert_eq!(left.merge(right),
+                   Err(MergeError::WriteThenRead {
+                       write: value.clone(),
+                       read: value2.clone(),
+                   })
+        )
+    }
+
+    #[test]
+    fn test_left_mod_neq_right_orig() {
+        let first_read = 1;
+        let mut value = create_value(first_read);
+
+        let second_read = 2;
+        let mut value2 = create_value(second_read);
+
+        let mut left = Access::ReadThenWrite {
+            original: value.clone(),
+            modified: value2.clone(),
+        };
+
+        let mut right = Access::ReadThenWrite {
+            original: value.clone(),
+            modified: value2.clone(),
+        };
+
+        assert_eq!(left.merge(right),
+                   Err(MergeError::WriteThenRead {
+                       write: value2.clone(),
+                       read: value.clone(),
+                   })
+        )
+    }
+
+
+    #[test]
+    fn test_left_right_neq_right_orig() {
+        let first_read = 1;
+        let mut value = create_value(first_read);
+
+        let second_read = 2;
+        let mut value2 = create_value(second_read);
+
+        let left = Access::Write(value.clone());
+        let right = Access::ReadThenWrite {
+            original: value2.clone(),
+            modified: value.clone(),
+        };
+
+        assert_eq!(left.merge(right),
+                   Err(MergeError::WriteThenRead {
+                       write: value.clone(),
+                       read: value2.clone(),
+                   })
         )
     }
 }
