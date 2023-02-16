@@ -13,7 +13,7 @@ impl ValueReader for FirstReads {
     fn read_value(&self, key: StorageKey) -> Option<StorageValue> {
         let key = key.as_cache_key();
         match self.get(&key) {
-            cache::ValueExists::Yes(read) => read.value.map(|v| StorageValue { value: v }),
+            cache::ValueExists::Yes(read) => read.map(StorageValue::new_from_cache_value),
             // It is ok to panic here, `ZkStorage` must be able to access all the keys it needs.
             cache::ValueExists::No => panic!("Error: Key {key:?} is inaccessible"),
         }

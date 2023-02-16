@@ -53,7 +53,7 @@ impl StorageKey {
 // `Value` type for the `Storage`
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StorageValue {
-    pub value: Arc<Vec<u8>>,
+    value: Arc<Vec<u8>>,
 }
 
 impl StorageValue {
@@ -65,9 +65,17 @@ impl StorageValue {
         }
     }
 
+    pub fn value(&self) -> &[u8] {
+        &self.value
+    }
+
     pub fn as_cache_value(self) -> CacheValue {
-        CacheValue {
-            value: Some(self.value),
+        CacheValue { value: self.value }
+    }
+
+    pub fn new_from_cache_value(cache_value: CacheValue) -> Self {
+        Self {
+            value: cache_value.value,
         }
     }
 }

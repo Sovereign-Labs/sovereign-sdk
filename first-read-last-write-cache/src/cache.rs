@@ -6,10 +6,10 @@ use thiserror::Error;
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum ReadError {
-    #[error("inconsistent read, expected: {expected}, found: {found}")]
+    #[error("inconsistent read, expected: {expected:?}, found: {found:?}")]
     InconsistentRead {
-        expected: CacheValue,
-        found: CacheValue,
+        expected: Option<CacheValue>,
+        found: Option<CacheValue>,
     },
 }
 
@@ -21,7 +21,7 @@ pub enum ReadError {
 /// - Exists and contains a value:
 ///     ValueExists::Yes(Some(value))
 pub enum ValueExists {
-    Yes(CacheValue),
+    Yes(Option<CacheValue>),
     No,
 }
 
@@ -34,11 +34,11 @@ pub struct CacheLog {
 /// Represents all reads from a CacheLog.
 #[derive(Default, Clone, Debug)]
 pub struct FirstReads {
-    reads: Arc<HashMap<CacheKey, CacheValue>>,
+    reads: Arc<HashMap<CacheKey, Option<CacheValue>>>,
 }
 
 impl FirstReads {
-    pub fn new(reads: HashMap<CacheKey, CacheValue>) -> Self {
+    pub fn new(reads: HashMap<CacheKey, Option<CacheValue>>) -> Self {
         Self {
             reads: Arc::new(reads),
         }
@@ -83,7 +83,7 @@ impl CacheLog {
 
     /// The first read for a given key is inserted in the cache. For an existing cache entry
     /// checks if reads are consistent with previous reads/writes.
-    pub fn add_read(&mut self, key: CacheKey, value: CacheValue) -> Result<(), ReadError> {
+    pub fn add_read(&mut self, key: CacheKey, value: Option<CacheValue>) -> Result<(), ReadError> {
         match self.log.entry(key) {
             Entry::Occupied(existing) => {
                 let last_value = existing.get().last_value().clone();
@@ -104,7 +104,7 @@ impl CacheLog {
     }
 
     /// Adds a write entry to the cache.  
-    pub fn add_write(&mut self, key: CacheKey, value: CacheValue) {
+    pub fn add_write(&mut self, key: CacheKey, value: Option<CacheValue>) {
         match self.log.entry(key) {
             Entry::Occupied(mut existing) => {
                 existing.get_mut().write_value(value);
@@ -151,7 +151,7 @@ impl CacheLog {
     }
 }
 
-fn filter_first_reads(k: CacheKey, access: Access) -> Option<(CacheKey, CacheValue)> {
+fn filter_first_reads(k: CacheKey, access: Access) -> Option<(CacheKey, Option<CacheValue>)> {
     match access {
         Access::Read(read) => Some((k, read)),
         Access::ReadThenWrite { original, .. } => Some((k, original)),
@@ -165,7 +165,7 @@ mod tests {
     use crate::utils::test_util::{create_key, create_value};
 
     impl ValueExists {
-        fn get(self) -> CacheValue {
+        fn get(self) -> Option<CacheValue> {
             match self {
                 ValueExists::Yes(value) => value,
                 ValueExists::No => unreachable!(),
@@ -204,11 +204,11 @@ mod tests {
     #[derive(PartialEq, Eq, Clone, Debug)]
     pub(crate) struct CacheEntry {
         key: CacheKey,
-        value: CacheValue,
+        value: Option<CacheValue>,
     }
 
     impl CacheEntry {
-        fn new(key: CacheKey, value: CacheValue) -> Self {
+        fn new(key: CacheKey, value: Option<CacheValue>) -> Self {
             Self { key, value }
         }
     }
