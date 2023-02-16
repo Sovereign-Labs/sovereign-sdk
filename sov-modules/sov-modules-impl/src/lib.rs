@@ -1,4 +1,5 @@
 use sov_modules_api::{Module, ModuleInfo};
+mod example_election;
 mod example_simple_module;
 
 pub struct Transaction<C: sov_modules_api::Context> {
@@ -27,7 +28,7 @@ impl<C: sov_modules_api::Context> _GenModuleEnumCall<C> {
             _GenModuleEnumCall::_Bank(call_msg) => {
                 let mut bank =
                     <example_simple_module::ValueAdderModule<C> as ModuleInfo<C>>::new(storage);
-                Ok(bank.call(call_msg, context)?)
+                Ok(bank.call(call_msg, &context)?)
             }
         }
     }

@@ -12,7 +12,7 @@ pub struct JmtDb {
 
 impl ValueReader for JmtDb {
     fn read_value(&self, _key: StorageKey) -> Option<StorageValue> {
-        todo!()
+        None
     }
 }
 

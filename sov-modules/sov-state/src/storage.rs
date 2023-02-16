@@ -33,7 +33,7 @@ impl AsRef<Vec<u8>> for StorageKey {
 
 impl StorageKey {
     /// Creates a new StorageKey that combines a prefix and a key.
-    pub fn new<K: Encode>(prefix: &Prefix, key: K) -> Self {
+    pub fn new<K: Encode>(prefix: &Prefix, key: &K) -> Self {
         let mut encoded_key = Vec::default();
         key.encode(&mut encoded_key);
 
