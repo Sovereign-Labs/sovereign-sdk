@@ -8,9 +8,10 @@ pub struct StateMap<K, V, S> {
     backend: Backend<K, V, S>,
 }
 
+/// Error type for `StateMap` get method.
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Value not found for prefix: {0} and storage key {1}")]
+    #[error("Value not found for prefix: {0} and: storage key {1}")]
     MissingValue(Prefix, StorageKey),
 }
 

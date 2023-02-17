@@ -21,6 +21,7 @@ pub struct StateValue<V, S> {
     backend: Backend<SingletonKey, V, S>,
 }
 
+/// Error type for `StateValue` get method.
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Value not found for prefix: {0}")]
