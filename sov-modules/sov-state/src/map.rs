@@ -28,12 +28,18 @@ impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
         self.backend.set_value(storage_key, value)
     }
 
-    /// Returns the value corresponding to the key or Error if key is absent in the StateMap.
-    pub fn get(&self, key: &K) -> Result<V, Error> {
+    /// Returns the value corresponding to the key or None if key is absent in the StateMap.
+    pub fn get(&self, key: &K) -> Option<V> {
         let storage_key = StorageKey::new(self.backend.prefix(), key);
-        self.backend
-            .get_value(storage_key.clone())
-            .ok_or(Error::MissingValue(self.prefix().clone(), storage_key))
+        self.backend.get_value(storage_key)
+    }
+
+    /// Returns the value corresponding to the key or Error if key is absent in the StateMap.
+    pub fn get_or_err(&self, key: &K) -> Result<V, Error> {
+        self.get(key).ok_or(Error::MissingValue(
+            self.prefix().clone(),
+            StorageKey::new(self.backend.prefix(), key),
+        ))
     }
 
     pub fn prefix(&self) -> &Prefix {

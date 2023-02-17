@@ -16,7 +16,7 @@ impl<C: sov_modules_api::Context> ValueAdderModule<C> {
     /// Queries the state of the module.
     pub fn query_value(&self) -> Response {
         Response {
-            value: self.value.get().ok(),
+            value: self.value.get(),
         }
     }
 }

@@ -43,12 +43,15 @@ impl<V: Encode + Decode, S: Storage> StateValue<V, S> {
         self.backend.set_value(storage_key, value)
     }
 
-    /// Gets a value from the StateValue or Error if the value is absent.
-    pub fn get(&self) -> Result<V, Error> {
+    /// Gets a value from the StateValue or None if the value is absent.
+    pub fn get(&self) -> Option<V> {
         let storage_key = StorageKey::new(self.backend.prefix(), &SingletonKey);
-        self.backend
-            .get_value(storage_key)
-            .ok_or(Error::MissingValue(self.prefix().clone()))
+        self.backend.get_value(storage_key)
+    }
+
+    /// Gets a value from the StateValue or Error if the value is absent.
+    pub fn get_or_err(&self) -> Result<V, Error> {
+        self.get().ok_or(Error::MissingValue(self.prefix().clone()))
     }
 
     pub fn prefix(&self) -> &Prefix {

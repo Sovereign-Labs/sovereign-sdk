@@ -31,7 +31,7 @@ impl<C: sov_modules_api::Context> ValueAdderModule<C> {
     ) -> Result<sov_modules_api::CallResponse> {
         let mut response = CallResponse::default();
 
-        let admin = self.admin.get()?;
+        let admin = self.admin.get_or_err()?;
 
         if &admin != context.sender() {
             // Here we use a custom error type.
