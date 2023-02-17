@@ -190,7 +190,7 @@ mod tests {
                 access,
                 Access::ReadThenWrite {
                     original: original_value.clone(),
-                    modified: new_value,
+                    modified: new_value
                 }
             );
         }
@@ -205,7 +205,7 @@ mod tests {
                 access,
                 Access::ReadThenWrite {
                     original: original_value,
-                    modified: new_value,
+                    modified: new_value
                 }
             );
         }
@@ -244,7 +244,7 @@ mod tests {
             left,
             Access::ReadThenWrite {
                 original: create_value(first_read),
-                modified: create_value(last_write),
+                modified: create_value(last_write)
             }
         )
     }
