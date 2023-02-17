@@ -7,7 +7,7 @@ members = [
 	"sov-modules/sov-modules-macros",
 	"sov-modules/sov-state",
 	"sov-modules/sov-modules-api",
-	"sov-modules/sov-modules-impl/example-simple-module",
+	"sov-modules/sov-modules-impl/example-value-adder",
 	"sov-modules/sov-modules-impl/example-election",
 	"sov-modules/sov-modules-impl/integration-tests",
 	
