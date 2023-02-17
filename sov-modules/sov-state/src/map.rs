@@ -24,13 +24,13 @@ impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
 
     /// Inserts a key-value pair into the map.
     pub fn set(&mut self, key: &K, value: V) {
-        let storage_key = StorageKey::new(self.backend.prefix(), key);
+        let storage_key = StorageKey::new(self.prefix(), key);
         self.backend.set_value(storage_key, value)
     }
 
     /// Returns the value corresponding to the key or None if key is absent in the StateMap.
     pub fn get(&self, key: &K) -> Option<V> {
-        let storage_key = StorageKey::new(self.backend.prefix(), key);
+        let storage_key = StorageKey::new(self.prefix(), key);
         self.backend.get_value(storage_key)
     }
 
@@ -38,7 +38,7 @@ impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
     pub fn get_or_err(&self, key: &K) -> Result<V, Error> {
         self.get(key).ok_or(Error::MissingValue(
             self.prefix().clone(),
-            StorageKey::new(self.backend.prefix(), key),
+            StorageKey::new(self.prefix(), key),
         ))
     }
 
