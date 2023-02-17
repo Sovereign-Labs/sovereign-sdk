@@ -1,16 +1,16 @@
-use std::sync::Arc;
-
-use first_read_last_write_cache::{CacheKey, CacheValue};
-use sovereign_sdk::serial::Encode;
+use std::{fmt::Display, sync::Arc};
 
 use crate::{
     internal_cache::{StorageInternalCache, ValueReader},
     utils::AlignedVec,
     Prefix,
 };
+use first_read_last_write_cache::{CacheKey, CacheValue};
+use hex;
+use sovereign_sdk::serial::Encode;
 
 // `Key` type for the `Storage`
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct StorageKey {
     key: Arc<Vec<u8>>,
 }
@@ -28,6 +28,12 @@ impl StorageKey {
 impl AsRef<Vec<u8>> for StorageKey {
     fn as_ref(&self) -> &Vec<u8> {
         &self.key
+    }
+}
+
+impl Display for StorageKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:x?}", hex::encode(self.key().as_ref()))
     }
 }
 

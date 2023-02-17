@@ -2,7 +2,7 @@
 // This makes certain operations cheaper in zk-context (concatenation)
 // TODO: Currently the implementation defaults to `stc::vec::Vec` see:
 // https://github.com/Sovereign-Labs/sovereign/issues/47
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct AlignedVec {
     inner: Vec<u8>,
 }

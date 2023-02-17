@@ -60,17 +60,14 @@ impl<C: sov_modules_api::Context> Election<C> {
     ) -> Result<CallResponse> {
         self.exit_if_frozen()?;
 
-        let voter = self
-            .allowed_voters
-            .get(context.sender())
-            .ok_or(anyhow!("Voter missing from the allowed list."))?;
+        let voter = self.allowed_voters.get_or_err(context.sender())?;
 
         match voter {
             Voter::Voted => bail!("Voter tried voting a second time!"),
             Voter::Fresh => {
                 self.allowed_voters.set(context.sender(), Voter::voted());
 
-                let mut candidates = self.get_candidates()?;
+                let mut candidates = self.candidates.get_or_err()?;
 
                 // Check if a candidate exist.
                 let candidate = candidates
@@ -102,7 +99,7 @@ impl<C: sov_modules_api::Context> Election<C> {
     }
 
     fn exit_if_not_admin(&self, context: &C) -> Result<()> {
-        let admin = self.admin.get().ok_or(anyhow!("Admin is not registered"))?;
+        let admin = self.admin.get_or_err()?;
 
         ensure!(
             &admin == context.sender(),
@@ -112,10 +109,7 @@ impl<C: sov_modules_api::Context> Election<C> {
     }
 
     fn exit_if_frozen(&self) -> Result<()> {
-        let is_frozen = self
-            .is_frozen
-            .get()
-            .ok_or(anyhow!("Frozen value is not set."))?;
+        let is_frozen = self.is_frozen.get_or_err()?;
 
         if is_frozen {
             bail!("Election is frozen.")
@@ -135,11 +129,5 @@ impl<C: sov_modules_api::Context> Election<C> {
             "Voter already has the right to vote."
         );
         Ok(())
-    }
-
-    fn get_candidates(&self) -> Result<Vec<Candidate>> {
-        self.candidates
-            .get()
-            .ok_or(anyhow!("Candidate not registered."))
     }
 }
