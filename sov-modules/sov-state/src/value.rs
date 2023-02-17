@@ -1,5 +1,6 @@
 use crate::{backend::Backend, storage::StorageKey, Prefix, Storage};
 use sovereign_sdk::serial::{Decode, Encode};
+use thiserror::Error;
 
 // SingletonKey is very similar to the unit type `()` i.e. it has only one value.
 // We provide a custom efficient Encode implementation for SingletonKey while Encode for `()`
@@ -20,6 +21,12 @@ pub struct StateValue<V, S> {
     backend: Backend<SingletonKey, V, S>,
 }
 
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("Value not found for prefix: {0}")]
+    MissingValue(Prefix),
+}
+
 impl<V: Encode + Decode, S: Storage> StateValue<V, S> {
     pub fn new(storage: S, prefix: Prefix) -> Self {
         Self {
@@ -35,10 +42,12 @@ impl<V: Encode + Decode, S: Storage> StateValue<V, S> {
         self.backend.set_value(storage_key, value)
     }
 
-    /// Gets a value from the StateValue.
-    pub fn get(&self) -> Option<V> {
+    /// Gets a value from the StateValue or Error if the value is absent.
+    pub fn get(&self) -> Result<V, Error> {
         let storage_key = StorageKey::new(self.backend.prefix(), &SingletonKey);
-        self.backend.get_value(storage_key)
+        self.backend
+            .get_value(storage_key)
+            .ok_or(Error::MissingValue(self.prefix().clone()))
     }
 
     pub fn prefix(&self) -> &Prefix {

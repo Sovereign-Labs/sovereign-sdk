@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::Result;
 use borsh::BorshDeserialize;
 use sov_modules_api::CallResponse;
 use std::fmt::Debug;
@@ -31,11 +31,7 @@ impl<C: sov_modules_api::Context> ValueAdderModule<C> {
     ) -> Result<sov_modules_api::CallResponse> {
         let mut response = CallResponse::default();
 
-        let admin = match self.admin.get() {
-            Some(admin) => admin,
-            // Here we use &str as an error.
-            None => bail!("Admin is not set"),
-        };
+        let admin = self.admin.get()?;
 
         if &admin != context.sender() {
             // Here we use a custom error type.
