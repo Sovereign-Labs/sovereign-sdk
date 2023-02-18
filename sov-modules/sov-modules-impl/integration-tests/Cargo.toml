@@ -1,0 +1,18 @@
+[package]
+name = "integration-tests"
+version = "0.1.0"
+edition = "2021"
+
+[dev-dependencies]
+sov-modules-api = { workspace = true ,  features = ["mocks"]}
+sov-modules-macros = { workspace = true }
+sov-state = { workspace = true }
+
+
+
+
+
+
+
+
+

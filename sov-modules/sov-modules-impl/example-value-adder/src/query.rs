@@ -1,7 +1,8 @@
 use super::ValueAdderModule;
+use borsh::BorshDeserialize;
 use serde::{Deserialize, Serialize};
-use sovereign_sdk::serial::{Decode, DecodeBorrowed};
 
+#[derive(BorshDeserialize)]
 pub enum QueryMessage {
     GetValue,
 }
@@ -17,23 +18,5 @@ impl<C: sov_modules_api::Context> ValueAdderModule<C> {
         Response {
             value: self.value.get(),
         }
-    }
-}
-
-// Generated
-impl<'de> DecodeBorrowed<'de> for QueryMessage {
-    type Error = ();
-
-    fn decode_from_slice(_: &'de [u8]) -> Result<Self, Self::Error> {
-        todo!()
-    }
-}
-
-// Generated
-impl Decode for QueryMessage {
-    type Error = ();
-
-    fn decode<R: std::io::Read>(_: &mut R) -> Result<Self, <Self as Decode>::Error> {
-        todo!()
     }
 }

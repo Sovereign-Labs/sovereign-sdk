@@ -33,12 +33,11 @@ impl<K: Encode, V: Encode + Decode, S: Storage> Backend<K, V, S> {
     }
 
     pub(crate) fn get_value(&self, storage_key: StorageKey) -> Option<V> {
-        let storage_value = self.storage.get(storage_key)?.value;
+        let storage_value = self.storage.get(storage_key)?;
 
-        let mut storage_reader: &[u8] = &storage_value;
         // It is ok to panic here. Deserialization problem means that something is terribly wrong.
         Some(
-            V::decode(&mut storage_reader)
+            V::decode(&mut storage_value.value())
                 .unwrap_or_else(|e| panic!("Unable to deserialize storage value {e:?}")),
         )
     }

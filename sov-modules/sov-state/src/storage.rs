@@ -1,16 +1,16 @@
-use std::sync::Arc;
-
-use first_read_last_write_cache::{CacheKey, CacheValue};
-use sovereign_sdk::serial::Encode;
+use std::{fmt::Display, sync::Arc};
 
 use crate::{
     internal_cache::{StorageInternalCache, ValueReader},
     utils::AlignedVec,
     Prefix,
 };
+use first_read_last_write_cache::{CacheKey, CacheValue};
+use hex;
+use sovereign_sdk::serial::Encode;
 
 // `Key` type for the `Storage`
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Debug)]
 pub struct StorageKey {
     key: Arc<Vec<u8>>,
 }
@@ -31,9 +31,15 @@ impl AsRef<Vec<u8>> for StorageKey {
     }
 }
 
+impl Display for StorageKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:x?}", hex::encode(self.key().as_ref()))
+    }
+}
+
 impl StorageKey {
     /// Creates a new StorageKey that combines a prefix and a key.
-    pub fn new<K: Encode>(prefix: &Prefix, key: K) -> Self {
+    pub fn new<K: Encode>(prefix: &Prefix, key: &K) -> Self {
         let mut encoded_key = Vec::default();
         key.encode(&mut encoded_key);
 
@@ -53,7 +59,7 @@ impl StorageKey {
 // `Value` type for the `Storage`
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct StorageValue {
-    pub value: Arc<Vec<u8>>,
+    value: Arc<Vec<u8>>,
 }
 
 impl StorageValue {
@@ -65,9 +71,17 @@ impl StorageValue {
         }
     }
 
+    pub fn value(&self) -> &[u8] {
+        &self.value
+    }
+
     pub fn as_cache_value(self) -> CacheValue {
-        CacheValue {
-            value: Some(self.value),
+        CacheValue { value: self.value }
+    }
+
+    pub fn new_from_cache_value(cache_value: CacheValue) -> Self {
+        Self {
+            value: cache_value.value,
         }
     }
 }

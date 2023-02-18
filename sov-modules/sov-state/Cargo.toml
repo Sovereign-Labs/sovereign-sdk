@@ -5,7 +5,9 @@ edition = "2021"
 
 [dependencies]
 # TODO remove this dependency once the  Decode/Encode traits are extracted to a separate crate.
+anyhow = { workspace = true }
+thiserror = { workspace = true }
 sovereign-sdk = { workspace = true }
 first-read-last-write-cache = { workspace = true }
 jellyfish-merkle-generic = { workspace = true }
-
+hex = { workspace = true}

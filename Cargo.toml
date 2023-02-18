@@ -4,10 +4,13 @@ members = [
 	"sdk",
 	"jmt",
 	"first-read-last-write-cache",
-	"sov-modules/sov-modules-api",
-	"sov-modules/sov-modules-impl",
 	"sov-modules/sov-modules-macros",
 	"sov-modules/sov-state",
+	"sov-modules/sov-modules-api",
+	"sov-modules/sov-modules-impl/example-value-adder",
+	"sov-modules/sov-modules-impl/example-election",
+	"sov-modules/sov-modules-impl/integration-tests",
+	
 ]
 
 

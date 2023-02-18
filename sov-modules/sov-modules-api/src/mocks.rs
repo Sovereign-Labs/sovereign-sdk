@@ -1,10 +1,11 @@
 use std::convert::Infallible;
 
 use crate::Context;
+use borsh::{BorshDeserialize, BorshSerialize};
 use sov_state::{JmtStorage, ZkStorage};
 
 /// Mock for Context::PublicKey, useful for testing.
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, PartialEq, Eq, Clone)]
+#[derive(PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize, Debug)]
 pub struct MockPublicKey {
     pub_key: Vec<u8>,
 }
@@ -37,6 +38,7 @@ impl MockSignature {
 }
 
 /// Mock for Context, useful for testing.
+#[derive(Clone)]
 pub struct MockContext {
     pub sender: MockPublicKey,
 }
@@ -49,8 +51,13 @@ impl Context for MockContext {
     fn sender(&self) -> &Self::PublicKey {
         &self.sender
     }
+
+    fn new(sender: Self::PublicKey) -> Self {
+        Self { sender }
+    }
 }
 
+#[derive(Clone)]
 pub struct ZkMockContext {
     pub sender: MockPublicKey,
 }
@@ -62,5 +69,9 @@ impl Context for ZkMockContext {
 
     fn sender(&self) -> &Self::PublicKey {
         &self.sender
+    }
+
+    fn new(sender: Self::PublicKey) -> Self {
+        Self { sender }
     }
 }

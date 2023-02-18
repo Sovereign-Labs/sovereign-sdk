@@ -1,8 +1,5 @@
 use crate::storage::{StorageKey, StorageValue};
-use first_read_last_write_cache::{
-    cache::{self, CacheLog},
-    CacheValue,
-};
+use first_read_last_write_cache::cache::{self, CacheLog};
 use std::{cell::RefCell, rc::Rc};
 
 /// `ValueReader` Reads a value from an external data source.
@@ -36,23 +33,33 @@ impl StorageInternalCache {
                     // It is ok to panic here, we must guarantee that the cache is consistent.
                     .unwrap_or_else(|e| panic!("Inconsistent read from the cache: {e:?}"));
 
-                cache_value_exists.value.map(|value| StorageValue { value })
+                cache_value_exists.map(StorageValue::new_from_cache_value)
             }
             // If the value does not exist in the cache, then fetch it from an external source.
-            cache::ValueExists::No => value_reader.read_value(key),
+            cache::ValueExists::No => {
+                let storage_value = value_reader.read_value(key);
+                let cache_value = storage_value.as_ref().map(|v| v.clone().as_cache_value());
+
+                self.cache
+                    .borrow_mut()
+                    .add_read(cache_key, cache_value)
+                    .unwrap_or_else(|e| panic!("Inconsistent read from the cache: {e:?}"));
+
+                storage_value
+            }
         }
     }
 
     pub(crate) fn set(&mut self, key: StorageKey, value: StorageValue) {
         let cache_key = key.as_cache_key();
         let cache_value = value.as_cache_value();
-        self.cache.borrow_mut().add_write(cache_key, cache_value);
+        self.cache
+            .borrow_mut()
+            .add_write(cache_key, Some(cache_value));
     }
 
     pub(crate) fn delete(&mut self, key: StorageKey) {
         let cache_key = key.as_cache_key();
-        self.cache
-            .borrow_mut()
-            .add_write(cache_key, CacheValue::empty());
+        self.cache.borrow_mut().add_write(cache_key, None);
     }
 }

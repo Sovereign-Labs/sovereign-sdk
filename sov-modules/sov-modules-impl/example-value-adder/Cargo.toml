@@ -1,5 +1,5 @@
 [package]
-name = "sov-modules-impl"
+name = "example-value-adder"
 version = "0.1.0"
 edition = "2021"
 
@@ -15,6 +15,7 @@ sovereign-sdk = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true}
 thiserror = { workspace = true }
+borsh = { workspace = true, features = ["rc"]}
 
 [features]
 default = ["native"]
