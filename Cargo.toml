@@ -10,7 +10,7 @@ members = [
 	"sov-modules/sov-modules-impl/example-value-adder",
 	"sov-modules/sov-modules-impl/example-election",
 	"sov-modules/sov-modules-impl/integration-tests",
-	
+
 ]
 
 
@@ -40,4 +40,3 @@ serde_json = { version = "1.0"}
 sha2 = "0.10.6"
 thiserror = "1.0.38"
 tiny-keccak = "2.0.2"
-im = "15.1.0"

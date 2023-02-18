@@ -103,7 +103,7 @@ impl CacheLog {
         }
     }
 
-    /// Adds a write entry to the cache.  
+    /// Adds a write entry to the cache.
     pub fn add_write(&mut self, key: CacheKey, value: Option<CacheValue>) {
         match self.log.entry(key) {
             Entry::Occupied(mut existing) => {
@@ -164,7 +164,6 @@ mod tests {
     use super::*;
     use crate::utils::test_util::{create_key, create_value};
     use proptest::prelude::*;
-    use im::proptest::vector;
 
     impl ValueExists {
         fn get(self) -> Option<CacheValue> {
@@ -397,17 +396,11 @@ mod tests {
 
     proptest! {
         #[test]
-        fn test_merge_fuzz(ref testvec in im::proptest::vector(".*", 15)) {
-            let mut unique_vector = true;
-            for i in 0..16 {
-                for j in i..16 {
-                    if testvec[i] == testvec[j] {
-                        unique_vector = false
-                    }
-                }
+        fn test_merge_fuzz(s: u8) {
+            let mut testvec = vec![0; 15];
+            for i in 0..15 {
+                testvec[i] = ((s as u16 + i as u16) % 255) as u8;
             }
-
-            prop_assume!(unique_vector);
 
             let test_cases = vec![
                 TestCase {
