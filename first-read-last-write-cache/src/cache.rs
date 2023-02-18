@@ -3,7 +3,6 @@ use crate::{CacheKey, CacheValue};
 use std::collections::{hash_map::Entry, HashMap};
 use std::sync::Arc;
 use thiserror::Error;
-use proptest::prelude::*;
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum ReadError {
@@ -164,6 +163,8 @@ fn filter_first_reads(k: CacheKey, access: Access) -> Option<(CacheKey, Option<C
 mod tests {
     use super::*;
     use crate::utils::test_util::{create_key, create_value};
+    use proptest::prelude::*;
+    use im::proptest::vector;
 
     impl ValueExists {
         fn get(self) -> Option<CacheValue> {
@@ -332,42 +333,7 @@ mod tests {
             },
         ];
 
-        let mut left_cache = CacheLog::default();
-        let mut right_cache = CacheLog::default();
-
-        for TestCase { left, right } in test_cases.clone() {
-            match (left, right) {
-                (None, None) => {}
-                (None, Some(rw)) => right_cache.add_to_cache(rw).unwrap(),
-                (Some(rw), None) => left_cache.add_to_cache(rw).unwrap(),
-                (Some(left_rw), Some(right_rw)) => {
-                    left_cache.add_to_cache(left_rw).unwrap();
-                    right_cache.add_to_cache(right_rw).unwrap();
-                }
-            }
-        }
-
-        let merged = left_cache.merge(right_cache).unwrap();
-        assert_eq!(merged.log.len(), test_cases.len());
-
-        for TestCase { left, right } in test_cases {
-            match (left, right) {
-                (None, None) => unreachable!(),
-                (None, Some(rw)) => {
-                    let entry = rw.get_value();
-                    let value = merged.get_value(&entry.key).get();
-                    assert_eq!(entry.value, value)
-                }
-                (Some(rw), None) => {
-                    let entry = rw.get_value();
-                    let value = merged.get_value(&entry.key).get();
-                    assert_eq!(entry.value, value)
-                }
-                (Some(left_rw), Some(right_rw)) => {
-                    left_rw.check_cache_consistency(right_rw, &merged);
-                }
-            }
-        }
+        test_merge_ok_helper(test_cases);
     }
 
     #[test]
@@ -431,39 +397,91 @@ mod tests {
 
     proptest! {
         #[test]
-        fn merge_doesnt_crash(a: u8, b: u8) {
+        fn test_merge_fuzz(ref testvec in im::proptest::vector(".*", 15)) {
+            let mut unique_vector = true;
+            for i in 0..16 {
+                for j in i..16 {
+                    if testvec[i] == testvec[j] {
+                        unique_vector = false
+                    }
+                }
+            }
+
+            prop_assume!(unique_vector);
 
             let test_cases = vec![
                 TestCase {
-                    left: Some(ReadWrite::Read(new_cache_entry(a, b))),
-                    right: Some(ReadWrite::Read(new_cache_entry(a, b))),
+                    left: Some(ReadWrite::Read(new_cache_entry(testvec[0], testvec[1]))),
+                    right: Some(ReadWrite::Read(new_cache_entry(testvec[0], testvec[1]))),
                 },
                 TestCase {
-                    left: Some(ReadWrite::Read(new_cache_entry(a, b))),
-                    right: Some(ReadWrite::Write(new_cache_entry(a, b))),
+                    left: Some(ReadWrite::Read(new_cache_entry(testvec[2], testvec[3]))),
+                    right: Some(ReadWrite::Write(new_cache_entry(testvec[2], testvec[4]))),
                 },
                 TestCase {
-                    left: Some(ReadWrite::Write(new_cache_entry(a, b))),
-                    right: Some(ReadWrite::Write(new_cache_entry(a, b))),
+                    left: Some(ReadWrite::Write(new_cache_entry(testvec[5], testvec[6]))),
+                    right: Some(ReadWrite::Write(new_cache_entry(testvec[5], testvec[7]))),
                 },
                 TestCase {
-                    left: Some(ReadWrite::Write(new_cache_entry(a, b))),
+                    left: Some(ReadWrite::Write(new_cache_entry(testvec[8], testvec[9]))),
                     right: None,
                 },
                 TestCase {
                     left: None,
-                    right: Some(ReadWrite::Read(new_cache_entry(a, b))),
+                    right: Some(ReadWrite::Read(new_cache_entry(testvec[10], testvec[11]))),
                 },
                 TestCase {
                     left: None,
-                    right: Some(ReadWrite::Write(new_cache_entry(a, b))),
+                    right: Some(ReadWrite::Write(new_cache_entry(testvec[12], testvec[11]))),
                 },
                 TestCase {
-                    left: Some(ReadWrite::Write(new_cache_entry(a, b))),
-                    right: Some(ReadWrite::Read(new_cache_entry(a, b))),
+                    left: Some(ReadWrite::Write(new_cache_entry(testvec[13], testvec[14]))),
+                    right: Some(ReadWrite::Read(new_cache_entry(testvec[13], testvec[14]))),
                 },
             ];
 
+            test_merge_ok_helper(test_cases);
         }
+    }
+
+    fn test_merge_ok_helper(test_cases: Vec<TestCase>) {
+        let mut left_cache = CacheLog::default();
+        let mut right_cache = CacheLog::default();
+
+        for TestCase { left, right } in test_cases.clone() {
+            match (left, right) {
+                (None, None) => {}
+                (None, Some(rw)) => right_cache.add_to_cache(rw).unwrap(),
+                (Some(rw), None) => left_cache.add_to_cache(rw).unwrap(),
+                (Some(left_rw), Some(right_rw)) => {
+                    left_cache.add_to_cache(left_rw).unwrap();
+                    right_cache.add_to_cache(right_rw).unwrap();
+                }
+            }
+        }
+
+        let merged = left_cache.merge(right_cache).unwrap();
+        assert_eq!(merged.log.len(), test_cases.len());
+
+        for TestCase { left, right } in test_cases {
+            match (left, right) {
+                (None, None) => unreachable!(),
+                (None, Some(rw)) => {
+                    let entry = rw.get_value();
+                    let value = merged.get_value(&entry.key).get();
+                    assert_eq!(entry.value, value)
+                }
+                (Some(rw), None) => {
+                    let entry = rw.get_value();
+                    let value = merged.get_value(&entry.key).get();
+                    assert_eq!(entry.value, value)
+                }
+                (Some(left_rw), Some(right_rw)) => {
+                    left_rw.check_cache_consistency(right_rw, &merged);
+                }
+            }
+        }
+
+
     }
 }
