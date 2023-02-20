@@ -381,8 +381,9 @@ mod tests {
     proptest! {
         #[test]
         fn test_merge_fuzz(s: u8) {
-            let mut testvec = vec![0; 15];
-            for i in 0..15 {
+            let num_cases = 15;
+            let mut testvec = vec![0; num_cases];
+            for i in 0..num_cases {
                 testvec[i] = s.wrapping_add(i as u8);
             }
 
