@@ -14,7 +14,7 @@ pub enum ReadError {
 }
 
 /// Cache entry can be in three states:
-/// - Does not exists, a given key was never inserted in the cache:             
+/// - Does not exists, a given key was never inserted in the cache:
 ///     ValueExists::No
 /// - Exists but the value is empty.
 ///      ValueExists::Yes(None)
@@ -103,7 +103,7 @@ impl CacheLog {
         }
     }
 
-    /// Adds a write entry to the cache.  
+    /// Adds a write entry to the cache.
     pub fn add_write(&mut self, key: CacheKey, value: Option<CacheValue>) {
         match self.log.entry(key) {
             Entry::Occupied(mut existing) => {
@@ -122,7 +122,7 @@ impl CacheLog {
     ///
     /// Example:
     ///
-    /// Cache1:        Cache2:         
+    /// Cache1:        Cache2:
     ///     k1 => v1       k1 => v1'
     ///     k2 => v2       k3 => v3
     ///
@@ -163,6 +163,7 @@ fn filter_first_reads(k: CacheKey, access: Access) -> Option<(CacheKey, Option<C
 mod tests {
     use super::*;
     use crate::utils::test_util::{create_key, create_value};
+    use proptest::prelude::*;
 
     impl ValueExists {
         fn get(self) -> Option<CacheValue> {
@@ -331,42 +332,7 @@ mod tests {
             },
         ];
 
-        let mut left_cache = CacheLog::default();
-        let mut right_cache = CacheLog::default();
-
-        for TestCase { left, right } in test_cases.clone() {
-            match (left, right) {
-                (None, None) => {}
-                (None, Some(rw)) => right_cache.add_to_cache(rw).unwrap(),
-                (Some(rw), None) => left_cache.add_to_cache(rw).unwrap(),
-                (Some(left_rw), Some(right_rw)) => {
-                    left_cache.add_to_cache(left_rw).unwrap();
-                    right_cache.add_to_cache(right_rw).unwrap();
-                }
-            }
-        }
-
-        let merged = left_cache.merge(right_cache).unwrap();
-        assert_eq!(merged.log.len(), test_cases.len());
-
-        for TestCase { left, right } in test_cases {
-            match (left, right) {
-                (None, None) => unreachable!(),
-                (None, Some(rw)) => {
-                    let entry = rw.get_value();
-                    let value = merged.get_value(&entry.key).get();
-                    assert_eq!(entry.value, value)
-                }
-                (Some(rw), None) => {
-                    let entry = rw.get_value();
-                    let value = merged.get_value(&entry.key).get();
-                    assert_eq!(entry.value, value)
-                }
-                (Some(left_rw), Some(right_rw)) => {
-                    left_rw.check_cache_consistency(right_rw, &merged);
-                }
-            }
-        }
+        test_merge_ok_helper(test_cases);
     }
 
     #[test]
@@ -384,25 +350,9 @@ mod tests {
             },
         ];
 
-        for TestCase { left, right } in test_cases {
-            let mut left_cache = CacheLog::default();
-            let mut right_cache = CacheLog::default();
+        let result = test_merge_helper(test_cases);
+        assert!(result.is_err());
 
-            match (left, right) {
-                (None, None) => {}
-                (None, Some(rw)) => right_cache.add_to_cache(rw).unwrap(),
-                (Some(rw), None) => left_cache.add_to_cache(rw).unwrap(),
-                (Some(left_rw), Some(right_rw)) => {
-                    left_cache.add_to_cache(left_rw).unwrap();
-                    right_cache.add_to_cache(right_rw).unwrap();
-                }
-            }
-
-            let result = left_cache.merge(right_cache);
-
-            // Assert that merge failed
-            assert!(result.is_err());
-        }
     }
 
     #[test]
@@ -426,5 +376,99 @@ mod tests {
                 ValueExists::No => unreachable!(),
             }
         }
+    }
+
+    proptest! {
+        #[test]
+        fn test_merge_fuzz(s: u8) {
+            let num_cases = 15;
+            let mut testvec = vec![0; num_cases];
+            for i in 0..num_cases {
+                testvec[i] = s.wrapping_add(i as u8);
+            }
+
+            let test_cases = vec![
+                TestCase {
+                    left: Some(ReadWrite::Read(new_cache_entry(testvec[0], testvec[1]))),
+                    right: Some(ReadWrite::Read(new_cache_entry(testvec[0], testvec[1]))),
+                },
+                TestCase {
+                    left: Some(ReadWrite::Read(new_cache_entry(testvec[2], testvec[3]))),
+                    right: Some(ReadWrite::Write(new_cache_entry(testvec[2], testvec[4]))),
+                },
+                TestCase {
+                    left: Some(ReadWrite::Write(new_cache_entry(testvec[5], testvec[6]))),
+                    right: Some(ReadWrite::Write(new_cache_entry(testvec[5], testvec[7]))),
+                },
+                TestCase {
+                    left: Some(ReadWrite::Write(new_cache_entry(testvec[8], testvec[9]))),
+                    right: None,
+                },
+                TestCase {
+                    left: None,
+                    right: Some(ReadWrite::Read(new_cache_entry(testvec[10], testvec[11]))),
+                },
+                TestCase {
+                    left: None,
+                    right: Some(ReadWrite::Write(new_cache_entry(testvec[12], testvec[11]))),
+                },
+                TestCase {
+                    left: Some(ReadWrite::Write(new_cache_entry(testvec[13], testvec[14]))),
+                    right: Some(ReadWrite::Read(new_cache_entry(testvec[13], testvec[14]))),
+                },
+            ];
+
+            test_merge_ok_helper(test_cases);
+        }
+    }
+
+    fn test_merge_ok_helper(test_cases: Vec<TestCase>) {
+        let result = test_merge_helper(test_cases.clone());
+        assert!(result.is_ok());
+
+        let merged = result.unwrap();
+        assert_eq!(merged.log.len(), test_cases.len());
+
+        for TestCase { left, right } in test_cases {
+            match (left, right) {
+                (None, None) => unreachable!(),
+                (None, Some(rw)) => {
+                    let entry = rw.get_value();
+                    let value = merged.get_value(&entry.key).get();
+                    assert_eq!(entry.value, value)
+                }
+                (Some(rw), None) => {
+                    let entry = rw.get_value();
+                    let value = merged.get_value(&entry.key).get();
+                    assert_eq!(entry.value, value)
+                }
+                (Some(left_rw), Some(right_rw)) => {
+                    left_rw.check_cache_consistency(right_rw, &merged);
+                }
+            }
+        }
+
+
+    }
+
+    fn test_merge_helper(test_cases: Vec<TestCase>) -> Result<CacheLog, MergeError> {
+        let mut left_cache = CacheLog::default();
+        let mut right_cache = CacheLog::default();
+
+        for TestCase { left, right } in test_cases {
+            match (left, right) {
+                (None, None) => {}
+                (None, Some(rw)) => right_cache.add_to_cache(rw).unwrap(),
+                (Some(rw), None) => left_cache.add_to_cache(rw).unwrap(),
+                (Some(left_rw), Some(right_rw)) => {
+                    left_cache.add_to_cache(left_rw).unwrap();
+                    right_cache.add_to_cache(right_rw).unwrap();
+                }
+            }
+
+        }
+
+        let result = left_cache.merge(right_cache);
+        return result;
     }
 }

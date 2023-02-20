@@ -10,7 +10,7 @@ members = [
 	"sov-modules/sov-modules-impl/example-value-adder",
 	"sov-modules/sov-modules-impl/example-election",
 	"sov-modules/sov-modules-impl/integration-tests",
-	
+
 ]
 
 
@@ -31,7 +31,7 @@ bytes = "1.2.1"
 hex = "0.4.3"
 once_cell = "1.10.0"
 prometheus = { version = "0.13.3", default-features = false }
-proptest = "1.0.0"  
+proptest = "1.0.0"
 proptest-derive = "0.3.0"
 rand = "0.8"
 rayon = "1.5.2"
