@@ -350,25 +350,9 @@ mod tests {
             },
         ];
 
-        for TestCase { left, right } in test_cases {
-            let mut left_cache = CacheLog::default();
-            let mut right_cache = CacheLog::default();
+        let result = test_merge_helper(test_cases);
+        assert!(result.is_err());
 
-            match (left, right) {
-                (None, None) => {}
-                (None, Some(rw)) => right_cache.add_to_cache(rw).unwrap(),
-                (Some(rw), None) => left_cache.add_to_cache(rw).unwrap(),
-                (Some(left_rw), Some(right_rw)) => {
-                    left_cache.add_to_cache(left_rw).unwrap();
-                    right_cache.add_to_cache(right_rw).unwrap();
-                }
-            }
-
-            let result = left_cache.merge(right_cache);
-
-            // Assert that merge failed
-            assert!(result.is_err());
-        }
     }
 
     #[test]
@@ -399,7 +383,7 @@ mod tests {
         fn test_merge_fuzz(s: u8) {
             let mut testvec = vec![0; 15];
             for i in 0..15 {
-                testvec[i] = ((s as u16 + i as u16) % 255) as u8;
+                testvec[i] = s.wrapping_add(i as u8);
             }
 
             let test_cases = vec![
@@ -438,22 +422,10 @@ mod tests {
     }
 
     fn test_merge_ok_helper(test_cases: Vec<TestCase>) {
-        let mut left_cache = CacheLog::default();
-        let mut right_cache = CacheLog::default();
+        let result = test_merge_helper(test_cases.clone());
+        assert!(result.is_ok());
 
-        for TestCase { left, right } in test_cases.clone() {
-            match (left, right) {
-                (None, None) => {}
-                (None, Some(rw)) => right_cache.add_to_cache(rw).unwrap(),
-                (Some(rw), None) => left_cache.add_to_cache(rw).unwrap(),
-                (Some(left_rw), Some(right_rw)) => {
-                    left_cache.add_to_cache(left_rw).unwrap();
-                    right_cache.add_to_cache(right_rw).unwrap();
-                }
-            }
-        }
-
-        let merged = left_cache.merge(right_cache).unwrap();
+        let merged = result.unwrap();
         assert_eq!(merged.log.len(), test_cases.len());
 
         for TestCase { left, right } in test_cases {
@@ -476,5 +448,26 @@ mod tests {
         }
 
 
+    }
+
+    fn test_merge_helper(test_cases: Vec<TestCase>) -> Result<CacheLog, MergeError> {
+        let mut left_cache = CacheLog::default();
+        let mut right_cache = CacheLog::default();
+
+        for TestCase { left, right } in test_cases {
+            match (left, right) {
+                (None, None) => {}
+                (None, Some(rw)) => right_cache.add_to_cache(rw).unwrap(),
+                (Some(rw), None) => left_cache.add_to_cache(rw).unwrap(),
+                (Some(left_rw), Some(right_rw)) => {
+                    left_cache.add_to_cache(left_rw).unwrap();
+                    right_cache.add_to_cache(right_rw).unwrap();
+                }
+            }
+
+        }
+
+        let result = left_cache.merge(right_cache);
+        return result;
     }
 }
