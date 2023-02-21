@@ -1,6 +1,6 @@
-mod call;
-mod genesis;
-mod query;
+pub mod call;
+pub mod genesis;
+pub mod query;
 
 #[cfg(test)]
 mod tests;

@@ -1,3 +1,4 @@
+mod demo;
 use sov_modules_api::mocks::{MockContext, ZkMockContext};
 use sov_modules_api::{Context, ModuleInfo, Prefix};
 use sov_modules_macros::ModuleInfo;

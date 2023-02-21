@@ -3,12 +3,12 @@ use super::{
     Election,
 };
 use anyhow::{anyhow, bail, ensure, Result};
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 
 use sov_modules_api::CallResponse;
 
 /// Call actions supported byte the module.
-#[derive(BorshDeserialize)]
+#[derive(BorshDeserialize, BorshSerialize)]
 pub enum CallMessage<C: sov_modules_api::Context> {
     SetCandidates { names: Vec<String> },
     AddVoter(C::PublicKey),

@@ -4,9 +4,14 @@ version = "0.1.0"
 edition = "2021"
 
 [dev-dependencies]
+anyhow = { workspace = true }
 sov-modules-api = { workspace = true ,  features = ["mocks"]}
 sov-modules-macros = { workspace = true }
+example-election = {path = "../example-election" }
+example-value-adder = {path = "../example-value-adder" }
 sov-state = { workspace = true }
+borsh = { workspace = true, features = ["rc"]}
+sovereign-sdk = { workspace = true}
 
 
 

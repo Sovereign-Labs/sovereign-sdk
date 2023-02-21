@@ -1,9 +1,9 @@
 use super::{types::Candidate, Election};
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
 /// Queries supported by the module.
-#[derive(BorshDeserialize)]
+#[derive(BorshDeserialize, BorshSerialize)]
 pub enum QueryMessage {
     Result,
 }
