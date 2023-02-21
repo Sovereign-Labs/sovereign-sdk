@@ -15,7 +15,7 @@ use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 
 #[derive(ModuleInfo)]
-pub struct ValueAdderModule<C: sov_modules_api::Context> {
+pub struct ValueSetter<C: sov_modules_api::Context> {
     #[state]
     pub value: sov_state::StateValue<u32, C::Storage>,
 
@@ -23,7 +23,7 @@ pub struct ValueAdderModule<C: sov_modules_api::Context> {
     pub admin: sov_state::StateValue<C::PublicKey, C::Storage>,
 }
 
-impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueAdderModule<C> {
+impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
     type Context = C;
 
     type CallMessage = CallMessage;

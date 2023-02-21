@@ -1,4 +1,4 @@
-use super::ValueAdderModule;
+use super::ValueSetter;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
@@ -12,7 +12,7 @@ pub struct Response {
     pub value: Option<u32>,
 }
 
-impl<C: sov_modules_api::Context> ValueAdderModule<C> {
+impl<C: sov_modules_api::Context> ValueSetter<C> {
     /// Queries the state of the module.
     pub fn query_value(&self) -> Response {
         Response {
