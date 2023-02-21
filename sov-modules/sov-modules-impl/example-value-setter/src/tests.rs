@@ -1,4 +1,4 @@
-use super::ValueAdderModule;
+use super::ValueSetter;
 use crate::{call, query};
 
 use sov_modules_api::mocks::ZkMockContext;
@@ -10,7 +10,7 @@ use sov_state::ZkStorage;
 use sovereign_sdk::stf::Event;
 
 #[test]
-fn test_value_adder() {
+fn test_value_setter() {
     let sender = MockPublicKey::try_from("admin").unwrap();
     let storage = JmtStorage::default();
 
@@ -20,7 +20,7 @@ fn test_value_adder() {
             sender: sender.clone(),
         };
 
-        test_value_adder_helper(context, storage.clone());
+        test_value_setter_helper(context, storage.clone());
     }
 
     // Test Zk-Context
@@ -28,12 +28,12 @@ fn test_value_adder() {
         let zk_context = ZkMockContext { sender };
 
         let zk_storage = ZkStorage::new(storage.get_first_reads());
-        test_value_adder_helper(zk_context, zk_storage);
+        test_value_setter_helper(zk_context, zk_storage);
     }
 }
 
-fn test_value_adder_helper<C: Context>(context: C, storage: C::Storage) {
-    let mut module = ValueAdderModule::<C>::new(storage);
+fn test_value_setter_helper<C: Context>(context: C, storage: C::Storage) {
+    let mut module = ValueSetter::<C>::new(storage);
     module.genesis().unwrap();
 
     let new_value = 99;
@@ -43,7 +43,7 @@ fn test_value_adder_helper<C: Context>(context: C, storage: C::Storage) {
     {
         let call_response = module.call(call_msg, &context).unwrap();
         let event = &call_response.events[0];
-        assert_eq!(event, &Event::new("add_event", "value_set: 99"));
+        assert_eq!(event, &Event::new("set", "value_set: 99"));
     }
 
     let query_msg = query::QueryMessage::GetValue;
@@ -61,7 +61,6 @@ fn test_value_adder_helper<C: Context>(context: C, storage: C::Storage) {
         )
     }
 }
-
 
 #[test]
 fn test_err_on_sender_is_not_admin() {
@@ -86,12 +85,10 @@ fn test_err_on_sender_is_not_admin() {
     }
 }
 
-
 fn test_err_on_sender_is_not_admin_helper<C: Context>(context: C, storage: C::Storage) {
-    let mut module = ValueAdderModule::<C>::new(storage);
+    let mut module = ValueSetter::<C>::new(storage);
     module.genesis().unwrap();
     let resp = module.set_value(11, &context);
 
     assert!(resp.is_err());
 }
-

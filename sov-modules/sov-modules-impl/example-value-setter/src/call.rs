@@ -4,7 +4,7 @@ use sov_modules_api::CallResponse;
 use std::fmt::Debug;
 use thiserror::Error;
 
-use super::ValueAdderModule;
+use super::ValueSetter;
 
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct SetValue {
@@ -22,7 +22,7 @@ enum SetValueError {
     WrongSender,
 }
 
-impl<C: sov_modules_api::Context> ValueAdderModule<C> {
+impl<C: sov_modules_api::Context> ValueSetter<C> {
     /// Sets `value` field to the `new_value`, only admin is authorized to call this method.
     pub(crate) fn set_value(
         &mut self,
@@ -39,7 +39,7 @@ impl<C: sov_modules_api::Context> ValueAdderModule<C> {
         }
 
         self.value.set(new_value);
-        response.add_event("add_event", &format!("value_set: {new_value:?}"));
+        response.add_event("set", &format!("value_set: {new_value:?}"));
 
         Ok(response)
     }

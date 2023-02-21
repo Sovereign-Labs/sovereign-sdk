@@ -8,7 +8,7 @@ anyhow = { workspace = true }
 sov-modules-api = { workspace = true ,  features = ["mocks"]}
 sov-modules-macros = { workspace = true }
 example-election = {path = "../example-election" }
-example-value-adder = {path = "../example-value-adder" }
+example-value-setter = {path = "../example-value-setter" }
 sov-state = { workspace = true }
 borsh = { workspace = true, features = ["rc"]}
 sovereign-sdk = { workspace = true}

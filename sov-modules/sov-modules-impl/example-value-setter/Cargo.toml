@@ -1,5 +1,5 @@
 [package]
-name = "example-value-adder"
+name = "example-value-setter"
 version = "0.1.0"
 edition = "2021"
 
