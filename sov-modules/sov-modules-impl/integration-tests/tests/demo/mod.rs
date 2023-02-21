@@ -122,10 +122,7 @@ impl<C: Context> Client<C> {
 
     fn send_election_message(&self, data: <Election<C> as Module>::CallMessage) -> Vec<u8> {
         let call = RuntimeCall::<C>::Election(data);
-        let mut data = Vec::default();
-        call.encode(&mut data);
-
-        data
+        call.encode_to_vec()
     }
 
     fn send_value_adder_message(
@@ -133,26 +130,17 @@ impl<C: Context> Client<C> {
         data: <ValueAdderModule<C> as Module>::CallMessage,
     ) -> Vec<u8> {
         let call = RuntimeCall::<C>::ValueAdder(data);
-        let mut data = Vec::default();
-        call.encode(&mut data);
-
-        data
+        call.encode_to_vec()
     }
 
     fn query_election(&self, data: <Election<C> as Module>::QueryMessage) -> Vec<u8> {
         let query = RuntimeQuery::<C>::Election(data);
-        let mut data = Vec::default();
-        query.encode(&mut data);
-
-        data
+        query.encode_to_vec()
     }
 
     fn query_value_adder(&self, data: <ValueAdderModule<C> as Module>::QueryMessage) -> Vec<u8> {
         let query = RuntimeQuery::<C>::ValueAdder(data);
-        let mut data = Vec::default();
-        query.encode(&mut data);
-
-        data
+        query.encode_to_vec()
     }
 }
 
