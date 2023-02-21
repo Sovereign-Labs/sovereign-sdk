@@ -31,7 +31,7 @@ pub trait Spec {
     type Signature: borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug;
 }
 
-/// Context functionality common for all modules.
+/// Context contains functionality common for all modules.
 pub trait Context: Spec + Clone {
     /// Sender of the transaction.
     fn sender(&self) -> &Self::PublicKey;
