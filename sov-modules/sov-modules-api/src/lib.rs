@@ -17,8 +17,8 @@ use std::fmt::Debug;
 /// A type that can't be instantiated.
 pub enum NonInstantiable {}
 
-/// Context contains types and functionality common for all modules.
-pub trait Context: Clone {
+/// Spec contains types common for all modules.
+pub trait Spec {
     type Storage: Storage + Clone + Default;
 
     type PublicKey: borsh::BorshDeserialize
@@ -28,6 +28,11 @@ pub trait Context: Clone {
         + Clone
         + Debug;
 
+    type Signature: borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug;
+}
+
+/// Context contains functionality common for all modules.
+pub trait Context: Spec + Clone {
     /// Sender of the transaction.
     fn sender(&self) -> &Self::PublicKey;
 
