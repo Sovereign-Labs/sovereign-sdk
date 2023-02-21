@@ -12,14 +12,14 @@ pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
 
 use sov_state::Storage;
-use sovereign_sdk::serial::Decode;
+use sovereign_sdk::serial::{Decode, Encode};
 use std::fmt::Debug;
 /// A type that can't be instantiated.
 pub enum NonInstantiable {}
 
 /// Context contains types and functionality common for all modules.
 pub trait Context: Clone {
-    type Storage: Storage + Clone;
+    type Storage: Storage + Clone + Default;
 
     type PublicKey: borsh::BorshDeserialize
         + borsh::BorshSerialize
@@ -45,10 +45,10 @@ pub trait Module {
     /// Types and functionality defined per module:
 
     /// Module defined argument to the call method.
-    type CallMessage: Decode = NonInstantiable;
+    type CallMessage: Decode + Encode = NonInstantiable;
 
     /// Module defined argument to the query method.
-    type QueryMessage: Decode = NonInstantiable;
+    type QueryMessage: Decode + Encode = NonInstantiable;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(&mut self) -> Result<(), Error> {

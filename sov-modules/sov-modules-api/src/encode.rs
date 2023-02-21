@@ -1,6 +1,6 @@
 use std::{convert::Infallible, io::Read};
 
-use sovereign_sdk::serial::{Decode, DecodeBorrowed};
+use sovereign_sdk::serial::{Decode, DecodeBorrowed, Encode};
 
 use crate::NonInstantiable;
 
@@ -16,6 +16,12 @@ impl Decode for NonInstantiable {
     type Error = Infallible;
 
     fn decode<R: Read>(_: &mut R) -> Result<Self, <Self as Decode>::Error> {
+        unreachable!()
+    }
+}
+
+impl Encode for NonInstantiable {
+    fn encode(&self, _: &mut impl std::io::Write) {
         unreachable!()
     }
 }

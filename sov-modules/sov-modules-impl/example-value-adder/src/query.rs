@@ -1,8 +1,8 @@
 use super::ValueAdderModule;
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
-#[derive(BorshDeserialize)]
+#[derive(BorshDeserialize, BorshSerialize)]
 pub enum QueryMessage {
     GetValue,
 }

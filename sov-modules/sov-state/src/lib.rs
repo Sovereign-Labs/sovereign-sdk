@@ -9,7 +9,8 @@ mod zk_storage;
 
 #[cfg(test)]
 mod storage_test;
-
+pub use first_read_last_write_cache::cache::CacheLog;
+pub use internal_cache::ValueReader;
 pub use jmt_storage::JmtStorage;
 pub use map::StateMap;
 use std::{fmt::Display, str};

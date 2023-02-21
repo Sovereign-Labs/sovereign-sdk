@@ -1,17 +1,17 @@
 use anyhow::Result;
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::CallResponse;
 use std::fmt::Debug;
 use thiserror::Error;
 
 use super::ValueAdderModule;
 
-#[derive(BorshDeserialize)]
+#[derive(BorshDeserialize, BorshSerialize)]
 pub struct SetValue {
     pub(crate) new_value: u32,
 }
 
-#[derive(BorshDeserialize)]
+#[derive(BorshDeserialize, BorshSerialize)]
 pub enum CallMessage {
     DoSetValue(SetValue),
 }
