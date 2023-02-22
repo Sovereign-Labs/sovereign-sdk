@@ -2,11 +2,13 @@
 #[cfg(feature = "mocks")]
 pub mod mocks;
 
+mod dispatch;
 mod encode;
 mod error;
 mod prefix;
 mod response;
 
+pub use dispatch::Genesis;
 pub use error::Error;
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
