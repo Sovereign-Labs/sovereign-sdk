@@ -1,11 +1,11 @@
 error: Only `#[module]` or `#[state]` attributes are supported.
- --> tests/not_supported_attribute.rs:8:5
+ --> tests/module_info/not_supported_attribute.rs:8:5
   |
 8 |     test_state1: StateMap<u32, String, C::Storage>,
   |     ^^^^^^^^^^^
 
 error: cannot find attribute `other` in this scope
- --> tests/not_supported_attribute.rs:7:7
+ --> tests/module_info/not_supported_attribute.rs:7:7
   |
 7 |     #[other]
   |       ^^^^^

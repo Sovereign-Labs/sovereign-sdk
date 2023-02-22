@@ -22,7 +22,9 @@ struct StructDef<'a> {
     fields: Result<Vec<FieldKind>, syn::Error>,
 }
 
-pub(crate) fn module(input: DeriveInput) -> Result<proc_macro::TokenStream, syn::Error> {
+pub(crate) fn derive_module_info(
+    input: DeriveInput,
+) -> Result<proc_macro::TokenStream, syn::Error> {
     let DeriveInput {
         data,
         ident,
