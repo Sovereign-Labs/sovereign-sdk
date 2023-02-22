@@ -4,7 +4,7 @@ use dispatch::genesis::GenesisMacro;
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
-/// Macro generating a `_new` method and prefixes for the underlying sov-module.
+/// Derives the `sov-modules-api::ModuleInfo` implementation for the underlying type.
 ///
 /// See `sov-modules-api` for definition of `prefix`.
 /// ## Example
@@ -21,7 +21,7 @@ use syn::parse_macro_input;
 /// ```
 /// allows getting a prefix of a member field like:
 /// ```ignore
-///  let test_struct = test_module::TestModule::<SomeContext>::_new(some_storage);
+///  let test_struct = <TestModule::<SomeContext> as sov_modules_api::ModuleInfo<SomeContext>>::new(some_storage);
 ///  let prefix1 = test_struct.test_state1.prefix;
 /// ````
 /// ## Attributes
