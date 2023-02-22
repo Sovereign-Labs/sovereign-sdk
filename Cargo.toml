@@ -1,6 +1,8 @@
 [workspace]
 resolver = "2"
 members = [
+	"db/schemadb",
+	"db/sovereign-db",
 	"sdk",
 	"first-read-last-write-cache",
 	"sov-modules/sov-modules-macros",
@@ -12,11 +14,22 @@ members = [
 
 ]
 
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["Sovereign Labs <info@sovereign.xyz>"]
+homepage = "sovereign.xyz"
+publish = false
+repository = "https://github.com/sovereign-labs/sovereign"
+rust-version = "1.67"
 
 [workspace.dependencies]
 # Internal dependencies
 sovereign-sdk = {path= "sdk" }
 first-read-last-write-cache = {path = "first-read-last-write-cache"}
+schemadb = {path = "db/schemadb"}
+sovereign-db = {path = "db/sovereign-db"}
 sov-state = {path = "sov-modules/sov-state"}
 sov-modules-api = {path = "sov-modules/sov-modules-api"}
 sov-modules-macros = {path = "sov-modules/sov-modules-macros"}
@@ -36,8 +49,10 @@ proptest = "1.0.0"
 proptest-derive = "0.3.0"
 rand = "0.8"
 rayon = "1.5.2"
+rocksdb =  { version = "0.19.0", features = ["lz4"] }
 serde = { version = "1.0.137", features = ["derive"] }
 serde_json = { version = "1.0"}
 sha2 = "0.10.6"
 thiserror = "1.0.38"
 tiny-keccak = "2.0.2"
+tracing = "0.1.37"
