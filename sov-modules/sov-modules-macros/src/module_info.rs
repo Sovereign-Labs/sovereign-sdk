@@ -237,28 +237,7 @@ fn make_init_module<'a>(
     let field_ident = &field.ident;
     let ty = &field.ty;
 
-    let ty = match ty {
-        syn::Type::Path(syn::TypePath { path, .. }) => {
-            let mut segments = path.segments.clone();
-
-            let last = segments
-                .last_mut()
-                .expect("Impossible happened! A type path has no segments");
-
-            // Remove generics for the type SomeType<G> => SomeType
-            last.arguments = PathArguments::None;
-            segments
-        }
-
-        _ => {
-            return Err(syn::Error::new_spanned(
-                ty,
-                "Type not supported by the `ModuleInfo` macro",
-            ));
-        }
-    };
-
     Ok(quote::quote! {
-        let #field_ident = <#ty #type_generics as sov_modules_api::ModuleInfo #type_generics>::new(storage.clone());
+        let #field_ident = <#ty as sov_modules_api::ModuleInfo #type_generics>::new(storage.clone());
     })
 }
