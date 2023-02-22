@@ -1,0 +1,28 @@
+[package]
+name = "schemadb"
+version = "0.1.0"
+
+# Workspace inherited keys
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+publish = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+
+[dependencies]
+# Dependencies maintained by sovereign labs
+sovereign-sdk = { workspace = true }
+
+# External dependencies 
+anyhow = { workspace = true }
+once_cell = { workspace = true }
+prometheus = { workspace = true }
+rocksdb = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+byteorder = "1.4.3"
+rand = "0.7.3"
+hex = "0.4.3"

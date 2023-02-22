@@ -1,0 +1,18 @@
+[package]
+name = "sovereign-db"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# Maintained by sovereign labs
+jmt = { workspace = true }
+schemadb = { workspace = true }
+sovereign-sdk = { workspace = true, features = ["sync"] }
+
+
+# External
+anyhow = { workspace = true }
+byteorder = { workspace = true }
+borsh = { workspace = true }
