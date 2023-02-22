@@ -6,4 +6,4 @@ pub use node::*;
 
 pub use borsh::maybestd;
 
-pub use jmt::*;
+pub use jmt;
