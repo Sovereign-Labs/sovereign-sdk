@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::marker::PhantomData;
 
-use sovereign_sdk::db::{KeyCodec, Schema, SeekKeyCodec, ValueCodec};
+use sovereign_sdk::db::{KeyDecoder, Schema, SeekKeyEncoder, ValueCodec};
 
 use crate::metrics::{SCHEMADB_ITER_BYTES, SCHEMADB_ITER_LATENCY_SECONDS};
 
@@ -42,11 +42,8 @@ where
 
     /// Seeks to the first key whose binary representation is equal to or greater than that of the
     /// `seek_key`.
-    pub fn seek<SK>(&mut self, seek_key: &SK) -> Result<()>
-    where
-        SK: SeekKeyCodec<S>,
-    {
-        let key = <SK as SeekKeyCodec<S>>::encode_seek_key(seek_key)?;
+    pub fn seek(&mut self, seek_key: &impl SeekKeyEncoder<S>) -> Result<()> {
+        let key = seek_key.encode_seek_key()?;
         self.db_iter.seek(&key);
         Ok(())
     }
@@ -55,11 +52,8 @@ where
     /// `seek_key`.
     ///
     /// See example in [`RocksDB doc`](https://github.com/facebook/rocksdb/wiki/SeekForPrev).
-    pub fn seek_for_prev<SK>(&mut self, seek_key: &SK) -> Result<()>
-    where
-        SK: SeekKeyCodec<S>,
-    {
-        let key = <SK as SeekKeyCodec<S>>::encode_seek_key(seek_key)?;
+    pub fn seek_for_prev(&mut self, seek_key: &impl SeekKeyEncoder<S>) -> Result<()> {
+        let key = seek_key.encode_seek_key()?;
         self.db_iter.seek_for_prev(&key);
         Ok(())
     }
@@ -80,7 +74,7 @@ where
             .with_label_values(&[S::COLUMN_FAMILY_NAME])
             .observe((raw_key.len() + raw_value.len()) as f64);
 
-        let key = <S::Key as KeyCodec<S>>::decode_key(raw_key)?;
+        let key = <S::Key as KeyDecoder<S>>::decode_key(raw_key)?;
         let value = <S::Value as ValueCodec<S>>::decode_value(raw_value)?;
 
         match self.direction {

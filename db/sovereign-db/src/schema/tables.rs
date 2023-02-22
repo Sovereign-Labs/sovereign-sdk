@@ -17,16 +17,19 @@
 //! - EventNumber -> (EventKey, EventValue)
 
 use super::types::{
-    BatchNumber, DbBytes, DbHash, EventNumber, SlotNumber, StoredBatch, StoredSlot,
+    BatchNumber, DbHash, EventNumber, JmtValue, SlotNumber, StateKey, StoredBatch, StoredSlot,
     StoredTransaction, TxNumber,
 };
 
+use borsh::maybestd;
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use jmt::{
     storage::{Node, NodeKey},
     Version,
 };
 use sovereign_sdk::{
-    db::{KeyCodec, ValueCodec},
+    db::{KeyDecoder, KeyEncoder, ValueCodec},
+    serial::{Decode, Encode},
     stf::{EventKey, EventValue},
 };
 
@@ -92,11 +95,13 @@ macro_rules! define_table_with_default_codec {
 	($(#[$docs:meta])+ ($table_name:ident) $key:ty => $value:ty) => {
 		define_table_without_codec!($(#[$docs])+ ( $table_name ) $key => $value);
 
-		impl ::sovereign_sdk::db::KeyCodec<$table_name> for $key {
+		impl ::sovereign_sdk::db::KeyEncoder<$table_name> for $key {
 			fn encode_key(&self) -> ::std::result::Result<::sovereign_sdk::maybestd::vec::Vec<u8>, ::sovereign_sdk::db::errors::CodecError> {
 				::std::result::Result::Ok(<Self as ::sovereign_sdk::serial::Encode>::encode_to_vec(self))
 			}
+		}
 
+        impl ::sovereign_sdk::db::KeyDecoder<$table_name> for $key {
 			fn decode_key(data: &[u8]) -> ::std::result::Result<Self, ::sovereign_sdk::db::errors::CodecError> {
 				<Self as ::sovereign_sdk::serial::Decode>::decode(&mut &data[..]).map_err(|e| e.into())
 			}
@@ -160,11 +165,12 @@ define_table_without_codec!(
     (JmtNodes) NodeKey => Node
 );
 
-impl KeyCodec<JmtNodes> for NodeKey {
+impl KeyEncoder<JmtNodes> for NodeKey {
     fn encode_key(&self) -> sovereign_sdk::db::Result<Vec<u8>> {
         Ok(self.encode()?)
     }
-
+}
+impl KeyDecoder<JmtNodes> for NodeKey {
     fn decode_key(data: &[u8]) -> sovereign_sdk::db::Result<Self> {
         Ok(Self::decode(data)?)
     }
@@ -180,15 +186,45 @@ impl ValueCodec<JmtNodes> for Node {
     }
 }
 
-define_table_with_default_codec!(
+define_table_without_codec!(
     /// The source of truth for JMT values by version
-    (JmtValues) (Version, Vec<u8>) => DbBytes
+    (JmtValues) (StateKey, Version) => JmtValue
 );
 
+impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> KeyEncoder<JmtValues> for (T, Version) {
+    fn encode_key(&self) -> sovereign_sdk::db::Result<Vec<u8>> {
+        let mut out = Vec::with_capacity(self.0.as_ref().len() + std::mem::size_of::<Version>());
+        out.extend_from_slice(self.0.as_ref());
+        // Write the version in big-endian order so that sorting order is based on the most-significant bytes of the key
+        out.write_u64::<BigEndian>(self.1)
+            .expect("serialization to vec is infallible");
+        Ok(out)
+    }
+}
+
+impl KeyDecoder<JmtValues> for (StateKey, Version) {
+    fn decode_key(data: &[u8]) -> sovereign_sdk::db::Result<Self> {
+        let mut cursor = maybestd::io::Cursor::new(data);
+        let key = Vec::<u8>::decode(&mut cursor)?;
+        let version = cursor.read_u64::<BigEndian>()?;
+        Ok((key, version))
+    }
+}
+
+impl ValueCodec<JmtValues> for JmtValue {
+    fn encode_value(&self) -> sovereign_sdk::db::Result<Vec<u8>> {
+        Ok(self.encode_to_vec())
+    }
+
+    fn decode_value(data: &[u8]) -> sovereign_sdk::db::Result<Self> {
+        Ok(Self::decode(&mut &data[..])?)
+    }
+}
+
 define_table_with_default_codec!(
-    /// A mapping from key-hashes to their preimages. Since we store raw
+    /// A mapping from key-hashes to their preimages and latest version. Since we store raw
     /// key-value pairs instead of keyHash->value pairs,
     /// this table is required to implement the `jmt::TreeReader` trait,
     /// which requires the ability to fetch values by hash.
-    (KeyHashToKey) [u8;32] => Vec<u8>
+    (KeyHashToKey) [u8;32] => StateKey
 );

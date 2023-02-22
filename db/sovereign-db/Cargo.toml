@@ -9,7 +9,7 @@ edition = "2021"
 # Maintained by sovereign labs
 jmt = { workspace = true }
 schemadb = { workspace = true }
-sovereign-sdk = { workspace = true, features = ["sync"] }
+sovereign-sdk = { workspace = true }
 
 
 # External

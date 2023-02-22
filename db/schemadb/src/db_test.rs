@@ -4,7 +4,7 @@
 use byteorder::{LittleEndian, ReadBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use sovereign_sdk::{
-    db::{errors::CodecError, ColumnFamilyName, KeyCodec, Result, ValueCodec},
+    db::{errors::CodecError, ColumnFamilyName, KeyDecoder, KeyEncoder, Result, ValueCodec},
     define_schema,
 };
 
@@ -35,11 +35,13 @@ impl TestField {
     }
 }
 
-impl KeyCodec<TestSchema1> for TestField {
+impl KeyEncoder<TestSchema1> for TestField {
     fn encode_key(&self) -> Result<Vec<u8>> {
         Ok(self.to_bytes())
     }
+}
 
+impl KeyDecoder<TestSchema1> for TestField {
     fn decode_key(data: &[u8]) -> Result<Self> {
         Self::from_bytes(data)
     }
@@ -55,11 +57,13 @@ impl ValueCodec<TestSchema1> for TestField {
     }
 }
 
-impl KeyCodec<TestSchema2> for TestField {
+impl KeyEncoder<TestSchema2> for TestField {
     fn encode_key(&self) -> Result<Vec<u8>> {
         Ok(self.to_bytes())
     }
+}
 
+impl KeyDecoder<TestSchema2> for TestField {
     fn decode_key(data: &[u8]) -> Result<Self> {
         Self::from_bytes(data)
     }
@@ -177,9 +181,7 @@ fn test_schema_put_get() {
 }
 
 fn collect_values<S: Schema>(db: &TestDB) -> Vec<(S::Key, S::Value)> {
-    let mut iter = db
-        .iter::<S>(Default::default())
-        .expect("Failed to create iterator.");
+    let mut iter = db.iter::<S>().expect("Failed to create iterator.");
     iter.seek_to_first();
     iter.collect::<Result<Vec<_>, anyhow::Error>>().unwrap()
 }

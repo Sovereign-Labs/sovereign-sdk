@@ -15,22 +15,30 @@ pub type ColumnFamilyName = &'static str;
 
 /// This trait defines a schema: an association of a column family name, the key type and the value
 /// type.
-pub trait Schema: Debug + Send + Sync + 'static {
+pub trait Schema: Debug + Send + Sync + 'static + Sized {
     /// The column family name associated with this struct.
     /// Note: all schemas within the same SchemaDB must have distinct column family names.
     const COLUMN_FAMILY_NAME: ColumnFamilyName;
 
     /// Type of the key.
     type Key: KeyCodec<Self>;
+
     /// Type of the value.
     type Value: ValueCodec<Self>;
 }
 pub type Result<T, E = CodecError> = core::result::Result<T, E>;
 
 /// This trait defines a type that can serve as a [`Schema::Key`].
-pub trait KeyCodec<S: Schema + ?Sized>: Sized + PartialEq + Debug {
+pub trait KeyCodec<S: Schema + ?Sized>: KeyEncoder<S> + KeyDecoder<S> {}
+
+impl<T, S: Schema + ?Sized> KeyCodec<S> for T where T: KeyEncoder<S> + KeyDecoder<S> {}
+
+pub trait KeyEncoder<S: Schema + ?Sized>: Sized + PartialEq + Debug {
     /// Converts `self` to bytes to be stored in DB.
     fn encode_key(&self) -> Result<Vec<u8>>;
+}
+
+pub trait KeyDecoder<S: Schema + ?Sized>: Sized + PartialEq + Debug {
     /// Converts bytes fetched from DB to `Self`.
     fn decode_key(data: &[u8]) -> Result<Self>;
 }
@@ -45,20 +53,20 @@ pub trait ValueCodec<S: Schema + ?Sized>: Sized + PartialEq + Debug {
 
 /// This defines a type that can be used to seek a [`SchemaIterator`](crate::SchemaIterator), via
 /// interfaces like [`seek`](crate::SchemaIterator::seek).
-pub trait SeekKeyCodec<S: Schema + ?Sized>: Sized {
+pub trait SeekKeyEncoder<S: Schema + ?Sized>: Sized {
     /// Converts `self` to bytes which is used to seek the underlying raw iterator.
     fn encode_seek_key(&self) -> Result<Vec<u8>>;
 }
 
 /// All keys can automatically be used as seek keys.
-impl<S, K> SeekKeyCodec<S> for K
+impl<S, K> SeekKeyEncoder<S> for K
 where
     S: Schema,
-    K: KeyCodec<S>,
+    K: KeyEncoder<S>,
 {
     /// Delegates to [`KeyCodec::encode_key`].
     fn encode_seek_key(&self) -> Result<Vec<u8>> {
-        <K as KeyCodec<S>>::encode_key(self)
+        <K as KeyEncoder<S>>::encode_key(self)
     }
 }
 
@@ -79,7 +87,7 @@ macro_rules! define_schema {
 
 #[cfg(feature = "fuzzing")]
 pub mod fuzzing {
-    use super::{KeyCodec, Schema, ValueCodec};
+    use super::{KeyDecoder, KeyEncoder, Schema, ValueCodec};
     use proptest::{collection::vec, prelude::*};
 
     /// Helper used in tests to assert a (key, value) pair for a certain [`Schema`] is able to convert

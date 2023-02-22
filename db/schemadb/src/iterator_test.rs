@@ -7,7 +7,7 @@ use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 
 use crate::{iterator::SchemaIterator, temppath::TempPath, Schema, DB};
 use sovereign_sdk::{
-    db::{errors::CodecError, KeyCodec, SeekKeyCodec, ValueCodec},
+    db::{errors::CodecError, KeyDecoder, KeyEncoder, SeekKeyEncoder, ValueCodec},
     define_schema,
 };
 
@@ -19,7 +19,7 @@ pub(crate) struct TestKey(u32, u32, u32);
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) struct TestValue(u32);
 
-impl KeyCodec<TestSchema> for TestKey {
+impl KeyEncoder<TestSchema> for TestKey {
     fn encode_key(&self) -> Result<Vec<u8>, CodecError> {
         let mut bytes = vec![];
         bytes
@@ -33,7 +33,9 @@ impl KeyCodec<TestSchema> for TestKey {
             .map_err(|e| CodecError::Wrapped(e.into()))?;
         Ok(bytes)
     }
+}
 
+impl KeyDecoder<TestSchema> for TestKey {
     fn decode_key(data: &[u8]) -> Result<Self, CodecError> {
         let mut reader = std::io::Cursor::new(data);
         Ok(TestKey(
@@ -67,7 +69,7 @@ impl ValueCodec<TestSchema> for TestValue {
 
 pub struct KeyPrefix1(u32);
 
-impl SeekKeyCodec<TestSchema> for KeyPrefix1 {
+impl SeekKeyEncoder<TestSchema> for KeyPrefix1 {
     fn encode_seek_key(&self) -> Result<Vec<u8>, CodecError> {
         Ok(self.0.to_be_bytes().to_vec())
     }
@@ -75,7 +77,7 @@ impl SeekKeyCodec<TestSchema> for KeyPrefix1 {
 
 pub struct KeyPrefix2(u32, u32);
 
-impl SeekKeyCodec<TestSchema> for KeyPrefix2 {
+impl SeekKeyEncoder<TestSchema> for KeyPrefix2 {
     fn encode_seek_key(&self) -> Result<Vec<u8>, CodecError> {
         let mut bytes = vec![];
         bytes
@@ -132,15 +134,11 @@ impl TestDB {
 
 impl TestDB {
     fn iter(&self) -> SchemaIterator<TestSchema> {
-        self.db
-            .iter(Default::default())
-            .expect("Failed to create iterator.")
+        self.db.iter().expect("Failed to create iterator.")
     }
 
     fn rev_iter(&self) -> SchemaIterator<TestSchema> {
-        self.db
-            .rev_iter(Default::default())
-            .expect("Failed to create iterator.")
+        self.db.rev_iter().expect("Failed to create iterator.")
     }
 }
 
