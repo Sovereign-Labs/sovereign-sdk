@@ -1,6 +1,0 @@
-This software is based on an implementation of the same data structure
-[by Aptos-Labs](https://github.com/aptos-labs/aptos-core/tree/6acd52f07650988d28b9f7b13f5d131f3a3ca179).
-
-It has been modified to remove dependencies, and modularize the code for use outside of Aptos-Core.
-
-It has also been made generic over the user's choice of hash function and Digest size.
