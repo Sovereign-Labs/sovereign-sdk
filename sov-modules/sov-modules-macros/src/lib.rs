@@ -1,5 +1,5 @@
 mod dispatch;
-mod prefix;
+mod module_info;
 use dispatch::genesis::GenesisMacro;
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
@@ -32,7 +32,7 @@ use syn::parse_macro_input;
 pub fn module_info(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
 
-    match prefix::derive_module_info(input) {
+    match module_info::derive_module_info(input) {
         Ok(ok) => ok,
         Err(err) => err.to_compile_error().into(),
     }

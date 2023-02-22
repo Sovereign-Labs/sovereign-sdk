@@ -1,17 +1,16 @@
 use syn::DeriveInput;
 use syn::TypeGenerics;
 
-use super::StructFieldExtractor;
-use super::StructNamedField;
+use super::common::{StructFieldExtractor, StructNamedField};
 
 pub(crate) struct GenesisMacro {
-    helper: StructFieldExtractor,
+    field_extractor: StructFieldExtractor,
 }
 
 impl GenesisMacro {
     pub(crate) fn new(name: &'static str) -> Self {
         Self {
-            helper: StructFieldExtractor::new(name),
+            field_extractor: StructFieldExtractor::new(name),
         }
     }
 
@@ -28,9 +27,10 @@ impl GenesisMacro {
 
         let (impl_generics, type_generics, _) = generics.split_for_impl();
 
-        let fields = self.helper.get_fields_from_struct(&data)?;
+        let fields = self.field_extractor.get_fields_from_struct(&data)?;
         let genesis_fn_body = Self::make_genesis_fn_body(type_generics.clone(), &fields);
 
+        // Implements the Genesis trait
         Ok(quote::quote! {
             impl #impl_generics sov_modules_api::Genesis for #ident #type_generics {
 
@@ -41,7 +41,6 @@ impl GenesisMacro {
                     #(#genesis_fn_body)*
                     Ok(storage)
                 }
-
             }
         }
         .into())
