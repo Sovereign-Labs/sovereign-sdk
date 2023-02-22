@@ -2,9 +2,9 @@ name: Rust
 
 on:
   push:
-    branches: [ "research" ]
+    branches: ["research"]
   pull_request:
-    branches: [ "research" ]
+    branches: ["research"]
 
 env:
   CARGO_TERM_COLOR: always
@@ -17,10 +17,11 @@ jobs:
       - name: Install latest nightly
         uses: actions-rs/toolchain@v1
         with:
-            toolchain: nightly
-            override: true
-            components: rustc
+          toolchain: nightly
+          override: true
+          components: rustc
 
+      - uses: Swatinem/rust-cache@v2.2.0
       - name: Run cargo build
         uses: actions-rs/cargo@v1
         with:
