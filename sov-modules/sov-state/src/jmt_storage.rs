@@ -3,7 +3,7 @@ use crate::{
     storage::{GenericStorage, StorageKey, StorageValue},
 };
 use first_read_last_write_cache::cache::{CacheLog, FirstReads};
-use jellyfish_merkle_generic::Version;
+use jmt::Version;
 
 #[derive(Default, Clone)]
 pub struct JmtDb {

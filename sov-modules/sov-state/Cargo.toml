@@ -9,5 +9,5 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 sovereign-sdk = { workspace = true }
 first-read-last-write-cache = { workspace = true }
-jellyfish-merkle-generic = { workspace = true }
+jmt = { workspace = true }
 hex = { workspace = true}

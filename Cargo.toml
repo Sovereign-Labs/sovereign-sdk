@@ -2,7 +2,6 @@
 resolver = "2"
 members = [
 	"sdk",
-	"jmt",
 	"first-read-last-write-cache",
 	"sov-modules/sov-modules-macros",
 	"sov-modules/sov-state",
@@ -17,11 +16,13 @@ members = [
 [workspace.dependencies]
 # Internal dependencies
 sovereign-sdk = {path= "sdk" }
-jellyfish-merkle-generic = {path= "jmt" }
 first-read-last-write-cache = {path = "first-read-last-write-cache"}
 sov-state = {path = "sov-modules/sov-state"}
 sov-modules-api = {path = "sov-modules/sov-modules-api"}
 sov-modules-macros = {path = "sov-modules/sov-modules-macros"}
+
+# Dependencies maintained by sovereign
+jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "2475dfb7b73bf16de518c2de34f10e00cd4fa909" }
 
 # External dependencies
 anyhow = "1.0.68"
