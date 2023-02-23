@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use jmt::{
     storage::{TreeReader, TreeWriter},
@@ -6,10 +6,35 @@ use jmt::{
 };
 use schemadb::DB;
 
-use crate::schema::tables::{JmtNodes, JmtValues, KeyHashToKey};
+use crate::{
+    rocks_db_config::gen_rocksdb_options,
+    schema::tables::{JmtNodes, JmtValues, KeyHashToKey},
+};
 
+#[derive(Clone)]
 pub struct StateDB {
     db: Arc<DB>,
+}
+
+impl StateDB {
+    pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
+        let inner = DB::open(
+            path,
+            "state-db",
+            vec![],
+            &gen_rocksdb_options(&Default::default(), false),
+        )?;
+        Ok(Self {
+            db: Arc::new(inner),
+        })
+    }
+
+    /// A rocksdb instance which stores its data in a tempdir
+    #[cfg(any(test, feature = "temp"))]
+    pub fn temporary() -> Self {
+        let path = schemadb::temppath::TempPath::new();
+        Self::with_path(path).unwrap()
+    }
 }
 
 impl TreeReader for StateDB {
