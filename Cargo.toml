@@ -39,7 +39,7 @@ jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "2475dfb7b73bf16
 
 # External dependencies
 anyhow = "1.0.68"
-borsh = { version = "0.10.0", features = ["rc"]}
+borsh = { version = "0.10.2", features = ["rc"]}
 byteorder = "1.4.3"
 bytes = "1.2.1"
 hex = "0.4.3"
