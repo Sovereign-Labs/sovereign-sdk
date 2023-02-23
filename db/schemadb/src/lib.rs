@@ -319,7 +319,7 @@ fn default_write_options() -> rocksdb::WriteOptions {
     opts
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "temppath"))]
 pub mod temppath {
     // Adapted from aptos temppath
 

@@ -16,3 +16,12 @@ sovereign-sdk = { workspace = true }
 anyhow = { workspace = true }
 byteorder = { workspace = true }
 borsh = { workspace = true }
+rocksdb = { workspace = true }
+
+
+[dev-dependencies]
+schemadb = { workspace = true, features = ["temppath"] }
+
+[features]
+default = []
+temp = ["schemadb/temppath"]
