@@ -1,5 +1,5 @@
-use super::Result;
-use super::{errors::CodecError, ColumnFamilyName, KeyCodec, Schema, ValueCodec};
+use super::{errors::CodecError, ColumnFamilyName, Schema, ValueCodec};
+use super::{KeyDecoder, KeyEncoder, Result};
 use std::fmt::Debug;
 
 use crate::{serial::Decode, services::da::SlotData};
@@ -17,14 +17,19 @@ impl<T: Debug + Send + Sync + 'static + SlotData> Schema for SlotSchema<T> {
     const COLUMN_FAMILY_NAME: ColumnFamilyName = SLOT_CF_NAME;
 }
 
-impl<T: Debug + Send + Sync + 'static> KeyCodec<SlotSchema<T>> for SlotNumber
+impl<T: Debug + Send + Sync + 'static> KeyEncoder<SlotSchema<T>> for SlotNumber
 where
     T: SlotData,
 {
     fn encode_key(&self) -> super::Result<Vec<u8>> {
         Ok(self.to_be_bytes().to_vec())
     }
+}
 
+impl<T: Debug + Send + Sync + 'static> KeyDecoder<SlotSchema<T>> for SlotNumber
+where
+    T: SlotData,
+{
     fn decode_key(data: &[u8]) -> super::Result<Self> {
         if data.len() != 8 {
             return Err(CodecError::InvalidKeyLength {

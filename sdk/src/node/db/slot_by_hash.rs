@@ -1,5 +1,5 @@
-use super::Result;
-use super::{ColumnFamilyName, KeyCodec, Schema, ValueCodec};
+use super::{ColumnFamilyName, KeyDecoder, Schema, ValueCodec};
+use super::{KeyEncoder, Result};
 use std::fmt::Debug;
 
 use crate::da::BlockHashTrait;
@@ -21,7 +21,7 @@ where
     const COLUMN_FAMILY_NAME: ColumnFamilyName = SLOT_BY_HASH_CF_NAME;
 }
 
-impl<K, V> KeyCodec<SlotByHashSchema<K, V>> for K
+impl<K, V> KeyEncoder<SlotByHashSchema<K, V>> for K
 where
     K: Debug + Send + Sync + 'static + BlockHashTrait,
     V: Debug + Send + Sync + 'static + SlotData,
@@ -29,7 +29,13 @@ where
     fn encode_key(&self) -> Result<Vec<u8>> {
         Ok(self.encode_to_vec())
     }
+}
 
+impl<K, V> KeyDecoder<SlotByHashSchema<K, V>> for K
+where
+    K: Debug + Send + Sync + 'static + BlockHashTrait,
+    V: Debug + Send + Sync + 'static + SlotData,
+{
     fn decode_key(mut data: &[u8]) -> Result<Self> {
         Ok(K::decode(&mut data)?)
     }

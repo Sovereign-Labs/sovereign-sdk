@@ -9,10 +9,19 @@ edition = "2021"
 # Maintained by sovereign labs
 jmt = { workspace = true }
 schemadb = { workspace = true }
-sovereign-sdk = { workspace = true, features = ["sync"] }
+sovereign-sdk = { workspace = true }
 
 
 # External
 anyhow = { workspace = true }
 byteorder = { workspace = true }
 borsh = { workspace = true }
+rocksdb = { workspace = true }
+
+
+[dev-dependencies]
+schemadb = { workspace = true, features = ["temppath"] }
+
+[features]
+default = []
+temp = ["schemadb/temppath"]

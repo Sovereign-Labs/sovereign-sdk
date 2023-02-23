@@ -26,6 +26,8 @@ impl AsRef<[u8]> for DbBytes {
 }
 
 pub type DbHash = DbBytes;
+pub type JmtValue = Option<Vec<u8>>;
+pub(crate) type StateKey = Vec<u8>;
 
 /// The on-disk format of a slot. Specifies the batches contained in the slot
 /// and the hash of the da block. TODO(@preston-evans98): add any additional data

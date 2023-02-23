@@ -32,9 +32,9 @@ pub mod iterator;
 mod metrics;
 
 #[cfg(test)]
-mod iterator_test;
-#[cfg(test)]
 mod db_test;
+#[cfg(test)]
+mod iterator_test;
 
 #[derive(Debug)]
 enum WriteOp {
@@ -64,12 +64,12 @@ impl SchemaBatch {
     }
 
     /// Adds an insert/update operation to the batch.
-    pub fn put<S: Schema>(&self, key: &S::Key, value: &S::Value) -> Result<()> {
+    pub fn put<S: Schema>(&self, key: &impl KeyCodec<S>, value: &impl ValueCodec<S>) -> Result<()> {
         let _timer = SCHEMADB_BATCH_PUT_LATENCY_SECONDS
             .with_label_values(&["unknown"])
             .start_timer();
-        let key = <S::Key as KeyCodec<S>>::encode_key(key)?;
-        let value = <S::Value as ValueCodec<S>>::encode_value(value)?;
+        let key = key.encode_key()?;
+        let value = value.encode_value()?;
         self.rows
             .lock()
             .expect("Lock must not be poisoned")
@@ -81,8 +81,8 @@ impl SchemaBatch {
     }
 
     /// Adds a delete operation to the batch.
-    pub fn delete<S: Schema>(&self, key: &S::Key) -> Result<()> {
-        let key = <S::Key as KeyCodec<S>>::encode_key(key)?;
+    pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> Result<()> {
+        let key = key.encode_key()?;
         self.rows
             .lock()
             .expect("Lock must not be poisoned")
@@ -172,12 +172,12 @@ impl DB {
     }
 
     /// Reads single record by key.
-    pub fn get<S: Schema>(&self, schema_key: &S::Key) -> Result<Option<S::Value>> {
+    pub fn get<S: Schema>(&self, schema_key: &impl KeyCodec<S>) -> Result<Option<S::Value>> {
         let _timer = SCHEMADB_GET_LATENCY_SECONDS
             .with_label_values(&[S::COLUMN_FAMILY_NAME])
             .start_timer();
 
-        let k = <S::Key as KeyCodec<S>>::encode_key(schema_key)?;
+        let k = schema_key.encode_key()?;
         let cf_handle = self.get_cf_handle(S::COLUMN_FAMILY_NAME)?;
 
         let result = self.inner.get_cf(cf_handle, k)?;
@@ -192,7 +192,7 @@ impl DB {
     }
 
     /// Writes single record.
-    pub fn put<S: Schema>(&self, key: &S::Key, value: &S::Value) -> Result<()> {
+    pub fn put<S: Schema>(&self, key: &impl KeyCodec<S>, value: &impl ValueCodec<S>) -> Result<()> {
         // Not necessary to use a batch, but we'd like a central place to bump counters.
         // Used in tests only anyway.
         let batch = SchemaBatch::new();
@@ -212,13 +212,22 @@ impl DB {
         ))
     }
 
-    /// Returns a forward [`SchemaIterator`] on a certain schema.
-    pub fn iter<S: Schema>(&self, opts: ReadOptions) -> Result<SchemaIterator<S>> {
-        self.iter_with_direction::<S>(opts, ScanDirection::Forward)
+    /// Returns a forward [`SchemaIterator`] on a certain schema with the default read options.
+    pub fn iter<S: Schema>(&self) -> Result<SchemaIterator<S>> {
+        self.iter_with_direction::<S>(Default::default(), ScanDirection::Forward)
     }
 
-    /// Returns a backward [`SchemaIterator`] on a certain schema.
-    pub fn rev_iter<S: Schema>(&self, opts: ReadOptions) -> Result<SchemaIterator<S>> {
+    /// Returns a forward [`SchemaIterator`] on a certain schema with the provided read options.
+    pub fn iter_with_opts<S: Schema>(&self, opts: ReadOptions) -> Result<SchemaIterator<S>> {
+        self.iter_with_direction::<S>(opts, ScanDirection::Forward)
+    }
+    /// Returns a backward [`SchemaIterator`] on a certain schema with the default read options.
+    pub fn rev_iter<S: Schema>(&self) -> Result<SchemaIterator<S>> {
+        self.iter_with_direction::<S>(Default::default(), ScanDirection::Backward)
+    }
+
+    /// Returns a backward [`SchemaIterator`] on a certain schema with the provided read options.
+    pub fn rev_iter_with_opts<S: Schema>(&self, opts: ReadOptions) -> Result<SchemaIterator<S>> {
         self.iter_with_direction::<S>(opts, ScanDirection::Backward)
     }
 
@@ -310,7 +319,7 @@ fn default_write_options() -> rocksdb::WriteOptions {
     opts
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "temppath"))]
 pub mod temppath {
     // Adapted from aptos temppath
 
