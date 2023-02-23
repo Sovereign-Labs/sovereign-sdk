@@ -31,7 +31,7 @@ mod second_test_module {
 
 fn main() {
     type C = MockContext;
-    let test_storage = JmtStorage::default();
+    let test_storage = JmtStorage::temporary();
 
     let second_test_struct =
         <second_test_module::SecondTestStruct<C> as ModuleInfo<C>>::new(test_storage);

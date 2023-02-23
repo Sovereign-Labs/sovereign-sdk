@@ -12,12 +12,4 @@ example-value-setter = {path = "../example-value-setter" }
 sov-state = { workspace = true }
 borsh = { workspace = true, features = ["rc"]}
 sovereign-sdk = { workspace = true}
-
-
-
-
-
-
-
-
-
+sovereign-db = { workspace = true, features = ["temp"]}

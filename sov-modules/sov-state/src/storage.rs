@@ -88,6 +88,9 @@ impl StorageValue {
 
 // An interface for storing and retrieving values in the storage.
 pub trait Storage {
+    type Config;
+    /// Creates a new storage instance with the provided config.
+    fn new(config: Self::Config) -> Self;
     // Returns the value corresponding to the key or None if key is absent.
     fn get(&self, key: StorageKey) -> Option<StorageValue>;
 
@@ -105,7 +108,13 @@ pub struct GenericStorage<VR: ValueReader> {
     pub(crate) internal_cache: StorageInternalCache,
 }
 
-impl<VR: ValueReader> Storage for GenericStorage<VR> {
+impl<VR: ValueReader + Default> Storage for GenericStorage<VR> {
+    type Config = ();
+
+    fn new(config: Self::Config) -> Self {
+        Default::default()
+    }
+
     fn get(&self, key: StorageKey) -> Option<StorageValue> {
         self.internal_cache.get_or_fetch(key, &self.value_reader)
     }

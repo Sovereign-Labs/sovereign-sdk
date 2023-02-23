@@ -14,7 +14,8 @@ path = "tests/all_tests.rs"
 [dev-dependencies]
 trybuild = "1.0"
 sov-modules-api = { workspace = true ,  features = ["mocks"]}
-sov-state = {workspace = true}
+sov-state = {workspace = true, features = ["temp"]}
+sovereign-db = {workspace = true, features = ["temp"]}
 
 [dependencies]
 sov-modules-api = { workspace = true }

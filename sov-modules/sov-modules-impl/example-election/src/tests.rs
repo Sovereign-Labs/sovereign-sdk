@@ -12,7 +12,7 @@ use sov_state::{JmtStorage, ZkStorage};
 
 #[test]
 fn test_election() {
-    let storage = JmtStorage::default();
+    let storage = JmtStorage::temporary();
     test_module::<MockContext>(storage.clone());
 
     let zk_storage = ZkStorage::new(storage.get_first_reads());
