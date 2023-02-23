@@ -101,33 +101,6 @@ pub trait Storage {
     fn delete(&mut self, key: StorageKey);
 }
 
-#[derive(Default, Clone)]
-pub struct GenericStorage<VR: ValueReader> {
-    pub(crate) value_reader: VR,
-    // Caches first read and last write for a particular key.
-    pub(crate) internal_cache: StorageInternalCache,
-}
-
-impl<VR: ValueReader + Default> Storage for GenericStorage<VR> {
-    type Config = ();
-
-    fn new(config: Self::Config) -> Self {
-        Default::default()
-    }
-
-    fn get(&self, key: StorageKey) -> Option<StorageValue> {
-        self.internal_cache.get_or_fetch(key, &self.value_reader)
-    }
-
-    fn set(&mut self, key: StorageKey, value: StorageValue) {
-        self.internal_cache.set(key, value)
-    }
-
-    fn delete(&mut self, key: StorageKey) {
-        self.internal_cache.delete(key)
-    }
-}
-
 // Used only in tests.
 #[cfg(test)]
 impl From<&'static str> for StorageKey {
