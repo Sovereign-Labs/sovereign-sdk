@@ -3,7 +3,8 @@
 
 use rocksdb::Options;
 
-/// Port selected RocksDB options for tuning underlying rocksdb instance of AptosDB.
+/// Port selected RocksDB options for tuning underlying rocksdb instance of our state db.
+/// The current default values are taken from Aptos. TODO: tune rocksdb for our workload.
 /// see <https://github.com/facebook/rocksdb/blob/master/include/rocksdb/options.h>
 /// for detailed explanations.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
