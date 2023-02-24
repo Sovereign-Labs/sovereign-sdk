@@ -51,12 +51,12 @@ pub mod second_test_module {
     #[derive(ModuleInfo)]
     pub(crate) struct SecondTestStruct<C: Context> {
         #[state]
-        pub state_in_second_struct: StateValue<u32, C::Storage>,
+        pub state_in_second_struct: StateValue<u64, C::Storage>,
     }
 
     impl<C: Context> Module for SecondTestStruct<C> {
         type Context = C;
-        type CallMessage = TestType;
+        type CallMessage = u64;
         type QueryMessage = TestType;
 
         fn genesis(&mut self) -> Result<(), Error> {
@@ -66,10 +66,11 @@ pub mod second_test_module {
 
         fn call(
             &mut self,
-            _msg: Self::CallMessage,
+            msg: Self::CallMessage,
             _context: &Self::Context,
         ) -> Result<CallResponse, Error> {
-            todo!()
+            self.state_in_second_struct.set(msg);
+            Ok(CallResponse::default())
         }
 
         fn query(&self, _msg: Self::QueryMessage) -> sov_modules_api::QueryResponse {
@@ -78,7 +79,7 @@ pub mod second_test_module {
     }
 
     impl<C: Context> SecondTestStruct<C> {
-        pub(crate) fn get_state_value(&self) -> Option<u32> {
+        pub(crate) fn get_state_value(&self) -> Option<u64> {
             self.state_in_second_struct.get()
         }
     }

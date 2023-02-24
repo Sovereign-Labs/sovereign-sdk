@@ -50,6 +50,7 @@ pub fn genesis(input: TokenStream) -> TokenStream {
     }
 }
 
+/// Derives the `sov-modules-api::DispatchCall` implementation for the underlying type.
 #[proc_macro_derive(DispatchCall)]
 pub fn dispatch_call(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
