@@ -8,6 +8,7 @@ use sov_modules_api::{
     mocks::{MockContext, MockPublicKey},
     CallResponse, Context, Error, Genesis, Module, ModuleInfo, QueryResponse, Spec,
 };
+use sov_modules_macros::Genesis;
 use sov_state::{CacheLog, Storage, ValueReader};
 use sovereign_db::state_db::StateDB;
 use sovereign_sdk::serial::{Decode, Encode};
