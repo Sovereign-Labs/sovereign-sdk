@@ -5,6 +5,7 @@ edition = "2021"
 
 [dev-dependencies]
 sov-modules-api = { workspace = true ,  features = ["mocks"]}
+sovereign-db = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
@@ -17,6 +18,7 @@ serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"]}
 hex = { workspace = true }
+
 
 [features]
 default = ["native"]

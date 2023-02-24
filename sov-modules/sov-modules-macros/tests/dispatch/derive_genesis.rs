@@ -1,6 +1,7 @@
 use sov_modules_api::{mocks::MockContext, CallResponse, Context, Error, Module, ModuleInfo};
 use sov_modules_macros::{Genesis, ModuleInfo};
 use sov_state::StateValue;
+use sovereign_db::state_db::StateDB;
 
 pub mod first_test_module {
     use super::*;
@@ -94,7 +95,8 @@ fn main() {
     use sov_modules_api::Genesis;
 
     type C = MockContext;
-    let storage = Runtime::<C>::genesis().unwrap();
+    let db = StateDB::temporary();
+    let storage = Runtime::<C>::genesis(db).unwrap();
 
     let first_module = first_test_module::FirstTestStruct::<C>::new(storage.clone());
     let state_value = first_module.get_state_value();

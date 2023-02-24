@@ -9,7 +9,8 @@ use sov_modules_api::{
     CallResponse, Context, Error, Genesis, Module, ModuleInfo, QueryResponse, Spec,
 };
 use sov_modules_macros::Genesis;
-use sov_state::{CacheLog, ValueReader};
+use sov_state::{CacheLog, Storage, ValueReader};
+use sovereign_db::state_db::StateDB;
 use sovereign_sdk::serial::{Decode, Encode};
 use std::{io::Cursor, marker::PhantomData};
 
@@ -171,7 +172,8 @@ fn test_demo() {
     type C = MockContext;
     let sender = MockPublicKey::try_from("admin").unwrap();
     let context = MockContext::new(sender);
-    let storage = Runtime::<C>::genesis().unwrap();
+    let temp_db = StateDB::temporary();
+    let storage = Runtime::<C>::genesis(temp_db).unwrap();
 
     // Call the election module.
     {

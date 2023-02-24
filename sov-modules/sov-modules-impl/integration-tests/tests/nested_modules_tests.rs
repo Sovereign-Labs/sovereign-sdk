@@ -67,7 +67,7 @@ mod module_c {
 
 #[test]
 fn nested_module_call_test() {
-    let native_storage = JmtStorage::default();
+    let native_storage = JmtStorage::temporary();
 
     // Test the `native` execution.
     {
