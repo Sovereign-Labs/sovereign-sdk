@@ -8,7 +8,7 @@ mod error;
 mod prefix;
 mod response;
 
-pub use dispatch::Genesis;
+pub use dispatch::{DispatchCall, Genesis};
 pub use error::Error;
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};

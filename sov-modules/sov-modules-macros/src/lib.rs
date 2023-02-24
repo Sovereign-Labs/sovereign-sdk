@@ -1,6 +1,6 @@
 mod dispatch;
 mod module_info;
-use dispatch::genesis::GenesisMacro;
+use dispatch::{dispatch_call::DispatchCallMacro, genesis::GenesisMacro};
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
@@ -39,12 +39,23 @@ pub fn module_info(input: TokenStream) -> TokenStream {
 }
 
 /// Derives the `sov-modules-api::Genesis` implementation for the underlying type.
-#[proc_macro_derive(Genesis, attributes(state, module))]
+#[proc_macro_derive(Genesis)]
 pub fn genesis(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let genesis_macro = GenesisMacro::new("Genesis");
 
     match genesis_macro.derive_genesis(input) {
+        Ok(ok) => ok,
+        Err(err) => err.to_compile_error().into(),
+    }
+}
+
+#[proc_macro_derive(DispatchCall)]
+pub fn dispatch_call(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+    let genesis_macro = DispatchCallMacro::new("Genesis");
+
+    match genesis_macro.derive_dispatch_call(input) {
         Ok(ok) => ok,
         Err(err) => err.to_compile_error().into(),
     }
