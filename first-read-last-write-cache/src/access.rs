@@ -263,11 +263,12 @@ mod tests {
         let second_read = 2;
         let value2 = create_value(second_read);
 
-        assert_eq!(left.merge(Access::Read(value2.clone())),
-                   Err(MergeError::ReadThenRead {
-                       left: value,
-                       right: value2,
-                   })
+        assert_eq!(
+            left.merge(Access::Read(value2.clone())),
+            Err(MergeError::ReadThenRead {
+                left: value,
+                right: value2,
+            })
         );
     }
 
@@ -284,11 +285,12 @@ mod tests {
             modified: value.clone(),
         };
 
-        assert_eq!(left.merge(right),
-                   Err(MergeError::ReadThenRead {
-                       left: value,
-                       right: value2,
-                   })
+        assert_eq!(
+            left.merge(right),
+            Err(MergeError::ReadThenRead {
+                left: value,
+                right: value2,
+            })
         );
     }
 
@@ -305,14 +307,14 @@ mod tests {
             modified: value.clone(),
         };
 
-
         let right = Access::Read(value2.clone());
 
-        assert_eq!(left.merge(right),
-                   Err(MergeError::WriteThenRead {
-                       write: value,
-                       read: value2,
-                   })
+        assert_eq!(
+            left.merge(right),
+            Err(MergeError::WriteThenRead {
+                write: value,
+                read: value2,
+            })
         )
     }
 
@@ -334,14 +336,14 @@ mod tests {
             modified: value2.clone(),
         };
 
-        assert_eq!(left.merge(right),
-                   Err(MergeError::WriteThenRead {
-                       write: value2,
-                       read: value,
-                   })
+        assert_eq!(
+            left.merge(right),
+            Err(MergeError::WriteThenRead {
+                write: value2,
+                read: value,
+            })
         )
     }
-
 
     #[test]
     fn test_err_merge_left_right_neq_right_orig() {
@@ -357,11 +359,12 @@ mod tests {
             modified: value.clone(),
         };
 
-        assert_eq!(left.merge(right),
-                   Err(MergeError::WriteThenRead {
-                       write: value,
-                       read: value2,
-                   })
+        assert_eq!(
+            left.merge(right),
+            Err(MergeError::WriteThenRead {
+                write: value,
+                read: value2,
+            })
         )
     }
 }
