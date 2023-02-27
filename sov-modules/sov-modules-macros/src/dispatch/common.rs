@@ -63,6 +63,7 @@ impl StructFieldExtractor {
     }
 }
 
+/// Represents "parsed" rust struct.
 pub(crate) struct StructDef<'a> {
     pub(crate) enum_ident: proc_macro2::Ident,
     pub(crate) impl_generics: ImplGenerics<'a>,
@@ -114,6 +115,7 @@ impl<'a> StructDef<'a> {
     }
 }
 
+/// Gets type parameter from `Generic` declaration.
 pub(crate) fn parse_generic_params(generics: &Generics) -> Result<Ident, syn::Error> {
     let generic_param = match generics.params.first().unwrap() {
         GenericParam::Type(ty) => &ty.ident,
