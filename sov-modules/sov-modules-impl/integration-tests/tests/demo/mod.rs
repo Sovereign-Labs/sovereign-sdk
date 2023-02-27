@@ -106,7 +106,7 @@ fn test_demo() {
 
         let serialized_message = client.send_election_message(call_message);
         let module = decode_dispatchable::<C>(serialized_message).unwrap();
-        let result = module.dispatch(storage.clone(), &context);
+        let result = module.dispatch_call(storage.clone(), &context);
         assert!(result.is_ok())
     }
 
@@ -117,7 +117,7 @@ fn test_demo() {
         let serialized_message = client.query_election(query_message);
         let module = decode_queryable::<C>(serialized_message).unwrap();
 
-        let response = module.dispatch(storage);
+        let response = module.dispatch_query(storage);
         let _json_response = std::str::from_utf8(&response.response).unwrap();
     }
 }

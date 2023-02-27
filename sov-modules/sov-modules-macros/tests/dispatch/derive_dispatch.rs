@@ -28,24 +28,24 @@ fn main() {
     let value = 11;
     {
         let message = RuntimeCall::<C>::first(value);
-        let _ = message.dispatch(storage.clone(), &context).unwrap();
+        let _ = message.dispatch_call(storage.clone(), &context).unwrap();
     }
 
     {
         let message = RuntimeQuery::<C>::first(());
-        let response = message.dispatch(storage.clone());
+        let response = message.dispatch_query(storage.clone());
         assert_eq!(response.response, vec![value]);
     }
 
     let value = 22;
     {
         let message = RuntimeCall::<C>::second(value);
-        let _ = message.dispatch(storage.clone(), &context).unwrap();
+        let _ = message.dispatch_call(storage.clone(), &context).unwrap();
     }
 
     {
         let message = RuntimeQuery::<C>::second(second_test_module::TestType {});
-        let response = message.dispatch(storage.clone());
+        let response = message.dispatch_query(storage.clone());
         assert_eq!(response.response, vec![value]);
     }
 }

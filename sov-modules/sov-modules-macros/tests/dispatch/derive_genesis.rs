@@ -24,13 +24,13 @@ fn main() {
 
     {
         let message = RuntimeQuery::<C>::first(());
-        let response = message.dispatch(storage.clone());
+        let response = message.dispatch_query(storage.clone());
         assert_eq!(response.response, vec![1]);
     }
 
     {
         let message = RuntimeQuery::<C>::second(second_test_module::TestType {});
-        let response = message.dispatch(storage.clone());
+        let response = message.dispatch_query(storage.clone());
         assert_eq!(response.response, vec![2]);
     }
 }

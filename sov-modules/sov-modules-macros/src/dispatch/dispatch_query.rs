@@ -42,7 +42,7 @@ impl<'a> StructDef<'a> {
             impl #impl_generics sov_modules_api::DispatchQuery for #enum_ident #type_generics #where_clause{
                 type Context = #generic_param;
 
-                fn dispatch(
+                fn dispatch_query(
                     self,
                     storage: <Self::Context as sov_modules_api::Spec>::Storage
                 ) -> sov_modules_api::QueryResponse {

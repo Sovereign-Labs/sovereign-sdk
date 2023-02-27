@@ -43,7 +43,7 @@ impl<'a> StructDef<'a> {
             impl #impl_generics sov_modules_api::DispatchCall for #enum_ident #type_generics #where_clause{
                 type Context = #generic_param;
 
-                fn dispatch(
+                fn dispatch_call(
                     self,
                     storage: <Self::Context as sov_modules_api::Spec>::Storage,
                     context: &Self::Context,

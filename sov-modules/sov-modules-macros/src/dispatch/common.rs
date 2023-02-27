@@ -115,7 +115,7 @@ impl<'a> StructDef<'a> {
     }
 }
 
-/// Gets type parameter from `Generic` declaration.
+/// Gets type parameter from `Generics` declaration.
 pub(crate) fn parse_generic_params(generics: &Generics) -> Result<Ident, syn::Error> {
     let generic_param = match generics.params.first().unwrap() {
         GenericParam::Type(ty) => &ty.ident,

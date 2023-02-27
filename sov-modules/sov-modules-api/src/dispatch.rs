@@ -17,7 +17,7 @@ pub trait DispatchCall {
     type Context: Context;
 
     /// Dispatches a call message to the appropriate module.
-    fn dispatch(
+    fn dispatch_call(
         self,
         storage: <<Self as DispatchCall>::Context as Spec>::Storage,
         context: &Self::Context,
@@ -29,7 +29,7 @@ pub trait DispatchQuery {
     type Context: Context;
 
     /// Dispatches a query message to the appropriate module.
-    fn dispatch(
+    fn dispatch_query(
         self,
         storage: <<Self as DispatchQuery>::Context as Spec>::Storage,
     ) -> QueryResponse;
