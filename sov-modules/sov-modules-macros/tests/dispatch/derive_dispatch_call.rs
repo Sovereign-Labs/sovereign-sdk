@@ -1,12 +1,12 @@
 mod modules;
 
+use modules::{first_test_module, second_test_module};
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey},
     Context, Genesis, Module, ModuleInfo,
 };
 use sov_modules_macros::{DispatchCall, Genesis};
-
-use modules::{first_test_module, second_test_module};
+use sovereign_db::state_db::StateDB;
 
 #[derive(Genesis, DispatchCall)]
 struct Runtime<C>
@@ -20,7 +20,9 @@ where
 fn main() {
     use sov_modules_api::DispatchCall;
     type C = MockContext;
-    let storage = Runtime::<C>::genesis().unwrap();
+
+    let db = StateDB::temporary();
+    let storage = Runtime::<C>::genesis(db).unwrap();
 
     let context = MockContext {
         sender: MockPublicKey::new(vec![]),

@@ -21,7 +21,7 @@ pub enum NonInstantiable {}
 
 /// Spec contains types common for all modules.
 pub trait Spec {
-    type Storage: Storage + Clone + Default;
+    type Storage: Storage + Clone;
 
     type PublicKey: borsh::BorshDeserialize
         + borsh::BorshSerialize

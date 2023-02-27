@@ -352,7 +352,6 @@ mod tests {
 
         let result = test_merge_helper(test_cases);
         assert!(result.is_err());
-
     }
 
     #[test]
@@ -447,8 +446,6 @@ mod tests {
                 }
             }
         }
-
-
     }
 
     fn test_merge_helper(test_cases: Vec<TestCase>) -> Result<CacheLog, MergeError> {
@@ -465,7 +462,6 @@ mod tests {
                     right_cache.add_to_cache(right_rw).unwrap();
                 }
             }
-
         }
 
         let result = left_cache.merge(right_cache);

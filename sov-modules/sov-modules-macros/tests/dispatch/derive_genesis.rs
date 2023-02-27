@@ -1,9 +1,9 @@
 mod modules;
 
+use modules::{first_test_module, second_test_module};
 use sov_modules_api::{mocks::MockContext, Context, Module, ModuleInfo};
 use sov_modules_macros::Genesis;
-
-use modules::{first_test_module, second_test_module};
+use sovereign_db::state_db::StateDB;
 
 // Debugging hint: To expand the macro in tests run: `cargo expand --test tests`
 #[derive(Genesis)]
@@ -19,7 +19,8 @@ fn main() {
     use sov_modules_api::Genesis;
 
     type C = MockContext;
-    let storage = Runtime::<C>::genesis().unwrap();
+    let db = StateDB::temporary();
+    let storage = Runtime::<C>::genesis(db).unwrap();
 
     let first_module = first_test_module::FirstTestStruct::<C>::new(storage.clone());
     let state_value = first_module.get_state_value();

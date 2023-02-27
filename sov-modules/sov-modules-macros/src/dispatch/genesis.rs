@@ -35,9 +35,10 @@ impl GenesisMacro {
             impl #impl_generics sov_modules_api::Genesis for #ident #type_generics #where_clause {
 
                 type Context = C;
+                type Config = <C::Storage as sov_state::Storage>::Config;
 
-                fn genesis() -> core::result::Result<C::Storage, sov_modules_api::Error> {
-                    let storage = C::Storage::default();
+                fn genesis(config: Self::Config) -> core::result::Result<C::Storage, sov_modules_api::Error> {
+                    let storage = <C::Storage as sov_state::Storage> ::new(config);
                     #(#genesis_fn_body)*
                     Ok(storage)
                 }

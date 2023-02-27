@@ -12,7 +12,7 @@ use sovereign_sdk::stf::Event;
 #[test]
 fn test_value_setter() {
     let sender = MockPublicKey::try_from("admin").unwrap();
-    let storage = JmtStorage::default();
+    let storage = JmtStorage::temporary();
 
     // Test Native-Context
     {
@@ -65,7 +65,7 @@ fn test_value_setter_helper<C: Context>(context: C, storage: C::Storage) {
 #[test]
 fn test_err_on_sender_is_not_admin() {
     let sender = MockPublicKey::try_from("not_admin").unwrap();
-    let storage = JmtStorage::default();
+    let storage = JmtStorage::temporary();
 
     // Test Native-Context
     {
