@@ -1,10 +1,9 @@
-use super::common::parse_generic_params;
-use super::common::StructDef;
-use super::common::StructFieldExtractor;
 use syn::DeriveInput;
 
+use super::common::{parse_generic_params, StructDef, StructFieldExtractor};
+
 impl<'a> StructDef<'a> {
-    fn create_call_enum_legs(&self) -> Vec<proc_macro2::TokenStream> {
+    fn create_query_enum_legs(&self) -> Vec<proc_macro2::TokenStream> {
         self.fields
             .iter()
             .map(|field| {
@@ -12,14 +11,14 @@ impl<'a> StructDef<'a> {
                 let ty = &field.ty;
 
                 quote::quote!(
-                    #name(<#ty as sov_modules_api::Module>::CallMessage),
+                    #name(<#ty as sov_modules_api::Module>::QueryMessage),
                 )
             })
             .collect()
     }
 
-    /// Implements `sov_modules_api::DispatchCall` for the enumeration created by `create_enum`.
-    fn create_call_dispatch(&self) -> proc_macro2::TokenStream {
+    /// Implements `sov_modules_api::DispatchQuery` for the enumeration created by `create_enum`.
+    fn create_query_dispatch(&self) -> proc_macro2::TokenStream {
         let enum_ident = &self.enum_ident;
         let type_generics = &self.type_generics;
 
@@ -30,7 +29,7 @@ impl<'a> StructDef<'a> {
             quote::quote!(
                 #enum_ident::#name(message)=>{
                     let mut #name = <#ty as sov_modules_api::ModuleInfo::#type_generics>::new(storage.clone());
-                    #name.call(message, context)
+                    #name.query(message)
                 },
             )
         });
@@ -40,15 +39,13 @@ impl<'a> StructDef<'a> {
         let generic_param = self.generic_param;
 
         quote::quote! {
-            impl #impl_generics sov_modules_api::DispatchCall for #enum_ident #type_generics #where_clause{
+            impl #impl_generics sov_modules_api::DispatchQuery for #enum_ident #type_generics #where_clause{
                 type Context = #generic_param;
 
-                fn dispatch_call(
+                fn dispatch_query(
                     self,
-                    storage: <Self::Context as sov_modules_api::Spec>::Storage,
-                    context: &Self::Context,
-                ) -> core::result::Result<sov_modules_api::CallResponse, sov_modules_api::Error> {
-
+                    storage: <Self::Context as sov_modules_api::Spec>::Storage
+                ) -> sov_modules_api::QueryResponse {
                     match self{
                         #(#match_legs)*
                     }
@@ -58,12 +55,12 @@ impl<'a> StructDef<'a> {
     }
 }
 
-pub(crate) struct DispatchCallMacro {
+pub(crate) struct DispatchQueryMacro {
     name: &'static str,
     field_extractor: StructFieldExtractor,
 }
 
-impl DispatchCallMacro {
+impl DispatchQueryMacro {
     pub(crate) fn new(name: &'static str) -> Self {
         Self {
             name,
@@ -71,7 +68,7 @@ impl DispatchCallMacro {
         }
     }
 
-    pub(crate) fn derive_dispatch_call(
+    pub(crate) fn derive_dispatch_query(
         &self,
         input: DeriveInput,
     ) -> Result<proc_macro::TokenStream, syn::Error> {
@@ -97,12 +94,12 @@ impl DispatchCallMacro {
             self.name,
         );
 
-        let call_enum_legs = struct_def.create_call_enum_legs();
-        let call_enum = struct_def.create_enum(&call_enum_legs);
-        let create_dispatch_impl = struct_def.create_call_dispatch();
+        let query_enum_legs = struct_def.create_query_enum_legs();
+        let query_enum = struct_def.create_enum(&query_enum_legs);
+        let create_dispatch_impl = struct_def.create_query_dispatch();
 
         Ok(quote::quote! {
-            #call_enum
+            #query_enum
 
             #create_dispatch_impl
         }

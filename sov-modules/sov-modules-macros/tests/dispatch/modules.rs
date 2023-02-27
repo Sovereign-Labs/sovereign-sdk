@@ -8,12 +8,12 @@ pub mod first_test_module {
     #[derive(ModuleInfo)]
     pub(crate) struct FirstTestStruct<C: Context> {
         #[state]
-        pub state_in_first_struct: StateValue<u32, C::Storage>,
+        pub state_in_first_struct: StateValue<u8, C::Storage>,
     }
 
     impl<C: Context> Module for FirstTestStruct<C> {
         type Context = C;
-        type CallMessage = u32;
+        type CallMessage = u8;
         type QueryMessage = ();
 
         fn genesis(&mut self) -> Result<(), Error> {
@@ -31,13 +31,10 @@ pub mod first_test_module {
         }
 
         fn query(&self, _msg: Self::QueryMessage) -> sov_modules_api::QueryResponse {
-            todo!()
-        }
-    }
-
-    impl<C: Context> FirstTestStruct<C> {
-        pub(crate) fn get_state_value(&self) -> Option<u32> {
-            self.state_in_first_struct.get()
+            let state = self.state_in_first_struct.get().unwrap();
+            sov_modules_api::QueryResponse {
+                response: vec![state],
+            }
         }
     }
 }
@@ -51,12 +48,12 @@ pub mod second_test_module {
     #[derive(ModuleInfo)]
     pub(crate) struct SecondTestStruct<C: Context> {
         #[state]
-        pub state_in_second_struct: StateValue<u64, C::Storage>,
+        pub state_in_second_struct: StateValue<u8, C::Storage>,
     }
 
     impl<C: Context> Module for SecondTestStruct<C> {
         type Context = C;
-        type CallMessage = u64;
+        type CallMessage = u8;
         type QueryMessage = TestType;
 
         fn genesis(&mut self) -> Result<(), Error> {
@@ -74,13 +71,10 @@ pub mod second_test_module {
         }
 
         fn query(&self, _msg: Self::QueryMessage) -> sov_modules_api::QueryResponse {
-            todo!()
-        }
-    }
-
-    impl<C: Context> SecondTestStruct<C> {
-        pub(crate) fn get_state_value(&self) -> Option<u64> {
-            self.state_in_second_struct.get()
+            let state = self.state_in_second_struct.get().unwrap();
+            sov_modules_api::QueryResponse {
+                response: vec![state],
+            }
         }
     }
 }

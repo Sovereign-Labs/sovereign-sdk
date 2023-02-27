@@ -1,6 +1,8 @@
 mod dispatch;
 mod module_info;
-use dispatch::{dispatch_call::DispatchCallMacro, genesis::GenesisMacro};
+use dispatch::{
+    dispatch_call::DispatchCallMacro, dispatch_query::DispatchQueryMacro, genesis::GenesisMacro,
+};
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
 
@@ -32,10 +34,7 @@ use syn::parse_macro_input;
 pub fn module_info(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
 
-    match module_info::derive_module_info(input) {
-        Ok(ok) => ok,
-        Err(err) => err.to_compile_error().into(),
-    }
+    handle_macro_error(module_info::derive_module_info(input))
 }
 
 /// Derives the `sov-modules-api::Genesis` implementation for the underlying type.
@@ -44,19 +43,29 @@ pub fn genesis(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let genesis_macro = GenesisMacro::new("Genesis");
 
-    match genesis_macro.derive_genesis(input) {
-        Ok(ok) => ok,
-        Err(err) => err.to_compile_error().into(),
-    }
+    handle_macro_error(genesis_macro.derive_genesis(input))
 }
 
 /// Derives the `sov-modules-api::DispatchCall` implementation for the underlying type.
 #[proc_macro_derive(DispatchCall)]
 pub fn dispatch_call(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
-    let genesis_macro = DispatchCallMacro::new("Genesis");
+    let call_macro = DispatchCallMacro::new("Call");
 
-    match genesis_macro.derive_dispatch_call(input) {
+    handle_macro_error(call_macro.derive_dispatch_call(input))
+}
+
+/// Derives the `sov-modules-api::DispatchQuery` implementation for the underlying type.
+#[proc_macro_derive(DispatchQuery)]
+pub fn dispatch_query(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+    let query_macro = DispatchQueryMacro::new("Query");
+
+    handle_macro_error(query_macro.derive_dispatch_query(input))
+}
+
+fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> TokenStream {
+    match result {
         Ok(ok) => ok,
         Err(err) => err.to_compile_error().into(),
     }
