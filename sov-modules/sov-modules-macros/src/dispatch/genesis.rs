@@ -25,14 +25,14 @@ impl GenesisMacro {
             ..
         } = input;
 
-        let (impl_generics, type_generics, _) = generics.split_for_impl();
+        let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
         let genesis_fn_body = Self::make_genesis_fn_body(type_generics.clone(), &fields);
 
         // Implements the Genesis trait
         Ok(quote::quote! {
-            impl #impl_generics sov_modules_api::Genesis for #ident #type_generics {
+            impl #impl_generics sov_modules_api::Genesis for #ident #type_generics #where_clause {
 
                 type Context = C;
                 type Config = <C::Storage as sov_state::Storage>::Config;

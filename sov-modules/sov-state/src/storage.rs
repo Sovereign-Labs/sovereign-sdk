@@ -1,10 +1,6 @@
 use std::{fmt::Display, sync::Arc};
 
-use crate::{
-    internal_cache::{StorageInternalCache, ValueReader},
-    utils::AlignedVec,
-    Prefix,
-};
+use crate::{utils::AlignedVec, Prefix};
 use first_read_last_write_cache::{CacheKey, CacheValue};
 use hex;
 use sovereign_sdk::serial::Encode;
