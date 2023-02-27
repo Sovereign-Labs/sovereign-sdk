@@ -1,4 +1,4 @@
-use crate::{CallResponse, Context, Error, Spec};
+use crate::{CallResponse, Context, Error, QueryResponse, Spec};
 
 /// Methods from this trait should be called only once during the rollup deployment.
 pub trait Genesis {
@@ -22,4 +22,15 @@ pub trait DispatchCall {
         storage: <<Self as DispatchCall>::Context as Spec>::Storage,
         context: &Self::Context,
     ) -> Result<CallResponse, Error>;
+}
+
+/// A trait that needs to be implemented for any query message.
+pub trait DispatchQuery {
+    type Context: Context;
+
+    /// Dispatches a query message to the appropriate module.
+    fn dispatch(
+        self,
+        storage: <<Self as DispatchQuery>::Context as Spec>::Storage,
+    ) -> QueryResponse;
 }
