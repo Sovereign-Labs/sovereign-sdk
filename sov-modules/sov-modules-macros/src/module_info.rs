@@ -1,5 +1,5 @@
 use proc_macro::{self};
-use syn::{DataStruct, DeriveInput, ImplGenerics, PathArguments, TypeGenerics};
+use syn::{DataStruct, DeriveInput, ImplGenerics, PathArguments, TypeGenerics, WhereClause};
 
 #[derive(Clone)]
 struct StructNamedField {
@@ -20,6 +20,7 @@ struct StructDef<'a> {
     impl_generics: ImplGenerics<'a>,
     type_generics: TypeGenerics<'a>,
     fields: Result<Vec<FieldKind>, syn::Error>,
+    where_clause: Option<&'a WhereClause>,
 }
 
 pub(crate) fn derive_module_info(
@@ -32,7 +33,7 @@ pub(crate) fn derive_module_info(
         ..
     } = input;
 
-    let (impl_generics, type_generics, _) = generics.split_for_impl();
+    let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
     let fields = get_fields_from_struct(&data);
 
     let struct_def = StructDef {
@@ -40,6 +41,7 @@ pub(crate) fn derive_module_info(
         fields,
         impl_generics,
         type_generics,
+        where_clause,
     };
 
     let impl_prefix_functions = struct_def.impl_prefix_functions()?;
@@ -67,9 +69,10 @@ impl<'a> StructDef<'a> {
         let impl_generics = &self.impl_generics;
         let ident = &self.ident;
         let ty_generics = &self.type_generics;
+        let where_clause = self.where_clause;
 
         Ok(quote::quote! {
-            impl #impl_generics #ident #ty_generics {
+            impl #impl_generics #ident #ty_generics #where_clause{
                 #(#impl_prefix_functions)*
             }
         })
@@ -98,9 +101,10 @@ impl<'a> StructDef<'a> {
         let impl_generics = &self.impl_generics;
         let ident = &self.ident;
         let type_generics = &self.type_generics;
+        let where_clause = self.where_clause;
 
         Ok(quote::quote! {
-            impl #impl_generics sov_modules_api::ModuleInfo #type_generics for #ident #type_generics {
+            impl #impl_generics sov_modules_api::ModuleInfo #type_generics for #ident #type_generics #where_clause{
 
                 fn new(storage: #type_generics::Storage) -> Self {
                     #(#impl_self_init)*

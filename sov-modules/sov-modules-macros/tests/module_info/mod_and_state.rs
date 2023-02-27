@@ -7,7 +7,10 @@ pub mod first_test_module {
     use super::*;
 
     #[derive(ModuleInfo)]
-    pub(crate) struct FirstTestStruct<C: Context> {
+    pub(crate) struct FirstTestStruct<C>
+    where
+        C: Context,
+    {
         #[state]
         pub state_in_first_struct_1: StateMap<C::PublicKey, u32, C::Storage>,
 
