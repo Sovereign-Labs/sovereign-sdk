@@ -10,24 +10,22 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install latest nightly
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: nightly
-          override: true
-          components: rustc
-
       - uses: Swatinem/rust-cache@v2.2.0
-      - name: Run cargo build
+      - name: Run cargo check
         uses: actions-rs/cargo@v1
         with:
-          command: build
+          command: check
 
-      - name: Run cargo test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
+  test:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v2
+        - uses: Swatinem/rust-cache@v2.2.0
+        - name: Run cargo test
+          uses: actions-rs/cargo@v1
+          with:
+            command: test
