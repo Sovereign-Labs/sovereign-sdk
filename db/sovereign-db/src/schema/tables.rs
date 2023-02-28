@@ -33,6 +33,12 @@ use sovereign_sdk::{
     stf::{EventKey, EventValue},
 };
 
+pub const STATE_TABLES: &[&'static str] = &[
+    KeyHashToKey::table_name(),
+    JmtValues::table_name(),
+    JmtNodes::table_name(),
+];
+
 /// Macro to define a table that implements [`sovereign_sdk::db::Schema`].
 /// KeyCodec<Schema> and ValueCodec<Schema> must be implemented separately.
 ///
@@ -193,8 +199,9 @@ define_table_without_codec!(
 
 impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> KeyEncoder<JmtValues> for (T, Version) {
     fn encode_key(&self) -> sovereign_sdk::db::Result<Vec<u8>> {
-        let mut out = Vec::with_capacity(self.0.as_ref().len() + std::mem::size_of::<Version>());
-        out.extend_from_slice(self.0.as_ref());
+        let mut out =
+            Vec::with_capacity(self.0.as_ref().len() + std::mem::size_of::<Version>() + 8);
+        self.0.as_ref().encode(&mut out);
         // Write the version in big-endian order so that sorting order is based on the most-significant bytes of the key
         out.write_u64::<BigEndian>(self.1)
             .expect("serialization to vec is infallible");
