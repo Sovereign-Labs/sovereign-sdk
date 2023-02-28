@@ -16,7 +16,7 @@ impl<'a> StructDef<'a> {
             let fn_call_name = format_ident!("encode_{}_call", &field.ident);
             let fn_query_name = format_ident!("encode_{}_query", &field.ident);
 
-            // Create functions like:
+            // Creates functions like:
             //  encode_*module_name*_call(data: ..) -> Vec<u8>
             //  encode_*module_name*_query(data: ..) -> Vec<u8>
             quote::quote! {
