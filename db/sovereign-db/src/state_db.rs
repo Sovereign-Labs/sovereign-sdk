@@ -8,7 +8,7 @@ use schemadb::DB;
 
 use crate::{
     rocks_db_config::gen_rocksdb_options,
-    schema::tables::{JmtNodes, JmtValues, KeyHashToKey},
+    schema::tables::{JmtNodes, JmtValues, KeyHashToKey, STATE_TABLES},
 };
 
 #[derive(Clone)]
@@ -21,7 +21,7 @@ impl StateDB {
         let inner = DB::open(
             path,
             "state-db",
-            vec![],
+            STATE_TABLES.iter().map(|x| *x),
             &gen_rocksdb_options(&Default::default(), false),
         )?;
         Ok(Self {
@@ -34,6 +34,10 @@ impl StateDB {
     pub fn temporary() -> Self {
         let path = schemadb::temppath::TempPath::new();
         Self::with_path(path).unwrap()
+    }
+
+    pub fn put_preimage(&self, key_hash: KeyHash, key: &Vec<u8>) -> Result<(), anyhow::Error> {
+        self.db.put::<KeyHashToKey>(&key_hash.0, key)
     }
 }
 
@@ -51,7 +55,7 @@ impl TreeReader for StateDB {
         key_hash: KeyHash,
     ) -> anyhow::Result<Option<jmt::OwnedValue>> {
         if let Some(key) = self.db.get::<KeyHashToKey>(&key_hash.0)? {
-            let mut iter = self.db.rev_iter::<JmtValues>()?;
+            let mut iter = self.db.iter::<JmtValues>()?;
             // find the latest instance of the key whose version <= target
             iter.seek_for_prev(&(&key, version))?;
             let found = iter.next();
@@ -94,5 +98,31 @@ impl TreeWriter for StateDB {
             self.db.put::<JmtValues>(&(key_preimage, *version), value)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod state_db_tests {
+    use jmt::{
+        storage::{NodeBatch, TreeReader, TreeWriter},
+        KeyHash,
+    };
+
+    use super::StateDB;
+
+    #[test]
+    fn test_simple() {
+        let db = StateDB::temporary();
+        let key_hash = KeyHash([1u8; 32]);
+        let key = vec![2u8; 100];
+        let value = [8u8; 150];
+
+        db.put_preimage(key_hash, &key).unwrap();
+        let mut batch = NodeBatch::default();
+        batch.extend(vec![], vec![((0, key_hash), Some(value.to_vec()))]);
+        db.write_node_batch(&batch).unwrap();
+
+        let found = db.get_value(0, key_hash).unwrap();
+        assert_eq!(found, value)
     }
 }

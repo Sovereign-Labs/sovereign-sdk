@@ -20,7 +20,7 @@ use metrics::{
     SCHEMADB_BATCH_PUT_LATENCY_SECONDS, SCHEMADB_DELETES, SCHEMADB_GET_BYTES,
     SCHEMADB_GET_LATENCY_SECONDS, SCHEMADB_PUT_BYTES,
 };
-use rocksdb::ReadOptions;
+use rocksdb::{ColumnFamilyDescriptor, ReadOptions};
 use std::{collections::HashMap, path::Path, sync::Mutex};
 use tracing::info;
 
@@ -108,21 +108,18 @@ impl DB {
     pub fn open(
         path: impl AsRef<Path>,
         name: &'static str,
-        column_families: Vec<ColumnFamilyName>,
+        column_families: impl IntoIterator<Item = impl Into<String>>,
         db_opts: &rocksdb::Options,
     ) -> Result<Self> {
         let db = DB::open_cf(
             db_opts,
             path,
             name,
-            column_families
-                .iter()
-                .map(|cf_name| {
-                    let mut cf_opts = rocksdb::Options::default();
-                    cf_opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
-                    rocksdb::ColumnFamilyDescriptor::new((*cf_name).to_string(), cf_opts)
-                })
-                .collect(),
+            column_families.into_iter().map(|cf_name| {
+                let mut cf_opts = rocksdb::Options::default();
+                cf_opts.set_compression_type(rocksdb::DBCompressionType::Lz4);
+                rocksdb::ColumnFamilyDescriptor::new(cf_name, cf_opts)
+            }),
         )?;
         Ok(db)
     }
@@ -132,7 +129,7 @@ impl DB {
         db_opts: &rocksdb::Options,
         path: impl AsRef<Path>,
         name: &'static str,
-        cfds: Vec<rocksdb::ColumnFamilyDescriptor>,
+        cfds: impl IntoIterator<Item = ColumnFamilyDescriptor>,
     ) -> Result<DB> {
         let inner = rocksdb::DB::open_cf_descriptors(db_opts, path, cfds)?;
         Ok(Self::log_construct(name, inner))
