@@ -1,6 +1,6 @@
 use syn::DeriveInput;
 
-use super::common::{parse_generic_params, StructDef, StructFieldExtractor};
+use super::common::{parse_generic_params, StructDef, StructFieldExtractor, QUERY};
 
 impl<'a> StructDef<'a> {
     fn create_query_enum_legs(&self) -> Vec<proc_macro2::TokenStream> {
@@ -19,7 +19,7 @@ impl<'a> StructDef<'a> {
 
     /// Implements `sov_modules_api::DispatchQuery` for the enumeration created by `create_enum`.
     fn create_query_dispatch(&self) -> proc_macro2::TokenStream {
-        let enum_ident = &self.enum_ident;
+        let enum_ident = &self.enum_ident(QUERY);
         let type_generics = &self.type_generics;
 
         let match_legs = self.fields.iter().map(|field| {
@@ -28,8 +28,8 @@ impl<'a> StructDef<'a> {
 
             quote::quote!(
                 #enum_ident::#name(message)=>{
-                    let mut #name = <#ty as sov_modules_api::ModuleInfo::#type_generics>::new(storage.clone());
-                    #name.query(message)
+                    let #name = <#ty as sov_modules_api::ModuleInfo::#type_generics>::new(storage.clone());
+                    sov_modules_api::Module::query(&#name, message)
                 },
             )
         });
@@ -56,14 +56,12 @@ impl<'a> StructDef<'a> {
 }
 
 pub(crate) struct DispatchQueryMacro {
-    name: &'static str,
     field_extractor: StructFieldExtractor,
 }
 
 impl DispatchQueryMacro {
     pub(crate) fn new(name: &'static str) -> Self {
         Self {
-            name,
             field_extractor: StructFieldExtractor::new(name),
         }
     }
@@ -91,11 +89,10 @@ impl DispatchQueryMacro {
             type_generics,
             &generic_param,
             where_clause,
-            self.name,
         );
 
         let query_enum_legs = struct_def.create_query_enum_legs();
-        let query_enum = struct_def.create_enum(&query_enum_legs);
+        let query_enum = struct_def.create_enum(&query_enum_legs, QUERY);
         let create_dispatch_impl = struct_def.create_query_dispatch();
 
         Ok(quote::quote! {
