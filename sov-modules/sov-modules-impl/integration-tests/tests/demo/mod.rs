@@ -25,7 +25,6 @@ fn dispatch_tx<C: Context, VR: ValueReader>(
 }
 
 /// Runtime defines modules registered in the rollup.
-// #[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
 #[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
 struct Runtime<C: Context> {
     election: Election<C>,
