@@ -2,6 +2,7 @@ mod dispatch;
 mod module_info;
 use dispatch::{
     dispatch_call::DispatchCallMacro, dispatch_query::DispatchQueryMacro, genesis::GenesisMacro,
+    message_codec::MessageCodec,
 };
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
@@ -62,6 +63,15 @@ pub fn dispatch_query(input: TokenStream) -> TokenStream {
     let query_macro = DispatchQueryMacro::new("Query");
 
     handle_macro_error(query_macro.derive_dispatch_query(input))
+}
+
+/// Adds encoding functionality to the underlying type.
+#[proc_macro_derive(MessageCodec)]
+pub fn codec(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+    let codec_macro = MessageCodec::new("MessageCodec");
+
+    handle_macro_error(codec_macro.derive_message_codec(input))
 }
 
 fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> TokenStream {

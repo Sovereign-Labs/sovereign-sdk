@@ -5,10 +5,10 @@ use sov_modules_api::{
     mocks::{MockContext, MockPublicKey},
     Context, Genesis, Module,
 };
-use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis};
+use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 use sovereign_db::state_db::StateDB;
 
-#[derive(Genesis, DispatchCall, DispatchQuery)]
+#[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
 struct Runtime<C: Context> {
     first: first_test_module::FirstTestStruct<C>,
     second: second_test_module::SecondTestStruct<C>,
@@ -16,10 +16,10 @@ struct Runtime<C: Context> {
 
 fn main() {
     use sov_modules_api::{DispatchCall, DispatchQuery};
-    type C = MockContext;
+    type RT = Runtime<MockContext>;
 
     let db = StateDB::temporary();
-    let storage = Runtime::<C>::genesis(db).unwrap();
+    let storage = RT::genesis(db).unwrap();
 
     let context = MockContext {
         sender: MockPublicKey::new(vec![]),
@@ -27,25 +27,31 @@ fn main() {
 
     let value = 11;
     {
-        let message = RuntimeCall::<C>::first(value);
-        let _ = message.dispatch_call(storage.clone(), &context).unwrap();
+        let message = value;
+        let serialized_message = RT::encode_first_call(message);
+        let module = RT::decode_call(&serialized_message).unwrap();
+        let _ = module.dispatch_call(storage.clone(), &context).unwrap();
     }
 
     {
-        let message = RuntimeQuery::<C>::first(());
-        let response = message.dispatch_query(storage.clone());
+        let serialized_message = RT::encode_first_query(());
+        let module = RT::decode_query(&serialized_message).unwrap();
+        let response = module.dispatch_query(storage.clone());
         assert_eq!(response.response, vec![value]);
     }
 
     let value = 22;
     {
-        let message = RuntimeCall::<C>::second(value);
-        let _ = message.dispatch_call(storage.clone(), &context).unwrap();
+        let message = value;
+        let serialized_message = RT::encode_second_call(message);
+        let module = RT::decode_call(&serialized_message).unwrap();
+        let _ = module.dispatch_call(storage.clone(), &context).unwrap();
     }
 
     {
-        let message = RuntimeQuery::<C>::second(second_test_module::TestType {});
-        let response = message.dispatch_query(storage.clone());
+        let serialized_message = RT::encode_second_query(second_test_module::TestType {});
+        let module = RT::decode_query(&serialized_message).unwrap();
+        let response = module.dispatch_query(storage.clone());
         assert_eq!(response.response, vec![value]);
     }
 }

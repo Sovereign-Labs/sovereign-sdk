@@ -18,7 +18,9 @@ sov-state = {workspace = true, features = ["temp"]}
 sovereign-db = {workspace = true, features = ["temp"]}
 
 [dependencies]
+anyhow = { workspace = true }
 sov-modules-api = { workspace = true }
+sovereign-sdk = { workspace = true}
 
 syn = { version = "1.0", features = ["full"] }
 quote = "1.0"

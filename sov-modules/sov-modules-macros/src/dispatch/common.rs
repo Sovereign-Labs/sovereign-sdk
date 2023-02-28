@@ -63,9 +63,12 @@ impl StructFieldExtractor {
     }
 }
 
+pub(crate) const CALL: &str = "Call";
+pub(crate) const QUERY: &str = "Query";
+
 /// Represents "parsed" rust struct.
 pub(crate) struct StructDef<'a> {
-    pub(crate) enum_ident: proc_macro2::Ident,
+    pub(crate) ident: proc_macro2::Ident,
     pub(crate) impl_generics: ImplGenerics<'a>,
     pub(crate) type_generics: TypeGenerics<'a>,
     pub(crate) generic_param: &'a Ident,
@@ -81,10 +84,9 @@ impl<'a> StructDef<'a> {
         type_generics: TypeGenerics<'a>,
         generic_param: &'a Ident,
         where_clause: Option<&'a WhereClause>,
-        postfix: &str,
     ) -> Self {
         Self {
-            enum_ident: format_ident!("{ident}{postfix}"),
+            ident,
             fields,
             impl_generics,
             type_generics,
@@ -97,8 +99,9 @@ impl<'a> StructDef<'a> {
     pub(crate) fn create_enum(
         &self,
         enum_legs: &[proc_macro2::TokenStream],
+        postfix: &'static str,
     ) -> proc_macro2::TokenStream {
-        let enum_ident = &self.enum_ident;
+        let enum_ident = self.enum_ident(postfix);
         let impl_generics = &self.impl_generics;
         let where_clause = &self.where_clause;
 
@@ -112,6 +115,11 @@ impl<'a> StructDef<'a> {
                 #(#enum_legs)*
             }
         }
+    }
+
+    pub(crate) fn enum_ident(&self, postfix: &'static str) -> Ident {
+        let ident = &self.ident;
+        format_ident!("{ident}{postfix}")
     }
 }
 
