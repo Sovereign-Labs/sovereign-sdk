@@ -6,7 +6,6 @@ pub trait Genesis {
     type Config;
 
     /// Initializes the state of the rollup.
-    // TDOD: genesis should take initial configuration as an argument.
     fn genesis(
         config: Self::Config,
     ) -> Result<<<Self as Genesis>::Context as Spec>::Storage, Error>;

@@ -7,10 +7,11 @@ mod tests;
 
 mod types;
 
+pub use types::Candidate;
+
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
-
-use self::types::{Candidate, Voter};
+use types::Voter;
 
 #[derive(ModuleInfo)]
 pub struct Election<C: sov_modules_api::Context> {
