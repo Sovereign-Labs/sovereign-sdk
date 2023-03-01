@@ -59,7 +59,7 @@ fn dispatch_tx<C: Context, VR: ValueReader>(
 ///  The `DispatchCall` implementation (derived by a macro) forwards the message to the appropriate module and executes its `call` method.
 ///
 /// Similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
-/// instead of going trough the DA layer.
+/// instead of going through the DA layer.
 #[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
 pub struct Runtime<C: Context> {
     /// Definition of the first module in the rollup (must implement the sov_modules_api::Module trait).
@@ -71,9 +71,9 @@ pub struct Runtime<C: Context> {
 fn run_example() {
     type C = MockContext;
     let sender = MockPublicKey::try_from("admin").unwrap();
-    let admin_context = MockContext::new(sender);
+    let admin_context = C::new(sender);
     let temp_db = StateDB::temporary();
-    type RT = Runtime<MockContext>;
+    type RT = Runtime<C>;
 
     // Initialize the rollup: Call genesis on the Runtime
     let storage = RT::genesis(temp_db).unwrap();
