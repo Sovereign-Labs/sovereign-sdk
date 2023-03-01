@@ -58,8 +58,8 @@ fn dispatch_tx<C: Context, VR: ValueReader>(
 /// `Runtime::decode_call` accepts serialized call message and returns a type that implements the `DispatchCall` trait.
 ///  The `DispatchCall` implementation (derived by a macro) forwards the message to the appropriate module and executes its `call` method.
 ///
-/// Similar mechanism works for queries with the difference that queries are submitted by users directly to a rollup node
-/// instead of going trough DA layer.
+/// Similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
+/// instead of going trough the DA layer.
 #[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
 pub struct Runtime<C: Context> {
     /// Definition of the first module in the rollup (must implement the sov_modules_api::Module trait).
