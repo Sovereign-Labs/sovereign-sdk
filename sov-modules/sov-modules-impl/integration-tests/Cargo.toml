@@ -5,6 +5,7 @@ edition = "2021"
 
 [dev-dependencies]
 anyhow = { workspace = true }
+serde_json = { workspace = true }
 sov-modules-api = { workspace = true ,  features = ["mocks"]}
 sov-modules-macros = { workspace = true }
 example-election = {path = "../example-election" }

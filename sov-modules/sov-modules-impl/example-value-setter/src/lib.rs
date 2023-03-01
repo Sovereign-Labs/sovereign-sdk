@@ -1,11 +1,11 @@
-mod call;
+pub mod call;
 mod genesis;
 
 #[cfg(test)]
 mod tests;
 
 #[cfg(feature = "native")]
-mod query;
+pub mod query;
 
 #[cfg(feature = "native")]
 use self::query::QueryMessage;

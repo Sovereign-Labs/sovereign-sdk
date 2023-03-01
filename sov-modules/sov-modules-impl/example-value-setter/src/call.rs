@@ -8,7 +8,7 @@ use super::ValueSetter;
 
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct SetValue {
-    pub(crate) new_value: u32,
+    pub new_value: u32,
 }
 
 #[derive(BorshDeserialize, BorshSerialize)]
