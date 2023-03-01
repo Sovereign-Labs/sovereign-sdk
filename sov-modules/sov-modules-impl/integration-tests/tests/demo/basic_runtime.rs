@@ -27,7 +27,7 @@ fn dispatch_tx<C: Context, VR: ValueReader>(
 /// On a high level, the rollup node receives serialized call messages from the DA layer and executes them as atomic transactions.
 /// Upon reception, the message has to be deserialized and forwarded to an appropriate module.
 ///
-/// The specific module logic is implemented by module creators, but all the glue code responsible for message
+/// The module specific logic is implemented by module creators, but all the glue code responsible for message
 /// deserialization/forwarding is handled by a rollup `runtime`.
 ///
 /// In order to define the runtime we need to specify all the modules supported by our rollup (see the `Runtime` struct bellow)
