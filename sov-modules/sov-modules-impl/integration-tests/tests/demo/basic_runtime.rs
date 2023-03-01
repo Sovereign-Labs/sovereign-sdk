@@ -128,8 +128,10 @@ fn run_example() {
     // Freeze
     {
         let freeze_message = example_election::call::CallMessage::<C>::FreezeElection;
+
         let serialized_message = RT::encode_election_call(freeze_message);
         let module = RT::decode_call(&serialized_message).unwrap();
+
         let result = module.dispatch_call(storage.clone(), &admin_context);
         assert!(result.is_ok())
     }
