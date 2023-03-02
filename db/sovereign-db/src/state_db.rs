@@ -46,7 +46,7 @@ impl StateDB {
     pub fn get_value_option_by_key(
         &self,
         version: Version,
-        key: StateKey,
+        key: &StateKey,
     ) -> anyhow::Result<Option<jmt::OwnedValue>> {
         let mut iter = self.db.iter::<JmtValues>()?;
         // find the latest instance of the key whose version <= target
@@ -55,7 +55,7 @@ impl StateDB {
         match found {
             Some(result) => {
                 let ((found_key, found_version), value) = result?;
-                if found_key == key {
+                if &found_key == key {
                     anyhow::ensure!(found_version <= version, "Bug! iterator isn't returning expected values. expected a version <= {version:} but found {found_version:}");
                     Ok(value)
                 } else {
@@ -81,7 +81,7 @@ impl TreeReader for StateDB {
         key_hash: KeyHash,
     ) -> anyhow::Result<Option<jmt::OwnedValue>> {
         if let Some(key) = self.db.get::<KeyHashToKey>(&key_hash.0)? {
-            self.get_value_option_by_key(version, key)
+            self.get_value_option_by_key(version, &key)
         } else {
             Ok(None)
         }
@@ -135,6 +135,9 @@ mod state_db_tests {
         db.write_node_batch(&batch).unwrap();
 
         let found = db.get_value(0, key_hash).unwrap();
-        assert_eq!(found, value)
+        assert_eq!(found, value);
+
+        let found = db.get_value_option_by_key(0, &key).unwrap().unwrap();
+        assert_eq!(found, value);
     }
 }

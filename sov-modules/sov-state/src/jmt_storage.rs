@@ -8,8 +8,11 @@ use first_read_last_write_cache::cache::{CacheLog, FirstReads};
 pub type JmtDb = sovereign_db::state_db::StateDB;
 
 impl ValueReader for JmtDb {
-    fn read_value(&self, _key: StorageKey) -> Option<StorageValue> {
-        None
+    fn read_value(&self, key: StorageKey) -> Option<StorageValue> {
+        match self.get_value_option_by_key(0, key.as_ref()) {
+            Ok(value) => value.map(StorageValue::new_from_bytes),
+            Err(e) => panic!("Unable to read value from db: {e}"),
+        }
     }
 }
 
