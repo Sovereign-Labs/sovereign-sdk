@@ -40,8 +40,6 @@ pub trait Context: Spec + Clone {
 
     /// Constructor for the Context.
     fn new(sender: Self::PublicKey, config: Self::Storage) -> Self;
-
-    fn make_storage(&self) -> Self::Storage;
 }
 
 /// Every module has to implement this trait.

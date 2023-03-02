@@ -5,7 +5,7 @@ use sov_modules_api::mocks::ZkMockContext;
 use sov_modules_api::mocks::{MockContext, MockPublicKey};
 use sov_modules_api::Context;
 use sov_modules_api::{Module, ModuleInfo};
-use sov_state::{JmtStorage, ZkStorage};
+use sov_state::{JmtStorage, Storage, ZkStorage};
 use sovereign_sdk::stf::Event;
 
 #[test]
@@ -13,24 +13,23 @@ fn test_value_setter() {
     let sender = MockPublicKey::try_from("admin").unwrap();
     let storage = JmtStorage::temporary();
 
-    let context = MockContext::new(sender.clone(), storage);
-    let storage = context.make_storage();
+    let context = MockContext::new(sender.clone(), storage.clone());
 
     // Test Native-Context
     {
-        test_value_setter_helper(context);
+        test_value_setter_helper(context, storage.clone());
     }
 
     // Test Zk-Context
     {
-        let zk_context = ZkMockContext::new(sender, ZkStorage::new(storage.get_first_reads()));
-
-        test_value_setter_helper(zk_context);
+        let zk_storage = ZkStorage::new(storage.get_first_reads());
+        let zk_context = ZkMockContext::new(sender, zk_storage.clone());
+        test_value_setter_helper(zk_context, zk_storage);
     }
 }
 
-fn test_value_setter_helper<C: Context>(context: C) {
-    let mut module = ValueSetter::<C>::new(context.make_storage());
+fn test_value_setter_helper<C: Context>(context: C, storage: C::Storage) {
+    let mut module = ValueSetter::<C>::new(storage);
     module.genesis().unwrap();
 
     let new_value = 99;
@@ -66,18 +65,19 @@ fn test_err_on_sender_is_not_admin() {
     let context = MockContext::new(sender.clone(), storage.clone());
     // Test Native-Context
     {
-        test_err_on_sender_is_not_admin_helper(context);
+        test_err_on_sender_is_not_admin_helper(context, storage.clone());
     }
 
     // Test Zk-Context
     {
-        let zk_context = ZkMockContext::new(sender, ZkStorage::new(storage.get_first_reads()));
-        test_err_on_sender_is_not_admin_helper(zk_context);
+        let zk_storage = ZkStorage::new(storage.get_first_reads());
+        let zk_context = ZkMockContext::new(sender, zk_storage.clone());
+        test_err_on_sender_is_not_admin_helper(zk_context, zk_storage);
     }
 }
 
-fn test_err_on_sender_is_not_admin_helper<C: Context>(context: C) {
-    let mut module = ValueSetter::<C>::new(context.make_storage());
+fn test_err_on_sender_is_not_admin_helper<C: Context>(context: C, storage: C::Storage) {
+    let mut module = ValueSetter::<C>::new(storage);
     module.genesis().unwrap();
     let resp = module.set_value(11, &context);
 

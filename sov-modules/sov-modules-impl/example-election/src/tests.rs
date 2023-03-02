@@ -24,7 +24,7 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: C::Storage) {
     let admin = MockPublicKey::try_from("admin").unwrap();
     let admin_context = C::new(admin, storage.clone());
 
-    let ellection = &mut Election::<C>::new(admin_context.make_storage());
+    let ellection = &mut Election::<C>::new(storage.clone());
 
     // Init module
     {

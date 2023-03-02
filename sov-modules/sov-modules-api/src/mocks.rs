@@ -60,11 +60,6 @@ impl Context for MockContext {
     fn new(sender: Self::PublicKey, config: Self::Storage) -> Self {
         Self { sender, config }
     }
-
-    fn make_storage(&self) -> Self::Storage {
-        //TODO remove clone
-        self.config.clone()
-    }
 }
 
 #[derive(Clone)]
@@ -86,10 +81,5 @@ impl Context for ZkMockContext {
 
     fn new(sender: Self::PublicKey, config: Self::Storage) -> Self {
         Self { sender, config }
-    }
-
-    fn make_storage(&self) -> Self::Storage {
-        //TODO remove clone
-        self.config.clone()
     }
 }
