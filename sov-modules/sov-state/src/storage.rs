@@ -91,8 +91,6 @@ impl StorageValue {
 // An interface for storing and retrieving values in the storage.
 pub trait Storage {
     type Config;
-    /// Creates a new storage instance with the provided config.
-    fn new(config: Self::Config) -> Self;
     // Returns the value corresponding to the key or None if key is absent.
     fn get(&self, key: StorageKey) -> Option<StorageValue>;
 

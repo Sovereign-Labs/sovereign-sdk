@@ -4,13 +4,12 @@ use super::{
     types::Candidate,
     Election,
 };
-use first_read_last_write_cache::cache::FirstReads;
+
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey, ZkMockContext},
     Context, Module, ModuleInfo,
 };
 use sov_state::{JmtStorage, ZkStorage};
-use sovereign_db::state_db::StateDB;
 
 #[test]
 fn test_election() {

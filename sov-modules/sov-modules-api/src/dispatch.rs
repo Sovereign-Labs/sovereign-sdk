@@ -6,9 +6,7 @@ pub trait Genesis {
     type Config;
 
     /// Initializes the state of the rollup.
-    fn genesis(
-        config: Self::Config,
-    ) -> Result<<<Self as Genesis>::Context as Spec>::Storage, Error>;
+    fn genesis(config: <<Self as Genesis>::Context as Spec>::Storage) -> Result<(), Error>;
 }
 
 /// A trait that needs to be implemented for any call message.

@@ -33,14 +33,13 @@ impl GenesisMacro {
         // Implements the Genesis trait
         Ok(quote::quote! {
             impl #impl_generics sov_modules_api::Genesis for #ident #type_generics #where_clause {
-
+                // TODO fix C => generic param
                 type Context = C;
                 type Config = <C::Storage as sov_state::Storage>::Config;
 
-                fn genesis(config: Self::Config) -> core::result::Result<C::Storage, sov_modules_api::Error> {
-                    let storage = <C::Storage as sov_state::Storage> ::new(config);
+                fn genesis(storage: C::Storage) -> core::result::Result<(), sov_modules_api::Error> {
                     #(#genesis_fn_body)*
-                    Ok(storage)
+                    Ok(())
                 }
             }
         }

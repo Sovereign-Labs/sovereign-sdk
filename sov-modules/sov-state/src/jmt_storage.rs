@@ -55,13 +55,6 @@ impl Storage for JmtStorage {
     //  rename this type
     type Config = JmtDb;
 
-    fn new(config: Self::Config) -> Self {
-        Self {
-            db: config,
-            internal_cache: Default::default(),
-        }
-    }
-
     fn get(&self, key: StorageKey) -> Option<StorageValue> {
         self.internal_cache.get_or_fetch(key, &self.db)
     }
