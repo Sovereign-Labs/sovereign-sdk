@@ -73,6 +73,7 @@ fn run_example() {
     let sender = MockPublicKey::try_from("admin").unwrap();
     let admin_context = C::new(sender);
     let temp_db = StateDB::temporary();
+
     type RT = Runtime<C>;
 
     // Initialize the rollup: Call genesis on the Runtime

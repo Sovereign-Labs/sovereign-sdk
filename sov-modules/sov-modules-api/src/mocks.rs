@@ -44,11 +44,11 @@ impl MockSignature {
 #[derive(Clone)]
 pub struct MockContext {
     pub sender: MockPublicKey,
-    pub config: JmtDb,
+    pub config: JmtStorage,
 }
 
 impl Spec for MockContext {
-    type Config = JmtDb;
+    type Config = JmtStorage;
     type Storage = JmtStorage;
     type PublicKey = MockPublicKey;
     type Signature = MockSignature;
@@ -65,18 +65,18 @@ impl Context for MockContext {
 
     fn make_storage(&self) -> Self::Storage {
         //TODO remove clone
-        JmtStorage::new(self.config.clone())
+        self.config.clone()
     }
 }
 
 #[derive(Clone)]
 pub struct ZkMockContext {
     pub sender: MockPublicKey,
-    pub config: FirstReads,
+    pub config: ZkStorage,
 }
 
 impl Spec for ZkMockContext {
-    type Config = FirstReads;
+    type Config = ZkStorage;
     type Storage = ZkStorage;
     type PublicKey = MockPublicKey;
     type Signature = MockSignature;
@@ -93,6 +93,6 @@ impl Context for ZkMockContext {
 
     fn make_storage(&self) -> Self::Storage {
         //TODO remove clone
-        ZkStorage::new(self.config.clone())
+        self.config.clone()
     }
 }

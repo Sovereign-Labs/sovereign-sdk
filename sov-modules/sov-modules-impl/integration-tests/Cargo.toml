@@ -14,3 +14,4 @@ sov-state = { workspace = true }
 borsh = { workspace = true, features = ["rc"]}
 sovereign-sdk = { workspace = true}
 sovereign-db = { workspace = true, features = ["temp"]}
+first-read-last-write-cache = { workspace = true }

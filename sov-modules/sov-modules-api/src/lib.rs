@@ -21,7 +21,7 @@ pub enum NonInstantiable {}
 
 /// Spec contains types common for all modules.
 pub trait Spec {
-    type Config;
+    type Config: Clone;
 
     type Storage: Storage + Clone;
 

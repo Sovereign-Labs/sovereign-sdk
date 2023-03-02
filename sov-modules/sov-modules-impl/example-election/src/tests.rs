@@ -4,6 +4,7 @@ use super::{
     types::Candidate,
     Election,
 };
+use first_read_last_write_cache::cache::FirstReads;
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey, ZkMockContext},
     Context, Module, ModuleInfo,
@@ -13,17 +14,18 @@ use sovereign_db::state_db::StateDB;
 
 #[test]
 fn test_election() {
-    let storage = JmtStorage::temporary();
-    test_module::<MockContext>(storage.clone());
+    let config = JmtStorage::temporary();
+    test_module::<MockContext>(config.clone());
 
-    let zk_storage = ZkStorage::new(storage.get_first_reads());
-    test_module::<ZkMockContext>(zk_storage);
+    let zk_config = ZkStorage::new(config.get_first_reads());
+    test_module::<ZkMockContext>(zk_config);
 }
 
-fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: C::Storage) {
+fn test_module<C: Context<PublicKey = MockPublicKey>>(config: C::Config) {
     let admin = MockPublicKey::try_from("admin").unwrap();
-    let admin_context = C::new(admin);
-    let ellection = &mut Election::<C>::new(storage);
+    let admin_context = C::new(admin.clone(), config.clone());
+
+    let ellection = &mut Election::<C>::new(admin_context.make_storage());
 
     // Init module
     {
@@ -57,15 +59,15 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: C::Storage) {
 
     // Vote
     {
-        let sender_context = C::new(voter_1);
+        let sender_context = C::new(voter_1, config.clone());
         let vote = CallMessage::Vote(0);
         ellection.call(vote, &sender_context).unwrap();
 
-        let sender_context = C::new(voter_2);
+        let sender_context = C::new(voter_2, config.clone());
         let vote = CallMessage::Vote(1);
         ellection.call(vote, &sender_context).unwrap();
 
-        let sender_context = C::new(voter_3);
+        let sender_context = C::new(voter_3, config);
         let vote = CallMessage::Vote(1);
         ellection.call(vote, &sender_context).unwrap();
     }
