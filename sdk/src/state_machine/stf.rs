@@ -117,12 +117,12 @@ impl<'de, P: DecodeBorrowed<'de>, B: DecodeBorrowed<'de>> DecodeBorrowed<'de>
                 .ok_or(ConsensusMessageDecodeError::NoTag)?
             {
                 0 => Self::Batch(
-                    B::decode_from_slice(&mut &target[1..])
-                        .map_err(|e| ConsensusMessageDecodeError::Batch(e))?,
+                    B::decode_from_slice(&target[1..])
+                        .map_err(ConsensusMessageDecodeError::Batch)?,
                 ),
                 1 => Self::Proof(
-                    P::decode_from_slice(&mut &target[1..])
-                        .map_err(|e| ConsensusMessageDecodeError::Proof(e))?,
+                    P::decode_from_slice(&target[1..])
+                        .map_err(ConsensusMessageDecodeError::Proof)?,
                 ),
                 _ => Err(ConsensusMessageDecodeError::InvalidTag {
                     max_allowed: 1,
