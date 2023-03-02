@@ -24,7 +24,7 @@ impl StateDB {
         let inner = DB::open(
             path,
             "state-db",
-            STATE_TABLES.iter().map(|x| *x),
+            STATE_TABLES.iter().copied(),
             &gen_rocksdb_options(&Default::default(), false),
         )?;
         Ok(Self {

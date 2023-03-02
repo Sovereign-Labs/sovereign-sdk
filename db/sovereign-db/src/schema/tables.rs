@@ -33,7 +33,7 @@ use sovereign_sdk::{
     stf::{EventKey, EventValue},
 };
 
-pub const STATE_TABLES: &[&'static str] = &[
+pub const STATE_TABLES: &[&str] = &[
     KeyHashToKey::table_name(),
     JmtValues::table_name(),
     JmtNodes::table_name(),
