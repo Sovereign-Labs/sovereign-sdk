@@ -37,8 +37,6 @@ impl ZkStorage {
 }
 
 impl Storage for ZkStorage {
-    type Config = ();
-
     fn get(&self, key: StorageKey) -> Option<StorageValue> {
         self.internal_cache.get_or_fetch(key, &self.first_reads)
     }

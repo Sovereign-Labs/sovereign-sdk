@@ -3,10 +3,9 @@ use crate::{CallResponse, Context, Error, QueryResponse, Spec};
 /// Methods from this trait should be called only once during the rollup deployment.
 pub trait Genesis {
     type Context: Context;
-    type Config;
 
     /// Initializes the state of the rollup.
-    fn genesis(config: <<Self as Genesis>::Context as Spec>::Storage) -> Result<(), Error>;
+    fn genesis(storage: <<Self as Genesis>::Context as Spec>::Storage) -> Result<(), Error>;
 }
 
 /// A trait that needs to be implemented for any call message.

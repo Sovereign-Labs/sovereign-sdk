@@ -35,7 +35,6 @@ impl GenesisMacro {
             impl #impl_generics sov_modules_api::Genesis for #ident #type_generics #where_clause {
                 // TODO fix C => generic param
                 type Context = C;
-                type Config = <C::Storage as sov_state::Storage>::Config;
 
                 fn genesis(storage: C::Storage) -> core::result::Result<(), sov_modules_api::Error> {
                     #(#genesis_fn_body)*

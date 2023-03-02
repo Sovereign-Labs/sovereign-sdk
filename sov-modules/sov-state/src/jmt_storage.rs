@@ -49,12 +49,6 @@ impl JmtStorage {
 }
 
 impl Storage for JmtStorage {
-    /// Instead of a config object, we just pass in the
-    /// db instance directly for now.
-    //  TODO: decide whether to use an actual config, or
-    //  rename this type
-    type Config = JmtDb;
-
     fn get(&self, key: StorageKey) -> Option<StorageValue> {
         self.internal_cache.get_or_fetch(key, &self.db)
     }
