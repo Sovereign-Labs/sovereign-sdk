@@ -8,7 +8,10 @@ use schemadb::DB;
 
 use crate::{
     rocks_db_config::gen_rocksdb_options,
-    schema::tables::{JmtNodes, JmtValues, KeyHashToKey, STATE_TABLES},
+    schema::{
+        tables::{JmtNodes, JmtValues, KeyHashToKey, STATE_TABLES},
+        types::StateKey,
+    },
 };
 
 #[derive(Clone)]
@@ -39,6 +42,29 @@ impl StateDB {
     pub fn put_preimage(&self, key_hash: KeyHash, key: &Vec<u8>) -> Result<(), anyhow::Error> {
         self.db.put::<KeyHashToKey>(&key_hash.0, key)
     }
+
+    pub fn get_value_option_by_key(
+        &self,
+        version: Version,
+        key: StateKey,
+    ) -> anyhow::Result<Option<jmt::OwnedValue>> {
+        let mut iter = self.db.iter::<JmtValues>()?;
+        // find the latest instance of the key whose version <= target
+        iter.seek_for_prev(&(&key, version))?;
+        let found = iter.next();
+        match found {
+            Some(result) => {
+                let ((found_key, found_version), value) = result?;
+                if found_key == key {
+                    anyhow::ensure!(found_version <= version, "Bug! iterator isn't returning expected values. expected a version <= {version:} but found {found_version:}");
+                    Ok(value)
+                } else {
+                    Ok(None)
+                }
+            }
+            None => Ok(None),
+        }
+    }
 }
 
 impl TreeReader for StateDB {
@@ -55,24 +81,10 @@ impl TreeReader for StateDB {
         key_hash: KeyHash,
     ) -> anyhow::Result<Option<jmt::OwnedValue>> {
         if let Some(key) = self.db.get::<KeyHashToKey>(&key_hash.0)? {
-            let mut iter = self.db.iter::<JmtValues>()?;
-            // find the latest instance of the key whose version <= target
-            iter.seek_for_prev(&(&key, version))?;
-            let found = iter.next();
-            return match found {
-                Some(result) => {
-                    let ((found_key, found_version), value) = result?;
-                    if found_key == key {
-                        anyhow::ensure!(found_version <= version, "Bug! iterator isn't returning expected values. expected a version <= {version:} but found {found_version:}");
-                        Ok(value.into())
-                    } else {
-                        Ok(None)
-                    }
-                }
-                None => Ok(None),
-            };
+            self.get_value_option_by_key(version, key)
+        } else {
+            Ok(None)
         }
-        Ok(None)
     }
 
     fn get_rightmost_leaf(
