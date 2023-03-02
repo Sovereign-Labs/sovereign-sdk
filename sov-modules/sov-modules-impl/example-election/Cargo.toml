@@ -5,7 +5,7 @@ edition = "2021"
 
 [dev-dependencies]
 sov-modules-api = { workspace = true ,  features = ["mocks"]}
-sovereign-db = { workspace = true }
+sovereign-db = { workspace = true, features = ["temp"] }
 
 [dependencies]
 anyhow = { workspace = true }

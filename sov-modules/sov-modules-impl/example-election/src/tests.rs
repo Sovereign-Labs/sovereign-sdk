@@ -9,6 +9,7 @@ use sov_modules_api::{
     Context, Module, ModuleInfo,
 };
 use sov_state::{JmtStorage, ZkStorage};
+use sovereign_db::state_db::StateDB;
 
 #[test]
 fn test_election() {

@@ -4,6 +4,9 @@ use crate::{Context, Spec};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_state::{JmtStorage, ZkStorage};
 
+use first_read_last_write_cache::cache::FirstReads;
+pub type JmtDb = sovereign_db::state_db::StateDB;
+
 /// Mock for Spec::PublicKey, useful for testing.
 #[derive(PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize, Debug)]
 pub struct MockPublicKey {
@@ -41,9 +44,11 @@ impl MockSignature {
 #[derive(Clone)]
 pub struct MockContext {
     pub sender: MockPublicKey,
+    pub config: JmtDb,
 }
 
 impl Spec for MockContext {
+    type Config = JmtDb;
     type Storage = JmtStorage;
     type PublicKey = MockPublicKey;
     type Signature = MockSignature;
@@ -54,17 +59,24 @@ impl Context for MockContext {
         &self.sender
     }
 
-    fn new(sender: Self::PublicKey) -> Self {
-        Self { sender }
+    fn new(sender: Self::PublicKey, config: Self::Config) -> Self {
+        Self { sender, config }
+    }
+
+    fn make_storage(&self) -> Self::Storage {
+        //TODO remove clone
+        JmtStorage::new(self.config.clone())
     }
 }
 
 #[derive(Clone)]
 pub struct ZkMockContext {
     pub sender: MockPublicKey,
+    pub config: FirstReads,
 }
 
 impl Spec for ZkMockContext {
+    type Config = FirstReads;
     type Storage = ZkStorage;
     type PublicKey = MockPublicKey;
     type Signature = MockSignature;
@@ -75,7 +87,12 @@ impl Context for ZkMockContext {
         &self.sender
     }
 
-    fn new(sender: Self::PublicKey) -> Self {
-        Self { sender }
+    fn new(sender: Self::PublicKey, config: Self::Config) -> Self {
+        Self { sender, config }
+    }
+
+    fn make_storage(&self) -> Self::Storage {
+        //TODO remove clone
+        ZkStorage::new(self.config.clone())
     }
 }

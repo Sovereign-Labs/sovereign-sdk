@@ -9,6 +9,8 @@ sov-state = { workspace = true }
 sovereign-sdk = { workspace = true }
 borsh = { workspace = true}
 thiserror = { workspace = true }
+sovereign-db = { workspace = true }
+first-read-last-write-cache = { workspace = true }
 
 [features]
 mocks = []
