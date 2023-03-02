@@ -47,7 +47,6 @@ pub struct MockContext {
 }
 
 impl Spec for MockContext {
-    type Config = JmtStorage;
     type Storage = JmtStorage;
     type PublicKey = MockPublicKey;
     type Signature = MockSignature;
@@ -58,7 +57,7 @@ impl Context for MockContext {
         &self.sender
     }
 
-    fn new(sender: Self::PublicKey, config: Self::Config) -> Self {
+    fn new(sender: Self::PublicKey, config: Self::Storage) -> Self {
         Self { sender, config }
     }
 
@@ -75,7 +74,6 @@ pub struct ZkMockContext {
 }
 
 impl Spec for ZkMockContext {
-    type Config = ZkStorage;
     type Storage = ZkStorage;
     type PublicKey = MockPublicKey;
     type Signature = MockSignature;
@@ -86,7 +84,7 @@ impl Context for ZkMockContext {
         &self.sender
     }
 
-    fn new(sender: Self::PublicKey, config: Self::Config) -> Self {
+    fn new(sender: Self::PublicKey, config: Self::Storage) -> Self {
         Self { sender, config }
     }
 

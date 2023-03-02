@@ -20,9 +20,9 @@ fn test_election() {
     test_module::<ZkMockContext>(zk_config);
 }
 
-fn test_module<C: Context<PublicKey = MockPublicKey>>(config: C::Config) {
+fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: C::Storage) {
     let admin = MockPublicKey::try_from("admin").unwrap();
-    let admin_context = C::new(admin.clone(), config.clone());
+    let admin_context = C::new(admin, storage.clone());
 
     let ellection = &mut Election::<C>::new(admin_context.make_storage());
 
@@ -58,15 +58,15 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(config: C::Config) {
 
     // Vote
     {
-        let sender_context = C::new(voter_1, config.clone());
+        let sender_context = C::new(voter_1, storage.clone());
         let vote = CallMessage::Vote(0);
         ellection.call(vote, &sender_context).unwrap();
 
-        let sender_context = C::new(voter_2, config.clone());
+        let sender_context = C::new(voter_2, storage.clone());
         let vote = CallMessage::Vote(1);
         ellection.call(vote, &sender_context).unwrap();
 
-        let sender_context = C::new(voter_3, config);
+        let sender_context = C::new(voter_3, storage);
         let vote = CallMessage::Vote(1);
         ellection.call(vote, &sender_context).unwrap();
     }

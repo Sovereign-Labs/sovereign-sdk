@@ -21,8 +21,6 @@ pub enum NonInstantiable {}
 
 /// Spec contains types common for all modules.
 pub trait Spec {
-    type Config: Clone;
-
     type Storage: Storage + Clone;
 
     type PublicKey: borsh::BorshDeserialize
@@ -41,7 +39,7 @@ pub trait Context: Spec + Clone {
     fn sender(&self) -> &Self::PublicKey;
 
     /// Constructor for the Context.
-    fn new(sender: Self::PublicKey, config: Self::Config) -> Self;
+    fn new(sender: Self::PublicKey, config: Self::Storage) -> Self;
 
     fn make_storage(&self) -> Self::Storage;
 }
