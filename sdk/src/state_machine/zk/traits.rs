@@ -10,7 +10,8 @@ pub trait ZkVM {
     type Proof: ProofTrait<Self>;
     type Error: Debug;
 
-    fn log<T: Encode>(item: T);
+    fn write_to_guest<T: Encode>(item: T);
+    fn read_from_host<T: Decode>() -> T;
     fn verify(
         proof: Self::Proof,
         code_commitment: &Self::CodeCommitment,
