@@ -80,7 +80,7 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
                 let commitment = proof
                     .code_commitment
                     .clone()
-                    .unwrap_or_else(|| env::read_unchecked());
+                    .unwrap_or_else(env::read_unchecked);
                 let prev_header = proof.verify(&commitment)?;
                 (prev_header, Some(commitment))
             }
@@ -108,7 +108,7 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
             let mut data = tx.data();
             let len = data.remaining();
             let data = data.copy_to_bytes(len);
-            match ConsensusMessage::decode_from_slice(&mut &data[..]).unwrap() {
+            match ConsensusMessage::decode_from_slice(&data[..]).unwrap() {
                 ConsensusMessage::Batch(batch) => {
                     if current_sequencers.allows(tx.sender()) {
                         match self.app.apply_batch(

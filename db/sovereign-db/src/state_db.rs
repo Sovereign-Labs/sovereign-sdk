@@ -21,7 +21,7 @@ impl StateDB {
         let inner = DB::open(
             path,
             "state-db",
-            STATE_TABLES.iter().map(|x| *x),
+            STATE_TABLES.iter().copied(),
             &gen_rocksdb_options(&Default::default(), false),
         )?;
         Ok(Self {
@@ -64,7 +64,7 @@ impl TreeReader for StateDB {
                     let ((found_key, found_version), value) = result?;
                     if found_key == key {
                         anyhow::ensure!(found_version <= version, "Bug! iterator isn't returning expected values. expected a version <= {version:} but found {found_version:}");
-                        Ok(value.into())
+                        Ok(value)
                     } else {
                         Ok(None)
                     }

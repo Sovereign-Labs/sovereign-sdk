@@ -42,7 +42,7 @@ pub trait DaLayerTrait {
     fn verify_relevant_tx_list(
         &self,
         blockheader: &Self::BlockHeader,
-        txs: &Vec<Self::BlobTransaction>,
+        txs: &[Self::BlobTransaction],
         inclusion_proof: Self::InclusionMultiProof,
         completeness_proof: Self::CompletenessProof,
     ) -> Result<(), Self::Error>;
