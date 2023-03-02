@@ -1,6 +1,6 @@
 use std::{fmt::Display, sync::Arc};
 
-use crate::{utils::AlignedVec, Prefix};
+use crate::{internal_cache::StorageInternalCache, utils::AlignedVec, Prefix, ValueReader};
 use first_read_last_write_cache::{CacheKey, CacheValue};
 use hex;
 use sovereign_sdk::serial::Encode;
@@ -80,13 +80,16 @@ impl StorageValue {
             value: cache_value.value,
         }
     }
+
+    pub fn new_from_bytes(value: Vec<u8>) -> Self {
+        Self {
+            value: Arc::new(value),
+        }
+    }
 }
 
 // An interface for storing and retrieving values in the storage.
 pub trait Storage {
-    type Config;
-    /// Creates a new storage instance with the provided config.
-    fn new(config: Self::Config) -> Self;
     // Returns the value corresponding to the key or None if key is absent.
     fn get(&self, key: StorageKey) -> Option<StorageValue>;
 
@@ -114,5 +117,34 @@ impl From<&'static str> for StorageValue {
         Self {
             value: Arc::new(value.as_bytes().to_vec()),
         }
+    }
+}
+
+#[derive(Clone)]
+pub struct GenericStorage<VR: ValueReader> {
+    value_reader: VR,
+    pub(crate) internal_cache: StorageInternalCache,
+}
+
+impl<VR: ValueReader> GenericStorage<VR> {
+    pub fn new(value_reader: VR) -> Self {
+        Self {
+            value_reader,
+            internal_cache: StorageInternalCache::default(),
+        }
+    }
+}
+
+impl<VR: ValueReader> Storage for GenericStorage<VR> {
+    fn get(&self, key: StorageKey) -> Option<StorageValue> {
+        self.internal_cache.get_or_fetch(key, &self.value_reader)
+    }
+
+    fn set(&mut self, key: StorageKey, value: StorageValue) {
+        self.internal_cache.set(key, value)
+    }
+
+    fn delete(&mut self, key: StorageKey) {
+        self.internal_cache.delete(key)
     }
 }

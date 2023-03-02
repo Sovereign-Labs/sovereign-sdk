@@ -6,7 +6,7 @@ use sov_modules_api::{
     Context, Genesis, Module,
 };
 use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
-use sovereign_db::state_db::StateDB;
+use sov_state::JmtStorage;
 
 #[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
 struct Runtime<C: Context> {
@@ -18,12 +18,9 @@ fn main() {
     use sov_modules_api::{DispatchCall, DispatchQuery};
     type RT = Runtime<MockContext>;
 
-    let db = StateDB::temporary();
-    let storage = RT::genesis(db).unwrap();
-
-    let context = MockContext {
-        sender: MockPublicKey::new(vec![]),
-    };
+    let storage = JmtStorage::temporary();
+    RT::genesis(storage.clone()).unwrap();
+    let context = MockContext::new(MockPublicKey::new(vec![]));
 
     let value = 11;
     {

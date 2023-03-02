@@ -1,6 +1,7 @@
 use syn::DeriveInput;
 use syn::TypeGenerics;
 
+use super::common::parse_generic_params;
 use super::common::{StructFieldExtractor, StructNamedField};
 
 pub(crate) struct GenesisMacro {
@@ -29,18 +30,16 @@ impl GenesisMacro {
 
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
         let genesis_fn_body = Self::make_genesis_fn_body(type_generics.clone(), &fields);
+        let generic_param = parse_generic_params(&generics)?;
 
         // Implements the Genesis trait
         Ok(quote::quote! {
             impl #impl_generics sov_modules_api::Genesis for #ident #type_generics #where_clause {
+                type Context = #generic_param;
 
-                type Context = C;
-                type Config = <C::Storage as sov_state::Storage>::Config;
-
-                fn genesis(config: Self::Config) -> core::result::Result<C::Storage, sov_modules_api::Error> {
-                    let storage = <C::Storage as sov_state::Storage> ::new(config);
+                fn genesis(storage: <<Self as sov_modules_api::Genesis>::Context as sov_modules_api::Spec>::Storage) -> core::result::Result<(), sov_modules_api::Error> {
                     #(#genesis_fn_body)*
-                    Ok(storage)
+                    Ok(())
                 }
             }
         }

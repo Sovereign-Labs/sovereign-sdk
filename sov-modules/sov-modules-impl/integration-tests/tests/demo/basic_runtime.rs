@@ -8,8 +8,7 @@ use sov_modules_api::{
     CallResponse, Context, DispatchCall, DispatchQuery, Error, Genesis, Module,
 };
 use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
-use sov_state::{CacheLog, ValueReader};
-use sovereign_db::state_db::StateDB;
+use sov_state::{CacheLog, JmtStorage, ValueReader};
 
 /// dispatch_tx is a high level interface used by the sdk.
 /// Transaction signature must be checked outside of this function.
@@ -70,13 +69,15 @@ pub struct Runtime<C: Context> {
 
 fn run_example() {
     type C = MockContext;
+
     let sender = MockPublicKey::try_from("admin").unwrap();
-    let admin_context = C::new(sender);
-    let temp_db = StateDB::temporary();
+    let storage = JmtStorage::temporary();
     type RT = Runtime<C>;
 
     // Initialize the rollup: Call genesis on the Runtime
-    let storage = RT::genesis(temp_db).unwrap();
+    RT::genesis(storage.clone()).unwrap();
+
+    let admin_context = C::new(sender);
 
     // Election module
     // Send candidates
