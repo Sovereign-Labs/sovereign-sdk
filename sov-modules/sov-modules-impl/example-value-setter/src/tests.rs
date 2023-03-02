@@ -5,8 +5,7 @@ use sov_modules_api::mocks::ZkMockContext;
 use sov_modules_api::mocks::{MockContext, MockPublicKey};
 use sov_modules_api::Context;
 use sov_modules_api::{Module, ModuleInfo};
-use sov_state::JmtStorage;
-use sov_state::ZkStorage;
+use sov_state::{JmtStorage, ZkStorage};
 use sovereign_sdk::stf::Event;
 
 #[test]
@@ -16,18 +15,14 @@ fn test_value_setter() {
 
     // Test Native-Context
     {
-        let context = MockContext {
-            sender: sender.clone(),
-        };
-
+        let context = MockContext::new(sender.clone());
         test_value_setter_helper(context, storage.clone());
     }
 
     // Test Zk-Context
     {
-        let zk_context = ZkMockContext { sender };
-
         let zk_storage = ZkStorage::new(storage.get_first_reads());
+        let zk_context = ZkMockContext::new(sender);
         test_value_setter_helper(zk_context, zk_storage);
     }
 }
@@ -69,18 +64,14 @@ fn test_err_on_sender_is_not_admin() {
 
     // Test Native-Context
     {
-        let context = MockContext {
-            sender: sender.clone(),
-        };
-
+        let context = MockContext::new(sender.clone());
         test_err_on_sender_is_not_admin_helper(context, storage.clone());
     }
 
     // Test Zk-Context
     {
-        let zk_context = ZkMockContext { sender };
-
         let zk_storage = ZkStorage::new(storage.get_first_reads());
+        let zk_context = ZkMockContext::new(sender);
         test_err_on_sender_is_not_admin_helper(zk_context, zk_storage);
     }
 }

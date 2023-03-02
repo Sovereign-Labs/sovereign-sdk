@@ -3,7 +3,7 @@ mod modules;
 use modules::{first_test_module, second_test_module};
 use sov_modules_api::{mocks::MockContext, Context, Module};
 use sov_modules_macros::{DispatchQuery, Genesis};
-use sovereign_db::state_db::StateDB;
+use sov_state::JmtStorage;
 
 // Debugging hint: To expand the macro in tests run: `cargo expand --test tests`
 #[derive(Genesis, DispatchQuery)]
@@ -19,8 +19,8 @@ fn main() {
     use sov_modules_api::{DispatchQuery, Genesis};
 
     type C = MockContext;
-    let db = StateDB::temporary();
-    let storage = Runtime::<C>::genesis(db).unwrap();
+    let storage = JmtStorage::temporary();
+    Runtime::<C>::genesis(storage.clone()).unwrap();
 
     {
         let message = RuntimeQuery::<C>::first(());

@@ -4,6 +4,7 @@ use super::{
     types::Candidate,
     Election,
 };
+
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey, ZkMockContext},
     Context, Module, ModuleInfo,
@@ -12,10 +13,10 @@ use sov_state::{JmtStorage, ZkStorage};
 
 #[test]
 fn test_election() {
-    let storage = JmtStorage::temporary();
-    test_module::<MockContext>(storage.clone());
+    let native_storage = JmtStorage::temporary();
+    test_module::<MockContext>(native_storage.clone());
 
-    let zk_storage = ZkStorage::new(storage.get_first_reads());
+    let zk_storage = ZkStorage::new(native_storage.get_first_reads());
     test_module::<ZkMockContext>(zk_storage);
 }
 
