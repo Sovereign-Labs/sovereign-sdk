@@ -4,7 +4,6 @@ use crate::{Context, Spec};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_state::{JmtStorage, ZkStorage};
 
-use first_read_last_write_cache::cache::FirstReads;
 pub type JmtDb = sovereign_db::state_db::StateDB;
 
 /// Mock for Spec::PublicKey, useful for testing.

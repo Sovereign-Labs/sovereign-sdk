@@ -10,7 +10,7 @@ sov-modules-api = { workspace = true ,  features = ["mocks"]}
 sov-modules-macros = { workspace = true }
 example-election = {path = "../example-election" }
 example-value-setter = {path = "../example-value-setter" }
-sov-state = { workspace = true }
+sov-state = { workspace = true, features = ["temp"] }
 borsh = { workspace = true, features = ["rc"]}
 sovereign-sdk = { workspace = true}
 sovereign-db = { workspace = true, features = ["temp"]}

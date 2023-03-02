@@ -19,7 +19,7 @@ impl ValueReader for JmtDb {
 /// Storage backed by JmtDb.
 #[derive(Clone)]
 pub struct JmtStorage {
-    pub(crate) db: JmtDb,
+    pub db: JmtDb,
     // Caches first read and last write for a particular key.
     pub(crate) internal_cache: StorageInternalCache,
 }

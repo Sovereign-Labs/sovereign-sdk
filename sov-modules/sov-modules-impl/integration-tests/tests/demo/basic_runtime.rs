@@ -8,7 +8,7 @@ use sov_modules_api::{
     CallResponse, Context, DispatchCall, DispatchQuery, Error, Genesis, Module,
 };
 use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
-use sov_state::{CacheLog, ValueReader};
+use sov_state::{CacheLog, JmtStorage, ValueReader};
 use sovereign_db::state_db::StateDB;
 
 /// dispatch_tx is a high level interface used by the sdk.
@@ -70,14 +70,15 @@ pub struct Runtime<C: Context> {
 
 fn run_example() {
     type C = MockContext;
+    let db = StateDB::temporary();
     let sender = MockPublicKey::try_from("admin").unwrap();
-    let admin_context = C::new(sender);
-    let temp_db = StateDB::temporary();
 
     type RT = Runtime<C>;
 
     // Initialize the rollup: Call genesis on the Runtime
-    let storage = RT::genesis(temp_db).unwrap();
+    let storage = RT::genesis(db).unwrap();
+
+    let admin_context = C::new(sender, storage.clone());
 
     // Election module
     // Send candidates
@@ -115,7 +116,7 @@ fn run_example() {
     // Vote
     {
         for voter in voters {
-            let voter_context = C::new(voter);
+            let voter_context = C::new(voter, storage.clone());
             let vote_message = example_election::call::CallMessage::<C>::Vote(1);
 
             let serialized_message = RT::encode_election_call(vote_message);

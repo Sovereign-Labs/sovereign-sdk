@@ -20,10 +20,7 @@ fn main() {
 
     let db = StateDB::temporary();
     let storage = RT::genesis(db).unwrap();
-
-    let context = MockContext {
-        sender: MockPublicKey::new(vec![]),
-    };
+    let context = MockContext::new(MockPublicKey::new(vec![]), storage.clone());
 
     let value = 11;
     {
