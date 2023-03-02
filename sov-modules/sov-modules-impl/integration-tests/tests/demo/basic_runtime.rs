@@ -77,7 +77,7 @@ fn run_example() {
     // Initialize the rollup: Call genesis on the Runtime
     RT::genesis(storage.clone()).unwrap();
 
-    let admin_context = C::new(sender, storage.clone());
+    let admin_context = C::new(sender);
 
     // Election module
     // Send candidates
@@ -115,7 +115,7 @@ fn run_example() {
     // Vote
     {
         for voter in voters {
-            let voter_context = C::new(voter, storage.clone());
+            let voter_context = C::new(voter);
             let vote_message = example_election::call::CallMessage::<C>::Vote(1);
 
             let serialized_message = RT::encode_election_call(vote_message);

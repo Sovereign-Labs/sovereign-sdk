@@ -20,7 +20,7 @@ fn main() {
 
     let storage = JmtStorage::temporary();
     RT::genesis(storage.clone()).unwrap();
-    let context = MockContext::new(MockPublicKey::new(vec![]), storage.clone());
+    let context = MockContext::new(MockPublicKey::new(vec![]));
 
     let value = 11;
     {

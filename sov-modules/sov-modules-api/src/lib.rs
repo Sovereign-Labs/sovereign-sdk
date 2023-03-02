@@ -39,7 +39,7 @@ pub trait Context: Spec + Clone {
     fn sender(&self) -> &Self::PublicKey;
 
     /// Constructor for the Context.
-    fn new(sender: Self::PublicKey, config: Self::Storage) -> Self;
+    fn new(sender: Self::PublicKey) -> Self;
 }
 
 /// Every module has to implement this trait.

@@ -22,7 +22,7 @@ fn test_election() {
 
 fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: C::Storage) {
     let admin = MockPublicKey::try_from("admin").unwrap();
-    let admin_context = C::new(admin, storage.clone());
+    let admin_context = C::new(admin);
 
     let ellection = &mut Election::<C>::new(storage.clone());
 
@@ -58,15 +58,15 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: C::Storage) {
 
     // Vote
     {
-        let sender_context = C::new(voter_1, storage.clone());
+        let sender_context = C::new(voter_1);
         let vote = CallMessage::Vote(0);
         ellection.call(vote, &sender_context).unwrap();
 
-        let sender_context = C::new(voter_2, storage.clone());
+        let sender_context = C::new(voter_2);
         let vote = CallMessage::Vote(1);
         ellection.call(vote, &sender_context).unwrap();
 
-        let sender_context = C::new(voter_3, storage);
+        let sender_context = C::new(voter_3);
         let vote = CallMessage::Vote(1);
         ellection.call(vote, &sender_context).unwrap();
     }

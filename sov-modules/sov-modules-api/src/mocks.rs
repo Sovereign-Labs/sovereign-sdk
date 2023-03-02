@@ -43,7 +43,6 @@ impl MockSignature {
 #[derive(Clone)]
 pub struct MockContext {
     pub sender: MockPublicKey,
-    pub config: JmtStorage,
 }
 
 impl Spec for MockContext {
@@ -57,15 +56,14 @@ impl Context for MockContext {
         &self.sender
     }
 
-    fn new(sender: Self::PublicKey, config: Self::Storage) -> Self {
-        Self { sender, config }
+    fn new(sender: Self::PublicKey) -> Self {
+        Self { sender }
     }
 }
 
 #[derive(Clone)]
 pub struct ZkMockContext {
     pub sender: MockPublicKey,
-    pub config: ZkStorage,
 }
 
 impl Spec for ZkMockContext {
@@ -79,7 +77,7 @@ impl Context for ZkMockContext {
         &self.sender
     }
 
-    fn new(sender: Self::PublicKey, config: Self::Storage) -> Self {
-        Self { sender, config }
+    fn new(sender: Self::PublicKey) -> Self {
+        Self { sender }
     }
 }
