@@ -41,4 +41,8 @@ impl<K: Encode, V: Encode + Decode, S: Storage> Backend<K, V, S> {
                 .unwrap_or_else(|e| panic!("Unable to deserialize storage value {e:?}")),
         )
     }
+    
+    pub(crate) fn delete_value(&mut self, storage_key: StorageKey) {
+        self.storage.delete(storage_key);
+    }
 }

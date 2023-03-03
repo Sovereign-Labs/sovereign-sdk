@@ -45,4 +45,9 @@ impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
     pub fn prefix(&self) -> &Prefix {
         self.backend.prefix()
     }
+
+    pub fn delete(&mut self, key: &K) {
+        let storage_key = StorageKey::new(self.prefix());
+        self.backend.delete_value(storage_key);
+    }
 }
