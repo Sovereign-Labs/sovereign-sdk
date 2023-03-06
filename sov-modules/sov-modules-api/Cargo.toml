@@ -9,6 +9,8 @@ sov-state = { workspace = true }
 sovereign-sdk = { workspace = true }
 borsh = { workspace = true}
 thiserror = { workspace = true }
+jmt = { workspace = true }
+sha2 = { workspace = true }
 
 [features]
 mocks = []

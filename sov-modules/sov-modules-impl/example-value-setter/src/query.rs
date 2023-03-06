@@ -2,7 +2,7 @@ use super::ValueSetter;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 pub enum QueryMessage {
     GetValue,
 }
