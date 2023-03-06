@@ -23,8 +23,9 @@ impl ValueReader for FirstReads {
 
 #[derive(Clone)]
 pub struct ZkStorage {
-    pub(crate) value_reader: FirstReads,
-    pub(crate) tx_cache: StorageInternalCache,
+    batch_cache: StorageInternalCache,
+    value_reader: FirstReads,
+    tx_cache: StorageInternalCache,
 }
 
 impl ZkStorage {
@@ -32,6 +33,7 @@ impl ZkStorage {
         Self {
             value_reader,
             tx_cache: StorageInternalCache::default(),
+            batch_cache: StorageInternalCache::default(),
         }
     }
 }
@@ -49,7 +51,11 @@ impl Storage for ZkStorage {
         self.tx_cache.delete(key)
     }
 
-    fn merge(&mut self) {}
+    fn merge(&mut self) {
+        self.batch_cache
+            .merge(&mut self.tx_cache)
+            .unwrap_or_else(|e| panic!("Cache merge error: {e}"));
+    }
 
     fn finalize(&mut self) {}
 }

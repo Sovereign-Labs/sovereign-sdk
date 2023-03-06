@@ -88,19 +88,21 @@ impl StorageValue {
     }
 }
 
-// An interface for storing and retrieving values in the storage.
+/// An interface for storing and retrieving values in the storage.
 pub trait Storage {
-    // Returns the value corresponding to the key or None if key is absent.
+    /// Returns the value corresponding to the key or None if key is absent.
     fn get(&self, key: StorageKey) -> Option<StorageValue>;
 
-    // Inserts a key-value pair into the storage.
+    /// Inserts a key-value pair into the storage.
     fn set(&mut self, key: StorageKey, value: StorageValue);
 
-    // Deletes a key from the storage.
+    /// Deletes a key from the storage.
     fn delete(&mut self, key: StorageKey);
 
+    /// Merges the batch level and tx level cache.
     fn merge(&mut self);
 
+    /// Saves modified values in the db and clears internal caches.
     fn finalize(&mut self);
 }
 
