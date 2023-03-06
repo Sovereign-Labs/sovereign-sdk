@@ -208,7 +208,7 @@ fn test_demo_values_in_cache() {
     assert!(check_query(storage))
 }
 
-//#[test]
+#[test]
 #[serial]
 fn test_demo_values_in_db() {
     type C = MockContext;
@@ -232,7 +232,7 @@ fn test_demo_values_in_db() {
     }
 }
 
-// /#[test]
+#[test]
 #[serial]
 fn test_demo_values_not_in_db() {
     type C = MockContext;
