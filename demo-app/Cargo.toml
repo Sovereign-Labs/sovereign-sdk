@@ -1,0 +1,20 @@
+[package]
+name = "demo-app"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = { workspace = true }
+sovereign-sdk = { workspace = true }
+example-election = { workspace = true }
+sov-state = { workspace = true, features = ["temp"] }
+sovereign-db = { workspace = true }
+sov-modules-api = { workspace = true, features = ["mocks"] }
+sov-modules-macros = { workspace = true }
+borsh = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+first-read-last-write-cache = { workspace = true }
