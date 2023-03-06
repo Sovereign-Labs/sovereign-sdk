@@ -246,7 +246,7 @@ fn test_demo_values_not_in_db() {
         call_value_setter_module::<C>(&storage);
         // Don't save anything in the db.
     }
-    // The lookups fails because we generated fresh storage, but we didn't save values in the db before.
+    // The DB lookup fails because we generated fresh storage, but we didn't save values in the db before.
     {
         let storage = JmtStorage::with_path(DB_DIR).unwrap();
         assert!(!check_query(storage))
