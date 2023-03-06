@@ -68,8 +68,6 @@ pub struct Runtime<C: Context> {
     value_setter: example_value_setter::ValueSetter<C>,
 }
 
-const DB_DIR: &str = "test_db";
-
 fn call_election_module<C: Context<PublicKey = MockPublicKey>>(storage: &C::Storage) {
     let sender = MockPublicKey::try_from("admin").unwrap();
     let admin_context = C::new(sender);
@@ -191,14 +189,13 @@ fn check_query(storage: JmtStorage) -> bool {
 }
 
 use serial_test::serial;
-
 #[test]
 #[serial]
 fn test_demo_values_in_cache() {
     type C = MockContext;
-    delete_storage(DB_DIR);
 
-    let storage = JmtStorage::with_path(DB_DIR).unwrap();
+    let path = schemadb::temppath::TempPath::new();
+    let storage = JmtStorage::with_path(path).unwrap();
     // Initialize the rollup: Call genesis on the Runtime
     Runtime::<C>::genesis(storage.clone()).unwrap();
 
@@ -212,10 +209,9 @@ fn test_demo_values_in_cache() {
 #[serial]
 fn test_demo_values_in_db() {
     type C = MockContext;
-    delete_storage(DB_DIR);
-
+    let path = schemadb::temppath::TempPath::new();
     {
-        let mut storage = JmtStorage::with_path(DB_DIR).unwrap();
+        let mut storage = JmtStorage::with_path(&path).unwrap();
 
         Runtime::<C>::genesis(storage.clone()).unwrap();
 
@@ -227,7 +223,7 @@ fn test_demo_values_in_db() {
     }
     // Generate new storage instance after dumping data to the db.
     {
-        let storage = JmtStorage::with_path(DB_DIR).unwrap();
+        let storage = JmtStorage::with_path(path).unwrap();
         assert!(check_query(storage))
     }
 }
@@ -236,9 +232,9 @@ fn test_demo_values_in_db() {
 #[serial]
 fn test_demo_values_not_in_db() {
     type C = MockContext;
-    delete_storage(DB_DIR);
+    let path = schemadb::temppath::TempPath::new();
     {
-        let storage = JmtStorage::with_path(DB_DIR).unwrap();
+        let storage = JmtStorage::with_path(&path).unwrap();
 
         Runtime::<C>::genesis(storage.clone()).unwrap();
 
@@ -248,7 +244,7 @@ fn test_demo_values_not_in_db() {
     }
     // The DB lookup fails because we generated fresh storage, but we didn't save values in the db before.
     {
-        let storage = JmtStorage::with_path(DB_DIR).unwrap();
+        let storage = JmtStorage::with_path(path).unwrap();
         assert!(!check_query(storage))
     }
 }

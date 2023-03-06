@@ -14,4 +14,4 @@ sov-state = { workspace = true, features = ["temp"] }
 borsh = { workspace = true, features = ["rc"]}
 sovereign-sdk = { workspace = true}
 serial_test = "*"
-
+schemadb = { workspace = true, features = ["temppath"] }
