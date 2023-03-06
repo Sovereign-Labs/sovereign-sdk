@@ -132,14 +132,8 @@ impl CacheLog {
     ///     k3 => v3
     pub fn merge_left(&mut self, rhs: &mut Self) -> Result<(), MergeError> {
         for (rhs_key, rhs_access) in rhs.log.drain() {
-            match self.log.remove(&rhs_key) {
-                // `Access::merge` should modify the access value in place. This way we will be able to change the log map directly.
-                // Now we are forced to remove the `access` from the map, and insert the new `access` back.
-                // TODO: https://github.com/Sovereign-Labs/sovereign/issues/112
-                Some(self_access) => {
-                    let merged = self_access.merge(rhs_access)?;
-                    self.log.insert(rhs_key, merged);
-                }
+            match self.log.get_mut(&rhs_key) {
+                Some(self_access) => self_access.merge(rhs_access)?,
                 None => {
                     self.log.insert(rhs_key, rhs_access);
                 }
