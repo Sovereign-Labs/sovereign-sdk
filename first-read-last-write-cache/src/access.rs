@@ -59,6 +59,8 @@ impl Access {
     }
 
     pub(crate) fn merge(&mut self, rhs: Self) -> Result<(), MergeError> {
+        // Pattern matching on (`self`, rhs) is a bit cleaner, but would move the `self` inside the tuple.
+        // We need the `self` later on for *self = Access.. therefore the nested solution.
         match self {
             Access::Read(left_read) => match rhs {
                 Access::Read(right_read) => {
