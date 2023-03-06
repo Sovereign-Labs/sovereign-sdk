@@ -57,5 +57,7 @@ impl Storage for ZkStorage {
             .unwrap_or_else(|e| panic!("Cache merge error: {e}"));
     }
 
-    fn finalize(&mut self) {}
+    fn finalize(&mut self) {
+        // TODO: calculate JMT root in-circuit and commit it to the zk-proof log
+    }
 }

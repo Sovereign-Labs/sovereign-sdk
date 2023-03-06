@@ -80,7 +80,7 @@ impl Storage for JmtStorage {
 
         let mut data = Vec::with_capacity(cache.len());
 
-        for (cache_key, cache_value) in cache.drain() {
+        for (cache_key, cache_value) in cache.drain_all_writes() {
             let key = &cache_key.key;
             // TODO: Don't hardcode the hashing algorithm
             // https://github.com/Sovereign-Labs/sovereign/issues/113

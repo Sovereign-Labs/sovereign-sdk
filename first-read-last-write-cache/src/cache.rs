@@ -148,8 +148,10 @@ impl CacheLog {
         Ok(())
     }
 
-    /// Clears the cache, returning all key-value pairs as an iterator.
-    pub fn drain(&mut self) -> impl Iterator<Item = (CacheKey, Option<CacheValue>)> + '_ {
+    /// Clears the cache, returning all writes as an iterator.
+    pub fn drain_all_writes(
+        &mut self,
+    ) -> impl Iterator<Item = (CacheKey, Option<CacheValue>)> + '_ {
         self.log
             .drain()
             .filter_map(|(key, access)| filter_writes(key, access))
