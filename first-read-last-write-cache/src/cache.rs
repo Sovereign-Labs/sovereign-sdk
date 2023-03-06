@@ -130,7 +130,7 @@ impl CacheLog {
     ///     k1 => v1.merge(v1') <- preserves the first read and the last write for 'k1'
     ///     k2 => v2
     ///     k3 => v3
-    pub fn merge(&mut self, rhs: &mut Self) -> Result<(), MergeError> {
+    pub fn merge_left(&mut self, rhs: &mut Self) -> Result<(), MergeError> {
         for (rhs_key, rhs_access) in rhs.log.drain() {
             match self.log.remove(&rhs_key) {
                 // `Access::merge` should modify the access value in place. This way we will be able to change the log map directly.
@@ -488,7 +488,7 @@ mod tests {
             }
         }
 
-        left_cache.merge(&mut right_cache)?;
+        left_cache.merge_left(&mut right_cache)?;
         Ok(left_cache)
     }
 }
