@@ -194,8 +194,7 @@ use serial_test::serial;
 fn test_demo_values_in_cache() {
     type C = MockContext;
 
-    let path = schemadb::temppath::TempPath::new();
-    let storage = JmtStorage::with_path(path).unwrap();
+    let storage = JmtStorage::temporary();
     // Initialize the rollup: Call genesis on the Runtime
     Runtime::<C>::genesis(storage.clone()).unwrap();
 
