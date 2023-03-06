@@ -71,7 +71,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
     #[cfg(feature = "native")]
     fn query(&self, msg: Self::QueryMessage) -> sov_modules_api::QueryResponse {
         match msg {
-            Self::QueryMessage::Result => {
+            Self::QueryMessage::GetResult => {
                 let response = serde_json::to_vec(&self.results()).unwrap();
                 sov_modules_api::QueryResponse { response }
             }

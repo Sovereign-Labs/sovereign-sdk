@@ -3,12 +3,13 @@
 
 #![allow(dead_code)]
 
+use example_election::Candidate;
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey},
     CallResponse, Context, DispatchCall, DispatchQuery, Error, Genesis, Module,
 };
 use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
-use sov_state::{CacheLog, JmtStorage, ValueReader};
+use sov_state::{CacheLog, JmtStorage, Storage, ValueReader};
 
 /// dispatch_tx is a high level interface used by the sdk.
 /// Transaction signature must be checked outside of this function.
@@ -67,16 +68,8 @@ pub struct Runtime<C: Context> {
     value_setter: example_value_setter::ValueSetter<C>,
 }
 
-fn run_example() {
-    type C = MockContext;
-
+fn call_election_module<C: Context<PublicKey = MockPublicKey>>(storage: &C::Storage) {
     let sender = MockPublicKey::try_from("admin").unwrap();
-    let storage = JmtStorage::temporary();
-    type RT = Runtime<C>;
-
-    // Initialize the rollup: Call genesis on the Runtime
-    RT::genesis(storage.clone()).unwrap();
-
     let admin_context = C::new(sender);
 
     // Election module
@@ -86,8 +79,8 @@ fn run_example() {
             names: vec!["candidate_1".to_owned(), "candidate_2".to_owned()],
         };
 
-        let serialized_message = RT::encode_election_call(set_candidates_message);
-        let module = RT::decode_call(&serialized_message).unwrap();
+        let serialized_message = Runtime::<C>::encode_election_call(set_candidates_message);
+        let module = Runtime::<C>::decode_call(&serialized_message).unwrap();
         let result = module.dispatch_call(storage.clone(), &admin_context);
         assert!(result.is_ok())
     }
@@ -104,10 +97,11 @@ fn run_example() {
             let add_voter_message =
                 example_election::call::CallMessage::<C>::AddVoter(voter.clone());
 
-            let serialized_message = RT::encode_election_call(add_voter_message);
-            let module = RT::decode_call(&serialized_message).unwrap();
+            let serialized_message = Runtime::<C>::encode_election_call(add_voter_message);
+            let module = Runtime::<C>::decode_call(&serialized_message).unwrap();
 
             let result = module.dispatch_call(storage.clone(), &admin_context);
+
             assert!(result.is_ok())
         }
     }
@@ -118,8 +112,8 @@ fn run_example() {
             let voter_context = C::new(voter);
             let vote_message = example_election::call::CallMessage::<C>::Vote(1);
 
-            let serialized_message = RT::encode_election_call(vote_message);
-            let module = RT::decode_call(&serialized_message).unwrap();
+            let serialized_message = Runtime::<C>::encode_election_call(vote_message);
+            let module = Runtime::<C>::decode_call(&serialized_message).unwrap();
 
             let result = module.dispatch_call(storage.clone(), &voter_context);
             assert!(result.is_ok())
@@ -130,35 +124,19 @@ fn run_example() {
     {
         let freeze_message = example_election::call::CallMessage::<C>::FreezeElection;
 
-        let serialized_message = RT::encode_election_call(freeze_message);
-        let module = RT::decode_call(&serialized_message).unwrap();
+        let serialized_message = Runtime::<C>::encode_election_call(freeze_message);
+        let module = Runtime::<C>::decode_call(&serialized_message).unwrap();
 
         let result = module.dispatch_call(storage.clone(), &admin_context);
         assert!(result.is_ok())
     }
+}
 
-    // Query the election module.
-    {
-        let query_message = example_election::query::QueryMessage::Result;
+fn call_value_setter_module<C: Context<PublicKey = MockPublicKey>>(storage: &C::Storage) {
+    let sender = MockPublicKey::try_from("admin").unwrap();
 
-        let serialized_message = RT::encode_election_query(query_message);
-        let module = RT::decode_query(&serialized_message).unwrap();
+    let admin_context = C::new(sender);
 
-        let query_response = module.dispatch_query(storage.clone());
-
-        let response: example_election::query::Response =
-            serde_json::from_slice(&query_response.response).unwrap();
-
-        assert_eq!(
-            response,
-            example_election::query::Response::Result(Some(example_election::Candidate {
-                name: "candidate_2".to_owned(),
-                count: 3
-            }))
-        )
-    }
-
-    // ValueSetter module
     // Set new value
     let new_value = 99;
     {
@@ -166,35 +144,120 @@ fn run_example() {
             example_value_setter::call::SetValue { new_value },
         );
 
-        let serialized_message = RT::encode_value_setter_call(set_value_msg);
-        let module = RT::decode_call(&serialized_message).unwrap();
+        let serialized_message = Runtime::<C>::encode_value_setter_call(set_value_msg);
+        let module = Runtime::<C>::decode_call(&serialized_message).unwrap();
         let result = module.dispatch_call(storage.clone(), &admin_context);
 
         assert!(result.is_ok())
     }
+}
 
-    // Query the ValueSetter module.
+fn query_election_returns_correct_result(storage: JmtStorage) -> bool {
+    let serialized_message = QueryGenerator::generate_query_election_message();
+    let module = Runtime::<MockContext>::decode_query(&serialized_message).unwrap();
+
+    let query_response = module.dispatch_query(storage);
+
+    let response: example_election::query::Response =
+        serde_json::from_slice(&query_response.response).unwrap();
+
+    response
+        == example_election::query::Response::Result(Some(Candidate {
+            name: "candidate_2".to_owned(),
+            count: 3,
+        }))
+}
+
+fn query_value_setter_returns_correct_result(storage: JmtStorage) -> bool {
+    let serialized_message = QueryGenerator::generate_query_value_setter_message();
+    let module = Runtime::<MockContext>::decode_query(&serialized_message).unwrap();
+
+    let new_value = 99;
+    let query_response = module.dispatch_query(storage);
+    let response: example_value_setter::query::Response =
+        serde_json::from_slice(&query_response.response).unwrap();
+
+    response
+        == example_value_setter::query::Response {
+            value: Some(new_value),
+        }
+}
+
+fn check_query(storage: JmtStorage) -> bool {
+    query_election_returns_correct_result(storage.clone())
+        && query_value_setter_returns_correct_result(storage)
+}
+
+use serial_test::serial;
+#[test]
+#[serial]
+fn test_demo_values_in_cache() {
+    type C = MockContext;
+
+    let storage = JmtStorage::temporary();
+    // Initialize the rollup: Call genesis on the Runtime
+    Runtime::<C>::genesis(storage.clone()).unwrap();
+
+    call_election_module::<C>(&storage);
+    call_value_setter_module::<C>(&storage);
+    // We didn't save anything in the db, but they exist in the Storage cache.
+    assert!(check_query(storage))
+}
+
+#[test]
+#[serial]
+fn test_demo_values_in_db() {
+    type C = MockContext;
+    let path = schemadb::temppath::TempPath::new();
     {
-        let query_message = example_value_setter::query::QueryMessage::GetValue;
+        let mut storage = JmtStorage::with_path(&path).unwrap();
 
-        let serialized_message = RT::encode_value_setter_query(query_message);
-        let module = RT::decode_query(&serialized_message).unwrap();
+        Runtime::<C>::genesis(storage.clone()).unwrap();
 
-        let query_response = module.dispatch_query(storage);
-
-        let response: example_value_setter::query::Response =
-            serde_json::from_slice(&query_response.response).unwrap();
-
-        assert_eq!(
-            response,
-            example_value_setter::query::Response {
-                value: Some(new_value)
-            }
-        )
+        call_election_module::<C>(&storage);
+        call_value_setter_module::<C>(&storage);
+        // Save storage values in the db.
+        storage.merge();
+        storage.finalize();
+    }
+    // Generate new storage instance after dumping data to the db.
+    {
+        let storage = JmtStorage::with_path(path).unwrap();
+        assert!(check_query(storage))
     }
 }
 
 #[test]
-fn test_demo() {
-    run_example()
+#[serial]
+fn test_demo_values_not_in_db() {
+    type C = MockContext;
+    let path = schemadb::temppath::TempPath::new();
+    {
+        let storage = JmtStorage::with_path(&path).unwrap();
+
+        Runtime::<C>::genesis(storage.clone()).unwrap();
+
+        call_election_module::<C>(&storage);
+        call_value_setter_module::<C>(&storage);
+        // Don't save anything in the db.
+    }
+    // The DB lookup fails because we generated fresh storage, but we didn't save values in the db before.
+    {
+        let storage = JmtStorage::with_path(path).unwrap();
+        assert!(!check_query(storage))
+    }
+}
+
+struct QueryGenerator {}
+
+impl QueryGenerator {
+    fn generate_query_election_message() -> Vec<u8> {
+        let query_message = example_election::query::QueryMessage::GetResult;
+        Runtime::<MockContext>::encode_election_query(query_message)
+    }
+
+    fn generate_query_value_setter_message() -> Vec<u8> {
+        let query_message = example_value_setter::query::QueryMessage::GetValue;
+        Runtime::<MockContext>::encode_value_setter_query(query_message)
+    }
 }
