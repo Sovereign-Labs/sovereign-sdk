@@ -76,7 +76,7 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: C::Storage) {
 
     // Get result
     {
-        let query = QueryMessage::Result;
+        let query = QueryMessage::GetResult;
         let query = ellection.query(query);
         let query_response: Response = serde_json::from_slice(&query.response).unwrap();
 

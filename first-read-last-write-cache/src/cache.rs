@@ -130,24 +130,37 @@ impl CacheLog {
     ///     k1 => v1.merge(v1') <- preserves the first read and the last write for 'k1'
     ///     k2 => v2
     ///     k3 => v3
-    pub fn merge(self, mut rhs: Self) -> Result<Self, MergeError> {
-        let mut new_cache = CacheLog::with_capacity(self.log.len() + rhs.log.len());
-
-        for (self_key, self_access) in self.log {
-            match rhs.log.remove(&self_key) {
-                Some(rhs_access) => {
+    pub fn merge(&mut self, rhs: &mut Self) -> Result<(), MergeError> {
+        for (rhs_key, rhs_access) in rhs.log.drain() {
+            match self.log.remove(&rhs_key) {
+                // `Access::merge` should modify the access value in place. This way we will be able to change the log map directly.
+                // Now we are forced to remove the `access` from the map, and insert the new `access` back.
+                // TODO: https://github.com/Sovereign-Labs/sovereign/issues/112
+                Some(self_access) => {
                     let merged = self_access.merge(rhs_access)?;
-                    new_cache.log.insert(self_key, merged);
+                    self.log.insert(rhs_key, merged);
                 }
                 None => {
-                    new_cache.log.insert(self_key, self_access);
+                    self.log.insert(rhs_key, rhs_access);
                 }
-            }
+            };
         }
+        Ok(())
+    }
 
-        // Insert remaining entries from the rhs to the new_cache.
-        new_cache.log.extend(rhs.log);
-        Ok(new_cache)
+    /// Clears the cache, returning all key-value pairs as an iterator.
+    pub fn drain(&mut self) -> impl Iterator<Item = (CacheKey, Option<CacheValue>)> + '_ {
+        self.log
+            .drain()
+            .filter_map(|(key, access)| filter_writes(key, access))
+    }
+
+    pub fn len(&self) -> usize {
+        self.log.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.log.is_empty()
     }
 }
 
@@ -156,6 +169,14 @@ fn filter_first_reads(k: CacheKey, access: Access) -> Option<(CacheKey, Option<C
         Access::Read(read) => Some((k, read)),
         Access::ReadThenWrite { original, .. } => Some((k, original)),
         Access::Write(_) => None,
+    }
+}
+
+fn filter_writes(k: CacheKey, access: Access) -> Option<(CacheKey, Option<CacheValue>)> {
+    match access {
+        Access::Read(_) => None,
+        Access::ReadThenWrite { modified, .. } => Some((k, modified)),
+        Access::Write(write) => Some((k, write)),
     }
 }
 
@@ -381,9 +402,10 @@ mod tests {
         #[test]
         fn test_merge_fuzz(s: u8) {
             let num_cases = 15;
-            let mut testvec = vec![0; num_cases];
+            let mut testvec = Vec::with_capacity(num_cases);
+
             for i in 0..num_cases {
-                testvec[i] = s.wrapping_add(i as u8);
+                testvec.push( s.wrapping_add(i as u8));
             }
 
             let test_cases = vec![
@@ -464,7 +486,7 @@ mod tests {
             }
         }
 
-        let result = left_cache.merge(right_cache);
-        return result;
+        left_cache.merge(&mut right_cache)?;
+        Ok(left_cache)
     }
 }

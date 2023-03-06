@@ -11,14 +11,13 @@ mod zk_storage;
 mod storage_test;
 pub use first_read_last_write_cache::cache::CacheLog;
 pub use internal_cache::ValueReader;
-pub use jmt_storage::JmtStorage;
+pub use jmt_storage::{delete_storage, JmtStorage};
 pub use map::StateMap;
 use std::{fmt::Display, str};
 pub use storage::Storage;
 use utils::AlignedVec;
-pub use zk_storage::ZkStorage;
-
 pub use value::StateValue;
+pub use zk_storage::ZkStorage;
 
 // A prefix prepended to each key before insertion and retrieval from the storage.
 // All the collection types in this crate are backed by the same storage instance, this means that insertions of the same key

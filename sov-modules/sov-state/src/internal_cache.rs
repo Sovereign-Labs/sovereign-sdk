@@ -1,6 +1,12 @@
 use crate::storage::{StorageKey, StorageValue};
-use first_read_last_write_cache::cache::{self, CacheLog};
-use std::{cell::RefCell, rc::Rc};
+use first_read_last_write_cache::{
+    cache::{self, CacheLog},
+    MergeError,
+};
+use std::{
+    cell::{Ref, RefCell, RefMut},
+    rc::Rc,
+};
 
 /// `ValueReader` Reads a value from an external data source.
 pub trait ValueReader {
@@ -12,7 +18,7 @@ pub trait ValueReader {
 /// the cache checks if the value we read was inserted before.
 #[derive(Default, Clone)]
 pub(crate) struct StorageInternalCache {
-    pub(crate) cache: Rc<RefCell<CacheLog>>,
+    cache: Rc<RefCell<CacheLog>>,
 }
 
 impl StorageInternalCache {
@@ -61,5 +67,17 @@ impl StorageInternalCache {
     pub(crate) fn delete(&mut self, key: StorageKey) {
         let cache_key = key.as_cache_key();
         self.cache.borrow_mut().add_write(cache_key, None);
+    }
+
+    pub(crate) fn merge(&mut self, rhs: &mut Self) -> Result<(), MergeError> {
+        self.cache.borrow_mut().merge(&mut rhs.cache.borrow_mut())
+    }
+
+    pub(crate) fn borrow_mut(&mut self) -> RefMut<CacheLog> {
+        self.cache.borrow_mut()
+    }
+
+    pub(crate) fn borrow(&self) -> Ref<CacheLog> {
+        self.cache.borrow()
     }
 }

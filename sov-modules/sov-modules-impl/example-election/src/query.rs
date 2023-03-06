@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 /// Queries supported by the module.
 #[derive(BorshDeserialize, BorshSerialize)]
 pub enum QueryMessage {
-    Result,
+    GetResult,
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
