@@ -58,119 +58,116 @@ impl Access {
         }
     }
 
-    pub(crate) fn merge(self, rhs: Self) -> Result<Self, MergeError> {
-        match (self, rhs) {
-            (Access::Read(left_read), Access::Read(right_read)) => {
-                if left_read != right_read {
-                    Err(MergeError::ReadThenRead {
-                        left: left_read,
-                        right: right_read,
-                    })
-                } else {
-                    Ok(Access::Read(left_read))
+    pub(crate) fn merge(&mut self, rhs: Self) -> Result<(), MergeError> {
+        // Pattern matching on (`self`, rhs) is a bit cleaner, but would move the `self` inside the tuple.
+        // We need the `self` later on for *self = Access.. therefore the nested solution.
+        match self {
+            Access::Read(left_read) => match rhs {
+                Access::Read(right_read) => {
+                    if left_read != &right_read {
+                        Err(MergeError::ReadThenRead {
+                            left: left_read.clone(),
+                            right: right_read,
+                        })
+                    } else {
+                        Ok(())
+                    }
                 }
-            }
-            (
-                Access::Read(left_read),
                 Access::ReadThenWrite {
                     original: right_original,
                     modified: right_modified,
-                },
-            ) => {
-                if left_read != right_original {
-                    Err(MergeError::ReadThenRead {
-                        left: left_read,
-                        right: right_original,
-                    })
-                } else {
-                    Ok(Access::ReadThenWrite {
-                        original: right_original,
-                        modified: right_modified,
-                    })
+                } => {
+                    if left_read != &right_original {
+                        Err(MergeError::ReadThenRead {
+                            left: left_read.clone(),
+                            right: right_original,
+                        })
+                    } else {
+                        *self = Access::ReadThenWrite {
+                            original: right_original,
+                            modified: right_modified,
+                        };
+
+                        Ok(())
+                    }
                 }
-            }
-            (Access::Read(left_read), Access::Write(right_write)) => Ok(Access::ReadThenWrite {
-                original: left_read,
-                modified: right_write,
-            }),
-            (
-                Access::ReadThenWrite {
-                    original: left_original,
-                    modified: left_modified,
-                },
-                Access::Read(right_read),
-            ) => {
-                if left_modified != right_read {
-                    Err(MergeError::WriteThenRead {
-                        write: left_modified,
-                        read: right_read,
-                    })
-                } else {
-                    Ok(Access::ReadThenWrite {
-                        original: left_original,
-                        modified: left_modified,
-                    })
+                Access::Write(right_write) => {
+                    *self = Access::ReadThenWrite {
+                        original: left_read.take(),
+                        modified: right_write,
+                    };
+                    Ok(())
                 }
-            }
-            (
-                Access::ReadThenWrite {
-                    original: left_original,
-                    modified: left_modified,
-                },
-                Access::ReadThenWrite {
-                    original: right_original,
-                    modified: right_modified,
-                },
-            ) => {
-                if left_modified != right_original {
-                    Err(MergeError::WriteThenRead {
-                        write: left_modified,
-                        read: right_original,
-                    })
-                } else {
-                    Ok(Access::ReadThenWrite {
-                        original: left_original,
-                        modified: right_modified,
-                    })
-                }
-            }
-            (
-                Access::ReadThenWrite {
-                    original: left_original,
-                    ..
-                },
-                Access::Write(right_write),
-            ) => Ok(Access::ReadThenWrite {
+            },
+            Access::ReadThenWrite {
                 original: left_original,
-                modified: right_write,
-            }),
-            (Access::Write(left_write), Access::Read(right_read)) => {
-                if left_write != right_read {
-                    Err(MergeError::WriteThenRead {
-                        write: left_write,
-                        read: right_read,
-                    })
-                } else {
-                    Ok(Access::Write(left_write))
+                modified: left_modified,
+            } => match rhs {
+                Access::Read(right_read) => {
+                    if left_modified != &right_read {
+                        Err(MergeError::WriteThenRead {
+                            write: left_modified.clone(),
+                            read: right_read,
+                        })
+                    } else {
+                        Ok(())
+                    }
                 }
-            }
-            (
-                Access::Write(left_write),
                 Access::ReadThenWrite {
                     original: right_original,
                     modified: right_modified,
-                },
-            ) => {
-                if left_write != right_original {
-                    Err(MergeError::WriteThenRead {
-                        write: left_write,
-                        read: right_original,
-                    })
-                } else {
-                    Ok(Access::Write(right_modified))
+                } => {
+                    if left_modified != &right_original {
+                        Err(MergeError::WriteThenRead {
+                            write: left_modified.clone(),
+                            read: right_original,
+                        })
+                    } else {
+                        *self = Access::ReadThenWrite {
+                            original: left_original.take(),
+                            modified: right_modified,
+                        };
+                        Ok(())
+                    }
                 }
-            }
-            (Access::Write(_), Access::Write(right_write)) => Ok(Access::Write(right_write)),
+                Access::Write(right_write) => {
+                    *self = Access::ReadThenWrite {
+                        original: left_original.take(),
+                        modified: right_write,
+                    };
+                    Ok(())
+                }
+            },
+            Access::Write(left_write) => match rhs {
+                Access::Read(right_read) => {
+                    if left_write != &right_read {
+                        Err(MergeError::WriteThenRead {
+                            write: left_write.clone(),
+                            read: right_read,
+                        })
+                    } else {
+                        Ok(())
+                    }
+                }
+                Access::ReadThenWrite {
+                    original: right_original,
+                    modified: right_modified,
+                } => {
+                    if left_write != &right_original {
+                        Err(MergeError::WriteThenRead {
+                            write: left_write.clone(),
+                            read: right_original,
+                        })
+                    } else {
+                        *self = Access::Write(right_modified);
+                        Ok(())
+                    }
+                }
+                Access::Write(right_write) => {
+                    *self = Access::Write(right_write);
+                    Ok(())
+                }
+            },
         }
     }
 }
@@ -239,10 +236,10 @@ mod tests {
 
         let last_write = 10;
         for i in 2..last_write + 1 {
-            left = left.merge(Access::Read(value.clone())).unwrap();
+            left.merge(Access::Read(value.clone())).unwrap();
 
             value = create_value(i);
-            left = left.merge(Access::Write(value.clone())).unwrap();
+            left.merge(Access::Write(value.clone())).unwrap();
         }
 
         assert_eq!(
@@ -258,7 +255,7 @@ mod tests {
     fn test_err_merge_left_read_neq_right_read() {
         let first_read = 1;
         let value = create_value(first_read);
-        let left = Access::Read(value.clone());
+        let left = &mut Access::Read(value.clone());
 
         let second_read = 2;
         let value2 = create_value(second_read);
@@ -276,7 +273,7 @@ mod tests {
     fn test_err_merge_left_read_neq_right_orig() {
         let first_read = 1;
         let value = create_value(first_read);
-        let left = Access::Read(value.clone());
+        let left = &mut Access::Read(value.clone());
 
         let second_read = 2;
         let value2 = create_value(second_read);
@@ -302,7 +299,7 @@ mod tests {
         let second_read = 2;
         let value2 = create_value(second_read);
 
-        let left = Access::ReadThenWrite {
+        let left = &mut Access::ReadThenWrite {
             original: value2.clone(),
             modified: value.clone(),
         };
@@ -326,7 +323,7 @@ mod tests {
         let second_read = 2;
         let value2 = create_value(second_read);
 
-        let left = Access::ReadThenWrite {
+        let left = &mut Access::ReadThenWrite {
             original: value.clone(),
             modified: value2.clone(),
         };
@@ -353,7 +350,7 @@ mod tests {
         let second_read = 2;
         let value2 = create_value(second_read);
 
-        let left = Access::Write(value.clone());
+        let left = &mut Access::Write(value.clone());
         let right = Access::ReadThenWrite {
             original: value2.clone(),
             modified: value.clone(),
