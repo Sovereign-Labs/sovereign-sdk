@@ -9,7 +9,7 @@ use sov_modules_api::{
     CallResponse, Context, DispatchCall, DispatchQuery, Error, Genesis, Module,
 };
 use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
-use sov_state::{delete_storage, CacheLog, JmtStorage, Storage, ValueReader};
+use sov_state::{CacheLog, JmtStorage, Storage, ValueReader};
 
 /// dispatch_tx is a high level interface used by the sdk.
 /// Transaction signature must be checked outside of this function.
