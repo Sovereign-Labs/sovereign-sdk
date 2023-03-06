@@ -149,7 +149,7 @@ impl CacheLog {
     }
 
     /// Clears the cache, returning all writes as an iterator.
-    pub fn drain_all_writes(
+    pub fn get_all_writes_and_clear_cache(
         &mut self,
     ) -> impl Iterator<Item = (CacheKey, Option<CacheValue>)> + '_ {
         self.log
