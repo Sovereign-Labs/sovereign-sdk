@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-sovereign-sdk = { workspace = true }
+sovereign-sdk = { workspace = true, features = ["mocks"] }
 example-election = { workspace = true }
 sov-state = { workspace = true, features = ["temp"] }
 sovereign-db = { workspace = true }

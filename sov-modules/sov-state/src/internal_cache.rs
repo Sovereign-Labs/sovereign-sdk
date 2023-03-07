@@ -75,6 +75,15 @@ impl StorageInternalCache {
             .merge_left(&mut rhs.cache.borrow_mut())
     }
 
+    pub(crate) fn merge_reads_and_discard_writes(
+        &mut self,
+        rhs: &mut Self,
+    ) -> Result<(), MergeError> {
+        self.cache
+            .borrow_mut()
+            .merge_reads_left(&mut rhs.cache.borrow_mut())
+    }
+
     pub(crate) fn borrow_mut(&mut self) -> RefMut<CacheLog> {
         self.cache.borrow_mut()
     }

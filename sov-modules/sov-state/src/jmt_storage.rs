@@ -72,6 +72,12 @@ impl Storage for JmtStorage {
             .unwrap_or_else(|e| panic!("Cache merge error: {e}"));
     }
 
+    fn merge_reads_and_discard_writes(&mut self) {
+        self.batch_cache
+            .merge_reads_and_discard_writes(&mut self.tx_cache)
+            .unwrap_or_else(|e| panic!("Cache merge error: {e}"));
+    }
+
     fn finalize(&mut self) {
         let cache = &mut self.batch_cache.borrow_mut();
 

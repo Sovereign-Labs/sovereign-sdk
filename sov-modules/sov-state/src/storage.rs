@@ -102,6 +102,9 @@ pub trait Storage {
     /// Merges the batch level and tx level cache.
     fn merge(&mut self);
 
+    /// Merges the batch level and tx level cache, discarding any writes from tx level cache.
+    fn merge_reads_and_discard_writes(&mut self);
+
     /// Saves modified values in the db and clears internal caches.
     fn finalize(&mut self);
 }
