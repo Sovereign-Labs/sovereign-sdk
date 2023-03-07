@@ -53,7 +53,7 @@ or is otherwise invalid
 ### Parse Proof
 
 * **Usage:**
-  * erforms a deserialization of a batch into a `proof`.
+  * Performs a deserialization of a batch into a `proof`.
   The deserialization should be zero-copy for efficiency. This method may perform
   additional sanity checks, but is assumed to be computationally
   inexpensive. Expensive checks (such as signatures) SHOULD wait for the
