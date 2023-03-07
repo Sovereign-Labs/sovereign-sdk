@@ -51,7 +51,7 @@ impl JmtStorage {
 
     /// Gets the first reads from the JmtStorage.
     pub fn get_first_reads(&self) -> FirstReads {
-        self.tx_cache.borrow().get_first_reads()
+        self.batch_cache.borrow().get_first_reads()
     }
 }
 
