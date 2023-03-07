@@ -7,6 +7,7 @@ use jmt::{
     storage::{TreeReader, TreeWriter},
     KeyHash, Version,
 };
+
 use schemadb::DB;
 
 use crate::{
@@ -76,7 +77,19 @@ impl StateDB {
         }
     }
 
-    fn inc_next_version(&self) {
+    pub fn update_db(
+        &self,
+        key: StateKey,
+        key_hash: KeyHash,
+        value: Option<Vec<u8>>,
+        next_version: Version,
+    ) -> anyhow::Result<()> {
+        self.put_preimage(key_hash, &key)?;
+        self.db.put::<JmtValues>(&(key, next_version), &value)?;
+        Ok(())
+    }
+
+    pub fn inc_next_version(&self) {
         let mut version = self.next_version.lock().unwrap();
         *version += 1;
     }
@@ -128,12 +141,10 @@ impl TreeReader for StateDB {
 impl TreeWriter for StateDB {
     fn write_node_batch(&self, node_batch: &jmt::storage::NodeBatch) -> anyhow::Result<()> {
         for (node_key, node) in node_batch.nodes() {
-            assert_eq!(node_key.version(), self.get_next_version());
             self.db.put::<JmtNodes>(node_key, node)?;
         }
 
         for ((version, key_hash), value) in node_batch.values() {
-            assert_eq!(version, &self.get_next_version());
             let key_preimage =
                 self.db
                     .get::<KeyHashToKey>(&key_hash.0)?
@@ -142,8 +153,6 @@ impl TreeWriter for StateDB {
                     ))?;
             self.db.put::<JmtValues>(&(key_preimage, *version), value)?;
         }
-
-        self.inc_next_version();
         Ok(())
     }
 }

@@ -6,10 +6,7 @@ use crate::{
     Storage,
 };
 use first_read_last_write_cache::cache::FirstReads;
-use jmt::{
-    storage::{NodeBatch, TreeWriter},
-    KeyHash,
-};
+use jmt::KeyHash;
 use sovereign_db::state_db::StateDB;
 use sovereign_sdk::core::crypto;
 
@@ -78,30 +75,19 @@ impl Storage for JmtStorage {
     fn finalize(&mut self) {
         let cache = &mut self.batch_cache.borrow_mut();
 
-        let mut data = Vec::with_capacity(cache.len());
-
+        let next_version = self.db.get_next_version();
         for (cache_key, cache_value) in cache.get_all_writes_and_clear_cache() {
-            let key = &cache_key.key;
-            // TODO: Don't hardcode the hashing algorithm
-            // https://github.com/Sovereign-Labs/sovereign/issues/113
+            let key = Arc::try_unwrap(cache_key.key).unwrap_or_else(|arc| (*arc).clone());
             let key_hash = KeyHash(crypto::hash::sha2(key.as_ref()).0);
-
-            self.db
-                .put_preimage(key_hash, key)
-                .unwrap_or_else(|e| panic!("Database error: {e}"));
 
             let value =
                 cache_value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone()));
 
-            data.push(((self.db.get_next_version(), key_hash), value));
+            self.db
+                .update_db(key, key_hash, value, next_version)
+                .unwrap_or_else(|e| panic!("Database error {e}"))
         }
-
-        let mut batch = NodeBatch::default();
-        batch.extend(vec![], data);
-
-        self.db
-            .write_node_batch(&batch)
-            .unwrap_or_else(|e| panic!("Database error: {e}"));
+        self.db.inc_next_version();
     }
 }
 
