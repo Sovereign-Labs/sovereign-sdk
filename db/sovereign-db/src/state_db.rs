@@ -20,7 +20,7 @@ use crate::{
 #[derive(Clone)]
 pub struct StateDB {
     db: Arc<DB>,
-    version: Arc<Mutex<Version>>,
+    next_version: Arc<Mutex<Version>>,
 }
 
 impl StateDB {
@@ -32,13 +32,13 @@ impl StateDB {
             &gen_rocksdb_options(&Default::default(), false),
         )?;
 
-        let version = Self::last_version_written(&inner)?
+        let next_version = Self::last_version_written(&inner)?
             .map(|v| v + 1)
             .unwrap_or_default();
 
         Ok(Self {
             db: Arc::new(inner),
-            version: Arc::new(Mutex::new(version)),
+            next_version: Arc::new(Mutex::new(next_version)),
         })
     }
 
@@ -76,13 +76,13 @@ impl StateDB {
         }
     }
 
-    pub fn inc_version(&mut self) {
-        let mut version = self.version.lock().unwrap();
+    pub fn inc_next_version(&mut self) {
+        let mut version = self.next_version.lock().unwrap();
         *version += 1;
     }
 
-    pub fn get_version(&self) -> Version {
-        let version = self.version.lock().unwrap();
+    pub fn get_next_version(&self) -> Version {
+        let version = self.next_version.lock().unwrap();
         *version
     }
 

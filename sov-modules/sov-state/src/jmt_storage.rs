@@ -15,7 +15,7 @@ use sovereign_sdk::core::crypto;
 
 impl ValueReader for StateDB {
     fn read_value(&self, key: StorageKey) -> Option<StorageValue> {
-        match self.get_value_option_by_key(self.get_version(), key.as_ref()) {
+        match self.get_value_option_by_key(self.get_next_version(), key.as_ref()) {
             Ok(value) => value.map(StorageValue::new_from_bytes),
             // It is ok to panic here, we assume the db is available and consistent.
             Err(e) => panic!("Unable to read value from db: {e}"),
@@ -93,7 +93,7 @@ impl Storage for JmtStorage {
             let value =
                 cache_value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone()));
 
-            data.push(((self.db.get_version(), key_hash), value));
+            data.push(((self.db.get_next_version(), key_hash), value));
         }
 
         if !data.is_empty() {
@@ -104,7 +104,7 @@ impl Storage for JmtStorage {
                 .write_node_batch(&batch)
                 .unwrap_or_else(|e| panic!("Database error: {e}"));
         }
-        self.db.inc_version()
+        self.db.inc_next_version()
     }
 }
 
@@ -154,20 +154,20 @@ mod test {
         {
             for test in tests.clone() {
                 let mut storage = JmtStorage::with_path(&path).unwrap();
-                assert_eq!(storage.db.get_version(), test.version);
+                assert_eq!(storage.db.get_next_version(), test.version);
 
                 storage.set(test.key.clone(), test.value.clone());
                 storage.merge();
                 storage.finalize();
 
                 assert_eq!(test.value, storage.get(test.key).unwrap());
-                assert_eq!(storage.db.get_version(), test.version + 1)
+                assert_eq!(storage.db.get_next_version(), test.version + 1)
             }
         }
 
         {
             let storage = JmtStorage::with_path(&path).unwrap();
-            assert_eq!(storage.db.get_version(), tests.len() as u64);
+            assert_eq!(storage.db.get_next_version(), tests.len() as u64);
             for test in tests {
                 assert_eq!(test.value, storage.get(test.key).unwrap());
             }
