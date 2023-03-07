@@ -1,4 +1,4 @@
-use std::{fs, path::Path, sync::Arc};
+use std::{fs, path::Path};
 
 use crate::{
     internal_cache::{StorageInternalCache, ValueReader},
@@ -8,14 +8,41 @@ use crate::{
 use first_read_last_write_cache::cache::FirstReads;
 use jmt::{
     storage::{NodeBatch, TreeWriter},
-    KeyHash,
+    KeyHash, Version,
 };
 use sovereign_db::state_db::StateDB;
 use sovereign_sdk::core::crypto;
 
-impl ValueReader for StateDB {
+type VersionAndKeyHash = (Version, KeyHash);
+
+#[derive(Clone)]
+struct StateDBAndVersion {
+    db: StateDB,
+    version: Version,
+}
+
+impl StateDBAndVersion {
+    fn write_data(&mut self, data: Vec<(VersionAndKeyHash, Option<Vec<u8>>)>) {
+        let mut batch = NodeBatch::default();
+        batch.extend(vec![], data);
+
+        self.db
+            .write_node_batch(&batch)
+            .unwrap_or_else(|e| panic!("Database error: {e}"));
+
+        self.version += 1;
+    }
+
+    fn put_preimage(&self, key_hash: KeyHash, key: &Vec<u8>) {
+        self.db
+            .put_preimage(key_hash, key)
+            .unwrap_or_else(|e| panic!("Database error: {e}"));
+    }
+}
+
+impl ValueReader for StateDBAndVersion {
     fn read_value(&self, key: StorageKey) -> Option<StorageValue> {
-        match self.get_value_option_by_key(0, key.as_ref()) {
+        match self.db.get_value_option_by_key(1000, key.as_ref()) {
             Ok(value) => value.map(StorageValue::new_from_bytes),
             // It is ok to panic here, we assume the db is available and consistent.
             Err(e) => panic!("Unable to read value from db: {e}"),
@@ -27,25 +54,27 @@ impl ValueReader for StateDB {
 pub struct JmtStorage {
     batch_cache: StorageInternalCache,
     tx_cache: StorageInternalCache,
-    db: StateDB,
+    db: StateDBAndVersion,
 }
 
 impl JmtStorage {
     #[cfg(any(test, feature = "temp"))]
     pub fn temporary() -> Self {
-        Self {
-            batch_cache: StorageInternalCache::default(),
-            tx_cache: StorageInternalCache::default(),
-            db: StateDB::temporary(),
-        }
+        let db = StateDB::temporary();
+        Self::with_db(db).unwrap()
     }
 
     pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
         let db = StateDB::with_path(&path)?;
+        Self::with_db(db)
+    }
+
+    fn with_db(db: StateDB) -> Result<Self, anyhow::Error> {
+        let version = db.last_version()?.map(|v| v + 1).unwrap_or_default();
         Ok(Self {
             batch_cache: StorageInternalCache::default(),
             tx_cache: StorageInternalCache::default(),
-            db,
+            db: StateDBAndVersion { db, version },
         })
     }
 
@@ -75,7 +104,6 @@ impl Storage for JmtStorage {
     }
 
     fn finalize(&mut self) {
-        let mut batch = NodeBatch::default();
         let cache = &mut self.batch_cache.borrow_mut();
 
         let mut data = Vec::with_capacity(cache.len());
@@ -86,23 +114,79 @@ impl Storage for JmtStorage {
             // https://github.com/Sovereign-Labs/sovereign/issues/113
             let key_hash = KeyHash(crypto::hash::sha2(key.as_ref()).0);
 
-            self.db
-                .put_preimage(key_hash, key)
-                .unwrap_or_else(|e| panic!("Database error: {e}"));
+            self.db.put_preimage(key_hash, key);
 
-            let value = cache_value.map(|v| Arc::try_unwrap(v.value).unwrap());
-            // TODO: Bump and save `version` number
-            // https://github.com/Sovereign-Labs/sovereign/issues/114
-            data.push(((0, key_hash), value));
+            let value = cache_value.map(|v| Vec::clone(&v.value));
+            data.push(((self.db.version, key_hash), value));
         }
 
-        batch.extend(vec![], data);
-        self.db.write_node_batch(&batch).unwrap();
+        if !data.is_empty() {
+            self.db.write_data(data);
+        }
     }
 }
 
 pub fn delete_storage(path: impl AsRef<Path>) {
     fs::remove_dir_all(&path)
         .or_else(|_| fs::remove_file(&path))
-        .unwrap_or(());
+        .unwrap();
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[derive(Clone)]
+    struct TestCase {
+        key: StorageKey,
+        value: StorageValue,
+        version: Version,
+    }
+
+    fn create_tests() -> Vec<TestCase> {
+        vec![
+            TestCase {
+                key: StorageKey::from("key_0"),
+                value: StorageValue::from("value_0"),
+                version: 0,
+            },
+            TestCase {
+                key: StorageKey::from("key_1"),
+                value: StorageValue::from("value_1"),
+                version: 1,
+            },
+            TestCase {
+                key: StorageKey::from("key_2"),
+                value: StorageValue::from("value_2"),
+                version: 2,
+            },
+        ]
+    }
+
+    #[test]
+    fn test_jmt_storage() {
+        let path = schemadb::temppath::TempPath::new();
+        let tests = create_tests();
+        {
+            for test in tests.clone() {
+                let mut storage = JmtStorage::with_path(&path).unwrap();
+                assert_eq!(storage.db.version, test.version);
+
+                storage.set(test.key.clone(), test.value.clone());
+                storage.merge();
+                storage.finalize();
+
+                assert_eq!(test.value, storage.get(test.key.clone()).unwrap());
+                assert_eq!(storage.db.version, test.version + 1)
+            }
+        }
+
+        {
+            let storage = JmtStorage::with_path(&path).unwrap();
+            assert_eq!(storage.db.version, tests.len() as u64);
+            for test in tests {
+                assert_eq!(test.value, storage.get(test.key.clone()).unwrap());
+            }
+        }
+    }
 }

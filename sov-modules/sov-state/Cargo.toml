@@ -15,6 +15,7 @@ hex = { workspace = true}
 
 [dev-dependencies]
 sovereign-db = { workspace = true, features = ["temp"] }
+schemadb = { workspace = true, features = ["temppath"] }
 
 [features]
 default = []
