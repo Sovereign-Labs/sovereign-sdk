@@ -8,41 +8,14 @@ use crate::{
 use first_read_last_write_cache::cache::FirstReads;
 use jmt::{
     storage::{NodeBatch, TreeWriter},
-    KeyHash, Version,
+    KeyHash,
 };
 use sovereign_db::state_db::StateDB;
 use sovereign_sdk::core::crypto;
 
-type VersionAndKeyHash = (Version, KeyHash);
-
-#[derive(Clone)]
-struct StateDBAndVersion {
-    db: StateDB,
-    version: Version,
-}
-
-impl StateDBAndVersion {
-    fn write_data(&mut self, data: Vec<(VersionAndKeyHash, Option<Vec<u8>>)>) {
-        let mut batch = NodeBatch::default();
-        batch.extend(vec![], data);
-
-        self.db
-            .write_node_batch(&batch)
-            .unwrap_or_else(|e| panic!("Database error: {e}"));
-
-        self.version += 1;
-    }
-
-    fn put_preimage(&self, key_hash: KeyHash, key: &Vec<u8>) {
-        self.db
-            .put_preimage(key_hash, key)
-            .unwrap_or_else(|e| panic!("Database error: {e}"));
-    }
-}
-
-impl ValueReader for StateDBAndVersion {
+impl ValueReader for StateDB {
     fn read_value(&self, key: StorageKey) -> Option<StorageValue> {
-        match self.db.get_value_option_by_key(1000, key.as_ref()) {
+        match self.get_value_option_by_key(self.get_version(), key.as_ref()) {
             Ok(value) => value.map(StorageValue::new_from_bytes),
             // It is ok to panic here, we assume the db is available and consistent.
             Err(e) => panic!("Unable to read value from db: {e}"),
@@ -54,7 +27,7 @@ impl ValueReader for StateDBAndVersion {
 pub struct JmtStorage {
     batch_cache: StorageInternalCache,
     tx_cache: StorageInternalCache,
-    db: StateDBAndVersion,
+    db: StateDB,
 }
 
 impl JmtStorage {
@@ -70,11 +43,10 @@ impl JmtStorage {
     }
 
     fn with_db(db: StateDB) -> Result<Self, anyhow::Error> {
-        let version = db.last_version()?.map(|v| v + 1).unwrap_or_default();
         Ok(Self {
             batch_cache: StorageInternalCache::default(),
             tx_cache: StorageInternalCache::default(),
-            db: StateDBAndVersion { db, version },
+            db,
         })
     }
 
@@ -114,17 +86,25 @@ impl Storage for JmtStorage {
             // https://github.com/Sovereign-Labs/sovereign/issues/113
             let key_hash = KeyHash(crypto::hash::sha2(key.as_ref()).0);
 
-            self.db.put_preimage(key_hash, key);
+            self.db
+                .put_preimage(key_hash, key)
+                .unwrap_or_else(|e| panic!("Database error: {e}"));
 
             let value =
                 cache_value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone()));
 
-            data.push(((self.db.version, key_hash), value));
+            data.push(((self.db.get_version(), key_hash), value));
         }
 
         if !data.is_empty() {
-            self.db.write_data(data);
+            let mut batch = NodeBatch::default();
+            batch.extend(vec![], data);
+
+            self.db
+                .write_node_batch(&batch)
+                .unwrap_or_else(|e| panic!("Database error: {e}"));
         }
+        self.db.inc_version()
     }
 }
 
@@ -136,6 +116,8 @@ pub fn delete_storage(path: impl AsRef<Path>) {
 
 #[cfg(test)]
 mod test {
+    use jmt::Version;
+
     use super::*;
 
     #[derive(Clone)]
@@ -172,20 +154,20 @@ mod test {
         {
             for test in tests.clone() {
                 let mut storage = JmtStorage::with_path(&path).unwrap();
-                assert_eq!(storage.db.version, test.version);
+                assert_eq!(storage.db.get_version(), test.version);
 
                 storage.set(test.key.clone(), test.value.clone());
                 storage.merge();
                 storage.finalize();
 
                 assert_eq!(test.value, storage.get(test.key).unwrap());
-                assert_eq!(storage.db.version, test.version + 1)
+                assert_eq!(storage.db.get_version(), test.version + 1)
             }
         }
 
         {
             let storage = JmtStorage::with_path(&path).unwrap();
-            assert_eq!(storage.db.version, tests.len() as u64);
+            assert_eq!(storage.db.get_version(), tests.len() as u64);
             for test in tests {
                 assert_eq!(test.value, storage.get(test.key).unwrap());
             }

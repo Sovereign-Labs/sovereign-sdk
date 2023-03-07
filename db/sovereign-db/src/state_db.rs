@@ -17,6 +17,7 @@ use crate::{
 #[derive(Clone)]
 pub struct StateDB {
     db: Arc<DB>,
+    version: Version,
 }
 
 impl StateDB {
@@ -27,8 +28,14 @@ impl StateDB {
             STATE_TABLES.iter().copied(),
             &gen_rocksdb_options(&Default::default(), false),
         )?;
+
+        let version = Self::last_version(&inner)?
+            .map(|v| v + 1)
+            .unwrap_or_default();
+
         Ok(Self {
             db: Arc::new(inner),
+            version,
         })
     }
 
@@ -66,8 +73,16 @@ impl StateDB {
         }
     }
 
-    pub fn last_version(&self) -> anyhow::Result<Option<Version>> {
-        let mut iter = self.db.iter::<JmtValues>()?;
+    pub fn inc_version(&mut self) {
+        self.version += 1;
+    }
+
+    pub fn get_version(&self) -> Version {
+        self.version
+    }
+
+    fn last_version(db: &DB) -> anyhow::Result<Option<Version>> {
+        let mut iter = db.iter::<JmtValues>()?;
         iter.seek_to_last();
 
         let version = match iter.next() {
