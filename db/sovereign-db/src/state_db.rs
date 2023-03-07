@@ -1,4 +1,7 @@
-use std::{path::Path, sync::Arc};
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 use jmt::{
     storage::{TreeReader, TreeWriter},
@@ -17,7 +20,7 @@ use crate::{
 #[derive(Clone)]
 pub struct StateDB {
     db: Arc<DB>,
-    version: Version,
+    version: Arc<Mutex<Version>>,
 }
 
 impl StateDB {
@@ -29,13 +32,13 @@ impl StateDB {
             &gen_rocksdb_options(&Default::default(), false),
         )?;
 
-        let version = Self::last_version(&inner)?
+        let version = Self::last_version_written(&inner)?
             .map(|v| v + 1)
             .unwrap_or_default();
 
         Ok(Self {
             db: Arc::new(inner),
-            version,
+            version: Arc::new(Mutex::new(version)),
         })
     }
 
@@ -74,14 +77,16 @@ impl StateDB {
     }
 
     pub fn inc_version(&mut self) {
-        self.version += 1;
+        let mut version = self.version.lock().unwrap();
+        *version += 1;
     }
 
     pub fn get_version(&self) -> Version {
-        self.version
+        let version = self.version.lock().unwrap();
+        *version
     }
 
-    fn last_version(db: &DB) -> anyhow::Result<Option<Version>> {
+    fn last_version_written(db: &DB) -> anyhow::Result<Option<Version>> {
         let mut iter = db.iter::<JmtValues>()?;
         iter.seek_to_last();
 
