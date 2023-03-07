@@ -128,6 +128,7 @@ impl TreeReader for StateDB {
 impl TreeWriter for StateDB {
     fn write_node_batch(&self, node_batch: &jmt::storage::NodeBatch) -> anyhow::Result<()> {
         for (node_key, node) in node_batch.nodes() {
+            assert_eq!(node_key.version(), self.get_next_version());
             self.db.put::<JmtNodes>(node_key, node)?;
         }
 
