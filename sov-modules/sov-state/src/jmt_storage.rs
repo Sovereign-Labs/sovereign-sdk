@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, sync::Arc};
 
 use crate::{
     internal_cache::{StorageInternalCache, ValueReader},
@@ -116,7 +116,9 @@ impl Storage for JmtStorage {
 
             self.db.put_preimage(key_hash, key);
 
-            let value = cache_value.map(|v| Vec::clone(&v.value));
+            let value =
+                cache_value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone()));
+
             data.push(((self.db.version, key_hash), value));
         }
 
