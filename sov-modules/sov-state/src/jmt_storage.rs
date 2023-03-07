@@ -176,7 +176,7 @@ mod test {
                 storage.merge();
                 storage.finalize();
 
-                assert_eq!(test.value, storage.get(test.key.clone()).unwrap());
+                assert_eq!(test.value, storage.get(test.key).unwrap());
                 assert_eq!(storage.db.version, test.version + 1)
             }
         }
@@ -185,7 +185,7 @@ mod test {
             let storage = JmtStorage::with_path(&path).unwrap();
             assert_eq!(storage.db.version, tests.len() as u64);
             for test in tests {
-                assert_eq!(test.value, storage.get(test.key.clone()).unwrap());
+                assert_eq!(test.value, storage.get(test.key).unwrap());
             }
         }
     }
