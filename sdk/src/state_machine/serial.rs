@@ -30,7 +30,7 @@ pub trait Encode {
 
 /// Decode a type from an arbitrary reader.
 ///
-/// Decoding cannot be zero-copy, since zero-copy deserialization depends on the liftime of the input.
+/// Decoding cannot be zero-copy, since zero-copy deserialization depends on the lifetime of the input.
 /// Types that support zero-copy deserialization implement `DecodeBorrowed` only.
 ///
 ///
