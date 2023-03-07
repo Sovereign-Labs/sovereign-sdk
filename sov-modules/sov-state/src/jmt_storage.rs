@@ -96,15 +96,12 @@ impl Storage for JmtStorage {
             data.push(((self.db.get_next_version(), key_hash), value));
         }
 
-        if !data.is_empty() {
-            let mut batch = NodeBatch::default();
-            batch.extend(vec![], data);
+        let mut batch = NodeBatch::default();
+        batch.extend(vec![], data);
 
-            self.db
-                .write_node_batch(&batch)
-                .unwrap_or_else(|e| panic!("Database error: {e}"));
-        }
-        self.db.inc_next_version()
+        self.db
+            .write_node_batch(&batch)
+            .unwrap_or_else(|e| panic!("Database error: {e}"));
     }
 }
 

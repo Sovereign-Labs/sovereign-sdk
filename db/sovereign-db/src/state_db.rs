@@ -76,7 +76,7 @@ impl StateDB {
         }
     }
 
-    pub fn inc_next_version(&mut self) {
+    fn inc_next_version(&self) {
         let mut version = self.next_version.lock().unwrap();
         *version += 1;
     }
@@ -132,6 +132,7 @@ impl TreeWriter for StateDB {
         }
 
         for ((version, key_hash), value) in node_batch.values() {
+            assert_eq!(version, &self.get_next_version());
             let key_preimage =
                 self.db
                     .get::<KeyHashToKey>(&key_hash.0)?
@@ -140,6 +141,8 @@ impl TreeWriter for StateDB {
                     ))?;
             self.db.put::<JmtValues>(&(key_preimage, *version), value)?;
         }
+
+        self.inc_next_version();
         Ok(())
     }
 }
