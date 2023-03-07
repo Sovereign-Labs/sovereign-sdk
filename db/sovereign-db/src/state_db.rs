@@ -1,9 +1,13 @@
-use std::{path::Path, sync::Arc};
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 use jmt::{
     storage::{TreeReader, TreeWriter},
     KeyHash, Version,
 };
+
 use schemadb::DB;
 
 use crate::{
@@ -17,6 +21,7 @@ use crate::{
 #[derive(Clone)]
 pub struct StateDB {
     db: Arc<DB>,
+    next_version: Arc<Mutex<Version>>,
 }
 
 impl StateDB {
@@ -27,8 +32,14 @@ impl StateDB {
             STATE_TABLES.iter().copied(),
             &gen_rocksdb_options(&Default::default(), false),
         )?;
+
+        let next_version = Self::last_version_written(&inner)?
+            .map(|v| v + 1)
+            .unwrap_or_default();
+
         Ok(Self {
             db: Arc::new(inner),
+            next_version: Arc::new(Mutex::new(next_version)),
         })
     }
 
@@ -64,6 +75,39 @@ impl StateDB {
             }
             None => Ok(None),
         }
+    }
+
+    pub fn update_db(
+        &self,
+        key: StateKey,
+        key_hash: KeyHash,
+        value: Option<Vec<u8>>,
+        next_version: Version,
+    ) -> anyhow::Result<()> {
+        self.put_preimage(key_hash, &key)?;
+        self.db.put::<JmtValues>(&(key, next_version), &value)?;
+        Ok(())
+    }
+
+    pub fn inc_next_version(&self) {
+        let mut version = self.next_version.lock().unwrap();
+        *version += 1;
+    }
+
+    pub fn get_next_version(&self) -> Version {
+        let version = self.next_version.lock().unwrap();
+        *version
+    }
+
+    fn last_version_written(db: &DB) -> anyhow::Result<Option<Version>> {
+        let mut iter = db.iter::<JmtValues>()?;
+        iter.seek_to_last();
+
+        let version = match iter.next() {
+            Some(Ok(((_, version), _))) => Some(version),
+            _ => None,
+        };
+        Ok(version)
     }
 }
 
