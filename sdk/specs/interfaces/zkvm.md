@@ -41,7 +41,7 @@ We strongly suggest that users consider a performant VM such as Risc0.
   |------|------|-------------|
   | Ok | any | The deserialized contents of the proof's public outputs |
   | Err | ERROR | An VM-defined error type |
-  * Note: This is a `Result` type. only one of the `Ok` and `Err` fields will be popualted.
+  * Note: This is a `Result` type. only one of the `Ok` and `Err` fields will be populated.
 
 ## Structs
 
