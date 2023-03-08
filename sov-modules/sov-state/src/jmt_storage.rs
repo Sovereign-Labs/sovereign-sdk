@@ -1,4 +1,8 @@
-use std::{fs, path::Path, sync::Arc};
+use std::{
+    fs,
+    path::Path,
+    sync::{Arc, Mutex},
+};
 
 use crate::{
     internal_cache::{StorageInternalCache, ValueReader},
@@ -25,6 +29,7 @@ pub struct JmtStorage {
     batch_cache: StorageInternalCache,
     tx_cache: StorageInternalCache,
     db: StateDB,
+    is_merged: Arc<Mutex<bool>>,
 }
 
 impl JmtStorage {
@@ -44,11 +49,22 @@ impl JmtStorage {
             batch_cache: StorageInternalCache::default(),
             tx_cache: StorageInternalCache::default(),
             db,
+            is_merged: Arc::new(Mutex::new(false)),
         })
     }
 
-    /// Gets the first reads from the JmtStorage.
+    fn set_merged_true(&self) {
+        let mut is_merged = self.is_merged.lock().unwrap();
+        *is_merged = true
+    }
+
+    /// Gets the first reads from the JmtStorage. Must be preceded by a `merge` call.
     pub fn get_first_reads(&self) -> FirstReads {
+        // Sanity check, before getting reads from the batch_cache we have to fill it by calling `merge()`
+        let mut is_merged = self.is_merged.lock().unwrap();
+        assert!(*is_merged);
+        *is_merged = false;
+
         self.batch_cache.borrow().get_first_reads()
     }
 }
@@ -70,6 +86,7 @@ impl Storage for JmtStorage {
         self.batch_cache
             .merge(&mut self.tx_cache)
             .unwrap_or_else(|e| panic!("Cache merge error: {e}"));
+        self.set_merged_true();
     }
 
     fn finalize(&mut self) {
