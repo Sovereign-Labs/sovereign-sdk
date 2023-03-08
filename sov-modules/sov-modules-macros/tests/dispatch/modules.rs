@@ -42,7 +42,7 @@ pub mod first_test_module {
 pub mod second_test_module {
     use super::*;
 
-    #[derive(borsh::BorshDeserialize, borsh::BorshSerialize)]
+    #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Clone, PartialEq, Debug)]
     pub struct TestType {}
 
     #[derive(ModuleInfo)]
