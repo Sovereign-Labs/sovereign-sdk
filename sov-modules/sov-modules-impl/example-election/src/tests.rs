@@ -9,12 +9,14 @@ use sov_modules_api::{
     mocks::{MockContext, MockPublicKey, ZkMockContext},
     Context, Module, ModuleInfo,
 };
-use sov_state::{JmtStorage, ZkStorage};
+use sov_state::{JmtStorage, Storage, ZkStorage};
 
 #[test]
 fn test_election() {
-    let native_storage = JmtStorage::temporary();
+    let mut native_storage = JmtStorage::temporary();
     test_module::<MockContext>(native_storage.clone());
+
+    native_storage.merge();
 
     let zk_storage = ZkStorage::new(native_storage.get_first_reads());
     test_module::<ZkMockContext>(zk_storage);
