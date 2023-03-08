@@ -67,13 +67,14 @@ mod module_c {
 
 #[test]
 fn nested_module_call_test() {
-    let native_storage = JmtStorage::temporary();
+    let mut native_storage = JmtStorage::temporary();
 
     // Test the `native` execution.
     {
         execute_module_logic::<MockContext>(native_storage.clone());
         test_state_update::<MockContext>(native_storage.clone());
     }
+    native_storage.merge();
 
     // Test the `zk` execution.
     {
