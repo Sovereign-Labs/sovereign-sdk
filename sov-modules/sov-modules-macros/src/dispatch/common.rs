@@ -111,7 +111,7 @@ impl<'a> StructDef<'a> {
             // TODO we should not hardcode the serialization format inside the macro:
             // https://github.com/Sovereign-Labs/sovereign/issues/97
             #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, ::core::fmt::Debug, PartialEq)]
-            pub enum #enum_ident #impl_generics #where_clause {
+            enum #enum_ident #impl_generics #where_clause {
                 #(#enum_legs)*
             }
         }
