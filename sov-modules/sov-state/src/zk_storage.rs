@@ -1,6 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
 use first_read_last_write_cache::cache::{self, FirstReads};
+use jmt::{PhantomHasher, SimpleHasher};
 
 use crate::{
     internal_cache::{StorageInternalCache, ValueReader},
@@ -24,21 +25,23 @@ impl ValueReader for FirstReads {
 }
 
 #[derive(Clone)]
-pub struct ZkStorage {
+pub struct ZkStorage<H: SimpleHasher> {
     cache: Rc<RefCell<StorageInternalCache>>,
     value_reader: FirstReads,
+    _phantom_hasher: PhantomHasher<H>,
 }
 
-impl ZkStorage {
+impl<H: SimpleHasher> ZkStorage<H> {
     pub fn new(value_reader: FirstReads) -> Self {
         Self {
             value_reader,
             cache: Rc::new(RefCell::new(StorageInternalCache::default())),
+            _phantom_hasher: Default::default(),
         }
     }
 }
 
-impl Storage for ZkStorage {
+impl<H: SimpleHasher> Storage for ZkStorage<H> {
     fn get(&self, key: StorageKey) -> Option<StorageValue> {
         self.cache
             .borrow_mut()
@@ -68,7 +71,7 @@ impl Storage for ZkStorage {
     }
 
     fn finalize(&mut self) -> [u8; 32] {
-        // TODO: calculate JMT root in-circuit and commit it to the zk-proof log
+        // let jmt = JellyfishMerkleTree::<_, H>::new(self.value_reader);
         todo!()
     }
 }

@@ -61,7 +61,7 @@ pub struct MockContext {
 }
 
 impl Spec for MockContext {
-    type Storage = JmtStorage;
+    type Storage = JmtStorage<Self::Hasher>;
     type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
     type Signature = MockSignature;
@@ -83,7 +83,7 @@ pub struct ZkMockContext {
 }
 
 impl Spec for ZkMockContext {
-    type Storage = ZkStorage;
+    type Storage = ZkStorage<Self::Hasher>;
     type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
     type Signature = MockSignature;
