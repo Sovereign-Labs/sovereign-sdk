@@ -1,11 +1,12 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{cell::RefCell, rc::Rc, sync::Arc};
 
 use first_read_last_write_cache::cache::{self, FirstReads};
-use jmt::{PhantomHasher, SimpleHasher};
+use jmt::{KeyHash, PhantomHasher, SimpleHasher};
 
 use crate::{
     internal_cache::{StorageInternalCache, ValueReader},
     storage::{StorageKey, StorageValue},
+    tree_db::ZkTreeDb,
     Storage,
 };
 
@@ -27,15 +28,27 @@ impl ValueReader for FirstReads {
 #[derive(Clone)]
 pub struct ZkStorage<H: SimpleHasher> {
     cache: Rc<RefCell<StorageInternalCache>>,
+    tree_reader: Rc<ZkTreeDb>,
     value_reader: FirstReads,
     _phantom_hasher: PhantomHasher<H>,
 }
 
 impl<H: SimpleHasher> ZkStorage<H> {
-    pub fn new(value_reader: FirstReads) -> Self {
+    pub fn new(value_reader: FirstReads, tree_reader: ZkTreeDb) -> Self {
         Self {
             value_reader,
             cache: Rc::new(RefCell::new(StorageInternalCache::default())),
+            tree_reader: Rc::new(tree_reader),
+            _phantom_hasher: Default::default(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn non_finalizable(value_reader: FirstReads) -> Self {
+        Self {
+            value_reader,
+            cache: Rc::new(RefCell::new(StorageInternalCache::default())),
+            tree_reader: Rc::new(ZkTreeDb::empty()),
             _phantom_hasher: Default::default(),
         }
     }
@@ -71,7 +84,25 @@ impl<H: SimpleHasher> Storage for ZkStorage<H> {
     }
 
     fn finalize(&mut self) -> [u8; 32] {
-        // let jmt = JellyfishMerkleTree::<_, H>::new(self.value_reader);
-        todo!()
+        let jmt = jmt::JellyfishMerkleTree::<_, H>::new(self.tree_reader.as_ref());
+        let mut cache = self.cache.borrow_mut();
+        cache.merge().expect("cache must be valid");
+        let value_set = cache
+            .slot_cache()
+            .get_all_writes_and_clear_cache()
+            .map(|(key, value)| {
+                // TODO: Allow jmt to work on borrowed and/or ref counted data
+                let key_hash = KeyHash(H::hash(key.key.as_ref()));
+
+                (
+                    key_hash,
+                    value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
+                )
+            });
+        let (root, _) = jmt
+            .put_value_set(value_set, self.tree_reader.next_version)
+            .expect("jmt update should succeed");
+
+        root.0
     }
 }

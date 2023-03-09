@@ -75,10 +75,12 @@ fn nested_module_call_test() {
         test_state_update::<MockContext>(native_storage.clone());
     }
     native_storage.merge();
+    native_storage.finalize();
+    let tree_read_log = native_storage.take_treedb_log().unwrap();
 
     // Test the `zk` execution.
     {
-        let zk_storage = ZkStorage::new(native_storage.get_first_reads());
+        let zk_storage = ZkStorage::new(native_storage.get_first_reads(), tree_read_log.into());
         execute_module_logic::<ZkMockContext>(zk_storage.clone());
         test_state_update::<ZkMockContext>(zk_storage);
     }

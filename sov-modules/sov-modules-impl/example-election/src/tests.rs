@@ -17,8 +17,13 @@ fn test_election() {
     test_module::<MockContext>(native_storage.clone());
 
     native_storage.merge();
+    let first_reads = native_storage.get_first_reads();
+    native_storage.finalize();
+    let tree_read_log = native_storage
+        .take_treedb_log()
+        .expect("Tree read log must exist");
 
-    let zk_storage = ZkStorage::new(native_storage.get_first_reads());
+    let zk_storage = ZkStorage::new(first_reads, tree_read_log.into());
     test_module::<ZkMockContext>(zk_storage);
 }
 

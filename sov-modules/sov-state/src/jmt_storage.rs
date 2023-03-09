@@ -9,6 +9,7 @@ use std::{
 use crate::{
     internal_cache::{StorageInternalCache, ValueReader},
     storage::{StorageKey, StorageValue},
+    tree_db::TreeReadLogger,
     Storage,
 };
 use first_read_last_write_cache::cache::FirstReads;
@@ -29,6 +30,7 @@ impl ValueReader for StateDB {
 pub struct JmtStorage<H: SimpleHasher> {
     cache: Rc<RefCell<StorageInternalCache>>,
     db: StateDB,
+    read_logger: Rc<RefCell<Option<TreeReadLogger>>>,
     is_merged: Arc<Mutex<bool>>,
     _phantom_hasher: PhantomHasher<H>,
 }
@@ -49,6 +51,7 @@ impl<H: SimpleHasher> JmtStorage<H> {
         Ok(Self {
             cache: Rc::new(RefCell::new(StorageInternalCache::default())),
             db,
+            read_logger: Rc::new(RefCell::new(None)),
             is_merged: Arc::new(Mutex::new(false)),
             _phantom_hasher: Default::default(),
         })
@@ -60,6 +63,8 @@ impl<H: SimpleHasher> JmtStorage<H> {
     }
 
     /// Gets the first reads from the JmtStorage. Must be preceded by a `merge` call.
+    // TODO: combine "get_first_reads" and "take_treedb_log" into a single method, preferably one which
+    // can be used as a drop-in replacement for "finalize" when running in prover mode.
     pub fn get_first_reads(&self) -> FirstReads {
         // Sanity check, before getting reads from the batch_cache we have to fill it by calling `merge()`
         let mut is_merged = self.is_merged.lock().unwrap();
@@ -67,6 +72,11 @@ impl<H: SimpleHasher> JmtStorage<H> {
         *is_merged = false;
 
         self.cache.borrow().get_first_reads()
+    }
+
+    /// Take the log
+    pub fn take_treedb_log(&self) -> Option<TreeReadLogger> {
+        self.read_logger.borrow_mut().take()
     }
 }
 
@@ -101,14 +111,12 @@ impl<H: SimpleHasher> Storage for JmtStorage<H> {
     fn finalize(&mut self) -> [u8; 32] {
         let mut borrowed_cache = self.cache.borrow_mut();
         let slot_cache = borrowed_cache.slot_cache();
-        let jmt = jmt::JellyfishMerkleTree::<StateDB, sha2::Sha256>::new(&self.db);
-        let preimage_db = self.db.clone();
 
         let batch = slot_cache
             .get_all_writes_and_clear_cache()
             .map(|(key, value)| {
                 let key_hash = KeyHash(H::hash(key.key.as_ref()));
-                preimage_db
+                self.db
                     .put_preimage(key_hash, key.key.as_ref())
                     .expect("preimage must succeed");
                 (
@@ -118,6 +126,11 @@ impl<H: SimpleHasher> Storage for JmtStorage<H> {
             });
 
         let next_version = self.db.get_next_version();
+        let mut read_logger_opt = self.read_logger.borrow_mut();
+        let read_logger =
+            read_logger_opt.get_or_insert_with(|| TreeReadLogger::with_db(self.db.clone()));
+        let jmt = jmt::JellyfishMerkleTree::<_, sha2::Sha256>::new(read_logger);
+
         let (new_root, tree_update) = jmt
             .put_value_set(batch, next_version)
             .expect("JMT update must succeed");
