@@ -12,9 +12,8 @@ use crate::{
     Storage,
 };
 use first_read_last_write_cache::cache::FirstReads;
-use jmt::{storage::TreeWriter, KeyHash};
+use jmt::{storage::TreeWriter, KeyHash, PhantomHasher, SimpleHasher};
 use sovereign_db::state_db::StateDB;
-use sovereign_sdk::core::crypto;
 
 impl ValueReader for StateDB {
     fn read_value(&self, key: StorageKey) -> Option<StorageValue> {
@@ -27,13 +26,14 @@ impl ValueReader for StateDB {
 }
 
 #[derive(Clone)]
-pub struct JmtStorage {
+pub struct JmtStorage<H: SimpleHasher> {
     cache: Rc<RefCell<StorageInternalCache>>,
     db: StateDB,
     is_merged: Arc<Mutex<bool>>,
+    _phantom_hasher: PhantomHasher<H>,
 }
 
-impl JmtStorage {
+impl<H: SimpleHasher> JmtStorage<H> {
     #[cfg(any(test, feature = "temp"))]
     pub fn temporary() -> Self {
         let db = StateDB::temporary();
@@ -50,6 +50,7 @@ impl JmtStorage {
             cache: Rc::new(RefCell::new(StorageInternalCache::default())),
             db,
             is_merged: Arc::new(Mutex::new(false)),
+            _phantom_hasher: Default::default(),
         })
     }
 
@@ -69,7 +70,7 @@ impl JmtStorage {
     }
 }
 
-impl Storage for JmtStorage {
+impl<H: SimpleHasher> Storage for JmtStorage<H> {
     fn get(&self, key: StorageKey) -> Option<StorageValue> {
         self.cache.borrow_mut().get_or_fetch(key, &self.db)
     }
@@ -106,7 +107,7 @@ impl Storage for JmtStorage {
         let batch = slot_cache
             .get_all_writes_and_clear_cache()
             .map(|(key, value)| {
-                let key_hash = KeyHash(crypto::hash::sha2(key.key.as_ref()).0);
+                let key_hash = KeyHash(H::hash(key.key.as_ref()));
                 preimage_db
                     .put_preimage(key_hash, key.key.as_ref())
                     .expect("preimage must succeed");
@@ -138,6 +139,7 @@ pub fn delete_storage(path: impl AsRef<Path>) {
 #[cfg(test)]
 mod test {
     use jmt::Version;
+    use sha2::Sha256;
 
     use super::*;
 
@@ -174,7 +176,7 @@ mod test {
         let tests = create_tests();
         {
             for test in tests.clone() {
-                let mut storage = JmtStorage::with_path(&path).unwrap();
+                let mut storage = JmtStorage::<Sha256>::with_path(&path).unwrap();
                 assert_eq!(storage.db.get_next_version(), test.version);
 
                 storage.set(test.key.clone(), test.value.clone());
@@ -187,7 +189,7 @@ mod test {
         }
 
         {
-            let storage = JmtStorage::with_path(&path).unwrap();
+            let storage = JmtStorage::<Sha256>::with_path(&path).unwrap();
             assert_eq!(storage.db.get_next_version(), tests.len() as u64);
             for test in tests {
                 assert_eq!(test.value, storage.get(test.key).unwrap());
