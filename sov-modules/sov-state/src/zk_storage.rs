@@ -1,3 +1,5 @@
+use std::{cell::RefCell, rc::Rc};
+
 use first_read_last_write_cache::cache::{self, FirstReads};
 
 use crate::{
@@ -23,43 +25,45 @@ impl ValueReader for FirstReads {
 
 #[derive(Clone)]
 pub struct ZkStorage {
-    batch_cache: StorageInternalCache,
+    cache: Rc<RefCell<StorageInternalCache>>,
     value_reader: FirstReads,
-    tx_cache: StorageInternalCache,
 }
 
 impl ZkStorage {
     pub fn new(value_reader: FirstReads) -> Self {
         Self {
             value_reader,
-            tx_cache: StorageInternalCache::default(),
-            batch_cache: StorageInternalCache::default(),
+            cache: Rc::new(RefCell::new(StorageInternalCache::default())),
         }
     }
 }
 
 impl Storage for ZkStorage {
     fn get(&self, key: StorageKey) -> Option<StorageValue> {
-        self.tx_cache.get_or_fetch(key, &self.value_reader)
+        self.cache
+            .borrow_mut()
+            .get_or_fetch(key, &self.value_reader)
     }
 
     fn set(&mut self, key: StorageKey, value: StorageValue) {
-        self.tx_cache.set(key, value)
+        self.cache.borrow_mut().set(key, value)
     }
 
     fn delete(&mut self, key: StorageKey) {
-        self.tx_cache.delete(key)
+        self.cache.borrow_mut().delete(key)
     }
 
     fn merge(&mut self) {
-        self.batch_cache
-            .merge(&mut self.tx_cache)
+        self.cache
+            .borrow_mut()
+            .merge()
             .unwrap_or_else(|e| panic!("Cache merge error: {e}"));
     }
 
     fn merge_reads_and_discard_writes(&mut self) {
-        self.batch_cache
-            .merge_reads_and_discard_writes(&mut self.tx_cache)
+        self.cache
+            .borrow_mut()
+            .merge_reads_and_discard_writes()
             .unwrap_or_else(|e| panic!("Cache merge error: {e}"));
     }
 
