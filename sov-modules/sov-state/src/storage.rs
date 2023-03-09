@@ -106,7 +106,7 @@ pub trait Storage {
     fn merge_reads_and_discard_writes(&mut self);
 
     /// Saves modified values in the db and clears internal caches.
-    fn finalize(&mut self);
+    fn finalize(&mut self) -> [u8; 32];
 }
 
 // Used only in tests.

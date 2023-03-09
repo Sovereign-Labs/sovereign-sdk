@@ -6,7 +6,7 @@ use crate::{
     Storage,
 };
 use first_read_last_write_cache::cache::FirstReads;
-use jmt::KeyHash;
+use jmt::{storage::TreeWriter, KeyHash};
 use sovereign_db::state_db::StateDB;
 use sovereign_sdk::core::crypto;
 
@@ -78,22 +78,30 @@ impl Storage for JmtStorage {
             .unwrap_or_else(|e| panic!("Cache merge error: {e}"));
     }
 
-    fn finalize(&mut self) {
+    fn finalize(&mut self) -> [u8; 32] {
         let cache = &mut self.batch_cache.borrow_mut();
+        let jmt = jmt::JellyfishMerkleTree::<StateDB, sha2::Sha256>::new(&self.db);
+        let preimage_db = self.db.clone();
+        let batch = cache.get_all_writes_and_clear_cache().map(|(key, value)| {
+            let key_hash = KeyHash(crypto::hash::sha2(key.key.as_ref()).0);
+            preimage_db
+                .put_preimage(key_hash, key.key.as_ref())
+                .expect("preimage must succeed");
+            (
+                key_hash,
+                value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
+            )
+        });
 
         let next_version = self.db.get_next_version();
-        for (cache_key, cache_value) in cache.get_all_writes_and_clear_cache() {
-            let key = Arc::try_unwrap(cache_key.key).unwrap_or_else(|arc| (*arc).clone());
-            let key_hash = KeyHash(crypto::hash::sha2(key.as_ref()).0);
-
-            let value =
-                cache_value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone()));
-
-            self.db
-                .update_db(key, key_hash, value, next_version)
-                .unwrap_or_else(|e| panic!("Database error {e}"))
-        }
+        let (new_root, tree_update) = jmt
+            .put_value_set(batch, next_version)
+            .expect("JMT update must succeed");
+        self.db
+            .write_node_batch(&tree_update.node_batch)
+            .expect("db write must succeed");
         self.db.inc_next_version();
+        new_root.0
     }
 }
 

@@ -116,8 +116,7 @@ impl StateTransitionFunction for Demo {
         Self::StateRoot,
         Vec<sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>>,
     ) {
-        self.current_storage.finalize();
-        todo!()
+        (jmt::RootHash(self.current_storage.finalize()), vec![])
     }
 }
 
