@@ -1,60 +1,39 @@
-use std::marker::PhantomData;
-
+use crate::runtime::Runtime;
 use borsh::{BorshDeserialize, BorshSerialize};
-use example_election::Election;
+
 // Items that should go in prelude
 use jmt::SimpleHasher;
 use sov_modules_api::{
-    mocks::{MockContext, MockPublicKey},
-    Context, DispatchCall, Genesis, Module, Spec,
+    mocks::{MockPublicKey, Transaction},
+    Context, DispatchCall, Genesis,
 };
-use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
-use sov_state::{JmtStorage, Storage};
+
+use sov_state::Storage;
 use sovereign_sdk::{
-    core::{
-        mocks::MockProof,
-        traits::{BatchTrait, CanonicalHash, TransactionTrait},
-    },
+    core::{mocks::MockProof, traits::BatchTrait},
     jmt,
     stf::{ConsensusSetUpdate, OpaqueAddress, StateTransitionFunction},
 };
 
-// we should re-export anyhow from the modules_api
-
-// TODO: Unify with Message from basic_runtime.rs
-#[derive(Debug, PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize)]
-pub struct DemoTransaction<C: Context> {
-    mock_signature: MockSignature,
-    msg: Vec<u8>,
-    phantom_context: PhantomData<C>,
+pub struct Demo<C: Context> {
+    pub current_storage: C::Storage,
 }
 
-// TODO: unify with MockSignature from sov-modules-api mocks
-#[derive(Debug, PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize)]
-pub struct MockSignature {
-    pub_key: MockPublicKey,
-    msg_hash: [u8; 32],
-}
-
-pub struct Demo {
-    pub current_storage: JmtStorage,
-}
-
-impl StateTransitionFunction for Demo {
+impl<C: Context<PublicKey = MockPublicKey>> StateTransitionFunction for Demo<C> {
     type StateRoot = jmt::RootHash;
 
     type ChainParams = ();
 
-    type Transaction = DemoTransaction<MockContext>;
+    type Transaction = Transaction;
 
-    type Batch = Batch<MockContext>;
+    type Batch = Batch;
 
     type Proof = MockProof;
 
     type MisbehaviorProof = ();
 
     fn init_chain(&mut self, _params: Self::ChainParams) {
-        Runtime::<MockContext>::genesis(self.current_storage.clone())
+        Runtime::<C>::genesis(self.current_storage.clone())
             .expect("module initialization must succeed");
         self.current_storage.finalize();
     }
@@ -76,21 +55,23 @@ impl StateTransitionFunction for Demo {
             // Do mock signature verification
             // We just check that the signature hash matches the tx hash
             let expected_hash = tx.mock_signature.msg_hash;
-            let found_hash = <MockContext as Spec>::Hasher::hash(&tx.msg);
+            let found_hash = C::Hasher::hash(&tx.msg);
             // If the (mock) signature is invalid, the sequencer is malicious. Slash them.
             if expected_hash != found_hash {
                 return Err(ConsensusSetUpdate::slashing(sequencer));
             }
 
-            if let Ok(msg) = Runtime::<MockContext>::decode_call(&tx.msg) {
-                let ctx = MockContext::new(tx.mock_signature.pub_key);
+            if let Ok(msg) = Runtime::<C>::decode_call(&tx.msg) {
+                let ctx = C::new(tx.mock_signature.pub_key);
                 let tx_result = msg.dispatch_call(storage.clone(), &ctx);
+
                 match tx_result {
                     Ok(resp) => {
                         events.push(resp.events);
                         storage.merge();
                     }
                     Err(_) => {
+                        // TODO add tests for this scenario
                         storage.merge_reads_and_discard_writes();
                     }
                 }
@@ -99,6 +80,7 @@ impl StateTransitionFunction for Demo {
                 return Err(ConsensusSetUpdate::slashing(sequencer));
             }
         }
+
         Ok(events)
     }
 
@@ -121,12 +103,12 @@ impl StateTransitionFunction for Demo {
 }
 
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
-pub struct Batch<C: Context> {
-    pub txs: Vec<DemoTransaction<C>>,
+pub struct Batch {
+    pub txs: Vec<Transaction>,
 }
 
-impl<C: Context> BatchTrait for Batch<C> {
-    type Transaction = DemoTransaction<C>;
+impl BatchTrait for Batch {
+    type Transaction = Transaction;
 
     fn transactions(&self) -> &[Self::Transaction] {
         &self.txs
@@ -134,29 +116,5 @@ impl<C: Context> BatchTrait for Batch<C> {
 
     fn take_transactions(self) -> Vec<Self::Transaction> {
         self.txs
-    }
-}
-
-#[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
-pub struct Runtime<C: Context> {
-    #[allow(unused)]
-    election: Election<C>,
-}
-
-impl<C: Context> core::fmt::Debug for Runtime<C> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Runtime").finish()
-    }
-}
-
-impl<C: Context> TransactionTrait for DemoTransaction<C> {
-    type Hash = [u8; 32];
-}
-
-impl<C: Context> CanonicalHash for DemoTransaction<C> {
-    type Output = [u8; 32];
-
-    fn hash(&self) -> Self::Output {
-        self.mock_signature.msg_hash.clone()
     }
 }

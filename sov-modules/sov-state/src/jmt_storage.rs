@@ -1,6 +1,8 @@
 use std::{
+    cell::RefCell,
     fs,
     path::Path,
+    rc::Rc,
     sync::{Arc, Mutex},
 };
 
@@ -26,8 +28,7 @@ impl ValueReader for StateDB {
 
 #[derive(Clone)]
 pub struct JmtStorage {
-    batch_cache: StorageInternalCache,
-    tx_cache: StorageInternalCache,
+    cache: Rc<RefCell<StorageInternalCache>>,
     db: StateDB,
     is_merged: Arc<Mutex<bool>>,
 }
@@ -46,8 +47,7 @@ impl JmtStorage {
 
     fn with_db(db: StateDB) -> Result<Self, anyhow::Error> {
         Ok(Self {
-            batch_cache: StorageInternalCache::default(),
-            tx_cache: StorageInternalCache::default(),
+            cache: Rc::new(RefCell::new(StorageInternalCache::default())),
             db,
             is_merged: Arc::new(Mutex::new(false)),
         })
@@ -65,55 +65,62 @@ impl JmtStorage {
         assert!(*is_merged);
         *is_merged = false;
 
-        self.batch_cache.borrow().get_first_reads()
+        self.cache.borrow().get_first_reads()
     }
 }
 
 impl Storage for JmtStorage {
     fn get(&self, key: StorageKey) -> Option<StorageValue> {
-        self.tx_cache.get_or_fetch(key, &self.db)
+        self.cache.borrow_mut().get_or_fetch(key, &self.db)
     }
 
     fn set(&mut self, key: StorageKey, value: StorageValue) {
-        self.tx_cache.set(key, value)
+        self.cache.borrow_mut().set(key, value)
     }
 
     fn delete(&mut self, key: StorageKey) {
-        self.tx_cache.delete(key)
+        self.cache.borrow_mut().delete(key)
     }
 
     fn merge(&mut self) {
-        self.batch_cache
-            .merge(&mut self.tx_cache)
+        self.cache
+            .borrow_mut()
+            .merge()
             .unwrap_or_else(|e| panic!("Cache merge error: {e}"));
         self.set_merged_true();
     }
 
     fn merge_reads_and_discard_writes(&mut self) {
-        self.batch_cache
-            .merge_reads_and_discard_writes(&mut self.tx_cache)
+        self.cache
+            .borrow_mut()
+            .merge_reads_and_discard_writes()
             .unwrap_or_else(|e| panic!("Cache merge error: {e}"));
     }
 
     fn finalize(&mut self) -> [u8; 32] {
-        let cache = &mut self.batch_cache.borrow_mut();
+        let mut borrowed_cache = self.cache.borrow_mut();
+        let slot_cache = borrowed_cache.slot_cache();
         let jmt = jmt::JellyfishMerkleTree::<StateDB, sha2::Sha256>::new(&self.db);
         let preimage_db = self.db.clone();
-        let batch = cache.get_all_writes_and_clear_cache().map(|(key, value)| {
-            let key_hash = KeyHash(crypto::hash::sha2(key.key.as_ref()).0);
-            preimage_db
-                .put_preimage(key_hash, key.key.as_ref())
-                .expect("preimage must succeed");
-            (
-                key_hash,
-                value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
-            )
-        });
+
+        let batch = slot_cache
+            .get_all_writes_and_clear_cache()
+            .map(|(key, value)| {
+                let key_hash = KeyHash(crypto::hash::sha2(key.key.as_ref()).0);
+                preimage_db
+                    .put_preimage(key_hash, key.key.as_ref())
+                    .expect("preimage must succeed");
+                (
+                    key_hash,
+                    value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
+                )
+            });
 
         let next_version = self.db.get_next_version();
         let (new_root, tree_update) = jmt
             .put_value_set(batch, next_version)
             .expect("JMT update must succeed");
+
         self.db
             .write_node_batch(&tree_update.node_batch)
             .expect("db write must succeed");
