@@ -19,9 +19,11 @@ fn test_value_setter() {
         test_value_setter_helper(context, storage.clone());
     }
     storage.merge();
+    storage.finalize();
+    let tree_read_log = storage.take_treedb_log().unwrap();
     // Test Zk-Context
     {
-        let zk_storage = ZkStorage::new(storage.get_first_reads());
+        let zk_storage = ZkStorage::new(storage.get_first_reads(), tree_read_log.into());
         let zk_context = ZkMockContext::new(sender);
         test_value_setter_helper(zk_context, zk_storage);
     }
@@ -68,10 +70,12 @@ fn test_err_on_sender_is_not_admin() {
         test_err_on_sender_is_not_admin_helper(context, storage.clone());
     }
     storage.merge();
+    storage.finalize();
+    let tree_read_log = storage.take_treedb_log().unwrap();
 
     // Test Zk-Context
     {
-        let zk_storage = ZkStorage::new(storage.get_first_reads());
+        let zk_storage = ZkStorage::new(storage.get_first_reads(), tree_read_log.into());
         let zk_context = ZkMockContext::new(sender);
         test_err_on_sender_is_not_admin_helper(zk_context, zk_storage);
     }
