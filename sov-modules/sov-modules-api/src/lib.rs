@@ -17,6 +17,7 @@ use sov_state::Storage;
 use sovereign_sdk::serial::{Decode, Encode};
 use std::fmt::Debug;
 /// A type that can't be instantiated.
+#[derive(Debug)]
 pub enum NonInstantiable {}
 
 /// Spec contains types common for all modules.
@@ -30,11 +31,13 @@ pub trait Spec {
         + Clone
         + Debug;
 
+    type Hasher: jmt::SimpleHasher;
+
     type Signature: borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug;
 }
 
 /// Context contains functionality common for all modules.
-pub trait Context: Spec + Clone {
+pub trait Context: Spec + Clone + Debug + PartialEq {
     /// Sender of the transaction.
     fn sender(&self) -> &Self::PublicKey;
 
@@ -52,10 +55,10 @@ pub trait Module {
     /// Types and functionality defined per module:
 
     /// Module defined argument to the call method.
-    type CallMessage: Decode + Encode = NonInstantiable;
+    type CallMessage: Decode + Encode + Debug = NonInstantiable;
 
     /// Module defined argument to the query method.
-    type QueryMessage: Decode + Encode = NonInstantiable;
+    type QueryMessage: Decode + Encode + Debug = NonInstantiable;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(&mut self) -> Result<(), Error> {

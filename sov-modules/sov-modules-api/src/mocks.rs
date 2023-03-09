@@ -38,13 +38,14 @@ impl MockSignature {
 }
 
 /// Mock for Context, useful for testing.
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MockContext {
     pub sender: MockPublicKey,
 }
 
 impl Spec for MockContext {
     type Storage = JmtStorage;
+    type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
     type Signature = MockSignature;
 }
@@ -59,13 +60,14 @@ impl Context for MockContext {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ZkMockContext {
     pub sender: MockPublicKey,
 }
 
 impl Spec for ZkMockContext {
     type Storage = ZkStorage;
+    type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
     type Signature = MockSignature;
 }

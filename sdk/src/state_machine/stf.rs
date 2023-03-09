@@ -3,11 +3,11 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::{
     core::traits::{BatchTrait, TransactionTrait},
-    serial::{Decode, DecodeBorrowed, DeserializationError},
+    serial::{Decode, DecodeBorrowed},
 };
 
 /// An address on the DA layer. Opaque to the StateTransitionFunction
-type OpaqueAddress = Rc<Vec<u8>>;
+pub type OpaqueAddress = Rc<Vec<u8>>;
 
 // TODO(@preston-evans98): update spec with simplified API
 pub trait StateTransitionFunction {
@@ -17,7 +17,7 @@ pub trait StateTransitionFunction {
     /// A batch of transactions. Also known as a "block" in most systems: we use
     /// the term batch in this context to avoid ambiguity with DA layer blocks
     type Batch: BatchTrait<Transaction = Self::Transaction>;
-    type Proof: Decode<Error = DeserializationError>;
+    type Proof: Decode;
 
     /// A proof that the sequencer has misbehaved. For example, this could be a merkle proof of a transaction
     /// with an invalid signature
@@ -27,12 +27,11 @@ pub trait StateTransitionFunction {
 
     /// Called at the beginning of each DA-layer block - whether or not that block contains any
     /// data relevant to the rollup.
-    fn begin_slot(&self) -> StateUpdate;
+    fn begin_slot(&self);
 
     /// Apply a batch of transactions to the rollup, slashing the sequencer who proposed the batch on failure
     fn apply_batch(
         &self,
-        cache: &mut StateUpdate,
         batch: Self::Batch,
         sequencer: &[u8],
         misbehavior_hint: Option<Self::MisbehaviorProof>,
@@ -40,21 +39,14 @@ pub trait StateTransitionFunction {
 
     fn apply_proof(
         &self,
-        cache: &mut StateUpdate,
         proof: Self::Proof,
         prover: &[u8],
     ) -> Result<(), ConsensusSetUpdate<OpaqueAddress>>;
 
     /// Called once at the *end* of each DA layer block (i.e. after all rollup batches and proofs have been processed)
     /// Commits state changes to the database
-    fn end_slot(
-        &mut self,
-        cache: StateUpdate,
-    ) -> (Self::StateRoot, Vec<ConsensusSetUpdate<OpaqueAddress>>);
+    fn end_slot(&mut self) -> (Self::StateRoot, Vec<ConsensusSetUpdate<OpaqueAddress>>);
 }
-
-// TODO(@bkolad): replace with first-read-last-write cache
-pub struct StateUpdate {}
 
 #[derive(Debug, Clone, Copy, BorshSerialize, BorshDeserialize)]
 pub enum ConsensusRole {
@@ -89,6 +81,16 @@ pub struct EventValue(Rc<Vec<u8>>);
 pub struct ConsensusSetUpdate<Address> {
     pub address: Address,
     pub new_role: Option<ConsensusRole>,
+}
+
+impl ConsensusSetUpdate<OpaqueAddress> {
+    pub fn slashing(sequencer: &[u8]) -> ConsensusSetUpdate<OpaqueAddress> {
+        let faulty_sequencer = Rc::new(sequencer.to_vec());
+        return ConsensusSetUpdate {
+            address: faulty_sequencer,
+            new_role: None,
+        };
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]

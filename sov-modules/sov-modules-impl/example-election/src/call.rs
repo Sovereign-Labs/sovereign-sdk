@@ -8,7 +8,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::CallResponse;
 
 /// Call actions supported byte the module.
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage<C: sov_modules_api::Context> {
     SetCandidates { names: Vec<String> },
     AddVoter(C::PublicKey),

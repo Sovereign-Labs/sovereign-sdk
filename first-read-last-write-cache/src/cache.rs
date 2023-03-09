@@ -131,7 +131,23 @@ impl CacheLog {
     ///     k2 => v2
     ///     k3 => v3
     pub fn merge_left(&mut self, rhs: &mut Self) -> Result<(), MergeError> {
-        for (rhs_key, rhs_access) in rhs.log.drain() {
+        self.merge_left_with_filter_map(rhs, |x| Some(x))
+    }
+
+    pub fn merge_reads_left(&mut self, rhs: &mut Self) -> Result<(), MergeError> {
+        self.merge_left_with_filter_map(rhs, |(key, access)| match access {
+            Access::Read(read) => Some((key, Access::Read(read))),
+            Access::ReadThenWrite { original, .. } => Some((key, Access::Read(original))),
+            Access::Write(_) => None,
+        })
+    }
+
+    fn merge_left_with_filter_map<F: FnMut((CacheKey, Access)) -> Option<(CacheKey, Access)>>(
+        &mut self,
+        rhs: &mut Self,
+        filter: F,
+    ) -> Result<(), MergeError> {
+        for (rhs_key, rhs_access) in rhs.log.drain().filter_map(filter) {
             match self.log.get_mut(&rhs_key) {
                 Some(self_access) => self_access.merge(rhs_access)?,
                 None => {

@@ -110,7 +110,7 @@ impl<'a> StructDef<'a> {
             #[allow(non_camel_case_types)]
             // TODO we should not hardcode the serialization format inside the macro:
             // https://github.com/Sovereign-Labs/sovereign/issues/97
-            #[derive(borsh::BorshDeserialize, borsh::BorshSerialize)]
+            #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, ::core::fmt::Debug, PartialEq)]
             enum #enum_ident #impl_generics #where_clause {
                 #(#enum_legs)*
             }

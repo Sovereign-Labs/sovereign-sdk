@@ -103,7 +103,7 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
         let mut current_sequencers = prev_header.sequencers_root.clone();
         let mut current_provers = prev_header.provers_root.clone();
 
-        let mut state_tracker = self.app.begin_slot();
+        self.app.begin_slot();
         for tx in relevant_txs {
             let mut data = tx.data();
             let len = data.remaining();
@@ -111,12 +111,7 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
             match ConsensusMessage::decode_from_slice(&data[..]).unwrap() {
                 ConsensusMessage::Batch(batch) => {
                     if current_sequencers.allows(tx.sender()) {
-                        match self.app.apply_batch(
-                            &mut state_tracker,
-                            batch,
-                            tx.sender().as_ref(),
-                            None,
-                        ) {
+                        match self.app.apply_batch(batch, tx.sender().as_ref(), None) {
                             // TODO: handle events
                             Ok(_events) => {}
                             Err(slashing) => current_sequencers.process_update(slashing),
@@ -125,10 +120,7 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
                 }
                 ConsensusMessage::Proof(p) => {
                     if current_provers.allows(tx.sender()) {
-                        match self
-                            .app
-                            .apply_proof(&mut state_tracker, p, tx.sender().as_ref())
-                        {
+                        match self.app.apply_proof(p, tx.sender().as_ref()) {
                             Ok(()) => {}
                             Err(slashing) => current_provers.process_update(slashing),
                         };
@@ -136,7 +128,7 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
                 }
             }
         }
-        let (app_hash, consensus_updates) = self.app.end_slot(state_tracker);
+        let (app_hash, consensus_updates) = self.app.end_slot();
         for update in consensus_updates {
             if let Some(role) = &update.new_role {
                 match role {
