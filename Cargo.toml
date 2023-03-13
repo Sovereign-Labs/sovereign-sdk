@@ -9,8 +9,8 @@ members = [
 	"sov-modules/sov-modules-macros",
 	"sov-modules/sov-state",
 	"sov-modules/sov-modules-api",
-	"sov-modules/sov-modules-impl/example-value-setter",
-	"sov-modules/sov-modules-impl/example-election",
+	"sov-modules/sov-modules-impl/examples/value-setter",
+	"sov-modules/sov-modules-impl/examples/election",
 	"sov-modules/sov-modules-impl/integration-tests",
 
 ]
@@ -29,8 +29,8 @@ rust-version = "1.67"
 # Internal dependencies
 sovereign-sdk = {path= "sdk" }
 first-read-last-write-cache = {path = "first-read-last-write-cache"}
-example-election = { path = "sov-modules/sov-modules-impl/example-election" }
-example-value-setter = { path = "sov-modules/sov-modules-impl/example-value-setter" }
+election = { path = "sov-modules/sov-modules-impl/examples/election" }
+value-setter = { path = "sov-modules/sov-modules-impl/examples/value-setter" }
 schemadb = {path = "db/schemadb"}
 sovereign-db = {path = "db/sovereign-db"}
 sov-state = {path = "sov-modules/sov-state"}
