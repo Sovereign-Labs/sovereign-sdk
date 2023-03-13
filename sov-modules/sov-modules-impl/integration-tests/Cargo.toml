@@ -8,8 +8,6 @@ anyhow = { workspace = true }
 serde_json = { workspace = true }
 sov-modules-api = { workspace = true ,  features = ["mocks"]}
 sov-modules-macros = { workspace = true }
-example-election = {path = "../example-election" }
-example-value-setter = {path = "../example-value-setter" }
 sov-state = { workspace = true, features = ["temp"] }
 borsh = { workspace = true, features = ["rc"]}
 sovereign-sdk = { workspace = true}

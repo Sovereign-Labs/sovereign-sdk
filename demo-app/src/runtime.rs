@@ -41,8 +41,8 @@ use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 pub(crate) struct Runtime<C: Context> {
     /// Definition of the first module in the rollup (must implement the sov_modules_api::Module trait).
     #[allow(unused)]
-    election: example_election::Election<C>,
+    election: election::Election<C>,
     // Definition of the second module in the rollup (must implement the sov_modules_api::Module trait).
     #[allow(unused)]
-    value_setter: example_value_setter::ValueSetter<C>,
+    value_setter: value_setter::ValueSetter<C>,
 }
