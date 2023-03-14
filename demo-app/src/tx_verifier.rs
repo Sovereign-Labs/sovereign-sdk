@@ -22,6 +22,7 @@ pub struct Transaction<C: sov_modules_api::Context> {
 /// VerifiedTx is a Transaction after verification.
 pub(crate) struct VerifiedTx<C: Context> {
     pub(crate) sender: C::PublicKey,
+    // TODO add Address
     pub(crate) runtime_msg: Vec<u8>,
     pub(crate) _nonce: u64,
 }
@@ -30,11 +31,21 @@ pub(crate) struct VerifiedTx<C: Context> {
 pub(crate) trait TxVerifier {
     type Context: Context;
 
+    fn verify_tx_stateless(&self, raw_tx: RawTx) -> anyhow::Result<Transaction<Self::Context>>;
+
     /// Runs stateless checks against RawTxs.
     fn verify_txs_stateless(
         &self,
-        txs: Vec<RawTx>,
-    ) -> anyhow::Result<Vec<Transaction<Self::Context>>>;
+        raw_txs: Vec<RawTx>,
+    ) -> anyhow::Result<Vec<Transaction<Self::Context>>> {
+        let mut txs = Vec::with_capacity(raw_txs.len());
+        for raw_tx in raw_txs {
+            let tx = self.verify_tx_stateless(raw_tx)?;
+            txs.push(tx);
+        }
+
+        Ok(txs)
+    }
 
     /// Runs stateful checks against a Transaction. This method can modify the storage.
     fn verify_tx_stateful(
@@ -59,28 +70,19 @@ impl<C: Context> DemoAppTxVerifier<C> {
 
 impl<C: Context> TxVerifier for DemoAppTxVerifier<C> {
     type Context = C;
+    fn verify_tx_stateless(&self, raw_tx: RawTx) -> anyhow::Result<Transaction<Self::Context>> {
+        let mut data = Cursor::new(&raw_tx.data);
+        let tx = Transaction::<C>::decode(&mut data)?;
 
-    fn verify_txs_stateless(
-        &self,
-        raw_txs: Vec<RawTx>,
-    ) -> anyhow::Result<Vec<Transaction<Self::Context>>> {
-        let mut txs = Vec::with_capacity(raw_txs.len());
+        // We check signature against runtime_msg and nonce.
+        let mut hasher = C::Hasher::new();
+        hasher.update(&tx.runtime_msg);
+        hasher.update(&tx.nonce.to_le_bytes());
+        let msg_hash = hasher.finalize();
 
-        for raw_tx in raw_txs {
-            let mut data = Cursor::new(&raw_tx.data);
-            let tx = Transaction::<C>::decode(&mut data)?;
+        tx.signature.verify(&tx.pub_key, msg_hash)?;
 
-            // We check signature against runtime_msg and nonce.
-            let mut hasher = C::Hasher::new();
-            hasher.update(&tx.runtime_msg);
-            hasher.update(&tx.nonce.to_le_bytes());
-            let msg_hash = hasher.finalize();
-
-            tx.signature.verify(&tx.pub_key, msg_hash)?;
-            txs.push(tx)
-        }
-
-        Ok(txs)
+        Ok(tx)
     }
 
     fn verify_tx_stateful(

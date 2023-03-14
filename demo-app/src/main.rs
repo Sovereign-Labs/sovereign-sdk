@@ -2,7 +2,7 @@ mod batch;
 mod data_generation;
 mod helpers;
 mod runtime;
-mod sft;
+mod stf;
 mod tx_verifier;
 
 use data_generation::{simulate_da, QueryGenerator};
@@ -14,7 +14,7 @@ fn main() {
     let path = schemadb::temppath::TempPath::new();
     {
         let storage = JmtStorage::with_path(&path).unwrap();
-        let mut demo = sft::Demo::new(storage);
+        let mut demo = stf::Demo::new(storage);
 
         demo.init_chain(());
         demo.begin_slot();
@@ -53,7 +53,7 @@ mod test {
         let path = schemadb::temppath::TempPath::new();
         {
             let storage = JmtStorage::with_path(&path).unwrap();
-            let mut demo = sft::Demo::new(storage);
+            let mut demo = stf::Demo::new(storage);
 
             demo.init_chain(());
             demo.begin_slot();
@@ -86,7 +86,7 @@ mod test {
     #[test]
     fn test_demo_values_in_cache() {
         let storage = JmtStorage::temporary();
-        let mut demo = sft::Demo::new(storage.clone());
+        let mut demo = stf::Demo::new(storage.clone());
 
         demo.init_chain(());
         demo.begin_slot();
@@ -114,7 +114,7 @@ mod test {
         let path = schemadb::temppath::TempPath::new();
         {
             let storage = JmtStorage::with_path(&path).unwrap();
-            let mut demo = sft::Demo::new(storage);
+            let mut demo = stf::Demo::new(storage);
 
             demo.init_chain(());
             demo.begin_slot();

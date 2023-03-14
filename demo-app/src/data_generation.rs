@@ -3,11 +3,7 @@ use crate::{
     tx_verifier::{RawTx, Transaction},
 };
 use borsh::BorshSerialize;
-use sov_modules_api::{
-    mocks::{MockContext, MockPublicKey, MockSignature},
-    Spec,
-};
-use sovereign_sdk::jmt::SimpleHasher;
+use sov_modules_api::mocks::{MockContext, MockPublicKey, MockSignature};
 
 pub(crate) fn simulate_da() -> Vec<RawTx> {
     let mut messages = Vec::default();
@@ -108,8 +104,6 @@ impl QueryGenerator {
 
 impl Transaction<MockContext> {
     pub fn new(msg: Vec<u8>, pub_key: MockPublicKey) -> Self {
-        let _hash = <MockContext as Spec>::Hasher::hash(&msg);
-
         Self {
             signature: MockSignature {
                 msg_sig: Vec::default(),
