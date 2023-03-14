@@ -16,6 +16,25 @@ pub use response::{CallResponse, QueryResponse};
 use sov_state::Storage;
 use sovereign_sdk::serial::{Decode, Encode};
 use std::fmt::Debug;
+
+use thiserror::Error;
+
+#[derive(Error, Debug)]
+pub enum SigVerificationError {
+    #[error("Bad signature")]
+    BadSignature,
+}
+
+pub trait Signature {
+    type PublicKey;
+
+    fn verify(
+        &self,
+        pub_key: &Self::PublicKey,
+        msg_hash: [u8; 32],
+    ) -> Result<(), SigVerificationError>;
+}
+
 /// A type that can't be instantiated.
 #[derive(Debug)]
 pub enum NonInstantiable {}
@@ -33,7 +52,12 @@ pub trait Spec {
 
     type Hasher: jmt::SimpleHasher;
 
-    type Signature: borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug;
+    type Signature: borsh::BorshDeserialize
+        + borsh::BorshSerialize
+        + Eq
+        + Clone
+        + Debug
+        + Signature<PublicKey = Self::PublicKey>;
 }
 
 /// Context contains functionality common for all modules.

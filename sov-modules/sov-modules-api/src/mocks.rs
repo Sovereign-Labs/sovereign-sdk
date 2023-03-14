@@ -1,10 +1,7 @@
-use std::convert::Infallible;
-
-use crate::{Context, Spec};
+use crate::{Context, SigVerificationError, Signature, Spec};
 use borsh::{BorshDeserialize, BorshSerialize};
-use jmt::SimpleHasher;
 use sov_state::{JmtStorage, ZkStorage};
-use sovereign_sdk::core::traits::{CanonicalHash, TransactionTrait};
+use std::convert::Infallible;
 
 /// Mock for Spec::PublicKey, useful for testing.
 #[derive(PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize, Debug)]
@@ -27,51 +24,22 @@ impl TryFrom<&'static str> for MockPublicKey {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize)]
-pub struct Transaction {
-    pub mock_signature: MockSignature,
-    pub msg: Vec<u8>,
-}
-
-impl Transaction {
-    pub fn new(msg: Vec<u8>, pub_key: MockPublicKey) -> Self {
-        let hash = <MockContext as Spec>::Hasher::hash(&msg);
-
-        Self {
-            mock_signature: MockSignature {
-                pub_key,
-                msg_hash: hash,
-            },
-            msg,
-        }
-    }
-
-    pub fn msg(&self) -> &[u8] {
-        &self.msg
-    }
-
-    pub fn sender(&self) -> &MockPublicKey {
-        &self.mock_signature.pub_key
-    }
-}
-
-impl TransactionTrait for Transaction {
-    type Hash = [u8; 32];
-}
-
-impl CanonicalHash for Transaction {
-    type Output = [u8; 32];
-
-    fn hash(&self) -> Self::Output {
-        self.mock_signature.msg_hash
-    }
-}
-
 /// Mock for Spec::Signature, useful for testing.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, PartialEq, Eq, Debug, Clone)]
 pub struct MockSignature {
-    pub pub_key: MockPublicKey,
-    pub msg_hash: [u8; 32],
+    pub msg_sig: Vec<u8>,
+}
+
+impl Signature for MockSignature {
+    type PublicKey = MockPublicKey;
+
+    fn verify(
+        &self,
+        _pub_key: &Self::PublicKey,
+        _msg_hash: [u8; 32],
+    ) -> Result<(), SigVerificationError> {
+        Ok(())
+    }
 }
 
 /// Mock for Context, useful for testing.

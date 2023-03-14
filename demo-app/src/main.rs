@@ -1,11 +1,12 @@
+mod batch;
 mod data_generation;
 mod helpers;
 mod runtime;
-mod types;
+mod sft;
+mod tx_verifier;
 
 use data_generation::{simulate_da, QueryGenerator};
 use helpers::check_query;
-use sov_modules_api::mocks::MockContext;
 use sov_state::JmtStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
 
@@ -13,15 +14,14 @@ fn main() {
     let path = schemadb::temppath::TempPath::new();
     {
         let storage = JmtStorage::with_path(&path).unwrap();
-        let mut demo = types::Demo::<MockContext> {
-            current_storage: storage,
-        };
+        let mut demo = sft::Demo::new(storage);
+
         demo.init_chain(());
         demo.begin_slot();
 
         let txs = simulate_da();
 
-        demo.apply_batch(types::Batch { txs }, &[1u8; 32], None)
+        demo.apply_batch(batch::Batch { txs }, &[1u8; 32], None)
             .expect("Batch is valid");
 
         demo.end_slot();
@@ -53,15 +53,14 @@ mod test {
         let path = schemadb::temppath::TempPath::new();
         {
             let storage = JmtStorage::with_path(&path).unwrap();
-            let mut demo = types::Demo::<MockContext> {
-                current_storage: storage,
-            };
+            let mut demo = sft::Demo::new(storage);
+
             demo.init_chain(());
             demo.begin_slot();
 
             let txs = simulate_da();
 
-            demo.apply_batch(types::Batch { txs }, &[1u8; 32], None)
+            demo.apply_batch(batch::Batch { txs }, &[1u8; 32], None)
                 .expect("Batch is valid");
 
             demo.end_slot();
@@ -87,15 +86,14 @@ mod test {
     #[test]
     fn test_demo_values_in_cache() {
         let storage = JmtStorage::temporary();
-        let mut demo = types::Demo::<MockContext> {
-            current_storage: storage.clone(),
-        };
+        let mut demo = sft::Demo::new(storage.clone());
+
         demo.init_chain(());
         demo.begin_slot();
 
         let txs = simulate_da();
 
-        demo.apply_batch(types::Batch { txs }, &[1u8; 32], None)
+        demo.apply_batch(batch::Batch { txs }, &[1u8; 32], None)
             .expect("Batch is valid");
 
         check_query(
@@ -116,15 +114,14 @@ mod test {
         let path = schemadb::temppath::TempPath::new();
         {
             let storage = JmtStorage::with_path(&path).unwrap();
-            let mut demo = types::Demo::<MockContext> {
-                current_storage: storage,
-            };
+            let mut demo = sft::Demo::new(storage);
+
             demo.init_chain(());
             demo.begin_slot();
 
             let txs = simulate_da();
 
-            demo.apply_batch(types::Batch { txs }, &[1u8; 32], None)
+            demo.apply_batch(batch::Batch { txs }, &[1u8; 32], None)
                 .expect("Batch is valid");
         }
 

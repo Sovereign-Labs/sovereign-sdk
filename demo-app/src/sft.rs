@@ -1,12 +1,8 @@
+use crate::batch::Batch;
 use crate::runtime::Runtime;
-use borsh::{BorshDeserialize, BorshSerialize};
+use crate::tx_verifier::{DemoAppTxVerifier, RawTx, TxVerifier};
 
-// Items that should go in prelude
-use jmt::SimpleHasher;
-use sov_modules_api::{
-    mocks::{MockPublicKey, Transaction},
-    Context, DispatchCall, Genesis,
-};
+use sov_modules_api::{mocks::MockContext, Context, DispatchCall, Genesis, Spec};
 
 use sov_state::Storage;
 use sovereign_sdk::{
@@ -15,16 +11,29 @@ use sovereign_sdk::{
     stf::{ConsensusSetUpdate, OpaqueAddress, StateTransitionFunction},
 };
 
-pub struct Demo<C: Context> {
+pub(crate) struct Demo<C: Context, V: TxVerifier> {
     pub current_storage: C::Storage,
+    pub verifier: V,
 }
 
-impl<C: Context<PublicKey = MockPublicKey>> StateTransitionFunction for Demo<C> {
+impl Demo<MockContext, DemoAppTxVerifier<MockContext>> {
+    pub fn new(storage: <MockContext as Spec>::Storage) -> Self {
+        Self {
+            current_storage: storage,
+            verifier: DemoAppTxVerifier::new(),
+        }
+    }
+}
+
+impl<C: Context, V> StateTransitionFunction for Demo<C, V>
+where
+    V: TxVerifier<Context = C>,
+{
     type StateRoot = jmt::RootHash;
 
     type ChainParams = ();
 
-    type Transaction = Transaction;
+    type Transaction = RawTx;
 
     type Batch = Batch;
 
@@ -51,18 +60,22 @@ impl<C: Context<PublicKey = MockPublicKey>> StateTransitionFunction for Demo<C> 
     > {
         let mut storage = self.current_storage.clone();
         let mut events = Vec::new();
-        for tx in batch.take_transactions() {
-            // Do mock signature verification
-            // We just check that the signature hash matches the tx hash
-            let expected_hash = tx.mock_signature.msg_hash;
-            let found_hash = C::Hasher::hash(&tx.msg);
-            // If the (mock) signature is invalid, the sequencer is malicious. Slash them.
-            if expected_hash != found_hash {
-                return Err(ConsensusSetUpdate::slashing(sequencer));
-            }
 
-            if let Ok(msg) = Runtime::<C>::decode_call(&tx.msg) {
-                let ctx = C::new(tx.mock_signature.pub_key);
+        // Run the stateless verification.
+        let txs = self
+            .verifier
+            .verify_txs_stateless(batch.take_transactions())
+            .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
+
+        for tx in txs {
+            // Run the stateful verification, possibly modify the state.
+            let verified_tx = self
+                .verifier
+                .verify_tx_stateful(tx)
+                .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
+
+            if let Ok(msg) = Runtime::<C>::decode_call(&verified_tx.runtime_msg) {
+                let ctx = C::new(verified_tx.sender);
                 let tx_result = msg.dispatch_call(storage.clone(), &ctx);
 
                 match tx_result {
@@ -99,22 +112,5 @@ impl<C: Context<PublicKey = MockPublicKey>> StateTransitionFunction for Demo<C> 
         Vec<sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>>,
     ) {
         (jmt::RootHash(self.current_storage.finalize()), vec![])
-    }
-}
-
-#[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
-pub struct Batch {
-    pub txs: Vec<Transaction>,
-}
-
-impl BatchTrait for Batch {
-    type Transaction = Transaction;
-
-    fn transactions(&self) -> &[Self::Transaction] {
-        &self.txs
-    }
-
-    fn take_transactions(self) -> Vec<Self::Transaction> {
-        self.txs
     }
 }
