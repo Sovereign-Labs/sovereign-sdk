@@ -22,12 +22,13 @@ pub trait ExecutionWitness<C: Context> {
 
 pub struct NativeWitness {
     pub first_reads: Option<FirstReads>,
+    //TODO add hints
 }
 
 impl ExecutionWitness<MockContext> for NativeWitness {
     fn update(&mut self, mut storage: <MockContext as Spec>::Storage) -> jmt::RootHash {
         let reads = storage.get_first_reads();
-        // save in file
+
         self.first_reads = Some(reads);
         jmt::RootHash(storage.finalize())
     }
