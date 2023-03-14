@@ -68,10 +68,10 @@ where
             .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
 
         for tx in txs {
-            // Run the stateful verification, possibly modify the state.
+            // Run the stateful verification, possibly modifies the state.
             let verified_tx = self
                 .verifier
-                .verify_tx_stateful(tx)
+                .verify_tx_stateful(tx, storage.clone())
                 .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
 
             if let Ok(msg) = Runtime::<C>::decode_call(&verified_tx.runtime_msg) {
