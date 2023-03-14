@@ -8,13 +8,15 @@ use helpers::check_query;
 use sov_modules_api::mocks::MockContext;
 use sov_state::JmtStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
+use types::NativeWitness;
 
 fn main() {
     let path = schemadb::temppath::TempPath::new();
     {
         let storage = JmtStorage::with_path(&path).unwrap();
-        let mut demo = types::Demo::<MockContext> {
+        let mut demo = types::Demo::<MockContext, NativeWitness> {
             current_storage: storage,
+            witness: NativeWitness { first_reads: None },
         };
         demo.init_chain(());
         demo.begin_slot();
@@ -25,6 +27,8 @@ fn main() {
             .expect("Batch is valid");
 
         demo.end_slot();
+
+        let witness = demo.witness;
     }
 
     // Checks

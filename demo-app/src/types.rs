@@ -1,11 +1,12 @@
 use crate::runtime::Runtime;
 use borsh::{BorshDeserialize, BorshSerialize};
 
+use first_read_last_write_cache::cache::FirstReads;
 // Items that should go in prelude
 use jmt::SimpleHasher;
 use sov_modules_api::{
-    mocks::{MockPublicKey, Transaction},
-    Context, DispatchCall, Genesis,
+    mocks::{MockContext, MockPublicKey, Transaction, ZkMockContext},
+    Context, DispatchCall, Genesis, Spec,
 };
 
 use sov_state::Storage;
@@ -15,11 +16,39 @@ use sovereign_sdk::{
     stf::{ConsensusSetUpdate, OpaqueAddress, StateTransitionFunction},
 };
 
-pub struct Demo<C: Context> {
-    pub current_storage: C::Storage,
+pub trait ExecutionWitness<C: Context> {
+    fn update(&mut self, storage: C::Storage) -> jmt::RootHash;
 }
 
-impl<C: Context<PublicKey = MockPublicKey>> StateTransitionFunction for Demo<C> {
+pub struct NativeWitness {
+    pub first_reads: Option<FirstReads>,
+}
+
+impl ExecutionWitness<MockContext> for NativeWitness {
+    fn update(&mut self, mut storage: <MockContext as Spec>::Storage) -> jmt::RootHash {
+        let reads = storage.get_first_reads();
+        // save in file
+        self.first_reads = Some(reads);
+        jmt::RootHash(storage.finalize())
+    }
+}
+
+pub struct ZkWitness {}
+
+impl ExecutionWitness<ZkMockContext> for NativeWitness {
+    fn update(&mut self, mut storage: <ZkMockContext as Spec>::Storage) -> jmt::RootHash {
+        jmt::RootHash(storage.finalize())
+    }
+}
+
+pub struct Demo<C: Context, SE: ExecutionWitness<C>> {
+    pub current_storage: C::Storage,
+    pub witness: SE,
+}
+
+impl<C: Context<PublicKey = MockPublicKey>, SE: ExecutionWitness<C>> StateTransitionFunction
+    for Demo<C, SE>
+{
     type StateRoot = jmt::RootHash;
 
     type ChainParams = ();
@@ -98,7 +127,8 @@ impl<C: Context<PublicKey = MockPublicKey>> StateTransitionFunction for Demo<C> 
         Self::StateRoot,
         Vec<sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>>,
     ) {
-        (jmt::RootHash(self.current_storage.finalize()), vec![])
+        let root = self.witness.update(self.current_storage.clone());
+        (root, vec![])
     }
 }
 
