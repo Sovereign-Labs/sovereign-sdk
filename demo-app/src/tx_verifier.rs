@@ -31,6 +31,7 @@ pub(crate) struct VerifiedTx<C: Context> {
 pub(crate) trait TxVerifier {
     type Context: Context;
 
+    /// Runs stateless checks against a single RawTx.
     fn verify_tx_stateless(&self, raw_tx: RawTx) -> anyhow::Result<Transaction<Self::Context>>;
 
     /// Runs stateless checks against RawTxs.
