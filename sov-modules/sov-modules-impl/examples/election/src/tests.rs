@@ -9,25 +9,21 @@ use sov_modules_api::{
     mocks::{MockContext, MockPublicKey, ZkMockContext},
     Context, Module, ModuleInfo,
 };
-use sov_state::{JmtStorage, Storage, ZkStorage};
+use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 
 #[test]
 fn test_election() {
-    let mut native_storage = JmtStorage::temporary();
-    test_module::<MockContext>(native_storage.clone());
+    let native_storage = ProverStorage::temporary();
+    let native_tx_store = WorkingSet::new(native_storage);
+    test_module::<MockContext>(native_tx_store.clone());
 
-    native_storage.merge();
-    let first_reads = native_storage.get_first_reads();
-    native_storage.finalize();
-    let tree_read_log = native_storage
-        .take_treedb_log()
-        .expect("Tree read log must exist");
-
-    let zk_storage = ZkStorage::new(first_reads, tree_read_log.into());
-    test_module::<ZkMockContext>(zk_storage);
+    let (_log, witness) = native_tx_store.freeze();
+    let zk_storage = ZkStorage::new([0u8; 32]);
+    let zk_tx_store = WorkingSet::with_witness(zk_storage, witness);
+    test_module::<ZkMockContext>(zk_tx_store);
 }
 
-fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: C::Storage) {
+fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: WorkingSet<C::Storage>) {
     let admin = MockPublicKey::try_from("admin").unwrap();
     let admin_context = C::new(admin);
     let ellection = &mut Election::<C>::new(storage);

@@ -1,108 +1,85 @@
-use std::{cell::RefCell, rc::Rc, sync::Arc};
+use std::sync::Arc;
 
-use first_read_last_write_cache::cache::{self, FirstReads};
-use jmt::{KeyHash, PhantomHasher, SimpleHasher};
+use first_read_last_write_cache::cache::{self};
+use jmt::{JellyfishMerkleTree, KeyHash, PhantomHasher, SimpleHasher, Version};
+use sovereign_sdk::core::traits::{TreeWitnessReader, Witness};
 
 use crate::{
-    internal_cache::{StorageInternalCache, ValueReader},
     storage::{StorageKey, StorageValue},
-    tree_db::ZkTreeDb,
-    Storage,
+    Storage, StorageSpec,
 };
 
-// Implementation of `ValueReader` trait for the zk-context. FirstReads is backed by a HashMap internally,
-// this is a good default choice. Once we start integrating with a proving system
-// we might want to explore other alternatives. For example, in Risc0 we could implement `ValueReader`
-// in terms of `env::read()` and fetch values lazily from the host.
-impl ValueReader for FirstReads {
-    fn read_value(&self, key: StorageKey) -> Option<StorageValue> {
-        let key = key.as_cache_key();
-        match self.get(&key) {
-            cache::ValueExists::Yes(read) => read.map(StorageValue::new_from_cache_value),
-            // It is ok to panic here, `ZkStorage` must be able to access all the keys it needs.
-            cache::ValueExists::No => panic!("Error: Key {key:?} is inaccessible"),
-        }
-    }
+pub struct ZkStorage<S: StorageSpec> {
+    prev_state_root: [u8; 32],
+    _phantom_hasher: PhantomHasher<S::Hasher>,
 }
 
-#[derive(Clone)]
-pub struct ZkStorage<H: SimpleHasher> {
-    cache: Rc<RefCell<StorageInternalCache>>,
-    tree_reader: Rc<ZkTreeDb>,
-    value_reader: FirstReads,
-    _phantom_hasher: PhantomHasher<H>,
-}
-
-impl<H: SimpleHasher> ZkStorage<H> {
-    pub fn new(value_reader: FirstReads, tree_reader: ZkTreeDb) -> Self {
+impl<S: StorageSpec> Clone for ZkStorage<S> {
+    fn clone(&self) -> Self {
         Self {
-            value_reader,
-            cache: Rc::new(RefCell::new(StorageInternalCache::default())),
-            tree_reader: Rc::new(tree_reader),
-            _phantom_hasher: Default::default(),
-        }
-    }
-
-    #[cfg(test)]
-    pub fn non_finalizable(value_reader: FirstReads) -> Self {
-        Self {
-            value_reader,
-            cache: Rc::new(RefCell::new(StorageInternalCache::default())),
-            tree_reader: Rc::new(ZkTreeDb::empty()),
+            prev_state_root: self.prev_state_root.clone(),
             _phantom_hasher: Default::default(),
         }
     }
 }
 
-impl<H: SimpleHasher> Storage for ZkStorage<H> {
-    fn get(&self, key: StorageKey) -> Option<StorageValue> {
-        self.cache
-            .borrow_mut()
-            .get_or_fetch(key, &self.value_reader)
+impl<S: StorageSpec> ZkStorage<S> {
+    pub fn new(prev_state_root: [u8; 32]) -> Self {
+        Self {
+            prev_state_root,
+            _phantom_hasher: Default::default(),
+        }
+    }
+}
+
+impl<S: StorageSpec> Storage for ZkStorage<S> {
+    fn get(&self, _key: StorageKey, witness: &S::Witness) -> Option<StorageValue> {
+        witness.get_hint()
     }
 
-    fn set(&mut self, key: StorageKey, value: StorageValue) {
-        self.cache.borrow_mut().set(key, value)
-    }
+    fn validate_and_commit(
+        &self,
+        cache_log: cache::CacheLog,
+        witness: &Self::Witness,
+    ) -> Result<[u8; 32], anyhow::Error> {
+        let latest_version: Version = witness.get_hint();
+        let (reads, writes) = cache_log.split();
+        let reader = TreeWitnessReader::new(witness);
 
-    fn delete(&mut self, key: StorageKey) {
-        self.cache.borrow_mut().delete(key)
-    }
-
-    fn merge(&mut self) {
-        self.cache
-            .borrow_mut()
-            .merge()
-            .unwrap_or_else(|e| panic!("Cache merge error: {e}"));
-    }
-
-    fn merge_reads_and_discard_writes(&mut self) {
-        self.cache
-            .borrow_mut()
-            .merge_reads_and_discard_writes()
-            .unwrap_or_else(|e| panic!("Cache merge error: {e}"));
-    }
-
-    fn finalize(&mut self) -> [u8; 32] {
-        let jmt = jmt::JellyfishMerkleTree::<_, H>::new(self.tree_reader.as_ref());
-        let mut cache = self.cache.borrow_mut();
-        cache.merge().expect("cache must be valid");
-        let value_set = cache
-            .slot_cache()
-            .get_all_writes_and_clear_cache()
-            .map(|(key, value)| {
-                // TODO: Allow jmt to work on borrowed and/or ref counted data
-                let key_hash = KeyHash(H::hash(key.key.as_ref()));
-
-                (
+        // For each value that's been read from the tree, verify the provided smt proof
+        for (key, read_value) in reads.into_iter() {
+            let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
+            // TODO: Switch to the batch read API once it becomes available
+            let proof: jmt::proof::SparseMerkleProof<S::Hasher> = witness.get_hint();
+            match read_value {
+                Some(val) => proof.verify_existence(
+                    jmt::RootHash(self.prev_state_root.clone()),
                     key_hash,
-                    value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
-                )
-            });
-        let (root, _) = jmt
-            .put_value_set(value_set, self.tree_reader.next_version)
-            .expect("jmt update should succeed");
+                    val.value.as_ref(),
+                )?,
+                None => proof
+                    .verify_nonexistence(jmt::RootHash(self.prev_state_root.clone()), key_hash)?,
+            }
+        }
 
-        root.0
+        // Compute the jmt update from the write batch
+        let batch = writes.into_iter().map(|(key, value)| {
+            let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
+            (
+                key_hash,
+                value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
+            )
+        });
+
+        let next_version = latest_version + 1;
+        let jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&reader);
+
+        let (new_root, _tree_update) = jmt
+            .put_value_set(batch, next_version)
+            .expect("JMT update must succeed");
+
+        Ok(new_root.0)
     }
+
+    type Witness = S::Witness;
 }

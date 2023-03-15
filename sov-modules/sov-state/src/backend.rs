@@ -1,21 +1,21 @@
 use crate::{
     storage::{StorageKey, StorageValue},
-    Prefix, Storage,
+    Prefix, Storage, WorkingSet,
 };
 use sovereign_sdk::serial::{Decode, Encode};
 use std::marker::PhantomData;
 
 #[derive(Debug)]
-pub(crate) struct Backend<K, V, S> {
+pub(crate) struct Backend<K, V, S: Storage> {
     _phantom: (PhantomData<K>, PhantomData<V>),
-    storage: S,
+    storage: WorkingSet<S>,
     /// Every instance of the `Backend` contains a unique prefix.
     /// The prefix is prepended to each key before insertion and retrieval from the storage.
     prefix: Prefix,
 }
 
 impl<K: Encode, V: Encode + Decode, S: Storage> Backend<K, V, S> {
-    pub(crate) fn new(storage: S, prefix: Prefix) -> Self {
+    pub(crate) fn new(storage: WorkingSet<S>, prefix: Prefix) -> Self {
         Self {
             _phantom: (PhantomData, PhantomData),
             storage,

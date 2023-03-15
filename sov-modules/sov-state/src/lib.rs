@@ -1,7 +1,8 @@
 mod backend;
 mod internal_cache;
-mod jmt_storage;
 mod map;
+mod prover_storage;
+mod scratchpad;
 pub mod storage;
 mod tree_db;
 mod utils;
@@ -15,9 +16,10 @@ mod storage_test;
 mod state_tests;
 
 pub use first_read_last_write_cache::cache::CacheLog;
-pub use internal_cache::ValueReader;
-pub use jmt_storage::{delete_storage, JmtStorage};
 pub use map::StateMap;
+pub use prover_storage::{delete_storage, ProverStorage};
+pub use scratchpad::*;
+use sovereign_sdk::core::traits::Witness;
 use std::{fmt::Display, str};
 pub use storage::Storage;
 use utils::AlignedVec;
@@ -58,5 +60,27 @@ impl Prefix {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+}
+
+pub trait StorageSpec {
+    type Witness: Witness;
+    type Hasher: jmt::SimpleHasher;
+}
+
+#[cfg(any(test, feature = "mocks"))]
+pub mod mocks {
+    use sha2::Sha256;
+    use sovereign_sdk::core::mocks::MockWitness;
+
+    use crate::StorageSpec;
+
+    #[derive(Clone)]
+    pub struct MockStorageSpec;
+
+    impl StorageSpec for MockStorageSpec {
+        type Witness = MockWitness;
+
+        type Hasher = Sha256;
     }
 }

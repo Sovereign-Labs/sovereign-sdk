@@ -1,9 +1,10 @@
 use std::{fmt::Display, sync::Arc};
 
 use crate::{utils::AlignedVec, Prefix};
-use first_read_last_write_cache::{CacheKey, CacheValue};
+use borsh::{BorshDeserialize, BorshSerialize};
+use first_read_last_write_cache::{cache::CacheLog, CacheKey, CacheValue};
 use hex;
-use sovereign_sdk::serial::Encode;
+use sovereign_sdk::{core::traits::Witness, serial::Encode};
 
 // `Key` type for the `Storage`
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -53,7 +54,7 @@ impl StorageKey {
 }
 
 // `Value` type for the `Storage`
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct StorageValue {
     value: Arc<Vec<u8>>,
 }
@@ -89,24 +90,18 @@ impl StorageValue {
 }
 
 /// An interface for storing and retrieving values in the storage.
-pub trait Storage {
+pub trait Storage: Clone {
+    type Witness: Witness;
     /// Returns the value corresponding to the key or None if key is absent.
-    fn get(&self, key: StorageKey) -> Option<StorageValue>;
+    fn get(&self, key: StorageKey, witness: &Self::Witness) -> Option<StorageValue>;
 
-    /// Inserts a key-value pair into the storage.
-    fn set(&mut self, key: StorageKey, value: StorageValue);
-
-    /// Deletes a key from the storage.
-    fn delete(&mut self, key: StorageKey);
-
-    /// Merges the batch level and tx level cache.
-    fn merge(&mut self);
-
-    /// Merges the batch level and tx level cache, discarding any writes from tx level cache.
-    fn merge_reads_and_discard_writes(&mut self);
-
-    /// Saves modified values in the db and clears internal caches.
-    fn finalize(&mut self) -> [u8; 32];
+    /// Validate all of the storage accesses in a particular cache log,
+    /// returning the new state root after applying all writes
+    fn validate_and_commit(
+        &self,
+        cache_log: CacheLog,
+        witness: &Self::Witness,
+    ) -> Result<[u8; 32], anyhow::Error>;
 }
 
 // Used only in tests.

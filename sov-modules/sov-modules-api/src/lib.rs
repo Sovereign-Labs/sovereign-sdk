@@ -13,8 +13,11 @@ pub use error::Error;
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
 
-use sov_state::Storage;
-use sovereign_sdk::serial::{Decode, Encode};
+use sov_state::{Storage, WorkingSet};
+use sovereign_sdk::{
+    core::traits::Witness,
+    serial::{Decode, Encode},
+};
 use std::fmt::Debug;
 
 use thiserror::Error;
@@ -83,6 +86,8 @@ pub trait Spec {
         + Clone
         + Debug
         + Signature<PublicKey = Self::PublicKey>;
+
+    type Witness: Witness;
 }
 
 /// Context contains functionality common for all modules.
@@ -133,5 +138,5 @@ pub trait Module {
 /// Every module has to implement this trait.
 /// It defines the `new` method for now and can be extended with some other metadata in the future.
 pub trait ModuleInfo<C: Context> {
-    fn new(storage: C::Storage) -> Self;
+    fn new(storage: WorkingSet<C::Storage>) -> Self;
 }

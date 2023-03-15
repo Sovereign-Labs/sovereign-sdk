@@ -5,31 +5,30 @@ use sov_modules_api::mocks::ZkMockContext;
 use sov_modules_api::mocks::{MockContext, MockPublicKey};
 use sov_modules_api::Context;
 use sov_modules_api::{Module, ModuleInfo};
-use sov_state::{JmtStorage, Storage, ZkStorage};
+use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 use sovereign_sdk::stf::Event;
 
 #[test]
 fn test_value_setter() {
     let sender = MockPublicKey::try_from("admin").unwrap();
-    let mut storage = JmtStorage::temporary();
+    let storage = WorkingSet::new(ProverStorage::temporary());
 
     // Test Native-Context
     {
         let context = MockContext::new(sender.clone());
         test_value_setter_helper(context, storage.clone());
     }
-    storage.merge();
-    storage.finalize();
-    let tree_read_log = storage.take_treedb_log().unwrap();
+    let (_, witness) = storage.freeze();
+
     // Test Zk-Context
     {
-        let zk_storage = ZkStorage::new(storage.get_first_reads(), tree_read_log.into());
         let zk_context = ZkMockContext::new(sender);
+        let zk_storage = WorkingSet::with_witness(ZkStorage::new([0u8; 32]), witness);
         test_value_setter_helper(zk_context, zk_storage);
     }
 }
 
-fn test_value_setter_helper<C: Context>(context: C, storage: C::Storage) {
+fn test_value_setter_helper<C: Context>(context: C, storage: WorkingSet<C::Storage>) {
     let mut module = ValueSetter::<C>::new(storage);
     module.genesis().unwrap();
 
@@ -62,26 +61,26 @@ fn test_value_setter_helper<C: Context>(context: C, storage: C::Storage) {
 #[test]
 fn test_err_on_sender_is_not_admin() {
     let sender = MockPublicKey::try_from("not_admin").unwrap();
-    let mut storage = JmtStorage::temporary();
+    let backing_store = ProverStorage::temporary();
+    let native_tx_store = WorkingSet::new(backing_store);
 
     // Test Native-Context
     {
         let context = MockContext::new(sender.clone());
-        test_err_on_sender_is_not_admin_helper(context, storage.clone());
+        test_err_on_sender_is_not_admin_helper(context, native_tx_store.clone());
     }
-    storage.merge();
-    storage.finalize();
-    let tree_read_log = storage.take_treedb_log().unwrap();
+    let (_, witness) = native_tx_store.freeze();
 
     // Test Zk-Context
     {
-        let zk_storage = ZkStorage::new(storage.get_first_reads(), tree_read_log.into());
+        let zk_backing_store = ZkStorage::new([0u8; 32]);
         let zk_context = ZkMockContext::new(sender);
+        let zk_storage = WorkingSet::with_witness(zk_backing_store, witness);
         test_err_on_sender_is_not_admin_helper(zk_context, zk_storage);
     }
 }
 
-fn test_err_on_sender_is_not_admin_helper<C: Context>(context: C, storage: C::Storage) {
+fn test_err_on_sender_is_not_admin_helper<C: Context>(context: C, storage: WorkingSet<C::Storage>) {
     let mut module = ValueSetter::<C>::new(storage);
     module.genesis().unwrap();
     let resp = module.set_value(11, &context);
