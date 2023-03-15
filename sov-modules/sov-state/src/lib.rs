@@ -9,6 +9,10 @@ mod zk_storage;
 
 #[cfg(test)]
 mod storage_test;
+
+#[cfg(test)]
+mod state_tests;
+
 pub use first_read_last_write_cache::cache::CacheLog;
 pub use internal_cache::ValueReader;
 pub use jmt_storage::{delete_storage, JmtStorage};
