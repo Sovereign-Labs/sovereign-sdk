@@ -36,10 +36,22 @@ impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
 
     /// Returns the value corresponding to the key or Error if key is absent in the StateMap.
     pub fn get_or_err(&self, key: &K) -> Result<V, Error> {
-        self.get(key).ok_or(Error::MissingValue(
-            self.prefix().clone(),
-            StorageKey::new(self.prefix(), key),
-        ))
+        self.get(key).ok_or_else(|| {
+            Error::MissingValue(self.prefix().clone(), StorageKey::new(self.prefix(), key))
+        })
+    }
+
+    // Removes a key from the StateMap, returning the corresponding value (or None if the key is absent).
+    pub fn remove(&mut self, key: &K) -> Option<V> {
+        let storage_key = StorageKey::new(self.prefix(), key);
+        self.backend.remove_value(storage_key)
+    }
+
+    // Removes a key from the StateMap, returning the corresponding value (or Error if the key is absent).
+    pub fn remove_or_err(&mut self, key: &K) -> Result<V, Error> {
+        self.remove(key).ok_or_else(|| {
+            Error::MissingValue(self.prefix().clone(), StorageKey::new(self.prefix(), key))
+        })
     }
 
     pub fn prefix(&self) -> &Prefix {

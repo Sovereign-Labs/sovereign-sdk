@@ -41,4 +41,10 @@ impl<K: Encode, V: Encode + Decode, S: Storage> Backend<K, V, S> {
                 .unwrap_or_else(|e| panic!("Unable to deserialize storage value {e:?}")),
         )
     }
+
+    pub(crate) fn remove_value(&mut self, storage_key: StorageKey) -> Option<V> {
+        let storage_value = self.get_value(storage_key.clone())?;
+        self.storage.delete(storage_key);
+        Some(storage_value)
+    }
 }
