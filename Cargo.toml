@@ -9,6 +9,7 @@ members = [
 	"sov-modules/sov-modules-macros",
 	"sov-modules/sov-state",
 	"sov-modules/sov-modules-api",
+	"sov-modules/sov-modules-impl/accounts",
 	"sov-modules/sov-modules-impl/examples/value-setter",
 	"sov-modules/sov-modules-impl/examples/election",
 	"sov-modules/sov-modules-impl/integration-tests",
