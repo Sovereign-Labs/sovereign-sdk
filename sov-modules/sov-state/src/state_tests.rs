@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use super::*;
 use crate::JmtStorage;
 
@@ -68,8 +70,8 @@ fn create_storage_operations() -> Vec<(StorageOperation, StorageOperation)> {
 fn create_state_map_and_storage(
     key: u32,
     value: u32,
+    path: impl AsRef<Path>,
 ) -> (StateMap<u32, u32, JmtStorage>, JmtStorage) {
-    let path = schemadb::temppath::TempPath::new();
     let storage = JmtStorage::with_path(&path).unwrap();
 
     let mut state_map = StateMap::new(storage.clone(), Prefix::new(vec![0]));
@@ -79,10 +81,11 @@ fn create_state_map_and_storage(
 
 #[test]
 fn test_state_map() {
+    let path = schemadb::temppath::TempPath::new();
     for (before_remove, after_remove) in create_storage_operations() {
         let key = 1;
         let value = 11;
-        let (mut state_map, storage) = create_state_map_and_storage(key, value);
+        let (mut state_map, storage) = create_state_map_and_storage(key, value, &path);
 
         before_remove.execute(storage.clone());
         assert_eq!(state_map.remove(&key).unwrap(), value);
@@ -92,8 +95,10 @@ fn test_state_map() {
     }
 }
 
-fn create_state_value_and_storage(value: u32) -> (StateValue<u32, JmtStorage>, JmtStorage) {
-    let path = schemadb::temppath::TempPath::new();
+fn create_state_value_and_storage(
+    value: u32,
+    path: impl AsRef<Path>,
+) -> (StateValue<u32, JmtStorage>, JmtStorage) {
     let storage = JmtStorage::with_path(&path).unwrap();
 
     let mut state_value = StateValue::new(storage.clone(), Prefix::new(vec![0]));
@@ -103,9 +108,10 @@ fn create_state_value_and_storage(value: u32) -> (StateValue<u32, JmtStorage>, J
 
 #[test]
 fn test_state_value() {
+    let path = schemadb::temppath::TempPath::new();
     for (before_remove, after_remove) in create_storage_operations() {
         let value = 11;
-        let (mut state_value, storage) = create_state_value_and_storage(value);
+        let (mut state_value, storage) = create_state_value_and_storage(value, &path);
 
         before_remove.execute(storage.clone());
         assert_eq!(state_value.remove().unwrap(), value);
