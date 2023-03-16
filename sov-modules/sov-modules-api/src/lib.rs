@@ -19,12 +19,31 @@ use std::fmt::Debug;
 
 use thiserror::Error;
 
+/// Represents an address in the rollup.
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Copy, Clone)]
+pub struct Address {
+    addr: [u8; 32],
+}
+
+impl Address {
+    pub fn inner(&self) -> [u8; 32] {
+        self.addr
+    }
+}
+
+impl Address {
+    pub fn new(addr: [u8; 32]) -> Self {
+        Self { addr }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum SigVerificationError {
     #[error("Bad signature")]
     BadSignature,
 }
 
+/// Signature used in the module system.
 pub trait Signature {
     type PublicKey;
 
@@ -39,6 +58,11 @@ pub trait Signature {
 #[derive(Debug)]
 pub enum NonInstantiable {}
 
+/// PublicKey used in the module system.
+pub trait PublicKey {
+    fn to_address(&self) -> Address;
+}
+
 /// Spec contains types common for all modules.
 pub trait Spec {
     type Storage: Storage + Clone;
@@ -48,7 +72,8 @@ pub trait Spec {
         + Eq
         + TryFrom<&'static str>
         + Clone
-        + Debug;
+        + Debug
+        + PublicKey;
 
     type Hasher: jmt::SimpleHasher;
 
