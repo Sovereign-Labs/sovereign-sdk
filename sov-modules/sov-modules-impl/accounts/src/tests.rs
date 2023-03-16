@@ -45,10 +45,10 @@ fn test_update_account() {
     // Test public key update
     {
         let new_pub_key = MockPublicKey::try_from("new_pub_key").unwrap();
-
+        let sig = new_pub_key.sign(call::UPDATE_ACCOUNT_MSG);
         accounts
             .call(
-                call::CallMessage::<C>::UpdatePublicKey(new_pub_key.clone()),
+                call::CallMessage::<C>::UpdatePublicKey(new_pub_key.clone(), sig),
                 &sender_context,
             )
             .unwrap();
@@ -91,6 +91,7 @@ fn test_update_account_fails() {
         .unwrap();
 
     let sender_2 = MockPublicKey::try_from("pub_key_2").unwrap();
+    let sig_2 = sender_2.sign(call::UPDATE_ACCOUNT_MSG);
     let sender_context_2 = C::new(sender_2.clone());
 
     accounts
@@ -100,7 +101,7 @@ fn test_update_account_fails() {
     // The new public key already exists and the call fails.
     assert!(accounts
         .call(
-            call::CallMessage::<C>::UpdatePublicKey(sender_2),
+            call::CallMessage::<C>::UpdatePublicKey(sender_2, sig_2),
             &sender_context_1,
         )
         .is_err())
@@ -119,9 +120,10 @@ fn test_create_account_fails() {
         .unwrap();
 
     let new_pub_key = MockPublicKey::try_from("pub_key_2").unwrap();
+    let sig = new_pub_key.sign(call::UPDATE_ACCOUNT_MSG);
     accounts
         .call(
-            call::CallMessage::<C>::UpdatePublicKey(new_pub_key.clone()),
+            call::CallMessage::<C>::UpdatePublicKey(new_pub_key.clone(), sig),
             &sender_context_1,
         )
         .unwrap();

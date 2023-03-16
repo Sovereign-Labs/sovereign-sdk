@@ -2,12 +2,15 @@ use crate::Account;
 use crate::Accounts;
 use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_modules_api::Signature;
 use sov_modules_api::{Address, CallResponse, PublicKey};
+
+pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [0; 32];
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage<C: sov_modules_api::Context> {
     CreateAccount,
-    UpdatePublicKey(C::PublicKey),
+    UpdatePublicKey(C::PublicKey, C::Signature),
 }
 
 impl<C: sov_modules_api::Context> Accounts<C> {
@@ -24,7 +27,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
 
         self.accounts.set(context.sender(), new_account);
 
-        self.addresses
+        self.public_keys
             .set(&default_address, context.sender().clone());
 
         Ok(CallResponse::default())
@@ -33,19 +36,20 @@ impl<C: sov_modules_api::Context> Accounts<C> {
     pub(crate) fn update_public_key(
         &mut self,
         new_pub_key: C::PublicKey,
+        signature: C::Signature,
         context: &C,
     ) -> Result<CallResponse> {
         self.exit_if_account_exist(&new_pub_key)?;
 
-        // Only the public key is updated, but account data remains the same.
-
         let account = self.accounts.remove_or_err(context.sender())?;
+        self.public_keys.remove_or_err(&account.addr)?;
+
+        // Proof that the sender is in possession of the `new_pub_key`
+        signature.verify(&new_pub_key, UPDATE_ACCOUNT_MSG)?;
+
+        // Only the public key is updated, but account data remains the same.
         self.accounts.set(&new_pub_key, account);
-        self.addresses.remove_or_err(&account.addr)?;
-        self.addresses.set(&account.addr, new_pub_key);
-
-        // TODO proof of possesion
-
+        self.public_keys.set(&account.addr, new_pub_key);
         Ok(CallResponse::default())
     }
 
@@ -59,7 +63,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
 
     fn exit_if_address_exist(&self, address: &Address) -> Result<()> {
         anyhow::ensure!(
-            self.addresses.get(address).is_none(),
+            self.public_keys.get(address).is_none(),
             "Address already exists"
         );
         Ok(())

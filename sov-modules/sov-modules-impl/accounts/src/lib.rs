@@ -17,7 +17,7 @@ struct Account {
 #[derive(ModuleInfo)]
 pub struct Accounts<C: sov_modules_api::Context> {
     #[state]
-    pub(crate) addresses: sov_state::StateMap<Address, C::PublicKey, C::Storage>,
+    pub(crate) public_keys: sov_state::StateMap<Address, C::PublicKey, C::Storage>,
 
     #[state]
     pub(crate) accounts: sov_state::StateMap<C::PublicKey, Account, C::Storage>,
@@ -41,8 +41,8 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
             call::CallMessage::CreateAccount => Ok(self.create_account(context)?),
-            call::CallMessage::UpdatePublicKey(new_pub_key) => {
-                Ok(self.update_public_key(new_pub_key, context)?)
+            call::CallMessage::UpdatePublicKey(new_pub_key, sig) => {
+                Ok(self.update_public_key(new_pub_key, sig, context)?)
             }
         }
     }

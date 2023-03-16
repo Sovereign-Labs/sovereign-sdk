@@ -14,6 +14,10 @@ impl MockPublicKey {
     pub fn new(pub_key: Vec<u8>) -> Self {
         Self { pub_key }
     }
+
+    pub fn sign(&self, _msg: [u8; 32]) -> MockSignature {
+        MockSignature { msg_sig: vec![] }
+    }
 }
 
 impl TryFrom<&'static str> for MockPublicKey {
