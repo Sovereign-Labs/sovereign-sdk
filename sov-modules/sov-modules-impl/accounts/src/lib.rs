@@ -4,24 +4,13 @@ mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use sov_modules_api::Error;
+use sov_modules_api::{Address, Error};
 use sov_modules_macros::ModuleInfo;
 
-#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
-pub struct Address {
-    addr: [u8; 32],
-}
-
-impl Address {
-    pub fn new<C: sov_modules_api::Context>(pub_key: &C::PublicKey) -> Self {
-        todo!()
-    }
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
+#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq, Copy, Clone)]
 struct Account {
-    addr: Address,
-    nonce: u64,
+    pub addr: Address,
+    pub nonce: u64,
 }
 
 #[derive(ModuleInfo)]
@@ -36,10 +25,9 @@ pub struct Accounts<C: sov_modules_api::Context> {
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
     type Context = C;
 
-    type CallMessage = sov_modules_api::NonInstantiable;
+    type CallMessage = call::CallMessage<C>;
 
     type QueryMessage = query::QueryMessage<C>;
-    // Add PreCheck
 
     fn genesis(&mut self) -> Result<(), Error> {
         Ok(self.init_module()?)
@@ -50,13 +38,21 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
         msg: Self::CallMessage,
         context: &Self::Context,
     ) -> Result<sov_modules_api::CallResponse, Error> {
-        todo!()
+        match msg {
+            call::CallMessage::CreateAccount => Ok(self.create_account(context)?),
+            call::CallMessage::UpdatePublicKey(new_pub_key) => {
+                Ok(self.update_public_key(new_pub_key, context)?)
+            }
+        }
     }
 
     #[cfg(feature = "native")]
     fn query(&self, msg: Self::QueryMessage) -> sov_modules_api::QueryResponse {
         match msg {
-            query::QueryMessage::GetAccount(pub_key) => self.get_account(pub_key),
+            query::QueryMessage::GetAccount(pub_key) => {
+                let response = serde_json::to_vec(&self.get_account(pub_key)).unwrap();
+                sov_modules_api::QueryResponse { response }
+            }
         };
         todo!()
     }

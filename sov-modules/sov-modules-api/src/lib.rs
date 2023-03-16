@@ -19,6 +19,23 @@ use std::fmt::Debug;
 
 use thiserror::Error;
 
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Copy, Clone)]
+pub struct Address {
+    addr: [u8; 32],
+}
+
+impl Address {
+    pub fn inner(&self) -> [u8; 32] {
+        self.addr
+    }
+}
+
+impl Address {
+    pub fn new(addr: [u8; 32]) -> Self {
+        Self { addr }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum SigVerificationError {
     #[error("Bad signature")]
@@ -48,7 +65,8 @@ pub trait Spec {
         + Eq
         + TryFrom<&'static str>
         + Clone
-        + Debug;
+        + Debug
+        + TryInto<Address, Error = ()>;
 
     type Hasher: jmt::SimpleHasher;
 

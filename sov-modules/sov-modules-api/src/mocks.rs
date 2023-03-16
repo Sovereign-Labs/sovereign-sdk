@@ -1,5 +1,6 @@
-use crate::{Context, SigVerificationError, Signature, Spec};
+use crate::{Address, Context, SigVerificationError, Signature, Spec};
 use borsh::{BorshDeserialize, BorshSerialize};
+use jmt::SimpleHasher;
 use sov_state::{JmtStorage, ZkStorage};
 use std::convert::Infallible;
 
@@ -21,6 +22,15 @@ impl TryFrom<&'static str> for MockPublicKey {
     fn try_from(key: &'static str) -> Result<Self, Self::Error> {
         let key = key.as_bytes().to_vec();
         Ok(Self { pub_key: key })
+    }
+}
+
+impl TryFrom<MockPublicKey> for Address {
+    type Error = ();
+
+    fn try_from(value: MockPublicKey) -> Result<Self, Self::Error> {
+        let pub_key_has = <MockContext as Spec>::Hasher::hash(&value.pub_key);
+        Ok(Address::new(pub_key_has))
     }
 }
 

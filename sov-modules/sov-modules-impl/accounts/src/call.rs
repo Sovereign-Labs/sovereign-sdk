@@ -1,10 +1,10 @@
-use crate::Address;
+use crate::Account;
 
 use super::Accounts;
 
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::CallResponse;
+use sov_modules_api::{Address, CallResponse};
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage<C: sov_modules_api::Context> {
@@ -12,9 +12,29 @@ pub enum CallMessage<C: sov_modules_api::Context> {
     UpdatePublicKey(C::PublicKey),
 }
 
+/*
+1. Create pub_key => addr
+2. Change pub_key => new_pub_key
+3. Create pub_key => addr
+ */
+
 impl<C: sov_modules_api::Context> Accounts<C> {
     pub(crate) fn create_account(&mut self, context: &C) -> Result<CallResponse> {
-        todo!()
+        self.exit_if_account_exist(context.sender())?;
+        let default_address = context.sender().clone().try_into().unwrap();
+
+        self.exit_if_address_exist(&default_address)?;
+
+        let new_account = Account {
+            addr: default_address,
+            nonce: 0,
+        };
+
+        self.accounts.set(context.sender(), new_account);
+        self.addresses
+            .set(&default_address, context.sender().clone());
+
+        Ok(CallResponse::default())
     }
 
     pub(crate) fn update_public_key(
@@ -22,14 +42,31 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         new_pub_key: C::PublicKey,
         context: &C,
     ) -> Result<CallResponse> {
-        anyhow::ensure!(
-            self.accounts.get(&new_pub_key).is_none(),
-            "New Public Key already exists"
-        );
+        self.exit_if_account_exist(&new_pub_key)?;
 
-        let account = self.accounts.get_or_err(context.sender())?;
+        let account = self.accounts.remove_or_err(context.sender())?;
+        // We don't reset the nonce
         self.accounts.set(&new_pub_key, account);
 
+        self.addresses.remove_or_err(&account.addr)?;
+        self.addresses.set(&account.addr, new_pub_key);
+
         Ok(CallResponse::default())
+    }
+
+    fn exit_if_account_exist(&self, new_pub_key: &C::PublicKey) -> Result<()> {
+        anyhow::ensure!(
+            self.accounts.get(new_pub_key).is_none(),
+            "New Public Key already exists"
+        );
+        Ok(())
+    }
+
+    fn exit_if_address_exist(&self, address: &Address) -> Result<()> {
+        anyhow::ensure!(
+            self.addresses.get(address).is_none(),
+            "Address already exists"
+        );
+        Ok(())
     }
 }
