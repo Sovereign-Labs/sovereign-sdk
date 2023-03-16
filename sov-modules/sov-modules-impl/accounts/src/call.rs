@@ -9,7 +9,10 @@ pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [0; 32];
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage<C: sov_modules_api::Context> {
+    // Creates a new account.
     CreateAccount,
+    // Updates a PublicKey for the corresponding Account.
+    // The sender must be in possession of the new PublicKey.
     UpdatePublicKey(C::PublicKey, C::Signature),
 }
 
@@ -42,12 +45,18 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         self.exit_if_account_exist(&new_pub_key)?;
 
         let account = self.accounts.remove_or_err(context.sender())?;
-        self.public_keys.remove_or_err(&account.addr)?;
 
-        // Proof that the sender is in possession of the `new_pub_key`
+        // Sanity check.
+        anyhow::ensure!(
+            // This is guaranteed to be true.
+            self.public_keys.get(&account.addr).is_some(),
+            "Missing PublicKey"
+        );
+
+        // Proof that the sender is in possession of the `new_pub_key`.
         signature.verify(&new_pub_key, UPDATE_ACCOUNT_MSG)?;
 
-        // Only the public key is updated, but account data remains the same.
+        // Update the public key (account data remains the same).
         self.accounts.set(&new_pub_key, account);
         self.public_keys.set(&account.addr, new_pub_key);
         Ok(CallResponse::default())
@@ -56,7 +65,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
     fn exit_if_account_exist(&self, new_pub_key: &C::PublicKey) -> Result<()> {
         anyhow::ensure!(
             self.accounts.get(new_pub_key).is_none(),
-            "New Public Key already exists"
+            "New PublicKey already exists"
         );
         Ok(())
     }
