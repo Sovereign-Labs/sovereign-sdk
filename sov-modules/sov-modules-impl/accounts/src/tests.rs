@@ -105,3 +105,31 @@ fn test_update_account_fails() {
         )
         .is_err())
 }
+
+#[test]
+fn test_create_account_fails() {
+    let native_storage = JmtStorage::temporary();
+    let accounts = &mut Accounts::<C>::new(native_storage);
+
+    let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();
+    let sender_context_1 = C::new(sender_1);
+
+    accounts
+        .call(call::CallMessage::<C>::CreateAccount, &sender_context_1)
+        .unwrap();
+
+    let new_pub_key = MockPublicKey::try_from("pub_key_2").unwrap();
+    accounts
+        .call(
+            call::CallMessage::<C>::UpdatePublicKey(new_pub_key.clone()),
+            &sender_context_1,
+        )
+        .unwrap();
+
+    let sender_context_2 = C::new(new_pub_key);
+
+    // Account creation fails because the `new_pub_key` is already registered.
+    assert!(accounts
+        .call(call::CallMessage::<C>::CreateAccount, &sender_context_2)
+        .is_err())
+}

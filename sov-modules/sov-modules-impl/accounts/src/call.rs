@@ -13,8 +13,8 @@ pub enum CallMessage<C: sov_modules_api::Context> {
 impl<C: sov_modules_api::Context> Accounts<C> {
     pub(crate) fn create_account(&mut self, context: &C) -> Result<CallResponse> {
         self.exit_if_account_exist(context.sender())?;
-        let default_address = context.sender().to_address();
 
+        let default_address = context.sender().to_address();
         self.exit_if_address_exist(&default_address)?;
 
         let new_account = Account {
@@ -23,6 +23,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         };
 
         self.accounts.set(context.sender(), new_account);
+
         self.addresses
             .set(&default_address, context.sender().clone());
 
@@ -36,12 +37,14 @@ impl<C: sov_modules_api::Context> Accounts<C> {
     ) -> Result<CallResponse> {
         self.exit_if_account_exist(&new_pub_key)?;
 
-        let account = self.accounts.remove_or_err(context.sender())?;
-        // We don't reset the nonce
-        self.accounts.set(&new_pub_key, account);
+        // Only the public key is updated, but account data remains the same.
 
+        let account = self.accounts.remove_or_err(context.sender())?;
+        self.accounts.set(&new_pub_key, account);
         self.addresses.remove_or_err(&account.addr)?;
         self.addresses.set(&account.addr, new_pub_key);
+
+        // TODO proof of possesion
 
         Ok(CallResponse::default())
     }
