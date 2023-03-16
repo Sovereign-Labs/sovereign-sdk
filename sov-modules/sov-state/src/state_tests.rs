@@ -1,19 +1,19 @@
 // use std::path::Path;
 
 // use super::*;
-// use crate::ProverStorage;
+// use crate::{ProverStorage, mocks::MockStorageSpec};
 
 // enum Operation {
 //     Merge,
 //     Finalize,
 // }
 
-// TODO: Re-enable test with `WorkingSet` abstraction
+// // TODO: Re-enable test with `WorkingSet` abstraction
 
 // impl Operation {
-//     fn execute(&self, storage: &mut JmtStorage) {
+//     fn execute(&self, storage: &mut WorkingSet<ProverStorage<MockStorageSpec>> {
 //         match self {
-//             Operation::Merge => storage.merge(),
+//             Operation::Merge => storage.,
 //             Operation::Finalize => {
 //                 storage.finalize();
 //             }

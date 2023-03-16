@@ -72,9 +72,10 @@ where
             .verifier
             .verify_txs_stateless(batch.take_transactions())
             .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
-        let batch_workspace = WorkingSet::new(self.current_storage.clone());
+        let mut batch_workspace = WorkingSet::new(self.current_storage.clone());
 
         for tx in txs {
+            batch_workspace.to_revertable();
             // Run the stateful verification, possibly modifies the state.
             let verified_tx = self
                 .verifier
@@ -88,17 +89,17 @@ where
                 match tx_result {
                     Ok(resp) => {
                         events.push(resp.events);
-                        // batch_workspace
-                        //     .merge(tx_workspace)
-                        //     .unwrap_or_else(|e| panic!("Cache merge error: {e}"));
+                        batch_workspace.commit();
                     }
                     Err(e) => {
                         // Don't merge the tx workspace. TODO add tests for this scenario
+                        batch_workspace.revert();
                         panic!("Demo app txs must succeed but failed with err: {}", e)
                     }
                 }
             } else {
                 // If the serialization is invalid, the sequencer is malicious. Slash them
+                batch_workspace.revert();
                 return Err(ConsensusSetUpdate::slashing(sequencer));
             }
         }

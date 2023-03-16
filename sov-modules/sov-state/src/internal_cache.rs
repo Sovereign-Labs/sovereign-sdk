@@ -3,7 +3,7 @@ use crate::{
     Storage,
 };
 use first_read_last_write_cache::{
-    cache::{self, CacheLog},
+    cache::{self, CacheLog, ValueExists},
     CacheKey, CacheValue,
 };
 
@@ -48,6 +48,11 @@ impl StorageInternalCache {
         }
     }
 
+    pub fn try_get(&self, key: StorageKey) -> ValueExists {
+        let cache_key = key.clone().as_cache_key();
+        self.get_value_from_cache(cache_key.clone())
+    }
+
     pub(crate) fn set(&mut self, key: StorageKey, value: StorageValue) {
         let cache_key = key.as_cache_key();
         let cache_value = value.as_cache_value();
@@ -65,6 +70,13 @@ impl StorageInternalCache {
 
     pub fn merge_left(&mut self, rhs: Self) -> Result<(), first_read_last_write_cache::MergeError> {
         self.tx_cache.merge_left(rhs.tx_cache)
+    }
+
+    pub fn merge_reads_left(
+        &mut self,
+        rhs: Self,
+    ) -> Result<(), first_read_last_write_cache::MergeError> {
+        self.tx_cache.merge_reads_left(rhs.tx_cache)
     }
 
     fn add_read(&mut self, key: CacheKey, value: Option<CacheValue>) {

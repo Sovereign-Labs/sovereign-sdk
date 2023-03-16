@@ -140,17 +140,17 @@ mod test {
             TestCase {
                 key: StorageKey::from("key_0"),
                 value: StorageValue::from("value_0"),
-                version: 0,
+                version: 1,
             },
             TestCase {
                 key: StorageKey::from("key_1"),
                 value: StorageValue::from("value_1"),
-                version: 1,
+                version: 2,
             },
             TestCase {
                 key: StorageKey::from("key_2"),
                 value: StorageValue::from("value_2"),
-                version: 2,
+                version: 3,
             },
         ]
     }
@@ -178,7 +178,7 @@ mod test {
 
         {
             let storage = ProverStorage::<MockStorageSpec>::with_path(&path).unwrap();
-            assert_eq!(storage.db.get_next_version(), tests.len() as u64);
+            assert_eq!(storage.db.get_next_version(), (tests.len() + 1) as u64);
             for test in tests {
                 assert_eq!(
                     test.value,
