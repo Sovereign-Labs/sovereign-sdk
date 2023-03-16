@@ -7,13 +7,13 @@ use sov_modules_api::{
     mocks::{MockContext, MockPublicKey},
     Address, Context, Module, ModuleInfo, PublicKey,
 };
-use sov_state::JmtStorage;
+use sov_state::{ProverStorage, WorkingSet};
 
 type C = MockContext;
 
 #[test]
 fn test_update_account() {
-    let native_storage = JmtStorage::temporary();
+    let native_storage = WorkingSet::new(ProverStorage::temporary());
     let accounts = &mut Accounts::<C>::new(native_storage);
 
     let sender = MockPublicKey::try_from("pub_key").unwrap();
@@ -80,7 +80,7 @@ fn test_update_account() {
 
 #[test]
 fn test_update_account_fails() {
-    let native_storage = JmtStorage::temporary();
+    let native_storage = WorkingSet::new(ProverStorage::temporary());
     let accounts = &mut Accounts::<C>::new(native_storage);
 
     let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();
@@ -109,7 +109,7 @@ fn test_update_account_fails() {
 
 #[test]
 fn test_create_account_fails() {
-    let native_storage = JmtStorage::temporary();
+    let native_storage = WorkingSet::new(ProverStorage::temporary());
     let accounts = &mut Accounts::<C>::new(native_storage);
 
     let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();

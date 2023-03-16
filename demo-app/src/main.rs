@@ -7,15 +7,17 @@ mod tx_verifier;
 
 use data_generation::{simulate_da, QueryGenerator};
 use helpers::check_query;
-use sov_state::JmtStorage;
+use sov_modules_api::mocks::MockContext;
+use sov_state::ProverStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
+use stf::Demo;
+use tx_verifier::DemoAppTxVerifier;
 
 fn main() {
     let path = schemadb::temppath::TempPath::new();
     {
-        let storage = JmtStorage::with_path(&path).unwrap();
-        let mut demo = stf::Demo::new(storage);
-
+        let storage = ProverStorage::with_path(&path).unwrap();
+        let mut demo = Demo::<MockContext, DemoAppTxVerifier<MockContext>>::new(storage);
         demo.init_chain(());
         demo.begin_slot();
 
@@ -29,7 +31,7 @@ fn main() {
 
     // Checks
     {
-        let storage = JmtStorage::with_path(&path).unwrap();
+        let storage = ProverStorage::with_path(&path).unwrap();
         check_query(
             QueryGenerator::generate_query_election_message(),
             r#"{"Result":{"name":"candidate_2","count":3}}"#,
@@ -52,9 +54,8 @@ mod test {
     fn test_demo_values_in_db() {
         let path = schemadb::temppath::TempPath::new();
         {
-            let storage = JmtStorage::with_path(&path).unwrap();
-            let mut demo = stf::Demo::new(storage);
-
+            let storage = ProverStorage::with_path(&path).unwrap();
+            let mut demo = Demo::<MockContext, DemoAppTxVerifier<MockContext>>::new(storage);
             demo.init_chain(());
             demo.begin_slot();
 
@@ -68,7 +69,7 @@ mod test {
 
         // Generate a new storage instance after dumping data to the db.
         {
-            let storage = JmtStorage::with_path(&path).unwrap();
+            let storage = ProverStorage::with_path(&path).unwrap();
             check_query(
                 QueryGenerator::generate_query_election_message(),
                 r#"{"Result":{"name":"candidate_2","count":3}}"#,
@@ -85,9 +86,8 @@ mod test {
 
     #[test]
     fn test_demo_values_in_cache() {
-        let storage = JmtStorage::temporary();
-        let mut demo = stf::Demo::new(storage.clone());
-
+        let storage = ProverStorage::temporary();
+        let mut demo = Demo::<MockContext, DemoAppTxVerifier<MockContext>>::new(storage.clone());
         demo.init_chain(());
         demo.begin_slot();
 
@@ -95,6 +95,7 @@ mod test {
 
         demo.apply_batch(batch::Batch { txs }, &[1u8; 32], None)
             .expect("Batch is valid");
+        demo.end_slot();
 
         check_query(
             QueryGenerator::generate_query_election_message(),
@@ -113,9 +114,8 @@ mod test {
     fn test_demo_values_not_in_db() {
         let path = schemadb::temppath::TempPath::new();
         {
-            let storage = JmtStorage::with_path(&path).unwrap();
-            let mut demo = stf::Demo::new(storage);
-
+            let storage = ProverStorage::with_path(&path).unwrap();
+            let mut demo = Demo::<MockContext, DemoAppTxVerifier<MockContext>>::new(storage);
             demo.init_chain(());
             demo.begin_slot();
 
@@ -127,7 +127,7 @@ mod test {
 
         // Generate a new storage instance, value are missing because we didn't call `end_slot()`;
         {
-            let storage = JmtStorage::with_path(&path).unwrap();
+            let storage = ProverStorage::with_path(&path).unwrap();
             check_query(
                 QueryGenerator::generate_query_election_message(),
                 r#"{"Err":"Election is not frozen"}"#,

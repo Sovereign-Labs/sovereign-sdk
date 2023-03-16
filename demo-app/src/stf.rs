@@ -1,10 +1,12 @@
 use crate::batch::Batch;
+use std::cell::RefCell;
+
 use crate::runtime::Runtime;
 use crate::tx_verifier::{DemoAppTxVerifier, RawTx, TxVerifier};
 
-use sov_modules_api::{mocks::MockContext, Context, DispatchCall, Genesis, Spec};
+use sov_modules_api::{Context, DispatchCall, Genesis};
 
-use sov_state::Storage;
+use sov_state::{Storage, WorkingSet};
 use sovereign_sdk::{
     core::{mocks::MockProof, traits::BatchTrait},
     jmt,
@@ -14,13 +16,15 @@ use sovereign_sdk::{
 pub(crate) struct Demo<C: Context, V: TxVerifier> {
     pub current_storage: C::Storage,
     pub verifier: V,
+    pub working_set: RefCell<Option<WorkingSet<C::Storage>>>,
 }
 
-impl Demo<MockContext, DemoAppTxVerifier<MockContext>> {
-    pub fn new(storage: <MockContext as Spec>::Storage) -> Self {
+impl<C: Context> Demo<C, DemoAppTxVerifier<C>> {
+    pub fn new(storage: C::Storage) -> Self {
         Self {
             current_storage: storage,
             verifier: DemoAppTxVerifier::new(),
+            working_set: RefCell::new(None),
         }
     }
 }
@@ -42,9 +46,12 @@ where
     type MisbehaviorProof = ();
 
     fn init_chain(&mut self, _params: Self::ChainParams) {
-        Runtime::<C>::genesis(self.current_storage.clone())
-            .expect("module initialization must succeed");
-        self.current_storage.finalize();
+        let working_set = WorkingSet::new(self.current_storage.clone());
+        Runtime::<C>::genesis(working_set.clone()).expect("module initialization must succeed");
+        let (log, witness) = working_set.freeze();
+        self.current_storage
+            .validate_and_commit(log, &witness)
+            .expect("Storage update must succeed");
     }
 
     fn begin_slot(&self) {}
@@ -58,7 +65,6 @@ where
         Vec<Vec<sovereign_sdk::stf::Event>>,
         sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>,
     > {
-        let mut storage = self.current_storage.clone();
         let mut events = Vec::new();
 
         // Run the stateless verification.
@@ -66,33 +72,38 @@ where
             .verifier
             .verify_txs_stateless(batch.take_transactions())
             .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
+        let mut batch_workspace = WorkingSet::new(self.current_storage.clone());
 
         for tx in txs {
+            batch_workspace.to_revertable();
             // Run the stateful verification, possibly modifies the state.
             let verified_tx = self
                 .verifier
-                .verify_tx_stateful(tx, storage.clone())
+                .verify_tx_stateful(tx, batch_workspace.clone())
                 .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
 
             if let Ok(msg) = Runtime::<C>::decode_call(&verified_tx.runtime_msg) {
                 let ctx = C::new(verified_tx.sender);
-                let tx_result = msg.dispatch_call(storage.clone(), &ctx);
+                let tx_result = msg.dispatch_call(batch_workspace.clone(), &ctx);
 
                 match tx_result {
                     Ok(resp) => {
                         events.push(resp.events);
-                        storage.merge();
+                        batch_workspace.commit();
                     }
-                    Err(_) => {
-                        // TODO add tests for this scenario
-                        storage.merge_reads_and_discard_writes();
+                    Err(e) => {
+                        // Don't merge the tx workspace. TODO add tests for this scenario
+                        batch_workspace.revert();
+                        panic!("Demo app txs must succeed but failed with err: {}", e)
                     }
                 }
             } else {
                 // If the serialization is invalid, the sequencer is malicious. Slash them
+                batch_workspace.revert();
                 return Err(ConsensusSetUpdate::slashing(sequencer));
             }
         }
+        self.working_set.borrow_mut().replace(batch_workspace);
 
         Ok(events)
     }
@@ -111,6 +122,11 @@ where
         Self::StateRoot,
         Vec<sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>>,
     ) {
-        (jmt::RootHash(self.current_storage.finalize()), vec![])
+        let (cache_log, witness) = self.working_set.borrow_mut().take().unwrap().freeze();
+        let root_hash = self
+            .current_storage
+            .validate_and_commit(cache_log, &witness)
+            .expect("edree update must succed");
+        (jmt::RootHash(root_hash), vec![])
     }
 }

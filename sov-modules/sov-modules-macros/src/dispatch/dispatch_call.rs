@@ -30,7 +30,7 @@ impl<'a> StructDef<'a> {
 
             quote::quote!(
                 #enum_ident::#name(message)=>{
-                    let mut #name = <#ty as sov_modules_api::ModuleInfo::#type_generics>::new(storage.clone());
+                    let mut #name = <#ty as sov_modules_api::ModuleInfo::#type_generics>::new(working_set.clone());
                     sov_modules_api::Module::call(&mut #name, message, context)
                 },
             )
@@ -46,7 +46,7 @@ impl<'a> StructDef<'a> {
 
                 fn dispatch_call(
                     self,
-                    storage: <Self::Context as sov_modules_api::Spec>::Storage,
+                    working_set: sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
                     context: &Self::Context,
                 ) -> core::result::Result<sov_modules_api::CallResponse, sov_modules_api::Error> {
 

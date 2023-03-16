@@ -6,7 +6,7 @@ use crate::{
     serial::DecodeBorrowed,
     state_machine::env,
     stf::{ConsensusMessage, StateTransitionFunction},
-    zk::traits::{ProofTrait, RecursiveProofInput, ZkVM},
+    zk::traits::{ProofTrait, RecursiveProofInput, ZkVm},
 };
 
 use super::types::RollupHeader;
@@ -34,7 +34,7 @@ pub struct Config<DaLayer: DaLayerTrait, App: StateTransitionFunction> {
     phantom: std::marker::PhantomData<App>,
 }
 
-pub struct BlockProof<Vm: ZkVM, DaLayer: DaLayerTrait, App: StateTransitionFunction> {
+pub struct BlockProof<Vm: ZkVm, DaLayer: DaLayerTrait, App: StateTransitionFunction> {
     pub phantom: std::marker::PhantomData<Vm>,
     // phantomapp: std::marker::PhantomData<App>,
     // phantomda: std::marker::PhantomData<DaLayer>,
@@ -42,21 +42,21 @@ pub struct BlockProof<Vm: ZkVM, DaLayer: DaLayerTrait, App: StateTransitionFunct
     pub code_commitment: Option<Vm::CodeCommitment>,
 }
 
-impl<Vm: ZkVM<Proof = Self>, DaLayer: DaLayerTrait, App: StateTransitionFunction> ProofTrait<Vm>
+impl<Vm: ZkVm<Proof = Self>, DaLayer: DaLayerTrait, App: StateTransitionFunction> ProofTrait<Vm>
     for BlockProof<Vm, DaLayer, App>
 {
     type Output = RollupHeader<DaLayer, App>;
 
     fn verify(
         self,
-        code_commitment: &<Vm as ZkVM>::CodeCommitment,
-    ) -> Result<Self::Output, <Vm as ZkVM>::Error> {
+        code_commitment: &<Vm as ZkVm>::CodeCommitment,
+    ) -> Result<Self::Output, <Vm as ZkVm>::Error> {
         Vm::verify(self, code_commitment)
     }
 }
 
 impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
-    pub fn zk_verify_block<Vm: ZkVM<Proof = BlockProof<Vm, DaLayer, App>>>(
+    pub fn zk_verify_block<Vm: ZkVm<Proof = BlockProof<Vm, DaLayer, App>>>(
         &mut self,
     ) -> Result<BlockProof<Vm, DaLayer, App>, Vm::Error> {
         // let prev_proof: RecursiveProof<Vm, DaLayer, App> = env::read_unchecked();

@@ -1,4 +1,4 @@
-use crate::{backend::Backend, storage::StorageKey, Prefix, Storage};
+use crate::{backend::Backend, storage::StorageKey, Prefix, Storage, WorkingSet};
 use sovereign_sdk::serial::{Decode, Encode};
 use thiserror::Error;
 
@@ -16,7 +16,7 @@ impl Encode for SingletonKey {
 
 /// Container for a single value.
 #[derive(Debug)]
-pub struct StateValue<V, S> {
+pub struct StateValue<V, S: Storage> {
     // StateValue is equivalent to a Backend with a single key.
     backend: Backend<SingletonKey, V, S>,
 }
@@ -29,7 +29,7 @@ pub enum Error {
 }
 
 impl<V: Encode + Decode, S: Storage> StateValue<V, S> {
-    pub fn new(storage: S, prefix: Prefix) -> Self {
+    pub fn new(storage: WorkingSet<S>, prefix: Prefix) -> Self {
         Self {
             backend: Backend::new(storage, prefix),
         }

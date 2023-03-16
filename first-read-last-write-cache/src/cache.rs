@@ -73,6 +73,29 @@ impl CacheLog {
         FirstReads::new(reads)
     }
 
+    /// Split a cachelog into an iterator of reads and an iterator of writes.
+    /// The return value is (first_reads, last_writes)
+    pub fn split(
+        &self,
+    ) -> (
+        Vec<(CacheKey, Option<CacheValue>)>,
+        Vec<(CacheKey, Option<CacheValue>)>,
+    ) {
+        let reads = self
+            .log
+            .iter()
+            .filter_map(|(k, v)| filter_first_reads(k.clone(), v.clone()))
+            .collect();
+
+        let writes = self
+            .log
+            .iter()
+            .filter_map(|(k, v)| filter_writes(k.clone(), v.clone()))
+            .collect();
+
+        (reads, writes)
+    }
+
     /// Returns a value corresponding to the key.
     pub fn get_value(&self, key: &CacheKey) -> ValueExists {
         match self.log.get(key) {
@@ -130,11 +153,11 @@ impl CacheLog {
     ///     k1 => v1.merge(v1') <- preserves the first read and the last write for 'k1'
     ///     k2 => v2
     ///     k3 => v3
-    pub fn merge_left(&mut self, rhs: &mut Self) -> Result<(), MergeError> {
+    pub fn merge_left(&mut self, rhs: Self) -> Result<(), MergeError> {
         self.merge_left_with_filter_map(rhs, |x| Some(x))
     }
 
-    pub fn merge_reads_left(&mut self, rhs: &mut Self) -> Result<(), MergeError> {
+    pub fn merge_reads_left(&mut self, rhs: Self) -> Result<(), MergeError> {
         self.merge_left_with_filter_map(rhs, |(key, access)| match access {
             Access::Read(read) => Some((key, Access::Read(read))),
             Access::ReadThenWrite { original, .. } => Some((key, Access::Read(original))),
@@ -144,10 +167,10 @@ impl CacheLog {
 
     fn merge_left_with_filter_map<F: FnMut((CacheKey, Access)) -> Option<(CacheKey, Access)>>(
         &mut self,
-        rhs: &mut Self,
+        rhs: Self,
         filter: F,
     ) -> Result<(), MergeError> {
-        for (rhs_key, rhs_access) in rhs.log.drain().filter_map(filter) {
+        for (rhs_key, rhs_access) in rhs.log.into_iter().filter_map(filter) {
             match self.log.get_mut(&rhs_key) {
                 Some(self_access) => self_access.merge(rhs_access)?,
                 None => {
@@ -498,7 +521,7 @@ mod tests {
             }
         }
 
-        left_cache.merge_left(&mut right_cache)?;
+        left_cache.merge_left(right_cache)?;
         Ok(left_cache)
     }
 }

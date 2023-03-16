@@ -6,11 +6,12 @@ edition = "2021"
 [dependencies]
 # TODO remove this dependency once the  Decode/Encode traits are extracted to a separate crate.
 anyhow = { workspace = true }
+borsh = { workspace = true}
 thiserror = { workspace = true }
 sovereign-db = { workspace = true }
-sovereign-sdk = { workspace = true }
+sovereign-sdk = { workspace = true, features = ["mocks"] }
 first-read-last-write-cache = { workspace = true }
-jmt = { workspace = true }
+jmt = { workspace = true, features = ["borsh"] }
 hex = { workspace = true}
 sha2 = { workspace = true}
 
@@ -20,4 +21,5 @@ schemadb = { workspace = true, features = ["temppath"] }
 
 [features]
 default = []
+mocks = []
 temp = ["sovereign-db/temp"]

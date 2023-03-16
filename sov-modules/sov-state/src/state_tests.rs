@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use super::*;
-use crate::JmtStorage;
+use crate::{mocks::MockStorageSpec, ProverStorage};
 
 enum Operation {
     Merge,
@@ -9,11 +9,14 @@ enum Operation {
 }
 
 impl Operation {
-    fn execute(&self, storage: &mut JmtStorage) {
+    fn execute(&self, storage: &mut WorkingSet<ProverStorage<MockStorageSpec>>) {
         match self {
-            Operation::Merge => storage.merge(),
+            Operation::Merge => storage.commit(),
             Operation::Finalize => {
-                storage.finalize();
+                let db = storage.backing();
+                let (cache_log, witness) = storage.freeze();
+                db.validate_and_commit(cache_log, &witness)
+                    .expect("JMT update is valid");
             }
         }
     }
@@ -24,7 +27,7 @@ struct StorageOperation {
 }
 
 impl StorageOperation {
-    fn execute(&self, storage: JmtStorage) {
+    fn execute(&self, storage: WorkingSet<ProverStorage<MockStorageSpec>>) {
         for op in self.operations.iter() {
             op.execute(&mut storage.clone())
         }
@@ -71,8 +74,11 @@ fn create_state_map_and_storage(
     key: u32,
     value: u32,
     path: impl AsRef<Path>,
-) -> (StateMap<u32, u32, JmtStorage>, JmtStorage) {
-    let storage = JmtStorage::with_path(&path).unwrap();
+) -> (
+    StateMap<u32, u32, ProverStorage<MockStorageSpec>>,
+    WorkingSet<ProverStorage<MockStorageSpec>>,
+) {
+    let storage = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
     let mut state_map = StateMap::new(storage.clone(), Prefix::new(vec![0]));
     state_map.set(&key, value);
@@ -98,8 +104,11 @@ fn test_state_map() {
 fn create_state_value_and_storage(
     value: u32,
     path: impl AsRef<Path>,
-) -> (StateValue<u32, JmtStorage>, JmtStorage) {
-    let storage = JmtStorage::with_path(&path).unwrap();
+) -> (
+    StateValue<u32, ProverStorage<MockStorageSpec>>,
+    WorkingSet<ProverStorage<MockStorageSpec>>,
+) {
+    let storage = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
     let mut state_value = StateValue::new(storage.clone(), Prefix::new(vec![0]));
     state_value.set(value);
