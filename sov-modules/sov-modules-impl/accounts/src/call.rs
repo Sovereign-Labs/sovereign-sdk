@@ -1,5 +1,5 @@
-use super::Accounts;
 use crate::Account;
+use crate::Accounts;
 use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::{Address, CallResponse, PublicKey};

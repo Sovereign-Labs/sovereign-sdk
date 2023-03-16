@@ -19,6 +19,7 @@ use std::fmt::Debug;
 
 use thiserror::Error;
 
+/// Represents an address in the rollup.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Copy, Clone)]
 pub struct Address {
     addr: [u8; 32],
@@ -42,6 +43,7 @@ pub enum SigVerificationError {
     BadSignature,
 }
 
+/// Signature used in the module system.
 pub trait Signature {
     type PublicKey;
 
@@ -56,6 +58,7 @@ pub trait Signature {
 #[derive(Debug)]
 pub enum NonInstantiable {}
 
+/// PublicKey used in the module system.
 pub trait PublicKey {
     fn to_address(&self) -> Address;
 }
