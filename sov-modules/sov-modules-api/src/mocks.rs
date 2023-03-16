@@ -70,7 +70,7 @@ impl Spec for MockContext {
     type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
     type Signature = MockSignature;
-    type Witness = MockWitness;
+    type Witness = ArrrayWitness;
 }
 
 impl Context for MockContext {
@@ -84,12 +84,12 @@ impl Context for MockContext {
 }
 
 #[derive(Default)]
-pub struct MockWitness {
+pub struct ArrrayWitness {
     next_idx: AtomicUsize,
     hints: RefCell<Vec<Vec<u8>>>,
 }
 
-impl Witness for MockWitness {
+impl Witness for ArrrayWitness {
     fn add_hint<T: Encode + Decode>(&self, hint: T) {
         self.hints.borrow_mut().push(hint.encode_to_vec())
     }
@@ -120,7 +120,7 @@ impl Spec for ZkMockContext {
     type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
     type Signature = MockSignature;
-    type Witness = MockWitness;
+    type Witness = ArrrayWitness;
 }
 
 impl Context for ZkMockContext {

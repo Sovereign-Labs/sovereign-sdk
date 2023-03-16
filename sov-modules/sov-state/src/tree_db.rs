@@ -16,18 +16,6 @@ impl<'a, W: Witness> TreeReadLogger<'a, W> {
             witness,
         }
     }
-
-    // pub fn put_preimage(&self, key_hash: KeyHash, key: &Vec<u8>) -> Result<(), anyhow::Error> {
-    //     self.state_db.put_preimage(key_hash, key)
-    // }
-
-    // pub fn get_next_version(&self) -> Version {
-    //     self.state_db.get_next_version()
-    // }
-
-    // pub fn inc_next_version(&self) {
-    //     self.state_db.inc_next_version()
-    // }
 }
 
 impl<'a, W: Witness> TreeReader for TreeReadLogger<'a, W> {

@@ -100,6 +100,19 @@ impl<S: Storage> WorkingSet<S> {
             WorkingSet::Revertable(_) => todo!(),
         }
     }
+
+    pub fn backing(&self) -> S {
+        match self {
+            WorkingSet::Standard(delta) => delta.inner.clone(),
+            WorkingSet::Revertable(revertable) => revertable
+                .inner
+                .borrow()
+                .as_ref()
+                .expect("Inner must exist")
+                .inner
+                .clone(),
+        }
+    }
 }
 
 impl<S: Storage> Clone for RevertableDelta<S> {
@@ -171,12 +184,6 @@ impl<S: Storage> RevertableDelta<S> {
         inner
     }
 }
-
-// pub trait WorkingSet: Clone {
-//     fn get(&self, key: StorageKey) -> Option<StorageValue>;
-//     fn set(&mut self, key: StorageKey, value: StorageValue);
-//     fn delete(&mut self, key: StorageKey);
-// }
 
 impl<S: Storage> Clone for Delta<S> {
     fn clone(&self) -> Self {

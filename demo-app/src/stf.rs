@@ -127,8 +127,6 @@ where
             .current_storage
             .validate_and_commit(cache_log, &witness)
             .expect("edree update must succed");
-        // let root_hash =
-        // ,
         (jmt::RootHash(root_hash), vec![])
     }
 }
