@@ -18,6 +18,8 @@ pub enum CallMessage<C: sov_modules_api::Context> {
 3. Create pub_key => addr
  */
 
+//TODO add remove account
+
 impl<C: sov_modules_api::Context> Accounts<C> {
     pub(crate) fn create_account(&mut self, context: &C) -> Result<CallResponse> {
         self.exit_if_account_exist(context.sender())?;

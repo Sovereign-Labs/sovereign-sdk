@@ -1,9 +1,10 @@
 mod call;
 mod genesis;
 mod query;
+#[cfg(test)]
+mod tests;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-
 use sov_modules_api::{Address, Error};
 use sov_modules_macros::ModuleInfo;
 
@@ -53,7 +54,6 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
                 let response = serde_json::to_vec(&self.get_account(pub_key)).unwrap();
                 sov_modules_api::QueryResponse { response }
             }
-        };
-        todo!()
+        }
     }
 }
