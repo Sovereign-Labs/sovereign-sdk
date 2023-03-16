@@ -92,7 +92,7 @@ impl<'a> StructDef<'a> {
                     impl_self_body.push(&field.ident);
                 }
                 FieldKind::Module(field) => {
-                    impl_self_init.push(make_init_module(field, &self.type_generics)?);
+                    impl_self_init.push(make_init_module(field)?);
                     impl_self_body.push(&field.ident);
                 }
             };
@@ -104,7 +104,8 @@ impl<'a> StructDef<'a> {
         let where_clause = self.where_clause;
 
         Ok(quote::quote! {
-            impl #impl_generics sov_modules_api::ModuleInfo #type_generics for #ident #type_generics #where_clause{
+            impl #impl_generics sov_modules_api::ModuleInfo for #ident #type_generics #where_clause{
+                type Context = C;
 
                 fn new(storage: #type_generics::Storage) -> Self {
                     #(#impl_self_init)*
@@ -234,14 +235,11 @@ fn make_init_state(field: &StructNamedField) -> Result<proc_macro2::TokenStream,
     })
 }
 
-fn make_init_module<'a>(
-    field: &StructNamedField,
-    type_generics: &'a TypeGenerics<'a>,
-) -> Result<proc_macro2::TokenStream, syn::Error> {
+fn make_init_module<'a>(field: &StructNamedField) -> Result<proc_macro2::TokenStream, syn::Error> {
     let field_ident = &field.ident;
     let ty = &field.ty;
 
     Ok(quote::quote! {
-        let #field_ident = <#ty as sov_modules_api::ModuleInfo #type_generics>::new(storage.clone());
+        let #field_ident = <#ty as sov_modules_api::ModuleInfo>::new(storage.clone());
     })
 }

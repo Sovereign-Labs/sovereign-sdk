@@ -31,7 +31,6 @@ pub mod module_b {
     pub(crate) struct ModuleB<C: Context> {
         #[state]
         state_1_b: StateMap<String, String, C::Storage>,
-
         #[module]
         pub(crate) mod_1_a: module_a::ModuleA<C>,
     }
@@ -90,7 +89,7 @@ fn execute_module_logic<C: Context>(storage: C::Storage) {
 }
 
 fn test_state_update<C: Context>(storage: C::Storage) {
-    let module = <module_c::ModuleC<C> as ModuleInfo<C>>::new(storage.clone());
+    let module = <module_c::ModuleC<C> as ModuleInfo>::new(storage.clone());
 
     let expected_value = StorageValue::new("some_value");
 

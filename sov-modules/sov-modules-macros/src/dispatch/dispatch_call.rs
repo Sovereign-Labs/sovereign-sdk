@@ -30,7 +30,7 @@ impl<'a> StructDef<'a> {
 
             quote::quote!(
                 #enum_ident::#name(message)=>{
-                    let mut #name = <#ty as sov_modules_api::ModuleInfo::#type_generics>::new(storage.clone());
+                    let mut #name = <#ty as sov_modules_api::ModuleInfo>::new(storage.clone());
                     sov_modules_api::Module::call(&mut #name, message, context)
                 },
             )

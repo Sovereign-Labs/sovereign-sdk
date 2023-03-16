@@ -37,7 +37,7 @@ fn main() {
     let test_storage = JmtStorage::temporary();
 
     let second_test_struct =
-        <second_test_module::SecondTestStruct<C> as ModuleInfo<C>>::new(test_storage);
+        <second_test_module::SecondTestStruct<C> as ModuleInfo>::new(test_storage);
 
     let prefix2 = second_test_struct.state_in_second_struct_1.prefix();
     assert_eq!(

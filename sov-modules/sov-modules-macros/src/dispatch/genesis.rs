@@ -1,8 +1,6 @@
-use syn::DeriveInput;
-use syn::TypeGenerics;
-
 use super::common::parse_generic_params;
 use super::common::{StructFieldExtractor, StructNamedField};
+use syn::DeriveInput;
 
 pub(crate) struct GenesisMacro {
     field_extractor: StructFieldExtractor,
@@ -29,7 +27,7 @@ impl GenesisMacro {
         let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
-        let genesis_fn_body = Self::make_genesis_fn_body(type_generics.clone(), &fields);
+        let genesis_fn_body = Self::make_genesis_fn_body(&fields);
         let generic_param = parse_generic_params(&generics)?;
 
         // Implements the Genesis trait
@@ -46,10 +44,7 @@ impl GenesisMacro {
         .into())
     }
 
-    fn make_genesis_fn_body(
-        type_generics: TypeGenerics,
-        fields: &[StructNamedField],
-    ) -> Vec<proc_macro2::TokenStream> {
+    fn make_genesis_fn_body(fields: &[StructNamedField]) -> Vec<proc_macro2::TokenStream> {
         fields
             .iter()
             .map(|field| {
@@ -57,10 +52,10 @@ impl GenesisMacro {
                 let ty = &field.ty;
 
                 // generates body for `genesis` method:
-                //  let mut module_name = <ModuleName::<C> as sov_modules_api::ModuleInfo<C>>::new(storage.clone());
+                //  let mut module_name = <ModuleName::<C> as sov_modules_api::ModuleInfo>::new(storage.clone());
                 //  module_name.genesis()?;
-                 quote::quote! {
-                    let mut #ident = <#ty as sov_modules_api::ModuleInfo #type_generics>::new(storage.clone());
+                quote::quote! {
+                    let mut #ident = <#ty as sov_modules_api::ModuleInfo>::new(storage.clone());
                     #ident.genesis()?;
                 }
             })

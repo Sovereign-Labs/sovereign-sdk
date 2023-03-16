@@ -24,7 +24,7 @@ mod test_module {
 fn main() {
     type C = MockContext;
     let test_storage = JmtStorage::temporary();
-    let test_struct = <test_module::TestStruct<C> as ModuleInfo<C>>::new(test_storage);
+    let test_struct = <test_module::TestStruct<C> as ModuleInfo>::new(test_storage);
 
     let prefix1 = test_struct.test_state1.prefix();
 

@@ -107,6 +107,7 @@ pub trait Module {
 
 /// Every module has to implement this trait.
 /// It defines the `new` method for now and can be extended with some other metadata in the future.
-pub trait ModuleInfo<C: Context> {
-    fn new(storage: C::Storage) -> Self;
+pub trait ModuleInfo {
+    type Context: Context;
+    fn new(storage: <Self::Context as Spec>::Storage) -> Self;
 }
