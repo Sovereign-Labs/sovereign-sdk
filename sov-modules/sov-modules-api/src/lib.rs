@@ -56,6 +56,10 @@ pub trait Signature {
 #[derive(Debug)]
 pub enum NonInstantiable {}
 
+pub trait PublicKey {
+    fn to_address(&self) -> Address;
+}
+
 /// Spec contains types common for all modules.
 pub trait Spec {
     type Storage: Storage + Clone;
@@ -66,7 +70,7 @@ pub trait Spec {
         + TryFrom<&'static str>
         + Clone
         + Debug
-        + TryInto<Address, Error = ()>;
+        + PublicKey;
 
     type Hasher: jmt::SimpleHasher;
 

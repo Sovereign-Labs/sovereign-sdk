@@ -5,7 +5,7 @@ use crate::{
 };
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey},
-    Address, Context, Module, ModuleInfo,
+    Address, Context, Module, ModuleInfo, PublicKey,
 };
 use sov_state::JmtStorage;
 
@@ -17,7 +17,7 @@ fn test_update_account() {
     let accounts = &mut Accounts::<C>::new(native_storage);
 
     let sender = MockPublicKey::try_from("pub_key").unwrap();
-    let sender_addr = TryInto::<Address>::try_into(sender.clone()).unwrap();
+    let sender_addr: Address = sender.to_address();
     let sender_context = C::new(sender.clone());
 
     // Test new account creation

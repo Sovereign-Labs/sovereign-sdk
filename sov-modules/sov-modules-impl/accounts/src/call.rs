@@ -1,10 +1,8 @@
-use crate::Account;
-
 use super::Accounts;
-
+use crate::Account;
 use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::{Address, CallResponse};
+use sov_modules_api::{Address, CallResponse, PublicKey};
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage<C: sov_modules_api::Context> {
@@ -12,18 +10,10 @@ pub enum CallMessage<C: sov_modules_api::Context> {
     UpdatePublicKey(C::PublicKey),
 }
 
-/*
-1. Create pub_key => addr
-2. Change pub_key => new_pub_key
-3. Create pub_key => addr
- */
-
-//TODO add remove account
-
 impl<C: sov_modules_api::Context> Accounts<C> {
     pub(crate) fn create_account(&mut self, context: &C) -> Result<CallResponse> {
         self.exit_if_account_exist(context.sender())?;
-        let default_address = context.sender().clone().try_into().unwrap();
+        let default_address = context.sender().to_address();
 
         self.exit_if_address_exist(&default_address)?;
 

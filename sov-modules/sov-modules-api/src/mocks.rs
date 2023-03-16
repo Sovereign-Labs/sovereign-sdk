@@ -1,4 +1,4 @@
-use crate::{Address, Context, SigVerificationError, Signature, Spec};
+use crate::{Address, Context, PublicKey, SigVerificationError, Signature, Spec};
 use borsh::{BorshDeserialize, BorshSerialize};
 use jmt::SimpleHasher;
 use sov_state::{JmtStorage, ZkStorage};
@@ -25,12 +25,10 @@ impl TryFrom<&'static str> for MockPublicKey {
     }
 }
 
-impl TryFrom<MockPublicKey> for Address {
-    type Error = ();
-
-    fn try_from(value: MockPublicKey) -> Result<Self, Self::Error> {
-        let pub_key_has = <MockContext as Spec>::Hasher::hash(&value.pub_key);
-        Ok(Address::new(pub_key_has))
+impl PublicKey for MockPublicKey {
+    fn to_address(&self) -> Address {
+        let pub_key_hash = <MockContext as Spec>::Hasher::hash(&self.pub_key);
+        Address::new(pub_key_hash)
     }
 }
 
