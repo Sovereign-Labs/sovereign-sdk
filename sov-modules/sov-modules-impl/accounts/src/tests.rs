@@ -35,7 +35,7 @@ fn test_update_account() {
 
         assert_eq!(
             query_response,
-            query::Response::AccountExist {
+            query::Response::AccountExists {
                 addr: sender_addr.inner(),
                 nonce: 0
             }
@@ -70,7 +70,7 @@ fn test_update_account() {
 
         assert_eq!(
             query_response,
-            query::Response::AccountExist {
+            query::Response::AccountExists {
                 addr: sender_addr.inner(),
                 nonce: 0
             }

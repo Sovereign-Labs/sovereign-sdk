@@ -5,7 +5,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::Signature;
 use sov_modules_api::{Address, CallResponse, PublicKey};
 
-pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [0; 32];
+pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage<C: sov_modules_api::Context> {
@@ -18,10 +18,10 @@ pub enum CallMessage<C: sov_modules_api::Context> {
 
 impl<C: sov_modules_api::Context> Accounts<C> {
     pub(crate) fn create_account(&mut self, context: &C) -> Result<CallResponse> {
-        self.exit_if_account_exist(context.sender())?;
+        self.exit_if_account_exists(context.sender())?;
 
         let default_address = context.sender().to_address();
-        self.exit_if_address_exist(&default_address)?;
+        self.exit_if_address_exists(&default_address)?;
 
         let new_account = Account {
             addr: default_address,
@@ -42,7 +42,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         signature: C::Signature,
         context: &C,
     ) -> Result<CallResponse> {
-        self.exit_if_account_exist(&new_pub_key)?;
+        self.exit_if_account_exists(&new_pub_key)?;
 
         let account = self.accounts.remove_or_err(context.sender())?;
 
@@ -62,7 +62,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         Ok(CallResponse::default())
     }
 
-    fn exit_if_account_exist(&self, new_pub_key: &C::PublicKey) -> Result<()> {
+    fn exit_if_account_exists(&self, new_pub_key: &C::PublicKey) -> Result<()> {
         anyhow::ensure!(
             self.accounts.get(new_pub_key).is_none(),
             "New PublicKey already exists"
@@ -70,7 +70,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         Ok(())
     }
 
-    fn exit_if_address_exist(&self, address: &Address) -> Result<()> {
+    fn exit_if_address_exists(&self, address: &Address) -> Result<()> {
         anyhow::ensure!(
             self.public_keys.get(address).is_none(),
             "Address already exists"
