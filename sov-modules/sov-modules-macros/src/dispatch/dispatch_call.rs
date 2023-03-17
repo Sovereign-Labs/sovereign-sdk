@@ -36,6 +36,18 @@ impl<'a> StructDef<'a> {
             )
         });
 
+        let match_legs_address = self.fields.iter().map(|field| {
+            let name = &field.ident;
+            let ty = &field.ty;
+
+            quote::quote!(
+                #enum_ident::#name(message)=>{
+                    <#ty as sov_modules_api::ModuleInfo>::address()
+
+                },
+            )
+        });
+
         let impl_generics = &self.impl_generics;
         let where_clause = self.where_clause;
         let generic_param = self.generic_param;
@@ -54,6 +66,13 @@ impl<'a> StructDef<'a> {
                         #(#match_legs)*
                     }
                 }
+
+                fn module_address(&self) -> [u8; 32]{
+                    match self{
+                        #(#match_legs_address)*
+                    }
+                }
+
             }
         }
     }

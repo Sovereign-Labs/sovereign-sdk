@@ -18,6 +18,8 @@ pub trait DispatchCall {
         storage: <<Self as DispatchCall>::Context as Spec>::Storage,
         context: &Self::Context,
     ) -> Result<CallResponse, Error>;
+
+    fn module_address(&self) -> [u8; 32];
 }
 
 /// A trait that needs to be implemented for any query message.

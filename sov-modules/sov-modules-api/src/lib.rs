@@ -114,20 +114,3 @@ pub trait ModuleInfo {
     fn address() -> [u8; 32];
     fn new(storage: <Self::Context as Spec>::Storage) -> Self;
 }
-
-struct Foo {}
-/*
-impl ModuleInfo for Foo {
-    type Context = MockContext;
-
-    fn address() -> [u8; 32] {
-        let mut hasher = <<Self::Context as Spec>::Hasher as jmt::SimpleHasher>::new();
-        hasher.update("lol".as_bytes());
-        hasher.finalize()
-    }
-
-    fn new(storage: <Self::Context as Spec>::Storage) -> Self {
-        todo!()
-    }
-}
-*/
