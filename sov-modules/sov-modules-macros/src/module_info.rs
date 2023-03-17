@@ -103,7 +103,7 @@ impl<'a> StructDef<'a> {
         let type_generics = &self.type_generics;
         let where_clause = self.where_clause;
 
-        let fn_address = make_address(ident);
+        let fn_address = make_fn_address(ident);
 
         Ok(quote::quote! {
             impl #impl_generics sov_modules_api::ModuleInfo for #ident #type_generics #where_clause{
@@ -204,7 +204,7 @@ fn make_prefix_func(
     }
 }
 
-fn make_address(module_ident: &proc_macro2::Ident) -> proc_macro2::TokenStream {
+fn make_fn_address(module_ident: &proc_macro2::Ident) -> proc_macro2::TokenStream {
     quote::quote! {
         fn address() -> sov_modules_api::Address {
             use sov_modules_api::Hasher;
