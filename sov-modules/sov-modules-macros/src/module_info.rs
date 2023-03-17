@@ -103,6 +103,8 @@ impl<'a> StructDef<'a> {
         let type_generics = &self.type_generics;
         let where_clause = self.where_clause;
 
+        let fn_address = make_address(ident);
+
         Ok(quote::quote! {
             impl #impl_generics sov_modules_api::ModuleInfo for #ident #type_generics #where_clause{
                 type Context = C;
@@ -114,6 +116,8 @@ impl<'a> StructDef<'a> {
                         #(#impl_self_body),*
                      }
                 }
+
+                #fn_address
             }
         })
     }
@@ -196,6 +200,20 @@ fn make_prefix_func(
         fn #prefix_func_ident() -> sov_modules_api::Prefix {
             let module_path = module_path!();
             sov_modules_api::Prefix::new(module_path, stringify!(#module_ident), stringify!(#field_ident))
+        }
+    }
+}
+
+fn make_address(module_ident: &proc_macro2::Ident) -> proc_macro2::TokenStream {
+    quote::quote! {
+        fn address() -> [u8;32] {
+            use sov_modules_api::Hasher;
+            let module_path = module_path!();
+
+            let mut hasher = <<Self::Context as sov_modules_api::Spec>::Hasher>::new();
+            hasher.update(module_path.as_bytes());
+            hasher.update(stringify!(#module_ident).as_bytes());
+            hasher.finalize()
         }
     }
 }
