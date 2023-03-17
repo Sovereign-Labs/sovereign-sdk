@@ -142,5 +142,5 @@ pub trait Module {
 pub trait ModuleInfo {
     type Context: Context;
     fn address() -> [u8; 32];
-    fn new(storage: WorkingSet<C::Storage>) -> Self;
+    fn new(storage: WorkingSet<<Self::Context as Spec>::Storage>) -> Self;
 }
