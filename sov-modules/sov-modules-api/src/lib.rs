@@ -141,6 +141,9 @@ pub trait Module {
 /// It defines the `new` method for now and can be extended with some other metadata in the future.
 pub trait ModuleInfo {
     type Context: Context;
-    fn address() -> [u8; 32];
+
     fn new(storage: WorkingSet<<Self::Context as Spec>::Storage>) -> Self;
+
+    // Returns an address for the Module.
+    fn address() -> Address;
 }

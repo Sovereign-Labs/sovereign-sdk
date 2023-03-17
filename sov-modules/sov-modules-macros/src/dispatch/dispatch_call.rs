@@ -67,7 +67,7 @@ impl<'a> StructDef<'a> {
                     }
                 }
 
-                fn module_address(&self) -> [u8; 32]{
+                fn module_address(&self) -> sov_modules_api::Address {
                     match self{
                         #(#match_legs_address)*
                     }

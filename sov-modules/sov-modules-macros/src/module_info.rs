@@ -206,14 +206,14 @@ fn make_prefix_func(
 
 fn make_address(module_ident: &proc_macro2::Ident) -> proc_macro2::TokenStream {
     quote::quote! {
-        fn address() -> [u8;32] {
+        fn address() -> sov_modules_api::Address {
             use sov_modules_api::Hasher;
             let module_path = module_path!();
 
             let mut hasher = <<Self::Context as sov_modules_api::Spec>::Hasher>::new();
             hasher.update(module_path.as_bytes());
             hasher.update(stringify!(#module_ident).as_bytes());
-            hasher.finalize()
+            sov_modules_api::Address::new(hasher.finalize())
         }
     }
 }

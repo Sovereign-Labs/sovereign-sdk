@@ -71,5 +71,8 @@ fn main() {
     hasher.update("trybuild000::test_module".as_bytes());
     hasher.update("TestStruct".as_bytes());
 
-    assert_eq!(hasher.finalize(), test_module::TestStruct::<C>::address());
+    assert_eq!(
+        sov_modules_api::Address::new(hasher.finalize()),
+        test_module::TestStruct::<C>::address()
+    );
 }

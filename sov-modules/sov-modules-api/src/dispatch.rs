@@ -1,6 +1,6 @@
 use sov_state::WorkingSet;
 
-use crate::{CallResponse, Context, Error, QueryResponse, Spec};
+use crate::{Address, CallResponse, Context, Error, QueryResponse, Spec};
 
 /// Methods from this trait should be called only once during the rollup deployment.
 pub trait Genesis {
@@ -23,7 +23,8 @@ pub trait DispatchCall {
         context: &Self::Context,
     ) -> Result<CallResponse, Error>;
 
-    fn module_address(&self) -> [u8; 32];
+    /// Returns an Address of the dispatched module
+    fn module_address(&self) -> Address;
 }
 
 /// A trait that needs to be implemented for any query message.
