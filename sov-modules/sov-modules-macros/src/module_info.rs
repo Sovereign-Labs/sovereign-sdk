@@ -258,10 +258,6 @@ fn make_init_module<'a>(field: &StructNamedField) -> Result<proc_macro2::TokenSt
     let ty = &field.ty;
 
     Ok(quote::quote! {
-    <<<<<<< HEAD
-            let #field_ident = <#ty as sov_modules_api::ModuleInfo>::new(storage.clone());
-    =======
-            let #field_ident = <#ty as sov_modules_api::ModuleInfo #type_generics>::new(working_set.clone());
-    >>>>>>> research
-        })
+        let #field_ident = <#ty as sov_modules_api::ModuleInfo>::new(working_set.clone());
+    })
 }

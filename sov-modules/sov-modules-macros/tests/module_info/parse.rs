@@ -26,7 +26,7 @@ fn main() {
     let test_storage = ProverStorage::temporary();
     let working_set = sov_state::WorkingSet::new(test_storage);
 
-    let test_struct = <test_module::TestStruct<C> as ModuleInfo<C>>::new(working_set);
+    let test_struct = <test_module::TestStruct<C> as ModuleInfo>::new(working_set);
 
     let prefix1 = test_struct.test_state1.prefix();
 

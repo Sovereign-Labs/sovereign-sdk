@@ -40,7 +40,7 @@ sov-modules-macros = {path = "sov-modules/sov-modules-macros"}
 
 # Dependencies maintained by sovereign
 #jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "2475dfb7b73bf16de518c2de34f10e00cd4fa909" }
-jmt = { git = "https://github.com/penumbra-zone/jmt.git", branch = "borsh" }
+jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "3d374ed7de884d50cbcd9559ef0a53adaacbf828" }
 
 # External dependencies
 anyhow = "1.0.68"

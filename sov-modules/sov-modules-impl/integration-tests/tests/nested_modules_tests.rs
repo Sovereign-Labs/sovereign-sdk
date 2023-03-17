@@ -94,7 +94,7 @@ fn execute_module_logic<C: Context>(storage: WorkingSet<C::Storage>) {
 }
 
 fn test_state_update<C: Context>(storage: WorkingSet<C::Storage>) {
-    let module = <module_c::ModuleC<C> as ModuleInfo<C>>::new(storage.clone());
+    let module = <module_c::ModuleC<C> as ModuleInfo>::new(storage.clone());
 
     let expected_value = StorageValue::new("some_value");
 

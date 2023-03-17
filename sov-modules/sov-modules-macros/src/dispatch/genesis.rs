@@ -52,10 +52,10 @@ impl GenesisMacro {
                 let ty = &field.ty;
 
                 // generates body for `genesis` method:
-                //  let mut module_name = <ModuleName::<C> as sov_modules_api::ModuleInfo<C>>::new(working_set.clone());
+                //  let mut module_name = <ModuleName::<C> as sov_modules_api::ModuleInfo>::new(working_set.clone());
                 //  module_name.genesis()?;
-                 quote::quote! {
-                    let mut #ident = <#ty as sov_modules_api::ModuleInfo #type_generics>::new(working_set.clone());
+                quote::quote! {
+                    let mut #ident = <#ty as sov_modules_api::ModuleInfo>::new(working_set.clone());
                     #ident.genesis()?;
                 }
             })

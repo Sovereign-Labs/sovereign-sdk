@@ -38,7 +38,7 @@ fn main() {
     let working_set = sov_state::WorkingSet::new(test_storage);
 
     let second_test_struct =
-        <second_test_module::SecondTestStruct<C> as ModuleInfo<C>>::new(working_set);
+        <second_test_module::SecondTestStruct<C> as ModuleInfo>::new(working_set);
 
     let prefix2 = second_test_struct.state_in_second_struct_1.prefix();
     assert_eq!(

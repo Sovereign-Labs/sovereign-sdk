@@ -28,7 +28,7 @@ impl<'a> StructDef<'a> {
 
             quote::quote!(
                 #enum_ident::#name(message)=>{
-                    let #name = <#ty as sov_modules_api::ModuleInfo::#type_generics>::new(working_set.clone());
+                    let #name = <#ty as sov_modules_api::ModuleInfo>::new(working_set.clone());
                     sov_modules_api::Module::query(&#name, message)
                 },
             )
