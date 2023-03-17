@@ -92,7 +92,7 @@ impl<'a> StructDef<'a> {
                     impl_self_body.push(&field.ident);
                 }
                 FieldKind::Module(field) => {
-                    impl_self_init.push(make_init_module(field, &self.type_generics)?);
+                    impl_self_init.push(make_init_module(field)?);
                     impl_self_body.push(&field.ident);
                 }
             };
@@ -103,8 +103,11 @@ impl<'a> StructDef<'a> {
         let type_generics = &self.type_generics;
         let where_clause = self.where_clause;
 
+        let fn_address = make_fn_address(ident);
+
         Ok(quote::quote! {
-            impl #impl_generics sov_modules_api::ModuleInfo #type_generics for #ident #type_generics #where_clause{
+            impl #impl_generics sov_modules_api::ModuleInfo for #ident #type_generics #where_clause{
+                type Context = C;
 
                 fn new(working_set: ::sov_state::WorkingSet< #type_generics::Storage >) -> Self {
                     #(#impl_self_init)*
@@ -113,6 +116,8 @@ impl<'a> StructDef<'a> {
                         #(#impl_self_body),*
                      }
                 }
+
+                #fn_address
             }
         })
     }
@@ -189,12 +194,24 @@ fn make_prefix_func(
     // generates prefix functions:
     //   fn _prefix_field_ident() -> sov_modules_api::Prefix {
     //      let module_path = "some_module";
-    //      sov_modules_api::Prefix::new(module_path, module_name, field_ident)
+    //      sov_modules_api::Prefix::new_storage(module_path, module_name, field_ident)
     //   }
     quote::quote! {
         fn #prefix_func_ident() -> sov_modules_api::Prefix {
             let module_path = module_path!();
-            sov_modules_api::Prefix::new(module_path, stringify!(#module_ident), stringify!(#field_ident))
+            sov_modules_api::Prefix::new_storage(module_path, stringify!(#module_ident), stringify!(#field_ident))
+        }
+    }
+}
+
+fn make_fn_address(module_ident: &proc_macro2::Ident) -> proc_macro2::TokenStream {
+    quote::quote! {
+        fn address() -> sov_modules_api::Address {
+            use sov_modules_api::Hasher;
+            let module_path = module_path!();
+            let prefix = sov_modules_api::Prefix::new_module(module_path, stringify!(#module_ident));
+
+            sov_modules_api::Address::new(prefix.hash::<C>())
         }
     }
 }
@@ -234,14 +251,11 @@ fn make_init_state(field: &StructNamedField) -> Result<proc_macro2::TokenStream,
     })
 }
 
-fn make_init_module<'a>(
-    field: &StructNamedField,
-    type_generics: &'a TypeGenerics<'a>,
-) -> Result<proc_macro2::TokenStream, syn::Error> {
+fn make_init_module<'a>(field: &StructNamedField) -> Result<proc_macro2::TokenStream, syn::Error> {
     let field_ident = &field.ident;
     let ty = &field.ty;
 
     Ok(quote::quote! {
-        let #field_ident = <#ty as sov_modules_api::ModuleInfo #type_generics>::new(working_set.clone());
+        let #field_ident = <#ty as sov_modules_api::ModuleInfo>::new(working_set.clone());
     })
 }

@@ -24,7 +24,7 @@ use syn::parse_macro_input;
 /// ```
 /// allows getting a prefix of a member field like:
 /// ```ignore
-///  let test_struct = <TestModule::<SomeContext> as sov_modules_api::ModuleInfo<SomeContext>>::new(some_storage);
+///  let test_struct = <TestModule::<SomeContext> as sov_modules_api::ModuleInfo>::new(some_storage);
 ///  let prefix1 = test_struct.test_state1.prefix;
 /// ````
 /// ## Attributes

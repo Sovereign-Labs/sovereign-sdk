@@ -30,8 +30,20 @@ impl<'a> StructDef<'a> {
 
             quote::quote!(
                 #enum_ident::#name(message)=>{
-                    let mut #name = <#ty as sov_modules_api::ModuleInfo::#type_generics>::new(working_set.clone());
+                    let mut #name = <#ty as sov_modules_api::ModuleInfo>::new(working_set.clone());
                     sov_modules_api::Module::call(&mut #name, message, context)
+                },
+            )
+        });
+
+        let match_legs_address = self.fields.iter().map(|field| {
+            let name = &field.ident;
+            let ty = &field.ty;
+
+            quote::quote!(
+                #enum_ident::#name(message)=>{
+                    <#ty as sov_modules_api::ModuleInfo>::address()
+
                 },
             )
         });
@@ -54,6 +66,13 @@ impl<'a> StructDef<'a> {
                         #(#match_legs)*
                     }
                 }
+
+                fn module_address(&self) -> sov_modules_api::Address {
+                    match self{
+                        #(#match_legs_address)*
+                    }
+                }
+
             }
         }
     }

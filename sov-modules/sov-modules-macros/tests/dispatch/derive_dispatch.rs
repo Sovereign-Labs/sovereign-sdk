@@ -1,6 +1,7 @@
 mod modules;
 
 use modules::{first_test_module, second_test_module};
+use sov_modules_api::ModuleInfo;
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey},
     Context, Genesis, Module,
@@ -28,6 +29,11 @@ fn main() {
         let message = value;
         let serialized_message = RT::encode_first_call(message);
         let module = RT::decode_call(&serialized_message).unwrap();
+
+        assert_eq!(
+            module.module_address(),
+            first_test_module::FirstTestStruct::<MockContext>::address()
+        );
         let _ = module.dispatch_call(working_set.clone(), &context).unwrap();
     }
 
@@ -43,6 +49,12 @@ fn main() {
         let message = value;
         let serialized_message = RT::encode_second_call(message);
         let module = RT::decode_call(&serialized_message).unwrap();
+
+        assert_eq!(
+            module.module_address(),
+            second_test_module::SecondTestStruct::<MockContext>::address()
+        );
+
         let _ = module.dispatch_call(working_set.clone(), &context).unwrap();
     }
 

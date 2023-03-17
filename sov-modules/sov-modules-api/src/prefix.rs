@@ -1,3 +1,5 @@
+use crate::{Context, Hasher};
+
 // separator == "/"
 const DOMAIN_SEPARATOR: [u8; 1] = [47];
 
@@ -6,11 +8,11 @@ const DOMAIN_SEPARATOR: [u8; 1] = [47];
 pub struct Prefix {
     module_path: &'static str,
     module_name: &'static str,
-    storage_name: &'static str,
+    storage_name: Option<&'static str>,
 }
 
 impl Prefix {
-    pub fn new(
+    pub fn new_storage(
         module_path: &'static str,
         module_name: &'static str,
         storage_name: &'static str,
@@ -18,27 +20,51 @@ impl Prefix {
         Self {
             module_path,
             module_name,
-            storage_name,
+            storage_name: Some(storage_name),
         }
+    }
+
+    pub fn new_module(module_path: &'static str, module_name: &'static str) -> Self {
+        Self {
+            module_path,
+            module_name,
+            storage_name: None,
+        }
+    }
+
+    fn combine_prefix(&self) -> Vec<u8> {
+        let storage_name_len = self
+            .storage_name
+            .map(|name| name.len() + DOMAIN_SEPARATOR.len())
+            .unwrap_or_default();
+
+        let mut combined_prefix = Vec::with_capacity(
+            self.module_path.len()
+                + self.module_name.len()
+                + 2 * DOMAIN_SEPARATOR.len()
+                + storage_name_len,
+        );
+
+        combined_prefix.extend(self.module_path.as_bytes());
+        combined_prefix.extend(DOMAIN_SEPARATOR);
+        combined_prefix.extend(self.module_name.as_bytes());
+        combined_prefix.extend(DOMAIN_SEPARATOR);
+        if let Some(storage_name) = self.storage_name {
+            combined_prefix.extend(storage_name.as_bytes());
+            combined_prefix.extend(DOMAIN_SEPARATOR);
+        }
+        combined_prefix
+    }
+
+    pub fn hash<C: Context>(&self) -> [u8; 32] {
+        let combined_prefix = self.combine_prefix();
+        C::Hasher::hash(&combined_prefix)
     }
 }
 
 impl From<Prefix> for sov_state::Prefix {
     fn from(prefix: Prefix) -> Self {
-        let mut combined_prefix = Vec::with_capacity(
-            prefix.module_path.len()
-                + prefix.module_name.len()
-                + prefix.storage_name.len()
-                + 3 * DOMAIN_SEPARATOR.len(),
-        );
-
-        // We call this logic only once per module instantiation, so we don't have to use AlignedVec here.
-        combined_prefix.extend(prefix.module_path.as_bytes());
-        combined_prefix.extend(DOMAIN_SEPARATOR);
-        combined_prefix.extend(prefix.module_name.as_bytes());
-        combined_prefix.extend(DOMAIN_SEPARATOR);
-        combined_prefix.extend(prefix.storage_name.as_bytes());
-        combined_prefix.extend(DOMAIN_SEPARATOR);
+        let combined_prefix = prefix.combine_prefix();
         sov_state::Prefix::new(combined_prefix)
     }
 }

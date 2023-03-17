@@ -10,6 +10,8 @@ mod response;
 
 pub use dispatch::{DispatchCall, DispatchQuery, Genesis};
 pub use error::Error;
+pub use jmt::SimpleHasher as Hasher;
+
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
 
@@ -78,7 +80,7 @@ pub trait Spec {
         + Debug
         + PublicKey;
 
-    type Hasher: jmt::SimpleHasher;
+    type Hasher: Hasher;
 
     type Signature: borsh::BorshDeserialize
         + borsh::BorshSerialize
@@ -136,7 +138,12 @@ pub trait Module {
 }
 
 /// Every module has to implement this trait.
-/// It defines the `new` method for now and can be extended with some other metadata in the future.
-pub trait ModuleInfo<C: Context> {
-    fn new(storage: WorkingSet<C::Storage>) -> Self;
+pub trait ModuleInfo {
+    type Context: Context;
+
+    fn new(storage: WorkingSet<<Self::Context as Spec>::Storage>) -> Self;
+
+    // Returns an address for the module.
+    // TODO: https://github.com/Sovereign-Labs/sovereign/issues/136
+    fn address() -> Address;
 }

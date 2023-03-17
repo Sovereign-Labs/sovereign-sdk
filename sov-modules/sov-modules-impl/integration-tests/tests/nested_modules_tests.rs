@@ -31,7 +31,6 @@ pub mod module_b {
     pub(crate) struct ModuleB<C: Context> {
         #[state]
         state_1_b: StateMap<String, String, C::Storage>,
-
         #[module]
         pub(crate) mod_1_a: module_a::ModuleA<C>,
     }
@@ -95,12 +94,12 @@ fn execute_module_logic<C: Context>(storage: WorkingSet<C::Storage>) {
 }
 
 fn test_state_update<C: Context>(storage: WorkingSet<C::Storage>) {
-    let module = <module_c::ModuleC<C> as ModuleInfo<C>>::new(storage.clone());
+    let module = <module_c::ModuleC<C> as ModuleInfo>::new(storage.clone());
 
     let expected_value = StorageValue::new("some_value");
 
     {
-        let prefix = Prefix::new("nested_modules_tests::module_a", "ModuleA", "state_1_a");
+        let prefix = Prefix::new_storage("nested_modules_tests::module_a", "ModuleA", "state_1_a");
         let key = StorageKey::new(&prefix.into(), &"some_key");
         let value = storage.get(key).unwrap();
 
@@ -108,7 +107,7 @@ fn test_state_update<C: Context>(storage: WorkingSet<C::Storage>) {
     }
 
     {
-        let prefix = Prefix::new("nested_modules_tests::module_b", "ModuleB", "state_1_b");
+        let prefix = Prefix::new_storage("nested_modules_tests::module_b", "ModuleB", "state_1_b");
         let key = StorageKey::new(&prefix.into(), &"some_key");
         let value = storage.get(key).unwrap();
 
@@ -116,7 +115,7 @@ fn test_state_update<C: Context>(storage: WorkingSet<C::Storage>) {
     }
 
     {
-        let prefix = Prefix::new("nested_modules_tests::module_a", "ModuleA", "state_1_a");
+        let prefix = Prefix::new_storage("nested_modules_tests::module_a", "ModuleA", "state_1_a");
         let key = StorageKey::new(&prefix.into(), &"key_from_b");
         let value = storage.get(key).unwrap();
 
