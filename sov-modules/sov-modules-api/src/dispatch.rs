@@ -23,7 +23,7 @@ pub trait DispatchCall {
         context: &Self::Context,
     ) -> Result<CallResponse, Error>;
 
-    /// Returns an Address of the dispatched module
+    /// Returns an address of the dispatched module.
     fn module_address(&self) -> Address;
 }
 
