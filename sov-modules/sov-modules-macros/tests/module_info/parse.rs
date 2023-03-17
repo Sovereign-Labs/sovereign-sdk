@@ -32,7 +32,7 @@ fn main() {
 
     assert_eq!(
         *prefix1,
-        sov_modules_api::Prefix::new(
+        sov_modules_api::Prefix::new_storage(
             // The tests compile inside trybuild.
             "trybuild000::test_module",
             "TestStruct",
@@ -44,7 +44,7 @@ fn main() {
     let prefix2 = test_struct.test_state2.prefix();
     assert_eq!(
         *prefix2,
-        sov_modules_api::Prefix::new(
+        sov_modules_api::Prefix::new_storage(
             // The tests compile inside trybuild.
             "trybuild000::test_module",
             "TestStruct",
@@ -56,7 +56,7 @@ fn main() {
     let prefix2 = test_struct.test_state3.prefix();
     assert_eq!(
         *prefix2,
-        sov_modules_api::Prefix::new(
+        sov_modules_api::Prefix::new_storage(
             // The tests compile inside trybuild.
             "trybuild000::test_module",
             "TestStruct",
@@ -68,7 +68,7 @@ fn main() {
     use sov_modules_api::Hasher;
 
     let mut hasher = <C as sov_modules_api::Spec>::Hasher::new();
-    hasher.update("trybuild000::test_module/TestStruct//".as_bytes());
+    hasher.update("trybuild000::test_module/TestStruct/".as_bytes());
 
     assert_eq!(
         sov_modules_api::Address::new(hasher.finalize()),

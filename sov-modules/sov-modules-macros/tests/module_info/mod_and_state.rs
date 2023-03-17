@@ -43,7 +43,7 @@ fn main() {
     let prefix2 = second_test_struct.state_in_second_struct_1.prefix();
     assert_eq!(
         *prefix2,
-        sov_modules_api::Prefix::new(
+        sov_modules_api::Prefix::new_storage(
             // The tests compile inside trybuild.
             "trybuild001::second_test_module",
             "SecondTestStruct",
@@ -59,7 +59,7 @@ fn main() {
 
     assert_eq!(
         *prefix1,
-        sov_modules_api::Prefix::new(
+        sov_modules_api::Prefix::new_storage(
             // The tests compile inside trybuild.
             "trybuild001::first_test_module",
             "FirstTestStruct",

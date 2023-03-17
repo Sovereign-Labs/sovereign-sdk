@@ -194,12 +194,12 @@ fn make_prefix_func(
     // generates prefix functions:
     //   fn _prefix_field_ident() -> sov_modules_api::Prefix {
     //      let module_path = "some_module";
-    //      sov_modules_api::Prefix::new(module_path, module_name, field_ident)
+    //      sov_modules_api::Prefix::new_storage(module_path, module_name, field_ident)
     //   }
     quote::quote! {
         fn #prefix_func_ident() -> sov_modules_api::Prefix {
             let module_path = module_path!();
-            sov_modules_api::Prefix::new(module_path, stringify!(#module_ident), stringify!(#field_ident))
+            sov_modules_api::Prefix::new_storage(module_path, stringify!(#module_ident), stringify!(#field_ident))
         }
     }
 }
@@ -209,7 +209,7 @@ fn make_fn_address(module_ident: &proc_macro2::Ident) -> proc_macro2::TokenStrea
         fn address() -> sov_modules_api::Address {
             use sov_modules_api::Hasher;
             let module_path = module_path!();
-            let prefix = sov_modules_api::Prefix::new(module_path, stringify!(#module_ident), "");
+            let prefix = sov_modules_api::Prefix::new_module(module_path, stringify!(#module_ident));
 
             sov_modules_api::Address::new(prefix.hash::<C>())
         }
