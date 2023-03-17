@@ -35,7 +35,7 @@ impl GenesisMacro {
             impl #impl_generics sov_modules_api::Genesis for #ident #type_generics #where_clause {
                 type Context = #generic_param;
 
-                fn genesis(storage: <<Self as sov_modules_api::Genesis>::Context as sov_modules_api::Spec>::Storage) -> core::result::Result<(), sov_modules_api::Error> {
+                fn genesis(working_set: sov_state::WorkingSet<<<Self as sov_modules_api::Genesis>::Context as sov_modules_api::Spec>::Storage>) -> core::result::Result<(), sov_modules_api::Error> {
                     #(#genesis_fn_body)*
                     Ok(())
                 }
@@ -52,10 +52,10 @@ impl GenesisMacro {
                 let ty = &field.ty;
 
                 // generates body for `genesis` method:
-                //  let mut module_name = <ModuleName::<C> as sov_modules_api::ModuleInfo>::new(storage.clone());
+                //  let mut module_name = <ModuleName::<C> as sov_modules_api::ModuleInfo<C>>::new(working_set.clone());
                 //  module_name.genesis()?;
-                quote::quote! {
-                    let mut #ident = <#ty as sov_modules_api::ModuleInfo>::new(storage.clone());
+                 quote::quote! {
+                    let mut #ident = <#ty as sov_modules_api::ModuleInfo #type_generics>::new(working_set.clone());
                     #ident.genesis()?;
                 }
             })

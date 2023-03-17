@@ -1,10 +1,10 @@
-use crate::{backend::Backend, storage::StorageKey, Prefix, Storage};
+use crate::{backend::Backend, storage::StorageKey, Prefix, Storage, WorkingSet};
 use sovereign_sdk::serial::{Decode, Encode};
 use thiserror::Error;
 
 /// A container that maps keys to values.
 #[derive(Debug)]
-pub struct StateMap<K, V, S> {
+pub struct StateMap<K, V, S: Storage> {
     backend: Backend<K, V, S>,
 }
 
@@ -16,7 +16,7 @@ pub enum Error {
 }
 
 impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
-    pub fn new(storage: S, prefix: Prefix) -> Self {
+    pub fn new(storage: WorkingSet<S>, prefix: Prefix) -> Self {
         Self {
             backend: Backend::new(storage, prefix),
         }

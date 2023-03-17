@@ -33,9 +33,7 @@ impl StateDB {
             &gen_rocksdb_options(&Default::default(), false),
         )?;
 
-        let next_version = Self::last_version_written(&inner)?
-            .map(|v| v + 1)
-            .unwrap_or_default();
+        let next_version = Self::last_version_written(&inner)?.unwrap_or_default() + 1;
 
         Ok(Self {
             db: Arc::new(inner),

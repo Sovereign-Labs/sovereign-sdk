@@ -1,5 +1,7 @@
 use core::fmt::Debug;
 
+use jmt::storage::TreeReader;
+
 use crate::serial::{Decode, Encode};
 
 // NOTE: When naming traits, we use the naming convention below:
@@ -34,3 +36,45 @@ pub trait AddressTrait:
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct InvalidAddress;
+
+pub trait Witness: Default {
+    fn add_hint<T: Encode + Decode>(&self, hint: T);
+    fn get_hint<T: Encode + Decode>(&self) -> T;
+    fn merge(&self, rhs: &Self);
+}
+
+#[derive(Debug)]
+pub struct TreeWitnessReader<'a, T: Witness>(&'a T);
+
+impl<'a, T: Witness> TreeWitnessReader<'a, T> {
+    pub fn new(witness: &'a T) -> Self {
+        Self(witness)
+    }
+}
+
+impl<'a, T: Witness> TreeReader for TreeWitnessReader<'a, T> {
+    fn get_node_option(
+        &self,
+        _node_key: &jmt::storage::NodeKey,
+    ) -> anyhow::Result<Option<jmt::storage::Node>> {
+        let serialized_node_opt: Option<Vec<u8>> = self.0.get_hint();
+        match serialized_node_opt {
+            Some(val) => Ok(Some(jmt::storage::Node::decode(&val)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn get_value_option(
+        &self,
+        _max_version: jmt::Version,
+        _key_hash: jmt::KeyHash,
+    ) -> anyhow::Result<Option<jmt::OwnedValue>> {
+        Ok(self.0.get_hint())
+    }
+
+    fn get_rightmost_leaf(
+        &self,
+    ) -> anyhow::Result<Option<(jmt::storage::NodeKey, jmt::storage::LeafNode)>> {
+        unimplemented!()
+    }
+}

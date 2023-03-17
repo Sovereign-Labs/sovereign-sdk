@@ -1,3 +1,5 @@
+use std::{cell::RefCell, sync::atomic::AtomicUsize};
+
 use crate::{
     da::DaLayerTrait,
     maybestd::rc::Rc,
@@ -5,7 +7,7 @@ use crate::{
     stf::{ConsensusSetUpdate, StateTransitionFunction},
 };
 
-use super::crypto::hash::DefaultHash;
+use super::{crypto::hash::DefaultHash, traits::Witness};
 
 /// A block header of the *logical* chain created by running a particular state transition
 /// function over a particular DA application.
@@ -127,5 +129,32 @@ impl<Addr: PartialEq> ConsensusParticipantRoot<Addr> {
 
     pub fn finalize(&mut self) {
         todo!()
+    }
+}
+
+#[derive(Default)]
+pub struct ArrrayWitness {
+    next_idx: AtomicUsize,
+    hints: RefCell<Vec<Vec<u8>>>,
+}
+
+impl Witness for ArrrayWitness {
+    fn add_hint<T: crate::serial::Encode + crate::serial::Decode>(&self, hint: T) {
+        self.hints.borrow_mut().push(hint.encode_to_vec())
+    }
+
+    fn get_hint<T: crate::serial::Encode + crate::serial::Decode>(&self) -> T {
+        let idx = self
+            .next_idx
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+
+        T::decode_from_slice(&self.hints.borrow()[idx]).unwrap()
+    }
+
+    fn merge(&self, rhs: &Self) {
+        let rhs_next_idx = rhs.next_idx.load(std::sync::atomic::Ordering::SeqCst);
+        self.hints
+            .borrow_mut()
+            .extend(rhs.hints.borrow_mut().drain(rhs_next_idx..))
     }
 }

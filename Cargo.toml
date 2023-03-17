@@ -9,6 +9,7 @@ members = [
 	"sov-modules/sov-modules-macros",
 	"sov-modules/sov-state",
 	"sov-modules/sov-modules-api",
+	"sov-modules/sov-modules-impl/accounts",
 	"sov-modules/sov-modules-impl/examples/value-setter",
 	"sov-modules/sov-modules-impl/examples/election",
 	"sov-modules/sov-modules-impl/integration-tests",
@@ -38,7 +39,8 @@ sov-modules-api = {path = "sov-modules/sov-modules-api"}
 sov-modules-macros = {path = "sov-modules/sov-modules-macros"}
 
 # Dependencies maintained by sovereign
-jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "2475dfb7b73bf16de518c2de34f10e00cd4fa909" }
+#jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "2475dfb7b73bf16de518c2de34f10e00cd4fa909" }
+jmt = { git = "https://github.com/penumbra-zone/jmt.git", branch = "borsh" }
 
 # External dependencies
 anyhow = "1.0.68"

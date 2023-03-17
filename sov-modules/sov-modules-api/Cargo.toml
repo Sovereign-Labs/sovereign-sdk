@@ -13,4 +13,4 @@ jmt = { workspace = true }
 sha2 = { workspace = true }
 
 [features]
-mocks = []
+mocks = ["sov-state/mocks"]

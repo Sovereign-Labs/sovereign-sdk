@@ -28,7 +28,7 @@ impl<'a> StructDef<'a> {
 
             quote::quote!(
                 #enum_ident::#name(message)=>{
-                    let #name = <#ty as sov_modules_api::ModuleInfo>::new(storage.clone());
+                    let #name = <#ty as sov_modules_api::ModuleInfo::#type_generics>::new(working_set.clone());
                     sov_modules_api::Module::query(&#name, message)
                 },
             )
@@ -44,7 +44,7 @@ impl<'a> StructDef<'a> {
 
                 fn dispatch_query(
                     self,
-                    storage: <Self::Context as sov_modules_api::Spec>::Storage
+                    working_set: sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>
                 ) -> sov_modules_api::QueryResponse {
                     match self{
                         #(#match_legs)*

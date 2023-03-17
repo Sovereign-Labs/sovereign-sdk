@@ -1,5 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::{Context, Signature, Spec};
+use sov_state::WorkingSet;
 use sovereign_sdk::jmt::SimpleHasher;
 use sovereign_sdk::serial::Decode;
 use std::{io::Cursor, marker::PhantomData};
@@ -52,7 +53,7 @@ pub(crate) trait TxVerifier {
     fn verify_tx_stateful(
         &self,
         tx: Transaction<Self::Context>,
-        storage: <Self::Context as Spec>::Storage,
+        storage: WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<VerifiedTx<Self::Context>>;
 }
 
@@ -89,7 +90,7 @@ impl<C: Context> TxVerifier for DemoAppTxVerifier<C> {
     fn verify_tx_stateful(
         &self,
         tx: Transaction<Self::Context>,
-        _storage: <Self::Context as Spec>::Storage,
+        _storage: WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<VerifiedTx<Self::Context>> {
         // TODO add stateful checks: account existence, nonce, etc..
 
