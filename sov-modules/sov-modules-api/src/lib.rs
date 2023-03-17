@@ -144,5 +144,6 @@ pub trait ModuleInfo {
     fn new(storage: WorkingSet<<Self::Context as Spec>::Storage>) -> Self;
 
     // Returns an address for the module.
+    // TODO: https://github.com/Sovereign-Labs/sovereign/issues/136
     fn address() -> Address;
 }
