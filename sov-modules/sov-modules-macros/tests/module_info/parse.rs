@@ -68,8 +68,7 @@ fn main() {
     use sov_modules_api::Hasher;
 
     let mut hasher = <C as sov_modules_api::Spec>::Hasher::new();
-    hasher.update("trybuild000::test_module".as_bytes());
-    hasher.update("TestStruct".as_bytes());
+    hasher.update("trybuild000::test_module/TestStruct//".as_bytes());
 
     assert_eq!(
         sov_modules_api::Address::new(hasher.finalize()),

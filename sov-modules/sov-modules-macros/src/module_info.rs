@@ -209,11 +209,9 @@ fn make_fn_address(module_ident: &proc_macro2::Ident) -> proc_macro2::TokenStrea
         fn address() -> sov_modules_api::Address {
             use sov_modules_api::Hasher;
             let module_path = module_path!();
+            let prefix = sov_modules_api::Prefix::new(module_path, stringify!(#module_ident), "");
 
-            let mut hasher = <<Self::Context as sov_modules_api::Spec>::Hasher>::new();
-            hasher.update(module_path.as_bytes());
-            hasher.update(stringify!(#module_ident).as_bytes());
-            sov_modules_api::Address::new(hasher.finalize())
+            sov_modules_api::Address::new(prefix.hash::<C>())
         }
     }
 }
