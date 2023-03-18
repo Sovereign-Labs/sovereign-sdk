@@ -6,6 +6,7 @@ use crate::tx_verifier::{DemoAppTxVerifier, RawTx, TxVerifier};
 
 use sov_modules_api::{Context, DispatchCall, Genesis};
 
+use crate::tx_hooks::{DemoAppTxHooks, TxHooks};
 use sov_state::{Storage, WorkingSet};
 use sovereign_sdk::{
     core::{mocks::MockProof, traits::BatchTrait},
@@ -13,25 +14,28 @@ use sovereign_sdk::{
     stf::{ConsensusSetUpdate, OpaqueAddress, StateTransitionFunction},
 };
 
-pub(crate) struct Demo<C: Context, V: TxVerifier> {
+pub(crate) struct Demo<C: Context, V: TxVerifier, H: TxHooks> {
     pub current_storage: C::Storage,
     pub verifier: V,
+    pub tx_hooks: H,
     pub working_set: RefCell<Option<WorkingSet<C::Storage>>>,
 }
 
-impl<C: Context> Demo<C, DemoAppTxVerifier<C>> {
+impl<C: Context> Demo<C, DemoAppTxVerifier<C>, DemoAppTxHooks<C>> {
     pub fn new(storage: C::Storage) -> Self {
         Self {
             current_storage: storage,
             verifier: DemoAppTxVerifier::new(),
+            tx_hooks: DemoAppTxHooks::new(),
             working_set: RefCell::new(None),
         }
     }
 }
 
-impl<C: Context, V> StateTransitionFunction for Demo<C, V>
+impl<C: Context, V, H> StateTransitionFunction for Demo<C, V, H>
 where
     V: TxVerifier<Context = C>,
+    H: TxHooks<Context = C>,
 {
     type StateRoot = jmt::RootHash;
 
