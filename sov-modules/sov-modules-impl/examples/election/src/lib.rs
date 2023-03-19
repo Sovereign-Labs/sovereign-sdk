@@ -9,14 +9,16 @@ mod types;
 
 pub use types::Candidate;
 
-use sov_modules_api::Error;
+use sov_modules_api::{Address, Error};
 use sov_modules_macros::ModuleInfo;
 use types::Voter;
+
+pub(crate) const ADMIN: Address = Address::new([7; 32]);
 
 #[derive(ModuleInfo)]
 pub struct Election<C: sov_modules_api::Context> {
     #[state]
-    pub(crate) admin: sov_state::StateValue<C::PublicKey, C::Storage>,
+    pub(crate) admin: sov_state::StateValue<Address, C::Storage>,
 
     #[state]
     pub(crate) is_frozen: sov_state::StateValue<bool, C::Storage>,
@@ -32,13 +34,13 @@ pub struct Election<C: sov_modules_api::Context> {
     pub(crate) candidates: sov_state::StateValue<Vec<Candidate>, C::Storage>,
 
     #[state]
-    pub(crate) allowed_voters: sov_state::StateMap<C::PublicKey, Voter, C::Storage>,
+    pub(crate) allowed_voters: sov_state::StateMap<Address, Voter, C::Storage>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
     type Context = C;
 
-    type CallMessage = call::CallMessage<C>;
+    type CallMessage = call::CallMessage;
 
     type QueryMessage = query::QueryMessage;
 
@@ -54,8 +56,8 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
         match msg {
             Self::CallMessage::SetCandidates { names } => Ok(self.set_candidates(names, context)?),
 
-            Self::CallMessage::AddVoter(voter_pub_key) => {
-                Ok(self.add_voter(voter_pub_key, context)?)
+            Self::CallMessage::AddVoter(voter_address) => {
+                Ok(self.add_voter(voter_address, context)?)
             }
 
             Self::CallMessage::Vote(candidate_index) => {
