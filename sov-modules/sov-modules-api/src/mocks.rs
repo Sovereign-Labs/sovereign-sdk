@@ -62,7 +62,7 @@ impl Signature for MockSignature {
 /// Mock for Context, useful for testing.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MockContext {
-    pub sender: MockPublicKey,
+    pub sender: Address,
 }
 
 impl Spec for MockContext {
@@ -74,11 +74,11 @@ impl Spec for MockContext {
 }
 
 impl Context for MockContext {
-    fn sender(&self) -> &Self::PublicKey {
-        &self.sender
+    fn sender(&self) -> Address {
+        self.sender
     }
 
-    fn new(sender: Self::PublicKey) -> Self {
+    fn new(sender: Address) -> Self {
         Self { sender }
     }
 }
@@ -112,7 +112,7 @@ impl Witness for ArrrayWitness {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ZkMockContext {
-    pub sender: MockPublicKey,
+    pub sender: Address,
 }
 
 impl Spec for ZkMockContext {
@@ -124,11 +124,16 @@ impl Spec for ZkMockContext {
 }
 
 impl Context for ZkMockContext {
-    fn sender(&self) -> &Self::PublicKey {
-        &self.sender
+    fn sender(&self) -> Address {
+        self.sender
     }
 
-    fn new(sender: Self::PublicKey) -> Self {
+    fn new(sender: Address) -> Self {
         Self { sender }
+    }
+}
+impl From<&'static str> for Address {
+    fn from(value: &'static str) -> Self {
+        Address::new(sha2::Sha256::hash(value.as_bytes()))
     }
 }

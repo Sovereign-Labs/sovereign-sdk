@@ -19,7 +19,7 @@ fn test_update_account() {
 
     let sender = MockPublicKey::try_from("pub_key").unwrap();
     let sender_addr: Address = sender.to_address();
-    let sender_context = C::new(sender.clone());
+    let sender_context = C::new(sender_addr);
 
     // Test new account creation
     {
@@ -84,7 +84,7 @@ fn test_update_account_fails() {
     let mut hooks = hooks::Hooks::<C>::new(native_storage);
 
     let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();
-    let sender_context_1 = C::new(sender_1.clone());
+    let sender_context_1 = C::new(sender_1.to_address());
     hooks.get_account_or_create_default(sender_1).unwrap();
 
     let sender_2 = MockPublicKey::try_from("pub_key_2").unwrap();
@@ -110,7 +110,7 @@ fn test_create_account_fails() {
     let mut hooks = hooks::Hooks::<C>::new(native_storage);
 
     let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();
-    let sender_context_1 = C::new(sender_1.clone());
+    let sender_context_1 = C::new(sender_1.to_address());
 
     hooks.get_account_or_create_default(sender_1).unwrap();
 

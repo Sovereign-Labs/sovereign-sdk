@@ -1,5 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::{Context, Signature, Spec};
+use sov_modules_api::{Address, Context, Signature, Spec};
 use sov_state::WorkingSet;
 use sovereign_sdk::jmt::SimpleHasher;
 use sovereign_sdk::serial::Decode;
@@ -23,7 +23,7 @@ pub struct Transaction<C: sov_modules_api::Context> {
 /// VerifiedTx is a Transaction after verification.
 pub(crate) struct VerifiedTx<C: Context> {
     pub(crate) sender: C::PublicKey,
-    // TODO add Address
+    pub(crate) sender_address: Address,
     pub(crate) runtime_msg: Vec<u8>,
     pub(crate) nonce: u64,
 }

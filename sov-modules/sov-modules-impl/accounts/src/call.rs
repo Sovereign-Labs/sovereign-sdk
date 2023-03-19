@@ -1,6 +1,6 @@
 use crate::Account;
 use crate::Accounts;
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::Signature;
 use sov_modules_api::{Address, CallResponse, PublicKey};
@@ -23,13 +23,12 @@ impl<C: sov_modules_api::Context> Accounts<C> {
     ) -> Result<CallResponse> {
         self.exit_if_account_exists(&new_pub_key)?;
 
-        let account = self.accounts.remove_or_err(context.sender())?;
-
-        // Sanity check.
-        anyhow::ensure!(
-            // This is guaranteed to be true.
-            self.public_keys.get(&account.addr).is_some(),
-            "Missing PublicKey"
+        let pub_key = self.public_keys.get_or_err(&context.sender())?;
+        let account = self.accounts.remove_or_err(&pub_key)?;
+        // Sanity check
+        ensure!(
+            context.sender() == account.addr,
+            "Inconsistent account data"
         );
 
         // Proof that the sender is in possession of the `new_pub_key`.
@@ -37,7 +36,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
 
         // Update the public key (account data remains the same).
         self.accounts.set(&new_pub_key, account);
-        self.public_keys.set(&account.addr, new_pub_key);
+        self.public_keys.set(&context.sender(), new_pub_key);
         Ok(CallResponse::default())
     }
 
@@ -45,14 +44,6 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         anyhow::ensure!(
             self.accounts.get(new_pub_key).is_none(),
             "New PublicKey already exists"
-        );
-        Ok(())
-    }
-
-    fn exit_if_address_exists(&self, address: &Address) -> Result<()> {
-        anyhow::ensure!(
-            self.public_keys.get(address).is_none(),
-            "Address already exists"
         );
         Ok(())
     }

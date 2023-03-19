@@ -46,6 +46,7 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
 
         Ok(VerifiedTx {
             sender: tx.pub_key,
+            sender_address: acc.addr,
             runtime_msg: tx.runtime_msg,
             nonce: tx.nonce,
         })
