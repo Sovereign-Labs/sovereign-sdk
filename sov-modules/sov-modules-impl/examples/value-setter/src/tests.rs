@@ -1,5 +1,5 @@
 use super::ValueSetter;
-use crate::{call, query};
+use crate::{call, query, ADMIN};
 
 use sov_modules_api::mocks::MockContext;
 use sov_modules_api::mocks::ZkMockContext;
@@ -10,7 +10,7 @@ use sovereign_sdk::stf::Event;
 
 #[test]
 fn test_value_setter() {
-    let sender = Address::from("admin");
+    let sender = ADMIN;
     let storage = WorkingSet::new(ProverStorage::temporary());
 
     // Test Native-Context
@@ -60,7 +60,7 @@ fn test_value_setter_helper<C: Context>(context: C, storage: WorkingSet<C::Stora
 
 #[test]
 fn test_err_on_sender_is_not_admin() {
-    let sender = Address::from("not_admin");
+    let sender = Address::new([9; 32]);
     let backing_store = ProverStorage::temporary();
     let native_tx_store = WorkingSet::new(backing_store);
 

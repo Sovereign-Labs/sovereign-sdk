@@ -14,6 +14,9 @@ use self::call::CallMessage;
 use sov_modules_api::{Address, Error};
 use sov_modules_macros::ModuleInfo;
 
+//TODO https://github.com/Sovereign-Labs/sovereign/issues/134
+pub(crate) const ADMIN: Address = Address::new([7; 32]);
+
 #[derive(ModuleInfo)]
 pub struct ValueSetter<C: sov_modules_api::Context> {
     #[state]

@@ -37,14 +37,8 @@ impl Address {
 }
 
 impl Address {
-    pub fn new(addr: [u8; 32]) -> Self {
+    pub const fn new(addr: [u8; 32]) -> Self {
         Self { addr }
-    }
-}
-
-impl From<&'static str> for Address {
-    fn from(value: &'static str) -> Self {
-        Address::new(sha2::Sha256::hash(value.as_bytes()))
     }
 }
 
