@@ -5,9 +5,10 @@ use super::{
     Election,
 };
 
+use crate::ADMIN;
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey, ZkMockContext},
-    Context, Module, ModuleInfo,
+    Context, Module, ModuleInfo, PublicKey,
 };
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 
@@ -24,8 +25,7 @@ fn test_election() {
 }
 
 fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: WorkingSet<C::Storage>) {
-    let admin = MockPublicKey::try_from("admin").unwrap();
-    let admin_context = C::new(admin);
+    let admin_context = C::new(ADMIN);
     let ellection = &mut Election::<C>::new(storage);
 
     // Init module
@@ -42,19 +42,19 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: WorkingSet<C::Sto
         ellection.call(set_candidates, &admin_context).unwrap();
     }
 
-    let voter_1 = MockPublicKey::try_from("voter_1").unwrap();
-    let voter_2 = MockPublicKey::try_from("voter_2").unwrap();
-    let voter_3 = MockPublicKey::try_from("voter_3").unwrap();
+    let voter_1 = MockPublicKey::try_from("voter_1").unwrap().to_address();
+    let voter_2 = MockPublicKey::try_from("voter_2").unwrap().to_address();
+    let voter_3 = MockPublicKey::try_from("voter_3").unwrap().to_address();
 
     // Register voters
     {
-        let add_voter = CallMessage::AddVoter(voter_1.clone());
+        let add_voter = CallMessage::AddVoter(voter_1);
         ellection.call(add_voter, &admin_context).unwrap();
 
-        let add_voter = CallMessage::AddVoter(voter_2.clone());
+        let add_voter = CallMessage::AddVoter(voter_2);
         ellection.call(add_voter, &admin_context).unwrap();
 
-        let add_voter = CallMessage::AddVoter(voter_3.clone());
+        let add_voter = CallMessage::AddVoter(voter_3);
         ellection.call(add_voter, &admin_context).unwrap();
     }
 
