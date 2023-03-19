@@ -4,6 +4,7 @@ use crate::{
 };
 use borsh::BorshSerialize;
 use sov_modules_api::mocks::{MockContext, MockPublicKey, MockSignature};
+use sov_modules_api::PublicKey;
 
 pub(crate) fn simulate_da() -> Vec<RawTx> {
     let mut messages = Vec::default();
@@ -21,7 +22,7 @@ impl CallGenerator {
 
         let admin = MockPublicKey::try_from("admin").unwrap();
 
-        let set_candidates_message = election::call::CallMessage::<MockContext>::SetCandidates {
+        let set_candidates_message = election::call::CallMessage::SetCandidates {
             names: vec!["candidate_1".to_owned(), "candidate_2".to_owned()],
         };
 
@@ -34,16 +35,15 @@ impl CallGenerator {
         ];
 
         for voter in voters {
-            let add_voter_message =
-                election::call::CallMessage::<MockContext>::AddVoter(voter.clone());
+            let add_voter_message = election::call::CallMessage::AddVoter(voter.to_address());
 
             messages.push((admin.clone(), add_voter_message));
 
-            let vote_message = election::call::CallMessage::<MockContext>::Vote(1);
+            let vote_message = election::call::CallMessage::Vote(1);
             messages.push((voter, vote_message));
         }
 
-        let freeze_message = election::call::CallMessage::<MockContext>::FreezeElection;
+        let freeze_message = election::call::CallMessage::FreezeElection;
         messages.push((admin, freeze_message));
 
         messages

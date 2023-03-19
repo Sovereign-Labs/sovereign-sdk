@@ -21,9 +21,8 @@ pub struct Transaction<C: sov_modules_api::Context> {
 }
 
 /// VerifiedTx is a Transaction after verification.
-pub(crate) struct VerifiedTx<C: Context> {
-    pub(crate) sender: C::PublicKey,
-    pub(crate) sender_address: Address,
+pub(crate) struct VerifiedTx {
+    pub(crate) sender: Address,
     pub(crate) runtime_msg: Vec<u8>,
     pub(crate) nonce: u64,
 }

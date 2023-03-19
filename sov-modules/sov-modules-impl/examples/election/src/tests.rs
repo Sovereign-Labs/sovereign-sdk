@@ -26,11 +26,11 @@ fn test_election() {
 
 fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: WorkingSet<C::Storage>) {
     let admin_context = C::new(ADMIN);
-    let ellection = &mut Election::<C>::new(storage);
+    let election = &mut Election::<C>::new(storage);
 
     // Init module
     {
-        ellection.genesis().unwrap();
+        election.genesis().unwrap();
     }
 
     // Send candidates
@@ -39,7 +39,7 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: WorkingSet<C::Sto
             names: vec!["candidate_1".to_owned(), "candidate_2".to_owned()],
         };
 
-        ellection.call(set_candidates, &admin_context).unwrap();
+        election.call(set_candidates, &admin_context).unwrap();
     }
 
     let voter_1 = MockPublicKey::try_from("voter_1").unwrap().to_address();
@@ -49,38 +49,38 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: WorkingSet<C::Sto
     // Register voters
     {
         let add_voter = CallMessage::AddVoter(voter_1);
-        ellection.call(add_voter, &admin_context).unwrap();
+        election.call(add_voter, &admin_context).unwrap();
 
         let add_voter = CallMessage::AddVoter(voter_2);
-        ellection.call(add_voter, &admin_context).unwrap();
+        election.call(add_voter, &admin_context).unwrap();
 
         let add_voter = CallMessage::AddVoter(voter_3);
-        ellection.call(add_voter, &admin_context).unwrap();
+        election.call(add_voter, &admin_context).unwrap();
     }
 
     // Vote
     {
         let sender_context = C::new(voter_1);
         let vote = CallMessage::Vote(0);
-        ellection.call(vote, &sender_context).unwrap();
+        election.call(vote, &sender_context).unwrap();
 
         let sender_context = C::new(voter_2);
         let vote = CallMessage::Vote(1);
-        ellection.call(vote, &sender_context).unwrap();
+        election.call(vote, &sender_context).unwrap();
 
         let sender_context = C::new(voter_3);
         let vote = CallMessage::Vote(1);
-        ellection.call(vote, &sender_context).unwrap();
+        election.call(vote, &sender_context).unwrap();
     }
 
-    ellection
+    election
         .call(CallMessage::FreezeElection, &admin_context)
         .unwrap();
 
     // Get result
     {
         let query = QueryMessage::GetResult;
-        let query = ellection.query(query);
+        let query = election.query(query);
         let query_response: Response = serde_json::from_slice(&query.response).unwrap();
 
         assert_eq!(

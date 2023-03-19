@@ -10,11 +10,11 @@ pub(crate) trait TxHooks {
         &self,
         tx: Transaction<Self::Context>,
         working_set: WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<VerifiedTx<Self::Context>>;
+    ) -> anyhow::Result<VerifiedTx>;
 
     fn post_dispatch_tx_hook(
         &self,
-        tx: VerifiedTx<Self::Context>,
+        tx: VerifiedTx,
         working_set: WorkingSet<<Self::Context as Spec>::Storage>,
     );
 }
@@ -38,15 +38,14 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
         &self,
         tx: Transaction<Self::Context>,
         working_set: WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<VerifiedTx<Self::Context>> {
+    ) -> anyhow::Result<VerifiedTx> {
         let mut acc_hooks = accounts::hooks::Hooks::<Self::Context>::new(working_set);
         let acc = acc_hooks.get_account_or_create_default(tx.pub_key.clone())?;
 
         anyhow::ensure!(tx.nonce == acc.nonce, "");
 
         Ok(VerifiedTx {
-            sender: tx.pub_key,
-            sender_address: acc.addr,
+            sender: acc.addr,
             runtime_msg: tx.runtime_msg,
             nonce: tx.nonce,
         })
@@ -54,7 +53,7 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
 
     fn post_dispatch_tx_hook(
         &self,
-        tx: VerifiedTx<Self::Context>,
+        _tx: VerifiedTx,
         working_set: WorkingSet<<Self::Context as Spec>::Storage>,
     ) {
         let mut acc_hooks = accounts::hooks::Hooks::<Self::Context>::new(working_set);
