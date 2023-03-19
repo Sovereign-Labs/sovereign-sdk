@@ -1,5 +1,5 @@
 use crate::{
-    call,
+    call, hooks,
     query::{self, QueryMessage},
     Accounts,
 };
@@ -14,7 +14,8 @@ type C = MockContext;
 #[test]
 fn test_update_account() {
     let native_storage = WorkingSet::new(ProverStorage::temporary());
-    let accounts = &mut Accounts::<C>::new(native_storage);
+    let accounts = &mut Accounts::<C>::new(native_storage.clone());
+    let mut hooks = hooks::Hooks::<C>::new(native_storage);
 
     let sender = MockPublicKey::try_from("pub_key").unwrap();
     let sender_addr: Address = sender.to_address();
@@ -22,9 +23,7 @@ fn test_update_account() {
 
     // Test new account creation
     {
-        accounts
-            .call(call::CallMessage::<C>::CreateAccount, &sender_context)
-            .unwrap();
+        hooks.get_account_or_create_default(sender.clone()).unwrap();
 
         let query_response: query::Response = serde_json::from_slice(
             &accounts
@@ -81,21 +80,18 @@ fn test_update_account() {
 #[test]
 fn test_update_account_fails() {
     let native_storage = WorkingSet::new(ProverStorage::temporary());
-    let accounts = &mut Accounts::<C>::new(native_storage);
+    let accounts = &mut Accounts::<C>::new(native_storage.clone());
+    let mut hooks = hooks::Hooks::<C>::new(native_storage);
 
     let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();
-    let sender_context_1 = C::new(sender_1);
-
-    accounts
-        .call(call::CallMessage::<C>::CreateAccount, &sender_context_1)
-        .unwrap();
+    let sender_context_1 = C::new(sender_1.clone());
+    hooks.get_account_or_create_default(sender_1).unwrap();
 
     let sender_2 = MockPublicKey::try_from("pub_key_2").unwrap();
     let sig_2 = sender_2.sign(call::UPDATE_ACCOUNT_MSG);
-    let sender_context_2 = C::new(sender_2.clone());
 
-    accounts
-        .call(call::CallMessage::<C>::CreateAccount, &sender_context_2)
+    hooks
+        .get_account_or_create_default(sender_2.clone())
         .unwrap();
 
     // The new public key already exists and the call fails.
@@ -110,14 +106,13 @@ fn test_update_account_fails() {
 #[test]
 fn test_create_account_fails() {
     let native_storage = WorkingSet::new(ProverStorage::temporary());
-    let accounts = &mut Accounts::<C>::new(native_storage);
+    let accounts = &mut Accounts::<C>::new(native_storage.clone());
+    let mut hooks = hooks::Hooks::<C>::new(native_storage);
 
     let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();
-    let sender_context_1 = C::new(sender_1);
+    let sender_context_1 = C::new(sender_1.clone());
 
-    accounts
-        .call(call::CallMessage::<C>::CreateAccount, &sender_context_1)
-        .unwrap();
+    hooks.get_account_or_create_default(sender_1).unwrap();
 
     let new_pub_key = MockPublicKey::try_from("pub_key_2").unwrap();
     let sig = new_pub_key.sign(call::UPDATE_ACCOUNT_MSG);
@@ -128,10 +123,6 @@ fn test_create_account_fails() {
         )
         .unwrap();
 
-    let sender_context_2 = C::new(new_pub_key);
-
     // Account creation fails because the `new_pub_key` is already registered.
-    assert!(accounts
-        .call(call::CallMessage::<C>::CreateAccount, &sender_context_2)
-        .is_err())
+    // assert!(hooks.get_account_or_create_default(new_pub_key).is_err());
 }

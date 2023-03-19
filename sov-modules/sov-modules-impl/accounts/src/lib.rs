@@ -42,7 +42,6 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
         context: &Self::Context,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
-            call::CallMessage::CreateAccount => Ok(self.create_account(context)?),
             call::CallMessage::UpdatePublicKey(new_pub_key, sig) => {
                 Ok(self.update_public_key(new_pub_key, sig, context)?)
             }

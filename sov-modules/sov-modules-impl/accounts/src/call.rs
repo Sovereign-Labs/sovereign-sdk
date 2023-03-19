@@ -9,33 +9,12 @@ pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage<C: sov_modules_api::Context> {
-    // Creates a new account.
-    CreateAccount,
     // Updates a PublicKey for the corresponding Account.
     // The sender must be in possession of the new PublicKey.
     UpdatePublicKey(C::PublicKey, C::Signature),
 }
 
 impl<C: sov_modules_api::Context> Accounts<C> {
-    pub(crate) fn create_account(&mut self, context: &C) -> Result<CallResponse> {
-        self.exit_if_account_exists(context.sender())?;
-
-        let default_address = context.sender().to_address();
-        self.exit_if_address_exists(&default_address)?;
-
-        let new_account = Account {
-            addr: default_address,
-            nonce: 0,
-        };
-
-        self.accounts.set(context.sender(), new_account);
-
-        self.public_keys
-            .set(&default_address, context.sender().clone());
-
-        Ok(CallResponse::default())
-    }
-
     pub(crate) fn update_public_key(
         &mut self,
         new_pub_key: C::PublicKey,
