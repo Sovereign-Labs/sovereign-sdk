@@ -25,7 +25,10 @@ fn test_election() {
 }
 
 fn test_module<C: Context<PublicKey = MockPublicKey>>(storage: WorkingSet<C::Storage>) {
-    let admin_context = C::new(ADMIN);
+    let admin_pub_key = C::PublicKey::try_from("election_admin")
+        .map_err(|_| anyhow!("Admin initialization failed"))?;
+
+    let admin_context = C::new(admin_pub_key.to_address());
     let election = &mut Election::<C>::new(storage);
 
     // Init module

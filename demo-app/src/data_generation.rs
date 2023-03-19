@@ -20,13 +20,14 @@ impl CallGenerator {
     fn election_call_messages() -> Vec<RawTx> {
         let mut messages = Vec::default();
 
-        let admin = MockPublicKey::try_from("admin").unwrap();
+        let admin = MockPublicKey::try_from("election_admin").unwrap();
 
         let set_candidates_message = election::call::CallMessage::SetCandidates {
             names: vec!["candidate_1".to_owned(), "candidate_2".to_owned()],
         };
 
-        messages.push((admin.clone(), set_candidates_message));
+        let mut admin_nonce = 0;
+        messages.push((admin.clone(), set_candidates_message, admin_nonce));
 
         let voters = vec![
             MockPublicKey::try_from("voter_1").unwrap(),
@@ -35,29 +36,35 @@ impl CallGenerator {
         ];
 
         for voter in voters {
+            admin_nonce += 1;
             let add_voter_message = election::call::CallMessage::AddVoter(voter.to_address());
 
-            messages.push((admin.clone(), add_voter_message));
+            messages.push((admin.clone(), add_voter_message, admin_nonce));
 
             let vote_message = election::call::CallMessage::Vote(1);
-            messages.push((voter, vote_message));
+            messages.push((voter, vote_message, 0));
         }
 
+        admin_nonce += 1;
         let freeze_message = election::call::CallMessage::FreezeElection;
-        messages.push((admin, freeze_message));
+        messages.push((admin, freeze_message, admin_nonce));
 
         messages
             .into_iter()
-            .map(|(sender, m)| RawTx {
-                data: Transaction::new(Runtime::<MockContext>::encode_election_call(m), sender)
-                    .try_to_vec()
-                    .unwrap(),
+            .map(|(sender, m, nonce)| RawTx {
+                data: Transaction::new(
+                    Runtime::<MockContext>::encode_election_call(m),
+                    sender,
+                    nonce,
+                )
+                .try_to_vec()
+                .unwrap(),
             })
             .collect()
     }
 
     fn value_setter_call_messages() -> Vec<RawTx> {
-        let admin = MockPublicKey::try_from("admin").unwrap();
+        let admin = MockPublicKey::try_from("value_setter_admin").unwrap();
         let new_value = 99;
 
         let set_value_msg_1 =
@@ -72,6 +79,7 @@ impl CallGenerator {
                 data: Transaction::new(
                     Runtime::<MockContext>::encode_value_setter_call(set_value_msg_1),
                     admin.clone(),
+                    0,
                 )
                 .try_to_vec()
                 .unwrap(),
@@ -80,6 +88,7 @@ impl CallGenerator {
                 data: Transaction::new(
                     Runtime::<MockContext>::encode_value_setter_call(set_value_msg_2),
                     admin,
+                    1,
                 )
                 .try_to_vec()
                 .unwrap(),
@@ -103,14 +112,14 @@ impl QueryGenerator {
 }
 
 impl Transaction<MockContext> {
-    pub fn new(msg: Vec<u8>, pub_key: MockPublicKey) -> Self {
+    pub fn new(msg: Vec<u8>, pub_key: MockPublicKey, nonce: u64) -> Self {
         Self {
             signature: MockSignature {
                 msg_sig: Vec::default(),
             },
             runtime_msg: msg,
             pub_key,
-            nonce: 0,
+            nonce,
         }
     }
 }

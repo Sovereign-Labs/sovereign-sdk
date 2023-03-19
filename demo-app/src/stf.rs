@@ -90,6 +90,9 @@ where
                 let ctx = C::new(verified_tx.sender);
                 let tx_result = msg.dispatch_call(batch_workspace.clone(), &ctx);
 
+                self.tx_hooks
+                    .post_dispatch_tx_hook(verified_tx, batch_workspace.clone());
+
                 match tx_result {
                     Ok(resp) => {
                         events.push(resp.events);

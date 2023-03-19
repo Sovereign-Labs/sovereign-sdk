@@ -35,7 +35,13 @@ impl<C: Context> Hooks<C> {
         }
     }
 
-    pub fn inc_nonce(&mut self, address: &Address) {}
+    pub fn inc_nonce(&mut self, pub_key: &C::PublicKey) -> Result<()> {
+        let mut account = self.inner.accounts.get_or_err(pub_key)?;
+        account.nonce += 1;
+        self.inner.accounts.set(pub_key, account);
+
+        Ok(())
+    }
 
     fn exit_if_address_exists(&self, address: &Address) -> Result<()> {
         anyhow::ensure!(
