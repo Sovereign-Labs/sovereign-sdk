@@ -10,6 +10,7 @@ anyhow = { workspace = true }
 sovereign-sdk = { workspace = true, features = ["mocks"] }
 election = { workspace = true }
 value-setter = { workspace = true }
+accounts = { workspace = true }
 sov-state = { workspace = true, features = ["temp"] }
 sovereign-db = { workspace = true }
 sov-modules-api = { workspace = true, features = ["mocks"] }

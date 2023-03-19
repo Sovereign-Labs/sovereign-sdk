@@ -82,8 +82,8 @@ where
             batch_workspace.to_revertable();
             // Run the stateful verification, possibly modifies the state.
             let verified_tx = self
-                .verifier
-                .verify_tx_stateful(tx, batch_workspace.clone())
+                .tx_hooks
+                .pre_dispatch_tx_hook(tx, batch_workspace.clone())
                 .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
 
             if let Ok(msg) = Runtime::<C>::decode_call(&verified_tx.runtime_msg) {

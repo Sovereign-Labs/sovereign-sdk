@@ -1,3 +1,5 @@
+pub mod hooks;
+
 mod call;
 mod genesis;
 mod query;
@@ -9,7 +11,7 @@ use sov_modules_api::{Address, Error};
 use sov_modules_macros::ModuleInfo;
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq, Copy, Clone)]
-struct Account {
+pub struct Account {
     pub addr: Address,
     pub nonce: u64,
 }
