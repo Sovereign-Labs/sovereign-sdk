@@ -132,8 +132,3 @@ impl Context for ZkMockContext {
         Self { sender }
     }
 }
-impl From<&'static str> for Address {
-    fn from(value: &'static str) -> Self {
-        Address::new(sha2::Sha256::hash(value.as_bytes()))
-    }
-}

@@ -33,7 +33,7 @@ impl<C: sov_modules_api::Context> ValueSetter<C> {
 
         let admin = self.admin.get_or_err()?;
 
-        if &admin != context.sender() {
+        if admin != context.sender() {
             // Here we use a custom error type.
             Err(SetValueError::WrongSender)?;
         }
