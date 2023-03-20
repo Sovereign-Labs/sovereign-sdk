@@ -68,7 +68,7 @@ pub trait StorageSpec {
 #[cfg(any(test, feature = "mocks"))]
 pub mod mocks {
     use sha2::Sha256;
-    use sovereign_sdk::core::types::ArrrayWitness;
+    use sovereign_sdk::core::types::ArrayWitness;
 
     use crate::StorageSpec;
 
@@ -76,7 +76,7 @@ pub mod mocks {
     pub struct MockStorageSpec;
 
     impl StorageSpec for MockStorageSpec {
-        type Witness = ArrrayWitness;
+        type Witness = ArrayWitness;
 
         type Hasher = Sha256;
     }
