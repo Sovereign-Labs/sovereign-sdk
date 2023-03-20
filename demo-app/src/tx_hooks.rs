@@ -1,5 +1,5 @@
 use crate::tx_verifier::{Transaction, VerifiedTx};
-use sov_modules_api::Context;
+use sov_modules_api::{Address, Context};
 use sov_state::WorkingSet;
 
 /// TxHooks allows injecting custom logic into a transaction processing pipeline.
@@ -35,20 +35,11 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
         &mut self,
         tx: Transaction<Self::Context>,
     ) -> anyhow::Result<VerifiedTx<Self::Context>> {
-        let acc = self
-            .accounts_hooks
-            .get_or_create_default_account(tx.pub_key.clone())?;
-
-        let tx_nonce = tx.nonce;
-        let acc_nonce = acc.nonce;
-        anyhow::ensure!(
-            acc_nonce == tx_nonce,
-            "Tx bad nonce, expected: {acc_nonce}, but found: {tx_nonce}",
-        );
+        let addr = self.accounts_hook(tx.nonce, tx.pub_key.clone())?;
 
         Ok(VerifiedTx {
             pub_key: tx.pub_key,
-            sender: acc.addr,
+            sender: addr,
             runtime_msg: tx.runtime_msg,
         })
     }
@@ -59,5 +50,25 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
             // At this point we are sure, that the account corresponding to the tx.pub_key is in the db,
             // therefore this panic should never happen, we add it for sanity check.
             .unwrap_or_else(|e| panic!("Inconsistent nonce {e}"));
+    }
+}
+
+impl<C: Context> DemoAppTxHooks<C> {
+    fn accounts_hook(
+        &mut self,
+        tx_nonce: u64,
+        tx_pub_key: C::PublicKey,
+    ) -> anyhow::Result<Address> {
+        let acc = self
+            .accounts_hooks
+            .get_or_create_default_account(tx_pub_key)?;
+
+        let acc_nonce = acc.nonce;
+        anyhow::ensure!(
+            acc_nonce == tx_nonce,
+            "Tx bad nonce, expected: {acc_nonce}, but found: {tx_nonce}",
+        );
+
+        Ok(acc.addr)
     }
 }
