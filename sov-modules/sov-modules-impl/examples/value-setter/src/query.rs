@@ -1,6 +1,7 @@
 use super::ValueSetter;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use sov_state::WorkingSet;
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 pub enum QueryMessage {
@@ -14,7 +15,7 @@ pub struct Response {
 
 impl<C: sov_modules_api::Context> ValueSetter<C> {
     /// Queries the state of the module.
-    pub fn query_value(&self) -> Response {
+    pub fn query_value(&self, _working_set: &mut WorkingSet<C::Storage>) -> Response {
         Response {
             value: self.value.get(),
         }

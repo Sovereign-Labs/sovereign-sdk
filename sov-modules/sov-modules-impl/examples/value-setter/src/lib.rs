@@ -13,6 +13,7 @@ use self::query::QueryMessage;
 use self::call::CallMessage;
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
+use sov_state::WorkingSet;
 
 #[derive(ModuleInfo)]
 pub struct ValueSetter<C: sov_modules_api::Context> {
@@ -31,25 +32,32 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
     #[cfg(feature = "native")]
     type QueryMessage = QueryMessage;
 
-    fn genesis(&mut self) -> Result<(), Error> {
-        Ok(self.init_module()?)
+    fn genesis(&mut self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
+        Ok(self.init_module(working_set)?)
     }
 
     fn call(
         &mut self,
         msg: Self::CallMessage,
         context: &Self::Context,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
-            CallMessage::DoSetValue(set_value) => Ok(self.set_value(set_value.new_value, context)?),
+            CallMessage::DoSetValue(set_value) => {
+                Ok(self.set_value(set_value.new_value, context, working_set)?)
+            }
         }
     }
 
     #[cfg(feature = "native")]
-    fn query(&self, msg: Self::QueryMessage) -> sov_modules_api::QueryResponse {
+    fn query(
+        &self,
+        msg: Self::QueryMessage,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> sov_modules_api::QueryResponse {
         match msg {
             QueryMessage::GetValue => {
-                let response = serde_json::to_vec(&self.query_value()).unwrap();
+                let response = serde_json::to_vec(&self.query_value(working_set)).unwrap();
                 sov_modules_api::QueryResponse { response }
             }
         }

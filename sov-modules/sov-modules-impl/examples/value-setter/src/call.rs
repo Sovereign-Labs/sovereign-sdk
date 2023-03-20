@@ -1,6 +1,7 @@
 use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::CallResponse;
+use sov_state::WorkingSet;
 use std::fmt::Debug;
 use thiserror::Error;
 
@@ -28,6 +29,7 @@ impl<C: sov_modules_api::Context> ValueSetter<C> {
         &mut self,
         new_value: u32,
         context: &C,
+        _working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
         let mut response = CallResponse::default();
 

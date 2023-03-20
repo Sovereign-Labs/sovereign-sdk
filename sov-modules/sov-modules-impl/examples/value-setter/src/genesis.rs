@@ -1,9 +1,10 @@
 use super::ValueSetter;
 use anyhow::{bail, Result};
+use sov_state::WorkingSet;
 
 impl<C: sov_modules_api::Context> ValueSetter<C> {
     /// Initializes module with the `admin` role.
-    pub(crate) fn init_module(&mut self) -> Result<()> {
+    pub(crate) fn init_module(&mut self, _working_set: &mut WorkingSet<C::Storage>) -> Result<()> {
         let maybe_admin = C::PublicKey::try_from("admin");
 
         let admin = match maybe_admin {

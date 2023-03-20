@@ -28,22 +28,22 @@ fn test_value_setter() {
     }
 }
 
-fn test_value_setter_helper<C: Context>(context: C, storage: WorkingSet<C::Storage>) {
-    let mut module = ValueSetter::<C>::new(storage);
-    module.genesis().unwrap();
+fn test_value_setter_helper<C: Context>(context: C, mut working_set: WorkingSet<C::Storage>) {
+    let mut module = ValueSetter::<C>::new(working_set.clone());
+    module.genesis(&mut working_set).unwrap();
 
     let new_value = 99;
     let call_msg = call::CallMessage::DoSetValue(call::SetValue { new_value });
 
     // Test events
     {
-        let call_response = module.call(call_msg, &context).unwrap();
+        let call_response = module.call(call_msg, &context, &mut working_set).unwrap();
         let event = &call_response.events[0];
         assert_eq!(event, &Event::new("set", "value_set: 99"));
     }
 
     let query_msg = query::QueryMessage::GetValue;
-    let query = module.query(query_msg);
+    let query = module.query(query_msg, &mut working_set);
 
     // Test query
     {
@@ -80,10 +80,13 @@ fn test_err_on_sender_is_not_admin() {
     }
 }
 
-fn test_err_on_sender_is_not_admin_helper<C: Context>(context: C, storage: WorkingSet<C::Storage>) {
-    let mut module = ValueSetter::<C>::new(storage);
-    module.genesis().unwrap();
-    let resp = module.set_value(11, &context);
+fn test_err_on_sender_is_not_admin_helper<C: Context>(
+    context: C,
+    mut working_set: WorkingSet<C::Storage>,
+) {
+    let mut module = ValueSetter::<C>::new(working_set.clone());
+    module.genesis(&mut working_set).unwrap();
+    let resp = module.set_value(11, &context, &mut working_set);
 
     assert!(resp.is_err());
 }
