@@ -27,13 +27,22 @@ impl<K: Encode, V: Encode + Decode, S: Storage> Backend<K, V, S> {
         &self.prefix
     }
 
-    pub(crate) fn set_value(&mut self, storage_key: StorageKey, value: V) {
+    pub(crate) fn set_value(
+        &mut self,
+        storage_key: StorageKey,
+        value: V,
+        working_set: &mut WorkingSet<S>,
+    ) {
         let storage_value = StorageValue::new(value);
-        self.storage.set(storage_key, storage_value);
+        working_set.set(storage_key, storage_value);
     }
 
-    pub(crate) fn get_value(&self, storage_key: StorageKey) -> Option<V> {
-        let storage_value = self.storage.get(storage_key)?;
+    pub(crate) fn get_value(
+        &self,
+        storage_key: StorageKey,
+        working_set: &mut WorkingSet<S>,
+    ) -> Option<V> {
+        let storage_value = working_set.get(storage_key)?;
 
         // It is ok to panic here. Deserialization problem means that something is terribly wrong.
         Some(
@@ -42,9 +51,13 @@ impl<K: Encode, V: Encode + Decode, S: Storage> Backend<K, V, S> {
         )
     }
 
-    pub(crate) fn remove_value(&mut self, storage_key: StorageKey) -> Option<V> {
-        let storage_value = self.get_value(storage_key.clone())?;
-        self.storage.delete(storage_key);
+    pub(crate) fn remove_value(
+        &mut self,
+        storage_key: StorageKey,
+        working_set: &mut WorkingSet<S>,
+    ) -> Option<V> {
+        let storage_value = self.get_value(storage_key.clone(), working_set)?;
+        working_set.delete(storage_key);
         Some(storage_value)
     }
 }
