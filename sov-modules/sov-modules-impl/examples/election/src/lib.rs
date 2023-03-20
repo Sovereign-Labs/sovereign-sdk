@@ -7,6 +7,7 @@ mod tests;
 
 mod types;
 
+use sov_state::WorkingSet;
 pub use types::Candidate;
 
 use sov_modules_api::{Address, Error};
@@ -42,37 +43,44 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
 
     type QueryMessage = query::QueryMessage;
 
-    fn genesis(&mut self) -> Result<(), Error> {
-        Ok(self.init_module()?)
+    fn genesis(&mut self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
+        Ok(self.init_module(working_set)?)
     }
 
     fn call(
         &mut self,
         msg: Self::CallMessage,
         context: &Self::Context,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
-            Self::CallMessage::SetCandidates { names } => Ok(self.set_candidates(names, context)?),
+            Self::CallMessage::SetCandidates { names } => {
+                Ok(self.set_candidates(names, context, working_set)?)
+            }
 
             Self::CallMessage::AddVoter(voter_address) => {
-                Ok(self.add_voter(voter_address, context)?)
+                Ok(self.add_voter(voter_address, context, working_set)?)
             }
 
             Self::CallMessage::Vote(candidate_index) => {
-                Ok(self.make_vote(candidate_index, context)?)
+                Ok(self.make_vote(candidate_index, context, working_set)?)
             }
 
             Self::CallMessage::ClearElection => Ok(self.clear()?),
 
-            Self::CallMessage::FreezeElection => Ok(self.freeze_election(context)?),
+            Self::CallMessage::FreezeElection => Ok(self.freeze_election(context, working_set)?),
         }
     }
 
     #[cfg(feature = "native")]
-    fn query(&self, msg: Self::QueryMessage) -> sov_modules_api::QueryResponse {
+    fn query(
+        &self,
+        msg: Self::QueryMessage,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> sov_modules_api::QueryResponse {
         match msg {
             Self::QueryMessage::GetResult => {
-                let response = serde_json::to_vec(&self.results()).unwrap();
+                let response = serde_json::to_vec(&self.results(working_set)).unwrap();
                 sov_modules_api::QueryResponse { response }
             }
         }
