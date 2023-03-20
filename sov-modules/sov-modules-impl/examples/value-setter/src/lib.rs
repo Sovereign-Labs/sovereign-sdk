@@ -11,7 +11,7 @@ pub mod query;
 use self::query::QueryMessage;
 
 use self::call::CallMessage;
-use sov_modules_api::Error;
+use sov_modules_api::{Address, Error};
 use sov_modules_macros::ModuleInfo;
 
 #[derive(ModuleInfo)]
@@ -20,7 +20,7 @@ pub struct ValueSetter<C: sov_modules_api::Context> {
     pub value: sov_state::StateValue<u32, C::Storage>,
 
     #[state]
-    pub admin: sov_state::StateValue<C::PublicKey, C::Storage>,
+    pub admin: sov_state::StateValue<Address, C::Storage>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {

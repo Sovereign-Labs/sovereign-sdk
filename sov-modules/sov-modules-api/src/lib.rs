@@ -37,7 +37,7 @@ impl Address {
 }
 
 impl Address {
-    pub fn new(addr: [u8; 32]) -> Self {
+    pub const fn new(addr: [u8; 32]) -> Self {
         Self { addr }
     }
 }
@@ -95,10 +95,10 @@ pub trait Spec {
 /// Context contains functionality common for all modules.
 pub trait Context: Spec + Clone + Debug + PartialEq {
     /// Sender of the transaction.
-    fn sender(&self) -> &Self::PublicKey;
+    fn sender(&self) -> Address;
 
     /// Constructor for the Context.
-    fn new(sender: Self::PublicKey) -> Self;
+    fn new(sender: Address) -> Self;
 }
 
 /// Every module has to implement this trait.

@@ -32,6 +32,7 @@ sovereign-sdk = {path= "sdk" }
 first-read-last-write-cache = {path = "first-read-last-write-cache"}
 election = { path = "sov-modules/sov-modules-impl/examples/election" }
 value-setter = { path = "sov-modules/sov-modules-impl/examples/value-setter" }
+accounts = { path = "sov-modules/sov-modules-impl/accounts" }
 schemadb = {path = "db/schemadb"}
 sovereign-db = {path = "db/sovereign-db"}
 sov-state = {path = "sov-modules/sov-state"}
@@ -61,3 +62,4 @@ sha2 = "0.10.6"
 thiserror = "1.0.38"
 tiny-keccak = "2.0.2"
 tracing = "0.1.37"
+

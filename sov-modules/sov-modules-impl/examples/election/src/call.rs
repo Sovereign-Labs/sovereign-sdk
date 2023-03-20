@@ -5,13 +5,13 @@ use super::{
 use anyhow::{anyhow, bail, ensure, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use sov_modules_api::CallResponse;
+use sov_modules_api::{Address, CallResponse};
 
 /// Call actions supported byte the module.
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
-pub enum CallMessage<C: sov_modules_api::Context> {
+pub enum CallMessage {
     SetCandidates { names: Vec<String> },
-    AddVoter(C::PublicKey),
+    AddVoter(Address),
     Vote(usize),
     ClearElection,
     FreezeElection,
@@ -37,14 +37,14 @@ impl<C: sov_modules_api::Context> Election<C> {
     /// Adds voter to the allow list. Must be called by the Admin.
     pub(crate) fn add_voter(
         &mut self,
-        voter_pub_key: C::PublicKey,
+        voter_address: Address,
         context: &C,
     ) -> Result<CallResponse> {
         self.exit_if_frozen()?;
         self.exit_if_not_admin(context)?;
-        self.exit_if_voter_already_set(&voter_pub_key)?;
+        self.exit_if_voter_already_set(&voter_address)?;
 
-        self.allowed_voters.set(&voter_pub_key, Voter::fresh());
+        self.allowed_voters.set(&voter_address, Voter::fresh());
 
         Ok(CallResponse::default())
     }
@@ -60,12 +60,12 @@ impl<C: sov_modules_api::Context> Election<C> {
     ) -> Result<CallResponse> {
         self.exit_if_frozen()?;
 
-        let voter = self.allowed_voters.get_or_err(context.sender())?;
+        let voter = self.allowed_voters.get_or_err(&context.sender())?;
 
         match voter {
             Voter::Voted => bail!("Voter tried voting a second time!"),
             Voter::Fresh => {
-                self.allowed_voters.set(context.sender(), Voter::voted());
+                self.allowed_voters.set(&context.sender(), Voter::voted());
 
                 let mut candidates = self.candidates.get_or_err()?;
 
@@ -102,7 +102,7 @@ impl<C: sov_modules_api::Context> Election<C> {
         let admin = self.admin.get_or_err()?;
 
         ensure!(
-            &admin == context.sender(),
+            admin == context.sender(),
             "Only admin can trigger this action."
         );
         Ok(())
@@ -123,9 +123,9 @@ impl<C: sov_modules_api::Context> Election<C> {
         Ok(())
     }
 
-    fn exit_if_voter_already_set(&self, voter_pub_key: &C::PublicKey) -> Result<()> {
+    fn exit_if_voter_already_set(&self, voter_address: &Address) -> Result<()> {
         ensure!(
-            self.allowed_voters.get(voter_pub_key).is_none(),
+            self.allowed_voters.get(voter_address).is_none(),
             "Voter already has the right to vote."
         );
         Ok(())
