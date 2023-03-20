@@ -24,7 +24,6 @@ pub(crate) struct VerifiedTx<C: Context> {
     pub(crate) pub_key: C::PublicKey,
     pub(crate) sender: Address,
     pub(crate) runtime_msg: Vec<u8>,
-    pub(crate) nonce: u64,
 }
 
 /// TxVerifier encapsulates Transaction verification.

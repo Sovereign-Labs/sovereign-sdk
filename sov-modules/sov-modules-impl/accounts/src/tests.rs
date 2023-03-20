@@ -104,13 +104,14 @@ fn test_update_account_fails() {
 }
 
 #[test]
-fn test_create_account_fails() {
+fn test_get_acc_after_pub_key_update() {
     let native_storage = WorkingSet::new(ProverStorage::temporary());
     let accounts = &mut Accounts::<C>::new(native_storage.clone());
     let mut hooks = hooks::Hooks::<C>::new(native_storage);
 
     let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();
-    let sender_context_1 = C::new(sender_1.to_address());
+    let sender_1_addr = sender_1.to_address();
+    let sender_context_1 = C::new(sender_1_addr);
 
     hooks.get_or_create_default_account(sender_1).unwrap();
 
@@ -118,11 +119,11 @@ fn test_create_account_fails() {
     let sig = new_pub_key.sign(call::UPDATE_ACCOUNT_MSG);
     accounts
         .call(
-            call::CallMessage::<C>::UpdatePublicKey(new_pub_key, sig),
+            call::CallMessage::<C>::UpdatePublicKey(new_pub_key.clone(), sig),
             &sender_context_1,
         )
         .unwrap();
 
-    // Account creation fails because the `new_pub_key` is already registered.
-    // assert!(hooks.get_account_or_create_default(new_pub_key).is_err());
+    let acc = hooks.get_or_create_default_account(new_pub_key).unwrap();
+    assert_eq!(acc.addr, sender_1_addr)
 }
