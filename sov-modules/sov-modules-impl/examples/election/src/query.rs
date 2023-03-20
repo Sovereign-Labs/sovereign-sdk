@@ -1,6 +1,7 @@
 use super::{types::Candidate, Election};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use sov_state::WorkingSet;
 
 /// Queries supported by the module.
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
@@ -15,11 +16,11 @@ pub enum Response {
 }
 
 impl<C: sov_modules_api::Context> Election<C> {
-    pub fn results(&self) -> Response {
-        let is_frozen = self.is_frozen.get().unwrap_or_default();
+    pub fn results(&self, working_set: &mut WorkingSet<C::Storage>) -> Response {
+        let is_frozen = self.is_frozen.get(working_set).unwrap_or_default();
 
         if is_frozen {
-            let candidates = self.candidates.get().unwrap_or(Vec::default());
+            let candidates = self.candidates.get(working_set).unwrap_or(Vec::default());
 
             // In case of tie, returns the candidate with the higher index in the vec, it is ok for the example.
             let candidate = candidates

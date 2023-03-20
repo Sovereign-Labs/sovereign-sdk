@@ -117,7 +117,10 @@ pub trait Module {
     type QueryMessage: Decode + Encode + Debug = NonInstantiable;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
-    fn genesis(&mut self) -> Result<(), Error> {
+    fn genesis(
+        &mut self,
+        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> Result<(), Error> {
         Ok(())
     }
 
@@ -127,12 +130,17 @@ pub trait Module {
         &mut self,
         _message: Self::CallMessage,
         _context: &Self::Context,
+        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> Result<CallResponse, Error> {
         unreachable!()
     }
 
     /// Query allows querying the module's state.
-    fn query(&self, _message: Self::QueryMessage) -> QueryResponse {
+    fn query(
+        &self,
+        _message: Self::QueryMessage,
+        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> QueryResponse {
         unreachable!()
     }
 }
@@ -141,7 +149,7 @@ pub trait Module {
 pub trait ModuleInfo {
     type Context: Context;
 
-    fn new(storage: WorkingSet<<Self::Context as Spec>::Storage>) -> Self;
+    fn new() -> Self;
 
     // Returns an address for the module.
     // TODO: https://github.com/Sovereign-Labs/sovereign/issues/136

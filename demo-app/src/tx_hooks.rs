@@ -1,5 +1,5 @@
 use crate::tx_verifier::{Transaction, VerifiedTx};
-use sov_modules_api::{Address, Context};
+use sov_modules_api::{Address, Context, Spec};
 use sov_state::WorkingSet;
 
 /// TxHooks allows injecting custom logic into a transaction processing pipeline.
@@ -10,10 +10,15 @@ pub(crate) trait TxHooks {
     fn pre_dispatch_tx_hook(
         &mut self,
         tx: Transaction<Self::Context>,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<VerifiedTx<Self::Context>>;
 
     /// post_dispatch_tx_hook runs after the tx is dispatched to an appropriate module.
-    fn post_dispatch_tx_hook(&mut self, tx: VerifiedTx<Self::Context>);
+    fn post_dispatch_tx_hook(
+        &mut self,
+        tx: VerifiedTx<Self::Context>,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    );
 }
 
 pub(crate) struct DemoAppTxHooks<C: Context> {
@@ -21,9 +26,9 @@ pub(crate) struct DemoAppTxHooks<C: Context> {
 }
 
 impl<C: Context> DemoAppTxHooks<C> {
-    pub fn new(working_set: WorkingSet<C::Storage>) -> Self {
+    pub fn new() -> Self {
         Self {
-            accounts_hooks: accounts::hooks::Hooks::<C>::new(working_set),
+            accounts_hooks: accounts::hooks::Hooks::<C>::new(),
         }
     }
 }
@@ -34,8 +39,9 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
     fn pre_dispatch_tx_hook(
         &mut self,
         tx: Transaction<Self::Context>,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<VerifiedTx<Self::Context>> {
-        let addr = self.check_nonce_for_address(tx.nonce, tx.pub_key.clone())?;
+        let addr = self.check_nonce_for_address(tx.nonce, tx.pub_key.clone(), working_set)?;
 
         Ok(VerifiedTx {
             pub_key: tx.pub_key,
@@ -44,9 +50,13 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
         })
     }
 
-    fn post_dispatch_tx_hook(&mut self, tx: VerifiedTx<Self::Context>) {
+    fn post_dispatch_tx_hook(
+        &mut self,
+        tx: VerifiedTx<Self::Context>,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) {
         self.accounts_hooks
-            .inc_nonce(&tx.pub_key)
+            .inc_nonce(&tx.pub_key, working_set)
             // At this point we are sure, that the account corresponding to the tx.pub_key is in the db,
             // therefore this panic should never happen, we add it for sanity check.
             .unwrap_or_else(|e| panic!("Inconsistent nonce {e}"));
@@ -58,10 +68,11 @@ impl<C: Context> DemoAppTxHooks<C> {
         &mut self,
         tx_nonce: u64,
         tx_pub_key: C::PublicKey,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> anyhow::Result<Address> {
         let acc = self
             .accounts_hooks
-            .get_or_create_default_account(tx_pub_key)?;
+            .get_or_create_default_account(tx_pub_key, working_set)?;
 
         let acc_nonce = acc.nonce;
         anyhow::ensure!(

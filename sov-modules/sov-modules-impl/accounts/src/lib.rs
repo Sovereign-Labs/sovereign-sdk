@@ -9,6 +9,7 @@ mod tests;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::{Address, Error};
 use sov_modules_macros::ModuleInfo;
+use sov_state::WorkingSet;
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq, Copy, Clone)]
 pub struct Account {
@@ -32,27 +33,32 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
 
     type QueryMessage = query::QueryMessage<C>;
 
-    fn genesis(&mut self) -> Result<(), Error> {
-        Ok(self.init_module()?)
+    fn genesis(&mut self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
+        Ok(self.init_module(working_set)?)
     }
 
     fn call(
         &mut self,
         msg: Self::CallMessage,
         context: &Self::Context,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
             call::CallMessage::UpdatePublicKey(new_pub_key, sig) => {
-                Ok(self.update_public_key(new_pub_key, sig, context)?)
+                Ok(self.update_public_key(new_pub_key, sig, context, working_set)?)
             }
         }
     }
 
     #[cfg(feature = "native")]
-    fn query(&self, msg: Self::QueryMessage) -> sov_modules_api::QueryResponse {
+    fn query(
+        &self,
+        msg: Self::QueryMessage,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> sov_modules_api::QueryResponse {
         match msg {
             query::QueryMessage::GetAccount(pub_key) => {
-                let response = serde_json::to_vec(&self.get_account(pub_key)).unwrap();
+                let response = serde_json::to_vec(&self.get_account(pub_key, working_set)).unwrap();
                 sov_modules_api::QueryResponse { response }
             }
         }

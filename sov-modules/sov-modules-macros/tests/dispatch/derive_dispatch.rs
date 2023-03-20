@@ -17,8 +17,8 @@ fn main() {
     type RT = Runtime<MockContext>;
 
     let storage = ProverStorage::temporary();
-    let working_set = sov_state::WorkingSet::new(storage);
-    RT::genesis(working_set.clone()).unwrap();
+    let working_set = &mut sov_state::WorkingSet::new(storage);
+    RT::genesis(working_set).unwrap();
     let context = MockContext::new(Address::new([0; 32]));
 
     let value = 11;
@@ -31,13 +31,13 @@ fn main() {
             module.module_address(),
             first_test_module::FirstTestStruct::<MockContext>::address()
         );
-        let _ = module.dispatch_call(working_set.clone(), &context).unwrap();
+        let _ = module.dispatch_call(working_set, &context).unwrap();
     }
 
     {
         let serialized_message = RT::encode_first_query(());
         let module = RT::decode_query(&serialized_message).unwrap();
-        let response = module.dispatch_query(working_set.clone());
+        let response = module.dispatch_query(working_set);
         assert_eq!(response.response, vec![value]);
     }
 
@@ -52,13 +52,13 @@ fn main() {
             second_test_module::SecondTestStruct::<MockContext>::address()
         );
 
-        let _ = module.dispatch_call(working_set.clone(), &context).unwrap();
+        let _ = module.dispatch_call(working_set, &context).unwrap();
     }
 
     {
         let serialized_message = RT::encode_second_query(second_test_module::TestType {});
         let module = RT::decode_query(&serialized_message).unwrap();
-        let response = module.dispatch_query(working_set.clone());
+        let response = module.dispatch_query(working_set);
         assert_eq!(response.response, vec![value]);
     }
 }

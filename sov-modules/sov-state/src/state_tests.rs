@@ -9,12 +9,12 @@ enum Operation {
 }
 
 impl Operation {
-    fn execute(&self, storage: &mut WorkingSet<ProverStorage<MockStorageSpec>>) {
+    fn execute(&self, working_set: &mut WorkingSet<ProverStorage<MockStorageSpec>>) {
         match self {
-            Operation::Merge => storage.commit(),
+            Operation::Merge => working_set.commit(),
             Operation::Finalize => {
-                let db = storage.backing();
-                let (cache_log, witness) = storage.freeze();
+                let db = working_set.backing();
+                let (cache_log, witness) = working_set.freeze();
                 db.validate_and_commit(cache_log, &witness)
                     .expect("JMT update is valid");
             }
@@ -27,9 +27,9 @@ struct StorageOperation {
 }
 
 impl StorageOperation {
-    fn execute(&self, storage: WorkingSet<ProverStorage<MockStorageSpec>>) {
+    fn execute(&self, working_set: &mut WorkingSet<ProverStorage<MockStorageSpec>>) {
         for op in self.operations.iter() {
-            op.execute(&mut storage.clone())
+            op.execute(&mut working_set.clone())
         }
     }
 }
@@ -78,11 +78,11 @@ fn create_state_map_and_storage(
     StateMap<u32, u32, ProverStorage<MockStorageSpec>>,
     WorkingSet<ProverStorage<MockStorageSpec>>,
 ) {
-    let storage = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
-    let mut state_map = StateMap::new(storage.clone(), Prefix::new(vec![0]));
-    state_map.set(&key, value);
-    (state_map, storage)
+    let mut state_map = StateMap::new(Prefix::new(vec![0]));
+    state_map.set(&key, value, &mut working_set);
+    (state_map, working_set)
 }
 
 #[test]
@@ -91,13 +91,13 @@ fn test_state_map() {
     for (before_remove, after_remove) in create_storage_operations() {
         let key = 1;
         let value = 11;
-        let (mut state_map, storage) = create_state_map_and_storage(key, value, &path);
+        let (mut state_map, mut working_set) = create_state_map_and_storage(key, value, &path);
 
-        before_remove.execute(storage.clone());
-        assert_eq!(state_map.remove(&key).unwrap(), value);
+        before_remove.execute(&mut working_set);
+        assert_eq!(state_map.remove(&key, &mut working_set).unwrap(), value);
 
-        after_remove.execute(storage);
-        assert!(state_map.get(&key).is_none())
+        after_remove.execute(&mut working_set);
+        assert!(state_map.get(&key, &mut working_set).is_none())
     }
 }
 
@@ -108,11 +108,11 @@ fn create_state_value_and_storage(
     StateValue<u32, ProverStorage<MockStorageSpec>>,
     WorkingSet<ProverStorage<MockStorageSpec>>,
 ) {
-    let storage = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
-    let mut state_value = StateValue::new(storage.clone(), Prefix::new(vec![0]));
-    state_value.set(value);
-    (state_value, storage)
+    let mut state_value = StateValue::new(Prefix::new(vec![0]));
+    state_value.set(value, &mut working_set);
+    (state_value, working_set)
 }
 
 #[test]
@@ -120,12 +120,12 @@ fn test_state_value() {
     let path = schemadb::temppath::TempPath::new();
     for (before_remove, after_remove) in create_storage_operations() {
         let value = 11;
-        let (mut state_value, storage) = create_state_value_and_storage(value, &path);
+        let (mut state_value, mut working_set) = create_state_value_and_storage(value, &path);
 
-        before_remove.execute(storage.clone());
-        assert_eq!(state_value.remove().unwrap(), value);
+        before_remove.execute(&mut working_set);
+        assert_eq!(state_value.remove(&mut working_set).unwrap(), value);
 
-        after_remove.execute(storage);
-        assert!(state_value.get().is_none())
+        after_remove.execute(&mut working_set);
+        assert!(state_value.get(&mut working_set).is_none())
     }
 }

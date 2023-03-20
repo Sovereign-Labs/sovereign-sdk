@@ -29,41 +29,41 @@ pub enum Error {
 }
 
 impl<V: Encode + Decode, S: Storage> StateValue<V, S> {
-    pub fn new(storage: WorkingSet<S>, prefix: Prefix) -> Self {
+    pub fn new(prefix: Prefix) -> Self {
         Self {
-            backend: Backend::new(storage, prefix),
+            backend: Backend::new(prefix),
         }
     }
 
     /// Sets a value in the StateValue.
-    pub fn set(&mut self, value: V) {
+    pub fn set(&mut self, value: V, working_set: &mut WorkingSet<S>) {
         // `StorageKey::new` will serialize the SingletonKey, but that's fine because we provided
         //  efficient Encode implementation.
         let storage_key = StorageKey::new(self.backend.prefix(), &SingletonKey);
-        self.backend.set_value(storage_key, value)
+        self.backend.set_value(storage_key, value, working_set)
     }
 
     /// Gets a value from the StateValue or None if the value is absent.
-    pub fn get(&self) -> Option<V> {
+    pub fn get(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
         let storage_key = StorageKey::new(self.backend.prefix(), &SingletonKey);
-        self.backend.get_value(storage_key)
+        self.backend.get_value(storage_key, working_set)
     }
 
     /// Gets a value from the StateValue or Error if the value is absent.
-    pub fn get_or_err(&self) -> Result<V, Error> {
-        self.get()
+    pub fn get_or_err(&self, working_set: &mut WorkingSet<S>) -> Result<V, Error> {
+        self.get(working_set)
             .ok_or_else(|| Error::MissingValue(self.prefix().clone()))
     }
 
     // Removes a value from the StateValue, returning the value (or None if the key is absent).
-    pub fn remove(&mut self) -> Option<V> {
+    pub fn remove(&mut self, working_set: &mut WorkingSet<S>) -> Option<V> {
         let storage_key = StorageKey::new(self.backend.prefix(), &SingletonKey);
-        self.backend.remove_value(storage_key)
+        self.backend.remove_value(storage_key, working_set)
     }
 
     // Removes a value and from the StateValue, returning the value (or Error if the key is absent).
-    pub fn remove_or_err(&mut self) -> Result<V, Error> {
-        self.remove()
+    pub fn remove_or_err(&mut self, working_set: &mut WorkingSet<S>) -> Result<V, Error> {
+        self.remove(working_set)
             .ok_or_else(|| Error::MissingValue(self.prefix().clone()))
     }
 

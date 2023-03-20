@@ -1,7 +1,7 @@
 use sov_modules_api::mocks::MockContext;
 use sov_modules_api::{Context, ModuleInfo};
 use sov_modules_macros::ModuleInfo;
-use sov_state::{ProverStorage, StateMap, StateValue};
+use sov_state::{StateMap, StateValue};
 
 mod test_module {
     use super::*;
@@ -23,10 +23,7 @@ mod test_module {
 
 fn main() {
     type C = MockContext;
-    let test_storage = ProverStorage::temporary();
-    let working_set = sov_state::WorkingSet::new(test_storage);
-
-    let test_struct = <test_module::TestStruct<C> as ModuleInfo>::new(working_set);
+    let test_struct = <test_module::TestStruct<C> as ModuleInfo>::new();
 
     let prefix1 = test_struct.test_state1.prefix();
 

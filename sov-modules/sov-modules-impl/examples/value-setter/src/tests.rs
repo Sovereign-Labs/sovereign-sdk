@@ -1,7 +1,6 @@
 use super::ValueSetter;
 use crate::{call, query};
 
-use anyhow::anyhow;
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey, ZkMockContext},
     Address, Context, PublicKey,
@@ -12,44 +11,42 @@ use sovereign_sdk::stf::Event;
 
 #[test]
 fn test_value_setter() {
-    let admin_pub_key = MockPublicKey::try_from("value_setter_admin")
-        .map_err(|_| anyhow!("Admin initialization failed"))
-        .unwrap();
-
-    let sender = admin_pub_key.to_address();
-    let storage = WorkingSet::new(ProverStorage::temporary());
+    let sender = MockPublicKey::try_from("value_setter_admin")
+        .unwrap()
+        .to_address();
+    let mut working_set = WorkingSet::new(ProverStorage::temporary());
 
     // Test Native-Context
     {
-        let context = MockContext::new(sender.clone());
-        test_value_setter_helper(context, storage.clone());
+        let context = MockContext::new(sender);
+        test_value_setter_helper(context, &mut working_set);
     }
-    let (_, witness) = storage.freeze();
+    let (_, witness) = working_set.freeze();
 
     // Test Zk-Context
     {
         let zk_context = ZkMockContext::new(sender);
-        let zk_storage = WorkingSet::with_witness(ZkStorage::new([0u8; 32]), witness);
-        test_value_setter_helper(zk_context, zk_storage);
+        let mut zk_working_set = WorkingSet::with_witness(ZkStorage::new([0u8; 32]), witness);
+        test_value_setter_helper(zk_context, &mut zk_working_set);
     }
 }
 
-fn test_value_setter_helper<C: Context>(context: C, storage: WorkingSet<C::Storage>) {
-    let mut module = ValueSetter::<C>::new(storage);
-    module.genesis().unwrap();
+fn test_value_setter_helper<C: Context>(context: C, working_set: &mut WorkingSet<C::Storage>) {
+    let mut module = ValueSetter::<C>::new();
+    module.genesis(working_set).unwrap();
 
     let new_value = 99;
     let call_msg = call::CallMessage::DoSetValue(call::SetValue { new_value });
 
     // Test events
     {
-        let call_response = module.call(call_msg, &context).unwrap();
+        let call_response = module.call(call_msg, &context, working_set).unwrap();
         let event = &call_response.events[0];
         assert_eq!(event, &Event::new("set", "value_set: 99"));
     }
 
     let query_msg = query::QueryMessage::GetValue;
-    let query = module.query(query_msg);
+    let query = module.query(query_msg, working_set);
 
     // Test query
     {
@@ -68,28 +65,31 @@ fn test_value_setter_helper<C: Context>(context: C, storage: WorkingSet<C::Stora
 fn test_err_on_sender_is_not_admin() {
     let sender = Address::new([9; 32]);
     let backing_store = ProverStorage::temporary();
-    let native_tx_store = WorkingSet::new(backing_store);
+    let native_working_set = WorkingSet::new(backing_store);
 
     // Test Native-Context
     {
         let context = MockContext::new(sender);
-        test_err_on_sender_is_not_admin_helper(context, native_tx_store.clone());
+        test_err_on_sender_is_not_admin_helper(context, native_working_set.clone());
     }
-    let (_, witness) = native_tx_store.freeze();
+    let (_, witness) = native_working_set.freeze();
 
     // Test Zk-Context
     {
         let zk_backing_store = ZkStorage::new([0u8; 32]);
         let zk_context = ZkMockContext::new(sender);
-        let zk_storage = WorkingSet::with_witness(zk_backing_store, witness);
-        test_err_on_sender_is_not_admin_helper(zk_context, zk_storage);
+        let zk_working_set = WorkingSet::with_witness(zk_backing_store, witness);
+        test_err_on_sender_is_not_admin_helper(zk_context, zk_working_set);
     }
 }
 
-fn test_err_on_sender_is_not_admin_helper<C: Context>(context: C, storage: WorkingSet<C::Storage>) {
-    let mut module = ValueSetter::<C>::new(storage);
-    module.genesis().unwrap();
-    let resp = module.set_value(11, &context);
+fn test_err_on_sender_is_not_admin_helper<C: Context>(
+    context: C,
+    mut working_set: WorkingSet<C::Storage>,
+) {
+    let mut module = ValueSetter::<C>::new();
+    module.genesis(&mut working_set).unwrap();
+    let resp = module.set_value(11, &context, &mut working_set);
 
     assert!(resp.is_err());
 }
