@@ -3,6 +3,7 @@ use anyhow::{ensure, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::CallResponse;
 use sov_modules_api::Signature;
+use sov_state::WorkingSet;
 
 pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 
@@ -19,11 +20,15 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         new_pub_key: C::PublicKey,
         signature: C::Signature,
         context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        self.exit_if_account_exists(&new_pub_key)?;
+        self.exit_if_account_exists(&new_pub_key, working_set)?;
 
-        let pub_key = self.public_keys.get_or_err(&context.sender())?;
-        let account = self.accounts.remove_or_err(&pub_key)?;
+        let pub_key = self
+            .public_keys
+            .get_or_err(&context.sender(), working_set)?;
+
+        let account = self.accounts.remove_or_err(&pub_key, working_set)?;
         // Sanity check
         ensure!(
             context.sender() == account.addr,
@@ -34,14 +39,19 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         signature.verify(&new_pub_key, UPDATE_ACCOUNT_MSG)?;
 
         // Update the public key (account data remains the same).
-        self.accounts.set(&new_pub_key, account);
-        self.public_keys.set(&context.sender(), new_pub_key);
+        self.accounts.set(&new_pub_key, account, working_set);
+        self.public_keys
+            .set(&context.sender(), new_pub_key, working_set);
         Ok(CallResponse::default())
     }
 
-    fn exit_if_account_exists(&self, new_pub_key: &C::PublicKey) -> Result<()> {
+    fn exit_if_account_exists(
+        &self,
+        new_pub_key: &C::PublicKey,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<()> {
         anyhow::ensure!(
-            self.accounts.get(new_pub_key).is_none(),
+            self.accounts.get(new_pub_key, working_set).is_none(),
             "New PublicKey already exists"
         );
         Ok(())
