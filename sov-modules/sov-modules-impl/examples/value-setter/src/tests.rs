@@ -14,39 +14,39 @@ fn test_value_setter() {
     let sender = MockPublicKey::try_from("value_setter_admin")
         .unwrap()
         .to_address();
-    let working_set = WorkingSet::new(ProverStorage::temporary());
+    let mut working_set = WorkingSet::new(ProverStorage::temporary());
 
     // Test Native-Context
     {
         let context = MockContext::new(sender);
-        test_value_setter_helper(context, working_set.clone());
+        test_value_setter_helper(context, &mut working_set);
     }
     let (_, witness) = working_set.freeze();
 
     // Test Zk-Context
     {
         let zk_context = ZkMockContext::new(sender);
-        let zk_working_set = WorkingSet::with_witness(ZkStorage::new([0u8; 32]), witness);
-        test_value_setter_helper(zk_context, zk_working_set);
+        let mut zk_working_set = WorkingSet::with_witness(ZkStorage::new([0u8; 32]), witness);
+        test_value_setter_helper(zk_context, &mut zk_working_set);
     }
 }
 
-fn test_value_setter_helper<C: Context>(context: C, mut working_set: WorkingSet<C::Storage>) {
+fn test_value_setter_helper<C: Context>(context: C, working_set: &mut WorkingSet<C::Storage>) {
     let mut module = ValueSetter::<C>::new();
-    module.genesis(&mut working_set).unwrap();
+    module.genesis(working_set).unwrap();
 
     let new_value = 99;
     let call_msg = call::CallMessage::DoSetValue(call::SetValue { new_value });
 
     // Test events
     {
-        let call_response = module.call(call_msg, &context, &mut working_set).unwrap();
+        let call_response = module.call(call_msg, &context, working_set).unwrap();
         let event = &call_response.events[0];
         assert_eq!(event, &Event::new("set", "value_set: 99"));
     }
 
     let query_msg = query::QueryMessage::GetValue;
-    let query = module.query(query_msg, &mut working_set);
+    let query = module.query(query_msg, working_set);
 
     // Test query
     {
