@@ -3,8 +3,6 @@ mod data_generation;
 mod helpers;
 mod runtime;
 
-fn main() {}
-
 mod stf;
 mod tx_hooks;
 mod tx_verifier;
@@ -16,7 +14,6 @@ use sov_state::ProverStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
 use stf::Demo;
 
-/*
 fn main() {
     let path = schemadb::temppath::TempPath::new();
     {
@@ -146,4 +143,3 @@ mod test {
         }
     }
 }
-*/

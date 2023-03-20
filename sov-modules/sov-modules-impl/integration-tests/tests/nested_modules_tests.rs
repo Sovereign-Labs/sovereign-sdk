@@ -17,9 +17,10 @@ pub mod module_a {
     }
 
     impl<C: Context> ModuleA<C> {
-        pub fn update(&mut self, key: &str, value: &str) {
-            self.state_1_a.set(&key.to_owned(), value.to_owned());
-            self.state_2_a.set(value.to_owned())
+        pub fn update(&mut self, key: &str, value: &str, working_set: &mut WorkingSet<C::Storage>) {
+            self.state_1_a
+                .set(&key.to_owned(), value.to_owned(), working_set);
+            self.state_2_a.set(value.to_owned(), working_set)
         }
     }
 }
@@ -36,9 +37,10 @@ pub mod module_b {
     }
 
     impl<C: Context> ModuleB<C> {
-        pub fn update(&mut self, key: &str, value: &str) {
-            self.state_1_b.set(&key.to_owned(), value.to_owned());
-            self.mod_1_a.update("key_from_b", value);
+        pub fn update(&mut self, key: &str, value: &str, working_set: &mut WorkingSet<C::Storage>) {
+            self.state_1_b
+                .set(&key.to_owned(), value.to_owned(), working_set);
+            self.mod_1_a.update("key_from_b", value, working_set);
         }
     }
 }
@@ -56,10 +58,15 @@ mod module_c {
     }
 
     impl<C: Context> ModuleC<C> {
-        pub fn execute(&mut self, key: &str, value: &str) {
-            self.mod_1_a.update(key, value);
-            self.mod_1_b.update(key, value);
-            self.mod_1_a.update(key, value);
+        pub fn execute(
+            &mut self,
+            key: &str,
+            value: &str,
+            working_set: &mut WorkingSet<C::Storage>,
+        ) {
+            self.mod_1_a.update(key, value, working_set);
+            self.mod_1_b.update(key, value, working_set);
+            self.mod_1_a.update(key, value, working_set);
         }
     }
 }
@@ -67,12 +74,12 @@ mod module_c {
 #[test]
 fn nested_module_call_test() {
     let native_storage = ProverStorage::temporary();
-    let working_set = WorkingSet::new(native_storage.clone());
+    let working_set = &mut WorkingSet::new(native_storage.clone());
 
     // Test the `native` execution.
     {
-        execute_module_logic::<MockContext>(working_set.clone());
-        test_state_update::<MockContext>(working_set.clone());
+        execute_module_logic::<MockContext>(working_set);
+        test_state_update::<MockContext>(working_set);
     }
     let (log, witness) = working_set.freeze();
     native_storage
@@ -82,26 +89,26 @@ fn nested_module_call_test() {
     // Test the `zk` execution.
     {
         let zk_storage = ZkStorage::new([0u8; 32]);
-        let working_set = WorkingSet::with_witness(zk_storage, witness);
-        execute_module_logic::<ZkMockContext>(working_set.clone());
+        let working_set = &mut WorkingSet::with_witness(zk_storage, witness);
+        execute_module_logic::<ZkMockContext>(working_set);
         test_state_update::<ZkMockContext>(working_set);
     }
 }
 
-fn execute_module_logic<C: Context>(storage: WorkingSet<C::Storage>) {
-    let module = &mut module_c::ModuleC::<C>::new(storage);
-    module.execute("some_key", "some_value");
+fn execute_module_logic<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
+    let module = &mut module_c::ModuleC::<C>::new();
+    module.execute("some_key", "some_value", working_set);
 }
 
-fn test_state_update<C: Context>(storage: WorkingSet<C::Storage>) {
-    let module = <module_c::ModuleC<C> as ModuleInfo>::new(storage.clone());
+fn test_state_update<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
+    let module = <module_c::ModuleC<C> as ModuleInfo>::new();
 
     let expected_value = StorageValue::new("some_value");
 
     {
         let prefix = Prefix::new_storage("nested_modules_tests::module_a", "ModuleA", "state_1_a");
         let key = StorageKey::new(&prefix.into(), &"some_key");
-        let value = storage.get(key).unwrap();
+        let value = working_set.get(key).unwrap();
 
         assert_eq!(expected_value, value);
     }
@@ -109,7 +116,7 @@ fn test_state_update<C: Context>(storage: WorkingSet<C::Storage>) {
     {
         let prefix = Prefix::new_storage("nested_modules_tests::module_b", "ModuleB", "state_1_b");
         let key = StorageKey::new(&prefix.into(), &"some_key");
-        let value = storage.get(key).unwrap();
+        let value = working_set.get(key).unwrap();
 
         assert_eq!(expected_value, value);
     }
@@ -117,13 +124,13 @@ fn test_state_update<C: Context>(storage: WorkingSet<C::Storage>) {
     {
         let prefix = Prefix::new_storage("nested_modules_tests::module_a", "ModuleA", "state_1_a");
         let key = StorageKey::new(&prefix.into(), &"key_from_b");
-        let value = storage.get(key).unwrap();
+        let value = working_set.get(key).unwrap();
 
         assert_eq!(expected_value, value);
     }
 
     {
-        let value = module.mod_1_a.state_2_a.get().unwrap();
+        let value = module.mod_1_a.state_2_a.get(working_set).unwrap();
         assert_eq!("some_value".to_owned(), value);
     }
 }
