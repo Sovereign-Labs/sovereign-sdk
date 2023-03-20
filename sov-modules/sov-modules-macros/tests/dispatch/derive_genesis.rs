@@ -20,18 +20,17 @@ fn main() {
 
     type C = MockContext;
     let storage = ProverStorage::temporary();
-    let working_set = sov_state::WorkingSet::new(storage);
-    Runtime::<C>::genesis(working_set.clone()).unwrap();
-
+    let working_set = &mut sov_state::WorkingSet::new(storage);
+    Runtime::<C>::genesis(working_set).unwrap();
     {
         let message = RuntimeQuery::<C>::first(());
-        let response = message.dispatch_query(working_set.clone());
+        let response = message.dispatch_query(working_set);
         assert_eq!(response.response, vec![1]);
     }
 
     {
         let message = RuntimeQuery::<C>::second(second_test_module::TestType {});
-        let response = message.dispatch_query(working_set.clone());
+        let response = message.dispatch_query(working_set);
         assert_eq!(response.response, vec![2]);
     }
 }

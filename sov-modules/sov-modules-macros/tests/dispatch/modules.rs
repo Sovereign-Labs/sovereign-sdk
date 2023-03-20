@@ -1,6 +1,6 @@
 use sov_modules_api::{CallResponse, Context, Error, Module};
 use sov_modules_macros::ModuleInfo;
-use sov_state::StateValue;
+use sov_state::{StateValue, WorkingSet};
 
 pub mod first_test_module {
     use super::*;
@@ -16,8 +16,8 @@ pub mod first_test_module {
         type CallMessage = u8;
         type QueryMessage = ();
 
-        fn genesis(&mut self) -> Result<(), Error> {
-            self.state_in_first_struct.set(1);
+        fn genesis(&mut self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
+            self.state_in_first_struct.set(1, working_set);
             Ok(())
         }
 
@@ -25,13 +25,18 @@ pub mod first_test_module {
             &mut self,
             msg: Self::CallMessage,
             _context: &Self::Context,
+            working_set: &mut WorkingSet<C::Storage>,
         ) -> Result<CallResponse, Error> {
-            self.state_in_first_struct.set(msg);
+            self.state_in_first_struct.set(msg, working_set);
             Ok(CallResponse::default())
         }
 
-        fn query(&self, _msg: Self::QueryMessage) -> sov_modules_api::QueryResponse {
-            let state = self.state_in_first_struct.get().unwrap();
+        fn query(
+            &self,
+            _msg: Self::QueryMessage,
+            working_set: &mut WorkingSet<C::Storage>,
+        ) -> sov_modules_api::QueryResponse {
+            let state = self.state_in_first_struct.get(working_set).unwrap();
             sov_modules_api::QueryResponse {
                 response: vec![state],
             }
@@ -56,8 +61,8 @@ pub mod second_test_module {
         type CallMessage = u8;
         type QueryMessage = TestType;
 
-        fn genesis(&mut self) -> Result<(), Error> {
-            self.state_in_second_struct.set(2);
+        fn genesis(&mut self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
+            self.state_in_second_struct.set(2, working_set);
             Ok(())
         }
 
@@ -65,13 +70,18 @@ pub mod second_test_module {
             &mut self,
             msg: Self::CallMessage,
             _context: &Self::Context,
+            working_set: &mut WorkingSet<C::Storage>,
         ) -> Result<CallResponse, Error> {
-            self.state_in_second_struct.set(msg);
+            self.state_in_second_struct.set(msg, working_set);
             Ok(CallResponse::default())
         }
 
-        fn query(&self, _msg: Self::QueryMessage) -> sov_modules_api::QueryResponse {
-            let state = self.state_in_second_struct.get().unwrap();
+        fn query(
+            &self,
+            _msg: Self::QueryMessage,
+            working_set: &mut WorkingSet<C::Storage>,
+        ) -> sov_modules_api::QueryResponse {
+            let state = self.state_in_second_struct.get(working_set).unwrap();
             sov_modules_api::QueryResponse {
                 response: vec![state],
             }

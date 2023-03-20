@@ -1,7 +1,7 @@
 use sov_modules_api::mocks::MockContext;
 use sov_modules_api::{Context, ModuleInfo};
 use sov_modules_macros::ModuleInfo;
-use sov_state::{ProverStorage, StateMap};
+use sov_state::StateMap;
 
 pub mod first_test_module {
     use super::*;
@@ -34,11 +34,7 @@ mod second_test_module {
 
 fn main() {
     type C = MockContext;
-    let test_storage = ProverStorage::temporary();
-    let working_set = sov_state::WorkingSet::new(test_storage);
-
-    let second_test_struct =
-        <second_test_module::SecondTestStruct<C> as ModuleInfo>::new(working_set);
+    let second_test_struct = <second_test_module::SecondTestStruct<C> as ModuleInfo>::new();
 
     let prefix2 = second_test_struct.state_in_second_struct_1.prefix();
     assert_eq!(
