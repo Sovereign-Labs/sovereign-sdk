@@ -2,12 +2,9 @@ use crate::{Address, Context, PublicKey, SigVerificationError, Signature, Spec};
 use borsh::{BorshDeserialize, BorshSerialize};
 use jmt::SimpleHasher;
 use sov_state::ZkStorage;
-use std::convert::Infallible;
-use std::{cell::RefCell, sync::atomic::AtomicUsize};
-
-use crate::Witness;
 use sov_state::{mocks::MockStorageSpec, ProverStorage};
-use sovereign_sdk::serial::{Decode, Encode};
+use sovereign_sdk::core::types::ArrayWitness;
+use std::convert::Infallible;
 
 /// Mock for Spec::PublicKey, useful for testing.
 #[derive(PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize, Debug)]
@@ -62,7 +59,7 @@ impl Signature for MockSignature {
 /// Mock for Context, useful for testing.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MockContext {
-    pub sender: MockPublicKey,
+    pub sender: Address,
 }
 
 impl Spec for MockContext {
@@ -70,49 +67,22 @@ impl Spec for MockContext {
     type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
     type Signature = MockSignature;
-    type Witness = ArrrayWitness;
+    type Witness = ArrayWitness;
 }
 
 impl Context for MockContext {
-    fn sender(&self) -> &Self::PublicKey {
-        &self.sender
+    fn sender(&self) -> Address {
+        self.sender
     }
 
-    fn new(sender: Self::PublicKey) -> Self {
+    fn new(sender: Address) -> Self {
         Self { sender }
-    }
-}
-
-#[derive(Default)]
-pub struct ArrrayWitness {
-    next_idx: AtomicUsize,
-    hints: RefCell<Vec<Vec<u8>>>,
-}
-
-impl Witness for ArrrayWitness {
-    fn add_hint<T: Encode + Decode>(&self, hint: T) {
-        self.hints.borrow_mut().push(hint.encode_to_vec())
-    }
-
-    fn get_hint<T: Encode + Decode>(&self) -> T {
-        let idx = self
-            .next_idx
-            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-
-        T::decode_from_slice(&self.hints.borrow()[idx]).unwrap()
-    }
-
-    fn merge(&self, rhs: &Self) {
-        let rhs_next_idx = rhs.next_idx.load(std::sync::atomic::Ordering::SeqCst);
-        self.hints
-            .borrow_mut()
-            .extend(rhs.hints.borrow_mut().drain(rhs_next_idx..))
     }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ZkMockContext {
-    pub sender: MockPublicKey,
+    pub sender: Address,
 }
 
 impl Spec for ZkMockContext {
@@ -120,15 +90,15 @@ impl Spec for ZkMockContext {
     type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
     type Signature = MockSignature;
-    type Witness = ArrrayWitness;
+    type Witness = ArrayWitness;
 }
 
 impl Context for ZkMockContext {
-    fn sender(&self) -> &Self::PublicKey {
-        &self.sender
+    fn sender(&self) -> Address {
+        self.sender
     }
 
-    fn new(sender: Self::PublicKey) -> Self {
+    fn new(sender: Address) -> Self {
         Self { sender }
     }
 }

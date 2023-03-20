@@ -3,6 +3,7 @@ mod data_generation;
 mod helpers;
 mod runtime;
 mod stf;
+mod tx_hooks;
 mod tx_verifier;
 
 use data_generation::{simulate_da, QueryGenerator};
@@ -11,13 +12,12 @@ use sov_modules_api::mocks::MockContext;
 use sov_state::ProverStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
 use stf::Demo;
-use tx_verifier::DemoAppTxVerifier;
 
 fn main() {
     let path = schemadb::temppath::TempPath::new();
     {
         let storage = ProverStorage::with_path(&path).unwrap();
-        let mut demo = Demo::<MockContext, DemoAppTxVerifier<MockContext>>::new(storage);
+        let mut demo = Demo::<MockContext, _>::new(storage);
         demo.init_chain(());
         demo.begin_slot();
 
@@ -55,7 +55,7 @@ mod test {
         let path = schemadb::temppath::TempPath::new();
         {
             let storage = ProverStorage::with_path(&path).unwrap();
-            let mut demo = Demo::<MockContext, DemoAppTxVerifier<MockContext>>::new(storage);
+            let mut demo = Demo::<MockContext, _>::new(storage);
             demo.init_chain(());
             demo.begin_slot();
 
@@ -87,7 +87,7 @@ mod test {
     #[test]
     fn test_demo_values_in_cache() {
         let storage = ProverStorage::temporary();
-        let mut demo = Demo::<MockContext, DemoAppTxVerifier<MockContext>>::new(storage.clone());
+        let mut demo = Demo::<MockContext, _>::new(storage.clone());
         demo.init_chain(());
         demo.begin_slot();
 
@@ -115,7 +115,7 @@ mod test {
         let path = schemadb::temppath::TempPath::new();
         {
             let storage = ProverStorage::with_path(&path).unwrap();
-            let mut demo = Demo::<MockContext, DemoAppTxVerifier<MockContext>>::new(storage);
+            let mut demo = Demo::<MockContext, _>::new(storage);
             demo.init_chain(());
             demo.begin_slot();
 

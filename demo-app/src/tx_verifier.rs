@@ -1,6 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::{Context, Signature, Spec};
-use sov_state::WorkingSet;
+use sov_modules_api::{Address, Context, Signature};
 use sovereign_sdk::jmt::SimpleHasher;
 use sovereign_sdk::serial::Decode;
 use std::{io::Cursor, marker::PhantomData};
@@ -22,10 +21,9 @@ pub struct Transaction<C: sov_modules_api::Context> {
 
 /// VerifiedTx is a Transaction after verification.
 pub(crate) struct VerifiedTx<C: Context> {
-    pub(crate) sender: C::PublicKey,
-    // TODO add Address
+    pub(crate) pub_key: C::PublicKey,
+    pub(crate) sender: Address,
     pub(crate) runtime_msg: Vec<u8>,
-    pub(crate) _nonce: u64,
 }
 
 /// TxVerifier encapsulates Transaction verification.
@@ -48,13 +46,6 @@ pub(crate) trait TxVerifier {
 
         Ok(txs)
     }
-
-    /// Runs stateful checks against a Transaction. This method can modify the storage.
-    fn verify_tx_stateful(
-        &self,
-        tx: Transaction<Self::Context>,
-        storage: WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<VerifiedTx<Self::Context>>;
 }
 
 pub(crate) struct DemoAppTxVerifier<C: Context> {
@@ -85,19 +76,5 @@ impl<C: Context> TxVerifier for DemoAppTxVerifier<C> {
         tx.signature.verify(&tx.pub_key, msg_hash)?;
 
         Ok(tx)
-    }
-
-    fn verify_tx_stateful(
-        &self,
-        tx: Transaction<Self::Context>,
-        _storage: WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<VerifiedTx<Self::Context>> {
-        // TODO add stateful checks: account existence, nonce, etc..
-
-        Ok(VerifiedTx {
-            sender: tx.pub_key,
-            runtime_msg: tx.runtime_msg,
-            _nonce: tx.nonce,
-        })
     }
 }

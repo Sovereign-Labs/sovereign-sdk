@@ -6,6 +6,7 @@ use crate::tx_verifier::{DemoAppTxVerifier, RawTx, TxVerifier};
 
 use sov_modules_api::{Context, DispatchCall, Genesis};
 
+use crate::tx_hooks::{DemoAppTxHooks, TxHooks};
 use sov_state::{Storage, WorkingSet};
 use sovereign_sdk::{
     core::{mocks::MockProof, traits::BatchTrait},
@@ -74,17 +75,20 @@ where
             .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
         let mut batch_workspace = WorkingSet::new(self.current_storage.clone());
 
+        let mut tx_hooks = DemoAppTxHooks::<C>::new(batch_workspace.clone());
+
         for tx in txs {
             batch_workspace.to_revertable();
             // Run the stateful verification, possibly modifies the state.
-            let verified_tx = self
-                .verifier
-                .verify_tx_stateful(tx, batch_workspace.clone())
+            let verified_tx = tx_hooks
+                .pre_dispatch_tx_hook(tx)
                 .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
 
             if let Ok(msg) = Runtime::<C>::decode_call(&verified_tx.runtime_msg) {
                 let ctx = C::new(verified_tx.sender);
                 let tx_result = msg.dispatch_call(batch_workspace.clone(), &ctx);
+
+                tx_hooks.post_dispatch_tx_hook(verified_tx);
 
                 match tx_result {
                     Ok(resp) => {
