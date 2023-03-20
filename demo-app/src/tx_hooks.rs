@@ -35,7 +35,7 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
         &mut self,
         tx: Transaction<Self::Context>,
     ) -> anyhow::Result<VerifiedTx<Self::Context>> {
-        let addr = self.accounts_hook(tx.nonce, tx.pub_key.clone())?;
+        let addr = self.check_nonce_for_address(tx.nonce, tx.pub_key.clone())?;
 
         Ok(VerifiedTx {
             pub_key: tx.pub_key,
@@ -54,7 +54,7 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
 }
 
 impl<C: Context> DemoAppTxHooks<C> {
-    fn accounts_hook(
+    fn check_nonce_for_address(
         &mut self,
         tx_nonce: u64,
         tx_pub_key: C::PublicKey,
