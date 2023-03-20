@@ -17,7 +17,7 @@ fn main() {
     let path = schemadb::temppath::TempPath::new();
     {
         let storage = ProverStorage::with_path(&path).unwrap();
-        let mut demo = Demo::<MockContext, _, _>::new(storage);
+        let mut demo = Demo::<MockContext, _>::new(storage);
         demo.init_chain(());
         demo.begin_slot();
 
@@ -55,7 +55,7 @@ mod test {
         let path = schemadb::temppath::TempPath::new();
         {
             let storage = ProverStorage::with_path(&path).unwrap();
-            let mut demo = Demo::<MockContext, _, _>::new(storage);
+            let mut demo = Demo::<MockContext, _>::new(storage);
             demo.init_chain(());
             demo.begin_slot();
 
@@ -87,7 +87,7 @@ mod test {
     #[test]
     fn test_demo_values_in_cache() {
         let storage = ProverStorage::temporary();
-        let mut demo = Demo::<MockContext, _, _>::new(storage.clone());
+        let mut demo = Demo::<MockContext, _>::new(storage.clone());
         demo.init_chain(());
         demo.begin_slot();
 
@@ -115,7 +115,7 @@ mod test {
         let path = schemadb::temppath::TempPath::new();
         {
             let storage = ProverStorage::with_path(&path).unwrap();
-            let mut demo = Demo::<MockContext, _, _>::new(storage);
+            let mut demo = Demo::<MockContext, _>::new(storage);
             demo.init_chain(());
             demo.begin_slot();
 

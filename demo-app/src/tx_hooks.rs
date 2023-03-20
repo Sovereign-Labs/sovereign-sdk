@@ -1,33 +1,29 @@
 use crate::tx_verifier::{Transaction, VerifiedTx};
-use sov_modules_api::{Context, Spec};
+use sov_modules_api::Context;
 use sov_state::WorkingSet;
-use std::marker::PhantomData;
 
-///
+/// TxHooks allows injecting custom logic into a transaction processing pipeline.
 pub(crate) trait TxHooks {
     type Context: Context;
 
+    /// pre_dispatch_tx_hook runs just before a transaction is dispatched to an appropriate module.
     fn pre_dispatch_tx_hook(
-        &self,
+        &mut self,
         tx: Transaction<Self::Context>,
-        working_set: WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<VerifiedTx<Self::Context>>;
 
-    fn post_dispatch_tx_hook(
-        &self,
-        tx: VerifiedTx<Self::Context>,
-        working_set: WorkingSet<<Self::Context as Spec>::Storage>,
-    );
+    /// post_dispatch_tx_hook runs after the tx is dispatched to an appropriate module.
+    fn post_dispatch_tx_hook(&mut self, tx: VerifiedTx<Self::Context>);
 }
 
 pub(crate) struct DemoAppTxHooks<C: Context> {
-    _p: PhantomData<C>,
+    accounts_hooks: accounts::hooks::Hooks<C>,
 }
 
 impl<C: Context> DemoAppTxHooks<C> {
-    pub fn new() -> Self {
+    pub fn new(working_set: WorkingSet<C::Storage>) -> Self {
         Self {
-            _p: Default::default(),
+            accounts_hooks: accounts::hooks::Hooks::<C>::new(working_set),
         }
     }
 }
@@ -36,12 +32,12 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
     type Context = C;
 
     fn pre_dispatch_tx_hook(
-        &self,
+        &mut self,
         tx: Transaction<Self::Context>,
-        working_set: WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<VerifiedTx<Self::Context>> {
-        let mut acc_hooks = accounts::hooks::Hooks::<Self::Context>::new(working_set);
-        let acc = acc_hooks.get_or_create_default_account(tx.pub_key.clone())?;
+        let acc = self
+            .accounts_hooks
+            .get_or_create_default_account(tx.pub_key.clone())?;
 
         let tx_nonce = tx.nonce;
         let acc_nonce = acc.nonce;
@@ -57,14 +53,8 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
         })
     }
 
-    fn post_dispatch_tx_hook(
-        &self,
-        tx: VerifiedTx<Self::Context>,
-        working_set: WorkingSet<<Self::Context as Spec>::Storage>,
-    ) {
-        let mut acc_hooks = accounts::hooks::Hooks::<Self::Context>::new(working_set);
-
-        acc_hooks
+    fn post_dispatch_tx_hook(&mut self, tx: VerifiedTx<Self::Context>) {
+        self.accounts_hooks
             .inc_nonce(&tx.pub_key)
             // At this point we are sure, that the account corresponding to the tx.pub_key is in the db,
             // therefore this panic should never happen, we add it for sanity check.
