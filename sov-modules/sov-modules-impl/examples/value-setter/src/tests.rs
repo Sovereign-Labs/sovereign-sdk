@@ -11,25 +11,25 @@ use sovereign_sdk::stf::Event;
 #[test]
 fn test_value_setter() {
     let sender = MockPublicKey::try_from("admin").unwrap();
-    let storage = WorkingSet::new(ProverStorage::temporary());
+    let working_set = WorkingSet::new(ProverStorage::temporary());
 
     // Test Native-Context
     {
         let context = MockContext::new(sender.clone());
-        test_value_setter_helper(context, storage.clone());
+        test_value_setter_helper(context, working_set.clone());
     }
-    let (_, witness) = storage.freeze();
+    let (_, witness) = working_set.freeze();
 
     // Test Zk-Context
     {
         let zk_context = ZkMockContext::new(sender);
-        let zk_storage = WorkingSet::with_witness(ZkStorage::new([0u8; 32]), witness);
-        test_value_setter_helper(zk_context, zk_storage);
+        let zk_working_set = WorkingSet::with_witness(ZkStorage::new([0u8; 32]), witness);
+        test_value_setter_helper(zk_context, zk_working_set);
     }
 }
 
 fn test_value_setter_helper<C: Context>(context: C, mut working_set: WorkingSet<C::Storage>) {
-    let mut module = ValueSetter::<C>::new(working_set.clone());
+    let mut module = ValueSetter::<C>::new();
     module.genesis(&mut working_set).unwrap();
 
     let new_value = 99;
@@ -62,21 +62,21 @@ fn test_value_setter_helper<C: Context>(context: C, mut working_set: WorkingSet<
 fn test_err_on_sender_is_not_admin() {
     let sender = MockPublicKey::try_from("not_admin").unwrap();
     let backing_store = ProverStorage::temporary();
-    let native_tx_store = WorkingSet::new(backing_store);
+    let native_working_set = WorkingSet::new(backing_store);
 
     // Test Native-Context
     {
         let context = MockContext::new(sender.clone());
-        test_err_on_sender_is_not_admin_helper(context, native_tx_store.clone());
+        test_err_on_sender_is_not_admin_helper(context, native_working_set.clone());
     }
-    let (_, witness) = native_tx_store.freeze();
+    let (_, witness) = native_working_set.freeze();
 
     // Test Zk-Context
     {
         let zk_backing_store = ZkStorage::new([0u8; 32]);
         let zk_context = ZkMockContext::new(sender);
-        let zk_storage = WorkingSet::with_witness(zk_backing_store, witness);
-        test_err_on_sender_is_not_admin_helper(zk_context, zk_storage);
+        let zk_working_set = WorkingSet::with_witness(zk_backing_store, witness);
+        test_err_on_sender_is_not_admin_helper(zk_context, zk_working_set);
     }
 }
 
@@ -84,7 +84,7 @@ fn test_err_on_sender_is_not_admin_helper<C: Context>(
     context: C,
     mut working_set: WorkingSet<C::Storage>,
 ) {
-    let mut module = ValueSetter::<C>::new(working_set.clone());
+    let mut module = ValueSetter::<C>::new();
     module.genesis(&mut working_set).unwrap();
     let resp = module.set_value(11, &context, &mut working_set);
 

@@ -149,7 +149,7 @@ pub trait Module {
 pub trait ModuleInfo {
     type Context: Context;
 
-    fn new(storage: WorkingSet<<Self::Context as Spec>::Storage>) -> Self;
+    fn new() -> Self;
 
     // Returns an address for the module.
     // TODO: https://github.com/Sovereign-Labs/sovereign/issues/136

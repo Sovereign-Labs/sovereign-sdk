@@ -109,7 +109,7 @@ impl<'a> StructDef<'a> {
             impl #impl_generics sov_modules_api::ModuleInfo for #ident #type_generics #where_clause{
                 type Context = C;
 
-                fn new(working_set: ::sov_state::WorkingSet< #type_generics::Storage >) -> Self {
+                fn new() -> Self {
                     #(#impl_self_init)*
 
                     Self{
@@ -244,18 +244,18 @@ fn make_init_state(field: &StructNamedField) -> Result<proc_macro2::TokenStream,
 
     // generates code for the state initialization:
     //  let state_prefix = Self::_prefix_field_ident().into();
-    //  let field_ident = path::StateType::new(working_set.clone(), state_prefix);
+    //  let field_ident = path::StateType::new(state_prefix);
     Ok(quote::quote! {
         let state_prefix = Self::#prefix_fun().into();
-        let #field_ident = #ty::new(working_set.clone(), state_prefix);
+        let #field_ident = #ty::new(state_prefix);
     })
 }
 
-fn make_init_module<'a>(field: &StructNamedField) -> Result<proc_macro2::TokenStream, syn::Error> {
+fn make_init_module(field: &StructNamedField) -> Result<proc_macro2::TokenStream, syn::Error> {
     let field_ident = &field.ident;
     let ty = &field.ty;
 
     Ok(quote::quote! {
-        let #field_ident = <#ty as sov_modules_api::ModuleInfo>::new(working_set.clone());
+        let #field_ident = <#ty as sov_modules_api::ModuleInfo>::new();
     })
 }

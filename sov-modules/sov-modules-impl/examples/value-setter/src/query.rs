@@ -15,9 +15,9 @@ pub struct Response {
 
 impl<C: sov_modules_api::Context> ValueSetter<C> {
     /// Queries the state of the module.
-    pub fn query_value(&self, _working_set: &mut WorkingSet<C::Storage>) -> Response {
+    pub fn query_value(&self, working_set: &mut WorkingSet<C::Storage>) -> Response {
         Response {
-            value: self.value.get(),
+            value: self.value.get(working_set),
         }
     }
 }
