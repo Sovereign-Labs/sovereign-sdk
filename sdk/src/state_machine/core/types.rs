@@ -133,12 +133,12 @@ impl<Addr: PartialEq> ConsensusParticipantRoot<Addr> {
 }
 
 #[derive(Default)]
-pub struct ArrrayWitness {
+pub struct ArrayWitness {
     next_idx: AtomicUsize,
     hints: RefCell<Vec<Vec<u8>>>,
 }
 
-impl Witness for ArrrayWitness {
+impl Witness for ArrayWitness {
     fn add_hint<T: crate::serial::Encode + crate::serial::Decode>(&self, hint: T) {
         self.hints.borrow_mut().push(hint.encode_to_vec())
     }
