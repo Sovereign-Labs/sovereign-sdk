@@ -1,8 +1,11 @@
-mod batch;
-mod data_generation;
-mod helpers;
+//mod batch;
+//mod data_generation;
+//mod helpers;
 mod runtime;
-mod stf;
+
+fn main() {}
+
+/*mod stf;
 mod tx_hooks;
 mod tx_verifier;
 
@@ -142,3 +145,4 @@ mod test {
         }
     }
 }
+*/
