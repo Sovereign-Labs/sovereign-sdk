@@ -9,12 +9,12 @@ enum Operation {
 }
 
 impl Operation {
-    fn execute(&self, storage: &mut WorkingSet<ProverStorage<MockStorageSpec>>) {
+    fn execute(&self, working_set: &mut WorkingSet<ProverStorage<MockStorageSpec>>) {
         match self {
-            Operation::Merge => storage.commit(),
+            Operation::Merge => working_set.commit(),
             Operation::Finalize => {
-                let db = storage.backing();
-                let (cache_log, witness) = storage.freeze();
+                let db = working_set.backing();
+                let (cache_log, witness) = working_set.freeze();
                 db.validate_and_commit(cache_log, &witness)
                     .expect("JMT update is valid");
             }
@@ -27,9 +27,9 @@ struct StorageOperation {
 }
 
 impl StorageOperation {
-    fn execute(&self, storage: &mut WorkingSet<ProverStorage<MockStorageSpec>>) {
+    fn execute(&self, working_set: &mut WorkingSet<ProverStorage<MockStorageSpec>>) {
         for op in self.operations.iter() {
-            op.execute(&mut storage.clone())
+            op.execute(&mut working_set.clone())
         }
     }
 }
@@ -80,7 +80,7 @@ fn create_state_map_and_storage(
 ) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
-    let mut state_map = StateMap::new(working_set.clone(), Prefix::new(vec![0]));
+    let mut state_map = StateMap::new(Prefix::new(vec![0]));
     state_map.set(&key, value, &mut working_set);
     (state_map, working_set)
 }
@@ -110,7 +110,7 @@ fn create_state_value_and_storage(
 ) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
-    let mut state_value = StateValue::new(working_set.clone(), Prefix::new(vec![0]));
+    let mut state_value = StateValue::new(Prefix::new(vec![0]));
     state_value.set(value, &mut working_set);
     (state_value, working_set)
 }

@@ -29,9 +29,9 @@ pub enum Error {
 }
 
 impl<V: Encode + Decode, S: Storage> StateValue<V, S> {
-    pub fn new(storage: WorkingSet<S>, prefix: Prefix) -> Self {
+    pub fn new(prefix: Prefix) -> Self {
         Self {
-            backend: Backend::new(storage, prefix),
+            backend: Backend::new(prefix),
         }
     }
 
