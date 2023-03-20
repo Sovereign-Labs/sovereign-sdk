@@ -1,6 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::{Address, Context, Signature};
-use sov_state::WorkingSet;
 use sovereign_sdk::jmt::SimpleHasher;
 use sovereign_sdk::serial::Decode;
 use std::{io::Cursor, marker::PhantomData};

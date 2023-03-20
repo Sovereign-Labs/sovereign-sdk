@@ -23,7 +23,7 @@ fn test_update_account() {
 
     // Test new account creation
     {
-        hooks.get_account_or_create_default(sender.clone()).unwrap();
+        hooks.get_or_create_default_account(sender.clone()).unwrap();
 
         let query_response: query::Response = serde_json::from_slice(
             &accounts
@@ -85,13 +85,13 @@ fn test_update_account_fails() {
 
     let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();
     let sender_context_1 = C::new(sender_1.to_address());
-    hooks.get_account_or_create_default(sender_1).unwrap();
+    hooks.get_or_create_default_account(sender_1).unwrap();
 
     let sender_2 = MockPublicKey::try_from("pub_key_2").unwrap();
     let sig_2 = sender_2.sign(call::UPDATE_ACCOUNT_MSG);
 
     hooks
-        .get_account_or_create_default(sender_2.clone())
+        .get_or_create_default_account(sender_2.clone())
         .unwrap();
 
     // The new public key already exists and the call fails.
@@ -112,13 +112,13 @@ fn test_create_account_fails() {
     let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();
     let sender_context_1 = C::new(sender_1.to_address());
 
-    hooks.get_account_or_create_default(sender_1).unwrap();
+    hooks.get_or_create_default_account(sender_1).unwrap();
 
     let new_pub_key = MockPublicKey::try_from("pub_key_2").unwrap();
     let sig = new_pub_key.sign(call::UPDATE_ACCOUNT_MSG);
     accounts
         .call(
-            call::CallMessage::<C>::UpdatePublicKey(new_pub_key.clone(), sig),
+            call::CallMessage::<C>::UpdatePublicKey(new_pub_key, sig),
             &sender_context_1,
         )
         .unwrap();

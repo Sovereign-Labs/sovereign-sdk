@@ -1,8 +1,8 @@
 use crate::{Account, Accounts, Address};
 use anyhow::Result;
+use sov_modules_api::Context;
 use sov_modules_api::ModuleInfo;
 use sov_modules_api::PublicKey;
-use sov_modules_api::{Context, Spec};
 use sov_state::WorkingSet;
 
 pub struct Hooks<C: sov_modules_api::Context> {
@@ -16,20 +16,20 @@ impl<C: Context> Hooks<C> {
         }
     }
 
-    pub fn get_account_or_create_default(&mut self, pub_key: C::PublicKey) -> Result<Account> {
+    pub fn get_or_create_default_account(&mut self, pub_key: C::PublicKey) -> Result<Account> {
         match self.inner.accounts.get(&pub_key) {
-            Some(acc) => return Ok(acc),
+            Some(acc) => Ok(acc),
             None => {
                 let default_address = pub_key.to_address();
                 self.exit_if_address_exists(&default_address)?;
+
                 let new_account = Account {
                     addr: default_address,
                     nonce: 0,
                 };
 
-                self.inner.accounts.set(&pub_key, new_account.clone());
+                self.inner.accounts.set(&pub_key, new_account);
                 self.inner.public_keys.set(&default_address, pub_key);
-
                 Ok(new_account)
             }
         }

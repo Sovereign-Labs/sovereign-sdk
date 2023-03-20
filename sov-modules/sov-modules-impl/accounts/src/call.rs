@@ -1,9 +1,8 @@
-use crate::Account;
 use crate::Accounts;
 use anyhow::{ensure, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_modules_api::CallResponse;
 use sov_modules_api::Signature;
-use sov_modules_api::{Address, CallResponse, PublicKey};
 
 pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 

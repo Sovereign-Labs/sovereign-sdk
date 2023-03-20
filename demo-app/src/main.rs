@@ -12,7 +12,6 @@ use sov_modules_api::mocks::MockContext;
 use sov_state::ProverStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
 use stf::Demo;
-use tx_verifier::DemoAppTxVerifier;
 
 fn main() {
     let path = schemadb::temppath::TempPath::new();

@@ -1,16 +1,22 @@
 use super::ValueSetter;
-use crate::{call, query, ADMIN};
+use crate::{call, query};
 
-use sov_modules_api::mocks::MockContext;
-use sov_modules_api::mocks::ZkMockContext;
-use sov_modules_api::{Address, Context};
+use anyhow::anyhow;
+use sov_modules_api::{
+    mocks::{MockContext, MockPublicKey, ZkMockContext},
+    Address, Context, PublicKey,
+};
 use sov_modules_api::{Module, ModuleInfo};
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 use sovereign_sdk::stf::Event;
 
 #[test]
 fn test_value_setter() {
-    let sender = ADMIN;
+    let admin_pub_key = MockPublicKey::try_from("value_setter_admin")
+        .map_err(|_| anyhow!("Admin initialization failed"))
+        .unwrap();
+
+    let sender = admin_pub_key.to_address();
     let storage = WorkingSet::new(ProverStorage::temporary());
 
     // Test Native-Context

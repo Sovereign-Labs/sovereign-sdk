@@ -2,10 +2,7 @@ mod modules;
 
 use modules::{first_test_module, second_test_module};
 use sov_modules_api::ModuleInfo;
-use sov_modules_api::{
-    mocks::{MockContext, MockPublicKey},
-    Context, Genesis, Module,
-};
+use sov_modules_api::{mocks::MockContext, Address, Context, Genesis, Module};
 use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 use sov_state::ProverStorage;
 
@@ -22,7 +19,7 @@ fn main() {
     let storage = ProverStorage::temporary();
     let working_set = sov_state::WorkingSet::new(storage);
     RT::genesis(working_set.clone()).unwrap();
-    let context = MockContext::new(MockPublicKey::new(vec![]));
+    let context = MockContext::new(Address::new([0; 32]));
 
     let value = 11;
     {
