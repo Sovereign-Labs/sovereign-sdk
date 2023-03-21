@@ -1,4 +1,4 @@
-use std::{cell::RefCell, fmt::Debug, ops::DerefMut, rc::Rc};
+use std::fmt::Debug;
 
 use crate::{
     internal_cache::StorageInternalCache,
@@ -12,8 +12,8 @@ use sovereign_sdk::core::traits::Witness;
 /// automating witness creation.
 pub struct Delta<S: Storage> {
     inner: S,
-    witness: Rc<S::Witness>,
-    cache: Rc<RefCell<StorageInternalCache>>,
+    witness: S::Witness,
+    cache: StorageInternalCache,
 }
 
 /// A wrapper that adds additional reads and writes on top of an underlying Delta.
@@ -21,9 +21,9 @@ pub struct Delta<S: Storage> {
 /// working set, without running the risk that the whole working set will be discarded if some particular
 /// operation reverts.
 pub struct RevertableDelta<S: Storage> {
-    inner: Rc<RefCell<Option<Delta<S>>>>,
-    witness: Rc<S::Witness>,
-    cache: Rc<RefCell<StorageInternalCache>>,
+    inner: Delta<S>,
+    witness: S::Witness,
+    cache: StorageInternalCache,
 }
 
 impl<S: Storage> Debug for RevertableDelta<S> {
@@ -35,7 +35,6 @@ impl<S: Storage> Debug for RevertableDelta<S> {
 }
 
 /// A read-write set which can be committed as a unit
-#[derive(Clone, Debug)]
 pub enum WorkingSet<S: Storage> {
     Standard(Delta<S>),
     Revertable(RevertableDelta<S>),
@@ -46,34 +45,32 @@ impl<S: Storage> WorkingSet<S> {
         Self::Standard(Delta::new(inner))
     }
 
-    pub fn with_witness(inner: S, witness: Rc<S::Witness>) -> Self {
+    pub fn with_witness(inner: S, witness: S::Witness) -> Self {
         Self::Standard(Delta::with_witness(inner, witness))
     }
 
-    pub fn to_revertable(&mut self) {
+    pub fn to_revertable(self) -> WorkingSet<S> {
         match self {
-            WorkingSet::Standard(delta) => {
-                *self = WorkingSet::Revertable(delta.get_revertable_wrapper())
-            }
-            WorkingSet::Revertable(_) => {}
+            WorkingSet::Standard(delta) => WorkingSet::Revertable(delta.get_revertable_wrapper()),
+            r @ WorkingSet::Revertable(_) => r,
         }
     }
 
-    pub fn commit(&mut self) {
+    pub fn commit(self) -> Self {
         match self {
-            WorkingSet::Standard(_) => {}
-            WorkingSet::Revertable(revertable) => *self = WorkingSet::Standard(revertable.commit()),
+            s @ WorkingSet::Standard(_) => s,
+            WorkingSet::Revertable(revertable) => WorkingSet::Standard(revertable.commit()),
         }
     }
 
-    pub fn revert(&mut self) {
+    pub fn revert(self) -> Self {
         match self {
-            WorkingSet::Standard(_) => {}
-            WorkingSet::Revertable(revertable) => *self = WorkingSet::Standard(revertable.revert()),
+            s @ WorkingSet::Standard(_) => s,
+            WorkingSet::Revertable(revertable) => WorkingSet::Standard(revertable.revert()),
         }
     }
 
-    pub fn get(&self, key: StorageKey) -> Option<StorageValue> {
+    pub fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
         match self {
             WorkingSet::Standard(s) => s.get(key),
             WorkingSet::Revertable(s) => s.get(key),
@@ -94,134 +91,92 @@ impl<S: Storage> WorkingSet<S> {
         }
     }
 
-    pub fn freeze(&self) -> (CacheLog, Rc<S::Witness>) {
+    pub fn freeze(&mut self) -> (CacheLog, S::Witness) {
         match self {
             WorkingSet::Standard(delta) => delta.freeze(),
             WorkingSet::Revertable(_) => todo!(),
         }
     }
 
-    pub fn backing(&self) -> S {
+    pub fn backing(&self) -> &S {
         match self {
-            WorkingSet::Standard(delta) => delta.inner.clone(),
-            WorkingSet::Revertable(revertable) => revertable
-                .inner
-                .borrow()
-                .as_ref()
-                .expect("Inner must exist")
-                .inner
-                .clone(),
-        }
-    }
-}
-
-impl<S: Storage> Clone for RevertableDelta<S> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            witness: self.witness.clone(),
-            cache: self.cache.clone(),
+            WorkingSet::Standard(delta) => &delta.inner,
+            WorkingSet::Revertable(revertable) => &revertable.inner.inner,
         }
     }
 }
 
 impl<S: Storage> RevertableDelta<S> {
-    pub fn get(&self, key: StorageKey) -> Option<StorageValue> {
-        match self.cache.borrow().try_get(key.clone()) {
+    fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
+        match self.cache.try_get(key.clone()) {
             first_read_last_write_cache::cache::ValueExists::Yes(val) => {
                 val.map(StorageValue::new_from_cache_value)
             }
-            first_read_last_write_cache::cache::ValueExists::No => self
-                .inner
-                .borrow()
-                .as_ref()
-                .expect("inner delta must exist")
-                .get_with_witness(key, &self.witness),
+            first_read_last_write_cache::cache::ValueExists::No => {
+                self.inner.get_with_witness(key, &self.witness)
+            }
         }
     }
 
-    pub fn set(&mut self, key: StorageKey, value: StorageValue) {
-        self.cache.borrow_mut().set(key, value)
+    fn set(&mut self, key: StorageKey, value: StorageValue) {
+        self.cache.set(key, value)
     }
 
-    pub fn delete(&mut self, key: StorageKey) {
-        self.cache.borrow_mut().delete(key)
+    fn delete(&mut self, key: StorageKey) {
+        self.cache.delete(key)
     }
 }
 
 impl<S: Storage> RevertableDelta<S> {
-    pub fn commit(&mut self) -> Delta<S> {
-        let inner = self
-            .inner
-            .borrow_mut()
-            .take()
-            .expect("Only one revertable delta may be merged");
+    fn commit(self) -> Delta<S> {
+        let mut inner = self.inner;
 
         inner
             .cache
-            .borrow_mut()
-            .merge_left(std::mem::take(&mut self.cache.as_ref().borrow_mut()))
+            .merge_left(self.cache)
             .expect("caches must be consistent");
 
-        inner.witness.merge(self.witness.as_ref());
+        inner.witness.merge(&self.witness);
         inner
     }
 
-    pub fn revert(&mut self) -> Delta<S> {
-        let inner = self
-            .inner
-            .borrow_mut()
-            .take()
-            .expect("Only one revertable delta may be merged");
+    fn revert(self) -> Delta<S> {
+        let mut inner = self.inner;
 
         inner
             .cache
-            .borrow_mut()
-            .merge_reads_left(std::mem::take(&mut self.cache.as_ref().borrow_mut()))
+            .merge_reads_left(self.cache)
             .expect("caches must be consistent");
 
-        inner.witness.merge(self.witness.as_ref());
+        inner.witness.merge(&self.witness);
         inner
-    }
-}
-
-impl<S: Storage> Clone for Delta<S> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            witness: self.witness.clone(),
-            cache: self.cache.clone(),
-        }
     }
 }
 
 impl<S: Storage> Delta<S> {
-    pub fn new(inner: S) -> Self {
+    fn new(inner: S) -> Self {
         Self {
             inner,
-            witness: Rc::new(Default::default()),
+            witness: Default::default(),
             cache: Default::default(),
         }
     }
 
-    pub fn get_revertable_wrapper(&self) -> RevertableDelta<S> {
+    fn with_witness(inner: S, witness: S::Witness) -> Self {
+        Self {
+            inner,
+            witness,
+            cache: Default::default(),
+        }
+    }
+
+    fn get_revertable_wrapper(self) -> RevertableDelta<S> {
         self.get_revertable_wrapper_with_witness(Default::default())
     }
 
-    pub fn get_revertable_wrapper_with_witness(
-        &self,
-        witness: Rc<S::Witness>,
-    ) -> RevertableDelta<S> {
+    fn get_revertable_wrapper_with_witness(self, witness: S::Witness) -> RevertableDelta<S> {
         RevertableDelta {
-            inner: Rc::new(RefCell::new(Some(self.clone()))),
-            witness: witness,
-            cache: Default::default(),
-        }
-    }
-
-    pub fn with_witness(inner: S, witness: Rc<S::Witness>) -> Self {
-        Self {
-            inner,
+            inner: self,
             witness,
             cache: Default::default(),
         }
@@ -235,40 +190,28 @@ impl<S: Storage> Debug for Delta<S> {
 }
 
 impl<S: Storage> Delta<S> {
-    pub fn get(&self, key: StorageKey) -> Option<StorageValue> {
-        self.cache
-            .borrow_mut()
-            .get_or_fetch(key, &self.inner, &self.witness)
+    fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
+        self.cache.get_or_fetch(key, &self.inner, &self.witness)
     }
 
-    pub fn set(&mut self, key: StorageKey, value: StorageValue) {
-        self.cache.borrow_mut().set(key, value)
+    fn set(&mut self, key: StorageKey, value: StorageValue) {
+        self.cache.set(key, value)
     }
 
-    pub fn delete(&mut self, key: StorageKey) {
-        self.cache.borrow_mut().delete(key)
+    fn delete(&mut self, key: StorageKey) {
+        self.cache.delete(key)
     }
 }
 
 impl<S: Storage> Delta<S> {
-    pub fn freeze(&self) -> (CacheLog, Rc<S::Witness>) {
-        (self.cache.take().into(), self.witness.clone())
+    fn freeze(&mut self) -> (CacheLog, S::Witness) {
+        let cache = std::mem::take(&mut self.cache);
+        let witness = std::mem::take(&mut self.witness);
+
+        (cache.into(), witness)
     }
 
-    fn get_with_witness(&self, key: StorageKey, witness: &S::Witness) -> Option<StorageValue> {
-        self.cache
-            .borrow_mut()
-            .get_or_fetch(key, &self.inner, witness)
-    }
-
-    pub fn merge(&mut self, rhs: Self) -> Result<(), first_read_last_write_cache::MergeError> {
-        // Merge caches
-        let rhs_cache = std::mem::take(rhs.cache.borrow_mut().deref_mut());
-        self.cache.borrow_mut().merge_left(rhs_cache)?;
-
-        // Merge witnesses
-        let rhs_witness = rhs.witness;
-        self.witness.merge(&rhs_witness);
-        Ok(())
+    fn get_with_witness(&mut self, key: StorageKey, witness: &S::Witness) -> Option<StorageValue> {
+        self.cache.get_or_fetch(key, &self.inner, witness)
     }
 }

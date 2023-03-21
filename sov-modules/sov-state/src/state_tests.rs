@@ -9,14 +9,18 @@ enum Operation {
 }
 
 impl Operation {
-    fn execute(&self, working_set: &mut WorkingSet<ProverStorage<MockStorageSpec>>) {
+    fn execute(
+        &self,
+        mut working_set: WorkingSet<ProverStorage<MockStorageSpec>>,
+    ) -> WorkingSet<ProverStorage<MockStorageSpec>> {
         match self {
             Operation::Merge => working_set.commit(),
             Operation::Finalize => {
-                let db = working_set.backing();
                 let (cache_log, witness) = working_set.freeze();
+                let db = working_set.backing();
                 db.validate_and_commit(cache_log, &witness)
                     .expect("JMT update is valid");
+                working_set
             }
         }
     }
@@ -27,10 +31,14 @@ struct StorageOperation {
 }
 
 impl StorageOperation {
-    fn execute(&self, working_set: &mut WorkingSet<ProverStorage<MockStorageSpec>>) {
+    fn execute(
+        &self,
+        mut working_set: WorkingSet<ProverStorage<MockStorageSpec>>,
+    ) -> WorkingSet<ProverStorage<MockStorageSpec>> {
         for op in self.operations.iter() {
-            op.execute(&mut working_set.clone())
+            working_set = op.execute(working_set)
         }
+        working_set
     }
 }
 
@@ -93,10 +101,10 @@ fn test_state_map() {
         let value = 11;
         let (mut state_map, mut working_set) = create_state_map_and_storage(key, value, &path);
 
-        before_remove.execute(&mut working_set);
+        working_set = before_remove.execute(working_set);
         assert_eq!(state_map.remove(&key, &mut working_set).unwrap(), value);
 
-        after_remove.execute(&mut working_set);
+        working_set = after_remove.execute(working_set);
         assert!(state_map.get(&key, &mut working_set).is_none())
     }
 }
@@ -122,10 +130,10 @@ fn test_state_value() {
         let value = 11;
         let (mut state_value, mut working_set) = create_state_value_and_storage(value, &path);
 
-        before_remove.execute(&mut working_set);
+        working_set = before_remove.execute(working_set);
         assert_eq!(state_value.remove(&mut working_set).unwrap(), value);
 
-        after_remove.execute(&mut working_set);
+        working_set = after_remove.execute(working_set);
         assert!(state_value.get(&mut working_set).is_none())
     }
 }
