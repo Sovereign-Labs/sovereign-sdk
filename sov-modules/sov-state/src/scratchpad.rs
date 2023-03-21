@@ -128,24 +128,24 @@ impl<S: Storage> RevertableDelta<S> {
 }
 
 impl<S: Storage> RevertableDelta<S> {
-    fn commit(mut self) -> Delta<S> {
+    fn commit(self) -> Delta<S> {
         let mut inner = self.inner;
 
         inner
             .cache
-            .merge_left(std::mem::take(&mut self.cache))
+            .merge_left(self.cache)
             .expect("caches must be consistent");
 
         inner.witness.merge(&self.witness);
         inner
     }
 
-    fn revert(mut self) -> Delta<S> {
+    fn revert(self) -> Delta<S> {
         let mut inner = self.inner;
 
         inner
             .cache
-            .merge_reads_left(std::mem::take(&mut self.cache))
+            .merge_reads_left(self.cache)
             .expect("caches must be consistent");
 
         inner.witness.merge(&self.witness);
