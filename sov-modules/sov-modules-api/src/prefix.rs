@@ -58,7 +58,7 @@ impl Prefix {
 
     pub fn hash<C: Context>(&self) -> [u8; 32] {
         let combined_prefix = self.combine_prefix();
-        C::Hasher::hash(&combined_prefix)
+        C::Hasher::hash(combined_prefix)
     }
 }
 
