@@ -115,7 +115,7 @@ impl<S: Storage> WorkingSet<S> {
 }
 
 impl<S: Storage> RevertableDelta<S> {
-    pub fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
+    fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
         match self.cache.try_get(key.clone()) {
             first_read_last_write_cache::cache::ValueExists::Yes(val) => {
                 val.map(StorageValue::new_from_cache_value)
@@ -128,17 +128,17 @@ impl<S: Storage> RevertableDelta<S> {
         }
     }
 
-    pub fn set(&mut self, key: StorageKey, value: StorageValue) {
+    fn set(&mut self, key: StorageKey, value: StorageValue) {
         self.cache.set(key, value)
     }
 
-    pub fn delete(&mut self, key: StorageKey) {
+    fn delete(&mut self, key: StorageKey) {
         self.cache.delete(key)
     }
 }
 
 impl<S: Storage> RevertableDelta<S> {
-    pub fn commit(&mut self) -> Delta<S> {
+    fn commit(&mut self) -> Delta<S> {
         let mut inner = self
             .inner
             .take()
@@ -153,7 +153,7 @@ impl<S: Storage> RevertableDelta<S> {
         inner
     }
 
-    pub fn revert(&mut self) -> Delta<S> {
+    fn revert(&mut self) -> Delta<S> {
         let mut inner = self
             .inner
             .take()
@@ -169,13 +169,11 @@ impl<S: Storage> RevertableDelta<S> {
     }
 }
 
-pub fn get_revertable_wrapper<S: Storage>(
-    maybe_delta: &mut Option<Delta<S>>,
-) -> RevertableDelta<S> {
+fn get_revertable_wrapper<S: Storage>(maybe_delta: &mut Option<Delta<S>>) -> RevertableDelta<S> {
     get_revertable_wrapper_with_witness(maybe_delta, Default::default())
 }
 
-pub fn get_revertable_wrapper_with_witness<S: Storage>(
+fn get_revertable_wrapper_with_witness<S: Storage>(
     maybe_delta: &mut Option<Delta<S>>,
     witness: S::Witness,
 ) -> RevertableDelta<S> {
@@ -187,7 +185,7 @@ pub fn get_revertable_wrapper_with_witness<S: Storage>(
 }
 
 impl<S: Storage> Delta<S> {
-    pub fn new(inner: S) -> Self {
+    fn new(inner: S) -> Self {
         Self {
             inner,
             witness: Default::default(),
@@ -195,7 +193,7 @@ impl<S: Storage> Delta<S> {
         }
     }
 
-    pub fn with_witness(inner: S, witness: S::Witness) -> Self {
+    fn with_witness(inner: S, witness: S::Witness) -> Self {
         Self {
             inner,
             witness,
@@ -211,21 +209,21 @@ impl<S: Storage> Debug for Delta<S> {
 }
 
 impl<S: Storage> Delta<S> {
-    pub fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
+    fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
         self.cache.get_or_fetch(key, &self.inner, &self.witness)
     }
 
-    pub fn set(&mut self, key: StorageKey, value: StorageValue) {
+    fn set(&mut self, key: StorageKey, value: StorageValue) {
         self.cache.set(key, value)
     }
 
-    pub fn delete(&mut self, key: StorageKey) {
+    fn delete(&mut self, key: StorageKey) {
         self.cache.delete(key)
     }
 }
 
 impl<S: Storage> Delta<S> {
-    pub fn freeze(&mut self) -> (CacheLog, S::Witness) {
+    fn freeze(&mut self) -> (CacheLog, S::Witness) {
         let cache = std::mem::take(&mut self.cache);
         let witness = std::mem::take(&mut self.witness);
 
@@ -235,16 +233,5 @@ impl<S: Storage> Delta<S> {
     fn get_with_witness(&mut self, key: StorageKey, witness: &S::Witness) -> Option<StorageValue> {
         // self.cache.get_or_fetch(key, &self.inner, witness)
         self.cache.get_or_fetch(key, &self.inner, witness)
-    }
-
-    pub fn merge(&mut self, mut rhs: Self) -> Result<(), first_read_last_write_cache::MergeError> {
-        // Merge caches
-        let rhs_cache = std::mem::take(&mut rhs.cache);
-        self.cache.merge_left(rhs_cache)?;
-
-        // Merge witnesses
-        let rhs_witness = rhs.witness;
-        self.witness.merge(&rhs_witness);
-        Ok(())
     }
 }
