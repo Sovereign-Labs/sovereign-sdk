@@ -21,7 +21,7 @@ pub struct Delta<S: Storage> {
 /// working set, without running the risk that the whole working set will be discarded if some particular
 /// operation reverts.
 pub struct RevertableDelta<S: Storage> {
-    inner: Option<Delta<S>>,
+    inner: Delta<S>,
     witness: S::Witness,
     cache: StorageInternalCache,
 }
@@ -36,80 +36,72 @@ impl<S: Storage> Debug for RevertableDelta<S> {
 
 /// A read-write set which can be committed as a unit
 pub enum WorkingSet<S: Storage> {
-    Standard(Option<Delta<S>>),
+    Standard(Delta<S>),
     Revertable(RevertableDelta<S>),
 }
 
 impl<S: Storage> WorkingSet<S> {
     pub fn new(inner: S) -> Self {
-        Self::Standard(Some(Delta::new(inner)))
+        Self::Standard(Delta::new(inner))
     }
 
     pub fn with_witness(inner: S, witness: S::Witness) -> Self {
-        Self::Standard(Some(Delta::with_witness(inner, witness)))
+        Self::Standard(Delta::with_witness(inner, witness))
     }
 
-    pub fn to_revertable(&mut self) {
+    pub fn to_revertable(self) -> WorkingSet<S> {
         match self {
-            WorkingSet::Standard(delta) => {
-                *self = WorkingSet::Revertable(get_revertable_wrapper(delta))
-            }
-            WorkingSet::Revertable(_) => {}
+            WorkingSet::Standard(delta) => WorkingSet::Revertable(get_revertable_wrapper(delta)),
+            r @ WorkingSet::Revertable(_) => r,
         }
     }
 
-    pub fn commit(&mut self) {
+    pub fn commit(self) -> Self {
         match self {
-            WorkingSet::Standard(_) => {}
-            WorkingSet::Revertable(revertable) => {
-                *self = WorkingSet::Standard(Some(revertable.commit()))
-            }
+            s @ WorkingSet::Standard(_) => s,
+            WorkingSet::Revertable(revertable) => WorkingSet::Standard(revertable.commit()),
         }
     }
 
-    pub fn revert(&mut self) {
+    pub fn revert(self) -> Self {
         match self {
-            WorkingSet::Standard(_) => {}
-            WorkingSet::Revertable(revertable) => {
-                *self = WorkingSet::Standard(Some(revertable.revert()))
-            }
+            s @ WorkingSet::Standard(_) => s,
+            WorkingSet::Revertable(revertable) => WorkingSet::Standard(revertable.revert()),
         }
     }
 
     pub fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
         match self {
-            WorkingSet::Standard(s) => s.as_mut().unwrap().get(key),
+            WorkingSet::Standard(s) => s.get(key),
             WorkingSet::Revertable(s) => s.get(key),
         }
     }
 
     pub fn set(&mut self, key: StorageKey, value: StorageValue) {
         match self {
-            WorkingSet::Standard(s) => s.as_mut().unwrap().set(key, value),
+            WorkingSet::Standard(s) => s.set(key, value),
             WorkingSet::Revertable(s) => s.set(key, value),
         }
     }
 
     pub fn delete(&mut self, key: StorageKey) {
         match self {
-            WorkingSet::Standard(s) => s.as_mut().unwrap().delete(key),
+            WorkingSet::Standard(s) => s.delete(key),
             WorkingSet::Revertable(s) => s.delete(key),
         }
     }
 
     pub fn freeze(&mut self) -> (CacheLog, S::Witness) {
         match self {
-            WorkingSet::Standard(delta) => delta.as_mut().unwrap().freeze(),
+            WorkingSet::Standard(delta) => delta.freeze(),
             WorkingSet::Revertable(_) => todo!(),
         }
     }
 
     pub fn backing(&self) -> &S {
         match self {
-            WorkingSet::Standard(delta) => &delta.as_ref().unwrap().inner,
-            WorkingSet::Revertable(revertable) => {
-                &revertable.inner.as_ref().expect("Inner must exist").inner
-            }
+            WorkingSet::Standard(delta) => &delta.inner,
+            WorkingSet::Revertable(revertable) => &revertable.inner.inner,
         }
     }
 }
@@ -120,11 +112,9 @@ impl<S: Storage> RevertableDelta<S> {
             first_read_last_write_cache::cache::ValueExists::Yes(val) => {
                 val.map(StorageValue::new_from_cache_value)
             }
-            first_read_last_write_cache::cache::ValueExists::No => self
-                .inner
-                .as_mut()
-                .expect("inner delta must exist")
-                .get_with_witness(key, &self.witness),
+            first_read_last_write_cache::cache::ValueExists::No => {
+                self.inner.get_with_witness(key, &self.witness)
+            }
         }
     }
 
@@ -138,11 +128,8 @@ impl<S: Storage> RevertableDelta<S> {
 }
 
 impl<S: Storage> RevertableDelta<S> {
-    fn commit(&mut self) -> Delta<S> {
-        let mut inner = self
-            .inner
-            .take()
-            .expect("Only one revertable delta may be merged");
+    fn commit(mut self) -> Delta<S> {
+        let mut inner = self.inner;
 
         inner
             .cache
@@ -153,11 +140,8 @@ impl<S: Storage> RevertableDelta<S> {
         inner
     }
 
-    fn revert(&mut self) -> Delta<S> {
-        let mut inner = self
-            .inner
-            .take()
-            .expect("Only one revertable delta may be merged");
+    fn revert(mut self) -> Delta<S> {
+        let mut inner = self.inner;
 
         inner
             .cache
@@ -169,16 +153,16 @@ impl<S: Storage> RevertableDelta<S> {
     }
 }
 
-fn get_revertable_wrapper<S: Storage>(maybe_delta: &mut Option<Delta<S>>) -> RevertableDelta<S> {
-    get_revertable_wrapper_with_witness(maybe_delta, Default::default())
+fn get_revertable_wrapper<S: Storage>(delta: Delta<S>) -> RevertableDelta<S> {
+    get_revertable_wrapper_with_witness(delta, Default::default())
 }
 
 fn get_revertable_wrapper_with_witness<S: Storage>(
-    maybe_delta: &mut Option<Delta<S>>,
+    delta: Delta<S>,
     witness: S::Witness,
 ) -> RevertableDelta<S> {
     RevertableDelta {
-        inner: maybe_delta.take(),
+        inner: delta,
         witness,
         cache: Default::default(),
     }

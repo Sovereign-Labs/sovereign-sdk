@@ -78,7 +78,7 @@ where
         let mut tx_hooks = DemoAppTxHooks::<C>::new();
 
         for tx in txs {
-            batch_workspace.to_revertable();
+            batch_workspace = batch_workspace.to_revertable();
             // Run the stateful verification, possibly modifies the state.
             let verified_tx = tx_hooks
                 .pre_dispatch_tx_hook(tx, &mut batch_workspace)
@@ -93,7 +93,7 @@ where
                 match tx_result {
                     Ok(resp) => {
                         events.push(resp.events);
-                        batch_workspace.commit();
+                        batch_workspace = batch_workspace.commit();
                     }
                     Err(e) => {
                         // Don't merge the tx workspace. TODO add tests for this scenario
