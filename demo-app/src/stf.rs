@@ -1,5 +1,4 @@
 use crate::batch::Batch;
-use std::cell::RefCell;
 
 use crate::runtime::Runtime;
 use crate::tx_verifier::{DemoAppTxVerifier, RawTx, TxVerifier};
@@ -17,7 +16,7 @@ use sovereign_sdk::{
 pub(crate) struct Demo<C: Context, V: TxVerifier> {
     pub current_storage: C::Storage,
     pub verifier: V,
-    pub working_set: RefCell<Option<WorkingSet<C::Storage>>>,
+    pub working_set: Option<WorkingSet<C::Storage>>,
 }
 
 impl<C: Context> Demo<C, DemoAppTxVerifier<C>> {
@@ -25,7 +24,7 @@ impl<C: Context> Demo<C, DemoAppTxVerifier<C>> {
         Self {
             current_storage: storage,
             verifier: DemoAppTxVerifier::new(),
-            working_set: RefCell::new(None),
+            working_set: None,
         }
     }
 }
@@ -58,7 +57,7 @@ where
     fn begin_slot(&self) {}
 
     fn apply_batch(
-        &self,
+        &mut self,
         batch: Self::Batch,
         sequencer: &[u8],
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
@@ -107,7 +106,7 @@ where
                 return Err(ConsensusSetUpdate::slashing(sequencer));
             }
         }
-        self.working_set.borrow_mut().replace(batch_workspace);
+        self.working_set = Some(batch_workspace);
 
         Ok(events)
     }
@@ -126,7 +125,7 @@ where
         Self::StateRoot,
         Vec<sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>>,
     ) {
-        let (cache_log, witness) = self.working_set.borrow_mut().take().unwrap().freeze();
+        let (cache_log, witness) = self.working_set.take().unwrap().freeze();
         let root_hash = self
             .current_storage
             .validate_and_commit(cache_log, &witness)

@@ -31,7 +31,7 @@ pub trait StateTransitionFunction {
 
     /// Apply a batch of transactions to the rollup, slashing the sequencer who proposed the batch on failure
     fn apply_batch(
-        &self,
+        &mut self,
         batch: Self::Batch,
         sequencer: &[u8],
         misbehavior_hint: Option<Self::MisbehaviorProof>,
