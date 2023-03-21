@@ -231,7 +231,6 @@ impl<S: Storage> Delta<S> {
     }
 
     fn get_with_witness(&mut self, key: StorageKey, witness: &S::Witness) -> Option<StorageValue> {
-        // self.cache.get_or_fetch(key, &self.inner, witness)
         self.cache.get_or_fetch(key, &self.inner, witness)
     }
 }
