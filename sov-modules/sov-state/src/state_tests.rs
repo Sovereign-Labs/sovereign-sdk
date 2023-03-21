@@ -13,8 +13,8 @@ impl Operation {
         match self {
             Operation::Merge => working_set.commit(),
             Operation::Finalize => {
-                let db = working_set.backing();
                 let (cache_log, witness) = working_set.freeze();
+                let db = working_set.backing();
                 db.validate_and_commit(cache_log, &witness)
                     .expect("JMT update is valid");
             }
@@ -29,7 +29,7 @@ struct StorageOperation {
 impl StorageOperation {
     fn execute(&self, working_set: &mut WorkingSet<ProverStorage<MockStorageSpec>>) {
         for op in self.operations.iter() {
-            op.execute(&mut working_set.clone())
+            op.execute(working_set)
         }
     }
 }
