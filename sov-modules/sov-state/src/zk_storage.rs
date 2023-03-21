@@ -17,7 +17,7 @@ pub struct ZkStorage<S: StorageSpec> {
 impl<S: StorageSpec> Clone for ZkStorage<S> {
     fn clone(&self) -> Self {
         Self {
-            prev_state_root: self.prev_state_root.clone(),
+            prev_state_root: self.prev_state_root,
             _phantom_hasher: Default::default(),
         }
     }
@@ -53,12 +53,11 @@ impl<S: StorageSpec> Storage for ZkStorage<S> {
             let proof: jmt::proof::SparseMerkleProof<S::Hasher> = witness.get_hint();
             match read_value {
                 Some(val) => proof.verify_existence(
-                    jmt::RootHash(self.prev_state_root.clone()),
+                    jmt::RootHash(self.prev_state_root),
                     key_hash,
                     val.value.as_ref(),
                 )?,
-                None => proof
-                    .verify_nonexistence(jmt::RootHash(self.prev_state_root.clone()), key_hash)?,
+                None => proof.verify_nonexistence(jmt::RootHash(self.prev_state_root), key_hash)?,
             }
         }
 

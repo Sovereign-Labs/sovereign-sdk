@@ -15,9 +15,9 @@ pub(crate) struct StorageInternalCache {
     tx_cache: CacheLog,
 }
 
-impl Into<CacheLog> for StorageInternalCache {
-    fn into(self) -> CacheLog {
-        self.tx_cache
+impl From<StorageInternalCache> for CacheLog {
+    fn from(val: StorageInternalCache) -> Self {
+        val.tx_cache
     }
 }
 
@@ -49,8 +49,8 @@ impl StorageInternalCache {
     }
 
     pub fn try_get(&self, key: StorageKey) -> ValueExists {
-        let cache_key = key.clone().as_cache_key();
-        self.get_value_from_cache(cache_key.clone())
+        let cache_key = key.as_cache_key();
+        self.get_value_from_cache(cache_key)
     }
 
     pub(crate) fn set(&mut self, key: StorageKey, value: StorageValue) {
