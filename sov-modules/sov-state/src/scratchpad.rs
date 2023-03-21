@@ -51,7 +51,7 @@ impl<S: Storage> WorkingSet<S> {
 
     pub fn to_revertable(self) -> WorkingSet<S> {
         match self {
-            WorkingSet::Standard(delta) => WorkingSet::Revertable(get_revertable_wrapper(delta)),
+            WorkingSet::Standard(delta) => WorkingSet::Revertable(delta.get_revertable_wrapper()),
             r @ WorkingSet::Revertable(_) => r,
         }
     }
@@ -153,21 +153,6 @@ impl<S: Storage> RevertableDelta<S> {
     }
 }
 
-fn get_revertable_wrapper<S: Storage>(delta: Delta<S>) -> RevertableDelta<S> {
-    get_revertable_wrapper_with_witness(delta, Default::default())
-}
-
-fn get_revertable_wrapper_with_witness<S: Storage>(
-    delta: Delta<S>,
-    witness: S::Witness,
-) -> RevertableDelta<S> {
-    RevertableDelta {
-        inner: delta,
-        witness,
-        cache: Default::default(),
-    }
-}
-
 impl<S: Storage> Delta<S> {
     fn new(inner: S) -> Self {
         Self {
@@ -180,6 +165,18 @@ impl<S: Storage> Delta<S> {
     fn with_witness(inner: S, witness: S::Witness) -> Self {
         Self {
             inner,
+            witness,
+            cache: Default::default(),
+        }
+    }
+
+    fn get_revertable_wrapper(self) -> RevertableDelta<S> {
+        self.get_revertable_wrapper_with_witness(Default::default())
+    }
+
+    fn get_revertable_wrapper_with_witness(self, witness: S::Witness) -> RevertableDelta<S> {
+        RevertableDelta {
+            inner: self,
             witness,
             cache: Default::default(),
         }
