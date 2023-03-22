@@ -139,11 +139,11 @@ pub struct ArrayWitness {
 }
 
 impl Witness for ArrayWitness {
-    fn add_hint<T: crate::serial::Encode + crate::serial::Decode>(&self, hint: T) {
+    fn add_hint<T: crate::serial::Encode>(&self, hint: T) {
         self.hints.borrow_mut().push(hint.encode_to_vec())
     }
 
-    fn get_hint<T: crate::serial::Encode + crate::serial::Decode>(&self) -> T {
+    fn get_hint<T: crate::serial::Decode>(&self) -> T {
         let idx = self
             .next_idx
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
