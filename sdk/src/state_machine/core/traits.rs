@@ -38,8 +38,8 @@ pub trait AddressTrait:
 pub struct InvalidAddress;
 
 pub trait Witness: Default {
-    fn add_hint<T: Encode + Decode>(&self, hint: T);
-    fn get_hint<T: Encode + Decode>(&self) -> T;
+    fn add_hint<T: Encode>(&self, hint: T);
+    fn get_hint<T: Decode>(&self) -> T;
     fn merge(&self, rhs: &Self);
 }
 

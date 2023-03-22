@@ -2,6 +2,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::zk::traits::{Matches, ProofTrait, ZkVm};
 
+use super::{traits::Witness, types::ArrayWitness};
+
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
 pub struct MockCodeCommitment(pub [u8; 32]);
 
@@ -28,7 +30,7 @@ impl ProofTrait<MockZkvm> for MockProof {
     }
 }
 
-pub struct MockZkvm;
+pub struct MockZkvm(ArrayWitness);
 
 impl ZkVm for MockZkvm {
     type CodeCommitment = MockCodeCommitment;
@@ -37,19 +39,19 @@ impl ZkVm for MockZkvm {
 
     type Error = anyhow::Error;
 
-    fn write_to_guest<T: crate::serial::Encode>(_item: T) {
-        todo!()
+    fn write_to_guest<T: crate::serial::Encode>(&self, hint: T) {
+        self.0.add_hint(hint)
     }
 
-    fn read_from_host<T: crate::serial::Decode>() -> T {
-        todo!()
+    fn read_from_host<T: crate::serial::Decode>(&self) -> T {
+        self.0.get_hint()
     }
 
     fn verify(
-        _proof: Self::Proof,
-        _code_commitment: &Self::CodeCommitment,
+        proof: Self::Proof,
+        code_commitment: &Self::CodeCommitment,
     ) -> Result<<<Self as ZkVm>::Proof as crate::zk::traits::ProofTrait<Self>>::Output, Self::Error>
     {
-        todo!()
+        proof.verify(code_commitment)
     }
 }
