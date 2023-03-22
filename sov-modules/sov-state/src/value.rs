@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use crate::{storage::StorageKey, Prefix, Storage, WorkingSet};
+use crate::{Prefix, Storage, WorkingSet};
 use sovereign_sdk::serial::{Decode, Encode};
 use thiserror::Error;
 
@@ -40,16 +40,12 @@ impl<V: Encode + Decode, S: Storage> StateValue<V, S> {
 
     /// Sets a value in the StateValue.
     pub fn set(&mut self, value: V, working_set: &mut WorkingSet<S>) {
-        // `StorageKey::new` will serialize the SingletonKey, but that's fine because we provided
-        //  efficient Encode implementation.
-        let storage_key = StorageKey::new(self.prefix(), &SingletonKey);
-        working_set.set_value(storage_key, value)
+        working_set.set_value(self.prefix(), &SingletonKey, value)
     }
 
     /// Gets a value from the StateValue or None if the value is absent.
     pub fn get(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
-        let storage_key = StorageKey::new(self.prefix(), &SingletonKey);
-        working_set.get_value(storage_key)
+        working_set.get_value(self.prefix(), &SingletonKey)
     }
 
     /// Gets a value from the StateValue or Error if the value is absent.
@@ -60,8 +56,7 @@ impl<V: Encode + Decode, S: Storage> StateValue<V, S> {
 
     // Removes a value from the StateValue, returning the value (or None if the key is absent).
     pub fn remove(&mut self, working_set: &mut WorkingSet<S>) -> Option<V> {
-        let storage_key = StorageKey::new(self.prefix(), &SingletonKey);
-        working_set.remove_value(storage_key)
+        working_set.remove_value(self.prefix(), &SingletonKey)
     }
 
     // Removes a value and from the StateValue, returning the value (or Error if the key is absent).

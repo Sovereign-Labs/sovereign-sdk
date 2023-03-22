@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use crate::{
     internal_cache::StorageInternalCache,
     storage::{StorageKey, StorageValue},
-    Storage,
+    Prefix, Storage,
 };
 use first_read_last_write_cache::cache::CacheLog;
 use sovereign_sdk::{
@@ -220,12 +220,23 @@ impl<S: Storage> Delta<S> {
 }
 
 impl<S: Storage> WorkingSet<S> {
-    pub(crate) fn set_value<V: Encode>(&mut self, storage_key: StorageKey, value: V) {
+    pub(crate) fn set_value<K: Encode, V: Encode>(
+        &mut self,
+        prefix: &Prefix,
+        storage_key: &K,
+        value: V,
+    ) {
+        let storage_key = StorageKey::new(prefix, storage_key);
         let storage_value = StorageValue::new(value);
         self.set(storage_key, storage_value);
     }
 
-    pub(crate) fn get_value<V: Decode>(&mut self, storage_key: StorageKey) -> Option<V> {
+    pub(crate) fn get_value<K: Encode, V: Decode>(
+        &mut self,
+        prefix: &Prefix,
+        storage_key: &K,
+    ) -> Option<V> {
+        let storage_key = StorageKey::new(prefix, storage_key);
         let storage_value = self.get(storage_key)?;
 
         // It is ok to panic here. Deserialization problem means that something is terribly wrong.
@@ -235,8 +246,13 @@ impl<S: Storage> WorkingSet<S> {
         )
     }
 
-    pub(crate) fn remove_value<V: Decode>(&mut self, storage_key: StorageKey) -> Option<V> {
-        let storage_value = self.get_value(storage_key.clone())?;
+    pub(crate) fn remove_value<K: Encode, V: Decode>(
+        &mut self,
+        prefix: &Prefix,
+        storage_key: &K,
+    ) -> Option<V> {
+        let storage_value = self.get_value(prefix, storage_key)?;
+        let storage_key = StorageKey::new(prefix, storage_key);
         self.delete(storage_key);
         Some(storage_value)
     }

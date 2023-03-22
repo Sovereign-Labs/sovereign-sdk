@@ -28,14 +28,12 @@ impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
 
     /// Inserts a key-value pair into the map.
     pub fn set(&mut self, key: &K, value: V, working_set: &mut WorkingSet<S>) {
-        let storage_key = StorageKey::new(self.prefix(), key);
-        working_set.set_value(storage_key, value)
+        working_set.set_value(self.prefix(), key, value)
     }
 
     /// Returns the value corresponding to the key or None if key is absent in the StateMap.
     pub fn get(&self, key: &K, working_set: &mut WorkingSet<S>) -> Option<V> {
-        let storage_key = StorageKey::new(self.prefix(), key);
-        working_set.get_value(storage_key)
+        working_set.get_value(self.prefix(), key)
     }
 
     /// Returns the value corresponding to the key or Error if key is absent in the StateMap.
@@ -47,8 +45,7 @@ impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
 
     // Removes a key from the StateMap, returning the corresponding value (or None if the key is absent).
     pub fn remove(&mut self, key: &K, working_set: &mut WorkingSet<S>) -> Option<V> {
-        let storage_key = StorageKey::new(self.prefix(), key);
-        working_set.remove_value(storage_key)
+        working_set.remove_value(self.prefix(), key)
     }
 
     // Removes a key from the StateMap, returning the corresponding value (or Error if the key is absent).
