@@ -237,13 +237,7 @@ impl<S: Storage> WorkingSet<S> {
         storage_key: &K,
     ) -> Option<V> {
         let storage_key = StorageKey::new(prefix, storage_key);
-        let storage_value = self.get(storage_key)?;
-
-        // It is ok to panic here. Deserialization problem means that something is terribly wrong.
-        Some(
-            V::decode(&mut storage_value.value())
-                .unwrap_or_else(|e| panic!("Unable to deserialize storage value {e:?}")),
-        )
+        self.get_decoded(storage_key)
     }
 
     pub(crate) fn remove_value<K: Encode, V: Decode>(
@@ -251,9 +245,19 @@ impl<S: Storage> WorkingSet<S> {
         prefix: &Prefix,
         storage_key: &K,
     ) -> Option<V> {
-        let storage_value = self.get_value(prefix, storage_key)?;
         let storage_key = StorageKey::new(prefix, storage_key);
+        let storage_value = self.get_decoded(storage_key.clone())?;
         self.delete(storage_key);
         Some(storage_value)
+    }
+
+    fn get_decoded<V: Decode>(&mut self, storage_key: StorageKey) -> Option<V> {
+        let storage_value = self.get(storage_key)?;
+
+        // It is ok to panic here. Deserialization problem means that something is terribly wrong.
+        Some(
+            V::decode(&mut storage_value.value())
+                .unwrap_or_else(|e| panic!("Unable to deserialize storage value {e:?}")),
+        )
     }
 }
