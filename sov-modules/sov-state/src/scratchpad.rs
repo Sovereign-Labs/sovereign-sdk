@@ -6,7 +6,10 @@ use crate::{
     Storage,
 };
 use first_read_last_write_cache::cache::CacheLog;
-use sovereign_sdk::core::traits::Witness;
+use sovereign_sdk::{
+    core::traits::Witness,
+    serial::{Decode, Encode},
+};
 
 /// A working set accumulates reads and writes on top of the underlying DB,
 /// automating witness creation.
@@ -213,5 +216,28 @@ impl<S: Storage> Delta<S> {
 
     fn get_with_witness(&mut self, key: StorageKey, witness: &S::Witness) -> Option<StorageValue> {
         self.cache.get_or_fetch(key, &self.inner, witness)
+    }
+}
+
+impl<S: Storage> WorkingSet<S> {
+    pub(crate) fn set_value<V: Encode>(&mut self, storage_key: StorageKey, value: V) {
+        let storage_value = StorageValue::new(value);
+        self.set(storage_key, storage_value);
+    }
+
+    pub(crate) fn get_value<V: Decode>(&mut self, storage_key: StorageKey) -> Option<V> {
+        let storage_value = self.get(storage_key)?;
+
+        // It is ok to panic here. Deserialization problem means that something is terribly wrong.
+        Some(
+            V::decode(&mut storage_value.value())
+                .unwrap_or_else(|e| panic!("Unable to deserialize storage value {e:?}")),
+        )
+    }
+
+    pub(crate) fn remove_value<V: Decode>(&mut self, storage_key: StorageKey) -> Option<V> {
+        let storage_value = self.get_value(storage_key.clone())?;
+        self.delete(storage_key);
+        Some(storage_value)
     }
 }

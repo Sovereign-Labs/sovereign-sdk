@@ -1,4 +1,3 @@
-mod backend;
 mod internal_cache;
 mod map;
 mod prover_storage;
