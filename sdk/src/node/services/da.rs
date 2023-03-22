@@ -1,6 +1,6 @@
 use std::future::Future;
 
-use crate::serial::{Decode, DeserializationError, Encode};
+use crate::serial::{Decode, Encode};
 
 // TODO: Rename to clarify distinction with DaApp
 /// A DaService is the local side of an RPC connection talking to node of the DA layer
@@ -13,7 +13,7 @@ pub trait DaService {
     // /// A transaction on the L1
     // type Transaction;
     // type Address;
-    type Error;
+    type Error: Send + Sync;
 
     /// Retrieve the data for the given height, waiting for it to be
     /// finalized if necessary. The block, once returned, must not be reverted
@@ -27,4 +27,4 @@ pub trait DaService {
     // TODO: Consider adding the send_transaction method
     // fn send_transaction(tx: Self::Transaction, sender: Self::Address)
 }
-pub trait SlotData: Encode + Decode<Error = DeserializationError> + PartialEq {}
+pub trait SlotData: Encode + Decode + PartialEq {}

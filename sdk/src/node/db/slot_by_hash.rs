@@ -1,3 +1,4 @@
+use super::errors::CodecError;
 use super::{ColumnFamilyName, KeyDecoder, Schema, ValueCodec};
 use super::{KeyEncoder, Result};
 use std::fmt::Debug;
@@ -10,10 +11,11 @@ pub const SLOT_BY_HASH_CF_NAME: ColumnFamilyName = "slot_by_hash";
 #[derive(Debug)]
 pub struct SlotByHashSchema<K, V>(std::marker::PhantomData<K>, std::marker::PhantomData<V>);
 
-impl<K, V> Schema for SlotByHashSchema<K, V>
+impl<K, V, E> Schema for SlotByHashSchema<K, V>
 where
     K: Debug + Send + Sync + 'static + BlockHashTrait,
-    V: Debug + Send + Sync + 'static + SlotData,
+    V: Debug + Send + Sync + 'static + SlotData + Decode<Error = E>,
+    CodecError: From<E>,
 {
     type Key = K;
     type Value = V;
@@ -21,30 +23,33 @@ where
     const COLUMN_FAMILY_NAME: ColumnFamilyName = SLOT_BY_HASH_CF_NAME;
 }
 
-impl<K, V> KeyEncoder<SlotByHashSchema<K, V>> for K
+impl<K, V, E> KeyEncoder<SlotByHashSchema<K, V>> for K
 where
     K: Debug + Send + Sync + 'static + BlockHashTrait,
-    V: Debug + Send + Sync + 'static + SlotData,
+    V: Debug + Send + Sync + 'static + SlotData + Decode<Error = E>,
+    CodecError: From<E>,
 {
     fn encode_key(&self) -> Result<Vec<u8>> {
         Ok(self.encode_to_vec())
     }
 }
 
-impl<K, V> KeyDecoder<SlotByHashSchema<K, V>> for K
+impl<K, V, E> KeyDecoder<SlotByHashSchema<K, V>> for K
 where
     K: Debug + Send + Sync + 'static + BlockHashTrait,
-    V: Debug + Send + Sync + 'static + SlotData,
+    V: Debug + Send + Sync + 'static + SlotData + Decode<Error = E>,
+    CodecError: From<E>,
 {
     fn decode_key(mut data: &[u8]) -> Result<Self> {
         Ok(K::decode(&mut data)?)
     }
 }
 
-impl<K, V> ValueCodec<SlotByHashSchema<K, V>> for V
+impl<K, V, E> ValueCodec<SlotByHashSchema<K, V>> for V
 where
     K: Debug + Send + Sync + 'static + BlockHashTrait,
-    V: Debug + Send + Sync + 'static + SlotData,
+    V: Debug + Send + Sync + 'static + SlotData + Decode<Error = E>,
+    CodecError: From<E>,
 {
     fn encode_value(&self) -> Result<Vec<u8>> {
         Ok(self.encode_to_vec())
