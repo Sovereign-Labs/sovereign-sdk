@@ -43,16 +43,21 @@ impl<K: Encode, V: Encode + Decode, S: Storage> StateMap<K, V, S> {
         })
     }
 
-    // Removes a key from the StateMap, returning the corresponding value (or None if the key is absent).
+    /// Removes a key from the StateMap, returning the corresponding value (or None if the key is absent).
     pub fn remove(&mut self, key: &K, working_set: &mut WorkingSet<S>) -> Option<V> {
         working_set.remove_value(self.prefix(), key)
     }
 
-    // Removes a key from the StateMap, returning the corresponding value (or Error if the key is absent).
+    /// Removes a key from the StateMap, returning the corresponding value (or Error if the key is absent).
     pub fn remove_or_err(&mut self, key: &K, working_set: &mut WorkingSet<S>) -> Result<V, Error> {
         self.remove(key, working_set).ok_or_else(|| {
             Error::MissingValue(self.prefix().clone(), StorageKey::new(self.prefix(), key))
         })
+    }
+
+    /// Deletes a key from the StateMap.
+    pub fn delete(&mut self, key: &K, working_set: &mut WorkingSet<S>) {
+        working_set.delete_value(self.prefix(), key);
     }
 
     pub fn prefix(&self) -> &Prefix {

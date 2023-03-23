@@ -54,15 +54,20 @@ impl<V: Encode + Decode, S: Storage> StateValue<V, S> {
             .ok_or_else(|| Error::MissingValue(self.prefix().clone()))
     }
 
-    // Removes a value from the StateValue, returning the value (or None if the key is absent).
+    /// Removes a value from the StateValue, returning the value (or None if the key is absent).
     pub fn remove(&mut self, working_set: &mut WorkingSet<S>) -> Option<V> {
         working_set.remove_value(self.prefix(), &SingletonKey)
     }
 
-    // Removes a value and from the StateValue, returning the value (or Error if the key is absent).
+    /// Removes a value and from the StateValue, returning the value (or Error if the key is absent).
     pub fn remove_or_err(&mut self, working_set: &mut WorkingSet<S>) -> Result<V, Error> {
         self.remove(working_set)
             .ok_or_else(|| Error::MissingValue(self.prefix().clone()))
+    }
+
+    /// Deletes a value from the StateValue.
+    pub fn delete(&mut self, working_set: &mut WorkingSet<S>) {
+        working_set.delete_value(self.prefix(), &SingletonKey);
     }
 
     pub fn prefix(&self) -> &Prefix {
