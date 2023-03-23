@@ -37,7 +37,7 @@ pub struct LedgerDB<S> {
     next_item_numbers: Arc<Mutex<ItemNumbers>>,
 }
 
-#[derive(Default, Clone)]
+#[derive(Default, Clone, Debug)]
 pub struct ItemNumbers {
     pub slot_number: u64,
     pub batch_number: u64,
@@ -48,9 +48,9 @@ pub struct ItemNumbers {
 #[derive(Default)]
 pub struct SlotCommitBuilder {
     pub slot_data: Option<StoredSlot>,
-    pub batches: Option<Vec<StoredBatch>>,
-    pub txs: Option<Vec<StoredTransaction>>,
-    pub events: Option<Vec<Vec<Event>>>,
+    pub batches: Vec<StoredBatch>,
+    pub txs: Vec<StoredTransaction>,
+    pub events: Vec<Vec<Event>>,
 }
 
 impl SlotCommitBuilder {
@@ -59,15 +59,9 @@ impl SlotCommitBuilder {
             slot_data: self.slot_data.ok_or(anyhow::format_err!(
                 "Slot data is required to commit a slot."
             ))?,
-            batches: self.batches.ok_or(anyhow::format_err!(
-                "Batches are required to commit a slot."
-            ))?,
-            txs: self.txs.ok_or(anyhow::format_err!(
-                "Transactions are required to commit a slot."
-            ))?,
-            events: self
-                .events
-                .ok_or(anyhow::format_err!("Events are required to commit a slot."))?,
+            batches: self.batches,
+            txs: self.txs,
+            events: self.events,
         };
 
         ensure!(

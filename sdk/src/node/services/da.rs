@@ -18,11 +18,11 @@ pub trait DaService {
     /// Retrieve the data for the given height, waiting for it to be
     /// finalized if necessary. The block, once returned, must not be reverted
     /// without a consensus violation.
-    fn get_finalized_at(&self, height: usize) -> Self::Future<Self::FilteredBlock>;
+    fn get_finalized_at(&self, height: u64) -> Self::Future<Self::FilteredBlock>;
 
     /// Get the block at the given height, waiting for one to be mined if necessary.
     /// The returned block may not be final, and can be reverted without a consensus violation
-    fn get_block_at(&self, height: usize) -> Self::Future<Self::FilteredBlock>;
+    fn get_block_at(&self, height: u64) -> Self::Future<Self::FilteredBlock>;
 
     // TODO: Consider adding the send_transaction method
     // fn send_transaction(tx: Self::Transaction, sender: Self::Address)
