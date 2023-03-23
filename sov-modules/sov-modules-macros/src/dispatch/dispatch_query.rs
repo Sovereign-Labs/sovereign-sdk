@@ -26,7 +26,7 @@ impl<'a> StructDef<'a> {
 
             quote::quote!(
                 #enum_ident::#name(message)=>{
-                    sov_modules_api::Module::query(&mut self.#name, message, working_set)
+                    sov_modules_api::Module::query(&self.#name, message, working_set)
                 },
             )
         });
