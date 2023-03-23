@@ -1,5 +1,5 @@
 use crate::batch::Batch;
-use crate::tx_hooks::{DemoAppTxHooks, TxHooks};
+use crate::tx_hooks::TxHooks;
 use crate::tx_verifier::{RawTx, TxVerifier};
 
 use sov_modules_api::{Context, DispatchCall, Genesis};
@@ -10,28 +10,31 @@ use sovereign_sdk::{
     stf::{ConsensusSetUpdate, OpaqueAddress, StateTransitionFunction},
 };
 
-pub(crate) struct Demo<C: Context, V, RT> {
+pub(crate) struct Demo<C: Context, V, RT, H> {
     pub current_storage: C::Storage,
     pub runtime: RT,
     pub tx_verifier: V,
+    pub tx_hooks: H,
     pub working_set: Option<WorkingSet<C::Storage>>,
 }
 
-impl<C: Context, V, RT> Demo<C, V, RT> {
-    pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V) -> Self {
+impl<C: Context, V, RT, H> Demo<C, V, RT, H> {
+    pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
         Self {
             runtime,
             current_storage: storage,
             tx_verifier,
+            tx_hooks,
             working_set: None,
         }
     }
 }
 
-impl<C: Context, V, RT> StateTransitionFunction for Demo<C, V, RT>
+impl<C: Context, V, RT, H> StateTransitionFunction for Demo<C, V, RT, H>
 where
     V: TxVerifier<Context = C>,
     RT: DispatchCall<Context = C> + Genesis<Context = C>,
+    H: TxHooks<Context = C>,
 {
     type StateRoot = jmt::RootHash;
 
@@ -76,12 +79,11 @@ where
             .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
         let mut batch_workspace = WorkingSet::new(self.current_storage.clone());
 
-        let mut tx_hooks = DemoAppTxHooks::<C>::new();
-
         for tx in txs {
             batch_workspace = batch_workspace.to_revertable();
             // Run the stateful verification, possibly modifies the state.
-            let verified_tx = tx_hooks
+            let verified_tx = self
+                .tx_hooks
                 .pre_dispatch_tx_hook(tx, &mut batch_workspace)
                 .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
 
@@ -89,7 +91,8 @@ where
                 let ctx = C::new(verified_tx.sender);
                 let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
-                tx_hooks.post_dispatch_tx_hook(verified_tx, &mut batch_workspace);
+                self.tx_hooks
+                    .post_dispatch_tx_hook(verified_tx, &mut batch_workspace);
 
                 match tx_result {
                     Ok(resp) => {
