@@ -25,10 +25,10 @@ impl<'a> StructDef<'a> {
 
         let match_legs = self.fields.iter().map(|field| {
             let name = &field.ident;
-            
+
             quote::quote!(
                 #enum_ident::#name(message)=>{
-                    core::result::Result::Ok(sov_modules_api::Module::call(&mut self.#name, message, context, working_set)?)
+                    sov_modules_api::Module::call(&mut self.#name, message, context, working_set)
                 },
             )
         });
@@ -57,7 +57,7 @@ impl<'a> StructDef<'a> {
                 type Context = #generic_param;
                 type Decodable = #call_enum #ty_generics;
 
-                
+
                 fn decode_call(serialized_message: &[u8]) -> core::result::Result<Self::Decodable, std::io::Error> {
                     let mut data = std::io::Cursor::new(serialized_message);
                     core::result::Result::Ok(<#call_enum #ty_generics as sovereign_sdk::serial::Decode>::decode(&mut data)?)
