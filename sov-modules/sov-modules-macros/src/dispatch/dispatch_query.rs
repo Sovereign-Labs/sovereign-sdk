@@ -1,6 +1,5 @@
-use syn::DeriveInput;
-
 use super::common::{parse_generic_params, StructDef, StructFieldExtractor, QUERY};
+use syn::DeriveInput;
 
 impl<'a> StructDef<'a> {
     fn create_query_enum_legs(&self) -> Vec<proc_macro2::TokenStream> {
@@ -24,29 +23,38 @@ impl<'a> StructDef<'a> {
 
         let match_legs = self.fields.iter().map(|field| {
             let name = &field.ident;
-            let ty = &field.ty;
 
             quote::quote!(
                 #enum_ident::#name(message)=>{
-                    let #name = <#ty as sov_modules_api::ModuleInfo>::new();
-                    sov_modules_api::Module::query(&#name, message, working_set)
+                    sov_modules_api::Module::query(&mut self.#name, message, working_set)
                 },
             )
         });
 
+        let ident = &self.ident;
         let impl_generics = &self.impl_generics;
         let where_clause = self.where_clause;
         let generic_param = self.generic_param;
+        let ty_generics = &self.type_generics;
+        let query_enum = self.enum_ident(QUERY);
 
         quote::quote! {
-            impl #impl_generics sov_modules_api::DispatchQuery for #enum_ident #type_generics #where_clause{
+            impl #impl_generics sov_modules_api::DispatchQuery for #ident #type_generics #where_clause{
                 type Context = #generic_param;
+                type Decodable = #query_enum #ty_generics;
+
+                fn decode_query(serialized_message: &[u8]) -> core::result::Result<Self::Decodable, std::io::Error> {
+                    let mut data = std::io::Cursor::new(serialized_message);
+                    core::result::Result::Ok(<#query_enum #ty_generics as sovereign_sdk::serial::Decode>::decode(&mut data)?)
+                }
 
                 fn dispatch_query(
-                    self,
+                    &mut self,
+                    decodable: Self::Decodable,
                     working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>
                 ) -> sov_modules_api::QueryResponse {
-                    match self{
+
+                    match decodable {
                         #(#match_legs)*
                     }
                 }

@@ -12,13 +12,23 @@ struct Runtime<C: Context> {
     second: second_test_module::SecondTestStruct<C>,
 }
 
+impl<C: Context> Runtime<C> {
+    fn new() -> Self {
+        Self {
+            first: first_test_module::FirstTestStruct::<C>::new(),
+            second: second_test_module::SecondTestStruct::<C>::new(),
+        }
+    }
+}
+
 fn main() {
     use sov_modules_api::{DispatchCall, DispatchQuery};
     type RT = Runtime<MockContext>;
+    let runtime = &mut RT::new();
 
     let storage = ProverStorage::temporary();
     let working_set = &mut sov_state::WorkingSet::new(storage);
-    RT::genesis(working_set).unwrap();
+    runtime.genesis(working_set).unwrap();
     let context = MockContext::new(Address::new([0; 32]));
 
     let value = 11;
@@ -28,16 +38,18 @@ fn main() {
         let module = RT::decode_call(&serialized_message).unwrap();
 
         assert_eq!(
-            module.module_address(),
+            runtime.module_address(&module),
             first_test_module::FirstTestStruct::<MockContext>::address()
         );
-        let _ = module.dispatch_call(working_set, &context).unwrap();
+        let _ = runtime
+            .dispatch_call(module, working_set, &context)
+            .unwrap();
     }
 
     {
         let serialized_message = RT::encode_first_query(());
         let module = RT::decode_query(&serialized_message).unwrap();
-        let response = module.dispatch_query(working_set);
+        let response = runtime.dispatch_query(module, working_set);
         assert_eq!(response.response, vec![value]);
     }
 
@@ -48,17 +60,19 @@ fn main() {
         let module = RT::decode_call(&serialized_message).unwrap();
 
         assert_eq!(
-            module.module_address(),
+            runtime.module_address(&module),
             second_test_module::SecondTestStruct::<MockContext>::address()
         );
 
-        let _ = module.dispatch_call(working_set, &context).unwrap();
+        let _ = runtime
+            .dispatch_call(module, working_set, &context)
+            .unwrap();
     }
 
     {
         let serialized_message = RT::encode_second_query(second_test_module::TestType {});
         let module = RT::decode_query(&serialized_message).unwrap();
-        let response = module.dispatch_query(working_set);
+        let response = runtime.dispatch_query(module, working_set);
         assert_eq!(response.response, vec![value]);
     }
 }
