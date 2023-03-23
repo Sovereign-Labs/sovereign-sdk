@@ -11,15 +11,15 @@ use sovereign_sdk::{
 };
 
 pub(crate) struct Demo<C: Context, V, RT, H> {
-    pub current_storage: C::Storage,
-    pub runtime: RT,
-    pub tx_verifier: V,
-    pub tx_hooks: H,
-    pub working_set: Option<WorkingSet<C::Storage>>,
+    current_storage: C::Storage,
+    runtime: RT,
+    tx_verifier: V,
+    tx_hooks: H,
+    working_set: Option<WorkingSet<C::Storage>>,
 }
 
 impl<C: Context, V, RT, H> Demo<C, V, RT, H> {
-    pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
+    pub(crate) fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
         Self {
             runtime,
             current_storage: storage,
