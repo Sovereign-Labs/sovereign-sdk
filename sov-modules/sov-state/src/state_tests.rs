@@ -94,7 +94,7 @@ fn create_state_map_and_storage(
 }
 
 #[test]
-fn test_state_map() {
+fn test_state_map_with_remove() {
     let path = schemadb::temppath::TempPath::new();
     for (before_remove, after_remove) in create_storage_operations() {
         let key = 1;
@@ -105,7 +105,23 @@ fn test_state_map() {
         assert_eq!(state_map.remove(&key, &mut working_set).unwrap(), value);
 
         working_set = after_remove.execute(working_set);
-        assert!(state_map.get(&key, &mut working_set).is_none())
+        assert!(state_map.get(&key, &mut working_set).is_none());
+    }
+}
+
+#[test]
+fn test_state_map_with_delete() {
+    let path = schemadb::temppath::TempPath::new();
+    for (before_delete, after_delete) in create_storage_operations() {
+        let key = 1;
+        let value = 11;
+        let (mut state_map, mut working_set) = create_state_map_and_storage(key, value, &path);
+
+        working_set = before_delete.execute(working_set);
+        state_map.delete(&key, &mut working_set);
+
+        working_set = after_delete.execute(working_set);
+        assert!(state_map.get(&key, &mut working_set).is_none());
     }
 }
 
@@ -124,7 +140,7 @@ fn create_state_value_and_storage(
 }
 
 #[test]
-fn test_state_value() {
+fn test_state_value_with_remove() {
     let path = schemadb::temppath::TempPath::new();
     for (before_remove, after_remove) in create_storage_operations() {
         let value = 11;
@@ -134,6 +150,21 @@ fn test_state_value() {
         assert_eq!(state_value.remove(&mut working_set).unwrap(), value);
 
         working_set = after_remove.execute(working_set);
-        assert!(state_value.get(&mut working_set).is_none())
+        assert!(state_value.get(&mut working_set).is_none());
+    }
+}
+
+#[test]
+fn test_state_value_with_delete() {
+    let path = schemadb::temppath::TempPath::new();
+    for (before_delete, after_delete) in create_storage_operations() {
+        let value = 11;
+        let (mut state_value, mut working_set) = create_state_value_and_storage(value, &path);
+
+        working_set = before_delete.execute(working_set);
+        state_value.delete(&mut working_set);
+
+        working_set = after_delete.execute(working_set);
+        assert!(state_value.get(&mut working_set).is_none());
     }
 }
