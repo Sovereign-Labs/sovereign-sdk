@@ -251,6 +251,11 @@ impl<S: Storage> WorkingSet<S> {
         Some(storage_value)
     }
 
+    pub(crate) fn delete_value<K: Encode>(&mut self, prefix: &Prefix, storage_key: &K) {
+        let storage_key = StorageKey::new(prefix, storage_key);
+        self.delete(storage_key);
+    }
+
     fn get_decoded<V: Decode>(&mut self, storage_key: StorageKey) -> Option<V> {
         let storage_value = self.get(storage_key)?;
 
