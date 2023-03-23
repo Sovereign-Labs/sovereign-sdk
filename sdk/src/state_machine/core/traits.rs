@@ -17,7 +17,7 @@ pub trait CanonicalHash {
     fn hash(&self) -> Self::Output;
 }
 
-pub trait BatchTrait: PartialEq + Debug + Encode + Decode {
+pub trait BatchTrait: PartialEq + Debug + Encode + Decode + Clone {
     type Transaction: TransactionTrait;
     fn transactions(&self) -> &[Self::Transaction];
     fn take_transactions(self) -> Vec<Self::Transaction>;

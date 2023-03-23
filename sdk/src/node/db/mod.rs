@@ -4,6 +4,8 @@
 // licensed under APACHE 2.0 only.
 use std::fmt::Debug;
 
+use crate::services::da::SlotData;
+
 use self::errors::CodecError;
 pub mod errors;
 mod slot;
@@ -11,6 +13,11 @@ pub use slot::*;
 mod slot_by_hash;
 pub use slot_by_hash::*;
 
+pub trait SlotStore {
+    type Slot: SlotData;
+    fn get(&self, hash: &[u8; 32]) -> Option<Self::Slot>;
+    fn insert(&self, hash: [u8; 32], slot_data: Self::Slot);
+}
 pub type ColumnFamilyName = &'static str;
 
 /// This trait defines a schema: an association of a column family name, the key type and the value

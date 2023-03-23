@@ -56,6 +56,6 @@ pub trait BlobTransactionTrait<Addr> {
 }
 
 pub trait BlockHashTrait:
-    Encode + Decode<Error = DeserializationError> + PartialEq + Debug
+    Encode + Decode<Error = DeserializationError> + PartialEq + Debug + Send + Sync
 {
 }

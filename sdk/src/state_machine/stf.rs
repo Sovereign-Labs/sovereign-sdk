@@ -71,7 +71,7 @@ impl Event {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, BorshSerialize, BorshDeserialize, Clone)]
 pub struct EventKey(Rc<Vec<u8>>);
 
 #[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]

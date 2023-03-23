@@ -5,7 +5,7 @@ use sovereign_sdk::serial::Decode;
 use std::{io::Cursor, marker::PhantomData};
 
 /// RawTx represents a serialized rollup transaction received from the DA.
-#[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
+#[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize, Clone)]
 pub struct RawTx {
     pub(crate) data: Vec<u8>,
 }
