@@ -13,7 +13,7 @@ use data_generation::{simulate_da, QueryGenerator};
 use helpers::check_query;
 use runtime::Runtime;
 use sov_modules_api::mocks::MockContext;
-use sov_state::{mocks::MockStorageSpec, ProverStorage};
+use sov_state::ProverStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
 use stf::Demo;
 use tx_hooks::DemoAppTxHooks;
@@ -22,22 +22,19 @@ use tx_verifier::DemoAppTxVerifier;
 type C = MockContext;
 type DemoApp = Demo<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>>;
 
-fn create_new_demo(path: impl AsRef<Path>) -> (DemoApp, ProverStorage<MockStorageSpec>) {
+fn create_new_demo(path: impl AsRef<Path>) -> DemoApp {
     let runtime = Runtime::new();
     let storage = ProverStorage::with_path(path).unwrap();
     let tx_hooks = DemoAppTxHooks::new();
     let tx_verifier = DemoAppTxVerifier::new();
 
-    (
-        Demo::new(storage.clone(), runtime, tx_verifier, tx_hooks),
-        storage,
-    )
+    Demo::new(storage, runtime, tx_verifier, tx_hooks)
 }
 
 fn main() {
     let path = schemadb::temppath::TempPath::new();
     {
-        let (mut demo, _) = create_new_demo(&path);
+        let mut demo = create_new_demo(&path);
         demo.init_chain(());
         demo.begin_slot();
 
@@ -77,7 +74,7 @@ mod test {
     fn test_demo_values_in_db() {
         let path = schemadb::temppath::TempPath::new();
         {
-            let (mut demo, _) = create_new_demo(&path);
+            let mut demo = create_new_demo(&path);
 
             demo.init_chain(());
             demo.begin_slot();
@@ -113,7 +110,7 @@ mod test {
     #[test]
     fn test_demo_values_in_cache() {
         let path = schemadb::temppath::TempPath::new();
-        let (mut demo, storage) = create_new_demo(&path);
+        let mut demo = create_new_demo(&path);
 
         demo.init_chain(());
         demo.begin_slot();
@@ -129,14 +126,14 @@ mod test {
             runtime,
             QueryGenerator::generate_query_election_message(),
             r#"{"Result":{"name":"candidate_2","count":3}}"#,
-            storage.clone(),
+            demo.current_storage.clone(),
         );
 
         check_query(
             runtime,
             QueryGenerator::generate_query_value_setter_message(),
             r#"{"value":33}"#,
-            storage,
+            demo.current_storage,
         );
     }
 
@@ -144,7 +141,7 @@ mod test {
     fn test_demo_values_not_in_db() {
         let path = schemadb::temppath::TempPath::new();
         {
-            let (mut demo, _) = create_new_demo(&path);
+            let mut demo = create_new_demo(&path);
 
             demo.init_chain(());
             demo.begin_slot();

@@ -11,7 +11,7 @@ use sovereign_sdk::{
 };
 
 pub(crate) struct Demo<C: Context, V, RT, H> {
-    current_storage: C::Storage,
+    pub(crate) current_storage: C::Storage,
     runtime: RT,
     tx_verifier: V,
     tx_hooks: H,

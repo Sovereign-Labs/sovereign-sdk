@@ -50,7 +50,7 @@ pub(crate) struct Runtime<C: Context> {
     accounts: accounts::Accounts<C>,
 }
 
-// TODO add macro to generate the code below.
+// TODO add macro to generate the following code.
 impl<C: Context> Runtime<C> {
     pub(crate) fn new() -> Self {
         Self {

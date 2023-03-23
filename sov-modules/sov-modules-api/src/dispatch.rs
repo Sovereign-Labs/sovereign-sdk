@@ -17,6 +17,7 @@ pub trait DispatchCall {
     type Context: Context;
     type Decodable;
 
+    /// Decode serialized call message
     fn decode_call(serialized_message: &[u8]) -> Result<Self::Decodable, std::io::Error>;
 
     /// Dispatches a call message to the appropriate module.
@@ -36,6 +37,7 @@ pub trait DispatchQuery {
     type Context: Context;
     type Decodable;
 
+    /// Decode serialized query message
     fn decode_query(serialized_message: &[u8]) -> Result<Self::Decodable, std::io::Error>;
 
     /// Dispatches a query message to the appropriate module.
