@@ -59,7 +59,7 @@ where
             .expect("Storage update must succeed");
     }
 
-    fn begin_slot(&self) {}
+    fn begin_slot(&mut self) {}
 
     fn apply_batch(
         &mut self,

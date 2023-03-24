@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use sovereign_sdk::services::da::SlotData;
 
 /// A cheaply cloneable bytes abstraction for use within the trust boundary of the node
 /// (i.e. when interfacing with the database). Serializes and deserializes more efficiently,
@@ -19,6 +20,13 @@ impl DbBytes {
     }
 }
 
+#[derive(Debug, Clone, Copy, BorshDeserialize, BorshSerialize, PartialEq, Eq)]
+pub enum Status {
+    Applied,
+    Skipped,
+    Reverted,
+}
+
 impl AsRef<[u8]> for DbBytes {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
@@ -34,8 +42,9 @@ pub(crate) type StateKey = Vec<u8>;
 /// required to reconstruct the da block proof
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct StoredSlot {
-    hash: DbHash,
-    batches: std::ops::Range<BatchNumber>,
+    pub hash: DbHash,
+    pub extra_data: DbBytes,
+    pub batches: std::ops::Range<BatchNumber>,
 }
 
 /// An identifier that specifies a single slot
@@ -49,8 +58,21 @@ pub enum SlotIdentifier {
 /// included in the batch
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct StoredBatch {
-    hash: DbBytes,
-    txs: std::ops::Range<TxNumber>,
+    pub hash: DbBytes,
+    pub extra_data: DbBytes,
+    pub txs: std::ops::Range<TxNumber>,
+    pub status: Status,
+}
+
+impl StoredBatch {
+    pub fn new(slot: &impl SlotData, txs_range: std::ops::Range<TxNumber>, status: Status) -> Self {
+        Self {
+            hash: DbBytes::new(slot.hash().to_vec()),
+            extra_data: DbBytes::new(slot.extra_data_for_storage()),
+            txs: txs_range,
+            status,
+        }
+    }
 }
 
 /// An identifier that specifies a single batch
@@ -77,12 +99,13 @@ pub enum TxIdentifier {
 
 /// The on-disk format of a transaction. Includes the txhash, the serialized tx data,
 /// and identifies the events emitted by this transaction
-#[derive(Debug, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, PartialEq, BorshSerialize, BorshDeserialize, Clone)]
 pub struct StoredTransaction {
-    hash: DbHash,
+    pub hash: DbHash,
     /// The range of event-numbers emitted by this transaction
-    events: std::ops::Range<EventNumber>,
-    data: DbBytes,
+    pub events: std::ops::Range<EventNumber>,
+    pub data: DbBytes,
+    pub status: Status,
 }
 
 /// An identifier that specifies a single event
@@ -119,6 +142,12 @@ macro_rules! u64_wrapper {
             ::borsh::BorshSerialize,
         )]
         pub struct $name(pub u64);
+
+        impl Into<u64> for $name {
+            fn into(self) -> u64 {
+                self.0
+            }
+        }
     };
 }
 

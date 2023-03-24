@@ -30,13 +30,24 @@ use jmt::{
 use sovereign_sdk::{
     db::{KeyDecoder, KeyEncoder, ValueCodec},
     serial::{Decode, Encode},
-    stf::{EventKey, EventValue},
+    stf::{Event, EventKey},
 };
 
 pub const STATE_TABLES: &[&str] = &[
     KeyHashToKey::table_name(),
     JmtValues::table_name(),
     JmtNodes::table_name(),
+];
+
+pub const LEDGER_TABLES: &[&str] = &[
+    SlotByNumber::table_name(),
+    SlotByHash::table_name(),
+    BatchByHash::table_name(),
+    BatchByNumber::table_name(),
+    TxByHash::table_name(),
+    TxByNumber::table_name(),
+    EventByKey::table_name(),
+    EventByNumber::table_name(),
 ];
 
 /// Macro to define a table that implements [`sovereign_sdk::db::Schema`].
@@ -158,12 +169,12 @@ define_table_with_default_codec!(
 
 define_table_with_default_codec!(
     /// The primary store for event data
-    (EventByNumber) EventNumber => (EventKey, EventValue)
+    (EventByNumber) EventNumber => Event
 );
 
 define_table_with_default_codec!(
     /// A "secondary index" for event data by key
-    (EventByKey) (EventKey, TxNumber) => Vec<EventNumber>
+    (EventByKey) (EventKey, TxNumber, EventNumber) => ()
 );
 
 define_table_without_codec!(

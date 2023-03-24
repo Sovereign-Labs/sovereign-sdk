@@ -27,7 +27,7 @@ pub trait StateTransitionFunction {
 
     /// Called at the beginning of each DA-layer block - whether or not that block contains any
     /// data relevant to the rollup.
-    fn begin_slot(&self);
+    fn begin_slot(&mut self);
 
     /// Apply a batch of transactions to the rollup, slashing the sequencer who proposed the batch on failure
     fn apply_batch(
@@ -71,7 +71,7 @@ impl Event {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, BorshSerialize, BorshDeserialize, Clone)]
 pub struct EventKey(Rc<Vec<u8>>);
 
 #[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]

@@ -24,8 +24,11 @@ pub struct StateDB {
     next_version: Arc<Mutex<Version>>,
 }
 
+const STATE_DB_PATH_SUFFIX: &'static str = "state";
+
 impl StateDB {
     pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
+        let path = path.as_ref().join(STATE_DB_PATH_SUFFIX);
         let inner = DB::open(
             path,
             "state-db",

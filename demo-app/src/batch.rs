@@ -11,7 +11,7 @@ use sovereign_sdk::{
 
 use crate::tx_verifier::RawTx;
 
-#[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
+#[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize, Clone)]
 pub struct Batch {
     pub txs: Vec<RawTx>,
 }
