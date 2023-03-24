@@ -149,10 +149,11 @@ impl<S: SlotData> LedgerDB<S> {
     ) -> Result<(), anyhow::Error> {
         self.db.put::<EventByNumber>(event_number, event)?;
         self.db
-            .put::<EventByKey>(&(event.key.clone(), tx_number, event_number.clone()), &())
+            .put::<EventByKey>(&(event.key.clone(), tx_number, *event_number), &())
     }
 
     pub fn commit_slot(&self, data_to_commit: SlotCommit) -> Result<(), anyhow::Error> {
+        // Create a scope to ensure that the lock is released before we commit to the db
         let item_numbers = {
             let mut next_item_numbers = self.next_item_numbers.lock().unwrap();
             let item_numbers = next_item_numbers.clone();
@@ -179,6 +180,7 @@ impl<S: SlotData> LedgerDB<S> {
             next_item_numbers.tx_number += data_to_commit.txs.len() as u64;
             next_item_numbers.event_number += data_to_commit.events.len() as u64;
             item_numbers
+            // The lock is released here
         };
 
         // Insert data from "bottom up" to ensure consistency is present if the application crashes during insert
