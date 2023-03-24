@@ -19,19 +19,16 @@ impl<'a> StructDef<'a> {
             .collect()
     }
 
-    /// Implements `sov_modules_api::DispatchCall` for the enumeration created by `create_enum`.
     fn create_call_dispatch(&self) -> proc_macro2::TokenStream {
         let enum_ident = self.enum_ident(CALL);
         let type_generics = &self.type_generics;
 
         let match_legs = self.fields.iter().map(|field| {
             let name = &field.ident;
-            let ty = &field.ty;
 
             quote::quote!(
                 #enum_ident::#name(message)=>{
-                    let mut #name = <#ty as sov_modules_api::ModuleInfo>::new();
-                    sov_modules_api::Module::call(&mut #name, message, context, working_set)
+                    sov_modules_api::Module::call(&mut self.#name, message, context, working_set)
                 },
             )
         });
@@ -48,31 +45,42 @@ impl<'a> StructDef<'a> {
             )
         });
 
+        let ident = &self.ident;
         let impl_generics = &self.impl_generics;
         let where_clause = self.where_clause;
         let generic_param = self.generic_param;
+        let ty_generics = &self.type_generics;
+        let call_enum = self.enum_ident(CALL);
 
         quote::quote! {
-            impl #impl_generics sov_modules_api::DispatchCall for #enum_ident #type_generics #where_clause{
+            impl #impl_generics sov_modules_api::DispatchCall for #ident #type_generics #where_clause {
                 type Context = #generic_param;
+                type Decodable = #call_enum #ty_generics;
+
+
+                fn decode_call(serialized_message: &[u8]) -> core::result::Result<Self::Decodable, std::io::Error> {
+                    let mut data = std::io::Cursor::new(serialized_message);
+                    <#call_enum #ty_generics as sovereign_sdk::serial::Decode>::decode(&mut data)
+                }
 
                 fn dispatch_call(
-                    self,
+                    &mut self,
+                    decodable: Self::Decodable,
                     working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
                     context: &Self::Context,
                 ) -> core::result::Result<sov_modules_api::CallResponse, sov_modules_api::Error> {
 
-                    match self{
+                    match decodable {
                         #(#match_legs)*
                     }
+
                 }
 
-                fn module_address(&self) -> sov_modules_api::Address {
-                    match self{
+                fn module_address(&self, decodable: &Self::Decodable) -> sov_modules_api::Address {
+                    match decodable {
                         #(#match_legs_address)*
                     }
                 }
-
             }
         }
     }

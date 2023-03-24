@@ -1,11 +1,8 @@
 use crate::batch::Batch;
-
-use crate::runtime::Runtime;
-use crate::tx_verifier::{DemoAppTxVerifier, RawTx, TxVerifier};
+use crate::tx_hooks::TxHooks;
+use crate::tx_verifier::{RawTx, TxVerifier};
 
 use sov_modules_api::{Context, DispatchCall, Genesis};
-
-use crate::tx_hooks::{DemoAppTxHooks, TxHooks};
 use sov_state::{Storage, WorkingSet};
 use sovereign_sdk::{
     core::{mocks::MockProof, traits::BatchTrait},
@@ -13,25 +10,31 @@ use sovereign_sdk::{
     stf::{ConsensusSetUpdate, OpaqueAddress, StateTransitionFunction},
 };
 
-pub(crate) struct Demo<C: Context, V: TxVerifier> {
-    pub current_storage: C::Storage,
-    pub verifier: V,
-    pub working_set: Option<WorkingSet<C::Storage>>,
+pub(crate) struct Demo<C: Context, V, RT, H> {
+    pub(crate) current_storage: C::Storage,
+    runtime: RT,
+    tx_verifier: V,
+    tx_hooks: H,
+    working_set: Option<WorkingSet<C::Storage>>,
 }
 
-impl<C: Context> Demo<C, DemoAppTxVerifier<C>> {
-    pub fn new(storage: C::Storage) -> Self {
+impl<C: Context, V, RT, H> Demo<C, V, RT, H> {
+    pub(crate) fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
         Self {
+            runtime,
             current_storage: storage,
-            verifier: DemoAppTxVerifier::new(),
+            tx_verifier,
+            tx_hooks,
             working_set: None,
         }
     }
 }
 
-impl<C: Context, V> StateTransitionFunction for Demo<C, V>
+impl<C: Context, V, RT, H> StateTransitionFunction for Demo<C, V, RT, H>
 where
     V: TxVerifier<Context = C>,
+    RT: DispatchCall<Context = C> + Genesis<Context = C>,
+    H: TxHooks<Context = C>,
 {
     type StateRoot = jmt::RootHash;
 
@@ -47,7 +50,9 @@ where
 
     fn init_chain(&mut self, _params: Self::ChainParams) {
         let working_set = &mut WorkingSet::new(self.current_storage.clone());
-        Runtime::<C>::genesis(working_set).expect("module initialization must succeed");
+        self.runtime
+            .genesis(working_set)
+            .expect("module initialization must succeed");
         let (log, witness) = working_set.freeze();
         self.current_storage
             .validate_and_commit(log, &witness)
@@ -69,25 +74,25 @@ where
 
         // Run the stateless verification.
         let txs = self
-            .verifier
+            .tx_verifier
             .verify_txs_stateless(batch.take_transactions())
             .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
         let mut batch_workspace = WorkingSet::new(self.current_storage.clone());
 
-        let mut tx_hooks = DemoAppTxHooks::<C>::new();
-
         for tx in txs {
             batch_workspace = batch_workspace.to_revertable();
             // Run the stateful verification, possibly modifies the state.
-            let verified_tx = tx_hooks
+            let verified_tx = self
+                .tx_hooks
                 .pre_dispatch_tx_hook(tx, &mut batch_workspace)
                 .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
 
-            if let Ok(msg) = Runtime::<C>::decode_call(&verified_tx.runtime_msg) {
+            if let Ok(msg) = RT::decode_call(&verified_tx.runtime_msg) {
                 let ctx = C::new(verified_tx.sender);
-                let tx_result = msg.dispatch_call(&mut batch_workspace, &ctx);
+                let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
-                tx_hooks.post_dispatch_tx_hook(verified_tx, &mut batch_workspace);
+                self.tx_hooks
+                    .post_dispatch_tx_hook(verified_tx, &mut batch_workspace);
 
                 match tx_result {
                     Ok(resp) => {
@@ -101,7 +106,7 @@ where
                     }
                 }
             } else {
-                // If the serialization is invalid, the sequencer is malicious. Slash them
+                // If the serialization is invalid, the sequencer is malicious. Slash them.
                 batch_workspace.revert();
                 return Err(ConsensusSetUpdate::slashing(sequencer));
             }

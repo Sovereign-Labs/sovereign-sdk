@@ -1,4 +1,4 @@
-use sov_modules_api::{Context, Module};
+use sov_modules_api::{Context, Module, ModuleInfo};
 use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 
 /// On a high level, the rollup node receives serialized call messages from the DA layer and executes them as atomic transactions.
@@ -45,4 +45,18 @@ pub(crate) struct Runtime<C: Context> {
     // Definition of the second module in the rollup (must implement the sov_modules_api::Module trait).
     #[allow(unused)]
     value_setter: value_setter::ValueSetter<C>,
+
+    #[allow(unused)]
+    accounts: accounts::Accounts<C>,
+}
+
+// TODO add macro to generate the following code.
+impl<C: Context> Runtime<C> {
+    pub(crate) fn new() -> Self {
+        Self {
+            election: election::Election::new(),
+            value_setter: value_setter::ValueSetter::new(),
+            accounts: accounts::Accounts::new(),
+        }
+    }
 }
