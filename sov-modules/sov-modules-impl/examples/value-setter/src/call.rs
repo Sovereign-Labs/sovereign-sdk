@@ -26,7 +26,7 @@ enum SetValueError {
 impl<C: sov_modules_api::Context> ValueSetter<C> {
     /// Sets `value` field to the `new_value`, only admin is authorized to call this method.
     pub(crate) fn set_value(
-        &mut self,
+        &self,
         new_value: u32,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,

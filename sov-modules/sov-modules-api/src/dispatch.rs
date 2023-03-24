@@ -7,7 +7,7 @@ pub trait Genesis {
 
     /// Initializes the state of the rollup.
     fn genesis(
-        &mut self,
+        &self,
         working_set: &mut WorkingSet<<<Self as Genesis>::Context as Spec>::Storage>,
     ) -> Result<(), Error>;
 }
@@ -22,7 +22,7 @@ pub trait DispatchCall {
 
     /// Dispatches a call message to the appropriate module.
     fn dispatch_call(
-        &mut self,
+        &self,
         message: Self::Decodable,
         working_set: &mut WorkingSet<<<Self as DispatchCall>::Context as Spec>::Storage>,
         context: &Self::Context,
@@ -42,7 +42,7 @@ pub trait DispatchQuery {
 
     /// Dispatches a query message to the appropriate module.
     fn dispatch_query(
-        &mut self,
+        &self,
         message: Self::Decodable,
         working_set: &mut WorkingSet<<<Self as DispatchQuery>::Context as Spec>::Storage>,
     ) -> QueryResponse;

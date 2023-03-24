@@ -32,12 +32,12 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
     #[cfg(feature = "native")]
     type QueryMessage = QueryMessage;
 
-    fn genesis(&mut self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
+    fn genesis(&self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
         Ok(self.init_module(working_set)?)
     }
 
     fn call(
-        &mut self,
+        &self,
         msg: Self::CallMessage,
         context: &Self::Context,
         working_set: &mut WorkingSet<C::Storage>,

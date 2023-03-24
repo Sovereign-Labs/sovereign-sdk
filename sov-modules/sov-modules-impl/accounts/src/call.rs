@@ -16,7 +16,7 @@ pub enum CallMessage<C: sov_modules_api::Context> {
 
 impl<C: sov_modules_api::Context> Accounts<C> {
     pub(crate) fn update_public_key(
-        &mut self,
+        &self,
         new_pub_key: C::PublicKey,
         signature: C::Signature,
         context: &C,

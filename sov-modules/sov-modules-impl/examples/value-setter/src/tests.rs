@@ -32,7 +32,7 @@ fn test_value_setter() {
 }
 
 fn test_value_setter_helper<C: Context>(context: C, working_set: &mut WorkingSet<C::Storage>) {
-    let mut module = ValueSetter::<C>::new();
+    let module = ValueSetter::<C>::new();
     module.genesis(working_set).unwrap();
 
     let new_value = 99;
@@ -87,7 +87,7 @@ fn test_err_on_sender_is_not_admin_helper<C: Context>(
     context: C,
     working_set: &mut WorkingSet<C::Storage>,
 ) {
-    let mut module = ValueSetter::<C>::new();
+    let module = ValueSetter::<C>::new();
     module.genesis(working_set).unwrap();
     let resp = module.set_value(11, &context, working_set);
 

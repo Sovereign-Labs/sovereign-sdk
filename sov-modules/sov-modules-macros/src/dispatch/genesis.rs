@@ -35,7 +35,7 @@ impl GenesisMacro {
             impl #impl_generics sov_modules_api::Genesis for #ident #type_generics #where_clause {
                 type Context = #generic_param;
 
-                fn genesis(&mut self, working_set: &mut sov_state::WorkingSet<<<Self as sov_modules_api::Genesis>::Context as sov_modules_api::Spec>::Storage>) -> core::result::Result<(), sov_modules_api::Error> {
+                fn genesis(&self, working_set: &mut sov_state::WorkingSet<<<Self as sov_modules_api::Genesis>::Context as sov_modules_api::Spec>::Storage>) -> core::result::Result<(), sov_modules_api::Error> {
                     #(#genesis_fn_body)*
                     Ok(())
                 }

@@ -49,7 +49,7 @@ impl<'a> StructDef<'a> {
                 }
 
                 fn dispatch_query(
-                    &mut self,
+                    &self,
                     decodable: Self::Decodable,
                     working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>
                 ) -> sov_modules_api::QueryResponse {
