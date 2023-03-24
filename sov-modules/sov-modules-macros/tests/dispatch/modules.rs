@@ -16,13 +16,13 @@ pub mod first_test_module {
         type CallMessage = u8;
         type QueryMessage = ();
 
-        fn genesis(&mut self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
+        fn genesis(&self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
             self.state_in_first_struct.set(1, working_set);
             Ok(())
         }
 
         fn call(
-            &mut self,
+            &self,
             msg: Self::CallMessage,
             _context: &Self::Context,
             working_set: &mut WorkingSet<C::Storage>,
@@ -61,13 +61,13 @@ pub mod second_test_module {
         type CallMessage = u8;
         type QueryMessage = TestType;
 
-        fn genesis(&mut self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
+        fn genesis(&self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
             self.state_in_second_struct.set(2, working_set);
             Ok(())
         }
 
         fn call(
-            &mut self,
+            &self,
             msg: Self::CallMessage,
             _context: &Self::Context,
             working_set: &mut WorkingSet<C::Storage>,

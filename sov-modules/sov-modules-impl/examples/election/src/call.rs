@@ -21,7 +21,7 @@ pub enum CallMessage {
 impl<C: sov_modules_api::Context> Election<C> {
     /// Sets the candidates. Must be called by the Admin.
     pub(crate) fn set_candidates(
-        &mut self,
+        &self,
         candidate_names: Vec<String>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
@@ -38,7 +38,7 @@ impl<C: sov_modules_api::Context> Election<C> {
 
     /// Adds voter to the allow list. Must be called by the Admin.
     pub(crate) fn add_voter(
-        &mut self,
+        &self,
         voter_address: Address,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
@@ -55,7 +55,7 @@ impl<C: sov_modules_api::Context> Election<C> {
 
     /// Votes for a candidate. Must be called by the Voter.
     pub(crate) fn make_vote(
-        &mut self,
+        &self,
         // TODO the candidates are stored in `Vec` which allows iteration, but it forces us
         // to use candidate_index instead of candidate_name here. We will change it once
         // we have iterator for `StateMap`.
@@ -95,7 +95,7 @@ impl<C: sov_modules_api::Context> Election<C> {
 
     /// Freezes the election.
     pub(crate) fn freeze_election(
-        &mut self,
+        &self,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
@@ -105,7 +105,7 @@ impl<C: sov_modules_api::Context> Election<C> {
     }
 
     /// Clears the election.
-    pub(crate) fn clear(&mut self) -> Result<CallResponse> {
+    pub(crate) fn clear(&self) -> Result<CallResponse> {
         // see https://github.com/Sovereign-Labs/sovereign/issues/62
         todo!()
     }

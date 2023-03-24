@@ -88,7 +88,7 @@ fn create_state_map_and_storage(
 ) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
-    let mut state_map = StateMap::new(Prefix::new(vec![0]));
+    let state_map = StateMap::new(Prefix::new(vec![0]));
     state_map.set(&key, value, &mut working_set);
     (state_map, working_set)
 }
@@ -99,7 +99,7 @@ fn test_state_map_with_remove() {
     for (before_remove, after_remove) in create_storage_operations() {
         let key = 1;
         let value = 11;
-        let (mut state_map, mut working_set) = create_state_map_and_storage(key, value, &path);
+        let (state_map, mut working_set) = create_state_map_and_storage(key, value, &path);
 
         working_set = before_remove.execute(working_set);
         assert_eq!(state_map.remove(&key, &mut working_set).unwrap(), value);
@@ -115,7 +115,7 @@ fn test_state_map_with_delete() {
     for (before_delete, after_delete) in create_storage_operations() {
         let key = 1;
         let value = 11;
-        let (mut state_map, mut working_set) = create_state_map_and_storage(key, value, &path);
+        let (state_map, mut working_set) = create_state_map_and_storage(key, value, &path);
 
         working_set = before_delete.execute(working_set);
         state_map.delete(&key, &mut working_set);
@@ -134,7 +134,7 @@ fn create_state_value_and_storage(
 ) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
-    let mut state_value = StateValue::new(Prefix::new(vec![0]));
+    let state_value = StateValue::new(Prefix::new(vec![0]));
     state_value.set(value, &mut working_set);
     (state_value, working_set)
 }
@@ -144,7 +144,7 @@ fn test_state_value_with_remove() {
     let path = schemadb::temppath::TempPath::new();
     for (before_remove, after_remove) in create_storage_operations() {
         let value = 11;
-        let (mut state_value, mut working_set) = create_state_value_and_storage(value, &path);
+        let (state_value, mut working_set) = create_state_value_and_storage(value, &path);
 
         working_set = before_remove.execute(working_set);
         assert_eq!(state_value.remove(&mut working_set).unwrap(), value);
@@ -159,7 +159,7 @@ fn test_state_value_with_delete() {
     let path = schemadb::temppath::TempPath::new();
     for (before_delete, after_delete) in create_storage_operations() {
         let value = 11;
-        let (mut state_value, mut working_set) = create_state_value_and_storage(value, &path);
+        let (state_value, mut working_set) = create_state_value_and_storage(value, &path);
 
         working_set = before_delete.execute(working_set);
         state_value.delete(&mut working_set);
