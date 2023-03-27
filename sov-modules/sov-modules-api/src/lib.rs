@@ -25,20 +25,24 @@ use std::fmt::Debug;
 use thiserror::Error;
 
 /// Represents an address in the rollup.
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Copy, Clone)]
-pub struct Address {
-    addr: [u8; 32],
+pub trait Address {
+    fn new(addr: Vec<u8>) -> Self;
+    fn as_bytes(&self) -> &[u8];
 }
 
-impl Address {
-    pub fn inner(&self) -> [u8; 32] {
-        self.addr
-    }
+/// Default implementation of Address trait
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Eq)]
+pub struct AddressImpl {
+    addr: Vec<u8>,
 }
 
-impl Address {
-    pub const fn new(addr: [u8; 32]) -> Self {
+impl Address for AddressImpl {
+    fn new(addr: Vec<u8>) -> Self {
         Self { addr }
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        &self.addr
     }
 }
 
@@ -65,11 +69,13 @@ pub enum NonInstantiable {}
 
 /// PublicKey used in the module system.
 pub trait PublicKey {
-    fn to_address(&self) -> Address;
+    fn to_address<A: Address>(&self) -> A;
 }
 
 /// Spec contains types common for all modules.
 pub trait Spec {
+    type Address: Address + borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug;
+
     type Storage: Storage + Clone;
 
     type PublicKey: borsh::BorshDeserialize
@@ -95,10 +101,10 @@ pub trait Spec {
 /// Context contains functionality common for all modules.
 pub trait Context: Spec + Clone + Debug + PartialEq {
     /// Sender of the transaction.
-    fn sender(&self) -> Address;
+    fn sender(&self) -> &Self::Address;
 
     /// Constructor for the Context.
-    fn new(sender: Address) -> Self;
+    fn new(sender: Self::Address) -> Self;
 }
 
 /// Every module has to implement this trait.
@@ -153,5 +159,5 @@ pub trait ModuleInfo {
 
     // Returns an address for the module.
     // TODO: https://github.com/Sovereign-Labs/sovereign/issues/136
-    fn address() -> Address;
+    fn address(&self) -> &<Self::Context as Spec>::Address;
 }

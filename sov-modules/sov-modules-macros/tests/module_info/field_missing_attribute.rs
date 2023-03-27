@@ -4,6 +4,9 @@ use sov_state::StateMap;
 
 #[derive(ModuleInfo)]
 struct TestStruct<C: Context> {
+    #[address]
+    pub address: C::Address,
+
     test_state1: StateMap<u32, u32, C::Storage>,
 
     #[state]

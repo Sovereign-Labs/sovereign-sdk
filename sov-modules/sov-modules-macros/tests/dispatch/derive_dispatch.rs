@@ -29,7 +29,7 @@ fn main() {
     let storage = ProverStorage::temporary();
     let working_set = &mut sov_state::WorkingSet::new(storage);
     runtime.genesis(working_set).unwrap();
-    let context = MockContext::new(Address::new([0; 32]));
+    let context = MockContext::new(Address::new([0; 32].to_vec()));
 
     let value = 11;
     {
@@ -37,10 +37,7 @@ fn main() {
         let serialized_message = RT::encode_first_call(message);
         let module = RT::decode_call(&serialized_message).unwrap();
 
-        assert_eq!(
-            runtime.module_address(&module),
-            first_test_module::FirstTestStruct::<MockContext>::address()
-        );
+        assert_eq!(runtime.module_address(&module), runtime.first.address());
         let _ = runtime
             .dispatch_call(module, working_set, &context)
             .unwrap();
@@ -59,10 +56,7 @@ fn main() {
         let serialized_message = RT::encode_second_call(message);
         let module = RT::decode_call(&serialized_message).unwrap();
 
-        assert_eq!(
-            runtime.module_address(&module),
-            second_test_module::SecondTestStruct::<MockContext>::address()
-        );
+        assert_eq!(runtime.module_address(&module), runtime.second.address());
 
         let _ = runtime
             .dispatch_call(module, working_set, &context)

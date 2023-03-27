@@ -11,6 +11,9 @@ pub mod first_test_module {
     where
         C: Context,
     {
+        #[address]
+        pub address: C::Address,
+
         #[state]
         pub state_in_first_struct_1: StateMap<C::PublicKey, u32, C::Storage>,
 
@@ -24,6 +27,9 @@ mod second_test_module {
 
     #[derive(ModuleInfo)]
     pub(crate) struct SecondTestStruct<C: Context> {
+        #[address]
+        pub address: C::Address,
+
         #[state]
         pub state_in_second_struct_1: StateMap<String, u32, C::Storage>,
 

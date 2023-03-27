@@ -5,7 +5,7 @@ use crate::{
 };
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey},
-    Address, Context, Module, ModuleInfo, PublicKey,
+    Address, Context, Module, ModuleInfo, PublicKey, Spec,
 };
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -18,8 +18,8 @@ fn test_update_account() {
     let mut hooks = hooks::Hooks::<C>::new();
 
     let sender = MockPublicKey::try_from("pub_key").unwrap();
-    let sender_addr: Address = sender.to_address();
-    let sender_context = C::new(sender_addr);
+    let sender_addr = sender.to_address::<<C as Spec>::Address>();
+    let sender_context = C::new(sender_addr.clone());
 
     // Test new account creation
     {
@@ -37,7 +37,7 @@ fn test_update_account() {
         assert_eq!(
             query_response,
             query::Response::AccountExists {
-                addr: sender_addr.inner(),
+                addr: sender_addr.as_bytes().to_vec(),
                 nonce: 0
             }
         )
@@ -76,7 +76,7 @@ fn test_update_account() {
         assert_eq!(
             query_response,
             query::Response::AccountExists {
-                addr: sender_addr.inner(),
+                addr: sender_addr.as_bytes().to_vec(),
                 nonce: 0
             }
         )
@@ -119,8 +119,8 @@ fn test_get_acc_after_pub_key_update() {
     let mut hooks = hooks::Hooks::<C>::new();
 
     let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();
-    let sender_1_addr = sender_1.to_address();
-    let sender_context_1 = C::new(sender_1_addr);
+    let sender_1_addr = sender_1.to_address::<<C as Spec>::Address>();
+    let sender_context_1 = C::new(sender_1_addr.clone());
 
     hooks
         .get_or_create_default_account(sender_1, native_working_set)

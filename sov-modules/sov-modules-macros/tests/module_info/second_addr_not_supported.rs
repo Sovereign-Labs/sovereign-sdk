@@ -5,13 +5,16 @@ use sov_state::StateMap;
 #[derive(ModuleInfo)]
 struct TestStruct<C: Context> {
     #[address]
-    address: C::Address,
+    address_1: C::Address,
 
-    #[other]
-    test_state1: StateMap<u32, String, C::Storage>,
+    #[address]
+    address_2: C::Address,
 
     #[state]
-    test_state2: StateMap<C::PublicKey, String, C::Storage>,
+    test_state1: StateMap<u32, u32, C::Storage>,
+
+    #[state]
+    test_state2: StateMap<Vec<u8>, u64, C::Storage>,
 }
 
 fn main() {}

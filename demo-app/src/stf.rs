@@ -88,7 +88,7 @@ where
                 .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
 
             if let Ok(msg) = RT::decode_call(&verified_tx.runtime_msg) {
-                let ctx = C::new(verified_tx.sender);
+                let ctx = C::new(verified_tx.sender.clone());
                 let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
                 self.tx_hooks

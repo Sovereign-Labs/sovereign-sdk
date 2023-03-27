@@ -9,6 +9,9 @@ pub mod module_a {
 
     #[derive(ModuleInfo)]
     pub(crate) struct ModuleA<C: Context> {
+        #[address]
+        pub address_module_a: C::Address,
+
         #[state]
         pub(crate) state_1_a: StateMap<String, String, C::Storage>,
 
@@ -30,8 +33,12 @@ pub mod module_b {
 
     #[derive(ModuleInfo)]
     pub(crate) struct ModuleB<C: Context> {
+        #[address]
+        pub address_module_b: C::Address,
+
         #[state]
         state_1_b: StateMap<String, String, C::Storage>,
+
         #[module]
         pub(crate) mod_1_a: module_a::ModuleA<C>,
     }
@@ -50,6 +57,9 @@ mod module_c {
 
     #[derive(ModuleInfo)]
     pub(crate) struct ModuleC<C: Context> {
+        #[address]
+        pub address: C::Address,
+
         #[module]
         pub(crate) mod_1_a: module_a::ModuleA<C>,
 

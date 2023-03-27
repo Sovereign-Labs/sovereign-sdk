@@ -1,6 +1,7 @@
 use crate::{Account, Accounts};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use sov_modules_api::Address;
 use sov_state::WorkingSet;
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
@@ -10,7 +11,7 @@ pub enum QueryMessage<C: sov_modules_api::Context> {
 
 #[derive(Deserialize, Serialize, Debug, Eq, PartialEq)]
 pub enum Response {
-    AccountExists { addr: [u8; 32], nonce: u64 },
+    AccountExists { addr: Vec<u8>, nonce: u64 },
     AccountEmpty,
 }
 
@@ -22,7 +23,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
     ) -> Response {
         match self.accounts.get(&pub_key, working_set) {
             Some(Account { addr, nonce }) => Response::AccountExists {
-                addr: addr.inner(),
+                addr: addr.as_bytes().to_vec(),
                 nonce,
             },
             None => Response::AccountEmpty,

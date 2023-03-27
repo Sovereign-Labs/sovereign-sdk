@@ -1,4 +1,5 @@
 use proc_macro::{self};
+use proc_macro2::{Ident, Span};
 use syn::{DataStruct, DeriveInput, ImplGenerics, PathArguments, TypeGenerics, WhereClause};
 
 #[derive(Clone)]
@@ -11,6 +12,7 @@ struct StructNamedField {
 // We don't generate prefix functions for imported modules as they are already generated.
 #[derive(Clone)]
 enum FieldKind {
+    Address(StructNamedField),
     State(StructNamedField),
     Module(StructNamedField),
 }
@@ -64,6 +66,8 @@ impl<'a> StructDef<'a> {
             FieldKind::State(field) => Some(make_prefix_func(field, &self.ident)),
             // Don't generate prefix functions for modules
             FieldKind::Module(_) => None,
+            // Don't generate prefix functions for address
+            FieldKind::Address(_) => None,
         });
 
         let impl_generics = &self.impl_generics;
@@ -85,6 +89,7 @@ impl<'a> StructDef<'a> {
         let mut impl_self_init = Vec::default();
         let mut impl_self_body = Vec::default();
 
+        let mut module_address = None;
         for field in fields.iter() {
             match field {
                 FieldKind::State(field) => {
@@ -95,6 +100,11 @@ impl<'a> StructDef<'a> {
                     impl_self_init.push(make_init_module(field)?);
                     impl_self_body.push(&field.ident);
                 }
+                FieldKind::Address(field) => {
+                    impl_self_init.push(make_init_address(field, &self.ident, module_address)?);
+                    impl_self_body.push(&field.ident);
+                    module_address = Some(&field.ident);
+                }
             };
         }
 
@@ -103,13 +113,16 @@ impl<'a> StructDef<'a> {
         let type_generics = &self.type_generics;
         let where_clause = self.where_clause;
 
-        let fn_address = make_fn_address(ident);
+        let fn_address = make_fn_address(module_address)?;
 
         Ok(quote::quote! {
+            use sov_modules_api::Address;
+
             impl #impl_generics sov_modules_api::ModuleInfo for #ident #type_generics #where_clause{
                 type Context = C;
 
                 fn new() -> Self {
+
                     #(#impl_self_init)*
 
                     Self{
@@ -153,7 +166,7 @@ fn get_fields_from_data_struct(data_struct: &DataStruct) -> Result<Vec<FieldKind
         if original_field.attrs.is_empty() {
             return Err(syn::Error::new_spanned(
                 &original_field.ident,
-                "This field is missing an attribute: add `#[module]` or `#[state]`. ",
+                "This field is missing an attribute: add `#[module]`, `#[state]` or `#[address]`. ",
             ));
         }
 
@@ -167,12 +180,14 @@ fn get_fields_from_data_struct(data_struct: &DataStruct) -> Result<Vec<FieldKind
                 output_fields.push(FieldKind::State(field));
             } else if attribute.path.segments[0].ident == "module" {
                 output_fields.push(FieldKind::Module(field))
+            } else if attribute.path.segments[0].ident == "address" {
+                output_fields.push(FieldKind::Address(field))
             } else if attribute.path.segments[0].ident == "doc" {
                 // Skip doc comments.
             } else {
                 return Err(syn::Error::new_spanned(
                     field_ident,
-                    "Only `#[module]` or `#[state]` attributes are supported.",
+                    "Only `#[module]`, `#[state]` or `#[address]` attributes are supported.",
                 ));
             };
         }
@@ -204,15 +219,19 @@ fn make_prefix_func(
     }
 }
 
-fn make_fn_address(module_ident: &proc_macro2::Ident) -> proc_macro2::TokenStream {
-    quote::quote! {
-        fn address() -> sov_modules_api::Address {
-            use sov_modules_api::Hasher;
-            let module_path = module_path!();
-            let prefix = sov_modules_api::Prefix::new_module(module_path, stringify!(#module_ident));
-
-            sov_modules_api::Address::new(prefix.hash::<C>())
-        }
+fn make_fn_address(
+    address_ident: Option<&proc_macro2::Ident>,
+) -> Result<proc_macro2::TokenStream, syn::Error> {
+    match address_ident {
+        Some(address_ident) => Ok(quote::quote! {
+            fn address(&self) -> &<Self::Context as sov_modules_api::Spec>::Address{
+               &self.#address_ident
+            }
+        }),
+        None => Err(syn::Error::new(
+            Span::call_site(),
+            "The `ModuleInfo` macro requires `[address]` attribute.",
+        )),
     }
 }
 
@@ -258,4 +277,28 @@ fn make_init_module(field: &StructNamedField) -> Result<proc_macro2::TokenStream
     Ok(quote::quote! {
         let #field_ident = <#ty as sov_modules_api::ModuleInfo>::new();
     })
+}
+
+fn make_init_address(
+    field: &StructNamedField,
+    struct_ident: &Ident,
+    address: Option<&Ident>,
+) -> Result<proc_macro2::TokenStream, syn::Error> {
+    let field_ident = &field.ident;
+
+    match address {
+        Some(addr) => Err(syn::Error::new_spanned(
+            addr,
+            format!(
+                "The `address` attribute is defined more than once, revisit field: {}",
+                addr
+            ),
+        )),
+        None => Ok(quote::quote! {
+            use sov_modules_api::Hasher;
+            let module_path = module_path!();
+            let prefix = sov_modules_api::Prefix::new_module(module_path, stringify!(#struct_ident));
+            let #field_ident = <Self::Context as sov_modules_api::Spec>::Address::new(prefix.hash::<C>().to_vec());
+        }),
+    }
 }

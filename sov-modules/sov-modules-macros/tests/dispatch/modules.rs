@@ -7,6 +7,9 @@ pub mod first_test_module {
 
     #[derive(ModuleInfo)]
     pub(crate) struct FirstTestStruct<C: Context> {
+        #[address]
+        pub address: C::Address,
+
         #[state]
         pub state_in_first_struct: StateValue<u8, C::Storage>,
     }
@@ -52,6 +55,9 @@ pub mod second_test_module {
 
     #[derive(ModuleInfo)]
     pub(crate) struct SecondTestStruct<C: Context> {
+        #[address]
+        pub address: C::Address,
+
         #[state]
         pub state_in_second_struct: StateValue<u8, C::Storage>,
     }

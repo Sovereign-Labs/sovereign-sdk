@@ -8,6 +8,9 @@ mod test_module {
 
     #[derive(ModuleInfo)]
     pub(crate) struct TestStruct<C: Context> {
+        #[address]
+        pub address: C::Address,
+
         // Comment
         #[state]
         pub test_state1: StateMap<C::PublicKey, u32, C::Storage>,
@@ -62,13 +65,13 @@ fn main() {
         .into()
     );
 
+    use sov_modules_api::Address;
     use sov_modules_api::Hasher;
-
     let mut hasher = <C as sov_modules_api::Spec>::Hasher::new();
     hasher.update("trybuild000::test_module/TestStruct/".as_bytes());
 
     assert_eq!(
-        sov_modules_api::Address::new(hasher.finalize()),
-        test_module::TestStruct::<C>::address()
+        &sov_modules_api::AddressImpl::new(hasher.finalize().to_vec()),
+        test_struct.address()
     );
 }

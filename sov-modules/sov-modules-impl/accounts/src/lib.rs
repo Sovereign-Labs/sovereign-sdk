@@ -7,23 +7,26 @@ mod query;
 mod tests;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::{Address, Error};
+use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq, Copy, Clone)]
-pub struct Account {
-    pub addr: Address,
+pub struct Account<C: sov_modules_api::Context> {
+    pub addr: C::Address,
     pub nonce: u64,
 }
 
 #[derive(ModuleInfo)]
 pub struct Accounts<C: sov_modules_api::Context> {
-    #[state]
-    pub(crate) public_keys: sov_state::StateMap<Address, C::PublicKey, C::Storage>,
+    #[address]
+    pub address: C::Address,
 
     #[state]
-    pub(crate) accounts: sov_state::StateMap<C::PublicKey, Account, C::Storage>,
+    pub(crate) public_keys: sov_state::StateMap<C::Address, C::PublicKey, C::Storage>,
+
+    #[state]
+    pub(crate) accounts: sov_state::StateMap<C::PublicKey, Account<C>, C::Storage>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {

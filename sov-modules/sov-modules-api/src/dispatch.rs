@@ -1,4 +1,4 @@
-use crate::{Address, CallResponse, Context, Error, QueryResponse, Spec};
+use crate::{CallResponse, Context, Error, QueryResponse, Spec};
 use sov_state::WorkingSet;
 
 /// Methods from this trait should be called only once during the rollup deployment.
@@ -29,7 +29,7 @@ pub trait DispatchCall {
     ) -> Result<CallResponse, Error>;
 
     /// Returns an address of the dispatched module.
-    fn module_address(&self, message: &Self::Decodable) -> Address;
+    fn module_address(&self, message: &Self::Decodable) -> &<Self::Context as Spec>::Address;
 }
 
 /// A trait that needs to be implemented for any query message.
