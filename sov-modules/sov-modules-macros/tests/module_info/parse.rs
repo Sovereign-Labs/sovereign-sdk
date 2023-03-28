@@ -65,13 +65,12 @@ fn main() {
         .into()
     );
 
-    use sov_modules_api::Address;
     use sov_modules_api::Hasher;
     let mut hasher = <C as sov_modules_api::Spec>::Hasher::new();
     hasher.update("trybuild000::test_module/TestStruct/".as_bytes());
 
     assert_eq!(
-        &sov_modules_api::AddressImpl::new(hasher.finalize().to_vec()),
+        &sov_modules_api::AddressImpl::try_from(hasher.finalize().as_ref()).unwrap(),
         test_struct.address()
     );
 }

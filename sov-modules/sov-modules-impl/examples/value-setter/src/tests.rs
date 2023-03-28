@@ -64,8 +64,7 @@ fn test_value_setter_helper<C: Context>(context: C, working_set: &mut WorkingSet
 
 #[test]
 fn test_err_on_sender_is_not_admin() {
-    let data: &[u8] = &[9u8; 32];
-    let sender: AddressImpl = AddressImpl::try_from(data).unwrap();
+    let sender: AddressImpl = AddressImpl::try_from([9u8; 32].as_ref()).unwrap();
     let backing_store = ProverStorage::temporary();
     let native_working_set = &mut WorkingSet::new(backing_store);
 

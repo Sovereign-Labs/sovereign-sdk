@@ -1,8 +1,8 @@
 mod modules;
-
 use modules::{first_test_module, second_test_module};
+use sov_modules_api::AddressImpl;
 use sov_modules_api::ModuleInfo;
-use sov_modules_api::{mocks::MockContext, Address, Context, Genesis, Module};
+use sov_modules_api::{mocks::MockContext, Context, Genesis, Module};
 use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 use sov_state::ProverStorage;
 
@@ -29,7 +29,7 @@ fn main() {
     let storage = ProverStorage::temporary();
     let working_set = &mut sov_state::WorkingSet::new(storage);
     runtime.genesis(working_set).unwrap();
-    let context = MockContext::new(Address::new([0; 32].to_vec()));
+    let context = MockContext::new(AddressImpl::try_from([0; 32].as_ref()).unwrap());
 
     let value = 11;
     {
