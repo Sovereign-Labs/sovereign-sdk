@@ -1,7 +1,7 @@
 error: Only `#[module]`, `#[state]` or `#[address]` attributes are supported.
   --> tests/module_info/not_supported_attribute.rs:11:5
    |
-11 |     test_state1: StateMap<u32, String, C::Storage>,
+11 |     test_state1: StateMap<u32, String>,
    |     ^^^^^^^^^^^
 
 error: cannot find attribute `other` in this scope

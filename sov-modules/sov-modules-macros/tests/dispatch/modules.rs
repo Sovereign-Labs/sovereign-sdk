@@ -11,7 +11,7 @@ pub mod first_test_module {
         pub address: C::Address,
 
         #[state]
-        pub state_in_first_struct: StateValue<u8, C::Storage>,
+        pub state_in_first_struct: StateValue<u8>,
     }
 
     impl<C: Context> Module for FirstTestStruct<C> {
@@ -59,7 +59,7 @@ pub mod second_test_module {
         pub address: C::Address,
 
         #[state]
-        pub state_in_second_struct: StateValue<u8, C::Storage>,
+        pub state_in_second_struct: StateValue<u8>,
     }
 
     impl<C: Context> Module for SecondTestStruct<C> {

@@ -8,10 +8,10 @@ struct TestStruct<C: Context> {
     address: C::Address,
 
     #[other]
-    test_state1: StateMap<u32, String, C::Storage>,
+    test_state1: StateMap<u32, String>,
 
     #[state]
-    test_state2: StateMap<C::PublicKey, String, C::Storage>,
+    test_state2: StateMap<C::PublicKey, String>,
 }
 
 fn main() {}
