@@ -3,7 +3,7 @@ use crate::{call, query};
 
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey, ZkMockContext},
-    Address, AddressImpl, Context, PublicKey, Spec,
+    AddressImpl, Context, PublicKey, Spec,
 };
 use sov_modules_api::{Module, ModuleInfo};
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
@@ -64,7 +64,8 @@ fn test_value_setter_helper<C: Context>(context: C, working_set: &mut WorkingSet
 
 #[test]
 fn test_err_on_sender_is_not_admin() {
-    let sender: AddressImpl = Address::new([9; 32].to_vec());
+    let data: &[u8] = &[9u8; 32];
+    let sender: AddressImpl = AddressImpl::try_from(data).unwrap();
     let backing_store = ProverStorage::temporary();
     let native_working_set = &mut WorkingSet::new(backing_store);
 

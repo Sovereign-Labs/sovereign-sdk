@@ -5,7 +5,7 @@ use crate::{
 };
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey},
-    Address, Context, Module, ModuleInfo, PublicKey, Spec,
+    Context, Module, ModuleInfo, PublicKey, Spec,
 };
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -37,7 +37,7 @@ fn test_update_account() {
         assert_eq!(
             query_response,
             query::Response::AccountExists {
-                addr: sender_addr.as_bytes().to_vec(),
+                addr: sender_addr.as_ref().to_vec(),
                 nonce: 0
             }
         )
@@ -76,7 +76,7 @@ fn test_update_account() {
         assert_eq!(
             query_response,
             query::Response::AccountExists {
-                addr: sender_addr.as_bytes().to_vec(),
+                addr: sender_addr.as_ref().to_vec(),
                 nonce: 0
             }
         )

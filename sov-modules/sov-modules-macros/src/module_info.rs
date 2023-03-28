@@ -116,7 +116,7 @@ impl<'a> StructDef<'a> {
         let fn_address = make_fn_address(module_address)?;
 
         Ok(quote::quote! {
-            use sov_modules_api::Address;
+            use sov_modules_api::AddressTrait;
 
             impl #impl_generics sov_modules_api::ModuleInfo for #ident #type_generics #where_clause{
                 type Context = C;
@@ -298,7 +298,7 @@ fn make_init_address(
             use sov_modules_api::Hasher;
             let module_path = module_path!();
             let prefix = sov_modules_api::Prefix::new_module(module_path, stringify!(#struct_ident));
-            let #field_ident = <Self::Context as sov_modules_api::Spec>::Address::new(prefix.hash::<C>().to_vec());
+            let #field_ident = <Self::Context as sov_modules_api::Spec>::Address::try_from(&prefix.hash::<C>()).expect("todo");
         }),
     }
 }

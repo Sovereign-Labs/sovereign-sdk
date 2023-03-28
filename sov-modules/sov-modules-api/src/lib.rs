@@ -17,18 +17,15 @@ pub use response::{CallResponse, QueryResponse};
 
 use sov_state::{Storage, WorkingSet};
 use sovereign_sdk::{
-    core::traits::{AddressTrait, Witness},
+    core::traits::Witness,
     serial::{Decode, Encode},
 };
+
+pub use sovereign_sdk::core::traits::AddressTrait;
+
 use std::fmt::Debug;
 
 use thiserror::Error;
-
-/// Represents an address in the rollup.
-pub trait Address {
-    fn new(addr: Vec<u8>) -> Self;
-    fn as_bytes(&self) -> &[u8];
-}
 
 impl AsRef<[u8]> for AddressImpl {
     fn as_ref(&self) -> &[u8] {
@@ -54,16 +51,6 @@ pub struct AddressImpl {
     addr: Vec<u8>,
 }
 
-impl Address for AddressImpl {
-    fn new(addr: Vec<u8>) -> Self {
-        Self { addr }
-    }
-
-    fn as_bytes(&self) -> &[u8] {
-        &self.addr
-    }
-}
-
 #[derive(Error, Debug)]
 pub enum SigVerificationError {
     #[error("Bad signature")]
@@ -87,12 +74,12 @@ pub enum NonInstantiable {}
 
 /// PublicKey used in the module system.
 pub trait PublicKey {
-    fn to_address<A: Address>(&self) -> A;
+    fn to_address<A: AddressTrait>(&self) -> A;
 }
 
 /// Spec contains types common for all modules.
 pub trait Spec {
-    type Address: Address + borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug;
+    type Address: AddressTrait + borsh::BorshDeserialize + borsh::BorshSerialize;
 
     type Storage: Storage + Clone;
 
