@@ -18,8 +18,8 @@ impl Encode for SingletonKey {
 
 /// Container for a single value.
 #[derive(Debug)]
-pub struct StateValue<V, S: Storage> {
-    _phantom: (PhantomData<V>, PhantomData<S>),
+pub struct StateValue<V> {
+    _phantom: PhantomData<V>,
     prefix: Prefix,
 }
 
@@ -30,43 +30,43 @@ pub enum Error {
     MissingValue(Prefix),
 }
 
-impl<V: Encode + Decode, S: Storage> StateValue<V, S> {
+impl<V: Encode + Decode> StateValue<V> {
     pub fn new(prefix: Prefix) -> Self {
         Self {
-            _phantom: (PhantomData, PhantomData),
+            _phantom: PhantomData,
             prefix,
         }
     }
 
     /// Sets a value in the StateValue.
-    pub fn set(&self, value: V, working_set: &mut WorkingSet<S>) {
+    pub fn set<S: Storage>(&self, value: V, working_set: &mut WorkingSet<S>) {
         working_set.set_value(self.prefix(), &SingletonKey, value)
     }
 
     /// Gets a value from the StateValue or None if the value is absent.
-    pub fn get(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
+    pub fn get<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
         working_set.get_value(self.prefix(), &SingletonKey)
     }
 
     /// Gets a value from the StateValue or Error if the value is absent.
-    pub fn get_or_err(&self, working_set: &mut WorkingSet<S>) -> Result<V, Error> {
+    pub fn get_or_err<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Result<V, Error> {
         self.get(working_set)
             .ok_or_else(|| Error::MissingValue(self.prefix().clone()))
     }
 
     /// Removes a value from the StateValue, returning the value (or None if the key is absent).
-    pub fn remove(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
+    pub fn remove<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
         working_set.remove_value(self.prefix(), &SingletonKey)
     }
 
     /// Removes a value and from the StateValue, returning the value (or Error if the key is absent).
-    pub fn remove_or_err(&self, working_set: &mut WorkingSet<S>) -> Result<V, Error> {
+    pub fn remove_or_err<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Result<V, Error> {
         self.remove(working_set)
             .ok_or_else(|| Error::MissingValue(self.prefix().clone()))
     }
 
     /// Deletes a value from the StateValue.
-    pub fn delete(&self, working_set: &mut WorkingSet<S>) {
+    pub fn delete<S: Storage>(&self, working_set: &mut WorkingSet<S>) {
         working_set.delete_value(self.prefix(), &SingletonKey);
     }
 

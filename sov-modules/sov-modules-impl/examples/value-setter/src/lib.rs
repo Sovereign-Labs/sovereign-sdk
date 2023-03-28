@@ -21,10 +21,10 @@ pub struct ValueSetter<C: sov_modules_api::Context> {
     pub address: C::Address,
 
     #[state]
-    pub value: sov_state::StateValue<u32, C::Storage>,
+    pub value: sov_state::StateValue<u32>,
 
     #[state]
-    pub admin: sov_state::StateValue<C::Address, C::Storage>,
+    pub admin: sov_state::StateValue<C::Address>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
