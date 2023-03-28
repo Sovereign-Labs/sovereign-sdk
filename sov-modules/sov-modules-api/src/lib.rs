@@ -17,7 +17,7 @@ pub use response::{CallResponse, QueryResponse};
 
 use sov_state::{Storage, WorkingSet};
 use sovereign_sdk::{
-    core::traits::Witness,
+    core::traits::{AddressTrait, Witness},
     serial::{Decode, Encode},
 };
 use std::fmt::Debug;
@@ -29,6 +29,24 @@ pub trait Address {
     fn new(addr: Vec<u8>) -> Self;
     fn as_bytes(&self) -> &[u8];
 }
+
+impl AsRef<[u8]> for AddressImpl {
+    fn as_ref(&self) -> &[u8] {
+        &self.addr
+    }
+}
+
+impl<'a> TryFrom<&'a [u8]> for AddressImpl {
+    type Error = ();
+
+    fn try_from(addr: &'a [u8]) -> Result<Self, Self::Error> {
+        Ok(Self {
+            addr: addr.to_vec(),
+        })
+    }
+}
+
+impl AddressTrait for AddressImpl {}
 
 /// Default implementation of Address trait
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Eq)]
