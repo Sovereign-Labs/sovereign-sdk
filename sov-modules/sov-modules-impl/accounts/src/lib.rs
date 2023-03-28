@@ -23,10 +23,10 @@ pub struct Accounts<C: sov_modules_api::Context> {
     pub address: C::Address,
 
     #[state]
-    pub(crate) public_keys: sov_state::StateMap<C::Address, C::PublicKey, C::Storage>,
+    pub(crate) public_keys: sov_state::StateMap<C::Address, C::PublicKey>,
 
     #[state]
-    pub(crate) accounts: sov_state::StateMap<C::PublicKey, Account<C>, C::Storage>,
+    pub(crate) accounts: sov_state::StateMap<C::PublicKey, Account<C>>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {

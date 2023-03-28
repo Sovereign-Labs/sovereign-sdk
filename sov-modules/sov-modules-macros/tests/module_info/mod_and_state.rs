@@ -15,10 +15,10 @@ pub mod first_test_module {
         pub address: C::Address,
 
         #[state]
-        pub state_in_first_struct_1: StateMap<C::PublicKey, u32, C::Storage>,
+        pub state_in_first_struct_1: StateMap<C::PublicKey, u32>,
 
         #[state]
-        pub state_in_first_struct_2: StateMap<String, String, C::Storage>,
+        pub state_in_first_struct_2: StateMap<String, String>,
     }
 }
 
@@ -31,7 +31,7 @@ mod second_test_module {
         pub address: C::Address,
 
         #[state]
-        pub state_in_second_struct_1: StateMap<String, u32, C::Storage>,
+        pub state_in_second_struct_1: StateMap<String, u32>,
 
         #[module]
         pub module_in_second_struct_1: first_test_module::FirstTestStruct<C>,

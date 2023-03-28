@@ -83,7 +83,7 @@ fn create_state_map_and_storage(
     value: u32,
     path: impl AsRef<Path>,
 ) -> (
-    StateMap<u32, u32, ProverStorage<MockStorageSpec>>,
+    StateMap<u32, u32>,
     WorkingSet<ProverStorage<MockStorageSpec>>,
 ) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
@@ -128,10 +128,7 @@ fn test_state_map_with_delete() {
 fn create_state_value_and_storage(
     value: u32,
     path: impl AsRef<Path>,
-) -> (
-    StateValue<u32, ProverStorage<MockStorageSpec>>,
-    WorkingSet<ProverStorage<MockStorageSpec>>,
-) {
+) -> (StateValue<u32>, WorkingSet<ProverStorage<MockStorageSpec>>) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
     let state_value = StateValue::new(Prefix::new(vec![0]));

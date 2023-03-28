@@ -13,10 +13,10 @@ pub mod module_a {
         pub address_module_a: C::Address,
 
         #[state]
-        pub(crate) state_1_a: StateMap<String, String, C::Storage>,
+        pub(crate) state_1_a: StateMap<String, String>,
 
         #[state]
-        pub(crate) state_2_a: StateValue<String, C::Storage>,
+        pub(crate) state_2_a: StateValue<String>,
     }
 
     impl<C: Context> ModuleA<C> {
@@ -37,7 +37,7 @@ pub mod module_b {
         pub address_module_b: C::Address,
 
         #[state]
-        state_1_b: StateMap<String, String, C::Storage>,
+        state_1_b: StateMap<String, String>,
 
         #[module]
         pub(crate) mod_1_a: module_a::ModuleA<C>,

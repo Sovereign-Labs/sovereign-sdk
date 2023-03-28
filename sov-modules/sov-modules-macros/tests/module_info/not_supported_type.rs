@@ -11,7 +11,7 @@ struct TestStruct<C: Context> {
     test_state1: [usize; 22],
 
     #[state]
-    test_state2: StateMap<u32, u32, C::Storage>,
+    test_state2: StateMap<u32, u32>,
 }
 
 fn main() {}

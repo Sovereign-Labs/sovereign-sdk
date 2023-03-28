@@ -13,14 +13,14 @@ mod test_module {
 
         // Comment
         #[state]
-        pub test_state1: StateMap<C::PublicKey, u32, C::Storage>,
+        pub test_state1: StateMap<C::PublicKey, u32>,
 
         /// Doc comment
         #[state]
-        pub test_state2: StateMap<String, String, C::Storage>,
+        pub test_state2: StateMap<String, String>,
 
         #[state]
-        pub test_state3: StateValue<String, C::Storage>,
+        pub test_state3: StateValue<String>,
     }
 }
 

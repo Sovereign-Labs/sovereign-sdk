@@ -20,10 +20,10 @@ pub struct Election<C: sov_modules_api::Context> {
     pub address: C::Address,
 
     #[state]
-    pub(crate) admin: sov_state::StateValue<C::Address, C::Storage>,
+    pub(crate) admin: sov_state::StateValue<C::Address>,
 
     #[state]
-    pub(crate) is_frozen: sov_state::StateValue<bool, C::Storage>,
+    pub(crate) is_frozen: sov_state::StateValue<bool>,
 
     // There are two issues here:
     // 1. We use `std::Vec` inside `StateValue` this might be inefficient because
@@ -33,10 +33,10 @@ pub struct Election<C: sov_modules_api::Context> {
     // 2. It would be better to use `StateMap`, but it doesn't support iteration,
     //      see: https://github.com/Sovereign-Labs/sovereign/issues/61
     #[state]
-    pub(crate) candidates: sov_state::StateValue<Vec<Candidate>, C::Storage>,
+    pub(crate) candidates: sov_state::StateValue<Vec<Candidate>>,
 
     #[state]
-    pub(crate) allowed_voters: sov_state::StateMap<C::Address, Voter, C::Storage>,
+    pub(crate) allowed_voters: sov_state::StateMap<C::Address, Voter>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {

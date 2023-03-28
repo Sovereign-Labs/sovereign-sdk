@@ -1,5 +1,5 @@
 error: The `ModuleInfo` macro supports structs only.
- --> tests/module_info/derive_on_enum_not_supported.rs:6:1
+ --> tests/module_info/derive_on_enum_not_supported.rs:5:1
   |
-6 | enum TestStruct<C: Context> {
+5 | enum TestStruct {
   | ^^^^
