@@ -70,7 +70,7 @@ fn main() {
     hasher.update("trybuild000::test_module/TestStruct/".as_bytes());
 
     assert_eq!(
-        &sov_modules_api::AddressImpl::try_from(hasher.finalize().as_ref()).unwrap(),
+        &sov_modules_api::Address::try_from(hasher.finalize().as_ref()).unwrap(),
         test_struct.address()
     );
 }

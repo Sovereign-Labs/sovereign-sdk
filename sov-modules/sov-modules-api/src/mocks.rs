@@ -1,4 +1,4 @@
-use crate::{AddressImpl, AddressTrait, Context, PublicKey, SigVerificationError, Signature, Spec};
+use crate::{Address, AddressTrait, Context, PublicKey, SigVerificationError, Signature, Spec};
 use borsh::{BorshDeserialize, BorshSerialize};
 use jmt::SimpleHasher;
 use sov_state::ZkStorage;
@@ -59,11 +59,11 @@ impl Signature for MockSignature {
 /// Mock for Context, useful for testing.
 #[derive(Clone, Debug, PartialEq)]
 pub struct MockContext {
-    pub sender: AddressImpl,
+    pub sender: Address,
 }
 
 impl Spec for MockContext {
-    type Address = AddressImpl;
+    type Address = Address;
     type Storage = ProverStorage<MockStorageSpec>;
     type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
@@ -83,11 +83,11 @@ impl Context for MockContext {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ZkMockContext {
-    pub sender: AddressImpl,
+    pub sender: Address,
 }
 
 impl Spec for ZkMockContext {
-    type Address = AddressImpl;
+    type Address = Address;
     type Storage = ZkStorage<MockStorageSpec>;
     type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;

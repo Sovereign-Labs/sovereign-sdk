@@ -27,13 +27,13 @@ use std::fmt::Debug;
 
 use thiserror::Error;
 
-impl AsRef<[u8]> for AddressImpl {
+impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {
         &self.addr
     }
 }
 
-impl<'a> TryFrom<&'a [u8]> for AddressImpl {
+impl<'a> TryFrom<&'a [u8]> for Address {
     type Error = ();
 
     fn try_from(addr: &'a [u8]) -> Result<Self, Self::Error> {
@@ -43,11 +43,11 @@ impl<'a> TryFrom<&'a [u8]> for AddressImpl {
     }
 }
 
-impl AddressTrait for AddressImpl {}
+impl AddressTrait for Address {}
 
-/// Default implementation of Address trait
+/// Default implementation of AddressTrait for the module system
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Eq)]
-pub struct AddressImpl {
+pub struct Address {
     addr: Vec<u8>,
 }
 
