@@ -9,7 +9,8 @@ impl<C: sov_modules_api::Context> ValueSetter<C> {
         let admin_pub_key = C::PublicKey::try_from("value_setter_admin")
             .map_err(|_| anyhow!("Admin initialization failed"))?;
 
-        self.admin.set(admin_pub_key.to_address(), working_set);
+        self.admin
+            .set(admin_pub_key.to_address::<C::Address>(), working_set);
         Ok(())
     }
 }

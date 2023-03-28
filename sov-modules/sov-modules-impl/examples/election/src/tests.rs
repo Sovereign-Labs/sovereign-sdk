@@ -48,23 +48,29 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(working_set: &mut WorkingS
             .unwrap();
     }
 
-    let voter_1 = MockPublicKey::try_from("voter_1").unwrap().to_address();
-    let voter_2 = MockPublicKey::try_from("voter_2").unwrap().to_address();
-    let voter_3 = MockPublicKey::try_from("voter_3").unwrap().to_address();
+    let voter_1 = MockPublicKey::try_from("voter_1")
+        .unwrap()
+        .to_address::<C::Address>();
+    let voter_2 = MockPublicKey::try_from("voter_2")
+        .unwrap()
+        .to_address::<C::Address>();
+    let voter_3 = MockPublicKey::try_from("voter_3")
+        .unwrap()
+        .to_address::<C::Address>();
 
     // Register voters
     {
-        let add_voter = CallMessage::AddVoter(voter_1);
+        let add_voter = CallMessage::AddVoter(voter_1.clone());
         election
             .call(add_voter, &admin_context, working_set)
             .unwrap();
 
-        let add_voter = CallMessage::AddVoter(voter_2);
+        let add_voter = CallMessage::AddVoter(voter_2.clone());
         election
             .call(add_voter, &admin_context, working_set)
             .unwrap();
 
-        let add_voter = CallMessage::AddVoter(voter_3);
+        let add_voter = CallMessage::AddVoter(voter_3.clone());
         election
             .call(add_voter, &admin_context, working_set)
             .unwrap();

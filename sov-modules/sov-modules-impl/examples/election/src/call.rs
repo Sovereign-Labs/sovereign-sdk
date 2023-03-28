@@ -5,14 +5,14 @@ use super::{
 use anyhow::{anyhow, bail, ensure, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use sov_modules_api::{Address, CallResponse};
+use sov_modules_api::{CallResponse, Context};
 use sov_state::WorkingSet;
 
 /// Call actions supported byte the module.
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
-pub enum CallMessage {
+pub enum CallMessage<C: Context> {
     SetCandidates { names: Vec<String> },
-    AddVoter(Address),
+    AddVoter(C::Address),
     Vote(usize),
     ClearElection,
     FreezeElection,
@@ -39,7 +39,7 @@ impl<C: sov_modules_api::Context> Election<C> {
     /// Adds voter to the allow list. Must be called by the Admin.
     pub(crate) fn add_voter(
         &self,
-        voter_address: Address,
+        voter_address: C::Address,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
@@ -118,7 +118,7 @@ impl<C: sov_modules_api::Context> Election<C> {
         let admin = self.admin.get_or_err(working_set)?;
 
         ensure!(
-            admin == context.sender(),
+            &admin == context.sender(),
             "Only admin can trigger this action."
         );
         Ok(())
@@ -147,7 +147,7 @@ impl<C: sov_modules_api::Context> Election<C> {
 
     fn exit_if_voter_already_set(
         &self,
-        voter_address: &Address,
+        voter_address: &C::Address,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
         ensure!(

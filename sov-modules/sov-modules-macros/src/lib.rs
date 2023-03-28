@@ -31,7 +31,8 @@ use syn::parse_macro_input;
 ///
 ///  * `state` - attribute for state members
 ///  * `module` - attribute for module members
-#[proc_macro_derive(ModuleInfo, attributes(state, module))]
+///  * `address` - attribute for module address
+#[proc_macro_derive(ModuleInfo, attributes(state, module, address))]
 pub fn module_info(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
 

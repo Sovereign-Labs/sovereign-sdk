@@ -39,8 +39,7 @@ impl<'a> StructDef<'a> {
 
             quote::quote!(
                 #enum_ident::#name(message)=>{
-                    <#ty as sov_modules_api::ModuleInfo>::address()
-
+                   <#ty as sov_modules_api::ModuleInfo>::address(&self.#name)
                 },
             )
         });
@@ -76,11 +75,12 @@ impl<'a> StructDef<'a> {
 
                 }
 
-                fn module_address(&self, decodable: &Self::Decodable) -> sov_modules_api::Address {
+                fn module_address(&self, decodable: &Self::Decodable) -> &<Self::Context as sov_modules_api::Spec>::Address {
                     match decodable {
                         #(#match_legs_address)*
                     }
                 }
+
             }
         }
     }

@@ -1,5 +1,5 @@
 use crate::tx_verifier::{Transaction, VerifiedTx};
-use sov_modules_api::{Address, Context, Spec};
+use sov_modules_api::{Context, Spec};
 use sov_state::WorkingSet;
 
 /// TxHooks allows injecting custom logic into a transaction processing pipeline.
@@ -69,7 +69,7 @@ impl<C: Context> DemoAppTxHooks<C> {
         tx_nonce: u64,
         tx_pub_key: C::PublicKey,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> anyhow::Result<Address> {
+    ) -> anyhow::Result<C::Address> {
         let acc = self
             .accounts_hooks
             .get_or_create_default_account(tx_pub_key, working_set)?;

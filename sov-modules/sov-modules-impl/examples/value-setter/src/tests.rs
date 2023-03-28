@@ -3,7 +3,7 @@ use crate::{call, query};
 
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey, ZkMockContext},
-    Address, Context, PublicKey,
+    Address, Context, PublicKey, Spec,
 };
 use sov_modules_api::{Module, ModuleInfo};
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
@@ -13,14 +13,15 @@ use sovereign_sdk::stf::Event;
 fn test_value_setter() {
     let sender = MockPublicKey::try_from("value_setter_admin")
         .unwrap()
-        .to_address();
+        .to_address::<<MockContext as Spec>::Address>();
     let mut working_set = WorkingSet::new(ProverStorage::temporary());
 
     // Test Native-Context
     {
-        let context = MockContext::new(sender);
+        let context = MockContext::new(sender.clone());
         test_value_setter_helper(context, &mut working_set);
     }
+
     let (_, witness) = working_set.freeze();
 
     // Test Zk-Context
@@ -63,13 +64,13 @@ fn test_value_setter_helper<C: Context>(context: C, working_set: &mut WorkingSet
 
 #[test]
 fn test_err_on_sender_is_not_admin() {
-    let sender = Address::new([9; 32]);
+    let sender: Address = Address::try_from([9u8; 32].as_ref()).unwrap();
     let backing_store = ProverStorage::temporary();
     let native_working_set = &mut WorkingSet::new(backing_store);
 
     // Test Native-Context
     {
-        let context = MockContext::new(sender);
+        let context = MockContext::new(sender.clone());
         test_err_on_sender_is_not_admin_helper(context, native_working_set);
     }
     let (_, witness) = native_working_set.freeze();

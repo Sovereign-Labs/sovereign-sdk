@@ -7,6 +7,8 @@ fn module_info_tests() {
     t.compile_fail("tests/module_info/not_supported_attribute.rs");
     t.compile_fail("tests/module_info/derive_on_enum_not_supported.rs");
     t.compile_fail("tests/module_info/not_supported_type.rs");
+    t.compile_fail("tests/module_info/second_addr_not_supported.rs");
+    t.compile_fail("tests/module_info/missing_address.rs");
 }
 
 #[test]

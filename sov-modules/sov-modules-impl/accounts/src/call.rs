@@ -24,14 +24,12 @@ impl<C: sov_modules_api::Context> Accounts<C> {
     ) -> Result<CallResponse> {
         self.exit_if_account_exists(&new_pub_key, working_set)?;
 
-        let pub_key = self
-            .public_keys
-            .get_or_err(&context.sender(), working_set)?;
+        let pub_key = self.public_keys.get_or_err(context.sender(), working_set)?;
 
         let account = self.accounts.remove_or_err(&pub_key, working_set)?;
         // Sanity check
         ensure!(
-            context.sender() == account.addr,
+            context.sender() == &account.addr,
             "Inconsistent account data"
         );
 
@@ -41,7 +39,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         // Update the public key (account data remains the same).
         self.accounts.set(&new_pub_key, account, working_set);
         self.public_keys
-            .set(&context.sender(), new_pub_key, working_set);
+            .set(context.sender(), new_pub_key, working_set);
         Ok(CallResponse::default())
     }
 

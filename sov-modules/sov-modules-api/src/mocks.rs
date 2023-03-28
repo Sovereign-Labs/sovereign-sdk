@@ -1,4 +1,4 @@
-use crate::{Address, Context, PublicKey, SigVerificationError, Signature, Spec};
+use crate::{Address, AddressTrait, Context, PublicKey, SigVerificationError, Signature, Spec};
 use borsh::{BorshDeserialize, BorshSerialize};
 use jmt::SimpleHasher;
 use sov_state::ZkStorage;
@@ -32,9 +32,9 @@ impl TryFrom<&'static str> for MockPublicKey {
 }
 
 impl PublicKey for MockPublicKey {
-    fn to_address(&self) -> Address {
+    fn to_address<A: AddressTrait>(&self) -> A {
         let pub_key_hash = <MockContext as Spec>::Hasher::hash(&self.pub_key);
-        Address::new(pub_key_hash)
+        A::try_from(&pub_key_hash).expect("todo")
     }
 }
 
@@ -63,6 +63,7 @@ pub struct MockContext {
 }
 
 impl Spec for MockContext {
+    type Address = Address;
     type Storage = ProverStorage<MockStorageSpec>;
     type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
@@ -71,11 +72,11 @@ impl Spec for MockContext {
 }
 
 impl Context for MockContext {
-    fn sender(&self) -> Address {
-        self.sender
+    fn sender(&self) -> &Self::Address {
+        &self.sender
     }
 
-    fn new(sender: Address) -> Self {
+    fn new(sender: Self::Address) -> Self {
         Self { sender }
     }
 }
@@ -86,6 +87,7 @@ pub struct ZkMockContext {
 }
 
 impl Spec for ZkMockContext {
+    type Address = Address;
     type Storage = ZkStorage<MockStorageSpec>;
     type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
@@ -94,11 +96,11 @@ impl Spec for ZkMockContext {
 }
 
 impl Context for ZkMockContext {
-    fn sender(&self) -> Address {
-        self.sender
+    fn sender(&self) -> &Self::Address {
+        &self.sender
     }
 
-    fn new(sender: Address) -> Self {
+    fn new(sender: Self::Address) -> Self {
         Self { sender }
     }
 }

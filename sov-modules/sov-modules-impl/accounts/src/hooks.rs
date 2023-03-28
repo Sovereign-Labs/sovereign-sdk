@@ -1,4 +1,4 @@
-use crate::{Account, Accounts, Address};
+use crate::{Account, Accounts};
 use anyhow::Result;
 use sov_modules_api::Context;
 use sov_modules_api::ModuleInfo;
@@ -20,7 +20,7 @@ impl<C: Context> Hooks<C> {
         &mut self,
         pub_key: C::PublicKey,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<Account> {
+    ) -> Result<Account<C>> {
         match self.inner.accounts.get(&pub_key, working_set) {
             Some(acc) => Ok(acc),
             None => {
@@ -28,11 +28,14 @@ impl<C: Context> Hooks<C> {
                 self.exit_if_address_exists(&default_address, working_set)?;
 
                 let new_account = Account {
-                    addr: default_address,
+                    addr: default_address.clone(),
                     nonce: 0,
                 };
 
-                self.inner.accounts.set(&pub_key, new_account, working_set);
+                self.inner
+                    .accounts
+                    .set(&pub_key, new_account.clone(), working_set);
+
                 self.inner
                     .public_keys
                     .set(&default_address, pub_key, working_set);
@@ -55,7 +58,7 @@ impl<C: Context> Hooks<C> {
 
     fn exit_if_address_exists(
         &self,
-        address: &Address,
+        address: &C::Address,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
         anyhow::ensure!(
