@@ -1,7 +1,6 @@
 use crate::access::{Access, MergeError};
 use crate::{CacheKey, CacheValue};
 use std::collections::{hash_map::Entry, HashMap};
-use std::sync::Arc;
 use thiserror::Error;
 
 #[derive(Error, Debug, Eq, PartialEq)]
@@ -31,28 +30,6 @@ pub struct CacheLog {
     log: HashMap<CacheKey, Access>,
 }
 
-/// Represents all reads from a CacheLog.
-#[derive(Default, Clone, Debug)]
-pub struct FirstReads {
-    reads: Arc<HashMap<CacheKey, Option<CacheValue>>>,
-}
-
-impl FirstReads {
-    pub fn new(reads: HashMap<CacheKey, Option<CacheValue>>) -> Self {
-        Self {
-            reads: Arc::new(reads),
-        }
-    }
-
-    /// Returns a value corresponding to the key.
-    pub fn get(&self, key: &CacheKey) -> ValueExists {
-        match self.reads.get(key) {
-            Some(read) => ValueExists::Yes(read.clone()),
-            None => ValueExists::No,
-        }
-    }
-}
-
 impl CacheLog {
     pub fn with_capacity(capacity: usize) -> Self {
         Self {
@@ -62,17 +39,6 @@ impl CacheLog {
 }
 
 impl CacheLog {
-    /// Returns all reads from the CacheLog.
-    pub fn get_first_reads(&self) -> FirstReads {
-        let reads = self
-            .log
-            .iter()
-            .filter_map(|(k, v)| filter_first_reads(k.clone(), v.clone()))
-            .collect::<HashMap<_, _>>();
-
-        FirstReads::new(reads)
-    }
-
     /// Split a cachelog into an iterator of reads and an iterator of writes.
     /// The return value is (first_reads, last_writes)
     pub fn split(
@@ -179,15 +145,6 @@ impl CacheLog {
             };
         }
         Ok(())
-    }
-
-    /// Clears the cache, returning all writes as an iterator.
-    pub fn get_all_writes_and_clear_cache(
-        &mut self,
-    ) -> impl Iterator<Item = (CacheKey, Option<CacheValue>)> + '_ {
-        self.log
-            .drain()
-            .filter_map(|(key, access)| filter_writes(key, access))
     }
 
     pub fn len(&self) -> usize {
@@ -408,29 +365,6 @@ mod tests {
 
         let result = test_merge_helper(test_cases);
         assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_first_reads() {
-        let mut cache = CacheLog::default();
-        let entries = vec![
-            new_cache_entry(1, 11),
-            new_cache_entry(2, 22),
-            new_cache_entry(3, 33),
-        ];
-
-        for entry in entries.clone() {
-            cache.add_read(entry.key, entry.value).unwrap();
-        }
-
-        let first_reads = cache.get_first_reads();
-
-        for entry in entries {
-            match first_reads.get(&entry.key) {
-                ValueExists::Yes(value) => assert_eq!(entry.value, value),
-                ValueExists::No => unreachable!(),
-            }
-        }
     }
 
     proptest! {
