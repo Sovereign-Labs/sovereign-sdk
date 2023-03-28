@@ -34,7 +34,7 @@ impl AsRef<[u8]> for Address {
 }
 
 impl<'a> TryFrom<&'a [u8]> for Address {
-    type Error = ();
+    type Error = anyhow::Error;
 
     fn try_from(addr: &'a [u8]) -> Result<Self, Self::Error> {
         Ok(Self {

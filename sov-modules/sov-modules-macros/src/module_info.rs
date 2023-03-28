@@ -298,7 +298,9 @@ fn make_init_address(
             use sov_modules_api::Hasher;
             let module_path = module_path!();
             let prefix = sov_modules_api::Prefix::new_module(module_path, stringify!(#struct_ident));
-            let #field_ident = <Self::Context as sov_modules_api::Spec>::Address::try_from(&prefix.hash::<C>()).expect("todo");
+            let #field_ident =
+                <Self::Context as sov_modules_api::Spec>::Address::try_from(&prefix.hash::<C>())
+                    .unwrap_or_else(|e| panic!("ModuleInfo macro error, unable to create an Address for module: {}", e));
         }),
     }
 }

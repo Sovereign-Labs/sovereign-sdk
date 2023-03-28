@@ -30,7 +30,7 @@ pub trait TransactionTrait:
 }
 
 pub trait AddressTrait:
-    PartialEq + Debug + Clone + AsRef<[u8]> + for<'a> TryFrom<&'a [u8], Error = ()> + Eq
+    PartialEq + Debug + Clone + AsRef<[u8]> + for<'a> TryFrom<&'a [u8], Error = anyhow::Error> + Eq
 {
 }
 
