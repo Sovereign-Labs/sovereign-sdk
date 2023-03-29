@@ -10,6 +10,7 @@ members = [
 	"sov-modules/sov-state",
 	"sov-modules/sov-modules-api",
 	"sov-modules/sov-modules-impl/accounts",
+	"sov-modules/sov-modules-impl/bank",
 	"sov-modules/sov-modules-impl/examples/value-setter",
 	"sov-modules/sov-modules-impl/examples/election",
 	"sov-modules/sov-modules-impl/integration-tests",
@@ -33,6 +34,7 @@ first-read-last-write-cache = {path = "first-read-last-write-cache"}
 election = { path = "sov-modules/sov-modules-impl/examples/election" }
 value-setter = { path = "sov-modules/sov-modules-impl/examples/value-setter" }
 accounts = { path = "sov-modules/sov-modules-impl/accounts" }
+bank = { path = "sov-modules/sov-modules-impl/bank" }
 schemadb = {path = "db/schemadb"}
 sovereign-db = {path = "db/sovereign-db"}
 sov-state = {path = "sov-modules/sov-state"}
