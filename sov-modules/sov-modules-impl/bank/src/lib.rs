@@ -27,8 +27,6 @@ pub struct Bank<C: sov_modules_api::Context> {
     pub address: C::Address,
 
     #[state]
-    // Q: Do we allow multiple tokens with the same name? If not then we could derive the address as hash(token_name, bank.address).
-    // This way the `token_address` can be calculated by users and we could get rid of of the `names` mapping.
     pub(crate) names: sov_state::StateMap<String, C::Address>,
 
     #[state]

@@ -7,10 +7,9 @@ use crate::{Amount, Bank, Coins};
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage<C: sov_modules_api::Context> {
     CreateToken {
-        // Q: should `token_name` be unique or should we allow multiple tokens with the same name.
         token_name: String,
         initial_balance: Amount,
-        // Q: should we allow only the sender of the tx to be the minter?
+
         minter_address: C::Address,
     },
 
@@ -22,9 +21,6 @@ pub enum CallMessage<C: sov_modules_api::Context> {
     Burn {
         coins: Coins<C::Address>,
     },
-    // TODO:
-    // We don't have "Mint" message (the initial supply is set with `CreateToken` message)
-    // We can add it later or we could crate a separate module "Minter/Staker".
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
