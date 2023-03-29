@@ -5,7 +5,6 @@ use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
-// Q: is u64 good enough?
 type Amount = u64;
 
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]

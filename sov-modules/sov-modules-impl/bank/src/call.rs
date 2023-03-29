@@ -9,7 +9,6 @@ pub enum CallMessage<C: sov_modules_api::Context> {
     CreateToken {
         token_name: String,
         initial_balance: Amount,
-
         minter_address: C::Address,
     },
 
