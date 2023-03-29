@@ -22,8 +22,9 @@ pub enum CallMessage<C: sov_modules_api::Context> {
     Burn {
         coins: Coins<C::Address>,
     },
+    // TODO:
     // We don't have "Mint" message (the initial supply is set with `CreateToken` message)
-    // We can add it later or maybe we should crate a new module "Minter/Staker".
+    // We can add it later or we could crate a separate module "Minter/Staker".
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {

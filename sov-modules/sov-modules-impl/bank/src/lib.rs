@@ -17,7 +17,7 @@ pub struct Coins<Address: sov_modules_api::AddressTrait> {
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct Token<Address: sov_modules_api::AddressTrait> {
     name: String,
-    total_supply: u128,
+    total_supply: u64,
     balances: sov_state::StateMap<Address, Amount>,
 }
 
@@ -25,6 +25,11 @@ pub struct Token<Address: sov_modules_api::AddressTrait> {
 pub struct Bank<C: sov_modules_api::Context> {
     #[address]
     pub address: C::Address,
+
+    #[state]
+    // Q: Do we allow multiple tokens with the same name? If not then we could derive the address as hash(token_name, bank.address).
+    // This way the `token_address` can be calculated by users and we could get rid of of the `names` mapping.
+    pub(crate) names: sov_state::StateMap<String, C::Address>,
 
     #[state]
     pub(crate) tokens: sov_state::StateMap<C::Address, Token<C::Address>>,
