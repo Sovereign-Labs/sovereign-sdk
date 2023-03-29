@@ -25,20 +25,20 @@ pub struct TotalSupplyResponse {
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
-    pub(crate) fn balance_of(
+    pub fn balance_of(
         &self,
-        user_address: C::Address,
-        token_address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        _user_address: C::Address,
+        _token_address: C::Address,
+        _working_set: &mut WorkingSet<C::Storage>,
     ) -> BalanceResponse {
         todo!()
     }
 
-    pub(crate) fn supply_of(
+    pub fn supply_of(
         &self,
-        user_address: C::Address,
-        token_address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        _user_address: C::Address,
+        _token_address: C::Address,
+        _working_set: &mut WorkingSet<C::Storage>,
     ) -> TotalSupplyResponse {
         todo!()
     }

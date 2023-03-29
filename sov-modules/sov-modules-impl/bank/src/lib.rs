@@ -26,10 +26,10 @@ pub struct Bank<C: sov_modules_api::Context> {
     pub address: C::Address,
 
     #[state]
-    pub(crate) names: sov_state::StateMap<String, C::Address>,
+    pub names: sov_state::StateMap<String, C::Address>,
 
     #[state]
-    pub(crate) tokens: sov_state::StateMap<C::Address, Token<C::Address>>,
+    pub tokens: sov_state::StateMap<C::Address, Token<C::Address>>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
@@ -45,9 +45,9 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
 
     fn call(
         &self,
-        msg: Self::CallMessage,
-        context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        _msg: Self::CallMessage,
+        _context: &Self::Context,
+        _working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         todo!()
     }
@@ -55,8 +55,8 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
     #[cfg(feature = "native")]
     fn query(
         &self,
-        msg: Self::QueryMessage,
-        working_set: &mut WorkingSet<C::Storage>,
+        _msg: Self::QueryMessage,
+        _working_set: &mut WorkingSet<C::Storage>,
     ) -> sov_modules_api::QueryResponse {
         todo!()
     }
