@@ -1,6 +1,7 @@
 use sov_modules_api::{Context, Spec};
 use sov_state::WorkingSet;
 
+/// Represents a transaction after verification.
 pub trait VerifiedTx {
     type Address;
     fn sender(&self) -> &Self::Address;

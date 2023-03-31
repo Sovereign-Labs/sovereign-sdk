@@ -67,13 +67,13 @@ impl<C: sov_modules_api::Context> Election<C> {
 
         let voter = self
             .allowed_voters
-            .get_or_err(&context.sender(), working_set)?;
+            .get_or_err(context.sender(), working_set)?;
 
         match voter {
             Voter::Voted => bail!("Voter tried voting a second time!"),
             Voter::Fresh => {
                 self.allowed_voters
-                    .set(&context.sender(), Voter::voted(), working_set);
+                    .set(context.sender(), Voter::voted(), working_set);
 
                 let mut candidates = self.candidates.get_or_err(working_set)?;
 
