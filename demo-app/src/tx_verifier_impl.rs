@@ -41,7 +41,7 @@ impl<C: Context> TxVerifier for DemoAppTxVerifier<C> {
     type Context = C;
     type Transaction = Transaction<C>;
 
-    fn verify_tx_stateless(&self, raw_tx: RawTx) -> anyhow::Result<Transaction<Self::Context>> {
+    fn verify_tx_stateless(&self, raw_tx: RawTx) -> anyhow::Result<Self::Transaction> {
         let mut data = Cursor::new(&raw_tx.data);
         let tx = Transaction::<C>::decode(&mut data)?;
 

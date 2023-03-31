@@ -7,13 +7,6 @@ pub struct RawTx {
     pub data: Vec<u8>,
 }
 
-/// VerifiedTx is a Transaction after verification.
-pub struct VerifiedTx<C: Context> {
-    pub pub_key: C::PublicKey,
-    pub sender: C::Address,
-    pub runtime_msg: Vec<u8>,
-}
-
 /// TxVerifier encapsulates Transaction verification.
 pub trait TxVerifier {
     type Context: Context;

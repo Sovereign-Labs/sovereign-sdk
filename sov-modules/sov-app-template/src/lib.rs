@@ -4,7 +4,8 @@ mod tx_verifier;
 
 pub use batch::Batch;
 pub use tx_hooks::TxHooks;
-pub use tx_verifier::{RawTx, TxVerifier, VerifiedTx};
+pub use tx_hooks::VerifiedTx;
+pub use tx_verifier::{RawTx, TxVerifier};
 
 use sov_modules_api::{Context, DispatchCall, Genesis};
 use sov_state::{Storage, WorkingSet};
@@ -91,8 +92,8 @@ where
                 .pre_dispatch_tx_hook(tx, &mut batch_workspace)
                 .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
 
-            if let Ok(msg) = RT::decode_call(&verified_tx.runtime_msg) {
-                let ctx = C::new(verified_tx.sender.clone());
+            if let Ok(msg) = RT::decode_call(verified_tx.runtime_message()) {
+                let ctx = C::new(verified_tx.sender().clone());
                 let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
                 self.tx_hooks
