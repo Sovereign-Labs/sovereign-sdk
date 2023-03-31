@@ -14,12 +14,12 @@ use sov_modules_api::mocks::MockContext;
 use sov_state::ProverStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
 
-use sov_app_template::{Batch, Demo};
+use sov_app_template::{AppTemplate, Batch};
 use tx_hooks_impl::DemoAppTxHooks;
 use tx_verifier_impl::DemoAppTxVerifier;
 
 type C = MockContext;
-type DemoApp = Demo<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>>;
+type DemoApp = AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>>;
 
 fn create_new_demo(path: impl AsRef<Path>) -> DemoApp {
     let runtime = Runtime::new();
@@ -27,7 +27,7 @@ fn create_new_demo(path: impl AsRef<Path>) -> DemoApp {
     let tx_hooks = DemoAppTxHooks::new();
     let tx_verifier = DemoAppTxVerifier::new();
 
-    Demo::new(storage, runtime, tx_verifier, tx_hooks)
+    AppTemplate::new(storage, runtime, tx_verifier, tx_hooks)
 }
 
 fn main() {

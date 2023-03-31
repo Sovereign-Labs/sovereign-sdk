@@ -1,4 +1,5 @@
 #![feature(associated_type_defaults)]
+
 #[cfg(feature = "mocks")]
 pub mod mocks;
 
