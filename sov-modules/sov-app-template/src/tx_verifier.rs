@@ -1,5 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::mocks::{MockContext, MockPublicKey, MockSignature};
+
 use sov_modules_api::Context;
 
 /// RawTx represents a serialized rollup transaction received from the DA.
@@ -45,12 +45,11 @@ pub trait TxVerifier {
         Ok(txs)
     }
 }
-impl Transaction<MockContext> {
-    pub fn new(msg: Vec<u8>, pub_key: MockPublicKey, nonce: u64) -> Self {
+
+impl<C: sov_modules_api::Context> Transaction<C> {
+    pub fn new(msg: Vec<u8>, pub_key: C::PublicKey, signature: C::Signature, nonce: u64) -> Self {
         Self {
-            signature: MockSignature {
-                msg_sig: Vec::default(),
-            },
+            signature,
             runtime_msg: msg,
             pub_key,
             nonce,

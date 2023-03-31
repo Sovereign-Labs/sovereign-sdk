@@ -1,7 +1,7 @@
 use crate::runtime::Runtime;
 use borsh::BorshSerialize;
 use sov_app_template::{RawTx, Transaction};
-use sov_modules_api::mocks::{MockContext, MockPublicKey};
+use sov_modules_api::mocks::{MockContext, MockPublicKey, MockSignature};
 use sov_modules_api::PublicKey;
 
 pub(crate) fn simulate_da() -> Vec<RawTx> {
@@ -50,9 +50,10 @@ impl CallGenerator {
         messages
             .into_iter()
             .map(|(sender, m, nonce)| RawTx {
-                data: Transaction::new(
+                data: Transaction::<MockContext>::new(
                     Runtime::<MockContext>::encode_election_call(m),
                     sender,
+                    MockSignature::default(),
                     nonce,
                 )
                 .try_to_vec()
@@ -74,18 +75,20 @@ impl CallGenerator {
 
         vec![
             RawTx {
-                data: Transaction::new(
+                data: Transaction::<MockContext>::new(
                     Runtime::<MockContext>::encode_value_setter_call(set_value_msg_1),
                     admin.clone(),
+                    MockSignature::default(),
                     0,
                 )
                 .try_to_vec()
                 .unwrap(),
             },
             RawTx {
-                data: Transaction::new(
+                data: Transaction::<MockContext>::new(
                     Runtime::<MockContext>::encode_value_setter_call(set_value_msg_2),
                     admin,
+                    MockSignature::default(),
                     1,
                 )
                 .try_to_vec()

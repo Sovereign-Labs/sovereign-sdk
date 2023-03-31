@@ -39,7 +39,7 @@ impl PublicKey for MockPublicKey {
 }
 
 /// Mock for Spec::Signature, useful for testing.
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, PartialEq, Eq, Debug, Clone)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, PartialEq, Eq, Debug, Clone, Default)]
 pub struct MockSignature {
     pub msg_sig: Vec<u8>,
 }
