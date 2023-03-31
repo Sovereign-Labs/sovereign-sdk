@@ -1,6 +1,10 @@
-use crate::batch::Batch;
-use crate::tx_hooks::TxHooks;
-use crate::tx_verifier::{RawTx, TxVerifier};
+mod batch;
+mod tx_hooks;
+mod tx_verifier;
+
+pub use batch::Batch;
+pub use tx_hooks::TxHooks;
+pub use tx_verifier::{RawTx, Transaction, TxVerifier, VerifiedTx};
 
 use sov_modules_api::{Context, DispatchCall, Genesis};
 use sov_state::{Storage, WorkingSet};
@@ -10,8 +14,8 @@ use sovereign_sdk::{
     stf::{ConsensusSetUpdate, OpaqueAddress, StateTransitionFunction},
 };
 
-pub(crate) struct Demo<C: Context, V, RT, H> {
-    pub(crate) current_storage: C::Storage,
+pub struct Demo<C: Context, V, RT, H> {
+    pub current_storage: C::Storage,
     runtime: RT,
     tx_verifier: V,
     tx_hooks: H,
@@ -19,7 +23,7 @@ pub(crate) struct Demo<C: Context, V, RT, H> {
 }
 
 impl<C: Context, V, RT, H> Demo<C, V, RT, H> {
-    pub(crate) fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
+    pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
         Self {
             runtime,
             current_storage: storage,

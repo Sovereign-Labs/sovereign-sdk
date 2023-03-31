@@ -1,11 +1,9 @@
-mod batch;
 mod data_generation;
 mod helpers;
 mod runtime;
 
-mod stf;
-mod tx_hooks;
-mod tx_verifier;
+mod tx_hooks_impl;
+mod tx_verifier_impl;
 
 use std::path::Path;
 
@@ -15,9 +13,10 @@ use runtime::Runtime;
 use sov_modules_api::mocks::MockContext;
 use sov_state::ProverStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
-use stf::Demo;
-use tx_hooks::DemoAppTxHooks;
-use tx_verifier::DemoAppTxVerifier;
+
+use sov_app_template::{Batch, Demo};
+use tx_hooks_impl::DemoAppTxHooks;
+use tx_verifier_impl::DemoAppTxVerifier;
 
 type C = MockContext;
 type DemoApp = Demo<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>>;
@@ -40,7 +39,7 @@ fn main() {
 
         let txs = simulate_da();
 
-        demo.apply_batch(batch::Batch { txs }, &[1u8; 32], None)
+        demo.apply_batch(Batch { txs }, &[1u8; 32], None)
             .expect("Batch is valid");
 
         demo.end_slot();
@@ -81,7 +80,7 @@ mod test {
 
             let txs = simulate_da();
 
-            demo.apply_batch(batch::Batch { txs }, &[1u8; 32], None)
+            demo.apply_batch(Batch { txs }, &[1u8; 32], None)
                 .expect("Batch is valid");
 
             demo.end_slot();
@@ -117,7 +116,7 @@ mod test {
 
         let txs = simulate_da();
 
-        demo.apply_batch(batch::Batch { txs }, &[1u8; 32], None)
+        demo.apply_batch(Batch { txs }, &[1u8; 32], None)
             .expect("Batch is valid");
         demo.end_slot();
 
@@ -148,7 +147,7 @@ mod test {
 
             let txs = simulate_da();
 
-            demo.apply_batch(batch::Batch { txs }, &[1u8; 32], None)
+            demo.apply_batch(Batch { txs }, &[1u8; 32], None)
                 .expect("Batch is valid");
         }
 

@@ -1,13 +1,11 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::{Context, Signature};
-use sovereign_sdk::jmt::SimpleHasher;
-use sovereign_sdk::serial::Decode;
-use std::{io::Cursor, marker::PhantomData};
+use sov_modules_api::mocks::{MockContext, MockPublicKey, MockSignature};
+use sov_modules_api::Context;
 
 /// RawTx represents a serialized rollup transaction received from the DA.
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize, Clone)]
 pub struct RawTx {
-    pub(crate) data: Vec<u8>,
+    pub data: Vec<u8>,
 }
 
 /// Transaction represents a deserialized RawTx.
@@ -20,14 +18,14 @@ pub struct Transaction<C: sov_modules_api::Context> {
 }
 
 /// VerifiedTx is a Transaction after verification.
-pub(crate) struct VerifiedTx<C: Context> {
-    pub(crate) pub_key: C::PublicKey,
-    pub(crate) sender: C::Address,
-    pub(crate) runtime_msg: Vec<u8>,
+pub struct VerifiedTx<C: Context> {
+    pub pub_key: C::PublicKey,
+    pub sender: C::Address,
+    pub runtime_msg: Vec<u8>,
 }
 
 /// TxVerifier encapsulates Transaction verification.
-pub(crate) trait TxVerifier {
+pub trait TxVerifier {
     type Context: Context;
 
     /// Runs stateless checks against a single RawTx.
@@ -47,34 +45,15 @@ pub(crate) trait TxVerifier {
         Ok(txs)
     }
 }
-
-pub(crate) struct DemoAppTxVerifier<C: Context> {
-    // TODO add Accounts module for stateful checks.
-    _phantom: PhantomData<C>,
-}
-
-impl<C: Context> DemoAppTxVerifier<C> {
-    pub fn new() -> Self {
+impl Transaction<MockContext> {
+    pub fn new(msg: Vec<u8>, pub_key: MockPublicKey, nonce: u64) -> Self {
         Self {
-            _phantom: PhantomData,
+            signature: MockSignature {
+                msg_sig: Vec::default(),
+            },
+            runtime_msg: msg,
+            pub_key,
+            nonce,
         }
-    }
-}
-
-impl<C: Context> TxVerifier for DemoAppTxVerifier<C> {
-    type Context = C;
-    fn verify_tx_stateless(&self, raw_tx: RawTx) -> anyhow::Result<Transaction<Self::Context>> {
-        let mut data = Cursor::new(&raw_tx.data);
-        let tx = Transaction::<C>::decode(&mut data)?;
-
-        // We check signature against runtime_msg and nonce.
-        let mut hasher = C::Hasher::new();
-        hasher.update(&tx.runtime_msg);
-        hasher.update(&tx.nonce.to_le_bytes());
-        let msg_hash = hasher.finalize();
-
-        tx.signature.verify(&tx.pub_key, msg_hash)?;
-
-        Ok(tx)
     }
 }
