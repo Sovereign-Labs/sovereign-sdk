@@ -16,6 +16,7 @@ sovereign-sdk = { workspace = true }
 anyhow = { workspace = true }
 byteorder = { workspace = true }
 borsh = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
 rocksdb = { workspace = true }
 
 

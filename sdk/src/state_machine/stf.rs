@@ -1,5 +1,6 @@
 use crate::maybestd::rc::Rc;
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     core::traits::{BatchTrait, TransactionTrait},
@@ -56,7 +57,7 @@ pub enum ConsensusRole {
 }
 
 /// A key-value pair representing a change to the rollup state
-#[derive(Debug, PartialEq, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, PartialEq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct Event {
     pub key: EventKey,
     pub value: EventValue,
@@ -65,17 +66,29 @@ pub struct Event {
 impl Event {
     pub fn new(key: &str, value: &str) -> Self {
         Self {
-            key: EventKey(Rc::new(key.as_bytes().to_vec())),
-            value: EventValue(Rc::new(value.as_bytes().to_vec())),
+            key: EventKey(key.as_bytes().to_vec()),
+            value: EventValue(value.as_bytes().to_vec()),
         }
     }
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, BorshSerialize, BorshDeserialize, Clone)]
-pub struct EventKey(Rc<Vec<u8>>);
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    BorshSerialize,
+    BorshDeserialize,
+    Clone,
+    Serialize,
+    Deserialize,
+)]
+pub struct EventKey(Vec<u8>);
 
-#[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
-pub struct EventValue(Rc<Vec<u8>>);
+#[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
+pub struct EventValue(Vec<u8>);
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct ConsensusSetUpdate<Address> {
