@@ -37,8 +37,8 @@ impl<C: Context, V, RT, H> AppTemplate<C, V, RT, H> {
 
 impl<C: Context, V, RT, H> StateTransitionFunction for AppTemplate<C, V, RT, H>
 where
-    V: TxVerifier<Context = C>,
     RT: DispatchCall<Context = C> + Genesis<Context = C>,
+    V: TxVerifier<Context = C>,
     H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
 {
     type StateRoot = jmt::RootHash;
