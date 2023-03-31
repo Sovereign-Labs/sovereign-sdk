@@ -1,6 +1,8 @@
 use crate::runtime::Runtime;
+use crate::tx_verifier_impl::Transaction;
+
 use borsh::BorshSerialize;
-use sov_app_template::{RawTx, Transaction};
+use sov_app_template::RawTx;
 use sov_modules_api::mocks::{MockContext, MockPublicKey, MockSignature};
 use sov_modules_api::PublicKey;
 

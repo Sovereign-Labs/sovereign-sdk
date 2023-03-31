@@ -1,6 +1,8 @@
-use sov_app_template::{Transaction, TxHooks, VerifiedTx};
+use sov_app_template::{TxHooks, VerifiedTx};
 use sov_modules_api::{Context, Spec};
 use sov_state::WorkingSet;
+
+use crate::tx_verifier_impl::Transaction;
 
 pub(crate) struct DemoAppTxHooks<C: Context> {
     accounts_hooks: accounts::hooks::Hooks<C>,
@@ -16,6 +18,7 @@ impl<C: Context> DemoAppTxHooks<C> {
 
 impl<C: Context> TxHooks for DemoAppTxHooks<C> {
     type Context = C;
+    type Transaction = Transaction<C>;
 
     fn pre_dispatch_tx_hook(
         &mut self,

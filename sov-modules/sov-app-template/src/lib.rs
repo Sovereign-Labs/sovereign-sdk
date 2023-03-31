@@ -4,7 +4,7 @@ mod tx_verifier;
 
 pub use batch::Batch;
 pub use tx_hooks::TxHooks;
-pub use tx_verifier::{RawTx, Transaction, TxVerifier, VerifiedTx};
+pub use tx_verifier::{RawTx, TxVerifier, VerifiedTx};
 
 use sov_modules_api::{Context, DispatchCall, Genesis};
 use sov_state::{Storage, WorkingSet};
@@ -38,7 +38,7 @@ impl<C: Context, V, RT, H> StateTransitionFunction for AppTemplate<C, V, RT, H>
 where
     V: TxVerifier<Context = C>,
     RT: DispatchCall<Context = C> + Genesis<Context = C>,
-    H: TxHooks<Context = C>,
+    H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
 {
     type StateRoot = jmt::RootHash;
 

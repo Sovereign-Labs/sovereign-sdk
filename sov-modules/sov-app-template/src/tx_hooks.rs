@@ -1,15 +1,16 @@
-use crate::tx_verifier::{Transaction, VerifiedTx};
+use crate::tx_verifier::VerifiedTx;
 use sov_modules_api::{Context, Spec};
 use sov_state::WorkingSet;
 
 /// TxHooks allows injecting custom logic into a transaction processing pipeline.
 pub trait TxHooks {
     type Context: Context;
+    type Transaction;
 
     /// pre_dispatch_tx_hook runs just before a transaction is dispatched to an appropriate module.
     fn pre_dispatch_tx_hook(
         &mut self,
-        tx: Transaction<Self::Context>,
+        tx: Self::Transaction,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<VerifiedTx<Self::Context>>;
 
