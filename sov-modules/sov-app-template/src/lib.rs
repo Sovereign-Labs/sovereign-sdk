@@ -17,7 +17,7 @@ use sovereign_sdk::{
 
 pub struct AppTemplate<C: Context, V, RT, H> {
     pub current_storage: C::Storage,
-    runtime: RT,
+    pub runtime: RT,
     tx_verifier: V,
     tx_hooks: H,
     working_set: Option<WorkingSet<C::Storage>>,
