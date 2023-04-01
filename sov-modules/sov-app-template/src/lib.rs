@@ -64,7 +64,9 @@ where
             .expect("Storage update must succeed");
     }
 
-    fn begin_slot(&mut self) {}
+    fn begin_slot(&mut self) {
+        self.working_set = Some(WorkingSet::new(self.current_storage.clone()));
+    }
 
     fn apply_batch(
         &mut self,
