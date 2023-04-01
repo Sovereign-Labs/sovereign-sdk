@@ -25,7 +25,6 @@ impl<C: sov_modules_api::Context> Transaction<C> {
 }
 
 pub(crate) struct DemoAppTxVerifier<C: Context> {
-    // TODO add Accounts module for stateful checks.
     _phantom: PhantomData<C>,
 }
 
