@@ -34,22 +34,25 @@ impl AsRef<[u8]> for Address {
     }
 }
 
-impl<'a> TryFrom<&'a [u8]> for Address {
-    type Error = anyhow::Error;
-
-    fn try_from(addr: &'a [u8]) -> Result<Self, Self::Error> {
-        Ok(Self {
-            addr: addr.to_vec(),
-        })
-    }
-}
-
 impl AddressTrait for Address {}
 
 /// Default implementation of AddressTrait for the module system
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Eq)]
 pub struct Address {
-    addr: Vec<u8>,
+    addr: [u8; 32],
+}
+
+impl<'a> TryFrom<&'a [u8]> for Address {
+    type Error = anyhow::Error;
+
+    fn try_from(addr: &'a [u8]) -> Result<Self, Self::Error> {
+        if addr.len() != 32 {
+            anyhow::bail!("Address must be 32 bytes long");
+        }
+        let mut addr_bytes = [0u8; 32];
+        addr_bytes.copy_from_slice(&addr);
+        Ok(Self { addr: addr_bytes })
+    }
 }
 
 #[derive(Error, Debug)]
