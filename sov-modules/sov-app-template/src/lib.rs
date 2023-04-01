@@ -1,6 +1,11 @@
-use crate::batch::Batch;
-use crate::tx_hooks::TxHooks;
-use crate::tx_verifier::{RawTx, TxVerifier};
+mod batch;
+mod tx_hooks;
+mod tx_verifier;
+
+pub use batch::Batch;
+pub use tx_hooks::TxHooks;
+pub use tx_hooks::VerifiedTx;
+pub use tx_verifier::{RawTx, TxVerifier};
 
 use sov_modules_api::{Context, DispatchCall, Genesis};
 use sov_state::{Storage, WorkingSet};
@@ -10,16 +15,16 @@ use sovereign_sdk::{
     stf::{ConsensusSetUpdate, OpaqueAddress, StateTransitionFunction},
 };
 
-pub(crate) struct Demo<C: Context, V, RT, H> {
-    pub(crate) current_storage: C::Storage,
+pub struct AppTemplate<C: Context, V, RT, H> {
+    pub current_storage: C::Storage,
     runtime: RT,
     tx_verifier: V,
     tx_hooks: H,
     working_set: Option<WorkingSet<C::Storage>>,
 }
 
-impl<C: Context, V, RT, H> Demo<C, V, RT, H> {
-    pub(crate) fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
+impl<C: Context, V, RT, H> AppTemplate<C, V, RT, H> {
+    pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
         Self {
             runtime,
             current_storage: storage,
@@ -30,11 +35,11 @@ impl<C: Context, V, RT, H> Demo<C, V, RT, H> {
     }
 }
 
-impl<C: Context, V, RT, H> StateTransitionFunction for Demo<C, V, RT, H>
+impl<C: Context, V, RT, H> StateTransitionFunction for AppTemplate<C, V, RT, H>
 where
-    V: TxVerifier<Context = C>,
     RT: DispatchCall<Context = C> + Genesis<Context = C>,
-    H: TxHooks<Context = C>,
+    V: TxVerifier,
+    H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
 {
     type StateRoot = jmt::RootHash;
 
@@ -87,8 +92,8 @@ where
                 .pre_dispatch_tx_hook(tx, &mut batch_workspace)
                 .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
 
-            if let Ok(msg) = RT::decode_call(&verified_tx.runtime_msg) {
-                let ctx = C::new(verified_tx.sender.clone());
+            if let Ok(msg) = RT::decode_call(verified_tx.runtime_message()) {
+                let ctx = C::new(verified_tx.sender().clone());
                 let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
                 self.tx_hooks

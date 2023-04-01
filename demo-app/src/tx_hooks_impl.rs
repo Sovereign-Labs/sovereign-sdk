@@ -1,24 +1,25 @@
-use crate::tx_verifier::{Transaction, VerifiedTx};
+use sov_app_template::{TxHooks, VerifiedTx};
 use sov_modules_api::{Context, Spec};
 use sov_state::WorkingSet;
 
-/// TxHooks allows injecting custom logic into a transaction processing pipeline.
-pub(crate) trait TxHooks {
-    type Context: Context;
+use crate::tx_verifier_impl::Transaction;
 
-    /// pre_dispatch_tx_hook runs just before a transaction is dispatched to an appropriate module.
-    fn pre_dispatch_tx_hook(
-        &mut self,
-        tx: Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<VerifiedTx<Self::Context>>;
+pub(crate) struct AppVerifiedTx<C: Context> {
+    pub(crate) pub_key: C::PublicKey,
+    pub(crate) sender: C::Address,
+    pub(crate) runtime_msg: Vec<u8>,
+}
 
-    /// post_dispatch_tx_hook runs after the tx is dispatched to an appropriate module.
-    fn post_dispatch_tx_hook(
-        &mut self,
-        tx: VerifiedTx<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    );
+impl<C: Context> VerifiedTx for AppVerifiedTx<C> {
+    type Address = C::Address;
+
+    fn sender(&self) -> &Self::Address {
+        &self.sender
+    }
+
+    fn runtime_message(&self) -> &[u8] {
+        &self.runtime_msg
+    }
 }
 
 pub(crate) struct DemoAppTxHooks<C: Context> {
@@ -35,15 +36,17 @@ impl<C: Context> DemoAppTxHooks<C> {
 
 impl<C: Context> TxHooks for DemoAppTxHooks<C> {
     type Context = C;
+    type Transaction = Transaction<C>;
+    type VerifiedTx = AppVerifiedTx<C>;
 
     fn pre_dispatch_tx_hook(
         &mut self,
         tx: Transaction<Self::Context>,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<VerifiedTx<Self::Context>> {
+    ) -> anyhow::Result<Self::VerifiedTx> {
         let addr = self.check_nonce_for_address(tx.nonce, tx.pub_key.clone(), working_set)?;
 
-        Ok(VerifiedTx {
+        Ok(AppVerifiedTx {
             pub_key: tx.pub_key,
             sender: addr,
             runtime_msg: tx.runtime_msg,
@@ -52,7 +55,7 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
 
     fn post_dispatch_tx_hook(
         &mut self,
-        tx: VerifiedTx<Self::Context>,
+        tx: Self::VerifiedTx,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) {
         self.accounts_hooks

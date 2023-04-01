@@ -1,15 +1,6 @@
-use borsh::{BorshDeserialize, BorshSerialize};
-
-// Items that should go in prelude
-use jmt::SimpleHasher;
-use sov_modules_api::{mocks::MockContext, Spec};
-
-use sovereign_sdk::{
-    core::traits::{BatchTrait, CanonicalHash, TransactionTrait},
-    jmt,
-};
-
 use crate::tx_verifier::RawTx;
+use borsh::{BorshDeserialize, BorshSerialize};
+use sovereign_sdk::core::traits::{BatchTrait, CanonicalHash, TransactionTrait};
 
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize, Clone)]
 pub struct Batch {
@@ -36,6 +27,6 @@ impl CanonicalHash for RawTx {
     type Output = [u8; 32];
 
     fn hash(&self) -> Self::Output {
-        <MockContext as Spec>::Hasher::hash(&self.data)
+        todo!()
     }
 }

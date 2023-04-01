@@ -1,8 +1,8 @@
-use crate::{
-    runtime::Runtime,
-    tx_verifier::{RawTx, Transaction},
-};
+use crate::runtime::Runtime;
+use crate::tx_verifier_impl::Transaction;
+
 use borsh::BorshSerialize;
+use sov_app_template::RawTx;
 use sov_modules_api::mocks::{MockContext, MockPublicKey, MockSignature};
 use sov_modules_api::PublicKey;
 
@@ -52,9 +52,10 @@ impl CallGenerator {
         messages
             .into_iter()
             .map(|(sender, m, nonce)| RawTx {
-                data: Transaction::new(
+                data: Transaction::<MockContext>::new(
                     Runtime::<MockContext>::encode_election_call(m),
                     sender,
+                    MockSignature::default(),
                     nonce,
                 )
                 .try_to_vec()
@@ -76,18 +77,20 @@ impl CallGenerator {
 
         vec![
             RawTx {
-                data: Transaction::new(
+                data: Transaction::<MockContext>::new(
                     Runtime::<MockContext>::encode_value_setter_call(set_value_msg_1),
                     admin.clone(),
+                    MockSignature::default(),
                     0,
                 )
                 .try_to_vec()
                 .unwrap(),
             },
             RawTx {
-                data: Transaction::new(
+                data: Transaction::<MockContext>::new(
                     Runtime::<MockContext>::encode_value_setter_call(set_value_msg_2),
                     admin,
+                    MockSignature::default(),
                     1,
                 )
                 .try_to_vec()
@@ -108,18 +111,5 @@ impl QueryGenerator {
     pub(crate) fn generate_query_value_setter_message() -> Vec<u8> {
         let query_message = value_setter::query::QueryMessage::GetValue;
         Runtime::<MockContext>::encode_value_setter_query(query_message)
-    }
-}
-
-impl Transaction<MockContext> {
-    pub fn new(msg: Vec<u8>, pub_key: MockPublicKey, nonce: u64) -> Self {
-        Self {
-            signature: MockSignature {
-                msg_sig: Vec::default(),
-            },
-            runtime_msg: msg,
-            pub_key,
-            nonce,
-        }
     }
 }
