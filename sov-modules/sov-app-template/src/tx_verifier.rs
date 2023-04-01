@@ -1,5 +1,4 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::Context;
 
 /// RawTx represents a serialized rollup transaction received from the DA.
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize, Clone)]
@@ -9,7 +8,6 @@ pub struct RawTx {
 
 /// TxVerifier encapsulates Transaction verification.
 pub trait TxVerifier {
-    type Context: Context;
     type Transaction;
 
     /// Runs stateless checks against a single RawTx.
