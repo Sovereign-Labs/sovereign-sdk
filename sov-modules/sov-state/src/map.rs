@@ -5,7 +5,8 @@ use sovereign_sdk::serial::{Decode, Encode};
 use thiserror::Error;
 
 /// A container that maps keys to values.
-#[derive(Debug)]
+
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct StateMap<K, V> {
     _phantom: (PhantomData<K>, PhantomData<V>),
     prefix: Prefix,

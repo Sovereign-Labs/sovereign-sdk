@@ -17,7 +17,7 @@ impl Encode for SingletonKey {
 }
 
 /// Container for a single value.
-#[derive(Debug)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Eq, Clone)]
 pub struct StateValue<V> {
     _phantom: PhantomData<V>,
     prefix: Prefix,
