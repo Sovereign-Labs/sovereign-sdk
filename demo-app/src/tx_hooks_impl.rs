@@ -5,10 +5,10 @@ use sov_state::WorkingSet;
 use crate::tx_verifier_impl::Transaction;
 
 /// VerifiedTx is a Transaction after verification.
-pub struct AppVerifiedTx<C: Context> {
-    pub pub_key: C::PublicKey,
-    pub sender: C::Address,
-    pub runtime_msg: Vec<u8>,
+pub(crate) struct AppVerifiedTx<C: Context> {
+    pub(crate) pub_key: C::PublicKey,
+    pub(crate) sender: C::Address,
+    pub(crate) runtime_msg: Vec<u8>,
 }
 
 impl<C: Context> VerifiedTx for AppVerifiedTx<C> {

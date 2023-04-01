@@ -6,11 +6,11 @@ use std::{io::Cursor, marker::PhantomData};
 
 /// Transaction represents a deserialized RawTx.
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub struct Transaction<C: sov_modules_api::Context> {
-    pub signature: C::Signature,
-    pub pub_key: C::PublicKey,
-    pub runtime_msg: Vec<u8>,
-    pub nonce: u64,
+pub(crate) struct Transaction<C: sov_modules_api::Context> {
+    pub(crate) signature: C::Signature,
+    pub(crate) pub_key: C::PublicKey,
+    pub(crate) runtime_msg: Vec<u8>,
+    pub(crate) nonce: u64,
 }
 
 impl<C: sov_modules_api::Context> Transaction<C> {
