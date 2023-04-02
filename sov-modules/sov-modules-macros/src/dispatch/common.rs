@@ -1,6 +1,6 @@
 use proc_macro2::Ident;
 use quote::format_ident;
-use syn::{DataStruct, GenericParam, Generics, ImplGenerics, TypeGenerics, WhereClause};
+use syn::{DataStruct, GenericParam, Generics, ImplGenerics, TypeGenerics, WhereClause, Lit, Meta, NestedMeta};
 #[derive(Clone)]
 pub(crate) struct StructNamedField {
     pub(crate) ident: proc_macro2::Ident,
@@ -100,6 +100,7 @@ impl<'a> StructDef<'a> {
         &self,
         enum_legs: &[proc_macro2::TokenStream],
         postfix: &'static str,
+        serialization_attrs: Vec<String>
     ) -> proc_macro2::TokenStream {
         let enum_ident = self.enum_ident(postfix);
         let impl_generics = &self.impl_generics;
@@ -108,9 +109,7 @@ impl<'a> StructDef<'a> {
         quote::quote! {
             // This is generated code (won't be exposed to the users) and we allow non camel case for enum variants.
             #[allow(non_camel_case_types)]
-            // TODO we should not hardcode the serialization format inside the macro:
-            // https://github.com/Sovereign-Labs/sovereign/issues/97
-            #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, ::core::fmt::Debug, PartialEq)]
+            #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, ::core::fmt::Debug, PartialEq, #(#serialization_attrs),*)]
             pub (crate) enum #enum_ident #impl_generics #where_clause {
                 #(#enum_legs)*
             }
@@ -142,4 +141,27 @@ pub(crate) fn parse_generic_params(generics: &Generics) -> Result<Ident, syn::Er
     };
 
     Ok(generic_param.clone())
+}
+
+pub fn get_attribute_values(item: &syn::DeriveInput, attribute_name: &str) -> Vec<String> {
+    let mut values = vec![];
+
+    // Find the attribute with the given name on the root item
+    if let Some(attr) = item.attrs.iter().find(|attr| attr.path.is_ident(attribute_name)) {
+        if let Ok(meta) = attr.parse_meta() {
+            if let Meta::List(list) = meta {
+                values.extend(
+                    list.nested
+                        .iter()
+                        .filter_map(|nested| match nested {
+                            NestedMeta::Lit(Lit::Str(lit_str)) => Some(lit_str.value()),
+                            _ => None,
+                        })
+                        .collect::<Vec<_>>(),
+                );
+            }
+        }
+    }
+
+    values
 }

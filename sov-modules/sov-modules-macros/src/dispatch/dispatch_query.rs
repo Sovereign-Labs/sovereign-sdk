@@ -1,4 +1,4 @@
-use super::common::{parse_generic_params, StructDef, StructFieldExtractor, QUERY};
+use super::common::{parse_generic_params, StructDef, StructFieldExtractor, QUERY, get_attribute_values};
 use syn::DeriveInput;
 
 impl<'a> StructDef<'a> {
@@ -78,6 +78,8 @@ impl DispatchQueryMacro {
         &self,
         input: DeriveInput,
     ) -> Result<proc_macro::TokenStream, syn::Error> {
+        let serialization_methods = get_attribute_values(&input, "serialization");
+
         let DeriveInput {
             data,
             ident,
@@ -100,7 +102,7 @@ impl DispatchQueryMacro {
         );
 
         let query_enum_legs = struct_def.create_query_enum_legs();
-        let query_enum = struct_def.create_enum(&query_enum_legs, QUERY);
+        let query_enum = struct_def.create_enum(&query_enum_legs, QUERY, serialization_methods);
         let create_dispatch_impl = struct_def.create_query_dispatch();
 
         Ok(quote::quote! {

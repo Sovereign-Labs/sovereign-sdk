@@ -2,6 +2,7 @@ use super::common::parse_generic_params;
 use super::common::StructDef;
 use super::common::StructFieldExtractor;
 use super::common::CALL;
+use super::common::get_attribute_values;
 use syn::DeriveInput;
 
 impl<'a> StructDef<'a> {
@@ -101,6 +102,8 @@ impl DispatchCallMacro {
         &self,
         input: DeriveInput,
     ) -> Result<proc_macro::TokenStream, syn::Error> {
+        let serialization_methods = get_attribute_values(&input, "serialization");
+
         let DeriveInput {
             data,
             ident,
@@ -123,7 +126,7 @@ impl DispatchCallMacro {
         );
 
         let call_enum_legs = struct_def.create_call_enum_legs();
-        let call_enum = struct_def.create_enum(&call_enum_legs, CALL);
+        let call_enum = struct_def.create_enum(&call_enum_legs, CALL, serialization_methods);
         let create_dispatch_impl = struct_def.create_call_dispatch();
 
         Ok(quote::quote! {
