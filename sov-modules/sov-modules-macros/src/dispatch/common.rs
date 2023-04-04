@@ -1,7 +1,8 @@
 use proc_macro2::Ident;
 use proc_macro2::TokenStream;
+use quote::ToTokens;
 use quote::format_ident;
-use syn::{DataStruct, GenericParam, Generics, ImplGenerics, TypeGenerics, WhereClause, Lit, Meta, NestedMeta};
+use syn::{DataStruct, GenericParam, Generics, ImplGenerics, TypeGenerics, WhereClause, Meta};
 
 #[derive(Clone)]
 pub(crate) struct StructNamedField {
@@ -102,13 +103,11 @@ impl<'a> StructDef<'a> {
         &self,
         enum_legs: &[proc_macro2::TokenStream],
         postfix: &'static str,
-        serialization_attrs: &Vec<String>
+        serialization_attrs: &Vec<TokenStream>
     ) -> proc_macro2::TokenStream {
         let enum_ident = self.enum_ident(postfix);
         let impl_generics = &self.impl_generics;
         let where_clause = &self.where_clause;
-
-        println!("serialization_attrs {:?}", serialization_attrs);
 
         quote::quote! {
             // This is generated code (won't be exposed to the users) and we allow non camel case for enum variants.
@@ -147,35 +146,18 @@ pub(crate) fn parse_generic_params(generics: &Generics) -> Result<Ident, syn::Er
     Ok(generic_param.clone())
 }
 
-pub fn get_attribute_values(item: &syn::DeriveInput, attribute_name: &str) -> Vec<String> {
+pub fn get_attribute_values(item: &syn::DeriveInput, attribute_name: &str) -> Vec<TokenStream> {
     let mut values = vec![];
 
     // Find the attribute with the given name on the root item
     if let Some(attr) = item.attrs.iter().find(|attr| attr.path.is_ident(attribute_name)) {
         if let Ok(meta) = attr.parse_meta() {
             if let Meta::List(list) = meta {
-                values.extend(list.nested.iter().filter_map(|nested| {
-                    match nested {
-                      NestedMeta::Meta(meta) => {
-                            match meta {
-                                Meta::Path(path) => {
-                                    let path_str = path
-                                        .segments
-                                        .iter()
-                                        .map(|segment| segment.ident.to_string())
-                                        .collect::<Vec<_>>()
-                                        .join("::");
-                                    Some(path_str)
-                                }
-                                _ => None,
-                            }
-                        }
-                        NestedMeta::Lit(Lit::Str(lit_str)) => {
-                            Some(lit_str.value())
-                        },
-                        _ => None
-                    }
-                }).collect::<Vec<_>>());
+                values.extend(list.nested.iter().map(|n| {
+                    let mut tokens = TokenStream::new();
+                    n.to_tokens(&mut tokens);
+                    return tokens;
+                }));
             }
         }
     }
@@ -183,17 +165,19 @@ pub fn get_attribute_values(item: &syn::DeriveInput, attribute_name: &str) -> Ve
     values
 }
 
-pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<String>, syn::Error> {
+pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStream>, syn::Error> {
     let serialization_attrs = get_attribute_values(&item, "serialization");
 
     let mut has_serialize = false;
     let mut has_deserialize = false;
 
     for attr in &serialization_attrs {
-        if attr.contains("Serialize") {
+        let str = attr.to_string();
+
+        if str.contains("Serialize") {
             has_serialize = true;
         }
-        if attr.contains("Deserialize") {
+        if str.contains("Deserialize") {
             has_deserialize = true;
         }
     }

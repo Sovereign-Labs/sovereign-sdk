@@ -1,6 +1,5 @@
 use sov_modules_api::{Context, Module, ModuleInfo};
 use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
-use borsh::{BorshDeserialize, BorshSerialize};
 
 /// On a high level, the rollup node receives serialized call messages from the DA layer and executes them as atomic transactions.
 /// Upon reception, the message has to be deserialized and forwarded to an appropriate module.
