@@ -7,7 +7,7 @@ use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 use sov_state::ProverStorage;
 
 #[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
-#[serialization(serde::Serialize, serde::Deserialize)]
+#[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 struct Runtime<C: Context> {
     first: first_test_module::FirstTestStruct<C>,
     second: second_test_module::SecondTestStruct<C>,
