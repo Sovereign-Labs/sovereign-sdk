@@ -8,6 +8,7 @@ use sov_state::ProverStorage;
 
 // Debugging hint: To expand the macro in tests run: `cargo expand --test tests`
 #[derive(Genesis, DispatchQuery, DispatchCall, MessageCodec)]
+#[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 struct Runtime<C>
 where
     C: Context,

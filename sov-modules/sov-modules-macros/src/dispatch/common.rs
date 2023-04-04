@@ -1,6 +1,8 @@
 use proc_macro2::Ident;
+use proc_macro2::TokenStream;
 use quote::format_ident;
 use syn::{DataStruct, GenericParam, Generics, ImplGenerics, TypeGenerics, WhereClause, Lit, Meta, NestedMeta};
+
 #[derive(Clone)]
 pub(crate) struct StructNamedField {
     pub(crate) ident: proc_macro2::Ident,
@@ -100,16 +102,18 @@ impl<'a> StructDef<'a> {
         &self,
         enum_legs: &[proc_macro2::TokenStream],
         postfix: &'static str,
-        serialization_attrs: Vec<String>
+        serialization_attrs: &Vec<String>
     ) -> proc_macro2::TokenStream {
         let enum_ident = self.enum_ident(postfix);
         let impl_generics = &self.impl_generics;
         let where_clause = &self.where_clause;
 
+        println!("serialization_attrs {:?}", serialization_attrs);
+
         quote::quote! {
             // This is generated code (won't be exposed to the users) and we allow non camel case for enum variants.
             #[allow(non_camel_case_types)]
-            #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, ::core::fmt::Debug, PartialEq, #(#serialization_attrs),*)]
+            #[derive(::core::fmt::Debug, PartialEq, #(#serialization_attrs),*)]
             pub (crate) enum #enum_ident #impl_generics #where_clause {
                 #(#enum_legs)*
             }
@@ -150,18 +154,58 @@ pub fn get_attribute_values(item: &syn::DeriveInput, attribute_name: &str) -> Ve
     if let Some(attr) = item.attrs.iter().find(|attr| attr.path.is_ident(attribute_name)) {
         if let Ok(meta) = attr.parse_meta() {
             if let Meta::List(list) = meta {
-                values.extend(
-                    list.nested
-                        .iter()
-                        .filter_map(|nested| match nested {
-                            NestedMeta::Lit(Lit::Str(lit_str)) => Some(lit_str.value()),
-                            _ => None,
-                        })
-                        .collect::<Vec<_>>(),
-                );
+                values.extend(list.nested.iter().filter_map(|nested| {
+                    match nested {
+                      NestedMeta::Meta(meta) => {
+                            match meta {
+                                Meta::Path(path) => {
+                                    let path_str = path
+                                        .segments
+                                        .iter()
+                                        .map(|segment| segment.ident.to_string())
+                                        .collect::<Vec<_>>()
+                                        .join("::");
+                                    Some(path_str)
+                                }
+                                _ => None,
+                            }
+                        }
+                        NestedMeta::Lit(Lit::Str(lit_str)) => {
+                            Some(lit_str.value())
+                        },
+                        _ => None
+                    }
+                }).collect::<Vec<_>>());
             }
         }
     }
 
     values
+}
+
+pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<String>, syn::Error> {
+    let serialization_attrs = get_attribute_values(&item, "serialization");
+
+    let mut has_serialize = false;
+    let mut has_deserialize = false;
+
+    for attr in &serialization_attrs {
+        if attr.contains("Serialize") {
+            has_serialize = true;
+        }
+        if attr.contains("Deserialize") {
+            has_deserialize = true;
+        }
+    }
+
+    if !has_serialize || !has_deserialize {
+        let tokens: TokenStream = quote::quote! { serialization };
+
+        return Err(syn::Error::new_spanned(
+            tokens,
+            format!("Serialization attributes must contain both 'Serialize' and 'Deserialize', but contained '{:?}'", serialization_attrs),
+        ));
+    }
+
+    Ok(serialization_attrs)
 }
