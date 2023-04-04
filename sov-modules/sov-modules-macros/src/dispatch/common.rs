@@ -1,7 +1,5 @@
-use proc_macro2::Ident;
-use proc_macro2::TokenStream;
-use quote::ToTokens;
-use quote::format_ident;
+use proc_macro2::{Ident, TokenStream};
+use quote::{ToTokens, format_ident};
 use syn::{DataStruct, GenericParam, Generics, ImplGenerics, TypeGenerics, WhereClause, Meta};
 
 #[derive(Clone)]
@@ -170,6 +168,7 @@ pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStrea
 
     let mut has_serialize = false;
     let mut has_deserialize = false;
+    let mut has_other = false;
 
     for attr in &serialization_attrs {
         let str = attr.to_string();
@@ -177,17 +176,25 @@ pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStrea
         if str.contains("Serialize") {
             has_serialize = true;
         }
-        if str.contains("Deserialize") {
+        else if str.contains("Deserialize") {
             has_deserialize = true;
+        }
+        else {
+            has_other = true;
         }
     }
 
-    if !has_serialize || !has_deserialize {
-        let tokens: TokenStream = quote::quote! { serialization };
-
+    let tokens: TokenStream = quote::quote! { serialization };
+    if !has_serialize || !has_deserialize {        
         return Err(syn::Error::new_spanned(
-            tokens,
+            &tokens,
             format!("Serialization attributes must contain both 'Serialize' and 'Deserialize', but contained '{:?}'", serialization_attrs),
+        ));
+    }
+    else if has_other {
+        return Err(syn::Error::new_spanned(
+            &tokens,
+            format!("Serialization attributes can not containt attributes that are not 'Serialize' and 'Deserialize': '{:?}'", serialization_attrs),
         ));
     }
 
