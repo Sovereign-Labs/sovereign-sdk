@@ -164,19 +164,23 @@ pub fn get_attribute_values(item: &syn::DeriveInput, attribute_name: &str) -> Ve
 }
 
 pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStream>, syn::Error> {
+    const SERIALIZE: &str = "Serialize";
+    const DESERIALIZE: &str = "Deserialize";
+
     let serialization_attrs = get_attribute_values(&item, "serialization");
 
     let mut has_serialize = false;
     let mut has_deserialize = false;
     let mut has_other = false;
 
-    for attr in &serialization_attrs {
-        let str = attr.to_string();
+    let attributes: Vec<String> = 
+        serialization_attrs.iter().map(|t| t.to_string()).collect();        
 
-        if str.contains("Serialize") {
+    for attr in &attributes {        
+        if attr.contains(SERIALIZE) {
             has_serialize = true;
         }
-        else if str.contains("Deserialize") {
+        else if attr.contains(DESERIALIZE) {
             has_deserialize = true;
         }
         else {
@@ -188,13 +192,14 @@ pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStrea
     if !has_serialize || !has_deserialize {        
         return Err(syn::Error::new_spanned(
             &tokens,
-            format!("Serialization attributes must contain both 'Serialize' and 'Deserialize', but contained '{:?}'", serialization_attrs),
+            format!("Serialization attributes must contain both '{}' and '{}', but contains '{:?}'", SERIALIZE, DESERIALIZE, &attributes),
         ));
     }
     else if has_other {
         return Err(syn::Error::new_spanned(
             &tokens,
-            format!("Serialization attributes can not containt attributes that are not 'Serialize' and 'Deserialize': '{:?}'", serialization_attrs),
+            format!("Serialization attributes can not contain attributes that are not '{}' and '{}', but contains: '{:?}'", 
+                SERIALIZE, DESERIALIZE, &attributes.iter().filter(|a| !a.contains(SERIALIZE) && !a.contains(DESERIALIZE)).collect::<Vec<_>>()),
         ));
     }
 

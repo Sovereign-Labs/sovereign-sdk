@@ -16,4 +16,5 @@ fn module_dispatch_tests() {
     let t = trybuild::TestCases::new();
     t.pass("tests/dispatch/derive_genesis.rs");
     t.pass("tests/dispatch/derive_dispatch.rs");
+    t.compile_fail("tests/dispatch/missing_serialization.rs");
 }
