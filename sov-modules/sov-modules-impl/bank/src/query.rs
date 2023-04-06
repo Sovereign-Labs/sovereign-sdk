@@ -16,30 +16,39 @@ pub enum QueryMessage<C: sov_modules_api::Context> {
 
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub struct BalanceResponse {
-    amount: Amount,
+    amount: Option<Amount>,
 }
 
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub struct TotalSupplyResponse {
-    amount: Amount,
+    amount: Option<Amount>,
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
     pub fn balance_of(
         &self,
-        _user_address: C::Address,
-        _token_address: C::Address,
-        _working_set: &mut WorkingSet<C::Storage>,
+        user_address: C::Address,
+        token_address: C::Address,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> BalanceResponse {
-        todo!()
+        BalanceResponse {
+            amount: self
+                .tokens
+                .get(&token_address, working_set)
+                .and_then(|token| token.balances.get(&user_address, working_set)),
+        }
     }
 
     pub fn supply_of(
         &self,
-        _user_address: C::Address,
-        _token_address: C::Address,
-        _working_set: &mut WorkingSet<C::Storage>,
+        token_address: C::Address,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> TotalSupplyResponse {
-        todo!()
+        TotalSupplyResponse {
+            amount: self
+                .tokens
+                .get(&token_address, working_set)
+                .map(|token| token.total_supply),
+        }
     }
 }
