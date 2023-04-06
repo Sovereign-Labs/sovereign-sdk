@@ -14,18 +14,18 @@ pub enum QueryMessage<C: sov_modules_api::Context> {
     },
 }
 
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, Eq, PartialEq)]
 pub struct BalanceResponse {
     amount: Option<Amount>,
 }
 
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, Eq, PartialEq)]
 pub struct TotalSupplyResponse {
     amount: Option<Amount>,
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
-    pub fn balance_of(
+    pub(crate) fn balance_of(
         &self,
         user_address: C::Address,
         token_address: C::Address,
@@ -39,7 +39,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         }
     }
 
-    pub fn supply_of(
+    pub(crate) fn supply_of(
         &self,
         token_address: C::Address,
         working_set: &mut WorkingSet<C::Storage>,
