@@ -1,24 +1,11 @@
 mod call;
 mod genesis;
 mod query;
+mod token;
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
-
-type Amount = u64;
-
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
-pub struct Coins<Address: sov_modules_api::AddressTrait> {
-    amount: Amount,
-    token_address: Address,
-}
-
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub struct Token<Address: sov_modules_api::AddressTrait> {
-    name: String,
-    total_supply: u64,
-    balances: sov_state::StateMap<Address, Amount>,
-}
+pub use token::{Amount, Coins, Token};
 
 #[derive(ModuleInfo)]
 pub struct Bank<C: sov_modules_api::Context> {
@@ -29,7 +16,7 @@ pub struct Bank<C: sov_modules_api::Context> {
     pub names: sov_state::StateMap<String, C::Address>,
 
     #[state]
-    pub tokens: sov_state::StateMap<C::Address, Token<C::Address>>,
+    pub tokens: sov_state::StateMap<C::Address, Token<C>>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {

@@ -37,20 +37,26 @@ impl<C: sov_modules_api::Context> Bank<C> {
 
     pub fn transfer(
         &self,
-        _to: C::Address,
-        _coins: Coins<C::Address>,
-        _context: &C,
-        _working_set: &mut WorkingSet<C::Storage>,
+        to: C::Address,
+        coins: Coins<C::Address>,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        todo!()
+        let token_address = coins.token_address;
+
+        let token = self.tokens.get_or_err(&token_address, working_set)?;
+        token.transfer(context.sender(), &to, coins.amount, working_set)
     }
 
     pub fn burn(
         &self,
-        _coins: Coins<C::Address>,
-        _context: &C,
-        _working_set: &mut WorkingSet<C::Storage>,
+        coins: Coins<C::Address>,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        todo!()
+        let token_address = coins.token_address;
+        let token = self.tokens.get_or_err(&token_address, working_set)?;
+
+        token.burn(context.sender(), coins.amount, working_set)
     }
 }
