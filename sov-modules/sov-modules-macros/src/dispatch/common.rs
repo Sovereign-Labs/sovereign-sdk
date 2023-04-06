@@ -1,6 +1,7 @@
-use proc_macro2::Ident;
-use quote::format_ident;
-use syn::{DataStruct, GenericParam, Generics, ImplGenerics, TypeGenerics, WhereClause};
+use proc_macro2::{Ident, TokenStream};
+use quote::{ToTokens, format_ident};
+use syn::{DataStruct, GenericParam, Generics, ImplGenerics, TypeGenerics, WhereClause, Meta};
+
 #[derive(Clone)]
 pub(crate) struct StructNamedField {
     pub(crate) ident: proc_macro2::Ident,
@@ -100,6 +101,7 @@ impl<'a> StructDef<'a> {
         &self,
         enum_legs: &[proc_macro2::TokenStream],
         postfix: &'static str,
+        serialization_attrs: &Vec<TokenStream>
     ) -> proc_macro2::TokenStream {
         let enum_ident = self.enum_ident(postfix);
         let impl_generics = &self.impl_generics;
@@ -108,9 +110,7 @@ impl<'a> StructDef<'a> {
         quote::quote! {
             // This is generated code (won't be exposed to the users) and we allow non camel case for enum variants.
             #[allow(non_camel_case_types)]
-            // TODO we should not hardcode the serialization format inside the macro:
-            // https://github.com/Sovereign-Labs/sovereign/issues/97
-            #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, ::core::fmt::Debug, PartialEq)]
+            #[derive(::core::fmt::Debug, PartialEq, #(#serialization_attrs),*)]
             pub (crate) enum #enum_ident #impl_generics #where_clause {
                 #(#enum_legs)*
             }
@@ -142,4 +142,66 @@ pub(crate) fn parse_generic_params(generics: &Generics) -> Result<Ident, syn::Er
     };
 
     Ok(generic_param.clone())
+}
+
+pub fn get_attribute_values(item: &syn::DeriveInput, attribute_name: &str) -> Vec<TokenStream> {
+    let mut values = vec![];
+
+    // Find the attribute with the given name on the root item
+    if let Some(attr) = item.attrs.iter().find(|attr| attr.path.is_ident(attribute_name)) {
+        if let Ok(meta) = attr.parse_meta() {
+            if let Meta::List(list) = meta {
+                values.extend(list.nested.iter().map(|n| {
+                    let mut tokens = TokenStream::new();
+                    n.to_tokens(&mut tokens);
+                    return tokens;
+                }));
+            }
+        }
+    }
+
+    values
+}
+
+pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStream>, syn::Error> {
+    const SERIALIZE: &str = "Serialize";
+    const DESERIALIZE: &str = "Deserialize";
+
+    let serialization_attrs = get_attribute_values(&item, "serialization");
+
+    let mut has_serialize = false;
+    let mut has_deserialize = false;
+    let mut has_other = false;
+
+    let attributes: Vec<String> = 
+        serialization_attrs.iter().map(|t| t.to_string()).collect();        
+
+    for attr in &attributes {        
+        if attr.contains(SERIALIZE) {
+            has_serialize = true;
+        }
+        else if attr.contains(DESERIALIZE) {
+            has_deserialize = true;
+        }
+        else {
+            has_other = true;
+        }
+    }
+
+    let tokens: TokenStream = quote::quote! { serialization };
+    if !has_serialize || !has_deserialize {        
+        return Err(syn::Error::new_spanned(
+            &tokens,
+            format!("Serialization attributes must contain both '{}' and '{}', but contains '{:?}'", SERIALIZE, DESERIALIZE, &attributes),
+        ));
+    }
+    else if has_other {
+        return Err(syn::Error::new_spanned(
+            &tokens,
+            format!("Serialization attributes can not contain attributes that are not '{}' and '{}', but contains: '{:?}'", 
+                SERIALIZE, DESERIALIZE, &attributes.iter().filter(|a| !a.contains(SERIALIZE) && !a.contains(DESERIALIZE)).collect::<Vec<_>>()),
+        ));
+    }
+
+    Ok(serialization_attrs)
 }

@@ -49,7 +49,7 @@ pub fn genesis(input: TokenStream) -> TokenStream {
 }
 
 /// Derives the `sov-modules-api::DispatchCall` implementation for the underlying type.
-#[proc_macro_derive(DispatchCall)]
+#[proc_macro_derive(DispatchCall, attributes(serialization))]
 pub fn dispatch_call(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let call_macro = DispatchCallMacro::new("Call");
@@ -58,7 +58,7 @@ pub fn dispatch_call(input: TokenStream) -> TokenStream {
 }
 
 /// Derives the `sov-modules-api::DispatchQuery` implementation for the underlying type.
-#[proc_macro_derive(DispatchQuery)]
+#[proc_macro_derive(DispatchQuery, attributes(serialization))]
 pub fn dispatch_query(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let query_macro = DispatchQueryMacro::new("Query");
