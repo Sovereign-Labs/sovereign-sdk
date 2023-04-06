@@ -1,8 +1,8 @@
+use crate::{Amount, Bank, Coins, Token};
 use anyhow::{bail, Result};
+use sov_modules_api::Hasher;
 use sov_modules_api::{CallResponse, Spec};
 use sov_state::WorkingSet;
-
-use crate::{Amount, Bank, Coins, Token};
 
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage<C: sov_modules_api::Context> {
@@ -23,14 +23,6 @@ pub enum CallMessage<C: sov_modules_api::Context> {
     },
 }
 
-fn contract_address<C: sov_modules_api::Context>() -> C::Address {
-    todo!()
-}
-
-fn burn_address<C: sov_modules_api::Context>() -> C::Address {
-    todo!()
-}
-
 fn prefix() -> sov_modules_api::Prefix {
     todo!()
 }
@@ -39,16 +31,13 @@ impl<C: sov_modules_api::Context> Bank<C> {
     pub fn create_token(
         &self,
         token_name: String,
+        salt: u64,
         initial_balance: Amount,
         minter_address: C::Address,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        //let sender_address = context.sender();
-        // salt
-        // hash(name)
-
-        let contract_address = contract_address::<C>();
+        let contract_address = create_contract_address::<C>(&token_name, context.sender(), salt);
 
         match self.tokens.get(&contract_address, working_set) {
             Some(_) => bail!("todo"),
@@ -61,7 +50,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
                 let token = Token::<C> {
                     name: token_name,
                     total_supply: initial_balance,
-                    burn_address: burn_address::<C>(),
+                    burn_address: create_burn_address::<C>(&contract_address),
                     balances,
                 };
 
@@ -96,4 +85,29 @@ impl<C: sov_modules_api::Context> Bank<C> {
 
         token.burn(context.sender(), coins.amount, working_set)
     }
+}
+
+fn create_contract_address<C: sov_modules_api::Context>(
+    token_name: &str,
+    sender_address: &C::Address,
+    salt: u64,
+) -> C::Address {
+    let mut hasher = C::Hasher::new();
+    hasher.update(token_name.as_bytes());
+    hasher.update(sender_address.as_ref());
+    hasher.update(&salt.to_le_bytes());
+
+    let data = hasher.finalize();
+    // TODO remove unwrap
+    C::Address::try_from(&data).unwrap()
+}
+
+fn create_burn_address<C: sov_modules_api::Context>(contract_address: &C::Address) -> C::Address {
+    let mut hasher = C::Hasher::new();
+    hasher.update(contract_address.as_ref());
+    hasher.update(&[0; 32]);
+
+    let data = hasher.finalize();
+    // TODO remove unwrap
+    C::Address::try_from(&data).unwrap()
 }
