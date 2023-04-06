@@ -12,10 +12,10 @@ pub struct Coins<Address: sov_modules_api::AddressTrait> {
 
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct Token<C: sov_modules_api::Context> {
-    name: String,
-    total_supply: u64,
-    burn_address: C::Address,
-    balances: sov_state::StateMap<C::Address, Amount>,
+    pub(crate) name: String,
+    pub(crate) total_supply: u64,
+    pub(crate) burn_address: C::Address,
+    pub(crate) balances: sov_state::StateMap<C::Address, Amount>,
 }
 
 impl<C: sov_modules_api::Context> Token<C> {

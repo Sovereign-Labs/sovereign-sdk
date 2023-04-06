@@ -13,9 +13,6 @@ pub struct Bank<C: sov_modules_api::Context> {
     pub address: C::Address,
 
     #[state]
-    pub names: sov_state::StateMap<String, C::Address>,
-
-    #[state]
     pub tokens: sov_state::StateMap<C::Address, Token<C>>,
 }
 
