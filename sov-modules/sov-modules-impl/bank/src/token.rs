@@ -37,7 +37,7 @@ impl<C: sov_modules_api::Context> Token<C> {
             None => bail!("Insufficient funds"),
         };
 
-        // We can't overflow here because the sum must be smaller than `total_supply` which is u64.
+        // We can't overflow here because the sum must be smaller or eq to `total_supply` which is u64.
         let to_balance = self.balances.get(to, working_set).unwrap_or_default() + amount;
 
         self.balances.set(from, from_balance, working_set);
