@@ -7,19 +7,23 @@ mod tests;
 mod token;
 
 pub use create_token::create_token_address;
-pub use token::{Amount, Coins, Token};
+use token::Token;
+pub use token::{Amount, Coins};
 
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
+///
 #[derive(ModuleInfo)]
 pub struct Bank<C: sov_modules_api::Context> {
+    /// The address of the bank module.
     #[address]
-    pub address: C::Address,
+    pub(crate) address: C::Address,
 
+    /// A mapping of addresses to tokens in the bank.
     #[state]
-    pub tokens: sov_state::StateMap<C::Address, Token<C>>,
+    pub(crate) tokens: sov_state::StateMap<C::Address, Token<C>>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
@@ -53,9 +57,11 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
                 context,
                 working_set,
             )?),
+
             call::CallMessage::Transfer { to, coins } => {
                 Ok(self.transfer(to, coins, context, working_set)?)
             }
+
             call::CallMessage::Burn { coins } => Ok(self.burn(coins, context, working_set)?),
         }
     }

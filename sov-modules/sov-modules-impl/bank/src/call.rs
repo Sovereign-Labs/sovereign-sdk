@@ -4,21 +4,32 @@ use sov_modules_api::CallResponse;
 use sov_modules_api::Hasher;
 use sov_state::WorkingSet;
 
+/// This enumeration represents the available call messages for interacting with the bank module.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage<C: sov_modules_api::Context> {
+    /// Creates a new token with the specified name and initial balance.
     CreateToken {
+        /// salt: a random value use to create a unique token address.
         salt: u64,
+        /// token_name: the name of the new token
         token_name: String,
+        /// initial_balance: the initial balance of the new token
         initial_balance: Amount,
+        /// minter_address: the address of the account that minted new tokens.
         minter_address: C::Address,
     },
 
+    /// Transfers a specified amount of tokens to the specified address.
     Transfer {
+        /// to: the address to which the tokens will be transferred.
         to: C::Address,
+        /// coins: the amount of tokens to transfer.
         coins: Coins<C::Address>,
     },
 
+    /// Burns a specified amount of tokens.
     Burn {
+        /// coins: the amount of tokens to burn.
         coins: Coins<C::Address>,
     },
 }

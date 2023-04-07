@@ -6,12 +6,13 @@ pub type Amount = u64;
 
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub struct Coins<Address: sov_modules_api::AddressTrait> {
-    pub(crate) amount: Amount,
-    pub(crate) token_address: Address,
+    pub amount: Amount,
+    pub token_address: Address,
 }
 
+/// This struct represents a token in the bank module.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub struct Token<C: sov_modules_api::Context> {
+pub(crate) struct Token<C: sov_modules_api::Context> {
     pub(crate) name: String,
     pub(crate) total_supply: u64,
     pub(crate) burn_address: C::Address,
@@ -19,7 +20,7 @@ pub struct Token<C: sov_modules_api::Context> {
 }
 
 impl<C: sov_modules_api::Context> Token<C> {
-    pub fn transfer(
+    pub(crate) fn transfer(
         &self,
         from: &C::Address,
         to: &C::Address,
@@ -41,7 +42,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         Ok(CallResponse::default())
     }
 
-    pub fn burn(
+    pub(crate) fn burn(
         &self,
         from: &C::Address,
         amount: Amount,

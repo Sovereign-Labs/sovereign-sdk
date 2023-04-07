@@ -1,17 +1,16 @@
+use crate::{Amount, Bank};
 use sov_state::WorkingSet;
 
-use crate::{Amount, Bank};
-
+/// This enumeration represents the available query messages for querying the bank module.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum QueryMessage<C: sov_modules_api::Context> {
+    /// Gets the balance of a specified token for a specified user.
     GetBalance {
         user_address: C::Address,
         token_address: C::Address,
     },
-
-    GetTotalSupply {
-        token_address: C::Address,
-    },
+    /// Gets the total supply of a specified token.
+    GetTotalSupply { token_address: C::Address },
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Eq, PartialEq)]

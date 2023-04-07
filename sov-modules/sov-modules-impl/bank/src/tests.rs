@@ -42,6 +42,7 @@ impl TestBank {
                 token_address: self.token_address.clone(),
             },
         };
+
         self.bank
             .call(transfer, &self.minter_context, &mut self.working_set)
             .unwrap();
@@ -54,6 +55,7 @@ impl TestBank {
                 token_address: self.token_address.clone(),
             },
         };
+
         self.bank
             .call(burn, context, &mut self.working_set)
             .unwrap();
@@ -66,7 +68,6 @@ impl TestBank {
         };
 
         let resp = self.bank.query(query, &mut self.working_set);
-
         serde_json::from_slice(&resp.response).unwrap()
     }
 }
