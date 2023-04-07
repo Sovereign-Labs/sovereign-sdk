@@ -15,8 +15,8 @@ pub fn create_token_address<C: sov_modules_api::Context>(
     hasher.update(&salt.to_le_bytes());
 
     let hash = hasher.finalize();
-    // TODO remove unwrap
-    C::Address::try_from(&hash).unwrap()
+
+    C::Address::from(hash)
 }
 
 /// Derives `special address` for a given token.
@@ -28,6 +28,5 @@ pub fn create_special_address<C: sov_modules_api::Context>(
     hasher.update(&SPECIAL);
 
     let hash = hasher.finalize();
-    // TODO remove unwrap
-    C::Address::try_from(&hash).unwrap()
+    C::Address::from(hash)
 }
