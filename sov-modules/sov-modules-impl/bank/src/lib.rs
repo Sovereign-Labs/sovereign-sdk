@@ -1,35 +1,32 @@
 mod call;
+mod create_token;
 mod genesis;
 mod query;
+#[cfg(test)]
+mod tests;
+mod token;
+
+pub use create_token::create_token_address;
+use token::Token;
+pub use token::{Amount, Coins};
+
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
-type Amount = u64;
-
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
-pub struct Coins<Address: sov_modules_api::AddressTrait> {
-    amount: Amount,
-    token_address: Address,
-}
-
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub struct Token<Address: sov_modules_api::AddressTrait> {
-    name: String,
-    total_supply: u64,
-    balances: sov_state::StateMap<Address, Amount>,
-}
-
+/// The Bank module manages user balances. It provides functionality for:
+/// - Token creation.
+/// - Token transfers.
+/// - Token burn.
 #[derive(ModuleInfo)]
 pub struct Bank<C: sov_modules_api::Context> {
+    /// The address of the bank module.
     #[address]
-    pub address: C::Address,
+    pub(crate) address: C::Address,
 
+    /// A mapping of addresses to tokens in the bank.
     #[state]
-    pub names: sov_state::StateMap<String, C::Address>,
-
-    #[state]
-    pub tokens: sov_state::StateMap<C::Address, Token<C::Address>>,
+    pub(crate) tokens: sov_state::StateMap<C::Address, Token<C>>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
@@ -45,19 +42,57 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
 
     fn call(
         &self,
-        _msg: Self::CallMessage,
-        _context: &Self::Context,
-        _working_set: &mut WorkingSet<C::Storage>,
+        msg: Self::CallMessage,
+        context: &Self::Context,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
-        todo!()
+        match msg {
+            call::CallMessage::CreateToken {
+                salt,
+                token_name,
+                initial_balance,
+                minter_address,
+            } => Ok(self.create_token(
+                token_name,
+                salt,
+                initial_balance,
+                minter_address,
+                context,
+                working_set,
+            )?),
+
+            call::CallMessage::Transfer { to, coins } => {
+                Ok(self.transfer(to, coins, context, working_set)?)
+            }
+
+            call::CallMessage::Burn { coins } => Ok(self.burn(coins, context, working_set)?),
+        }
     }
 
     #[cfg(feature = "native")]
     fn query(
         &self,
-        _msg: Self::QueryMessage,
-        _working_set: &mut WorkingSet<C::Storage>,
+        msg: Self::QueryMessage,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> sov_modules_api::QueryResponse {
-        todo!()
+        match msg {
+            query::QueryMessage::GetBalance {
+                user_address,
+                token_address,
+            } => {
+                let response =
+                    serde_json::to_vec(&self.balance_of(user_address, token_address, working_set))
+                        .unwrap();
+
+                sov_modules_api::QueryResponse { response }
+            }
+
+            query::QueryMessage::GetTotalSupply { token_address } => {
+                let response =
+                    serde_json::to_vec(&self.supply_of(token_address, working_set)).unwrap();
+
+                sov_modules_api::QueryResponse { response }
+            }
+        }
     }
 }

@@ -55,6 +55,12 @@ impl<'a> TryFrom<&'a [u8]> for Address {
     }
 }
 
+impl From<[u8; 32]> for Address {
+    fn from(addr: [u8; 32]) -> Self {
+        Self { addr }
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum SigVerificationError {
     #[error("Bad signature")]
@@ -83,7 +89,7 @@ pub trait PublicKey {
 
 /// Spec contains types common for all modules.
 pub trait Spec {
-    type Address: AddressTrait + borsh::BorshDeserialize + borsh::BorshSerialize;
+    type Address: AddressTrait + borsh::BorshDeserialize + borsh::BorshSerialize + From<[u8; 32]>;
 
     type Storage: Storage + Clone;
 
