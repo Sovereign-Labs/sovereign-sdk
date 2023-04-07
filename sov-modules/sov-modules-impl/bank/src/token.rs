@@ -13,9 +13,13 @@ pub struct Coins<Address: sov_modules_api::AddressTrait> {
 /// This struct represents a token in the bank module.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub(crate) struct Token<C: sov_modules_api::Context> {
+    /// Name of the token.
     pub(crate) name: String,
+    /// Total supply of the coins.
     pub(crate) total_supply: u64,
-    pub(crate) burn_address: C::Address,
+    /// The special address can be used as burn address or to store temporarily locked coins.
+    pub(crate) special_address: C::Address,
+    /// Mapping from user address to user balance.
     pub(crate) balances: sov_state::StateMap<C::Address, Amount>,
 }
 
@@ -31,7 +35,7 @@ impl<C: sov_modules_api::Context> Token<C> {
 
         let from_balance = match from_balance.checked_sub(amount) {
             Some(from_balance) => from_balance,
-            // TODO: Add from address to the message (we need pretty print for Address)
+            // TODO: Add `from` address to the message (we need pretty print for Address first)
             None => bail!("Insufficient funds"),
         };
 
@@ -50,6 +54,6 @@ impl<C: sov_modules_api::Context> Token<C> {
         amount: Amount,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        self.transfer(from, &self.burn_address, amount, working_set)
+        self.transfer(from, &self.special_address, amount, working_set)
     }
 }

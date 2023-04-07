@@ -59,7 +59,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
                 let token = Token::<C> {
                     name: token_name,
                     total_supply: initial_balance,
-                    burn_address: super::create_burn_address::<C>(&token_address),
+                    special_address: super::create_special_address::<C>(&token_address),
                     balances,
                 };
 

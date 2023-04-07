@@ -1,5 +1,8 @@
 use sov_modules_api::Hasher;
 
+// Const used for creating `special_address`
+const SPECIAL: [u8; 32] = [0; 32];
+
 /// Derives token address from `token_name`, `sender` and `salt`.
 pub fn create_token_address<C: sov_modules_api::Context>(
     token_name: &str,
@@ -16,11 +19,13 @@ pub fn create_token_address<C: sov_modules_api::Context>(
     C::Address::try_from(&hash).unwrap()
 }
 
-/// Derives burn address for a given token.
-pub fn create_burn_address<C: sov_modules_api::Context>(token_address: &C::Address) -> C::Address {
+/// Derives `special address` for a given token.
+pub fn create_special_address<C: sov_modules_api::Context>(
+    token_address: &C::Address,
+) -> C::Address {
     let mut hasher = C::Hasher::new();
     hasher.update(token_address.as_ref());
-    hasher.update(&[0; 32]);
+    hasher.update(&SPECIAL);
 
     let hash = hasher.finalize();
     // TODO remove unwrap
