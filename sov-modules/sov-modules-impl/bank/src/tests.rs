@@ -17,13 +17,14 @@ struct TestBank {
     minter_address: <C as Spec>::Address,
     minter_context: C,
     token_address: <C as Spec>::Address,
+    salt: u64,
     working_set: WorkingSet<<C as Spec>::Storage>,
 }
 
 impl TestBank {
     fn create_token(&mut self, initial_balance: u64, sender_context: &C) {
         let create_token = call::CallMessage::CreateToken::<C> {
-            salt: 0,
+            salt: self.salt,
             token_name: "Token1".to_owned(),
             initial_balance,
             minter_address: self.minter_address.clone(),
@@ -94,6 +95,7 @@ fn create_test_bank() -> (TestBank, C) {
             minter_address,
             minter_context,
             token_address,
+            salt,
             working_set,
         },
         sender_context,
