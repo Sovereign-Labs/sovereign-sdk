@@ -1,14 +1,17 @@
 mod call;
+mod create_token;
 mod genesis;
 mod query;
 #[cfg(test)]
 mod tests;
 mod token;
+
+pub use create_token::create_token_address;
+pub use token::{Amount, Coins, Token};
+
 use sov_modules_api::Error;
-use sov_modules_api::Hasher;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
-pub use token::{Amount, Coins, Token};
 
 #[derive(ModuleInfo)]
 pub struct Bank<C: sov_modules_api::Context> {
@@ -83,19 +86,4 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
             }
         }
     }
-}
-
-fn create_token_address<C: sov_modules_api::Context>(
-    token_name: &str,
-    sender_address: &C::Address,
-    salt: u64,
-) -> C::Address {
-    let mut hasher = C::Hasher::new();
-    hasher.update(sender_address.as_ref());
-    hasher.update(token_name.as_bytes());
-    hasher.update(&salt.to_le_bytes());
-
-    let hash = hasher.finalize();
-    // TODO remove unwrap
-    C::Address::try_from(&hash).unwrap()
 }

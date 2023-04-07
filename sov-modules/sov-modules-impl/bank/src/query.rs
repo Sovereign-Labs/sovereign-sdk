@@ -16,12 +16,12 @@ pub enum QueryMessage<C: sov_modules_api::Context> {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Eq, PartialEq)]
 pub struct BalanceResponse {
-    amount: Option<Amount>,
+    pub amount: Option<Amount>,
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Eq, PartialEq)]
 pub struct TotalSupplyResponse {
-    amount: Option<Amount>,
+    pub amount: Option<Amount>,
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
