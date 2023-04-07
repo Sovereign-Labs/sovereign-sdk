@@ -12,7 +12,7 @@ pub enum CallMessage<C: sov_modules_api::Context> {
         salt: u64,
         /// token_name: the name of the new token.
         token_name: String,
-        /// initial_balance: the initial balance of the new token
+        /// initial_balance: the initial balance of the new token.
         initial_balance: Amount,
         /// minter_address: the address of the account that minted new tokens.
         minter_address: C::Address,
@@ -58,7 +58,6 @@ impl<C: sov_modules_api::Context> Bank<C> {
                 let token = Token::<C> {
                     name: token_name,
                     total_supply: initial_balance,
-                    special_address: super::create_special_address::<C>(&token_address),
                     balances,
                 };
 
@@ -87,7 +86,12 @@ impl<C: sov_modules_api::Context> Bank<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        token.burn(context.sender(), coins.amount, working_set)
+        token.burn(
+            context.sender(),
+            &coins.token_address,
+            coins.amount,
+            working_set,
+        )
     }
 }
 
