@@ -14,7 +14,10 @@ use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
-///
+/// The Bank module manages user balances. It provides functionality for:
+/// - Token creation.
+/// - Token transfers.
+/// - Token burn.
 #[derive(ModuleInfo)]
 pub struct Bank<C: sov_modules_api::Context> {
     /// The address of the bank module.

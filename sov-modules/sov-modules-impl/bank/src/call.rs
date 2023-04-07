@@ -1,7 +1,6 @@
 use crate::{Amount, Bank, Coins, Token};
 use anyhow::{bail, Result};
 use sov_modules_api::CallResponse;
-use sov_modules_api::Hasher;
 use sov_state::WorkingSet;
 
 /// This enumeration represents the available call messages for interacting with the bank module.
@@ -77,9 +76,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let token_address = coins.token_address;
-        let token = self.tokens.get_or_err(&token_address, working_set)?;
-
+        let token = self.tokens.get_or_err(&coins.token_address, working_set)?;
         token.transfer(context.sender(), &to, coins.amount, working_set)
     }
 
@@ -89,22 +86,13 @@ impl<C: sov_modules_api::Context> Bank<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let token_address = coins.token_address;
-        let token = self.tokens.get_or_err(&token_address, working_set)?;
-
+        let token = self.tokens.get_or_err(&coins.token_address, working_set)?;
         token.burn(context.sender(), coins.amount, working_set)
     }
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
     fn prefix(&self, token_address: &C::Address) -> sov_state::Prefix {
-        let mut hasher = C::Hasher::new();
-        hasher.update(self.address.as_ref());
-        hasher.update(token_address.as_ref());
-
-        //TODO address/token_address
-
-        let hash = hasher.finalize();
-        sov_state::Prefix::new(hash.to_vec())
+        sov_state::Prefix::new(token_address.as_ref().to_vec())
     }
 }

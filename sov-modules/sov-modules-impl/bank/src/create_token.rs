@@ -15,7 +15,6 @@ pub fn create_token_address<C: sov_modules_api::Context>(
     hasher.update(&salt.to_le_bytes());
 
     let hash = hasher.finalize();
-
     C::Address::from(hash)
 }
 
