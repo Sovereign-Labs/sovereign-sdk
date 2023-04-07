@@ -161,23 +161,19 @@ impl<S: RollupSpec> LedgerDB<S> {
     /// the range of the database, the result will smaller than the requested range.
     /// Note that this method blindly preallocates for the requested range, so it should not be exposed
     /// directly via rpc.
-    fn get_data_range<T: Schema<Key = K, Value = V>, K: Into<u64> + Copy + SeekKeyEncoder<T>, V>(
-        &self,
-        range: &std::ops::Range<K>,
-    ) -> Result<Vec<V>, anyhow::Error> {
+    fn get_data_range<T, K, V>(&self, range: &std::ops::Range<K>) -> Result<Vec<V>, anyhow::Error>
+    where
+        T: Schema<Key = K, Value = V>,
+        K: Into<u64> + Copy + SeekKeyEncoder<T>,
+    {
         let mut raw_iter = self.db.iter()?;
         let max_items = (range.start.into() - range.end.into()) as usize;
         raw_iter.seek(&range.start)?;
-        let mut iter = raw_iter.take(max_items);
+        let iter = raw_iter.take(max_items);
         let mut out = Vec::with_capacity(max_items);
-        for _ in 0..max_items {
-            match iter.next() {
-                Some(res) => {
-                    let (_, batch) = res?;
-                    out.push(batch)
-                }
-                None => return Ok(out),
-            }
+        for res in iter {
+            let (_, batch) = res?;
+            out.push(batch)
         }
         Ok(out)
     }
