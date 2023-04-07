@@ -31,9 +31,11 @@ impl<C: sov_modules_api::Context> Token<C> {
 
         let from_balance = match from_balance.checked_sub(amount) {
             Some(from_balance) => from_balance,
-            None => bail!("todo"),
+            // TODO: Add from address to the message (we need pretty print for Address)
+            None => bail!("Insufficient funds"),
         };
 
+        // We can't overflow here because the sum must be smaller than `total_supply` which is u64.
         let to_balance = self.balances.get(to, working_set).unwrap_or_default() + amount;
 
         self.balances.set(from, from_balance, working_set);

@@ -11,7 +11,7 @@ pub enum CallMessage<C: sov_modules_api::Context> {
     CreateToken {
         /// salt: a random value use to create a unique token address.
         salt: u64,
-        /// token_name: the name of the new token
+        /// token_name: the name of the new token.
         token_name: String,
         /// initial_balance: the initial balance of the new token
         initial_balance: Amount,
@@ -47,17 +47,19 @@ impl<C: sov_modules_api::Context> Bank<C> {
         let token_address = super::create_token_address::<C>(&token_name, context.sender(), salt);
 
         match self.tokens.get(&token_address, working_set) {
-            Some(_) => bail!("todo"),
+            Some(_) => bail!("Token address already exists"),
 
             None => {
                 let prefix = self.prefix(&token_address);
+
+                // Create balances map and initialize minter balance.
                 let balances = sov_state::StateMap::new(prefix);
                 balances.set(&minter_address, initial_balance, working_set);
 
                 let token = Token::<C> {
                     name: token_name,
                     total_supply: initial_balance,
-                    burn_address: self.create_burn_address(&token_address),
+                    burn_address: super::create_burn_address::<C>(&token_address),
                     balances,
                 };
 
@@ -104,15 +106,5 @@ impl<C: sov_modules_api::Context> Bank<C> {
 
         let hash = hasher.finalize();
         sov_state::Prefix::new(hash.to_vec())
-    }
-
-    fn create_burn_address(&self, token_address: &C::Address) -> C::Address {
-        let mut hasher = C::Hasher::new();
-        hasher.update(token_address.as_ref());
-        hasher.update(&[0; 32]);
-
-        let hash = hasher.finalize();
-        // TODO remove unwrap
-        C::Address::try_from(&hash).unwrap()
     }
 }

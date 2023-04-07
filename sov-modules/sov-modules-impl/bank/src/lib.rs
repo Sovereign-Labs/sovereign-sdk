@@ -6,7 +6,7 @@ mod query;
 mod tests;
 mod token;
 
-pub use create_token::create_token_address;
+pub use create_token::{create_burn_address, create_token_address};
 use token::Token;
 pub use token::{Amount, Coins};
 
