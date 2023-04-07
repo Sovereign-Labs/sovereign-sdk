@@ -49,10 +49,10 @@ impl<C: sov_modules_api::Context> Bank<C> {
             Some(_) => bail!("Token address already exists"),
 
             None => {
-                let prefix = self.prefix(&token_address);
+                let token_prefix = self.prefix_from_address(&token_address);
 
                 // Create balances map and initialize minter balance.
-                let balances = sov_state::StateMap::new(prefix);
+                let balances = sov_state::StateMap::new(token_prefix);
                 balances.set(&minter_address, initial_balance, working_set);
 
                 let token = Token::<C> {
@@ -92,7 +92,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
-    fn prefix(&self, token_address: &C::Address) -> sov_state::Prefix {
+    fn prefix_from_address(&self, token_address: &C::Address) -> sov_state::Prefix {
         sov_state::Prefix::new(token_address.as_ref().to_vec())
     }
 }
