@@ -11,10 +11,10 @@ use core::fmt::Debug;
 /// Named DaLayerTrait to avoid confusion with the associated type "DaLayer" used
 /// in top-level rollup definitions
 pub trait DaLayerTrait {
-    type Blockhash: BlockHashTrait;
+    type Slothash: BlockHashTrait;
 
     type Address: AddressTrait;
-    type BlockHeader: BlockheaderTrait<Hash = Self::Blockhash>;
+    type BlockHeader: BlockheaderTrait<Hash = Self::Slothash>;
     type BlobTransaction: BlobTransactionTrait<Self::Address>;
     /// A proof that a set of transactions are included in a block.
     type InclusionMultiProof;
@@ -27,12 +27,12 @@ pub trait DaLayerTrait {
     const ADDRESS_LENGTH: usize;
     /// The hash of the DA layer block which is the genesis of the logical chain defined by this app.
     /// This is *not* necessarily the DA layer's genesis block.
-    const RELATIVE_GENESIS: Self::Blockhash;
+    const RELATIVE_GENESIS: Self::Slothash;
 
-    fn get_relevant_txs(&self, blockhash: &Self::Blockhash) -> Vec<Self::BlobTransaction>;
+    fn get_relevant_txs(&self, blockhash: &Self::Slothash) -> Vec<Self::BlobTransaction>;
     fn get_relevant_txs_with_proof(
         &self,
-        blockhash: &Self::Blockhash,
+        blockhash: &Self::Slothash,
     ) -> (
         Vec<Self::BlobTransaction>,
         Self::InclusionMultiProof,

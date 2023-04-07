@@ -7,6 +7,7 @@ edition = "2021"
 
 [dependencies]
 borsh = { workspace = true, features = ["rc"]}
+serde = { workspace = true, features = ["derive"]}
 bytes = { workspace = true }
 jmt = { workspace = true }
 sha2 = { workspace = true }

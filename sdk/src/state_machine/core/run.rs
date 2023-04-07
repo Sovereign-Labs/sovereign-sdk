@@ -20,7 +20,7 @@ pub struct Config<DaLayer: DaLayerTrait, App: StateTransitionFunction> {
     /// The hash of the DA block which is considered "genesis" for this blockchain.
     /// Note that this block is *not* necessarily the genesis block of the DA layer. Rather,
     /// it's the hash of the first DA block which is allowed to contain rollup blocks.
-    pub da_hash_at_rollup_genesis: DaLayer::Blockhash,
+    pub da_hash_at_rollup_genesis: DaLayer::Slothash,
     /// The height after *rollup* genesis at which the chain will start accepting transactions.
     ///
     /// This setting is to aid in setting of the genesis block. We have a period of blocks

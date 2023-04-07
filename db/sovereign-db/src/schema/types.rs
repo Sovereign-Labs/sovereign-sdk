@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use sovereign_sdk::services::da::SlotData;
+use serde::{Deserialize, Serialize};
+use sovereign_sdk::rpc::TxIdentifier;
 
 /// A cheaply cloneable bytes abstraction for use within the trust boundary of the node
 /// (i.e. when interfacing with the database). Serializes and deserializes more efficiently,
@@ -20,7 +21,9 @@ impl DbBytes {
     }
 }
 
-#[derive(Debug, Clone, Copy, BorshDeserialize, BorshSerialize, PartialEq, Eq)]
+#[derive(
+    Debug, Clone, Copy, BorshDeserialize, BorshSerialize, PartialEq, Eq, Serialize, Deserialize,
+)]
 pub enum Status {
     Applied,
     Skipped,
@@ -33,7 +36,7 @@ impl AsRef<[u8]> for DbBytes {
     }
 }
 
-pub type DbHash = DbBytes;
+pub type DbHash = [u8; 32];
 pub type JmtValue = Option<Vec<u8>>;
 pub(crate) type StateKey = Vec<u8>;
 
@@ -46,55 +49,15 @@ pub struct StoredSlot {
     pub extra_data: DbBytes,
     pub batches: std::ops::Range<BatchNumber>,
 }
-
-/// An identifier that specifies a single slot
-#[derive(Debug, PartialEq)]
-pub enum SlotIdentifier {
-    Hash(DbHash),       // the hash of a da block
-    Number(SlotNumber), // the blocknumber of a da block
-}
-
 /// The on-disk format for a batch. Stores the hash and identifies the range of transactions
 /// included in the batch
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct StoredBatch {
-    pub hash: DbBytes,
+    pub sender: Vec<u8>,
+    pub hash: DbHash,
     pub extra_data: DbBytes,
     pub txs: std::ops::Range<TxNumber>,
     pub status: Status,
-}
-
-impl StoredBatch {
-    pub fn new(slot: &impl SlotData, txs_range: std::ops::Range<TxNumber>, status: Status) -> Self {
-        Self {
-            hash: DbBytes::new(slot.hash().to_vec()),
-            extra_data: DbBytes::new(slot.extra_data_for_storage()),
-            txs: txs_range,
-            status,
-        }
-    }
-}
-
-/// An identifier that specifies a single batch
-#[derive(Debug, PartialEq)]
-pub enum BatchIdentifier {
-    Hash(DbHash),
-    SlotIdAndIndex((SlotIdentifier, u64)),
-    /// The monotonically increasing number of the batch, ordered by the DA layer For example, if the genesis slot
-    /// contains 0 batches, slot 1 contains 2 txs, and slot 3 contains 3 txs,
-    /// the last batch in block 3 would have number 5. The counter never resets.
-    Number(BatchNumber),
-}
-
-/// An identifier that specifies a single transaction
-#[derive(Debug, PartialEq)]
-pub enum TxIdentifier {
-    Hash(DbHash),
-    BatchIdAndIndex((BatchIdentifier, u64)),
-    /// The monotonically increasing number of the tx, ordered by the DA layer For example, if genesis
-    /// contains 0 txs, batch 1 contains 8 txs, and batch 3 contains 7 txs,
-    /// the last tx in batch 3 would have number 15. The counter never resets.
-    Number(TxNumber),
 }
 
 /// The on-disk format of a transaction. Includes the txhash, the serialized tx data,
@@ -140,6 +103,8 @@ macro_rules! u64_wrapper {
             Ord,
             ::borsh::BorshDeserialize,
             ::borsh::BorshSerialize,
+            ::serde::Serialize,
+            ::serde::Deserialize,
         )]
         pub struct $name(pub u64);
 

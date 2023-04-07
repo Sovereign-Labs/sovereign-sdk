@@ -6,7 +6,11 @@ use std::{
 
 use anyhow::ensure;
 use schemadb::{Schema, DB};
-use sovereign_sdk::{db::SlotStore, services::da::SlotData, stf::Event};
+use sovereign_sdk::{
+    db::{SeekKeyEncoder, SlotStore},
+    spec::RollupSpec,
+    stf::Event,
+};
 
 use crate::{
     rocks_db_config::gen_rocksdb_options,
@@ -22,18 +26,20 @@ use crate::{
     },
 };
 
+mod rpc;
+
 const LEDGER_DB_PATH_SUFFIX: &'static str = "ledger";
 
 #[derive(Clone)]
 /// A database which stores the ledger history (slots, transactions, events, etc).
 /// Ledger data is first ingested into an in-memory map before being fed to the state-transition function.
 /// Once the state-transition function has been executed and finalzied, the results are committed to the final db
-pub struct LedgerDB<S> {
+pub struct LedgerDB<R: RollupSpec> {
     /// The RocksDB which stores the committed ledger. Uses an optimized layout which
     /// requires transactions to be executed before being committed.
     db: Arc<DB>,
     /// In memory storage for slots that have not yet been executed.
-    slots_to_execute: Arc<Mutex<HashMap<[u8; 32], S>>>,
+    slots_to_execute: Arc<Mutex<HashMap<[u8; 32], R::SlotData>>>,
     next_item_numbers: Arc<Mutex<ItemNumbers>>,
 }
 
@@ -81,7 +87,7 @@ pub struct SlotCommit {
 
 impl SlotCommitBuilder {}
 
-impl<S: SlotData> LedgerDB<S> {
+impl<S: RollupSpec> LedgerDB<S> {
     pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
         let path = path.as_ref().join(LEDGER_DB_PATH_SUFFIX);
         let inner = DB::open(
@@ -116,6 +122,60 @@ impl<S: SlotData> LedgerDB<S> {
 
     pub fn get_next_items_numbers(&self) -> ItemNumbers {
         self.next_item_numbers.lock().unwrap().clone()
+    }
+
+    /// Gets all slots with numbers `range.start` to `range.end`. If `range.end` is outside
+    /// the range of the database, the result will smaller than the requested range.
+    /// Note that this method blindly preallocates for the requested range, so it should not be exposed
+    /// directly via rpc.
+    pub(crate) fn _get_slot_range(
+        &self,
+        range: &std::ops::Range<SlotNumber>,
+    ) -> Result<Vec<StoredSlot>, anyhow::Error> {
+        self.get_data_range::<SlotByNumber, _, _>(range)
+    }
+
+    /// Gets all batches with numbers `range.start` to `range.end`. If `range.end` is outside
+    /// the range of the database, the result will smaller than the requested range.
+    /// Note that this method blindly preallocates for the requested range, so it should not be exposed
+    /// directly via rpc.
+    pub(crate) fn get_batch_range(
+        &self,
+        range: &std::ops::Range<BatchNumber>,
+    ) -> Result<Vec<StoredBatch>, anyhow::Error> {
+        self.get_data_range::<BatchByNumber, _, _>(range)
+    }
+
+    /// Gets all transactions with numbers `range.start` to `range.end`. If `range.end` is outside
+    /// the range of the database, the result will smaller than the requested range.
+    /// Note that this method blindly preallocates for the requested range, so it should not be exposed
+    /// directly via rpc.
+    pub(crate) fn get_tx_range(
+        &self,
+        range: &std::ops::Range<TxNumber>,
+    ) -> Result<Vec<StoredTransaction>, anyhow::Error> {
+        self.get_data_range::<TxByNumber, _, _>(range)
+    }
+
+    /// Gets all data with identifier in `range.start` to `range.end`. If `range.end` is outside
+    /// the range of the database, the result will smaller than the requested range.
+    /// Note that this method blindly preallocates for the requested range, so it should not be exposed
+    /// directly via rpc.
+    fn get_data_range<T, K, V>(&self, range: &std::ops::Range<K>) -> Result<Vec<V>, anyhow::Error>
+    where
+        T: Schema<Key = K, Value = V>,
+        K: Into<u64> + Copy + SeekKeyEncoder<T>,
+    {
+        let mut raw_iter = self.db.iter()?;
+        let max_items = (range.start.into() - range.end.into()) as usize;
+        raw_iter.seek(&range.start)?;
+        let iter = raw_iter.take(max_items);
+        let mut out = Vec::with_capacity(max_items);
+        for res in iter {
+            let (_, batch) = res?;
+            out.push(batch)
+        }
+        Ok(out)
     }
 
     fn put_slot(&self, slot: &StoredSlot, slot_number: &SlotNumber) -> Result<(), anyhow::Error> {
@@ -231,8 +291,8 @@ impl<S: SlotData> LedgerDB<S> {
     }
 }
 
-impl<S: SlotData> SlotStore for LedgerDB<S> {
-    type Slot = S;
+impl<S: RollupSpec> SlotStore for LedgerDB<S> {
+    type Slot = S::SlotData;
 
     fn get(&self, hash: &[u8; 32]) -> Option<Self::Slot> {
         self.slots_to_execute.lock().unwrap().remove(hash)
