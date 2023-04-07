@@ -17,7 +17,6 @@ pub(crate) struct Token<C: sov_modules_api::Context> {
     pub(crate) name: String,
     /// Total supply of the coins.
     pub(crate) total_supply: u64,
-
     /// Mapping from user address to user balance.
     pub(crate) balances: sov_state::StateMap<C::Address, Amount>,
 }
