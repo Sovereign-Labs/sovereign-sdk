@@ -61,3 +61,91 @@ impl<C: Context> Runtime<C> {
         }
     }
 }
+
+// 1. Add Config to Genesis
+// 2. Implement Conf in modules
+// 3. Add #config in RT
+// 4. Handle #config in macros
+
+trait Gen {
+    type Config;
+
+    fn rt_gen(&self, config: Self::Config);
+}
+
+trait Mod {
+    type Config;
+
+    fn genesis(&self, config: &Self::Config);
+}
+
+struct ModA {}
+
+impl Mod for ModA {
+    type Config = ();
+
+    fn genesis(&self, config: &Self::Config) {
+        todo!()
+    }
+}
+
+struct ModB {}
+
+impl Mod for ModB {
+    type Config = String;
+
+    fn genesis(&self, config: &Self::Config) {
+        todo!()
+    }
+}
+
+struct RT {
+    moda: ModA,
+    modb: ModB,
+}
+
+#[derive(Clone)]
+struct Config {
+    config_a: <ModA as Mod>::Config,
+    config_b: <ModB as Mod>::Config,
+}
+
+fn new_config() -> Config {
+    Config {
+        config_a: todo!(),
+        config_b: todo!(),
+    }
+}
+
+impl AsRef<<ModA as Mod>::Config> for Config {
+    fn as_ref(&self) -> &<ModA as Mod>::Config {
+        &self.config_a
+    }
+}
+
+impl AsRef<<ModB as Mod>::Config> for Config {
+    fn as_ref(&self) -> &<ModB as Mod>::Config {
+        &self.config_b
+    }
+}
+
+impl Gen for RT {
+    type Config = Config;
+
+    fn rt_gen(&self, config: Self::Config) {
+        self.moda.genesis(config.as_ref());
+        self.modb.genesis(config.as_ref());
+    }
+}
+
+trait X<K> {
+    fn foo(k: K);
+}
+
+struct S {}
+
+impl X<String> for S {
+    fn foo(k: String) {
+        todo!()
+    }
+}

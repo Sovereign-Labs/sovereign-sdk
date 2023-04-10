@@ -14,6 +14,8 @@ use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use types::Voter;
 
+pub struct NoConfig;
+
 #[derive(ModuleInfo)]
 pub struct Election<C: sov_modules_api::Context> {
     #[address]
@@ -42,11 +44,17 @@ pub struct Election<C: sov_modules_api::Context> {
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
     type Context = C;
 
+    type Config = NoConfig;
+
     type CallMessage = call::CallMessage<C>;
 
     type QueryMessage = query::QueryMessage;
 
-    fn genesis(&self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
+    fn genesis(
+        &self,
+        config: Self::Config,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<(), Error> {
         Ok(self.init_module(working_set)?)
     }
 
