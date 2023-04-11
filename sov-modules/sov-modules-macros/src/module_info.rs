@@ -1,3 +1,4 @@
+use super::dispatch::common::parse_generic_params;
 use proc_macro::{self};
 use proc_macro2::{Ident, Span};
 use syn::{DataStruct, DeriveInput, ImplGenerics, PathArguments, TypeGenerics, WhereClause};
@@ -21,6 +22,8 @@ struct StructDef<'a> {
     ident: proc_macro2::Ident,
     impl_generics: ImplGenerics<'a>,
     type_generics: TypeGenerics<'a>,
+    generic_param: &'a Ident,
+
     fields: Result<Vec<FieldKind>, syn::Error>,
     where_clause: Option<&'a WhereClause>,
 }
@@ -35,6 +38,8 @@ pub(crate) fn derive_module_info(
         ..
     } = input;
 
+    let generic_param = parse_generic_params(&generics)?;
+
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
     let fields = get_fields_from_struct(&data);
 
@@ -43,6 +48,7 @@ pub(crate) fn derive_module_info(
         fields,
         impl_generics,
         type_generics,
+        generic_param: &generic_param,
         where_clause,
     };
 
@@ -89,6 +95,8 @@ impl<'a> StructDef<'a> {
         let mut impl_self_init = Vec::default();
         let mut impl_self_body = Vec::default();
 
+        let generic_param = self.generic_param;
+
         let mut module_address = None;
         for field in fields.iter() {
             match field {
@@ -101,7 +109,12 @@ impl<'a> StructDef<'a> {
                     impl_self_body.push(&field.ident);
                 }
                 FieldKind::Address(field) => {
-                    impl_self_init.push(make_init_address(field, &self.ident, module_address)?);
+                    impl_self_init.push(make_init_address(
+                        field,
+                        &self.ident,
+                        module_address,
+                        generic_param,
+                    )?);
                     impl_self_body.push(&field.ident);
                     module_address = Some(&field.ident);
                 }
@@ -119,7 +132,7 @@ impl<'a> StructDef<'a> {
             use sov_modules_api::AddressTrait;
 
             impl #impl_generics sov_modules_api::ModuleInfo for #ident #type_generics #where_clause{
-                type Context = C;
+                type Context = #generic_param;
 
                 fn new() -> Self {
 
@@ -283,6 +296,7 @@ fn make_init_address(
     field: &StructNamedField,
     struct_ident: &Ident,
     address: Option<&Ident>,
+    generic_param: &Ident,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let field_ident = &field.ident;
 
@@ -299,7 +313,7 @@ fn make_init_address(
             let module_path = module_path!();
             let prefix = sov_modules_api::Prefix::new_module(module_path, stringify!(#struct_ident));
             let #field_ident =
-                <Self::Context as sov_modules_api::Spec>::Address::try_from(&prefix.hash::<C>())
+                <Self::Context as sov_modules_api::Spec>::Address::try_from(&prefix.hash::<#generic_param>())
                     .unwrap_or_else(|e| panic!("ModuleInfo macro error, unable to create an Address for module: {}", e));
         }),
     }

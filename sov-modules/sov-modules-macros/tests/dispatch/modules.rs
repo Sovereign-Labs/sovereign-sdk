@@ -59,16 +59,16 @@ pub mod second_test_module {
     pub struct TestType {}
 
     #[derive(ModuleInfo)]
-    pub struct SecondTestStruct<C: Context> {
+    pub struct SecondTestStruct<K: Context> {
         #[address]
-        pub address: C::Address,
+        pub address: K::Address,
 
         #[state]
         pub state_in_second_struct: StateValue<u8>,
     }
 
-    impl<C: Context> Module for SecondTestStruct<C> {
-        type Context = C;
+    impl<K: Context> Module for SecondTestStruct<K> {
+        type Context = K;
         type Config = ();
         type CallMessage = u8;
         type QueryMessage = TestType;
@@ -76,7 +76,7 @@ pub mod second_test_module {
         fn genesis(
             &self,
             _config: &Self::Config,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<K::Storage>,
         ) -> Result<(), Error> {
             self.state_in_second_struct.set(2, working_set);
             Ok(())
@@ -86,7 +86,7 @@ pub mod second_test_module {
             &self,
             msg: Self::CallMessage,
             _context: &Self::Context,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<K::Storage>,
         ) -> Result<CallResponse, Error> {
             self.state_in_second_struct.set(msg, working_set);
             Ok(CallResponse::default())
@@ -95,7 +95,7 @@ pub mod second_test_module {
         fn query(
             &self,
             _msg: Self::QueryMessage,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<K::Storage>,
         ) -> sov_modules_api::QueryResponse {
             let state = self.state_in_second_struct.get(working_set).unwrap();
             sov_modules_api::QueryResponse {
