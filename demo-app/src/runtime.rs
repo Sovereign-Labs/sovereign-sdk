@@ -55,11 +55,14 @@ pub(crate) struct Runtime<C: Context> {
 // 2. Impl Genesis with GenesisConfig = GenesisConfig
 // 3. Add new_config(..) to RT //OR Genesis
 
+/*
 pub struct GenesisConfig<C: Context> {
     election: <election::Election<C> as Module>::Config,
     value_setter: <value_setter::ValueSetter<C> as Module>::Config,
     accounts: <accounts::Accounts<C> as Module>::Config,
 }
+
+
 
 impl<C: Context> GenesisConfig<C> {
     fn new() -> Self {
@@ -69,7 +72,7 @@ impl<C: Context> GenesisConfig<C> {
             accounts: accounts::NoConfig,
         }
     }
-}
+}*/
 
 //impl<C: Context> RuntimeConfig for C {
 //   type GenesisConfig = GenesisConfig<C>;

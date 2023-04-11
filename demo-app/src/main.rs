@@ -9,7 +9,7 @@ use std::path::Path;
 
 use data_generation::{simulate_da, QueryGenerator};
 use helpers::check_query;
-use runtime::Runtime;
+use runtime::{GenesisConfig, Runtime};
 use sov_modules_api::mocks::MockContext;
 use sov_state::ProverStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
@@ -19,15 +19,16 @@ use tx_hooks_impl::DemoAppTxHooks;
 use tx_verifier_impl::DemoAppTxVerifier;
 
 type C = MockContext;
-type DemoApp = AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>>;
+type DemoApp =
+    AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>, GenesisConfig<C>>;
 
 fn create_new_demo(path: impl AsRef<Path>) -> DemoApp {
     let runtime = Runtime::new();
     let storage = ProverStorage::with_path(path).unwrap();
     let tx_hooks = DemoAppTxHooks::new();
     let tx_verifier = DemoAppTxVerifier::new();
-
-    AppTemplate::new(storage, runtime, tx_verifier, tx_hooks)
+    let genesis_config = GenesisConfig::new();
+    AppTemplate::new(storage, runtime, tx_verifier, tx_hooks, genesis_config)
 }
 
 fn main() {
