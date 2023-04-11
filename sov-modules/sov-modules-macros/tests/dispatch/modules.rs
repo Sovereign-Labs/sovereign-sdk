@@ -61,14 +61,14 @@ pub mod second_test_module {
     #[derive(ModuleInfo)]
     pub struct SecondTestStruct<Ctx: Context> {
         #[address]
-        pub address: K::Address,
+        pub address: Ctx::Address,
 
         #[state]
         pub state_in_second_struct: StateValue<u8>,
     }
 
     impl<Ctx: Context> Module for SecondTestStruct<Ctx> {
-        type Context = K;
+        type Context = Ctx;
         type Config = ();
         type CallMessage = u8;
         type QueryMessage = TestType;
