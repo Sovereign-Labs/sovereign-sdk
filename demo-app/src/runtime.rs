@@ -37,19 +37,43 @@ use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 ///
 /// Similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
 /// instead of going through the DA layer.
+///
+
 #[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub(crate) struct Runtime<C: Context> {
-    /// Definition of the first module in the rollup (must implement the sov_modules_api::Module trait).
     #[allow(unused)]
     election: election::Election<C>,
-    // Definition of the second module in the rollup (must implement the sov_modules_api::Module trait).
+
     #[allow(unused)]
     value_setter: value_setter::ValueSetter<C>,
 
     #[allow(unused)]
     accounts: accounts::Accounts<C>,
 }
+// 1. Generate GenesisConfig
+// 2. Impl Genesis with GenesisConfig = GenesisConfig
+// 3. Add new_config(..) to RT //OR Genesis
+
+pub struct GenesisConfig<C: Context> {
+    election: <election::Election<C> as Module>::Config,
+    value_setter: <value_setter::ValueSetter<C> as Module>::Config,
+    accounts: <accounts::Accounts<C> as Module>::Config,
+}
+
+impl<C: Context> GenesisConfig<C> {
+    fn new() -> Self {
+        Self {
+            election: election::NoConfig,
+            value_setter: value_setter::NoConfig,
+            accounts: accounts::NoConfig,
+        }
+    }
+}
+
+//impl<C: Context> RuntimeConfig for C {
+//   type GenesisConfig = GenesisConfig<C>;
+// /}
 
 // TODO add macro to generate the following code.
 impl<C: Context> Runtime<C> {
@@ -62,15 +86,14 @@ impl<C: Context> Runtime<C> {
     }
 }
 
+/*
 // 1. Add Config to Genesis
 // 2. Implement Conf in modules
 // 3. Add #config in RT
 // 4. Handle #config in macros
 
 trait Gen {
-    type Config;
-
-    fn rt_gen(&self, config: Self::Config);
+    fn rt_gen<T, Config: AsRef<T>>(&self, config: Config);
 }
 
 trait Mod {
@@ -130,9 +153,7 @@ impl AsRef<<ModB as Mod>::Config> for Config {
 }
 
 impl Gen for RT {
-    type Config = Config;
-
-    fn rt_gen(&self, config: Self::Config) {
+    fn rt_gen<Config>(&self, config: Config) {
         self.moda.genesis(config.as_ref());
         self.modb.genesis(config.as_ref());
     }
@@ -149,3 +170,4 @@ impl X<String> for S {
         todo!()
     }
 }
+*/
