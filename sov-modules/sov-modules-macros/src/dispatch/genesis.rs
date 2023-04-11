@@ -62,14 +62,19 @@ impl GenesisMacro {
     }
 
     fn make_genesis_config(fields: &[StructNamedField]) -> proc_macro2::TokenStream {
-        let fields = fields.iter().map(|field| {
-            let name = &field.ident;
-            let ty = &field.ty;
+        let field_names = fields.iter().map(|field| &field.ident);
 
-            quote::quote! {
-              #name: <#ty as sov_modules_api::Module>::Config,
-            }
-        });
+        let fields: &Vec<proc_macro2::TokenStream> = &fields
+            .iter()
+            .map(|field| {
+                let name = &field.ident;
+                let ty = &field.ty;
+
+                quote::quote! {
+                  #name: <#ty as sov_modules_api::Module>::Config,
+                }
+            })
+            .collect();
 
         quote::quote! {
             pub struct GenesisConfig<C: sov_modules_api::Context>{
@@ -77,11 +82,9 @@ impl GenesisMacro {
             }
 
             impl<C: sov_modules_api::Context> GenesisConfig<C> {
-                pub fn new() -> Self {
+                pub fn new(#(#fields)*) -> Self {
                     Self {
-                        election: election::NoConfig,
-                        value_setter: value_setter::NoConfig,
-                        accounts: accounts::NoConfig,
+                        #(#field_names),*
                     }
                 }
             }
