@@ -14,8 +14,6 @@ use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
-pub struct NoConfig;
-
 /// The Bank module manages user balances. It provides functionality for:
 /// - Token creation.
 /// - Token transfers.
@@ -34,7 +32,7 @@ pub struct Bank<C: sov_modules_api::Context> {
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
     type Context = C;
 
-    type Config = NoConfig;
+    type Config = ();
 
     type CallMessage = call::CallMessage<C>;
 

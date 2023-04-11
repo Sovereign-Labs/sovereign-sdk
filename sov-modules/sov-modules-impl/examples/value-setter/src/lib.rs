@@ -15,8 +15,6 @@ use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
-pub struct NoConfig;
-
 #[derive(ModuleInfo)]
 pub struct ValueSetter<C: sov_modules_api::Context> {
     #[address]
@@ -32,7 +30,7 @@ pub struct ValueSetter<C: sov_modules_api::Context> {
 impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
     type Context = C;
 
-    type Config = NoConfig;
+    type Config = ();
 
     type CallMessage = CallMessage;
 

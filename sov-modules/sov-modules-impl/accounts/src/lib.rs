@@ -17,8 +17,6 @@ pub struct Account<C: sov_modules_api::Context> {
     pub nonce: u64,
 }
 
-pub struct NoConfig;
-
 #[derive(ModuleInfo)]
 pub struct Accounts<C: sov_modules_api::Context> {
     #[address]
@@ -34,7 +32,7 @@ pub struct Accounts<C: sov_modules_api::Context> {
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
     type Context = C;
 
-    type Config = NoConfig;
+    type Config = ();
 
     type CallMessage = call::CallMessage<C>;
 
