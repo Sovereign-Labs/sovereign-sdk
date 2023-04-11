@@ -29,7 +29,8 @@ fn main() {
 
     let storage = ProverStorage::temporary();
     let working_set = &mut sov_state::WorkingSet::new(storage);
-    runtime.genesis(working_set).unwrap();
+    let config = GenesisConfig::new((), ());
+    runtime.genesis(&config, working_set).unwrap();
     let context = MockContext::new(Address::try_from([0; 32].as_ref()).unwrap());
 
     let value = 11;

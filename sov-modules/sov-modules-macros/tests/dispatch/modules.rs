@@ -6,7 +6,7 @@ pub mod first_test_module {
     use super::*;
 
     #[derive(ModuleInfo)]
-    pub(crate) struct FirstTestStruct<C: Context> {
+    pub struct FirstTestStruct<C: Context> {
         #[address]
         pub address: C::Address,
 
@@ -16,10 +16,15 @@ pub mod first_test_module {
 
     impl<C: Context> Module for FirstTestStruct<C> {
         type Context = C;
+        type Config = ();
         type CallMessage = u8;
         type QueryMessage = ();
 
-        fn genesis(&self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
+        fn genesis(
+            &self,
+            _config: &Self::Config,
+            working_set: &mut WorkingSet<C::Storage>,
+        ) -> Result<(), Error> {
             self.state_in_first_struct.set(1, working_set);
             Ok(())
         }
@@ -54,7 +59,7 @@ pub mod second_test_module {
     pub struct TestType {}
 
     #[derive(ModuleInfo)]
-    pub(crate) struct SecondTestStruct<C: Context> {
+    pub struct SecondTestStruct<C: Context> {
         #[address]
         pub address: C::Address,
 
@@ -64,10 +69,15 @@ pub mod second_test_module {
 
     impl<C: Context> Module for SecondTestStruct<C> {
         type Context = C;
+        type Config = ();
         type CallMessage = u8;
         type QueryMessage = TestType;
 
-        fn genesis(&self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
+        fn genesis(
+            &self,
+            _config: &Self::Config,
+            working_set: &mut WorkingSet<C::Storage>,
+        ) -> Result<(), Error> {
             self.state_in_second_struct.set(2, working_set);
             Ok(())
         }

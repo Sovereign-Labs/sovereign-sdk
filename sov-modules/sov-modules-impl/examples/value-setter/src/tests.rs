@@ -1,5 +1,5 @@
 use super::ValueSetter;
-use crate::{call, query, NoConfig};
+use crate::{call, query};
 
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey, ZkMockContext},
@@ -34,7 +34,7 @@ fn test_value_setter() {
 
 fn test_value_setter_helper<C: Context>(context: C, working_set: &mut WorkingSet<C::Storage>) {
     let module = ValueSetter::<C>::new();
-    module.genesis(&NoConfig, working_set).unwrap();
+    module.genesis(&(), working_set).unwrap();
 
     let new_value = 99;
     let call_msg = call::CallMessage::DoSetValue(call::SetValue { new_value });
@@ -89,7 +89,7 @@ fn test_err_on_sender_is_not_admin_helper<C: Context>(
     working_set: &mut WorkingSet<C::Storage>,
 ) {
     let module = ValueSetter::<C>::new();
-    module.genesis(&NoConfig, working_set).unwrap();
+    module.genesis(&(), working_set).unwrap();
     let resp = module.set_value(11, &context, working_set);
 
     assert!(resp.is_err());
