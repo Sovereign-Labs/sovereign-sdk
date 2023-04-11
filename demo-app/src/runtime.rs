@@ -37,7 +37,6 @@ use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 ///
 /// Similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
 /// instead of going through the DA layer.
-///
 
 #[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]

@@ -129,9 +129,10 @@ pub trait Module {
     /// Types and functionality common for all modules:
     type Context: Context;
 
-    type Config;
-
     /// Types and functionality defined per module:
+
+    /// Configuration for the genesis method.
+    type Config;
 
     /// Module defined argument to the call method.
     type CallMessage: Decode + Encode + Debug = NonInstantiable;
