@@ -15,29 +15,38 @@ use sovereign_sdk::{
     stf::{ConsensusSetUpdate, OpaqueAddress, StateTransitionFunction},
 };
 
-pub struct AppTemplate<C: Context, V, RT, H> {
+pub struct AppTemplate<C: Context, V, RT, H, GenesisConfig> {
     pub current_storage: C::Storage,
     pub runtime: RT,
     tx_verifier: V,
     tx_hooks: H,
+    genesis_config: GenesisConfig,
     working_set: Option<WorkingSet<C::Storage>>,
 }
 
-impl<C: Context, V, RT, H> AppTemplate<C, V, RT, H> {
-    pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
+impl<C: Context, V, RT, H, GenesisConfig> AppTemplate<C, V, RT, H, GenesisConfig> {
+    pub fn new(
+        storage: C::Storage,
+        runtime: RT,
+        tx_verifier: V,
+        tx_hooks: H,
+        genesis_config: GenesisConfig,
+    ) -> Self {
         Self {
             runtime,
             current_storage: storage,
             tx_verifier,
             tx_hooks,
+            genesis_config,
             working_set: None,
         }
     }
 }
 
-impl<C: Context, V, RT, H> StateTransitionFunction for AppTemplate<C, V, RT, H>
+impl<C: Context, V, RT, H, GenesisConfig> StateTransitionFunction
+    for AppTemplate<C, V, RT, H, GenesisConfig>
 where
-    RT: DispatchCall<Context = C> + Genesis<Context = C>,
+    RT: DispatchCall<Context = C> + Genesis<Context = C, Config = GenesisConfig>,
     V: TxVerifier,
     H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
 {
@@ -56,7 +65,7 @@ where
     fn init_chain(&mut self, _params: Self::ChainParams) {
         let working_set = &mut WorkingSet::new(self.current_storage.clone());
         self.runtime
-            .genesis(working_set)
+            .genesis(&self.genesis_config, working_set)
             .expect("module initialization must succeed");
         let (log, witness) = working_set.freeze();
         self.current_storage

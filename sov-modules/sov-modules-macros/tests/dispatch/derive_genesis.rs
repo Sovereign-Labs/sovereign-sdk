@@ -33,7 +33,8 @@ fn main() {
     let storage = ProverStorage::temporary();
     let working_set = &mut sov_state::WorkingSet::new(storage);
     let runtime = &mut Runtime::<C>::new();
-    runtime.genesis(working_set).unwrap();
+    let config = GenesisConfig::new((), ());
+    runtime.genesis(&config, working_set).unwrap();
 
     {
         let message = RuntimeQuery::<C>::first(());

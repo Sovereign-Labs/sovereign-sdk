@@ -6,7 +6,7 @@ pub mod first_test_module {
     use super::*;
 
     #[derive(ModuleInfo)]
-    pub(crate) struct FirstTestStruct<C: Context> {
+    pub struct FirstTestStruct<C: Context> {
         #[address]
         pub address: C::Address,
 
@@ -16,10 +16,15 @@ pub mod first_test_module {
 
     impl<C: Context> Module for FirstTestStruct<C> {
         type Context = C;
+        type Config = ();
         type CallMessage = u8;
         type QueryMessage = ();
 
-        fn genesis(&self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
+        fn genesis(
+            &self,
+            _config: &Self::Config,
+            working_set: &mut WorkingSet<C::Storage>,
+        ) -> Result<(), Error> {
             self.state_in_first_struct.set(1, working_set);
             Ok(())
         }
@@ -54,20 +59,25 @@ pub mod second_test_module {
     pub struct TestType {}
 
     #[derive(ModuleInfo)]
-    pub(crate) struct SecondTestStruct<C: Context> {
+    pub struct SecondTestStruct<Ctx: Context> {
         #[address]
-        pub address: C::Address,
+        pub address: Ctx::Address,
 
         #[state]
         pub state_in_second_struct: StateValue<u8>,
     }
 
-    impl<C: Context> Module for SecondTestStruct<C> {
-        type Context = C;
+    impl<Ctx: Context> Module for SecondTestStruct<Ctx> {
+        type Context = Ctx;
+        type Config = ();
         type CallMessage = u8;
         type QueryMessage = TestType;
 
-        fn genesis(&self, working_set: &mut WorkingSet<C::Storage>) -> Result<(), Error> {
+        fn genesis(
+            &self,
+            _config: &Self::Config,
+            working_set: &mut WorkingSet<Ctx::Storage>,
+        ) -> Result<(), Error> {
             self.state_in_second_struct.set(2, working_set);
             Ok(())
         }
@@ -76,7 +86,7 @@ pub mod second_test_module {
             &self,
             msg: Self::CallMessage,
             _context: &Self::Context,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<Ctx::Storage>,
         ) -> Result<CallResponse, Error> {
             self.state_in_second_struct.set(msg, working_set);
             Ok(CallResponse::default())
@@ -85,7 +95,7 @@ pub mod second_test_module {
         fn query(
             &self,
             _msg: Self::QueryMessage,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<Ctx::Storage>,
         ) -> sov_modules_api::QueryResponse {
             let state = self.state_in_second_struct.get(working_set).unwrap();
             sov_modules_api::QueryResponse {

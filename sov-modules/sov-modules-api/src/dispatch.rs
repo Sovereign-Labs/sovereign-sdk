@@ -4,10 +4,12 @@ use sov_state::WorkingSet;
 /// Methods from this trait should be called only once during the rollup deployment.
 pub trait Genesis {
     type Context: Context;
+    type Config;
 
     /// Initializes the state of the rollup.
     fn genesis(
         &self,
+        config: &Self::Config,
         working_set: &mut WorkingSet<<<Self as Genesis>::Context as Spec>::Storage>,
     ) -> Result<(), Error>;
 }

@@ -131,6 +131,9 @@ pub trait Module {
 
     /// Types and functionality defined per module:
 
+    /// Configuration for the genesis method.
+    type Config;
+
     /// Module defined argument to the call method.
     type CallMessage: Decode + Encode + Debug = NonInstantiable;
 
@@ -140,6 +143,7 @@ pub trait Module {
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(
         &self,
+        _config: &Self::Config,
         _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> Result<(), Error> {
         Ok(())
