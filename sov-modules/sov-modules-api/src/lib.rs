@@ -142,7 +142,7 @@ pub trait Module {
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(
         &self,
-        _config: Self::Config,
+        _config: &Self::Config,
         _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> Result<(), Error> {
         Ok(())

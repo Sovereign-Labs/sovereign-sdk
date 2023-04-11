@@ -27,8 +27,8 @@ impl GenesisMacro {
         let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
-        let genesis_fn_body = Self::make_genesis_fn_body(&fields);
         let genesis_config = Self::make_genesis_config(&fields);
+        let genesis_fn_body = Self::make_genesis_fn_body(&fields);
         let generic_param = parse_generic_params(&generics)?;
 
         // Implements the Genesis trait
@@ -40,7 +40,7 @@ impl GenesisMacro {
                 type Config = GenesisConfig<C>;
 
                 fn genesis(&self, config: &Self::Config, working_set: &mut sov_state::WorkingSet<<<Self as sov_modules_api::Genesis>::Context as sov_modules_api::Spec>::Storage>) -> core::result::Result<(), sov_modules_api::Error> {
-          //          #(#genesis_fn_body)*
+                    #(#genesis_fn_body)*
                     Ok(())
                 }
             }
@@ -55,7 +55,7 @@ impl GenesisMacro {
                 let ident = &field.ident;
 
                 quote::quote! {
-                    self.#ident.genesis(working_set)?;
+                    self.#ident.genesis(&config.#ident, working_set)?;
                 }
             })
             .collect()

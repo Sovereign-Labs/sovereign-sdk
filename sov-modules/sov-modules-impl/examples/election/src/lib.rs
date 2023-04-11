@@ -52,7 +52,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
 
     fn genesis(
         &self,
-        config: Self::Config,
+        config: &Self::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(), Error> {
         Ok(self.init_module(working_set)?)

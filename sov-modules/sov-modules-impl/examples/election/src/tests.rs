@@ -36,7 +36,7 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(working_set: &mut WorkingS
 
     // Init module
     {
-        election.genesis(NoConfig, working_set).unwrap();
+        election.genesis(&NoConfig, working_set).unwrap();
     }
 
     // Send candidates

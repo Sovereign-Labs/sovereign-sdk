@@ -42,7 +42,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
 
     fn genesis(
         &self,
-        _config: Self::Config,
+        _config: &Self::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(), Error> {
         Ok(self.init_module(working_set)?)
