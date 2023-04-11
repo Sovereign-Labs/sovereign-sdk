@@ -91,11 +91,10 @@ impl<'a> StructDef<'a> {
     // Implements the `ModuleInfo` trait.
     fn impl_module_info(&self) -> Result<proc_macro2::TokenStream, syn::Error> {
         let fields = self.fields.clone()?;
+        let type_generics = &self.type_generics;
 
         let mut impl_self_init = Vec::default();
         let mut impl_self_body = Vec::default();
-
-        let generic_param = self.generic_param;
 
         let mut module_address = None;
         for field in fields.iter() {
@@ -113,7 +112,7 @@ impl<'a> StructDef<'a> {
                         field,
                         &self.ident,
                         module_address,
-                        generic_param,
+                        type_generics,
                     )?);
                     impl_self_body.push(&field.ident);
                     module_address = Some(&field.ident);
@@ -121,9 +120,10 @@ impl<'a> StructDef<'a> {
             };
         }
 
+        let generic_param = self.generic_param;
         let impl_generics = &self.impl_generics;
         let ident = &self.ident;
-        let type_generics = &self.type_generics;
+
         let where_clause = self.where_clause;
 
         let fn_address = make_fn_address(module_address)?;
@@ -296,7 +296,7 @@ fn make_init_address(
     field: &StructNamedField,
     struct_ident: &Ident,
     address: Option<&Ident>,
-    generic_param: &Ident,
+    type_generics: &TypeGenerics,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let field_ident = &field.ident;
 
@@ -313,7 +313,7 @@ fn make_init_address(
             let module_path = module_path!();
             let prefix = sov_modules_api::Prefix::new_module(module_path, stringify!(#struct_ident));
             let #field_ident =
-                <Self::Context as sov_modules_api::Spec>::Address::try_from(&prefix.hash::<#generic_param>())
+                <Self::Context as sov_modules_api::Spec>::Address::try_from(&prefix.hash:: #type_generics ())
                     .unwrap_or_else(|e| panic!("ModuleInfo macro error, unable to create an Address for module: {}", e));
         }),
     }

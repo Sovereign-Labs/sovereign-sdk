@@ -1,6 +1,7 @@
 use super::common::parse_generic_params;
 use super::common::{StructFieldExtractor, StructNamedField};
-use syn::DeriveInput;
+use proc_macro2::Ident;
+use syn::{DeriveInput, TypeGenerics};
 
 pub(crate) struct GenesisMacro {
     field_extractor: StructFieldExtractor,
@@ -27,9 +28,9 @@ impl GenesisMacro {
         let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
-        let genesis_config = Self::make_genesis_config(&fields);
-        let genesis_fn_body = Self::make_genesis_fn_body(&fields);
         let generic_param = parse_generic_params(&generics)?;
+        let genesis_config = Self::make_genesis_config(&fields, &type_generics, &generic_param);
+        let genesis_fn_body = Self::make_genesis_fn_body(&fields);
 
         // Implements the Genesis trait
         Ok(quote::quote! {
@@ -37,7 +38,7 @@ impl GenesisMacro {
 
             impl #impl_generics sov_modules_api::Genesis for #ident #type_generics #where_clause {
                 type Context = #generic_param;
-                type Config = GenesisConfig<C>;
+                type Config = GenesisConfig #type_generics;
 
                 fn genesis(&self, config: &Self::Config, working_set: &mut sov_state::WorkingSet<<<Self as sov_modules_api::Genesis>::Context as sov_modules_api::Spec>::Storage>) -> core::result::Result<(), sov_modules_api::Error> {
                     #(#genesis_fn_body)*
@@ -61,7 +62,11 @@ impl GenesisMacro {
             .collect()
     }
 
-    fn make_genesis_config(fields: &[StructNamedField]) -> proc_macro2::TokenStream {
+    fn make_genesis_config(
+        fields: &[StructNamedField],
+        type_generics: &TypeGenerics,
+        generic_param: &Ident,
+    ) -> proc_macro2::TokenStream {
         let field_names = fields.iter().map(|field| &field.ident);
 
         let fields: &Vec<proc_macro2::TokenStream> = &fields
@@ -77,11 +82,11 @@ impl GenesisMacro {
             .collect();
 
         quote::quote! {
-            pub struct GenesisConfig<C: sov_modules_api::Context>{
+            pub struct GenesisConfig<#generic_param: sov_modules_api::Context>{
                 #(#fields)*
             }
 
-            impl<C: sov_modules_api::Context> GenesisConfig<C> {
+            impl<#generic_param: sov_modules_api::Context> GenesisConfig #type_generics {
                 pub fn new(#(#fields)*) -> Self {
                     Self {
                         #(#field_names),*
