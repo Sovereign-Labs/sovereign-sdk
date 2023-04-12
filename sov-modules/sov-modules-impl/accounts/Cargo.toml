@@ -18,6 +18,7 @@ serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"]}
 hex = { workspace = true }
+bech32 = { workspace = true }
 
 
 [features]

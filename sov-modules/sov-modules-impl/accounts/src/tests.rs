@@ -1,6 +1,6 @@
 use crate::{
     call, hooks,
-    query::{self, QueryMessage},
+    query::{self, QueryMessage, Response},
     Accounts,
 };
 use sov_modules_api::{
@@ -140,4 +140,31 @@ fn test_get_acc_after_pub_key_update() {
         .get_or_create_default_account(new_pub_key, native_working_set)
         .unwrap();
     assert_eq!(acc.addr, sender_1_addr)
+}
+
+#[test]
+fn test_response_serialization() {
+    let addr = vec![1, 2, 3];
+    let nonce = 123456789;
+    let response = Response::AccountExists { addr, nonce };
+
+    let json = serde_json::to_string(&response).unwrap();
+    assert_eq!(
+        json,
+        r#"{"AccountExists":{"addr":"addr1qypqx805nky","nonce":123456789}}"#
+    );
+}
+
+#[test]
+fn test_response_deserialization() {
+    let json = r#"{"AccountExists":{"addr":"addr1qypqx805nky","nonce":123456789}}"#;
+    let response: Response = serde_json::from_str(json).unwrap();
+
+    let expected_addr = vec![1, 2, 3];
+    let expected_response = Response::AccountExists {
+        addr: expected_addr,
+        nonce: 123456789,
+    };
+
+    assert_eq!(response, expected_response);
 }
