@@ -14,10 +14,13 @@ use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
-pub struct BankConfig<C: sov_modules_api::Context> {
-    // TODO take collection of tokens
+pub struct TokenConfig<C: sov_modules_api::Context> {
     token_name: String,
     address_and_balances: Vec<(C::Address, u64)>,
+}
+
+pub struct BankConfig<C: sov_modules_api::Context> {
+    pub tokens: Vec<TokenConfig<C>>,
 }
 
 /// The Bank module manages user balances. It provides functionality for:

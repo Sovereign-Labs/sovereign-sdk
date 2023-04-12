@@ -2,7 +2,7 @@ use crate::{
     call, create_token_address,
     genesis::{SALT, SENDER},
     query::{self, QueryMessage},
-    Bank, BankConfig, Coins,
+    Bank, BankConfig, Coins, TokenConfig,
 };
 
 use sov_modules_api::{
@@ -114,9 +114,13 @@ fn create_bank_config(n: usize) -> BankConfig<C> {
         .map(|addr| (addr, 1000))
         .collect();
 
-    BankConfig {
+    let token_config = TokenConfig {
         token_name: "InitialToken".to_owned(),
         address_and_balances,
+    };
+
+    BankConfig {
+        tokens: vec![token_config],
     }
 }
 
@@ -139,7 +143,8 @@ fn create_test_bank() -> (TestBank, C) {
         super::create_token_address::<C>(&token_name, sender_address.as_ref(), salt);
 
     let bank_config = create_bank_config(5);
-    let init_token_address = create_token_address::<C>(&bank_config.token_name, &SENDER, SALT);
+    let init_token_address =
+        create_token_address::<C>(&bank_config.tokens[0].token_name, &SENDER, SALT);
     (
         TestBank {
             bank,
@@ -163,7 +168,7 @@ fn test_bank() {
     // Genesis
     {
         test_bank.genesis();
-        let (addr, balance) = test_bank.bank_config.address_and_balances[0].clone();
+        let (addr, balance) = test_bank.bank_config.tokens[0].address_and_balances[0].clone();
         let query_response = test_bank.query_balance_for_initial_token(addr);
 
         assert_eq!(query_response.amount, Some(balance));
