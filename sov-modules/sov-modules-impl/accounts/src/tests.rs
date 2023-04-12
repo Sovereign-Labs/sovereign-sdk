@@ -168,3 +168,15 @@ fn test_response_deserialization() {
 
     assert_eq!(response, expected_response);
 }
+
+#[test]
+fn test_response_deserialization_on_wrong_hrp() {
+    let json = r#"{"AccountExists":{"addr":"hax1qypqx68ju0l","nonce":123456789}}"#;
+    let response: Result<Response, serde_json::Error> = serde_json::from_str(json);
+    match response {
+        Ok(response) => assert!(false, "{}", format!("Expected error, got {:?}", response)),
+        Err(err) => {
+            assert!(err.to_string().contains("Invalid HRP, expected 'addr', got 'hax'"));
+        }
+    }
+}

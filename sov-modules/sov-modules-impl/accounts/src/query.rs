@@ -56,7 +56,7 @@ mod bech32_serde {
         let bech32_str = String::deserialize(deserializer)?;
         let (hrp, vec) = bech32_to_vec(&bech32_str).map_err(serde::de::Error::custom)?;
         if HRP != hrp {
-            Err(serde::de::Error::custom(format!("Invalid HRP, expected {}, got {}", HRP, hrp)))
+            Err(serde::de::Error::custom(format!("Invalid HRP, expected '{}', got '{}'", HRP, hrp)))
         } else {
             Ok(vec)
         }        
