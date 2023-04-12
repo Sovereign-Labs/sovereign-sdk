@@ -43,7 +43,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let token_address = super::create_token_address::<C>(&token_name, context.sender(), salt);
+        let token_address =
+            super::create_token_address::<C>(&token_name, context.sender().as_ref(), salt);
 
         if self.tokens.get(&token_address, working_set).is_some() {
             bail!("Token address already exists");
@@ -94,7 +95,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
-    fn prefix_from_address(&self, token_address: &C::Address) -> sov_state::Prefix {
+    pub(crate) fn prefix_from_address(&self, token_address: &C::Address) -> sov_state::Prefix {
         sov_state::Prefix::new(token_address.as_ref().to_vec())
     }
 }

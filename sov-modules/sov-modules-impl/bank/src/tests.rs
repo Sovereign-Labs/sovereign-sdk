@@ -1,7 +1,8 @@
 use crate::{
-    call,
+    call, create_token_address,
+    genesis::{SALT, SENDER},
     query::{self, QueryMessage},
-    Bank, Coins,
+    Bank, BankConfig, Coins,
 };
 
 use sov_modules_api::{
@@ -14,14 +15,22 @@ type C = MockContext;
 
 struct TestBank {
     bank: Bank<C>,
+    bank_config: BankConfig<C>,
     minter_address: <C as Spec>::Address,
     minter_context: C,
-    token_address: <C as Spec>::Address,
+    init_token_address: <C as Spec>::Address,
+    deployed_token_address: <C as Spec>::Address,
     salt: u64,
     working_set: WorkingSet<<C as Spec>::Storage>,
 }
 
 impl TestBank {
+    fn genesis(&mut self) {
+        self.bank
+            .genesis(&self.bank_config, &mut self.working_set)
+            .unwrap()
+    }
+
     fn create_token(&mut self, initial_balance: u64, sender_context: &C) {
         let create_token = call::CallMessage::CreateToken::<C> {
             salt: self.salt,
@@ -40,7 +49,7 @@ impl TestBank {
             to: receiver_address,
             coins: Coins {
                 amount,
-                token_address: self.token_address.clone(),
+                token_address: self.deployed_token_address.clone(),
             },
         };
 
@@ -53,7 +62,7 @@ impl TestBank {
         let burn = call::CallMessage::Burn {
             coins: Coins {
                 amount,
-                token_address: self.token_address.clone(),
+                token_address: self.deployed_token_address.clone(),
             },
         };
 
@@ -63,13 +72,51 @@ impl TestBank {
     }
 
     fn query_balance(&mut self, user_address: <C as Spec>::Address) -> query::BalanceResponse {
+        self.query_balance_for(user_address, self.deployed_token_address.clone())
+    }
+
+    fn query_balance_for_initial_token(
+        &mut self,
+        user_address: <C as Spec>::Address,
+    ) -> query::BalanceResponse {
+        self.query_balance_for(user_address, self.init_token_address.clone())
+    }
+
+    fn query_balance_for(
+        &mut self,
+        user_address: <C as Spec>::Address,
+        token_address: <C as Spec>::Address,
+    ) -> query::BalanceResponse {
         let query = QueryMessage::GetBalance {
             user_address,
-            token_address: self.token_address.clone(),
+            token_address,
         };
 
         let resp = self.bank.query(query, &mut self.working_set);
         serde_json::from_slice(&resp.response).unwrap()
+    }
+}
+
+fn create_addresses(n: usize) -> Vec<<C as sov_modules_api::Spec>::Address> {
+    let mut addresses = Vec::new();
+    for _ in 0..n {
+        let pub_key = <C as Spec>::PublicKey::try_from("pub_key").unwrap();
+        let address = pub_key.to_address::<<C as Spec>::Address>();
+        addresses.push(address)
+    }
+
+    addresses
+}
+
+fn create_bank_config(n: usize) -> BankConfig<C> {
+    let address_and_balances = create_addresses(n)
+        .into_iter()
+        .map(|addr| (addr, 1000))
+        .collect();
+
+    BankConfig {
+        token_name: "InitialToken".to_owned(),
+        address_and_balances,
     }
 }
 
@@ -88,13 +135,19 @@ fn create_test_bank() -> (TestBank, C) {
     let salt = 0;
     let token_name = "Token1".to_owned();
 
-    let token_address = super::create_token_address::<C>(&token_name, &sender_address, salt);
+    let deployed_token_address =
+        super::create_token_address::<C>(&token_name, sender_address.as_ref(), salt);
+
+    let bank_config = create_bank_config(5);
+    let init_token_address = create_token_address::<C>(&bank_config.token_name, &SENDER, SALT);
     (
         TestBank {
             bank,
+            bank_config,
             minter_address,
             minter_context,
-            token_address,
+            init_token_address,
+            deployed_token_address,
             salt,
             working_set,
         },
@@ -106,6 +159,15 @@ fn create_test_bank() -> (TestBank, C) {
 fn test_bank() {
     let initial_balance = 100;
     let (mut test_bank, sender_context) = create_test_bank();
+
+    // Genesis
+    {
+        test_bank.genesis();
+        let (addr, balance) = test_bank.bank_config.address_and_balances[0].clone();
+        let query_response = test_bank.query_balance_for_initial_token(addr);
+
+        assert_eq!(query_response.amount, Some(balance));
+    }
 
     // Create token
     {
