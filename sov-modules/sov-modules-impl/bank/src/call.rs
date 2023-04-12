@@ -44,8 +44,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let (token_address, token) = Token::<C>::create(
-            token_name,
-            vec![(minter_address, initial_balance)],
+            &token_name,
+            &[(minter_address, initial_balance)],
             context.sender().as_ref(),
             salt,
             working_set,
@@ -56,7 +56,6 @@ impl<C: sov_modules_api::Context> Bank<C> {
         }
 
         self.tokens.set(&token_address, token, working_set);
-
         Ok(CallResponse::default())
     }
 

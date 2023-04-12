@@ -59,13 +59,13 @@ impl<C: sov_modules_api::Context> Token<C> {
     }
 
     pub(crate) fn create(
-        token_name: String,
-        address_and_balances: Vec<(C::Address, u64)>,
+        token_name: &str,
+        address_and_balances: &[(C::Address, u64)],
         sender: &[u8],
         salt: u64,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(C::Address, Self)> {
-        let token_address = super::create_token_address::<C>(&token_name, sender, salt);
+        let token_address = super::create_token_address::<C>(token_name, sender, salt);
 
         let token_prefix = prefix_from_address::<C>(&token_address);
         let balances = sov_state::StateMap::new(token_prefix);
@@ -83,7 +83,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         };
 
         let token = Token::<C> {
-            name: token_name,
+            name: token_name.to_owned(),
             total_supply,
             balances,
         };

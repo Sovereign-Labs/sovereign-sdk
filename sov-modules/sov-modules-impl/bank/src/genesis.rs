@@ -13,15 +13,15 @@ impl<C: sov_modules_api::Context> Bank<C> {
     ) -> Result<()> {
         for token_config in config.tokens.iter() {
             let (token_address, token) = Token::<C>::create(
-                token_config.token_name.clone(),
-                token_config.address_and_balances.clone(),
+                &token_config.token_name,
+                &token_config.address_and_balances,
                 &SENDER,
                 SALT,
                 working_set,
             )?;
 
             if self.tokens.get(&token_address, working_set).is_some() {
-                bail!("Impossible happened, token address already exists");
+                bail!("Token address already exists");
             }
 
             self.tokens.set(&token_address, token, working_set);

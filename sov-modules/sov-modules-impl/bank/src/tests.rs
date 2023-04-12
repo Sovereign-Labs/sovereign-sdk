@@ -1,6 +1,5 @@
 use crate::{
-    call, create_token_address,
-    genesis::{SALT, SENDER},
+    call, create_token_address, genesis,
     query::{self, QueryMessage},
     Bank, BankConfig, Coins, TokenConfig,
 };
@@ -143,8 +142,11 @@ fn create_test_bank() -> (TestBank, C) {
         super::create_token_address::<C>(&token_name, sender_address.as_ref(), salt);
 
     let bank_config = create_bank_config(5);
-    let init_token_address =
-        create_token_address::<C>(&bank_config.tokens[0].token_name, &SENDER, SALT);
+    let init_token_address = create_token_address::<C>(
+        &bank_config.tokens[0].token_name,
+        &genesis::SENDER,
+        genesis::SALT,
+    );
     (
         TestBank {
             bank,
