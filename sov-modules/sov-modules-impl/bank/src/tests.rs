@@ -144,7 +144,7 @@ fn create_test_bank() -> (TestBank, C) {
     let bank_config = create_bank_config(5);
     let init_token_address = create_token_address::<C>(
         &bank_config.tokens[0].token_name,
-        &genesis::SENDER,
+        &genesis::DEPLOYER,
         genesis::SALT,
     );
     (

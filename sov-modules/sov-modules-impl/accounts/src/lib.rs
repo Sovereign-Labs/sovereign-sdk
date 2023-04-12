@@ -11,6 +11,7 @@ use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
+/// Initial configuration for Accounts module.
 pub struct AccountConfig<C: sov_modules_api::Context> {
     pub pub_keys: Vec<C::PublicKey>,
 }

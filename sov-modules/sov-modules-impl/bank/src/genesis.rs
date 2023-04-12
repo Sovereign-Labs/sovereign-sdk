@@ -3,7 +3,7 @@ use anyhow::{bail, Result};
 use sov_state::WorkingSet;
 
 pub const SALT: u64 = 0;
-pub const SENDER: [u8; 32] = [0; 32];
+pub const DEPLOYER: [u8; 32] = [0; 32];
 
 impl<C: sov_modules_api::Context> Bank<C> {
     pub(crate) fn init_module(
@@ -15,7 +15,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
             let (token_address, token) = Token::<C>::create(
                 &token_config.token_name,
                 &token_config.address_and_balances,
-                &SENDER,
+                &DEPLOYER,
                 SALT,
                 working_set,
             )?;

@@ -19,6 +19,7 @@ pub struct TokenConfig<C: sov_modules_api::Context> {
     address_and_balances: Vec<(C::Address, u64)>,
 }
 
+/// Initial configuration for Bank module.
 pub struct BankConfig<C: sov_modules_api::Context> {
     pub tokens: Vec<TokenConfig<C>>,
 }
