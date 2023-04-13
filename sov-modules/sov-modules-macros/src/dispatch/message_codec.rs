@@ -1,3 +1,5 @@
+use crate::dispatch::dispatch_query::convert_snake_case_to_upper_camel_case;
+
 use super::common::{parse_generic_params, StructDef, StructFieldExtractor, CALL, QUERY};
 use proc_macro2::TokenStream;
 use quote::format_ident;
@@ -10,7 +12,7 @@ impl<'a> StructDef<'a> {
         let ty_generics = &self.type_generics;
 
         let fns = self.fields.iter().map(|field| {
-            let variant = &field.ident;
+            let variant = convert_snake_case_to_upper_camel_case(&field.ident);
             let ty = &field.ty;
 
             let fn_call_name = format_ident!("encode_{}_call", &field.ident);

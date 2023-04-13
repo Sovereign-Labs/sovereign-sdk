@@ -1,7 +1,7 @@
-mod call;
+pub mod call;
 mod create_token;
 mod genesis;
-mod query;
+pub mod query;
 #[cfg(test)]
 mod tests;
 mod token;
@@ -37,6 +37,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
     type CallMessage = call::CallMessage<C>;
 
     type QueryMessage = query::QueryMessage<C>;
+    type QueryResponse = query::QueryResponse;
 
     fn genesis(
         &self,
@@ -80,24 +81,27 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
         &self,
         msg: Self::QueryMessage,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> sov_modules_api::QueryResponse {
+    ) -> Self::QueryResponse {
+        use query::QueryResponse;
+
         match msg {
             query::QueryMessage::GetBalance {
                 user_address,
                 token_address,
             } => {
-                let response =
-                    serde_json::to_vec(&self.balance_of(user_address, token_address, working_set))
-                        .unwrap();
+                let response = self.balance_of(user_address, token_address, working_set);
 
-                sov_modules_api::QueryResponse { response }
+                QueryResponse::GetBalance {
+                    balance: response.amount.unwrap_or_default(),
+                }
             }
 
             query::QueryMessage::GetTotalSupply { token_address } => {
-                let response =
-                    serde_json::to_vec(&self.supply_of(token_address, working_set)).unwrap();
+                let response = self.supply_of(token_address, working_set);
 
-                sov_modules_api::QueryResponse { response }
+                QueryResponse::GetTotalSupply {
+                    total_supply: response.amount,
+                }
             }
         }
     }

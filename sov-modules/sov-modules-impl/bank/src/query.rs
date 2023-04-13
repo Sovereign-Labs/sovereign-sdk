@@ -13,6 +13,16 @@ pub enum QueryMessage<C: sov_modules_api::Context> {
     GetTotalSupply { token_address: C::Address },
 }
 
+/// This enumeration represents the available query messages for querying the bank module.
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+pub enum QueryResponse {
+    /// The balance of a specified token for a specified user.
+    /// This is non-optional, because all untouched accounts have a (well-defined) balance of 0.
+    GetBalance { balance: u64 },
+    /// The total supply of a requested token. This is optional, because because the total supply of an undefined token is undefined
+    GetTotalSupply { total_supply: Option<u64> },
+}
+
 #[derive(serde::Deserialize, serde::Serialize, Debug, Eq, PartialEq)]
 pub struct BalanceResponse {
     pub amount: Option<Amount>,

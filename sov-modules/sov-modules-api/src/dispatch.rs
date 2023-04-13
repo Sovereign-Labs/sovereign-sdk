@@ -1,4 +1,4 @@
-use crate::{CallResponse, Context, Error, QueryResponse, Spec};
+use crate::{CallResponse, Context, Error, Spec};
 use sov_state::WorkingSet;
 
 /// Methods from this trait should be called only once during the rollup deployment.
@@ -38,6 +38,7 @@ pub trait DispatchCall {
 pub trait DispatchQuery {
     type Context: Context;
     type Decodable;
+    type QueryResponse: core::fmt::Debug;
 
     /// Decode serialized query message
     fn decode_query(serialized_message: &[u8]) -> Result<Self::Decodable, std::io::Error>;
@@ -47,5 +48,5 @@ pub trait DispatchQuery {
         &self,
         message: Self::Decodable,
         working_set: &mut WorkingSet<<<Self as DispatchQuery>::Context as Spec>::Storage>,
-    ) -> QueryResponse;
+    ) -> Self::QueryResponse;
 }

@@ -1,8 +1,10 @@
+use crate::dispatch::dispatch_query::convert_snake_case_to_upper_camel_case;
+
+use super::common::get_serialization_attrs;
 use super::common::parse_generic_params;
 use super::common::StructDef;
 use super::common::StructFieldExtractor;
 use super::common::CALL;
-use super::common::get_serialization_attrs;
 use syn::DeriveInput;
 
 impl<'a> StructDef<'a> {
@@ -10,7 +12,7 @@ impl<'a> StructDef<'a> {
         self.fields
             .iter()
             .map(|field| {
-                let name = &field.ident;
+                let name = convert_snake_case_to_upper_camel_case(&field.ident);
                 let ty = &field.ty;
 
                 quote::quote!(
@@ -25,22 +27,24 @@ impl<'a> StructDef<'a> {
         let type_generics = &self.type_generics;
 
         let match_legs = self.fields.iter().map(|field| {
-            let name = &field.ident;
+            let field_name = &field.ident;
+            let variant_name = convert_snake_case_to_upper_camel_case(field_name);
 
             quote::quote!(
-                #enum_ident::#name(message)=>{
-                    sov_modules_api::Module::call(&self.#name, message, context, working_set)
+                #enum_ident::#variant_name(message)=>{
+                    sov_modules_api::Module::call(&self.#field_name, message, context, working_set)
                 },
             )
         });
 
         let match_legs_address = self.fields.iter().map(|field| {
-            let name = &field.ident;
+            let field_name = &field.ident;
+            let variant_name = convert_snake_case_to_upper_camel_case(&field.ident);
             let ty = &field.ty;
 
             quote::quote!(
-                #enum_ident::#name(message)=>{
-                   <#ty as sov_modules_api::ModuleInfo>::address(&self.#name)
+                #enum_ident::#variant_name(message)=>{
+                   <#ty as sov_modules_api::ModuleInfo>::address(&self.#field_name)
                 },
             )
         });

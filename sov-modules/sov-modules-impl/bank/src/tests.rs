@@ -62,14 +62,13 @@ impl TestBank {
             .unwrap();
     }
 
-    fn query_balance(&mut self, user_address: <C as Spec>::Address) -> query::BalanceResponse {
+    fn query_balance(&mut self, user_address: <C as Spec>::Address) -> query::QueryResponse {
         let query = QueryMessage::GetBalance {
             user_address,
             token_address: self.token_address.clone(),
         };
 
-        let resp = self.bank.query(query, &mut self.working_set);
-        serde_json::from_slice(&resp.response).unwrap()
+        self.bank.query(query, &mut self.working_set)
     }
 }
 
@@ -111,7 +110,12 @@ fn test_bank() {
     {
         test_bank.create_token(initial_balance, &sender_context);
         let query_response = test_bank.query_balance(test_bank.minter_address.clone());
-        assert_eq!(query_response.amount, Some(initial_balance));
+        assert_eq!(
+            query_response,
+            query::QueryResponse::GetBalance {
+                balance: initial_balance
+            }
+        );
     }
 
     let amount = 22;
@@ -124,18 +128,31 @@ fn test_bank() {
         test_bank.transfer(amount, receiver_address.clone());
 
         let query_response = test_bank.query_balance(test_bank.minter_address.clone());
-        assert_eq!(query_response.amount, Some(initial_balance - amount));
+        assert_eq!(
+            query_response,
+            query::QueryResponse::GetBalance {
+                balance: initial_balance - amount
+            }
+        );
     }
 
     // Burn coins
     {
         let query_response = test_bank.query_balance(receiver_address.clone());
-        assert_eq!(query_response.amount, Some(amount));
+        assert_eq!(
+            query_response,
+            query::QueryResponse::GetBalance { balance: amount }
+        );
 
         let burn_amount = 22;
         test_bank.burn(burn_amount, &receiver_context);
 
         let query_response = test_bank.query_balance(receiver_address);
-        assert_eq!(query_response.amount, Some(amount - burn_amount));
+        assert_eq!(
+            query_response,
+            query::QueryResponse::GetBalance {
+                balance: amount - burn_amount
+            }
+        );
     }
 }

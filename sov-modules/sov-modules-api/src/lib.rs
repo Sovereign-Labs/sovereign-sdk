@@ -139,6 +139,8 @@ pub trait Module {
 
     /// Module defined argument to the query method.
     type QueryMessage: Decode + Encode + Debug = NonInstantiable;
+    /// Module defined response to the query method.
+    type QueryResponse: Debug = QueryResponse;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(
@@ -165,7 +167,7 @@ pub trait Module {
         &self,
         _message: Self::QueryMessage,
         _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> QueryResponse {
+    ) -> Self::QueryResponse {
         unreachable!()
     }
 }
