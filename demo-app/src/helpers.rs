@@ -12,7 +12,18 @@ pub(crate) fn check_query(
 ) {
     let module = Runtime::<MockContext>::decode_query(&query).unwrap();
     let query_response = runtime.dispatch_query(module, &mut WorkingSet::new(storage));
-
-    let response = str::from_utf8(&query_response.response).unwrap();
-    assert_eq!(response, expected_response)
+    match query_response {
+        crate::runtime::RuntimeQueryResponse::Election(election_response) => {
+            let response = str::from_utf8(&election_response.response).unwrap();
+            assert_eq!(response, expected_response)
+        }
+        crate::runtime::RuntimeQueryResponse::ValueSetter(value_setter_response) => {
+            let response = str::from_utf8(&value_setter_response.response).unwrap();
+            assert_eq!(response, expected_response)
+        }
+        crate::runtime::RuntimeQueryResponse::Accounts(accounts_response) => {
+            let response = str::from_utf8(&accounts_response.response).unwrap();
+            assert_eq!(response, expected_response)
+        }
+    }
 }

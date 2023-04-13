@@ -37,14 +37,20 @@ fn main() {
     runtime.genesis(&config, working_set).unwrap();
 
     {
-        let message = RuntimeQuery::<C>::first(());
+        let message = RuntimeQuery::<C>::First(());
         let response = runtime.dispatch_query(message, working_set);
-        assert_eq!(response.response, vec![1]);
+        match response {
+            RuntimeQueryResponse::First(contents) => assert_eq!(contents.response, vec![1]),
+            _ => panic!("Wrong response"),
+        }
     }
 
     {
-        let message = RuntimeQuery::<C>::second(second_test_module::TestType {});
+        let message = RuntimeQuery::<C>::Second(second_test_module::TestType {});
         let response = runtime.dispatch_query(message, working_set);
-        assert_eq!(response.response, vec![2]);
+        match response {
+            RuntimeQueryResponse::Second(contents) => assert_eq!(contents.response, vec![2]),
+            _ => panic!("Wrong response"),
+        }
     }
 }

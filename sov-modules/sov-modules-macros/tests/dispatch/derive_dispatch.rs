@@ -49,7 +49,10 @@ fn main() {
         let serialized_message = RT::encode_first_query(());
         let module = RT::decode_query(&serialized_message).unwrap();
         let response = runtime.dispatch_query(module, working_set);
-        assert_eq!(response.response, vec![value]);
+        match response {
+            RuntimeQueryResponse::First(contents) => assert_eq!(contents.response, vec![value]),
+            _ => panic!("Wrong response"),
+        }
     }
 
     let value = 22;
@@ -69,6 +72,9 @@ fn main() {
         let serialized_message = RT::encode_second_query(second_test_module::TestType {});
         let module = RT::decode_query(&serialized_message).unwrap();
         let response = runtime.dispatch_query(module, working_set);
-        assert_eq!(response.response, vec![value]);
+        match response {
+            RuntimeQueryResponse::Second(contents) => assert_eq!(contents.response, vec![value]),
+            _ => panic!("Wrong response"),
+        }
     }
 }
