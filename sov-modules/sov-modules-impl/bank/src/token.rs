@@ -2,6 +2,8 @@ use anyhow::{bail, Result};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
+use crate::call::prefix_from_address;
+
 pub type Amount = u64;
 
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
@@ -54,5 +56,38 @@ impl<C: sov_modules_api::Context> Token<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         self.transfer(from, burn, amount, working_set)
+    }
+
+    pub(crate) fn create(
+        token_name: &str,
+        address_and_balances: &[(C::Address, u64)],
+        sender: &[u8],
+        salt: u64,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<(C::Address, Self)> {
+        let token_address = super::create_token_address::<C>(token_name, sender, salt);
+
+        let token_prefix = prefix_from_address::<C>(&token_address);
+        let balances = sov_state::StateMap::new(token_prefix);
+
+        let mut total_supply: Option<u64> = Some(0);
+
+        for (address, balance) in address_and_balances.iter() {
+            balances.set(address, *balance, working_set);
+            total_supply = total_supply.and_then(|ts| ts.checked_add(*balance));
+        }
+
+        let total_supply = match total_supply {
+            Some(total_supply) => total_supply,
+            None => bail!("Total supply overflow"),
+        };
+
+        let token = Token::<C> {
+            name: token_name.to_owned(),
+            total_supply,
+            balances,
+        };
+
+        Ok((token_address, token))
     }
 }
