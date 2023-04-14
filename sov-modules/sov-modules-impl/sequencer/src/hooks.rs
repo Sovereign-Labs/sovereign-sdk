@@ -16,7 +16,7 @@ impl<C: sov_modules_api::Context> Hooks<C> {
 
     pub fn lock(&self, working_set: &mut WorkingSet<C::Storage>) -> Result<()> {
         // TODO:
-        // Transfer `self.coins_to_lock` form `self.seq_rollup_address` to `self.address`
+        // Transfer `self.inner.coins_to_lock` form `self.inner.seq_rollup_address` to `self.address`
         todo!()
     }
 
@@ -30,8 +30,8 @@ impl<C: sov_modules_api::Context> Hooks<C> {
 
     pub fn reward(&self, amount: u64, working_set: &mut WorkingSet<C::Storage>) -> Result<()> {
         // TODO:
-        // Transfer `self.coins_to_lock` form `self.seq_rollup_address` to `self.address`
-        // Add `amount` coins to self.seq_rollup_address
+        // Transfer `self.coins_to_lock` form  `self.inner.address` to `self.seq_rollup_address`
+        // Add `amount` coins to self.inner.seq_rollup_address
         todo!()
     }
 }
