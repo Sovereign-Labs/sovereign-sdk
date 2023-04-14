@@ -81,13 +81,6 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
         self.sequencer_hooks.next_sequencer(working_set)
     }
 
-    fn slash_sequencer(
-        &self,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> Result<()> {
-        self.sequencer_hooks.slash(working_set)
-    }
-
     fn reward_sequencer(
         &self,
         amount: u64,

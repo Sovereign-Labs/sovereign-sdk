@@ -47,10 +47,19 @@ where
         }
     }
 
-    fn slash(&mut self, mut batch_workspace: WorkingSet<C::Storage>) {
-        // It is ok to unwrap here, we are sure that sequencer has enough funds locked.
-        self.tx_hooks.slash_sequencer(&mut batch_workspace).unwrap();
-        // TODO: should we save the working_set here?
+    fn revert_and_slash(&mut self, batch_workspace: WorkingSet<C::Storage>) {
+        // Revert all the changes (the sequencer funds are no longer locked)
+        let batch_workspace = batch_workspace.revert();
+
+        // Create a new batch_workspace
+        let mut batch_workspace = batch_workspace.to_revertable();
+
+        // Locks funds again, we know there are enough coins to lock.
+        self.tx_hooks
+            .lock_sequencer_funds(&mut batch_workspace)
+            .unwrap();
+
+        // Only the locked_coins are saved in the `AppTemplate`.
         self.working_set = Some(batch_workspace);
     }
 }
@@ -129,9 +138,7 @@ where
         {
             Ok(txs) => txs,
             Err(_) => {
-                // It is ok to not revert here, `verify_txs_stateless` won't modify the state
-                // but the sequencer is slashed
-                self.slash(batch_workspace);
+                self.revert_and_slash(batch_workspace);
                 return Err(ConsensusSetUpdate::slashing(sequencer));
             }
         };
@@ -142,8 +149,8 @@ where
             let verified_tx = match self.tx_hooks.pre_dispatch_tx_hook(tx, &mut batch_workspace) {
                 Ok(verified_tx) => verified_tx,
                 Err(_) => {
-                    // TODO: We should revert here but somehow preserve the slashing.
-                    self.slash(batch_workspace);
+                    // TODO: should we revert here? // pre_dispatch_tx_hook changes nonces
+                    self.revert_and_slash(batch_workspace);
                     return Err(ConsensusSetUpdate::slashing(sequencer));
                 }
             };
@@ -161,28 +168,15 @@ where
                         batch_workspace = batch_workspace.commit();
                     }
                     Err(e) => {
-                        // Don't merge the tx workspace. TODO add tests for this scenario
-                        // TODO: figure out how to handle slashing & reverts.
-                        let batch_workspace = batch_workspace.revert();
-
-                        // Maybe something like:
-                        /*
-                        let batch_workspace = batch_workspace.revert();
-                        let mut batch_workspace = batch_workspace.to_revertable();
-                        // we locks funds again
-                        self.tx_hooks
-                            .lock_sequencer_funds(&mut batch_workspace)
-                            .unwrap();
-                        self.working_set = Some(batch_workspace);
-                        */
-
+                        // TODO: all the previous "successful" txs will be reverted, is that ok?
+                        self.revert_and_slash(batch_workspace);
                         panic!("Demo app txs must succeed but failed with err: {}", e)
                     }
                 }
             } else {
                 // If the serialization is invalid, the sequencer is malicious. Slash them.\
-                // TODO: We don't revert is that ok?
-                self.slash(batch_workspace);
+                // TODO all the previous "successful" txs will be reverted, is that ok?
+                self.revert_and_slash(batch_workspace);
                 return Err(ConsensusSetUpdate::slashing(sequencer));
             }
         }
@@ -213,10 +207,11 @@ where
         Self::StateRoot,
         Vec<sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>>,
     ) {
-        // TODO: maybe we should apply slashing here and not in  `apply_batch`:
-        // 1. Apply batch locks sequencer funds
-        // 2. Sequencer did something wrong all the changes are reverted (sequencer funds are not locked anymore), but we propagate `is_reverted` flag.
-        // 3. in `end_slot` we do the slashing.
+        // TODO (discussion) possible alternative design for slashing sequencer:
+        // 1. When `apply_batch` batch encounters an error it early returns (it already works this way)
+        // 2. Save the faulty sequencer address in `AppTemplate`
+        // 3. Slash the sequencer here in `end_slot` (lock the coins in working_set and never unlock them)
+        // This way we won't need `revert_and_slash` anymore.
 
         let (cache_log, witness) = self.working_set.take().unwrap().freeze();
         let root_hash = self

@@ -39,11 +39,6 @@ pub trait TxHooks {
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> Result<Vec<u8>>;
 
-    fn slash_sequencer(
-        &self,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> Result<()>;
-
     fn reward_sequencer(
         &self,
         amount: u64,

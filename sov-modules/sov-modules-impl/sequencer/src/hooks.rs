@@ -24,10 +24,6 @@ impl<C: sov_modules_api::Context> Hooks<C> {
         Ok(self.inner.da_address.get_or_err(working_set)?)
     }
 
-    pub fn slash(&self, working_set: &mut WorkingSet<C::Storage>) -> Result<()> {
-        todo!()
-    }
-
     pub fn reward(&self, amount: u64, working_set: &mut WorkingSet<C::Storage>) -> Result<()> {
         // TODO:
         // Transfer `self.coins_to_lock` form  `self.inner.address` to `self.seq_rollup_address`

@@ -26,9 +26,6 @@ pub struct Sequencer<C: sov_modules_api::Context> {
 
     #[state]
     pub(crate) coins_to_lock: StateValue<bank::Coins<C::Address>>,
-
-    #[state]
-    pub(crate) slash: StateValue<u64>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Sequencer<C> {
