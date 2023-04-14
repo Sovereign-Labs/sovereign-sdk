@@ -9,6 +9,7 @@ edition = "2021"
 anyhow = { workspace = true }
 sovereign-sdk = { workspace = true, features = ["mocks"] }
 election = { workspace = true }
+sequencer = { workspace = true }
 sov-app-template = { workspace = true }
 value-setter = { workspace = true }
 accounts = { workspace = true }

@@ -1,8 +1,8 @@
+use crate::tx_verifier_impl::Transaction;
+use anyhow::Result;
 use sov_app_template::{TxHooks, VerifiedTx};
 use sov_modules_api::{Context, Spec};
 use sov_state::WorkingSet;
-
-use crate::tx_verifier_impl::Transaction;
 
 pub(crate) struct AppVerifiedTx<C: Context> {
     pub(crate) pub_key: C::PublicKey,
@@ -24,12 +24,14 @@ impl<C: Context> VerifiedTx for AppVerifiedTx<C> {
 
 pub(crate) struct DemoAppTxHooks<C: Context> {
     accounts_hooks: accounts::hooks::Hooks<C>,
+    sequencer_hooks: sequencer::hooks::Hooks<C>,
 }
 
 impl<C: Context> DemoAppTxHooks<C> {
     pub fn new() -> Self {
         Self {
             accounts_hooks: accounts::hooks::Hooks::<C>::new(),
+            sequencer_hooks: sequencer::hooks::Hooks::<C>::new(),
         }
     }
 }
@@ -40,7 +42,7 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
     type VerifiedTx = AppVerifiedTx<C>;
 
     fn pre_dispatch_tx_hook(
-        &mut self,
+        &self,
         tx: Transaction<Self::Context>,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<Self::VerifiedTx> {
@@ -54,7 +56,7 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
     }
 
     fn post_dispatch_tx_hook(
-        &mut self,
+        &self,
         tx: Self::VerifiedTx,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) {
@@ -64,11 +66,40 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
             // therefore this panic should never happen, we add it for sanity check.
             .unwrap_or_else(|e| panic!("Inconsistent nonce {e}"));
     }
+
+    fn lock_sequencer_funds(
+        &self,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> Result<()> {
+        self.sequencer_hooks.lock(working_set)
+    }
+
+    fn next_sequencer(
+        &self,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> Result<Vec<u8>> {
+        self.sequencer_hooks.next_sequencer(working_set)
+    }
+
+    fn slash_sequencer(
+        &self,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> Result<()> {
+        self.sequencer_hooks.slash(working_set)
+    }
+
+    fn reward_sequencer(
+        &self,
+        amount: u64,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> Result<()> {
+        self.sequencer_hooks.reward(amount, working_set)
+    }
 }
 
 impl<C: Context> DemoAppTxHooks<C> {
     fn check_nonce_for_address(
-        &mut self,
+        &self,
         tx_nonce: u64,
         tx_pub_key: C::PublicKey,
         working_set: &mut WorkingSet<C::Storage>,

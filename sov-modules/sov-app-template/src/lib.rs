@@ -24,7 +24,12 @@ pub struct AppTemplate<C: Context, V, RT, H, GenesisConfig> {
     working_set: Option<WorkingSet<C::Storage>>,
 }
 
-impl<C: Context, V, RT, H, GenesisConfig> AppTemplate<C, V, RT, H, GenesisConfig> {
+impl<C: Context, V, RT, H, GenesisConfig> AppTemplate<C, V, RT, H, GenesisConfig>
+where
+    RT: DispatchCall<Context = C> + Genesis<Context = C, Config = GenesisConfig>,
+    V: TxVerifier,
+    H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
+{
     pub fn new(
         storage: C::Storage,
         runtime: RT,
@@ -40,6 +45,18 @@ impl<C: Context, V, RT, H, GenesisConfig> AppTemplate<C, V, RT, H, GenesisConfig
             genesis_config,
             working_set: None,
         }
+    }
+
+    fn revert_and_slash(&mut self, batch_workspace: WorkingSet<C::Storage>) -> anyhow::Result<()> {
+        // Revert all the changes.
+        let mut batch_workspace = batch_workspace.revert();
+        batch_workspace = batch_workspace.to_revertable();
+
+        // Slash the sequencer on a fresh batch_workspace (should we unwrap: slashing shouldn't fail).
+        self.tx_hooks.slash_sequencer(&mut batch_workspace)?;
+        self.working_set = Some(batch_workspace);
+
+        Ok(())
     }
 }
 
@@ -84,24 +101,53 @@ where
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> Result<
         Vec<Vec<sovereign_sdk::stf::Event>>,
+        // Question: Should we return an enum error here (see TODOs bellow)
         sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>,
     > {
+        let mut batch_workspace = WorkingSet::new(self.current_storage.clone());
+        batch_workspace = batch_workspace.to_revertable();
+
+        // TODO: check sequencer address
+        match self.tx_hooks.next_sequencer(&mut batch_workspace) {
+            Ok(next_sequencer) => {
+                if next_sequencer != sequencer {
+                    // Return an error
+                    todo!()
+                }
+            }
+            // TODOs: return an error
+            Err(_) => todo!(),
+        }
+
+        // TODO: Handle an error (sequencer doesn't have enough funds)
+        self.tx_hooks.lock_sequencer_funds(&mut batch_workspace);
+
         let mut events = Vec::new();
 
         // Run the stateless verification.
-        let txs = self
+        let txs = match self
             .tx_verifier
             .verify_txs_stateless(batch.take_transactions())
-            .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
-        let mut batch_workspace = WorkingSet::new(self.current_storage.clone());
+        {
+            Ok(txs) => txs,
+            Err(_) => {
+                // TODO: Handle error (slashing failed)
+                self.revert_and_slash(batch_workspace);
+                return Err(ConsensusSetUpdate::slashing(sequencer));
+            }
+        };
 
         for tx in txs {
             batch_workspace = batch_workspace.to_revertable();
             // Run the stateful verification, possibly modifies the state.
-            let verified_tx = self
-                .tx_hooks
-                .pre_dispatch_tx_hook(tx, &mut batch_workspace)
-                .or(Err(ConsensusSetUpdate::slashing(sequencer)))?;
+            let verified_tx = match self.tx_hooks.pre_dispatch_tx_hook(tx, &mut batch_workspace) {
+                Ok(verified_tx) => verified_tx,
+                Err(_) => {
+                    // TODO: Handle error (slashing failed)
+                    self.revert_and_slash(batch_workspace);
+                    return Err(ConsensusSetUpdate::slashing(sequencer));
+                }
+            };
 
             if let Ok(msg) = RT::decode_call(verified_tx.runtime_message()) {
                 let ctx = C::new(verified_tx.sender().clone());
@@ -123,10 +169,16 @@ where
                 }
             } else {
                 // If the serialization is invalid, the sequencer is malicious. Slash them.
-                batch_workspace.revert();
+                // TODO: Handle error (slashing failed)
                 return Err(ConsensusSetUpdate::slashing(sequencer));
             }
         }
+
+        // TODO:
+        // - handle error (should we unwrap here)
+        // - calculate the amount based of gas and fees
+        self.tx_hooks.reward_sequencer(0, &mut batch_workspace);
+
         self.working_set = Some(batch_workspace);
 
         Ok(events)
