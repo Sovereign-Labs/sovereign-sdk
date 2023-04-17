@@ -1,5 +1,3 @@
-#![feature(adt_const_params)]
-
 pub mod hooks;
 
 mod call;
