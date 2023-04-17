@@ -32,7 +32,7 @@ impl<C: sov_modules_api::Context> Hooks<C> {
 
     /// Currently this module supports only centralized sequencer, therefore this method always returns the same DA address.
     pub fn next_sequencer(&self, working_set: &mut WorkingSet<C::Storage>) -> Result<Vec<u8>> {
-        Ok(self.inner.da_address.get_or_err(working_set)?)
+        Ok(self.inner.seq_da_address.get_or_err(working_set)?)
     }
 
     /// Unlocks the sequencer coins and awards additional coins (possibly based on transactions fees and used gas).

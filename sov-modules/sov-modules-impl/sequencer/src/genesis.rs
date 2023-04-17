@@ -11,7 +11,7 @@ impl<C: sov_modules_api::Context> Sequencer<C> {
         self.seq_rollup_address
             .set(config.seq_rollup_address.clone(), working_set);
 
-        self.da_address
+        self.seq_da_address
             .set(config.seq_da_address.clone(), working_set);
 
         self.coins_to_lock
