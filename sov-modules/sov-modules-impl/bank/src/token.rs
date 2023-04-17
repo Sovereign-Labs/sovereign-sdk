@@ -6,7 +6,7 @@ use crate::call::prefix_from_address;
 
 pub type Amount = u64;
 
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct Coins<Address: sov_modules_api::AddressTrait> {
     pub amount: Amount,
     pub token_address: Address,

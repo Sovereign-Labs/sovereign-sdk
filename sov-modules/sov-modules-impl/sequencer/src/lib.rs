@@ -1,5 +1,5 @@
+mod genesis;
 pub mod hooks;
-
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::{StateValue, WorkingSet};
@@ -7,7 +7,7 @@ use sov_state::{StateValue, WorkingSet};
 pub struct SequencerConfig<C: sov_modules_api::Context> {
     seq_rollup_address: C::Address,
     seq_da_address: Vec<u8>,
-    coins_to_lock: StateValue<bank::Coins<C::Address>>,
+    coins_to_lock: bank::Coins<C::Address>,
 }
 
 #[derive(ModuleInfo)]
@@ -38,8 +38,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Sequencer<C> {
         config: &Self::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(), Error> {
-        //Ok(self.init_module(config, working_set)?)
-        todo!()
+        Ok(self.init_module(config, working_set)?)
     }
 
     // Questions:
