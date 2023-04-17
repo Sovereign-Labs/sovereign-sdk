@@ -67,21 +67,34 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
             .unwrap_or_else(|e| panic!("Inconsistent nonce {e}"));
     }
 
-    fn lock_sequencer_funds(
+    fn enter_apply_batch(
+        &self,
+        sequencer: &[u8],
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> Result<()> {
+        // TODO: Handle errors
+        match self.sequencer_hooks.next_sequencer(working_set) {
+            Ok(next_sequencer) => {
+                if next_sequencer != sequencer {
+                    // TODO: Return an error, should we slash in this case?
+                    todo!()
+                }
+            }
+            // TODO: return an error if sequencer doesn't exist
+            Err(_) => todo!(),
+        }
+
+        self.sequencer_hooks.lock(working_set)
+    }
+
+    fn post_revert_apply_batch(
         &self,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> Result<()> {
         self.sequencer_hooks.lock(working_set)
     }
 
-    fn next_sequencer(
-        &self,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> Result<Vec<u8>> {
-        self.sequencer_hooks.next_sequencer(working_set)
-    }
-
-    fn reward_sequencer(
+    fn exit_apply_batch(
         &self,
         amount: u64,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,

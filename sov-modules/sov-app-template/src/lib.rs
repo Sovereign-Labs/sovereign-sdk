@@ -56,7 +56,7 @@ where
 
         // Locks funds again, we know there are enough coins to lock.
         self.tx_hooks
-            .lock_sequencer_funds(&mut batch_workspace)
+            .post_revert_apply_batch(&mut batch_workspace)
             .unwrap();
 
         // Only the locked_coins are saved in the `AppTemplate`.
@@ -111,20 +111,11 @@ where
         let mut batch_workspace = WorkingSet::new(self.current_storage.clone());
         batch_workspace = batch_workspace.to_revertable();
 
-        // TODO: Handle errors
-        match self.tx_hooks.next_sequencer(&mut batch_workspace) {
-            Ok(next_sequencer) => {
-                if next_sequencer != sequencer {
-                    // TODO: Return an error, should we slash in this case?
-                    todo!()
-                }
-            }
-            // TODO: return an error if sequencer doesn't exist
-            Err(_) => todo!(),
-        }
-
-        // TODO: Handle an error (sequencer doesn't have enough funds)
-        match self.tx_hooks.lock_sequencer_funds(&mut batch_workspace) {
+        // TODO: Error handling.
+        match self
+            .tx_hooks
+            .enter_apply_batch(sequencer, &mut batch_workspace)
+        {
             Ok(_) => {}
             Err(_) => todo!(),
         }
@@ -174,7 +165,7 @@ where
                     }
                 }
             } else {
-                // If the serialization is invalid, the sequencer is malicious. Slash them.\
+                // If the serialization is invalid, the sequencer is malicious. Slash them.
                 // TODO all the previous "successful" txs will be reverted, is that ok?
                 self.revert_and_slash(batch_workspace);
                 return Err(ConsensusSetUpdate::slashing(sequencer));
@@ -185,7 +176,7 @@ where
         // - `reward_sequencer` shouldn't fail so unwrapping here is ok.
         // - calculate the amount based of gas and fees
         self.tx_hooks
-            .reward_sequencer(0, &mut batch_workspace)
+            .exit_apply_batch(0, &mut batch_workspace)
             .unwrap();
 
         self.working_set = Some(batch_workspace);
