@@ -1,7 +1,7 @@
 use crate::{
     call, hooks,
     query::{self, QueryMessage, Response},
-    Accounts,
+    AccountConfig, Accounts,
 };
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey},
@@ -12,10 +12,45 @@ use sov_state::{ProverStorage, WorkingSet};
 type C = MockContext;
 
 #[test]
+fn test_config_account() {
+    let init_pub_key = MockPublicKey::try_from("init_pub_key").unwrap();
+    let init_pub_key_addr = init_pub_key.to_address::<<C as Spec>::Address>();
+
+    let account_config = AccountConfig::<C> {
+        pub_keys: vec![init_pub_key.clone()],
+    };
+
+    let accounts = &mut Accounts::<C>::new();
+    let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
+
+    accounts
+        .init_module(&account_config, native_working_set)
+        .unwrap();
+
+    let query_response: query::Response = serde_json::from_slice(
+        &accounts
+            .query(
+                QueryMessage::GetAccount(init_pub_key.clone()),
+                native_working_set,
+            )
+            .response,
+    )
+    .unwrap();
+
+    assert_eq!(
+        query_response,
+        query::Response::AccountExists {
+            addr: AddressBech32::from(&init_pub_key_addr),
+            nonce: 0
+        }
+    )
+}
+
+#[test]
 fn test_update_account() {
     let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
     let accounts = &mut Accounts::<C>::new();
-    let mut hooks = hooks::Hooks::<C>::new();
+    let hooks = hooks::Hooks::<C>::new();
 
     let sender = MockPublicKey::try_from("pub_key").unwrap();
     let sender_addr = sender.to_address::<<C as Spec>::Address>();
@@ -87,7 +122,7 @@ fn test_update_account() {
 fn test_update_account_fails() {
     let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
     let accounts = &mut Accounts::<C>::new();
-    let mut hooks = hooks::Hooks::<C>::new();
+    let hooks = hooks::Hooks::<C>::new();
 
     let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();
     let sender_context_1 = C::new(sender_1.to_address());
@@ -116,7 +151,7 @@ fn test_update_account_fails() {
 fn test_get_acc_after_pub_key_update() {
     let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
     let accounts = &mut Accounts::<C>::new();
-    let mut hooks = hooks::Hooks::<C>::new();
+    let hooks = hooks::Hooks::<C>::new();
 
     let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();
     let sender_1_addr = sender_1.to_address::<<C as Spec>::Address>();

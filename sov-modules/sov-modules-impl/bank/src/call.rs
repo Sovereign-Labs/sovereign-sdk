@@ -43,26 +43,19 @@ impl<C: sov_modules_api::Context> Bank<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let token_address = super::create_token_address::<C>(&token_name, context.sender(), salt);
+        let (token_address, token) = Token::<C>::create(
+            &token_name,
+            &[(minter_address, initial_balance)],
+            context.sender().as_ref(),
+            salt,
+            working_set,
+        )?;
 
         if self.tokens.get(&token_address, working_set).is_some() {
             bail!("Token address already exists");
         }
 
-        let token_prefix = self.prefix_from_address(&token_address);
-
-        // Create balances map and initialize minter balance.
-        let balances = sov_state::StateMap::new(token_prefix);
-        balances.set(&minter_address, initial_balance, working_set);
-
-        let token = Token::<C> {
-            name: token_name,
-            total_supply: initial_balance,
-            balances,
-        };
-
         self.tokens.set(&token_address, token, working_set);
-
         Ok(CallResponse::default())
     }
 
@@ -93,8 +86,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
     }
 }
 
-impl<C: sov_modules_api::Context> Bank<C> {
-    fn prefix_from_address(&self, token_address: &C::Address) -> sov_state::Prefix {
-        sov_state::Prefix::new(token_address.as_ref().to_vec())
-    }
+pub(crate) fn prefix_from_address<C: sov_modules_api::Context>(
+    token_address: &C::Address,
+) -> sov_state::Prefix {
+    sov_state::Prefix::new(token_address.as_ref().to_vec())
 }

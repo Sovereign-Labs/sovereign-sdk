@@ -14,6 +14,16 @@ use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
+pub struct TokenConfig<C: sov_modules_api::Context> {
+    token_name: String,
+    address_and_balances: Vec<(C::Address, u64)>,
+}
+
+/// Initial configuration for Bank module.
+pub struct BankConfig<C: sov_modules_api::Context> {
+    pub tokens: Vec<TokenConfig<C>>,
+}
+
 /// The Bank module manages user balances. It provides functionality for:
 /// - Token creation.
 /// - Token transfers.
@@ -32,7 +42,7 @@ pub struct Bank<C: sov_modules_api::Context> {
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
     type Context = C;
 
-    type Config = ();
+    type Config = BankConfig<C>;
 
     type CallMessage = call::CallMessage<C>;
 
@@ -40,10 +50,10 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
 
     fn genesis(
         &self,
-        _config: &Self::Config,
+        config: &Self::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(), Error> {
-        Ok(self.init_module(working_set)?)
+        Ok(self.init_module(config, working_set)?)
     }
 
     fn call(
