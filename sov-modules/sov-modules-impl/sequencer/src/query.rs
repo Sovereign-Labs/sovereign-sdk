@@ -10,7 +10,7 @@ pub enum QueryMessage {
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Eq, PartialEq)]
 pub struct SequencerAndBalanceResponse {
-    // TODO: Add address after: https://github.com/Sovereign-Labs/sovereign/pull/166 is merged
+    // TODO: https://github.com/Sovereign-Labs/sovereign/issues/173
     // address: Option<C::Address>,
     pub amount: Option<u64>,
 }
@@ -20,7 +20,7 @@ impl<C: sov_modules_api::Context> Sequencer<C> {
         &self,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> SequencerAndBalanceResponse {
-        // TODO add seq address
+        // TODO: https://github.com/Sovereign-Labs/sovereign/issues/173
         SequencerAndBalanceResponse {
             amount: self.get_seq_and_balance(working_set).map(|res| res.1),
         }

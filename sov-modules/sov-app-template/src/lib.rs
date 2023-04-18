@@ -113,7 +113,7 @@ where
             .enter_apply_batch(sequencer, &mut batch_workspace)
             .is_err()
         {
-            // TODO: Add logging:
+            // TODO: Enable it after: https://github.com/Sovereign-Labs/sovereign/issues/174
             //return Ok(Vec::default());
         }
 
@@ -174,7 +174,7 @@ where
             .exit_apply_batch(0, &mut batch_workspace)
             .is_err()
         {
-            // TODO handle error:
+            // TODO handle error: https://github.com/Sovereign-Labs/sovereign/issues/174
         }
 
         self.working_set = Some(batch_workspace);
