@@ -19,7 +19,6 @@ thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"]}
 hex = { workspace = true }
 
-
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]

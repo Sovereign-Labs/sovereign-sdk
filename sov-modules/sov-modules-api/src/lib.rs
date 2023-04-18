@@ -8,10 +8,13 @@ mod encode;
 mod error;
 mod prefix;
 mod response;
+mod bech32;
+mod tests;
 
 pub use dispatch::{DispatchCall, DispatchQuery, Genesis};
 pub use error::Error;
 pub use jmt::SimpleHasher as Hasher;
+pub use crate::bech32::AddressBech32;
 
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
@@ -24,7 +27,7 @@ use sovereign_sdk::{
 
 pub use sovereign_sdk::core::traits::AddressTrait;
 
-use std::fmt::Debug;
+use std::fmt::{Debug, Display, self};
 
 use thiserror::Error;
 
@@ -58,6 +61,12 @@ impl<'a> TryFrom<&'a [u8]> for Address {
 impl From<[u8; 32]> for Address {
     fn from(addr: [u8; 32]) -> Self {
         Self { addr }
+    }
+}
+
+impl Display for Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", AddressBech32::from(self))
     }
 }
 

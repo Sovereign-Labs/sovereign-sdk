@@ -1,11 +1,11 @@
 use crate::{
     call, hooks,
-    query::{self, QueryMessage},
+    query::{self, QueryMessage, Response},
     AccountConfig, Accounts,
 };
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey},
-    Context, Module, ModuleInfo, PublicKey, Spec,
+    Context, Module, ModuleInfo, PublicKey, Spec, AddressBech32,
 };
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -40,7 +40,7 @@ fn test_config_account() {
     assert_eq!(
         query_response,
         query::Response::AccountExists {
-            addr: init_pub_key_addr.as_ref().to_vec(),
+            addr: AddressBech32::from(&init_pub_key_addr),
             nonce: 0
         }
     )
@@ -72,7 +72,7 @@ fn test_update_account() {
         assert_eq!(
             query_response,
             query::Response::AccountExists {
-                addr: sender_addr.as_ref().to_vec(),
+                addr: AddressBech32::try_from(sender_addr.as_ref()).unwrap(),
                 nonce: 0
             }
         )
@@ -111,7 +111,7 @@ fn test_update_account() {
         assert_eq!(
             query_response,
             query::Response::AccountExists {
-                addr: sender_addr.as_ref().to_vec(),
+                addr: AddressBech32::try_from(sender_addr.as_ref()).unwrap(),
                 nonce: 0
             }
         )
@@ -175,4 +175,43 @@ fn test_get_acc_after_pub_key_update() {
         .get_or_create_default_account(new_pub_key, native_working_set)
         .unwrap();
     assert_eq!(acc.addr, sender_1_addr)
+}
+
+#[test]
+fn test_response_serialization() {
+    let addr: Vec<u8> = (1..=32).collect();
+    let nonce = 123456789;
+    let response = Response::AccountExists { addr: AddressBech32::try_from(addr.as_slice()).unwrap(), nonce };
+
+    let json = serde_json::to_string(&response).unwrap();
+    assert_eq!(
+        json,
+        r#"{"AccountExists":{"addr":"sov1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5z5tpwxqergd3c8g7rusq4vrkje","nonce":123456789}}"#
+    );
+}
+
+#[test]
+fn test_response_deserialization() {
+    let json = r#"{"AccountExists":{"addr":"sov1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5z5tpwxqergd3c8g7rusq4vrkje","nonce":123456789}}"#;
+    let response: Response = serde_json::from_str(json).unwrap();
+
+    let expected_addr: Vec<u8> = (1..=32).collect();
+    let expected_response = Response::AccountExists {
+        addr: AddressBech32::try_from(expected_addr.as_slice()).unwrap(),
+        nonce: 123456789,
+    };
+
+    assert_eq!(response, expected_response);
+}
+
+#[test]
+fn test_response_deserialization_on_wrong_hrp() {
+    let json = r#"{"AccountExists":{"addr":"hax1qypqx68ju0l","nonce":123456789}}"#;
+    let response: Result<Response, serde_json::Error> = serde_json::from_str(json);
+    match response {
+        Ok(response) => assert!(false, "{}", format!("Expected error, got {:?}", response)),
+        Err(err) => {
+            assert_eq!(err.to_string(), "Wrong HRP: hax at line 1 column 42");
+        }
+    }
 }
