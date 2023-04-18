@@ -1,12 +1,13 @@
 mod genesis;
 pub mod hooks;
+pub mod query;
 #[cfg(test)]
 mod tests;
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::{StateValue, WorkingSet};
 
-/// Initial configuration for Sequencer module.
+/// Initial configuration for the Sequencer module.
 pub struct SequencerConfig<C: sov_modules_api::Context> {
     pub seq_rollup_address: C::Address,
     pub seq_da_address: Vec<u8>,
@@ -42,6 +43,8 @@ pub struct Sequencer<C: sov_modules_api::Context> {
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Sequencer<C> {
     type Context = C;
 
+    type QueryMessage = query::QueryMessage;
+
     type Config = SequencerConfig<C>;
 
     fn genesis(
@@ -52,7 +55,19 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Sequencer<C> {
         Ok(self.init_module(config, working_set)?)
     }
 
-    // Questions:
-    // 1. There is no need to handle external calls?
-    // 2. What about queries, the sequencer balance can be already queried via `Bank`
+    #[cfg(feature = "native")]
+    fn query(
+        &self,
+        msg: Self::QueryMessage,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> sov_modules_api::QueryResponse {
+        match msg {
+            query::QueryMessage::GetSequencerAddressAndBalance => {
+                let response =
+                    serde_json::to_vec(&self.sequencer_address_and_balance(working_set)).unwrap();
+
+                sov_modules_api::QueryResponse { response }
+            }
+        }
+    }
 }

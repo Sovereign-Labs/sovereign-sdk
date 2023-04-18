@@ -3,11 +3,14 @@ use sov_modules_api::{Module, ModuleInfo, PublicKey, Spec};
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::hooks::Hooks;
-use crate::{hooks, Sequencer, SequencerConfig};
+use crate::query;
+use crate::{Sequencer, SequencerConfig};
 
 type C = MockContext;
 
 const SEQUENCER_DA_ADDRESS: [u8; 32] = [0; 32];
+const INITIAL_BALANCE: u64 = 201;
+const LOCKED_AMOUNT: u64 = 200;
 
 struct TestSequencer {
     bank: bank::Bank<C>,
@@ -25,8 +28,14 @@ impl TestSequencer {
             .genesis(&self.sequencer_config, working_set)
             .unwrap();
     }
-    fn query_balance_via_sequencer(&self) {
-        todo!()
+    fn query_balance_via_sequencer(
+        &self,
+        working_set: &mut WorkingSet<<C as Spec>::Storage>,
+    ) -> query::SequencerAndBalanceResponse {
+        let query = query::QueryMessage::GetSequencerAddressAndBalance;
+        let resp = self.sequencer.query(query, working_set);
+
+        serde_json::from_slice(&resp.response).unwrap()
     }
 
     fn query_balance_via_bank(
@@ -49,7 +58,7 @@ fn create_bank_config() -> (bank::BankConfig<C>, <C as Spec>::Address) {
 
     let token_config = bank::TokenConfig {
         token_name: "InitialToken".to_owned(),
-        address_and_balances: vec![(seq_address.clone(), 201)],
+        address_and_balances: vec![(seq_address.clone(), INITIAL_BALANCE)],
     };
 
     (
@@ -68,7 +77,7 @@ fn create_sequencer_config(
         seq_rollup_address,
         seq_da_address: SEQUENCER_DA_ADDRESS.to_vec(),
         coins_to_lock: bank::Coins {
-            amount: 200,
+            amount: LOCKED_AMOUNT,
             token_address,
         },
     }
@@ -108,17 +117,32 @@ fn test_sequencer() {
         hooks.next_sequencer(working_set).unwrap()
     );
 
-    let x = test_sequencer.query_balance_via_bank(working_set);
-    println!(" {:?}", x.amount);
-    hooks.lock(working_set).unwrap();
+    {
+        let resp = test_sequencer.query_balance_via_bank(working_set);
+        assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
 
-    let x = test_sequencer.query_balance_via_bank(working_set);
-    println!(" {:?}", x.amount);
-    // TODO Query balance via seq
+        let resp = test_sequencer.query_balance_via_sequencer(working_set);
+        assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
+    }
 
-    hooks.reward(0, working_set).unwrap();
-    let x = test_sequencer.query_balance_via_bank(working_set);
-    println!(" {:?}", x.amount);
+    // Lock
+    {
+        hooks.lock(working_set).unwrap();
 
-    // TODO Query balance via seq
+        let resp = test_sequencer.query_balance_via_bank(working_set);
+        assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, resp.amount.unwrap());
+
+        let resp = test_sequencer.query_balance_via_sequencer(working_set);
+        assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, resp.amount.unwrap());
+    }
+
+    // Reward
+    {
+        hooks.reward(0, working_set).unwrap();
+        let resp = test_sequencer.query_balance_via_bank(working_set);
+        assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
+
+        let resp = test_sequencer.query_balance_via_sequencer(working_set);
+        assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
+    }
 }
