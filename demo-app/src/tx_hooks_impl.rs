@@ -72,16 +72,13 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
         sequencer: &[u8],
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> Result<()> {
-        // TODO: Handle errors
         match self.sequencer_hooks.next_sequencer(working_set) {
             Ok(next_sequencer) => {
                 if next_sequencer != sequencer {
-                    // TODO: Return an error, should we slash in this case?
-                    todo!()
+                    anyhow::bail!("Invalid next sequencer.")
                 }
             }
-            // TODO: return an error if sequencer doesn't exist
-            Err(_) => todo!(),
+            Err(_) => anyhow::bail!("Sequencer not registered."),
         }
 
         self.sequencer_hooks.lock(working_set)

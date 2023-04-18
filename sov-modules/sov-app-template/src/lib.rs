@@ -49,10 +49,7 @@ where
 
     fn revert_and_slash(&mut self, batch_workspace: WorkingSet<C::Storage>) {
         // Revert all the changes (the sequencer funds are no longer locked)
-        let batch_workspace = batch_workspace.revert();
-
-        // Create a new batch_workspace
-        let mut batch_workspace = batch_workspace.to_revertable();
+        let mut batch_workspace = batch_workspace.revert();
 
         // Locks funds again, we know there are enough coins to lock.
         self.tx_hooks
@@ -111,13 +108,13 @@ where
         let mut batch_workspace = WorkingSet::new(self.current_storage.clone());
         batch_workspace = batch_workspace.to_revertable();
 
-        // TODO: Error handling.
-        match self
+        if self
             .tx_hooks
             .enter_apply_batch(sequencer, &mut batch_workspace)
+            .is_err()
         {
-            Ok(_) => {}
-            Err(_) => todo!(),
+            // TODO: Add logging:
+            //return Ok(Vec::default());
         }
 
         let mut events = Vec::new();
@@ -140,7 +137,6 @@ where
             let verified_tx = match self.tx_hooks.pre_dispatch_tx_hook(tx, &mut batch_workspace) {
                 Ok(verified_tx) => verified_tx,
                 Err(_) => {
-                    // TODO: should we revert here? // pre_dispatch_tx_hook changes nonces
                     self.revert_and_slash(batch_workspace);
                     return Err(ConsensusSetUpdate::slashing(sequencer));
                 }
@@ -172,12 +168,14 @@ where
             }
         }
 
-        // TODO:
-        // - `reward_sequencer` shouldn't fail so unwrapping here is ok.
-        // - calculate the amount based of gas and fees
-        self.tx_hooks
+        // TODO: calculate the amount based of gas and fees
+        if self
+            .tx_hooks
             .exit_apply_batch(0, &mut batch_workspace)
-            .unwrap();
+            .is_err()
+        {
+            // TODO handle error:
+        }
 
         self.working_set = Some(batch_workspace);
 
@@ -198,12 +196,6 @@ where
         Self::StateRoot,
         Vec<sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>>,
     ) {
-        // TODO (discussion) possible alternative design for slashing sequencer:
-        // 1. When `apply_batch` batch encounters an error it early returns (it already works this way)
-        // 2. Save the faulty sequencer address in `AppTemplate`
-        // 3. Slash the sequencer here in `end_slot` (lock the coins in working_set and never unlock them)
-        // This way we won't need `revert_and_slash` anymore.
-
         let (cache_log, witness) = self.working_set.take().unwrap().freeze();
         let root_hash = self
             .current_storage
