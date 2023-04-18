@@ -1,7 +1,6 @@
-use std::{str::FromStr, fmt::{Display, self}};
+use std::{str::FromStr, fmt};
 use bech32::{ToBase32, FromBase32, Error};
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
+use derive_more::{Into, Display};
 use crate::Address;
 
 pub fn vec_to_bech32(vec: &[u8], hrp: &str) -> Result<String, Error> {        
@@ -18,8 +17,11 @@ pub fn bech32_to_vec(bech32_addr: &str) -> Result<(String, Vec<u8>), Error> {
 
 const HRP: &str = "sov";
 
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Eq)]
-pub struct AddressBech32{    
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, serde::Serialize, serde::Deserialize, Debug, PartialEq, Clone, Eq, Into, Display)]
+#[serde(try_from = "String")]
+#[serde(into = "String")]
+#[display(fmt = "{}", "value")]
+pub struct AddressBech32 {    
     value: String
 }
 
@@ -39,6 +41,14 @@ impl From<&Address> for AddressBech32 {
     fn from(addr: &Address) -> Self {
         let string = vec_to_bech32(&addr.addr, HRP).unwrap();
         AddressBech32{ value: string }
+    }    
+}
+
+impl TryFrom<String> for AddressBech32 {
+    type Error = Bech32ParseError;
+
+    fn try_from(addr: String) -> Result<Self, Bech32ParseError> {
+        AddressBech32::from_str(&addr)
     }    
 }
 
@@ -76,31 +86,5 @@ impl FromStr for AddressBech32 {
         Ok(AddressBech32 {
             value: s.to_string(),
         })        
-    }
-}
-
-impl Display for AddressBech32 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.value)
-    }
-}
-
-impl<'de> Deserialize<'de> for AddressBech32 {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let s = String::deserialize(deserializer)?;
-        let value = AddressBech32::from_str(&s).map_err(serde::de::Error::custom)?;
-        Ok(value)
-    }
-}
-
-impl Serialize for AddressBech32 {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        serializer.serialize_str(&self.value)
     }
 }

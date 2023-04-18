@@ -13,6 +13,7 @@ thiserror = { workspace = true }
 jmt = { workspace = true }
 sha2 = { workspace = true }
 bech32 = { workspace = true }
+derive_more = { workspace = true }
 
 [features]
 mocks = ["sov-state/mocks"]

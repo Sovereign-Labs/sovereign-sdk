@@ -9,6 +9,7 @@ mod error;
 mod prefix;
 mod response;
 mod bech32;
+mod tests;
 
 pub use dispatch::{DispatchCall, DispatchQuery, Genesis};
 pub use error::Error;
