@@ -59,15 +59,14 @@ impl<C: sov_modules_api::Context> Bank<C> {
         Ok(CallResponse::default())
     }
 
-    pub(crate) fn transfer(
+    pub fn transfer(
         &self,
         to: C::Address,
         coins: Coins<C::Address>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        token.transfer(context.sender(), &to, coins.amount, working_set)
+        self.transfer_from(context.sender(), &to, coins, working_set)
     }
 
     pub(crate) fn burn(
@@ -83,6 +82,19 @@ impl<C: sov_modules_api::Context> Bank<C> {
             coins.amount,
             working_set,
         )
+    }
+}
+
+impl<C: sov_modules_api::Context> Bank<C> {
+    pub fn transfer_from(
+        &self,
+        from: &C::Address,
+        to: &C::Address,
+        coins: Coins<C::Address>,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<CallResponse> {
+        let token = self.tokens.get_or_err(&coins.token_address, working_set)?;
+        token.transfer(from, to, coins.amount, working_set)
     }
 }
 

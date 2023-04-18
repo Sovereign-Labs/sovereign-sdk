@@ -1,7 +1,7 @@
 mod call;
 mod create_token;
-mod genesis;
-mod query;
+pub mod genesis;
+pub mod query;
 #[cfg(test)]
 mod tests;
 mod token;
@@ -15,8 +15,8 @@ use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
 pub struct TokenConfig<C: sov_modules_api::Context> {
-    token_name: String,
-    address_and_balances: Vec<(C::Address, u64)>,
+    pub token_name: String,
+    pub address_and_balances: Vec<(C::Address, u64)>,
 }
 
 /// Initial configuration for Bank module.

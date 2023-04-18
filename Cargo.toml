@@ -12,6 +12,7 @@ members = [
 	"sov-modules/sov-modules-api",
 	"sov-modules/sov-modules-impl/accounts",
 	"sov-modules/sov-modules-impl/bank",
+	"sov-modules/sov-modules-impl/sequencer",
 	"sov-modules/sov-modules-impl/examples/value-setter",
 	"sov-modules/sov-modules-impl/examples/election",
 	"sov-modules/sov-modules-impl/integration-tests",
@@ -36,6 +37,7 @@ sov-app-template = { path = "sov-modules/sov-app-template" }
 election = { path = "sov-modules/sov-modules-impl/examples/election" }
 value-setter = { path = "sov-modules/sov-modules-impl/examples/value-setter" }
 accounts = { path = "sov-modules/sov-modules-impl/accounts" }
+sequencer = { path = "sov-modules/sov-modules-impl/sequencer" }
 bank = { path = "sov-modules/sov-modules-impl/bank" }
 schemadb = {path = "db/schemadb"}
 sovereign-db = {path = "db/sovereign-db"}

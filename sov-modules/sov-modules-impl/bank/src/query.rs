@@ -31,10 +31,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> BalanceResponse {
         BalanceResponse {
-            amount: self
-                .tokens
-                .get(&token_address, working_set)
-                .and_then(|token| token.balances.get(&user_address, working_set)),
+            amount: self.get_balance_of(user_address, token_address, working_set),
         }
     }
 
@@ -49,5 +46,18 @@ impl<C: sov_modules_api::Context> Bank<C> {
                 .get(&token_address, working_set)
                 .map(|token| token.total_supply),
         }
+    }
+}
+
+impl<C: sov_modules_api::Context> Bank<C> {
+    pub fn get_balance_of(
+        &self,
+        user_address: C::Address,
+        token_address: C::Address,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Option<u64> {
+        self.tokens
+            .get(&token_address, working_set)
+            .and_then(|token| token.balances.get(&user_address, working_set))
     }
 }
