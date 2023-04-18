@@ -1,7 +1,7 @@
 use bytes::Buf;
 
 use crate::{
-    core::traits::{BlockheaderTrait, CanonicalHash},
+    core::traits::{BlockHeaderTrait, CanonicalHash},
     da::{BlobTransactionTrait, DaLayerTrait},
     serial::DecodeBorrowed,
     state_machine::env,
@@ -20,7 +20,7 @@ pub struct Config<DaLayer: DaLayerTrait, App: StateTransitionFunction> {
     /// The hash of the DA block which is considered "genesis" for this blockchain.
     /// Note that this block is *not* necessarily the genesis block of the DA layer. Rather,
     /// it's the hash of the first DA block which is allowed to contain rollup blocks.
-    pub da_hash_at_rollup_genesis: DaLayer::Slothash,
+    pub da_hash_at_rollup_genesis: DaLayer::SlotHash,
     /// The height after *rollup* genesis at which the chain will start accepting transactions.
     ///
     /// This setting is to aid in setting of the genesis block. We have a period of blocks
@@ -72,7 +72,7 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
 
         let (prev_header, code_commitment) = match prev_proof {
             RecursiveProofInput::Base(purported_genesis) => {
-                assert!(purported_genesis.da_blockhash == DaLayer::RELATIVE_GENESIS);
+                assert!(purported_genesis.da_block_hash == DaLayer::RELATIVE_GENESIS);
                 // TODO! more checks
                 (purported_genesis, None)
             }
@@ -86,7 +86,7 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
             }
         };
         let current_da_header: DaLayer::BlockHeader = env::read_unchecked();
-        assert_eq!(&prev_header.da_blockhash, current_da_header.prev_hash());
+        assert_eq!(&prev_header.da_block_hash, current_da_header.prev_hash());
 
         let relevant_txs = env::read_unchecked();
         let tx_witness = env::read_unchecked();
@@ -150,7 +150,7 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
         current_sequencers.finalize();
 
         let header = RollupHeader {
-            da_blockhash: current_da_header.hash(),
+            da_block_hash: current_da_header.hash(),
             sequencers_root: current_sequencers,
             provers_root: current_provers,
             app_root: app_hash,
