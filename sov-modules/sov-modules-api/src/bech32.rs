@@ -1,9 +1,9 @@
-use std::str::FromStr;
-use bech32::{ToBase32, FromBase32, Error};
-use derive_more::{Into, Display};
 use crate::Address;
+use bech32::{Error, FromBase32, ToBase32};
+use derive_more::{Display, Into};
+use std::str::FromStr;
 
-pub fn vec_to_bech32(vec: &[u8], hrp: &str) -> Result<String, Error> {        
+pub fn vec_to_bech32(vec: &[u8], hrp: &str) -> Result<String, Error> {
     let data = vec.to_base32();
     let bech32_addr = bech32::encode(hrp, data, bech32::Variant::Bech32)?;
     Ok(bech32_addr.to_string())
@@ -17,12 +17,23 @@ pub fn bech32_to_vec(bech32_addr: &str) -> Result<(String, Vec<u8>), Error> {
 
 const HRP: &str = "sov";
 
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, serde::Serialize, serde::Deserialize, Debug, PartialEq, Clone, Eq, Into, Display)]
+#[derive(
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    serde::Serialize,
+    serde::Deserialize,
+    Debug,
+    PartialEq,
+    Clone,
+    Eq,
+    Into,
+    Display,
+)]
 #[serde(try_from = "String")]
 #[serde(into = "String")]
 #[display(fmt = "{}", "value")]
-pub struct AddressBech32 {    
-    value: String
+pub struct AddressBech32 {
+    value: String,
 }
 
 impl TryFrom<&[u8]> for AddressBech32 {
@@ -33,19 +44,26 @@ impl TryFrom<&[u8]> for AddressBech32 {
             return Err(bech32::Error::InvalidLength);
         }
         let string = vec_to_bech32(addr, HRP)?;
-        Ok(AddressBech32{ value: string })
-    }    
+        Ok(AddressBech32 { value: string })
+    }
 }
 
 impl From<&Address> for AddressBech32 {
     fn from(addr: &Address) -> Self {
         let string = vec_to_bech32(&addr.addr, HRP).unwrap();
-        AddressBech32{ value: string }
-    }    
+        AddressBech32 { value: string }
+    }
+}
+
+impl From<Address> for AddressBech32 {
+    fn from(addr: Address) -> Self {
+        let string = vec_to_bech32(&addr.addr, HRP).unwrap();
+        AddressBech32 { value: string }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
-pub enum Bech32ParseError {   
+pub enum Bech32ParseError {
     #[error("Bech32 error: {0}")]
     Bech32(#[from] bech32::Error),
     #[error("Wrong HRP: {0}")]
@@ -57,7 +75,7 @@ impl TryFrom<String> for AddressBech32 {
 
     fn try_from(addr: String) -> Result<Self, Bech32ParseError> {
         AddressBech32::from_str(&addr)
-    }    
+    }
 }
 
 impl FromStr for AddressBech32 {
@@ -66,12 +84,12 @@ impl FromStr for AddressBech32 {
     fn from_str(s: &str) -> Result<Self, Bech32ParseError> {
         let (hrp, _) = bech32_to_vec(s)?;
 
-        if HRP != hrp {            
-            return Err(Bech32ParseError::WrongHPR(hrp))
+        if HRP != hrp {
+            return Err(Bech32ParseError::WrongHPR(hrp));
         }
 
         Ok(AddressBech32 {
             value: s.to_string(),
-        })        
+        })
     }
 }

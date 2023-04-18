@@ -98,7 +98,11 @@ pub trait PublicKey {
 
 /// Spec contains types common for all modules.
 pub trait Spec {
-    type Address: AddressTrait + borsh::BorshDeserialize + borsh::BorshSerialize + From<[u8; 32]>;
+    type Address: AddressTrait
+        + borsh::BorshDeserialize
+        + borsh::BorshSerialize
+        + From<[u8; 32]>
+        + Into<AddressBech32>;
 
     type Storage: Storage + Clone;
 

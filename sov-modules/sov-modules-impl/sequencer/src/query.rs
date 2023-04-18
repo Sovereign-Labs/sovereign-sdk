@@ -1,3 +1,4 @@
+use sov_modules_api::AddressBech32;
 use sov_state::WorkingSet;
 
 use crate::Sequencer;
@@ -9,10 +10,14 @@ pub enum QueryMessage {
 }
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, Eq, PartialEq)]
+pub struct Data {
+    pub address: AddressBech32,
+    pub balance: u64,
+}
+
+#[derive(serde::Deserialize, serde::Serialize, Debug, Eq, PartialEq)]
 pub struct SequencerAndBalanceResponse {
-    // TODO: https://github.com/Sovereign-Labs/sovereign/issues/173
-    // address: Option<C::Address>,
-    pub amount: Option<u64>,
+    pub data: Option<Data>,
 }
 
 impl<C: sov_modules_api::Context> Sequencer<C> {
@@ -20,24 +25,23 @@ impl<C: sov_modules_api::Context> Sequencer<C> {
         &self,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> SequencerAndBalanceResponse {
-        // TODO: https://github.com/Sovereign-Labs/sovereign/issues/173
         SequencerAndBalanceResponse {
-            amount: self.get_seq_and_balance(working_set).map(|res| res.1),
+            data: self.get_seq_and_balance(working_set),
         }
     }
 }
 
 impl<C: sov_modules_api::Context> Sequencer<C> {
-    fn get_seq_and_balance(
-        &self,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<(C::Address, u64)> {
+    fn get_seq_and_balance(&self, working_set: &mut WorkingSet<C::Storage>) -> Option<Data> {
         let seq_address = self.seq_rollup_address.get(working_set)?;
         let coins = self.coins_to_lock.get(working_set)?;
         let balance =
             self.bank
                 .get_balance_of(seq_address.clone(), coins.token_address, working_set)?;
 
-        Some((seq_address, balance))
+        Some(Data {
+            address: seq_address.into(),
+            balance,
+        })
     }
 }
