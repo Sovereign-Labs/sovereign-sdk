@@ -70,7 +70,7 @@ in this repository.
 
 ### RPC
 
-The node will provide a standardized RPC, which aims to be compatible with Coinbase Rosetta. Specification to be developed.
+The node will provide a standardized RPC, which aims to be compatible with [Coinbase Rosetta](https://www.rosetta-api.org/docs/welcome.html). Specification to be developed.
 
 ### P2P Network
 
@@ -120,7 +120,7 @@ other in order to communicate. These bridges are typically expensive, so chains 
 light client bridges. However, light-client bridges between two established chains are very secure - as secure as the
 weaker of the two validator sets involved. The most prominent light-client bridging protocol is IBC.
 
-The Sovereign SDK's bridging protocol is similar to a light-client bridge. It works rougly like this: Every Sovereign
+The Sovereign SDK's bridging protocol is similar to a light-client bridge. It works roughly like this: Every Sovereign
 rollup is already creating zero-knowledge proofs of its own execution. By aggregating these proofs (off-chain),
 we can create a meta-proof which attests to the state of all Sovereign rollups on a given DA layer at a given
 point in time. Then, by verifying this meta-proof on each rollup, we can establish a shared view of the network
@@ -145,7 +145,7 @@ rather than just the validator set signatures.
 ### Vector Commitments
 
 The SDK provides two zk-friendly vector commitments - a
-[simple merkle tree](https://github.com/Sovereign-Labs/nmt-rs/blob/master/src/simple_merkle/tree.rs) for commiting to
+[simple merkle tree](https://github.com/Sovereign-Labs/nmt-rs/blob/master/src/simple_merkle/tree.rs) for committing to
 static data like the arrays of transactions in a block, and a [versioned merkle tree](./overview.md#storage) for storing
 state. Both merkle trees are generic over hash function (and even digest length) to allow customization for different zkVMs
 with different efficiency tradeoffs.
