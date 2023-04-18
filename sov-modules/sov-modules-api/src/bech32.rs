@@ -1,4 +1,4 @@
-use std::{str::FromStr, fmt};
+use std::str::FromStr;
 use bech32::{ToBase32, FromBase32, Error};
 use derive_more::{Into, Display};
 use crate::Address;
@@ -44,33 +44,20 @@ impl From<&Address> for AddressBech32 {
     }    
 }
 
+#[derive(Debug, thiserror::Error)]
+pub enum Bech32ParseError {   
+    #[error("Bech32 error: {0}")]
+    Bech32(#[from] bech32::Error),
+    #[error("Wrong HRP: {0}")]
+    WrongHPR(String),
+}
+
 impl TryFrom<String> for AddressBech32 {
     type Error = Bech32ParseError;
 
     fn try_from(addr: String) -> Result<Self, Bech32ParseError> {
         AddressBech32::from_str(&addr)
     }    
-}
-
-#[derive(Debug)]
-pub enum Bech32ParseError {   
-    Bech32(bech32::Error),
-    WrongHPR(String),
-}
-
-impl From<bech32::Error> for Bech32ParseError {
-    fn from(err: bech32::Error) -> Self {
-        Bech32ParseError::Bech32(err)
-    }
-}
-
-impl fmt::Display for Bech32ParseError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Bech32ParseError::Bech32(err) => write!(f, "Bech32 error: {}", err),
-            Bech32ParseError::WrongHPR(hrp) => write!(f, "Wrong HRP: {}", hrp),
-        }
-    }
 }
 
 impl FromStr for AddressBech32 {
