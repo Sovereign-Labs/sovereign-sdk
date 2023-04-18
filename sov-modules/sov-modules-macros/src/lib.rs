@@ -1,3 +1,4 @@
+#![feature(log_syntax)]
 mod dispatch;
 mod module_info;
 use dispatch::{
@@ -73,6 +74,56 @@ pub fn codec(input: TokenStream) -> TokenStream {
     let codec_macro = MessageCodec::new("MessageCodec");
 
     handle_macro_error(codec_macro.derive_message_codec(input))
+}
+
+/// Derive a `jsonrpsee` implementation for the underlying type. Any code relying on this macro
+/// must take jsonrpsee as a dependency with at least the following features enabled: `["macros", "client-core", "server"]`.
+///
+/// Syntax is identical to `jsonrpsee`'s `#[rpc]` execept that:
+/// 1. `#[rpc]` is renamed to `#[rpc_gen]` to avoid confusion with `jsonrpsee`'s `#[rpc]`
+/// 2. `#[rpc_gen]` is applied to an `impl` block instead of a trait
+/// 3. `#[method]` is renamed to with `#[rpc_method]` to avoid import confusion and clarify the purpose of the annotation
+///
+/// ## Example
+///  ```rust,ignore
+///  struct MyModule {};
+///
+/// #[rpc_gen(client, server, namespace ="myNamespace")]
+/// impl MyModule {
+///    #[rpc_method(name = "myMethod")]
+///     fn my_method(&self, param: u32) -> u32 {
+///          1
+///     }
+/// }
+/// ```
+///
+/// This is exactly equivalent to hand-writing
+/// ```rust,ignore
+/// struct MyModule {};
+///
+/// impl MyModule {
+///     fn my_method(&self, param: u32) -> u32 {
+///         1
+///     }  
+/// }
+///
+/// #[jsonrpsee::rpc(client, server, namespace ="myNamespace")]
+/// pub trait MyModuleRpc {
+///    #[jsonrpsee::method(name = "myMethod")]
+///    fn my_method(&self, param: u32) -> Result<u32, jsonrpsee::Error>;
+///    #[method(name = "health")]
+///    fn health() -> Result<(), jsonrpsee::Error> {
+///        Ok(())
+///    }
+/// }
+/// ```
+#[proc_macro_attribute]
+pub fn rpc_gen(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as syn::ItemImpl);
+    // dbg!( attr);
+    // let attr = parse_macro_input!(attr as syn::AttributeArgs);
+
+    handle_macro_error(dispatch::derive_rpc::derive_rpc(attr.into(), input).map(|ok| ok.into()))
 }
 
 fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> TokenStream {

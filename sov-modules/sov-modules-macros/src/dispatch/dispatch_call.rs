@@ -1,3 +1,6 @@
+use crate::dispatch::common::convert_snake_case_to_upper_camel_case;
+
+use super::common::get_serialization_attrs;
 use super::common::parse_generic_params;
 use super::common::StructDef;
 use super::common::StructFieldExtractor;

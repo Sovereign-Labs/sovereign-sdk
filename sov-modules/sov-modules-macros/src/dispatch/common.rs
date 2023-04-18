@@ -205,3 +205,23 @@ pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStrea
 
     Ok(serialization_attrs)
 }
+
+/// A handy function that gpt4 generated to convert snake-case identifiers to camel-case
+pub(crate) fn convert_snake_case_to_upper_camel_case(ident: &Ident) -> Ident {
+    let snake_case_str = ident.to_string();
+    let mut upper_camel_case_str = String::new();
+    let mut capitalize_next = true;
+
+    for ch in snake_case_str.chars() {
+        if ch == '_' {
+            capitalize_next = true;
+        } else if capitalize_next {
+            upper_camel_case_str.extend(ch.to_uppercase());
+            capitalize_next = false;
+        } else {
+            upper_camel_case_str.push(ch);
+        }
+    }
+
+    format_ident!("{}", upper_camel_case_str)
+}

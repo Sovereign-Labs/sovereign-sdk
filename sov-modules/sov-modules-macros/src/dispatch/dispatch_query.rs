@@ -1,4 +1,9 @@
-use super::common::{parse_generic_params, StructDef, StructFieldExtractor, QUERY, get_serialization_attrs};
+use crate::dispatch::common::convert_snake_case_to_upper_camel_case;
+
+use super::common::{
+    get_serialization_attrs, parse_generic_params, StructDef, StructFieldExtractor, QUERY,
+    QUERY_RESPONSE,
+};
 use syn::DeriveInput;
 
 impl<'a> StructDef<'a> {
