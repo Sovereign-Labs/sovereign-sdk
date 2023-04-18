@@ -3,18 +3,18 @@
 #[cfg(feature = "mocks")]
 pub mod mocks;
 
+mod bech32;
 mod dispatch;
 mod encode;
 mod error;
 mod prefix;
 mod response;
-mod bech32;
 mod tests;
 
+pub use crate::bech32::AddressBech32;
 pub use dispatch::{DispatchCall, DispatchQuery, Genesis};
 pub use error::Error;
 pub use jmt::SimpleHasher as Hasher;
-pub use crate::bech32::AddressBech32;
 
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
@@ -27,7 +27,7 @@ use sovereign_sdk::{
 
 pub use sovereign_sdk::core::traits::AddressTrait;
 
-use std::fmt::{Debug, Display, self};
+use std::fmt::{self, Debug, Display};
 
 use thiserror::Error;
 
@@ -88,7 +88,7 @@ pub trait Signature {
 }
 
 /// A type that can't be instantiated.
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum NonInstantiable {}
 
 /// PublicKey used in the module system.

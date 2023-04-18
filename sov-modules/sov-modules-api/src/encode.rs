@@ -1,27 +1,18 @@
 use std::{convert::Infallible, io::Read};
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use sovereign_sdk::serial::{Decode, DecodeBorrowed, Encode};
 
 use crate::NonInstantiable;
 
-impl<'de> DecodeBorrowed<'de> for NonInstantiable {
-    type Error = Infallible;
-
-    fn decode_from_slice(_: &'de [u8]) -> Result<Self, Self::Error> {
+impl BorshDeserialize for NonInstantiable {
+    fn deserialize_reader<R: Read>(reader: &mut R) -> std::io::Result<Self> {
         unreachable!()
     }
 }
 
-impl Decode for NonInstantiable {
-    type Error = Infallible;
-
-    fn decode<R: Read>(_: &mut R) -> Result<Self, <Self as Decode>::Error> {
-        unreachable!()
-    }
-}
-
-impl Encode for NonInstantiable {
-    fn encode(&self, _: &mut impl std::io::Write) {
+impl BorshSerialize for NonInstantiable {
+    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
         unreachable!()
     }
 }

@@ -27,7 +27,17 @@ fn create_new_demo(path: impl AsRef<Path>) -> DemoApp {
     let storage = ProverStorage::with_path(path).unwrap();
     let tx_hooks = DemoAppTxHooks::new();
     let tx_verifier = DemoAppTxVerifier::new();
-    let genesis_config = GenesisConfig::new((), (), accounts::AccountConfig { pub_keys: vec![] });
+    let genesis_config = GenesisConfig::new(
+        sequencer::SequencerConfig {
+            seq_rollup_address: todo!(),
+            seq_da_address: todo!(),
+            coins_to_lock: todo!(),
+        },
+        bank::BankConfig { tokens: todo!() },
+        (),
+        (),
+        accounts::AccountConfig { pub_keys: vec![] },
+    );
     AppTemplate::new(storage, runtime, tx_verifier, tx_hooks, genesis_config)
 }
 
