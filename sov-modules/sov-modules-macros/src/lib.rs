@@ -119,12 +119,12 @@ pub fn codec(input: TokenStream) -> TokenStream {
 ///    }
 /// }
 /// ```
-/// 
-/// 
+///
+///
 /// This proc macro also generates an implementation trait intended to be used by a Runtime struct. This trait
-/// is named `MyModuleRpcImpl`, and allows a Runtime to be converted into a functional RPC server 
+/// is named `MyModuleRpcImpl`, and allows a Runtime to be converted into a functional RPC server
 /// by simply implementing the two required methods - `get_backing_impl(&self) -> MyModule` and `get_working_set(&self) -> ::sov_modules_api::WorkingSet<C>`
-/// 
+///
 /// ```rust,ignore
 /// pub trait MyModuleRpcImpl<C: sov_modules_api::Context> {
 ///     fn get_backing_impl(&self) -> &TestStruct<C>;

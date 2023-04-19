@@ -1,10 +1,11 @@
 use proc_macro2::Ident;
 use quote::{format_ident, quote};
-use syn::{Attribute, FnArg, ImplItem, Meta, MetaList, Path, PathSegment, Type, Signature, PatType};
 use std::str::FromStr;
+use syn::{
+    Attribute, FnArg, ImplItem, Meta, MetaList, PatType, Path, PathSegment, Signature, Type,
+};
 
-
-/// Retrns an attribute with the name `rpc_method` replaced with `method`, and the index
+/// Returns an attribute with the name `rpc_method` replaced with `method`, and the index
 /// into the argument array where the attribute was found.
 fn get_method_attribute(attributes: &[Attribute]) -> Option<(Attribute, usize)> {
     for (idx, attribute) in attributes.iter().enumerate() {
@@ -27,21 +28,19 @@ fn jsonrpsee_rpc_macro_path() -> Path {
         Ident::new("rpc", proc_macro2::Span::call_site()),
     ];
 
-    let path_segments = segments
-        .into_iter()
-        .map(|ident| PathSegment {
-            ident,
-            arguments: syn::PathArguments::None,
-        });
+    let path_segments = segments.into_iter().map(|ident| PathSegment {
+        ident,
+        arguments: syn::PathArguments::None,
+    });
 
-        Path {
+    Path {
         leading_colon: Some(syn::Token![::](proc_macro2::Span::call_site())),
         segments: syn::punctuated::Punctuated::from_iter(path_segments),
     }
 }
 
 fn find_working_set_argument(sig: &Signature) -> Option<(usize, syn::Type)> {
-    for (idx, input) in sig.inputs.iter().enumerate(){
+    for (idx, input) in sig.inputs.iter().enumerate() {
         if let FnArg::Typed(PatType { ty, .. }) = input {
             if let syn::Type::Reference(syn::TypeReference { elem, .. }) = *ty.clone() {
                 if let syn::Type::Path(syn::TypePath { path, .. }) = elem.as_ref() {
@@ -53,18 +52,16 @@ fn find_working_set_argument(sig: &Signature) -> Option<(usize, syn::Type)> {
                     }
                 }
             }
-        } 
+        }
     }
     None
 }
-
 
 struct RpcImplBlock {
     pub(crate) type_name: Ident,
     pub(crate) methods: Vec<RpcEnabledMethod>,
     pub(crate) working_set_type: Option<Type>,
     pub(crate) generics: syn::Generics,
-
 }
 
 struct RpcEnabledMethod {
@@ -73,57 +70,72 @@ struct RpcEnabledMethod {
     pub(crate) idx_of_working_set_arg: Option<usize>,
 }
 
-
 impl RpcImplBlock {
     /// Builds the trait `_RpcImpl` That will be implemented by the runtime
     fn build_rpc_impl_trait(&self) -> proc_macro2::TokenStream {
         let type_name = &self.type_name;
         let generics = &self.generics;
-        let generics_params = generics.params.iter().map(|param| {
-            if let syn::GenericParam::Type(syn::TypeParam { ident, .. }) = param {
-                return quote! { #ident }
-            }
-            unreachable!("Expected a type parameter")
-        }).collect::<Vec<_>>();
-        
+        let generics_params = generics
+            .params
+            .iter()
+            .map(|param| {
+                if let syn::GenericParam::Type(syn::TypeParam { ident, .. }) = param {
+                    return quote! { #ident };
+                }
+                unreachable!("Expected a type parameter")
+            })
+            .collect::<Vec<_>>();
 
         let mut impl_trait_methods = vec![];
         let mut blanket_impl_methods = vec![];
         let impl_trait_name = format_ident!("{}RpcImpl", self.type_name);
         for method in self.methods.iter() {
             // Extract the names of the formal arguments
-            let arg_values = method.method_signature.inputs.clone().into_iter().map(|item| {
-                if let FnArg::Typed(PatType { pat, .. }) = item {
-                    if let syn::Pat::Ident(syn::PatIdent { ident, .. }) = *pat {
-                        return quote! { #ident }
+            let arg_values = method
+                .method_signature
+                .inputs
+                .clone()
+                .into_iter()
+                .map(|item| {
+                    if let FnArg::Typed(PatType { pat, .. }) = item {
+                        if let syn::Pat::Ident(syn::PatIdent { ident, .. }) = *pat {
+                            return quote! { #ident };
+                        }
+                        unreachable!("Expected a pattern identifier")
+                    } else {
+                        quote! { self }
                     }
-                    unreachable!("Expected a pattern identifier")
-                } else {
-                    quote! { self }
-                }
-            });
-            
+                });
+
             let mut signature = method.method_signature.clone();
-            
+
             let method_name = &method.method_name;
 
-            let impl_trait_method = if let Some(idx) = method.idx_of_working_set_arg  {
+            let impl_trait_method = if let Some(idx) = method.idx_of_working_set_arg {
                 // If necessary, adjust the signature to remove the working set argument and replace it with one generated by the implementer.
                 // Remove the "self" argument as well
-                let pre_working_set_args = arg_values.clone().take(idx).filter(|arg| arg.to_string() != quote! { self }.to_string());
-                let post_working_set_args = arg_values.clone().skip(idx + 1).filter(|arg| arg.to_string() != quote! { self }.to_string());
+                let pre_working_set_args = arg_values
+                    .clone()
+                    .take(idx)
+                    .filter(|arg| arg.to_string() != quote! { self }.to_string());
+                let post_working_set_args = arg_values
+                    .clone()
+                    .skip(idx + 1)
+                    .filter(|arg| arg.to_string() != quote! { self }.to_string());
                 let mut inputs: Vec<syn::FnArg> = signature.inputs.clone().into_iter().collect();
                 inputs.remove(idx);
                 signature.inputs = inputs.into_iter().collect();
-                quote!{
+                quote! {
                     #signature {
                         Self::get_backing_impl(self).#method_name(#(#pre_working_set_args,)* &mut Self::get_working_set(self), #(#post_working_set_args),* )
                     }
                 }
             } else {
                 // Remove the "self" argument, since the method is invoked on `self` using dot notation
-                let arg_values = arg_values.clone().filter(|arg| arg.to_string() != quote! { self }.to_string());
-                quote!{
+                let arg_values = arg_values
+                    .clone()
+                    .filter(|arg| arg.to_string() != quote! { self }.to_string());
+                quote! {
                     #signature {
                         Self::get_backing_impl(self).#method_name(#(#arg_values),* )
                     }
@@ -148,18 +160,17 @@ impl RpcImplBlock {
                     }
                 }
             };
-            
+
             blanket_impl_methods.push(blanket_impl_method);
         }
 
-        
         let rpc_impl_trait = if let Some(ref working_set_type) = self.working_set_type {
             quote! {
                 pub trait #impl_trait_name #generics {
                     fn get_backing_impl(&self) -> & #type_name < #(#generics_params)*, >;
                     // TODO: Extract this method into a trait
                     fn get_working_set(&self) -> #working_set_type;
-    
+
                     #(#impl_trait_methods)*
                 }
             }
@@ -167,7 +178,7 @@ impl RpcImplBlock {
             quote! {
                 pub trait #impl_trait_name #generics {
                     fn get_backing_impl(&self) -> & #type_name < #(#generics_params)*, >;
-    
+
                     #(#impl_trait_methods)*
                 }
             }
@@ -175,12 +186,16 @@ impl RpcImplBlock {
 
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
         let blanket_impl_generics = quote! {
-            #impl_generics 
-        }.to_string();
-        let blanket_impl_generics_without_braces = proc_macro2::TokenStream::from_str(&blanket_impl_generics[1..blanket_impl_generics.len() - 1]).expect("Failed to parse generics without braces as token stream");
+            #impl_generics
+        }
+        .to_string();
+        let blanket_impl_generics_without_braces = proc_macro2::TokenStream::from_str(
+            &blanket_impl_generics[1..blanket_impl_generics.len() - 1],
+        )
+        .expect("Failed to parse generics without braces as token stream");
         let blanket_impl = quote! {
             impl <MacroGeneratedTypeWithLongNameToAvoidCollisions: #impl_trait_name #ty_generics + Send + Sync + 'static,  #blanket_impl_generics_without_braces > TestStructRpcServer #ty_generics for MacroGeneratedTypeWithLongNameToAvoidCollisions #where_clause {
-                #(#blanket_impl_methods)* 
+                #(#blanket_impl_methods)*
             }
         };
 
@@ -196,19 +211,32 @@ fn wrap_in_jsonprsee_result(return_type: &syn::ReturnType) -> syn::ReturnType {
         syn::ReturnType::Default => syn::parse_quote! { ::jsonrpsee::core::RpcResult<()> },
         syn::ReturnType::Type(_, ty) => syn::parse_quote! { ::jsonrpsee::core::RpcResult<#ty> },
     };
-    syn::ReturnType::Type(syn::token::RArrow { spans: [proc_macro2::Span::call_site(); 2] }, Box::new(result_type))
+    syn::ReturnType::Type(
+        syn::token::RArrow {
+            spans: [proc_macro2::Span::call_site(); 2],
+        },
+        Box::new(result_type),
+    )
 }
 
-fn build_rpc_trait(attrs: &proc_macro2::TokenStream, type_name: Ident, mut input: syn::ItemImpl) -> Result<proc_macro2::TokenStream, syn::Error> {
+fn build_rpc_trait(
+    attrs: &proc_macro2::TokenStream,
+    type_name: Ident,
+    mut input: syn::ItemImpl,
+) -> Result<proc_macro2::TokenStream, syn::Error> {
     let intermediate_trait_name = format_ident!("{}Rpc", type_name);
 
     let wrapped_attr_args = quote! {
         (#attrs)
     };
     let rpc_attribute = syn::Attribute {
-        pound_token: syn::token::Pound { spans: [proc_macro2::Span::call_site()] },
+        pound_token: syn::token::Pound {
+            spans: [proc_macro2::Span::call_site()],
+        },
         style: syn::AttrStyle::Outer,
-        bracket_token: syn::token::Bracket { span: proc_macro2::Span::call_site() },
+        bracket_token: syn::token::Bracket {
+            span: proc_macro2::Span::call_site(),
+        },
         path: jsonrpsee_rpc_macro_path(),
         tokens: wrapped_attr_args,
     };
@@ -227,11 +255,12 @@ fn build_rpc_trait(attrs: &proc_macro2::TokenStream, type_name: Ident, mut input
     for item in input.items.into_iter() {
         if let ImplItem::Method(ref method) = item {
             if let Some((attr, idx_of_rpc_attr)) = get_method_attribute(&method.attrs) {
-                let mut intermediate_trait_inputs = method.sig.inputs.clone(); 
+                let mut intermediate_trait_inputs = method.sig.inputs.clone();
                 let working_set_arg = find_working_set_argument(&method.sig);
                 let idx_of_working_set_arg = if let Some((idx, ty)) = working_set_arg {
                     // Remove the working set argument from the intermediate trait signature
-                    let mut inputs: Vec<syn::FnArg> = intermediate_trait_inputs.into_iter().collect();
+                    let mut inputs: Vec<syn::FnArg> =
+                        intermediate_trait_inputs.into_iter().collect();
                     inputs.remove(idx);
                     intermediate_trait_inputs = inputs.into_iter().collect();
 
@@ -241,31 +270,31 @@ fn build_rpc_trait(attrs: &proc_macro2::TokenStream, type_name: Ident, mut input
                 } else {
                     None
                 };
-                rpc_info.methods.push(RpcEnabledMethod{
+                rpc_info.methods.push(RpcEnabledMethod {
                     method_name: method.sig.ident.clone(),
                     method_signature: method.sig.clone(),
-                    idx_of_working_set_arg
+                    idx_of_working_set_arg,
                 });
 
                 // Remove the working set argument from the signature
                 let mut intermediate_signature = method.sig.clone();
                 intermediate_signature.inputs = intermediate_trait_inputs;
-                
-                intermediate_signature.output = wrap_in_jsonprsee_result(&intermediate_signature.output);
-                
-                
+
+                intermediate_signature.output =
+                    wrap_in_jsonprsee_result(&intermediate_signature.output);
+
                 // Build the annotated signature for the intermediate trait
                 let annotated_signature = quote! {
                     #attr
                     #intermediate_signature;
                 };
                 intermediate_trait_items.push(annotated_signature);
-                
+
                 let mut original_method = method.clone();
                 original_method.attrs.remove(idx_of_rpc_attr);
                 simplified_impl_items.push(ImplItem::Method(original_method));
-                continue
-            } 
+                continue;
+            }
         }
         simplified_impl_items.push(item)
     }
@@ -277,7 +306,7 @@ fn build_rpc_trait(attrs: &proc_macro2::TokenStream, type_name: Ident, mut input
     let simplified_impl = quote! {
         #input
     };
-   
+
     let rpc_output = quote! {
         #simplified_impl
 
@@ -302,7 +331,6 @@ pub(crate) fn derive_rpc(
     attrs: proc_macro2::TokenStream,
     input: syn::ItemImpl,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
-
     let type_name = match *input.self_ty {
         syn::Type::Path(ref type_path) => &type_path.path.segments.last().unwrap().ident,
         _ => return Err(syn::Error::new_spanned(input.self_ty, "Invalid type")),
