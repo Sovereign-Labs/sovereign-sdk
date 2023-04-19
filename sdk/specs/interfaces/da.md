@@ -102,14 +102,14 @@ might define "relevant" to mean, "occurring in namespace 'foo'".
 
 * **Arguments:**
 
- | Name          | Type      | Description                              |
- |-----------|--------|------------------------------------------|
- | `blockhash`   | `Blockhash` | The hash of the DA layer block to be parsed |
+ | Name        | Type        | Description                                 |
+ |-------------|-------------|---------------------------------------------|
+ | `blockhash` | `Blockhash` | The hash of the DA layer block to be parsed |
 
 * **Response:**
 
- | Name          | Type                    | Description                              |
- |-------------------------|--------|------------------------------------------|
+ | Name  | Type                        | Description                                                  |
+ |-------|-----------------------------|--------------------------------------------------------------|
  | `txs` | `iterable<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
 
 ### `get_relevant_txs_with_proof`
@@ -122,17 +122,17 @@ showing the completeness of the provided list.
 
 * **Arguments:**
 
- | Name         | Type       | Description                                 |
- |-------------|------------|---------------------------------------------|
- | `blockhash`    | `Blockhash` | The hash of the DA layer block to be parsed |
+ | Name        | Type        | Description                                 |
+ |-------------|-------------|---------------------------------------------|
+ | `blockhash` | `Blockhash` | The hash of the DA layer block to be parsed |
 
 * **Response:**
 
- | Name          | Type                      | Description                              |
- |---------------------------|--------|------------------------------------------|
- | `txs` | `iterable<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
- | `inclusion_proof` | `InclusionMultiproof`     | A witness showing that each transaction was included in the DA layer block |
- | `completeness_proof` | `CompletenessProof`         | A witness showing that the returned list of transactions is complete |
+ | Name                 | Type                        | Description                                                                |
+ |----------------------|-----------------------------|----------------------------------------------------------------------------|
+ | `txs`                | `iterable<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders               |
+ | `inclusion_proof`    | `InclusionMultiproof`       | A witness showing that each transaction was included in the DA layer block |
+ | `completeness_proof` | `CompletenessProof`         | A witness showing that the returned list of transactions is complete       |
 
 ### `verify_relevant_tx_list`
 
@@ -144,18 +144,18 @@ and is complete.
 
 * **Arguments:**
 
- | Name          | Type                     | Description                              |
- |--------------------------|--------|------------------------------------------|
- | `header` | `Blockheader`            | The header of the DA layer block including the relevant transactions |
- | `txs` | `iterable<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders |
- | `inclusion_proof` | `InclusionMultiproof`     | A witness showing that each transaction was included in the DA layer block |
- | `completeness_proof` | `CompletenessProof`        | A witness showing that the returned list of transactions is complete |
+ | Name                 | Type                        | Description                                                                |
+ |----------------------|-----------------------------|----------------------------------------------------------------------------|
+ | `header`             | `Blockheader`               | The header of the DA layer block including the relevant transactions       |
+ | `txs`                | `iterable<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders               |
+ | `inclusion_proof`    | `InclusionMultiproof`       | A witness showing that each transaction was included in the DA layer block |
+ | `completeness_proof` | `CompletenessProof`         | A witness showing that the returned list of transactions is complete       |
 
 * **Response:**
 
- | Name          | Type  | Description                              |
- |-------|--------|------------------------------------------|
- | `Ok` | `_`     | No response |
+ | Name  | Type    | Description      |
+ |-------|---------|------------------|
+ | `Ok`  | `_`     | No response      |
  | `Err` | `Error` | An error message |
 
 * Note: This response is a `Result` type - only one of Ok or Err will be populated
@@ -164,9 +164,9 @@ and is complete.
 
 ### `BlobTransaction`
 
-| Name   | Type    | Description                              |
-|--------|---------|------------------------------------------|
-| `sender` | `bytes` | The address which sent this transaction |
+| Name     | Type    | Description                                                            |
+|----------|---------|------------------------------------------------------------------------|
+| `sender` | `bytes` | The address which sent this transaction                                |
 | `data`   | `bytes` | Data intended for rollup. Can be a proof, a transaction list, and etc. |
 
 ### `InclusionMultiproof`
@@ -188,9 +188,9 @@ May be a simple String, an Error code, or anything else.
 
 Must include a `prev_hash` field.
 
-| Name          | Type   | Description                                                               |
-|---------------|--------|---------------------------------------------------------------------------|
-| `prev_hash`     | `Blockhash` | the hash of the previous (L1) block                                       |
+| Name        | Type        | Description                         |
+|-------------|-------------|-------------------------------------|
+| `prev_hash` | `Blockhash` | the hash of the previous (L1) block |
 
 ## Code
 

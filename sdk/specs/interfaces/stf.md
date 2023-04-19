@@ -43,10 +43,10 @@ or is otherwise invalid
 
 * **Response**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | Ok       | BATCH  | A deserialized batch                     |
- | Err       | optional CONSENSUS_UPDATE  | An update to the set of sequencers, potentially slashing the batch's sponsor|
+ | Name | Type                      | Description                                                                  |
+ |------|---------------------------|------------------------------------------------------------------------------|
+ | Ok   | BATCH                     | A deserialized batch                                                         |
+ | Err  | optional CONSENSUS_UPDATE | An update to the set of sequencers, potentially slashing the batch's sponsor |
 
 * Note: This response is a `Result` type - only one of Ok or Err will be populated
 
@@ -67,10 +67,10 @@ or is otherwise invalid
 
 * **Response**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | Ok       | PROOF  | A deserialized proof                     |
- | Err       | optional CONSENSUS_UPDATE  | An update to the set of sequencers, potentially slashing the proof's sponsor|
+ | Name | Type                      | Description                                                                  |
+ |------|---------------------------|------------------------------------------------------------------------------|
+ | Ok   | PROOF                     | A deserialized proof                                                         |
+ | Err  | optional CONSENSUS_UPDATE | An update to the set of sequencers, potentially slashing the proof's sponsor |
 
 * Note: This response is a `Result` type - only one of Ok or Err will be populated
 
@@ -78,7 +78,7 @@ or is otherwise invalid
 
 * **Usage:**
   * This method is called once at the beginning of each rollup batch.
-  It has two purposes: to allow the rollup to perofrm and  needed initialiation before
+  It has two purposes: to allow the rollup to perform and needed initialization before
   processing the block, and to process an optional "misbehavior proof" to allow short-circuiting
   in case the block is invalid. (An example misbehavior proof would be a merkle-proof to a transaction
   with an invalid signature). In case of misbehavior, this method should slash the block's sender.
@@ -86,18 +86,18 @@ or is otherwise invalid
 
 * **Arguments**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | batch   | BATCH  | The batch to be processed |
- | sender   | bytes  | The sender of the DA layer TX, as bytes |
- | misbehavior | optional MISBEHAVIOR_PROOF |
+ | Name        | Type                       | Description                             |
+ |-------------|----------------------------|-----------------------------------------|
+ | batch       | BATCH                      | The batch to be processed               |
+ | sender      | bytes                      | The sender of the DA layer TX, as bytes |
+ | misbehavior | optional MISBEHAVIOR_PROOF | TBD                                     |
 
 * **Response**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | Ok       | _  | no response |
- | Err       | optional CONSENSUS_UPDATE  | An update to the set of sequencers, potentially slashing the batch's sender |
+ | Name | Type                      | Description                                                                 |
+ |------|---------------------------|-----------------------------------------------------------------------------|
+ | Ok   | _                         | no response                                                                 |
+ | Err  | optional CONSENSUS_UPDATE | An update to the set of sequencers, potentially slashing the batch's sender |
 
 * Note: This response is a `Result` type - only one of Ok or Err will be populated
 
