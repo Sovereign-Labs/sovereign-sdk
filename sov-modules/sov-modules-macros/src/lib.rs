@@ -99,10 +99,12 @@ pub fn codec(input: TokenStream) -> TokenStream {
 ///
 /// This is exactly equivalent to hand-writing
 /// ```rust,ignore
-/// struct MyModule {};
+/// struct MyModule<C: Context> {
+/// ...
+/// };
 ///
 /// impl MyModule {
-///     fn my_method(&self, param: u32) -> u32 {
+///     fn my_method(&self, working_set: &mut WorkingSet<C::Storage>, param: u32) -> u32 {
 ///         1
 ///     }  
 /// }
@@ -117,12 +119,24 @@ pub fn codec(input: TokenStream) -> TokenStream {
 ///    }
 /// }
 /// ```
+/// 
+/// 
+/// This proc macro also generates an implementation trait intended to be used by a Runtime struct. This trait
+/// is named `MyModuleRpcImpl`, and allows a Runtime to be converted into a functional RPC server 
+/// by simply implementing the two required methods - `get_backing_impl(&self) -> MyModule` and `get_working_set(&self) -> ::sov_modules_api::WorkingSet<C>`
+/// 
+/// ```rust,ignore
+/// pub trait MyModuleRpcImpl<C: sov_modules_api::Context> {
+///     fn get_backing_impl(&self) -> &TestStruct<C>;
+///     fn get_working_set(&self) -> ::sov_modules_api::WorkingSet<C>;
+///     fn my_method(&self, param: u32) -> u32 {
+///         Self::get_backing_impl(self).my_method(self, &mut Self::get_working_set(self), param)
+///     }
+/// }
+/// ```
 #[proc_macro_attribute]
 pub fn rpc_gen(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as syn::ItemImpl);
-    // dbg!( attr);
-    // let attr = parse_macro_input!(attr as syn::AttributeArgs);
-
     handle_macro_error(dispatch::derive_rpc::derive_rpc(attr.into(), input).map(|ok| ok.into()))
 }
 
