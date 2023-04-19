@@ -81,10 +81,10 @@ where
     type MisbehaviorProof = ();
 
     fn init_chain(&mut self, _params: Self::ChainParams) {
-        let mut working_set = WorkingSet::new(self.current_storage.clone());
+        let working_set = &mut WorkingSet::new(self.current_storage.clone());
 
         self.runtime
-            .genesis(&self.genesis_config, &mut working_set)
+            .genesis(&self.genesis_config, working_set)
             .expect("module initialization must succeed");
 
         let (log, witness) = working_set.freeze();

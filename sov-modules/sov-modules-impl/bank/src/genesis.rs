@@ -1,5 +1,5 @@
 use crate::{token::Token, Bank};
-use anyhow::{bail, Result};
+use anyhow::Result;
 use sov_state::WorkingSet;
 
 pub const SALT: u64 = 0;
@@ -20,9 +20,10 @@ impl<C: sov_modules_api::Context> Bank<C> {
                 working_set,
             )?;
 
-            //     if self.tokens.get(&token_address, working_set).is_some() {
-            //         bail!("Token address already exists");
-            //     }
+            // TODO: https://github.com/Sovereign-Labs/sovereign/issues/179
+            // if self.tokens.get(&token_address, working_set).is_some() {
+            //    bail!("Token address already exists");
+            //}
 
             self.tokens.set(&token_address, token, working_set);
         }

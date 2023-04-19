@@ -24,7 +24,6 @@ type DemoApp =
     AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>, GenesisConfig<C>>;
 
 const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
-
 const LOCKED_AMOUNT: u64 = 200;
 const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
 const TOKEN_NAME: &str = "Token0";
