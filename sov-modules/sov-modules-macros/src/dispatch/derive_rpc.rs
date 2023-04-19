@@ -193,8 +193,9 @@ impl RpcImplBlock {
             &blanket_impl_generics[1..blanket_impl_generics.len() - 1],
         )
         .expect("Failed to parse generics without braces as token stream");
+        let rpc_server_trait_name = format_ident!("{}RpcServer", self.type_name);
         let blanket_impl = quote! {
-            impl <MacroGeneratedTypeWithLongNameToAvoidCollisions: #impl_trait_name #ty_generics + Send + Sync + 'static,  #blanket_impl_generics_without_braces > TestStructRpcServer #ty_generics for MacroGeneratedTypeWithLongNameToAvoidCollisions #where_clause {
+            impl <MacroGeneratedTypeWithLongNameToAvoidCollisions: #impl_trait_name #ty_generics + Send + Sync + 'static,  #blanket_impl_generics_without_braces > #rpc_server_trait_name #ty_generics for MacroGeneratedTypeWithLongNameToAvoidCollisions #where_clause {
                 #(#blanket_impl_methods)*
             }
         };
