@@ -43,8 +43,10 @@ use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 pub(crate) struct Runtime<C: Context> {
     #[allow(unused)]
     sequencer: sequencer::Sequencer<C>,
+
     #[allow(unused)]
     bank: bank::Bank<C>,
+
     #[allow(unused)]
     election: election::Election<C>,
 

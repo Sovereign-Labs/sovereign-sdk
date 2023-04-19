@@ -24,7 +24,7 @@ type DemoApp =
     AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>, GenesisConfig<C>>;
 
 const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
-const INITIAL_BALANCE: u64 = 2001;
+
 const LOCKED_AMOUNT: u64 = 200;
 const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
 const TOKEN_NAME: &str = "Token0";
@@ -43,13 +43,13 @@ fn create_sequencer_config(
     }
 }
 
-fn create_config() -> GenesisConfig<C> {
+fn create_config(initial_sequencer_balance: u64) -> GenesisConfig<C> {
     let pub_key = <C as Spec>::PublicKey::try_from(SEQ_PUB_KEY_STR).unwrap();
     let seq_address = pub_key.to_address::<<C as Spec>::Address>();
 
     let token_config = bank::TokenConfig {
         token_name: TOKEN_NAME.to_owned(),
-        address_and_balances: vec![(seq_address.clone(), INITIAL_BALANCE)],
+        address_and_balances: vec![(seq_address.clone(), initial_sequencer_balance)],
     };
 
     let bank_config = bank::BankConfig {
@@ -73,19 +73,19 @@ fn create_config() -> GenesisConfig<C> {
     )
 }
 
-fn create_new_demo(path: impl AsRef<Path>) -> DemoApp {
+fn create_new_demo(initial_sequencer_balance: u64, path: impl AsRef<Path>) -> DemoApp {
     let runtime = Runtime::new();
     let storage = ProverStorage::with_path(path).unwrap();
     let tx_hooks = DemoAppTxHooks::new();
     let tx_verifier = DemoAppTxVerifier::new();
-    let genesis_config = create_config();
+    let genesis_config = create_config(initial_sequencer_balance);
     AppTemplate::new(storage, runtime, tx_verifier, tx_hooks, genesis_config)
 }
 
 fn main() {
     let path = schemadb::temppath::TempPath::new();
     {
-        let mut demo = create_new_demo(&path);
+        let mut demo = create_new_demo(LOCKED_AMOUNT + 1, &path);
         demo.init_chain(());
         demo.begin_slot();
 
@@ -125,7 +125,7 @@ mod test {
     fn test_demo_values_in_db() {
         let path = schemadb::temppath::TempPath::new();
         {
-            let mut demo = create_new_demo(&path);
+            let mut demo = create_new_demo(LOCKED_AMOUNT + 1, &path);
 
             demo.init_chain(());
             demo.begin_slot();
@@ -161,7 +161,7 @@ mod test {
     #[test]
     fn test_demo_values_in_cache() {
         let path = schemadb::temppath::TempPath::new();
-        let mut demo = create_new_demo(&path);
+        let mut demo = create_new_demo(LOCKED_AMOUNT + 1, &path);
 
         demo.init_chain(());
         demo.begin_slot();
@@ -192,7 +192,7 @@ mod test {
     fn test_demo_values_not_in_db() {
         let path = schemadb::temppath::TempPath::new();
         {
-            let mut demo = create_new_demo(&path);
+            let mut demo = create_new_demo(LOCKED_AMOUNT + 1, &path);
 
             demo.init_chain(());
             demo.begin_slot();
@@ -221,5 +221,25 @@ mod test {
                 storage,
             );
         }
+    }
+
+    #[test]
+    fn test_sequencer_insufficient_funds() {
+        let path = schemadb::temppath::TempPath::new();
+        let mut demo = create_new_demo(LOCKED_AMOUNT - 1, &path);
+
+        demo.init_chain(());
+        demo.begin_slot();
+
+        let txs = simulate_da();
+
+        let err = demo
+            .apply_batch(Batch { txs }, &SEQUENCER_DA_ADDRESS, None)
+            .unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "Error: enter_apply_batch. Insufficient funds"
+        );
     }
 }

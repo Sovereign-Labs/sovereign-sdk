@@ -12,7 +12,7 @@ use sov_state::{Storage, WorkingSet};
 use sovereign_sdk::{
     core::{mocks::MockProof, traits::BatchTrait},
     jmt,
-    stf::{ConsensusSetUpdate, OpaqueAddress, StateTransitionFunction},
+    stf::{OpaqueAddress, StateTransitionFunction},
 };
 
 pub struct AppTemplate<C: Context, V, RT, H, GenesisConfig> {
@@ -102,21 +102,15 @@ where
         batch: Self::Batch,
         sequencer: &[u8],
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
-    ) -> Result<
-        Vec<Vec<sovereign_sdk::stf::Event>>,
-        // Question: Should we return an enum error here? (see TODOs bellow)
-        sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>,
-    > {
+    ) -> anyhow::Result<Vec<Vec<sovereign_sdk::stf::Event>>> {
         let mut batch_workspace = WorkingSet::new(self.current_storage.clone());
         batch_workspace = batch_workspace.to_revertable();
 
-        if self
+        if let Err(e) = self
             .tx_hooks
             .enter_apply_batch(sequencer, &mut batch_workspace)
-            .is_err()
         {
-            // TODO: Enable it after: https://github.com/Sovereign-Labs/sovereign/issues/174
-            return Ok(Vec::default());
+            anyhow::bail!("Error: enter_apply_batch. {}", e)
         }
 
         let mut events = Vec::new();
@@ -127,9 +121,9 @@ where
             .verify_txs_stateless(batch.take_transactions())
         {
             Ok(txs) => txs,
-            Err(_) => {
+            Err(e) => {
                 self.revert_and_slash(batch_workspace);
-                return Err(ConsensusSetUpdate::slashing(sequencer));
+                anyhow::bail!("Stateless verification error: {}", e);
             }
         };
 
@@ -138,9 +132,9 @@ where
             // Run the stateful verification, possibly modifies the state.
             let verified_tx = match self.tx_hooks.pre_dispatch_tx_hook(tx, &mut batch_workspace) {
                 Ok(verified_tx) => verified_tx,
-                Err(_) => {
+                Err(e) => {
                     self.revert_and_slash(batch_workspace);
-                    return Err(ConsensusSetUpdate::slashing(sequencer));
+                    anyhow::bail!("Stateful verification error: {}", e);
                 }
             };
 
@@ -157,17 +151,14 @@ where
                         batch_workspace = batch_workspace.commit();
                     }
                     Err(e) => {
-                        println!("3 {}", e);
-                        // TODO: all the previous "successful" txs will be reverted, is that ok?
                         self.revert_and_slash(batch_workspace);
                         panic!("Demo app txs must succeed but failed with err: {}", e)
                     }
                 }
             } else {
                 // If the serialization is invalid, the sequencer is malicious. Slash them.
-                // TODO all the previous "successful" txs will be reverted, is that ok?
                 self.revert_and_slash(batch_workspace);
-                return Err(ConsensusSetUpdate::slashing(sequencer));
+                anyhow::bail!("Tx decoding error");
             }
         }
 
