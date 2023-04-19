@@ -20,9 +20,9 @@ impl<C: sov_modules_api::Context> Bank<C> {
                 working_set,
             )?;
 
-            if self.tokens.get(&token_address, working_set).is_some() {
-                bail!("Token address already exists");
-            }
+            //     if self.tokens.get(&token_address, working_set).is_some() {
+            //         bail!("Token address already exists");
+            //     }
 
             self.tokens.set(&token_address, token, working_set);
         }

@@ -81,10 +81,12 @@ where
     type MisbehaviorProof = ();
 
     fn init_chain(&mut self, _params: Self::ChainParams) {
-        let working_set = &mut WorkingSet::new(self.current_storage.clone());
+        let mut working_set = WorkingSet::new(self.current_storage.clone());
+
         self.runtime
-            .genesis(&self.genesis_config, working_set)
+            .genesis(&self.genesis_config, &mut working_set)
             .expect("module initialization must succeed");
+
         let (log, witness) = working_set.freeze();
         self.current_storage
             .validate_and_commit(log, &witness)
@@ -114,7 +116,7 @@ where
             .is_err()
         {
             // TODO: Enable it after: https://github.com/Sovereign-Labs/sovereign/issues/174
-            //return Ok(Vec::default());
+            return Ok(Vec::default());
         }
 
         let mut events = Vec::new();
@@ -155,6 +157,7 @@ where
                         batch_workspace = batch_workspace.commit();
                     }
                     Err(e) => {
+                        println!("3 {}", e);
                         // TODO: all the previous "successful" txs will be reverted, is that ok?
                         self.revert_and_slash(batch_workspace);
                         panic!("Demo app txs must succeed but failed with err: {}", e)
@@ -169,13 +172,9 @@ where
         }
 
         // TODO: calculate the amount based of gas and fees
-        if self
-            .tx_hooks
+        self.tx_hooks
             .exit_apply_batch(0, &mut batch_workspace)
-            .is_err()
-        {
-            // TODO handle error: https://github.com/Sovereign-Labs/sovereign/issues/174
-        }
+            .unwrap();
 
         self.working_set = Some(batch_workspace);
 

@@ -10,6 +10,7 @@ impl<C: sov_modules_api::Context> Election<C> {
 
         self.admin.set(admin_pub_key.to_address(), working_set);
         self.is_frozen.set(false, working_set);
+
         Ok(())
     }
 }
