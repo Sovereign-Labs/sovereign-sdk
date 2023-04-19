@@ -241,8 +241,8 @@ fn build_rpc_trait(attrs: &proc_macro2::TokenStream, type_name: Ident, mut input
     let generics_where_clause = &input.generics.where_clause;
 
     // TODO: Get robust detection of the working set type
-    let impl_trait_mpl = quote! {
-        pub trait #impl_trait_name #generics  {
+    let impl_trait_impl = quote! {
+        pub trait #impl_trait_name #generics {
             fn get_backing_impl(&self) -> & #type_name < #(#generics_params)*, >;
             // TODO: Extract this method into a trait
             fn get_working_set(&self) -> ::sov_modules_api::WorkingSet<C>;
@@ -252,15 +252,15 @@ fn build_rpc_trait(attrs: &proc_macro2::TokenStream, type_name: Ident, mut input
     };
 
 
-    println!("impl_trait_impl: {}", impl_trait_mpl.to_string());
+    println!("impl_trait_impl: {}", impl_trait_impl.to_string());
    
     let rpc_output = quote! {
         #reduced_impl
 
-        #impl_trait_mpl
+        #impl_trait_impl
 
         #rpc_attribute
-        pub trait #intermediate_trait_name {
+        pub trait #intermediate_trait_name  #generics {
 
             #(#intermediate_trait_methods)*
 
