@@ -1,8 +1,5 @@
-use crate::dispatch::common::convert_snake_case_to_upper_camel_case;
-
 use super::common::{
     get_serialization_attrs, parse_generic_params, StructDef, StructFieldExtractor, QUERY,
-    QUERY_RESPONSE,
 };
 use syn::DeriveInput;
 

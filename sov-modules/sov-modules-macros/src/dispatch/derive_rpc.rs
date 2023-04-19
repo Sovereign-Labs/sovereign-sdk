@@ -75,9 +75,7 @@ struct RpcEnabledMethod {
 
 
 impl RpcImplBlock {
-
-
-    /// Builds the trait `_RpcImpl` That will be implemented by the runtim
+    /// Builds the trait `_RpcImpl` That will be implemented by the runtime
     fn build_rpc_impl_trait(&self) -> proc_macro2::TokenStream {
         let type_name = &self.type_name;
         let generics = &self.generics;
@@ -176,21 +174,16 @@ impl RpcImplBlock {
         };
 
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-        let mut blanket_impl_generics = quote! {
+        let blanket_impl_generics = quote! {
             #impl_generics 
         }.to_string();
-
         let blanket_impl_generics_without_braces = proc_macro2::TokenStream::from_str(&blanket_impl_generics[1..blanket_impl_generics.len() - 1]).expect("Failed to parse generics without braces as token stream");
-        
         let blanket_impl = quote! {
             impl <MacroGeneratedTypeWithLongNameToAvoidCollisions: #impl_trait_name #ty_generics + Send + Sync + 'static,  #blanket_impl_generics_without_braces > TestStructRpcServer #ty_generics for MacroGeneratedTypeWithLongNameToAvoidCollisions #where_clause {
                 #(#blanket_impl_methods)* 
             }
         };
 
-
-        
         quote! {
             #rpc_impl_trait
             #blanket_impl
