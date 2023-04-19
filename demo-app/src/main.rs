@@ -238,7 +238,7 @@ mod test {
 
         assert_eq!(
             err.to_string(),
-            "Error: enter_apply_batch. Insufficient funds"
+            "Error: The transaction was rejected by the 'enter_apply_batch' hook. Insufficient funds"
         );
     }
 }

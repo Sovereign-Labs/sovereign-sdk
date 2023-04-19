@@ -110,7 +110,10 @@ where
             .tx_hooks
             .enter_apply_batch(sequencer, &mut batch_workspace)
         {
-            anyhow::bail!("Error: enter_apply_batch. {}", e)
+            anyhow::bail!(
+                "Error: The transaction was rejected by the 'enter_apply_batch' hook. {}",
+                e
+            )
         }
 
         let mut events = Vec::new();
@@ -123,7 +126,7 @@ where
             Ok(txs) => txs,
             Err(e) => {
                 self.revert_and_slash(batch_workspace);
-                anyhow::bail!("Stateless verification error: {}", e);
+                anyhow::bail!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}", e);
             }
         };
 
@@ -134,38 +137,39 @@ where
                 Ok(verified_tx) => verified_tx,
                 Err(e) => {
                     self.revert_and_slash(batch_workspace);
-                    anyhow::bail!("Stateful verification error: {}", e);
+                    anyhow::bail!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
                 }
             };
 
-            if let Ok(msg) = RT::decode_call(verified_tx.runtime_message()) {
-                let ctx = C::new(verified_tx.sender().clone());
-                let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
+            match RT::decode_call(verified_tx.runtime_message()) {
+                Ok(msg) => {
+                    let ctx = C::new(verified_tx.sender().clone());
+                    let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
-                self.tx_hooks
-                    .post_dispatch_tx_hook(verified_tx, &mut batch_workspace);
+                    self.tx_hooks
+                        .post_dispatch_tx_hook(verified_tx, &mut batch_workspace);
 
-                match tx_result {
-                    Ok(resp) => {
-                        events.push(resp.events);
-                        batch_workspace = batch_workspace.commit();
-                    }
-                    Err(e) => {
-                        self.revert_and_slash(batch_workspace);
-                        panic!("Demo app txs must succeed but failed with err: {}", e)
+                    match tx_result {
+                        Ok(resp) => {
+                            events.push(resp.events);
+                            batch_workspace = batch_workspace.commit();
+                        }
+                        Err(e) => {
+                            self.revert_and_slash(batch_workspace);
+                            panic!("Demo app txs must succeed but failed with err: {}", e)
+                        }
                     }
                 }
-            } else {
-                // If the serialization is invalid, the sequencer is malicious. Slash them.
-                self.revert_and_slash(batch_workspace);
-                anyhow::bail!("Tx decoding error");
+                Err(e) => {
+                    // If the serialization is invalid, the sequencer is malicious. Slash them.
+                    self.revert_and_slash(batch_workspace);
+                    anyhow::bail!("Tx decoding error: {}", e);
+                }
             }
         }
 
         // TODO: calculate the amount based of gas and fees
-        self.tx_hooks
-            .exit_apply_batch(0, &mut batch_workspace)
-            .unwrap();
+        self.tx_hooks.exit_apply_batch(0, &mut batch_workspace)?;
 
         self.working_set = Some(batch_workspace);
 
