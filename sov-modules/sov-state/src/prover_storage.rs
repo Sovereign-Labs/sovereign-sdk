@@ -80,6 +80,7 @@ impl<S: StorageSpec> Storage for ProverStorage<S> {
             .get_root_hash_option(latest_version)?
             .is_none()
         {
+            assert_eq!(latest_version, 0);
             let empty_batch = Vec::default().into_iter();
             let (_, tree_update) = untracked_jmt
                 .put_value_set(empty_batch, latest_version)
