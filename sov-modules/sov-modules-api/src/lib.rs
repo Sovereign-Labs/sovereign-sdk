@@ -114,7 +114,7 @@ pub trait Spec {
         + borsh::BorshDeserialize
         + borsh::BorshSerialize
         + From<[u8; 32]>
-        + Into<AddressBech32>;
+        + Into<AddressBech32>
         + Serialize
         + for<'a> Deserialize<'a>
         + Send;
