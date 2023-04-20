@@ -75,6 +75,21 @@ impl<S: StorageSpec> Storage for ProverStorage<S> {
         let read_logger = TreeReadLogger::with_db_and_witness(self.db.clone(), witness);
         let untracked_jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&self.db);
 
+        // Handle empty untracked_jmt
+        if untracked_jmt
+            .get_root_hash_option(latest_version)?
+            .is_none()
+        {
+            let empty_batch = Vec::default().into_iter();
+            let (_, tree_update) = untracked_jmt
+                .put_value_set(empty_batch, latest_version)
+                .expect("JMT update must succeed");
+
+            self.db
+                .write_node_batch(&tree_update.node_batch)
+                .expect("db write must succeed");
+        }
+
         // For each value that's been read from the tree, read it from the logged JMT to populate hints
         for (key, read_value) in reads.into_iter() {
             let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
