@@ -96,10 +96,10 @@ impl TestBank {
     }
 }
 
-fn create_addresses(n: usize) -> Vec<<C as sov_modules_api::Spec>::Address> {
+fn create_addresses(count: usize) -> Vec<<C as sov_modules_api::Spec>::Address> {
     let mut addresses = Vec::new();
-    for _ in 0..n {
-        let pub_key = <C as Spec>::PublicKey::try_from("pub_key").unwrap();
+    for i in 0..count {
+        let pub_key = <C as Spec>::PublicKey::try_from(format!("pub_key_{}", i)).unwrap();
         let address = pub_key.to_address::<<C as Spec>::Address>();
         addresses.push(address)
     }
@@ -107,10 +107,10 @@ fn create_addresses(n: usize) -> Vec<<C as sov_modules_api::Spec>::Address> {
     addresses
 }
 
-fn create_bank_config(n: usize) -> BankConfig<C> {
-    let address_and_balances = create_addresses(n)
+fn create_bank_config(addresses_count: usize, initial_balance: u64) -> BankConfig<C> {
+    let address_and_balances = create_addresses(addresses_count)
         .into_iter()
-        .map(|addr| (addr, 1000))
+        .map(|addr| (addr, initial_balance))
         .collect();
 
     let token_config = TokenConfig {
@@ -123,7 +123,7 @@ fn create_bank_config(n: usize) -> BankConfig<C> {
     }
 }
 
-fn create_test_bank() -> (TestBank, C) {
+fn create_test_bank(address_count: usize, initial_balance: u64) -> (TestBank, C) {
     let bank = Bank::<C>::new();
     let working_set = WorkingSet::new(ProverStorage::temporary());
 
@@ -141,7 +141,7 @@ fn create_test_bank() -> (TestBank, C) {
     let deployed_token_address =
         super::create_token_address::<C>(&token_name, sender_address.as_ref(), salt);
 
-    let bank_config = create_bank_config(5);
+    let bank_config = create_bank_config(address_count, initial_balance);
     let init_token_address = create_token_address::<C>(
         &bank_config.tokens[0].token_name,
         &genesis::DEPLOYER,
@@ -163,9 +163,8 @@ fn create_test_bank() -> (TestBank, C) {
 }
 
 #[test]
-fn test_bank() {
-    let initial_balance = 100;
-    let (mut test_bank, sender_context) = create_test_bank();
+fn test_bank_happy_path() {
+    let (mut test_bank, sender_context) = create_test_bank(5, 10_000);
 
     // Genesis
     {
@@ -173,22 +172,26 @@ fn test_bank() {
         let (addr, balance) = test_bank.bank_config.tokens[0].address_and_balances[0].clone();
         let query_response = test_bank.query_balance_for_initial_token(addr);
 
-        assert_eq!(query_response.amount, Some(balance));
+        assert_eq!(
+            query_response.amount,
+            Some(balance),
+            "Bank has not been deployed correctly"
+        );
     }
 
     // Create token
+    let initial_balance = 100;
     {
         test_bank.create_token(initial_balance, &sender_context);
         let query_response = test_bank.query_balance(test_bank.minter_address.clone());
         assert_eq!(query_response.amount, Some(initial_balance));
     }
 
+    // Transfer coins
     let amount = 22;
     let receiver = MockPublicKey::try_from("pub_key_receiver").unwrap();
     let receiver_address = receiver.to_address::<<C as Spec>::Address>();
     let receiver_context = C::new(receiver_address.clone());
-
-    // Transfer coins
     {
         test_bank.transfer(amount, receiver_address.clone());
 
@@ -207,4 +210,96 @@ fn test_bank() {
         let query_response = test_bank.query_balance(receiver_address);
         assert_eq!(query_response.amount, Some(amount - burn_amount));
     }
+}
+
+#[test]
+fn test_bank_edge_cases() {
+    let (mut test_bank, _) = create_test_bank(3, 10_0000);
+    test_bank.genesis();
+
+    // Not enough balance
+    {}
+
+    // Sender does not exist
+    {
+        let amount = 22;
+        let unknown_sender = MockPublicKey::try_from("pub_key_unknown_receiver").unwrap();
+        let unknown_sender_address = unknown_sender.to_address::<<C as Spec>::Address>();
+        let unknown_sender_context = C::new(unknown_sender_address);
+
+        let (receiver_address, _) = test_bank.bank_config.tokens[0].address_and_balances[0].clone();
+
+        let transfer = call::CallMessage::Transfer {
+            to: receiver_address.clone(),
+            coins: Coins {
+                amount,
+                token_address: test_bank.deployed_token_address.clone(),
+            },
+        };
+
+        let query_response = test_bank.query_balance(receiver_address.clone());
+        let balance_before = query_response.amount;
+
+        let result = test_bank.bank.call(
+            transfer,
+            &unknown_sender_context,
+            &mut test_bank.working_set,
+        );
+        assert!(result.is_err());
+        let error = result.err().unwrap();
+        assert!(error
+            .to_string()
+            .contains("Value not found for prefix: \"bank/Bank/tokens/\" and: storage key"));
+
+        let query_response = test_bank.query_balance(receiver_address);
+
+        assert_eq!(query_response.amount, balance_before);
+    }
+
+    // Receiver does not exist
+
+    // Sender does not have enough of token A, but enough token B
+}
+
+#[test]
+fn not_enough_balance() {
+    let initial_balance = 100;
+    let (mut test_bank, sender_context) = create_test_bank(2, initial_balance);
+    test_bank.genesis();
+
+    let receiver = MockPublicKey::try_from("pub_key_receiver").unwrap();
+    let receiver_address = receiver.to_address::<<C as Spec>::Address>();
+    {
+        let transfer = call::CallMessage::Transfer {
+            to: receiver_address,
+            coins: Coins {
+                amount: initial_balance + 1,
+                token_address: test_bank.init_token_address.clone(),
+            },
+        };
+
+        let result = test_bank
+            .bank
+            .call(transfer, &sender_context, &mut test_bank.working_set);
+
+        assert!(result.is_err());
+        let error = result.err().unwrap();
+        assert_eq!("Not enough balance", error.to_string());
+    }
+}
+
+#[test]
+fn integer_overflow() {
+    let bank = Bank::<C>::new();
+    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+
+    let bank_config = create_bank_config(2, u64::MAX - 1);
+
+    let genesis_result = bank.genesis(&bank_config, &mut working_set);
+    assert!(genesis_result.is_err());
+
+    assert_eq!(
+        "Total supply overflow",
+        genesis_result.unwrap_err().to_string()
+    );
 }

@@ -32,6 +32,15 @@ impl TryFrom<&'static str> for MockPublicKey {
     }
 }
 
+impl TryFrom<String> for MockPublicKey {
+    type Error = Infallible;
+
+    fn try_from(key: String) -> Result<Self, Self::Error> {
+        let key = key.as_bytes().to_vec();
+        Ok(Self { pub_key: key })
+    }
+}
+
 impl PublicKey for MockPublicKey {
     fn to_address<A: AddressTrait>(&self) -> A {
         let pub_key_hash = <MockContext as Spec>::Hasher::hash(&self.pub_key);

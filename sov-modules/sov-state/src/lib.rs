@@ -35,7 +35,14 @@ pub struct Prefix {
 impl Display for Prefix {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let buf = self.prefix.as_ref();
-        write!(f, "{:?}", str::from_utf8(buf).unwrap())
+        match str::from_utf8(buf) {
+            Ok(s) => {
+                write!(f, "{:?}", s)
+            }
+            Err(_) => {
+                write!(f, "0x{}", hex::encode(buf))
+            }
+        }
     }
 }
 
@@ -57,6 +64,10 @@ impl Prefix {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
+    }
+
+    pub fn extend(mut self, other: &Self) {
+        self.prefix.extend(&other.prefix);
     }
 }
 
