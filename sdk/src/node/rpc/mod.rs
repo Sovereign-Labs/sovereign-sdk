@@ -61,6 +61,9 @@ pub trait LedgerRpcProvider {
     type BatchResponse: Serialize;
     type TxResponse: Serialize;
     type EventResponse: Serialize;
+
+    fn get_head(&self) -> Result<Option<Self::SlotResponse>, anyhow::Error>;
+
     fn get_slots(
         &self,
         slot_ids: &[SlotIdentifier],
@@ -79,7 +82,7 @@ pub trait LedgerRpcProvider {
     fn get_events(
         &self,
         event_ids: &[EventIdentifier],
-    ) -> Result<Option<Vec<Self::EventResponse>>, anyhow::Error>;
+    ) -> Result<Vec<Option<Self::EventResponse>>, anyhow::Error>;
 
     // TODO: Add lots of convenience methods
     // - get_X (by identifier), get_X_by_hash, get_X_by_number

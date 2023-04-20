@@ -1,14 +1,22 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sovereign_sdk::{
-    rpc::{LedgerRpcProvider, QueryMode, SlotIdentifier},
+    rpc::{
+        BatchIdentifier, EventIdentifier, LedgerRpcProvider, QueryMode, SlotIdentifier,
+        TxIdentifier,
+    },
     spec::RollupSpec,
     stf::Event,
 };
 
 use crate::schema::{
-    tables::{SlotByHash, SlotByNumber},
-    types::{BatchNumber, EventNumber, SlotNumber, Status, StoredBatch, StoredSlot, TxNumber},
+    tables::{
+        BatchByHash, BatchByNumber, EventByNumber, SlotByHash, SlotByNumber, TxByHash, TxByNumber,
+    },
+    types::{
+        BatchNumber, EventNumber, SlotNumber, Status, StoredBatch, StoredSlot, StoredTransaction,
+        TxNumber,
+    },
 };
 
 use super::LedgerDB;
@@ -22,6 +30,7 @@ pub enum ItemOrHash<T> {
 
 #[derive(Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct SlotResponse {
+    pub number: u64,
     pub hash: [u8; 32],
     pub batch_range: std::ops::Range<BatchNumber>,
     pub batches: Option<Vec<ItemOrHash<BatchResponse>>>,
@@ -41,6 +50,17 @@ pub struct TxResponse {
     pub event_range: std::ops::Range<EventNumber>,
     pub body: Option<Vec<u8>>,
     pub status: Status,
+}
+
+impl From<StoredTransaction> for TxResponse {
+    fn from(tx: StoredTransaction) -> Self {
+        Self {
+            hash: tx.hash,
+            event_range: tx.events,
+            body: Some(tx.data.as_ref().to_vec()),
+            status: tx.status,
+        }
+    }
 }
 
 impl<S: RollupSpec> LedgerRpcProvider for LedgerDB<S> {
@@ -64,7 +84,7 @@ impl<S: RollupSpec> LedgerRpcProvider for LedgerDB<S> {
             out.push(match slot_num {
                 Some(num) => {
                     if let Some(stored_slot) = self.db.get::<SlotByNumber>(&num)? {
-                        Some(self.populate_slot_response(stored_slot, query_mode)?)
+                        Some(self.populate_slot_response(num.into(), stored_slot, query_mode)?)
                     } else {
                         None
                     }
@@ -77,25 +97,77 @@ impl<S: RollupSpec> LedgerRpcProvider for LedgerDB<S> {
 
     fn get_batches(
         &self,
-        _batch_ids: &[sovereign_sdk::rpc::BatchIdentifier],
-        _query_mode: QueryMode,
+        batch_ids: &[sovereign_sdk::rpc::BatchIdentifier],
+        query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::BatchResponse>>, anyhow::Error> {
-        todo!()
+        // TODO: Sort the input and use an iterator instead of querying for each slot individually
+        let mut out = Vec::with_capacity(batch_ids.len());
+        for batch_id in batch_ids {
+            let batch_num = self.resolve_batch_identifier(batch_id)?;
+            out.push(match batch_num {
+                Some(num) => {
+                    if let Some(stored_batch) = self.db.get::<BatchByNumber>(&num)? {
+                        Some(self.populate_batch_response(stored_batch, query_mode)?)
+                    } else {
+                        None
+                    }
+                }
+                None => None,
+            })
+        }
+        Ok(out)
     }
 
     fn get_transactions(
         &self,
-        _tx_ids: &[sovereign_sdk::rpc::TxIdentifier],
+        tx_ids: &[sovereign_sdk::rpc::TxIdentifier],
         _query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::TxResponse>>, anyhow::Error> {
-        todo!()
+        // TODO: Sort the input and use an iterator instead of querying for each slot individually
+        let mut out = Vec::with_capacity(tx_ids.len());
+        for id in tx_ids {
+            let num = self.resolve_tx_identifier(id)?;
+            out.push(match num {
+                Some(num) => self.db.get::<TxByNumber>(&num)?.map(|tx| tx.into()),
+                None => None,
+            })
+        }
+        Ok(out)
     }
 
     fn get_events(
         &self,
-        _event_ids: &[sovereign_sdk::rpc::EventIdentifier],
-    ) -> Result<Option<Vec<Self::EventResponse>>, anyhow::Error> {
-        todo!()
+        event_ids: &[sovereign_sdk::rpc::EventIdentifier],
+    ) -> Result<Vec<Option<Self::EventResponse>>, anyhow::Error> {
+        // TODO: Sort the input and use an iterator instead of querying for each slot individually
+        let mut out = Vec::with_capacity(event_ids.len());
+        for id in event_ids {
+            let num = self.resolve_event_identifier(id)?;
+            out.push(match num {
+                Some(num) => self.db.get::<EventByNumber>(&num)?,
+                None => None,
+            })
+        }
+        Ok(out)
+    }
+
+    fn get_head(&self) -> Result<Option<Self::SlotResponse>, anyhow::Error> {
+        let next_ids = self.get_next_items_numbers();
+        let next_slot = next_ids.slot_number;
+
+        let head_number = next_slot.saturating_sub(1);
+
+        if let Some(stored_slot) = self
+            .db
+            .get::<SlotByNumber>(&SlotNumber(next_slot.saturating_sub(1)))?
+        {
+            return Ok(Some(self.populate_slot_response(
+                head_number,
+                stored_slot,
+                QueryMode::Compact,
+            )?));
+        }
+        Ok(None)
     }
 }
 
@@ -110,13 +182,57 @@ impl<S: RollupSpec> LedgerDB<S> {
         }
     }
 
+    fn resolve_batch_identifier(
+        &self,
+        batch_id: &BatchIdentifier,
+    ) -> Result<Option<BatchNumber>, anyhow::Error> {
+        match batch_id {
+            BatchIdentifier::Hash(hash) => self.db.get::<BatchByHash>(hash),
+            BatchIdentifier::Number(num) => Ok(Some(BatchNumber(*num))),
+            BatchIdentifier::SlotIdAndIndex(_) => todo!(),
+        }
+    }
+
+    fn resolve_tx_identifier(
+        &self,
+        tx_id: &TxIdentifier,
+    ) -> Result<Option<TxNumber>, anyhow::Error> {
+        match tx_id {
+            TxIdentifier::Hash(hash) => self.db.get::<TxByHash>(hash),
+            TxIdentifier::Number(num) => Ok(Some(TxNumber(*num))),
+            TxIdentifier::BatchIdAndIndex(_) => todo!(),
+        }
+    }
+
+    fn resolve_event_identifier(
+        &self,
+        event_id: &EventIdentifier,
+    ) -> Result<Option<EventNumber>, anyhow::Error> {
+        match event_id {
+            EventIdentifier::TxIdAndIndex((tx_id, offset)) => {
+                if let Some(tx_num) = self.resolve_tx_identifier(tx_id)? {
+                    Ok(self
+                        .db
+                        .get::<TxByNumber>(&tx_num)?
+                        .map(|tx| EventNumber(tx.events.start.0 + offset)))
+                } else {
+                    Ok(None)
+                }
+            }
+            EventIdentifier::Number(num) => Ok(Some(EventNumber(*num))),
+            EventIdentifier::TxIdAndKey(_) => todo!(),
+        }
+    }
+
     fn populate_slot_response(
         &self,
+        number: u64,
         slot: StoredSlot,
         mode: QueryMode,
     ) -> Result<SlotResponse, anyhow::Error> {
         Ok(match mode {
             QueryMode::Compact => SlotResponse {
+                number,
                 hash: slot.hash,
                 batch_range: slot.batches,
                 batches: None,
@@ -130,6 +246,7 @@ impl<S: RollupSpec> LedgerDB<S> {
                         .collect(),
                 );
                 SlotResponse {
+                    number,
                     hash: slot.hash,
                     batch_range: slot.batches,
                     batches: batch_hashes,
@@ -143,6 +260,7 @@ impl<S: RollupSpec> LedgerDB<S> {
                 }
 
                 SlotResponse {
+                    number,
                     hash: slot.hash,
                     batch_range: slot.batches,
                     batches: Some(batches),
@@ -182,13 +300,7 @@ impl<S: RollupSpec> LedgerDB<S> {
                 let num_txs = (batch.txs.end.0 - batch.txs.start.0) as usize;
                 let mut txs = Vec::with_capacity(num_txs);
                 for tx in self.get_tx_range(&batch.txs)? {
-                    let response_tx = TxResponse {
-                        hash: tx.hash,
-                        event_range: tx.events,
-                        body: Some(tx.data.as_ref().to_vec()),
-                        status: tx.status,
-                    };
-                    txs.push(ItemOrHash::Full(response_tx));
+                    txs.push(ItemOrHash::Full(tx.into()));
                 }
 
                 BatchResponse {
