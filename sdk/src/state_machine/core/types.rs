@@ -16,7 +16,7 @@ use super::{crypto::hash::DefaultHash, traits::Witness};
 /// and blocks of the rollup.
 pub struct RollupHeader<DaLayer: DaLayerTrait, App: StateTransitionFunction> {
     /// The hash of the DA layer block corresponding to this rollup block
-    pub da_blockhash: DaLayer::Slothash,
+    pub da_block_hash: DaLayer::SlotHash,
     /// A commitment to the set of allowed sequencers after executing this block
     pub sequencers_root: ConsensusParticipantRoot<DaLayer::Address>,
     /// A commitment to the set of allowed provers after executing this block

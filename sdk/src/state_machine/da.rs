@@ -1,6 +1,6 @@
 use bytes::Buf;
 
-use crate::core::traits::{AddressTrait, BlockheaderTrait};
+use crate::core::traits::{AddressTrait, BlockHeaderTrait};
 use crate::serial::{Decode, DeserializationError, Encode};
 use core::fmt::Debug;
 
@@ -11,10 +11,10 @@ use core::fmt::Debug;
 /// Named DaLayerTrait to avoid confusion with the associated type "DaLayer" used
 /// in top-level rollup definitions
 pub trait DaLayerTrait {
-    type Slothash: BlockHashTrait;
+    type SlotHash: BlockHashTrait;
 
     type Address: AddressTrait;
-    type BlockHeader: BlockheaderTrait<Hash = Self::Slothash>;
+    type BlockHeader: BlockHeaderTrait<Hash = Self::SlotHash>;
     type BlobTransaction: BlobTransactionTrait<Self::Address>;
     /// A proof that a set of transactions are included in a block.
     type InclusionMultiProof;
@@ -27,12 +27,12 @@ pub trait DaLayerTrait {
     const ADDRESS_LENGTH: usize;
     /// The hash of the DA layer block which is the genesis of the logical chain defined by this app.
     /// This is *not* necessarily the DA layer's genesis block.
-    const RELATIVE_GENESIS: Self::Slothash;
+    const RELATIVE_GENESIS: Self::SlotHash;
 
-    fn get_relevant_txs(&self, blockhash: &Self::Slothash) -> Vec<Self::BlobTransaction>;
+    fn get_relevant_txs(&self, block_hash: &Self::SlotHash) -> Vec<Self::BlobTransaction>;
     fn get_relevant_txs_with_proof(
         &self,
-        blockhash: &Self::Slothash,
+        block_hash: &Self::SlotHash,
     ) -> (
         Vec<Self::BlobTransaction>,
         Self::InclusionMultiProof,
@@ -41,7 +41,7 @@ pub trait DaLayerTrait {
 
     fn verify_relevant_tx_list(
         &self,
-        blockheader: &Self::BlockHeader,
+        block_header: &Self::BlockHeader,
         txs: &[Self::BlobTransaction],
         inclusion_proof: Self::InclusionMultiProof,
         completeness_proof: Self::CompletenessProof,
