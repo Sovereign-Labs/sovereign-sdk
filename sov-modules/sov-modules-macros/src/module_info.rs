@@ -1,5 +1,5 @@
 use super::dispatch::common::parse_generic_params;
-use proc_macro::{self};
+use proc_macro2::{self};
 use proc_macro2::{Ident, Span};
 use syn::{DataStruct, DeriveInput, ImplGenerics, PathArguments, TypeGenerics, WhereClause};
 

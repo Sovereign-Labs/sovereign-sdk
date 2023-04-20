@@ -1,6 +1,6 @@
 use proc_macro2::{Ident, TokenStream};
-use quote::{ToTokens, format_ident};
-use syn::{DataStruct, GenericParam, Generics, ImplGenerics, TypeGenerics, WhereClause, Meta};
+use quote::{format_ident, ToTokens};
+use syn::{DataStruct, GenericParam, Generics, ImplGenerics, Meta, TypeGenerics, WhereClause};
 
 #[derive(Clone)]
 pub(crate) struct StructNamedField {
@@ -101,7 +101,7 @@ impl<'a> StructDef<'a> {
         &self,
         enum_legs: &[proc_macro2::TokenStream],
         postfix: &'static str,
-        serialization_attrs: &Vec<TokenStream>
+        serialization_attrs: &Vec<TokenStream>,
     ) -> proc_macro2::TokenStream {
         let enum_ident = self.enum_ident(postfix);
         let impl_generics = &self.impl_generics;
@@ -148,7 +148,11 @@ pub fn get_attribute_values(item: &syn::DeriveInput, attribute_name: &str) -> Ve
     let mut values = vec![];
 
     // Find the attribute with the given name on the root item
-    if let Some(attr) = item.attrs.iter().find(|attr| attr.path.is_ident(attribute_name)) {
+    if let Some(attr) = item
+        .attrs
+        .iter()
+        .find(|attr| attr.path.is_ident(attribute_name))
+    {
         if let Ok(meta) = attr.parse_meta() {
             if let Meta::List(list) = meta {
                 values.extend(list.nested.iter().map(|n| {
@@ -173,29 +177,28 @@ pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStrea
     let mut has_deserialize = false;
     let mut has_other = false;
 
-    let attributes: Vec<String> = 
-        serialization_attrs.iter().map(|t| t.to_string()).collect();        
+    let attributes: Vec<String> = serialization_attrs.iter().map(|t| t.to_string()).collect();
 
-    for attr in &attributes {        
+    for attr in &attributes {
         if attr.contains(SERIALIZE) {
             has_serialize = true;
-        }
-        else if attr.contains(DESERIALIZE) {
+        } else if attr.contains(DESERIALIZE) {
             has_deserialize = true;
-        }
-        else {
+        } else {
             has_other = true;
         }
     }
 
     let tokens: TokenStream = quote::quote! { serialization };
-    if !has_serialize || !has_deserialize {        
+    if !has_serialize || !has_deserialize {
         return Err(syn::Error::new_spanned(
             &tokens,
-            format!("Serialization attributes must contain both '{}' and '{}', but contains '{:?}'", SERIALIZE, DESERIALIZE, &attributes),
+            format!(
+                "Serialization attributes must contain both '{}' and '{}', but contains '{:?}'",
+                SERIALIZE, DESERIALIZE, &attributes
+            ),
         ));
-    }
-    else if has_other {
+    } else if has_other {
         return Err(syn::Error::new_spanned(
             &tokens,
             format!("Serialization attributes can not contain attributes that are not '{}' and '{}', but contains: '{:?}'", 
