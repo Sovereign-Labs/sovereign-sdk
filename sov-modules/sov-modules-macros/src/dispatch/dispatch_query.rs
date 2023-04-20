@@ -1,4 +1,6 @@
-use super::common::{parse_generic_params, StructDef, StructFieldExtractor, QUERY, get_serialization_attrs};
+use super::common::{
+    get_serialization_attrs, parse_generic_params, StructDef, StructFieldExtractor, QUERY,
+};
 use syn::DeriveInput;
 
 impl<'a> StructDef<'a> {

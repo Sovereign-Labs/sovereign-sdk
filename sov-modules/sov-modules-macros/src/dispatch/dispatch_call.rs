@@ -1,8 +1,8 @@
+use super::common::get_serialization_attrs;
 use super::common::parse_generic_params;
 use super::common::StructDef;
 use super::common::StructFieldExtractor;
 use super::common::CALL;
-use super::common::get_serialization_attrs;
 use syn::DeriveInput;
 
 impl<'a> StructDef<'a> {
