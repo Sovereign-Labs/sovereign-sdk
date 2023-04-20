@@ -14,7 +14,7 @@ use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use types::Voter;
 
-#[derive(ModuleInfo)]
+#[derive(ModuleInfo, Clone)]
 pub struct Election<C: sov_modules_api::Context> {
     #[address]
     pub address: C::Address,

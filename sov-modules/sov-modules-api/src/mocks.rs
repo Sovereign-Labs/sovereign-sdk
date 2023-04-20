@@ -1,6 +1,7 @@
 use crate::{Address, AddressTrait, Context, PublicKey, SigVerificationError, Signature, Spec};
 use borsh::{BorshDeserialize, BorshSerialize};
 use jmt::SimpleHasher;
+use serde::{Deserialize, Serialize};
 use sov_state::ZkStorage;
 use sov_state::{mocks::MockStorageSpec, ProverStorage};
 use sovereign_sdk::core::types::ArrayWitness;
@@ -57,7 +58,8 @@ impl Signature for MockSignature {
 }
 
 /// Mock for Context, useful for testing.
-#[derive(Clone, Debug, PartialEq)]
+// TODO: consider feature gating the serde implementations, since they are only needed for RPC
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MockContext {
     pub sender: Address,
 }

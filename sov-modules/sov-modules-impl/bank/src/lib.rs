@@ -28,7 +28,7 @@ pub struct BankConfig<C: sov_modules_api::Context> {
 /// - Token creation.
 /// - Token transfers.
 /// - Token burn.
-#[derive(ModuleInfo)]
+#[derive(ModuleInfo, Clone)]
 pub struct Bank<C: sov_modules_api::Context> {
     /// The address of the bank module.
     #[address]

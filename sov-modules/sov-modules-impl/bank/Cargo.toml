@@ -19,8 +19,10 @@ thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"]}
 hex = { workspace = true }
 
+jsonrpsee = { version = "0.16.2", features = ["macros", "client-core", "server"], optional = true }
+
 
 [features]
-default = ["native"]
+default = ["native", "dep:jsonrpsee" ]
 serde = ["dep:serde", "dep:serde_json"]
 native = ["serde"]

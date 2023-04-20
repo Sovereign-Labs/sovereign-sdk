@@ -199,7 +199,7 @@ where
         let root_hash = self
             .current_storage
             .validate_and_commit(cache_log, &witness)
-            .expect("edree update must succed");
+            .expect("jellyfish merkle tree update must succeed");
         (jmt::RootHash(root_hash), vec![])
     }
 }
