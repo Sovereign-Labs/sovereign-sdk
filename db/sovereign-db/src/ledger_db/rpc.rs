@@ -136,7 +136,7 @@ impl<S: RollupSpec> LedgerDB<S> {
                 }
             }
             QueryMode::Full => {
-                let num_batches = (slot.batches.start.0 - slot.batches.end.0) as usize;
+                let num_batches = (slot.batches.end.0 - slot.batches.start.0) as usize;
                 let mut batches = Vec::with_capacity(num_batches);
                 for batch in self.get_batch_range(&slot.batches)? {
                     batches.push(ItemOrHash::Full(self.populate_batch_response(batch, mode)?));
@@ -179,7 +179,7 @@ impl<S: RollupSpec> LedgerDB<S> {
                 }
             }
             QueryMode::Full => {
-                let num_txs = (batch.txs.start.0 - batch.txs.end.0) as usize;
+                let num_txs = (batch.txs.end.0 - batch.txs.start.0) as usize;
                 let mut txs = Vec::with_capacity(num_txs);
                 for tx in self.get_tx_range(&batch.txs)? {
                     let response_tx = TxResponse {
