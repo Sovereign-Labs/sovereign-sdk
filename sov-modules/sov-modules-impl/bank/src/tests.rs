@@ -214,10 +214,39 @@ fn test_bank_happy_path() {
 
 #[test]
 fn test_bank_edge_cases() {
-    let (mut test_bank, _) = create_test_bank(3, 10_0000);
+    let initial_balance = 10_000;
+    let (mut test_bank, _) = create_test_bank(3, initial_balance);
     test_bank.genesis();
 
     // Not enough balance
+    {
+        let sender_address = test_bank.bank_config.tokens[0].address_and_balances[0]
+            .0
+            .clone();
+        let sender_context = C::new(sender_address);
+
+        let receiver = MockPublicKey::try_from("pub_key_receiver").unwrap();
+        let receiver_address = receiver.to_address::<<C as Spec>::Address>();
+        {
+            let transfer = call::CallMessage::Transfer {
+                to: receiver_address,
+                coins: Coins {
+                    amount: initial_balance + 1,
+                    token_address: test_bank.init_token_address.clone(),
+                },
+            };
+
+            let result = test_bank
+                .bank
+                .call(transfer, &sender_context, &mut test_bank.working_set);
+
+            assert!(result.is_err());
+            let error = result.err().unwrap();
+            assert_eq!("Insufficient funds", error.to_string());
+        }
+    }
+
+    // Token does not exist
     {}
 
     // Sender does not exist
@@ -233,7 +262,7 @@ fn test_bank_edge_cases() {
             to: receiver_address.clone(),
             coins: Coins {
                 amount,
-                token_address: test_bank.deployed_token_address.clone(),
+                token_address: test_bank.init_token_address.clone(),
             },
         };
 
@@ -249,42 +278,11 @@ fn test_bank_edge_cases() {
         let error = result.err().unwrap();
         assert!(error
             .to_string()
-            .contains("Value not found for prefix: \"bank/Bank/tokens/\" and: storage key"));
+            .contains("Value not found for prefix: 0xc166b1b9c394ac408de38dd16fdba54edfcb3f7502f42ed59f296b93216f34f4 and: storage key"));
 
         let query_response = test_bank.query_balance(receiver_address);
 
         assert_eq!(query_response.amount, balance_before);
-    }
-
-    // Receiver does not exist
-
-    // Sender does not have enough of token A, but enough token B
-}
-
-#[test]
-fn not_enough_balance() {
-    let initial_balance = 100;
-    let (mut test_bank, sender_context) = create_test_bank(2, initial_balance);
-    test_bank.genesis();
-
-    let receiver = MockPublicKey::try_from("pub_key_receiver").unwrap();
-    let receiver_address = receiver.to_address::<<C as Spec>::Address>();
-    {
-        let transfer = call::CallMessage::Transfer {
-            to: receiver_address,
-            coins: Coins {
-                amount: initial_balance + 1,
-                token_address: test_bank.init_token_address.clone(),
-            },
-        };
-
-        let result = test_bank
-            .bank
-            .call(transfer, &sender_context, &mut test_bank.working_set);
-
-        assert!(result.is_err());
-        let error = result.err().unwrap();
-        assert_eq!("Not enough balance", error.to_string());
     }
 }
 
