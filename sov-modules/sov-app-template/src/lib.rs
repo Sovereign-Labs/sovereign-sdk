@@ -136,7 +136,10 @@ where
             let verified_tx = match self.tx_hooks.pre_dispatch_tx_hook(tx, &mut batch_workspace) {
                 Ok(verified_tx) => verified_tx,
                 Err(e) => {
-                    self.revert_and_slash(batch_workspace);
+                    // TODO check if we want to slash here.
+                    let batch_workspace = batch_workspace.revert();
+                    self.working_set = Some(batch_workspace);
+
                     anyhow::bail!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
                 }
             };
@@ -169,7 +172,9 @@ where
         }
 
         // TODO: calculate the amount based of gas and fees
-        self.tx_hooks.exit_apply_batch(0, &mut batch_workspace)?;
+        self.tx_hooks
+            .exit_apply_batch(0, &mut batch_workspace)
+            .expect("Impossible happened: error in exit_apply_batch");
 
         self.working_set = Some(batch_workspace);
 
