@@ -42,6 +42,12 @@ use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub(crate) struct Runtime<C: Context> {
     #[allow(unused)]
+    sequencer: sequencer::Sequencer<C>,
+
+    #[allow(unused)]
+    bank: bank::Bank<C>,
+
+    #[allow(unused)]
     election: election::Election<C>,
 
     #[allow(unused)]
@@ -55,6 +61,8 @@ pub(crate) struct Runtime<C: Context> {
 impl<C: Context> Runtime<C> {
     pub(crate) fn new() -> Self {
         Self {
+            sequencer: sequencer::Sequencer::new(),
+            bank: bank::Bank::new(),
             election: election::Election::new(),
             value_setter: value_setter::ValueSetter::new(),
             accounts: accounts::Accounts::new(),

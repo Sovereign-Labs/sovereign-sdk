@@ -36,7 +36,7 @@ pub trait StateTransitionFunction {
         batch: Self::Batch,
         sequencer: &[u8],
         misbehavior_hint: Option<Self::MisbehaviorProof>,
-    ) -> Result<Vec<Vec<Event>>, ConsensusSetUpdate<OpaqueAddress>>;
+    ) -> anyhow::Result<Vec<Vec<Event>>>;
 
     fn apply_proof(
         &self,

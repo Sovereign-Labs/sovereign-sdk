@@ -122,7 +122,7 @@ fn test_sequencer() {
         assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
 
         let resp = test_sequencer.query_balance_via_sequencer(working_set);
-        assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
+        assert_eq!(INITIAL_BALANCE, resp.data.unwrap().balance);
     }
 
     // Lock
@@ -133,7 +133,7 @@ fn test_sequencer() {
         assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, resp.amount.unwrap());
 
         let resp = test_sequencer.query_balance_via_sequencer(working_set);
-        assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, resp.amount.unwrap());
+        assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, resp.data.unwrap().balance);
     }
 
     // Reward
@@ -143,6 +143,6 @@ fn test_sequencer() {
         assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
 
         let resp = test_sequencer.query_balance_via_sequencer(working_set);
-        assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
+        assert_eq!(INITIAL_BALANCE, resp.data.unwrap().balance);
     }
 }

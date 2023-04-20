@@ -114,7 +114,7 @@ impl<DaLayer: DaLayerTrait, App: StateTransitionFunction> Rollup<DaLayer, App> {
                         match self.app.apply_batch(batch, tx.sender().as_ref(), None) {
                             // TODO: handle events
                             Ok(_events) => {}
-                            Err(slashing) => current_sequencers.process_update(slashing),
+                            Err(_slashing) => todo!(), //current_sequencers.process_update(slashing),
                         };
                     }
                 }
