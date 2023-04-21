@@ -26,3 +26,8 @@ jsonrpsee = { version = "0.16.2", features = ["macros", "client-core", "server"]
 default = ["native", "dep:jsonrpsee" ]
 serde = ["dep:serde", "dep:serde_json"]
 native = ["serde"]
+
+
+[[test]]
+name = "tests"
+path = "tests/tests.rs"

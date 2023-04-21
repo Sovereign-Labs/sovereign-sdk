@@ -77,8 +77,8 @@ pub struct MockContext {
 impl Spec for MockContext {
     type Address = Address;
     type Storage = ProverStorage<MockStorageSpec>;
-    type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
+    type Hasher = sha2::Sha256;
     type Signature = MockSignature;
     type Witness = ArrayWitness;
 }
@@ -101,8 +101,8 @@ pub struct ZkMockContext {
 impl Spec for ZkMockContext {
     type Address = Address;
     type Storage = ZkStorage<MockStorageSpec>;
-    type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
+    type Hasher = sha2::Sha256;
     type Signature = MockSignature;
     type Witness = ArrayWitness;
 }

@@ -1,4 +1,4 @@
-mod call;
+pub mod call;
 mod create_token;
 pub mod genesis;
 pub mod query;
