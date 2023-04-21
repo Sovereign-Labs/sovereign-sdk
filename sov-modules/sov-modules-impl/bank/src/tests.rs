@@ -1,15 +1,13 @@
 use crate::{
     call, create_token_address, genesis,
     query::{self, QueryMessage},
-    Amount, Bank, BankConfig, Coins, TokenConfig,
+    Bank, BankConfig, Coins, TokenConfig,
 };
 
-use crate::query::BalanceResponse;
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey},
-    Address, Context, Module, ModuleInfo, PublicKey, Spec,
+    Context, Module, ModuleInfo, PublicKey, Spec,
 };
-use sov_state::mocks::MockStorageSpec;
 use sov_state::{ProverStorage, WorkingSet};
 
 pub type C = MockContext;

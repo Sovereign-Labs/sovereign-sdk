@@ -1,6 +1,7 @@
 use borsh::BorshSerialize;
 
 use bank::call::CallMessage;
+use bank::genesis::{DEPLOYER, SALT};
 use bank::query::{BalanceResponse, QueryMessage, TotalSupplyResponse};
 use bank::{create_token_address, Bank, BankConfig, Coins};
 use helpers::*;
@@ -10,7 +11,7 @@ use sov_state::{ProverStorage, WorkingSet};
 mod helpers;
 
 #[test]
-fn burn_tokens() {
+fn burn_deployed_tokens() {
     let bank = Bank::<C>::new();
     let mut working_set = WorkingSet::new(ProverStorage::temporary());
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
@@ -138,4 +139,50 @@ fn burn_tokens() {
 
     // ---
     // Burn more than available
+}
+
+#[test]
+fn burn_initial_tokens() {
+    let initial_balance = 100;
+    let bank_config = create_bank_config_with_token(1, initial_balance);
+    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    let bank = Bank::new();
+    bank.genesis(&bank_config, &mut working_set).unwrap();
+
+    let token_address =
+        create_token_address::<C>(&bank_config.tokens[0].token_name, &DEPLOYER, SALT);
+    let sender_address = bank_config.tokens[0].address_and_balances[0].0.clone();
+
+    let query_user_balance =
+        |user_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+            let query = QueryMessage::GetBalance {
+                user_address,
+                token_address: token_address.clone(),
+            };
+
+            let balance: BalanceResponse = query_and_deserialize(&bank, query, working_set);
+            balance.amount
+        };
+
+    let balance_before = query_user_balance(sender_address.clone(), &mut working_set);
+    assert_eq!(Some(initial_balance), balance_before);
+
+    let burn_amount = 10;
+    let burn_message = CallMessage::Burn {
+        coins: Coins {
+            amount: burn_amount,
+            token_address: token_address.clone(),
+        },
+    };
+
+    let context = C::new(sender_address.clone());
+    let burned = bank
+        .call(burn_message.clone(), &context, &mut working_set)
+        .expect("Failed to burn token");
+    assert!(burned.events.is_empty());
+
+    let balance_after = query_user_balance(sender_address, &mut working_set);
+    assert_eq!(Some(initial_balance - burn_amount), balance_after);
+
+    // Assume that the rest of edge cases are similar to deployed tokens
 }
