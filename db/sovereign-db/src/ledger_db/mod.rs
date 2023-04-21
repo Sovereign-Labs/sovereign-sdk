@@ -167,7 +167,7 @@ impl<S: RollupSpec> LedgerDB<S> {
         K: Into<u64> + Copy + SeekKeyEncoder<T>,
     {
         let mut raw_iter = self.db.iter()?;
-        let max_items = (range.start.into() - range.end.into()) as usize;
+        let max_items = (range.end.into() - range.start.into()) as usize;
         raw_iter.seek(&range.start)?;
         let iter = raw_iter.take(max_items);
         let mut out = Vec::with_capacity(max_items);

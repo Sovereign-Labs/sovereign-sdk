@@ -22,7 +22,7 @@ pub struct Account<C: sov_modules_api::Context> {
     pub nonce: u64,
 }
 
-#[derive(ModuleInfo)]
+#[derive(ModuleInfo, Clone)]
 pub struct Accounts<C: sov_modules_api::Context> {
     #[address]
     pub address: C::Address,

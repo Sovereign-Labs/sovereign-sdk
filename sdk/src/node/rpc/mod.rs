@@ -47,7 +47,7 @@ pub enum SlotIdentifier {
     Number(u64),    // the block number of a da block
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum QueryMode {
     /// Returns the minimal parent struct with no minimal about its children.
     /// For example, a compact "slot" response would contain a range of

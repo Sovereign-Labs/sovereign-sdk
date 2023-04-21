@@ -15,6 +15,7 @@ pub use crate::bech32::AddressBech32;
 pub use dispatch::{DispatchCall, DispatchQuery, Genesis};
 pub use error::Error;
 pub use jmt::SimpleHasher as Hasher;
+use serde::{Deserialize, Serialize};
 
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
@@ -40,7 +41,17 @@ impl AsRef<[u8]> for Address {
 impl AddressTrait for Address {}
 
 /// Default implementation of AddressTrait for the module system
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Eq)]
+// TODO: decide if we want to feature gate the serde implementations
+#[derive(
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    Debug,
+    PartialEq,
+    Clone,
+    Eq,
+    Serialize,
+    Deserialize,
+)]
 pub struct Address {
     addr: [u8; 32],
 }
@@ -98,11 +109,15 @@ pub trait PublicKey {
 
 /// Spec contains types common for all modules.
 pub trait Spec {
+    // TODO: consider feature gating the serde implementations, since they are only needed for RPC
     type Address: AddressTrait
         + borsh::BorshDeserialize
         + borsh::BorshSerialize
         + From<[u8; 32]>
-        + Into<AddressBech32>;
+        + Into<AddressBech32>
+        + Serialize
+        + for<'a> Deserialize<'a>
+        + Send;
 
     type Storage: Storage + Clone;
 

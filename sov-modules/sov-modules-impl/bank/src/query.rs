@@ -1,4 +1,5 @@
 use crate::{Amount, Bank};
+use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
 
 /// This enumeration represents the available query messages for querying the bank module.
@@ -23,7 +24,9 @@ pub struct TotalSupplyResponse {
     pub amount: Option<Amount>,
 }
 
+#[rpc_gen(client, server, namespace = "bank")]
 impl<C: sov_modules_api::Context> Bank<C> {
+    #[rpc_method(name = "balanceOf")]
     pub(crate) fn balance_of(
         &self,
         user_address: C::Address,
