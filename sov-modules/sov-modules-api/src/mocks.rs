@@ -59,6 +59,7 @@ impl Signature for MockSignature {
 
 /// Mock for Context, useful for testing.
 // TODO: consider feature gating the serde implementations, since they are only needed for RPC
+// https://github.com/Sovereign-Labs/sovereign/issues/175
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MockContext {
     pub sender: Address,

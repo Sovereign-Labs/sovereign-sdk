@@ -42,6 +42,7 @@ impl AddressTrait for Address {}
 
 /// Default implementation of AddressTrait for the module system
 // TODO: decide if we want to feature gate the serde implementations
+// See https://github.com/Sovereign-Labs/sovereign/issues/175
 #[derive(
     borsh::BorshDeserialize,
     borsh::BorshSerialize,
@@ -110,6 +111,7 @@ pub trait PublicKey {
 /// Spec contains types common for all modules.
 pub trait Spec {
     // TODO: consider feature gating the serde implementations, since they are only needed for RPC
+    // https://github.com/Sovereign-Labs/sovereign/issues/175
     type Address: AddressTrait
         + borsh::BorshDeserialize
         + borsh::BorshSerialize

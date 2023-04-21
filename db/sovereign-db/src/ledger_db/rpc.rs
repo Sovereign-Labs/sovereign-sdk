@@ -78,6 +78,7 @@ impl<S: RollupSpec> LedgerRpcProvider for LedgerDB<S> {
         query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::SlotResponse>>, anyhow::Error> {
         // TODO: Sort the input and use an iterator instead of querying for each slot individually
+        // https://github.com/Sovereign-Labs/sovereign/issues/191
         let mut out = Vec::with_capacity(slot_ids.len());
         for slot_id in slot_ids {
             let slot_num = self.resolve_slot_identifier(slot_id)?;
@@ -101,6 +102,7 @@ impl<S: RollupSpec> LedgerRpcProvider for LedgerDB<S> {
         query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::BatchResponse>>, anyhow::Error> {
         // TODO: Sort the input and use an iterator instead of querying for each slot individually
+        // https://github.com/Sovereign-Labs/sovereign/issues/191
         let mut out = Vec::with_capacity(batch_ids.len());
         for batch_id in batch_ids {
             let batch_num = self.resolve_batch_identifier(batch_id)?;
@@ -124,6 +126,7 @@ impl<S: RollupSpec> LedgerRpcProvider for LedgerDB<S> {
         _query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::TxResponse>>, anyhow::Error> {
         // TODO: Sort the input and use an iterator instead of querying for each slot individually
+        // https://github.com/Sovereign-Labs/sovereign/issues/191
         let mut out = Vec::with_capacity(tx_ids.len());
         for id in tx_ids {
             let num = self.resolve_tx_identifier(id)?;
@@ -140,6 +143,7 @@ impl<S: RollupSpec> LedgerRpcProvider for LedgerDB<S> {
         event_ids: &[sovereign_sdk::rpc::EventIdentifier],
     ) -> Result<Vec<Option<Self::EventResponse>>, anyhow::Error> {
         // TODO: Sort the input and use an iterator instead of querying for each slot individually
+        // https://github.com/Sovereign-Labs/sovereign/issues/191
         let mut out = Vec::with_capacity(event_ids.len());
         for id in event_ids {
             let num = self.resolve_event_identifier(id)?;
