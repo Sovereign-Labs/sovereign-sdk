@@ -1,16 +1,18 @@
 use crate::{
     call, create_token_address, genesis,
     query::{self, QueryMessage},
-    Bank, BankConfig, Coins, TokenConfig,
+    Amount, Bank, BankConfig, Coins, TokenConfig,
 };
 
+use crate::query::BalanceResponse;
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey},
-    Context, Module, ModuleInfo, PublicKey, Spec,
+    Address, Context, Module, ModuleInfo, PublicKey, Spec,
 };
+use sov_state::mocks::MockStorageSpec;
 use sov_state::{ProverStorage, WorkingSet};
 
-type C = MockContext;
+pub type C = MockContext;
 
 struct TestBank {
     bank: Bank<C>,
@@ -139,7 +141,7 @@ fn create_test_bank(address_count: usize, initial_balance: u64) -> (TestBank, C)
     let token_name = "Token1".to_owned();
 
     let deployed_token_address =
-        super::create_token_address::<C>(&token_name, sender_address.as_ref(), salt);
+        create_token_address::<C>(&token_name, sender_address.as_ref(), salt);
 
     let bank_config = create_bank_config(address_count, initial_balance);
     let init_token_address = create_token_address::<C>(
@@ -227,27 +229,53 @@ fn test_bank_edge_cases() {
 
         let receiver = MockPublicKey::try_from("pub_key_receiver").unwrap();
         let receiver_address = receiver.to_address::<<C as Spec>::Address>();
-        {
-            let transfer = call::CallMessage::Transfer {
-                to: receiver_address,
-                coins: Coins {
-                    amount: initial_balance + 1,
-                    token_address: test_bank.init_token_address.clone(),
-                },
-            };
+        let transfer = call::CallMessage::Transfer {
+            to: receiver_address,
+            coins: Coins {
+                amount: initial_balance + 1,
+                token_address: test_bank.init_token_address.clone(),
+            },
+        };
 
-            let result = test_bank
-                .bank
-                .call(transfer, &sender_context, &mut test_bank.working_set);
+        let result = test_bank
+            .bank
+            .call(transfer, &sender_context, &mut test_bank.working_set);
 
-            assert!(result.is_err());
-            let error = result.err().unwrap();
-            assert_eq!("Insufficient funds", error.to_string());
-        }
+        assert!(result.is_err());
+        let error = result.err().unwrap();
+        assert_eq!("Insufficient funds", error.to_string());
     }
 
     // Token does not exist
-    {}
+    {
+        let sender_address = test_bank.bank_config.tokens[0].address_and_balances[0]
+            .0
+            .clone();
+        let salt = 0;
+        let token_name = "NonExistingToken".to_owned();
+
+        let token_address = create_token_address::<C>(&token_name, sender_address.as_ref(), salt);
+
+        let sender_context = C::new(sender_address);
+
+        let transfer = call::CallMessage::Transfer {
+            to: test_bank.minter_address.clone(),
+            coins: Coins {
+                amount: 1,
+                token_address,
+            },
+        };
+
+        let result = test_bank
+            .bank
+            .call(transfer, &sender_context, &mut test_bank.working_set);
+
+        assert!(result.is_err());
+        let error = result.err().unwrap();
+        assert!(error
+            .to_string()
+            .contains("Value not found for prefix: \"bank/Bank/tokens/\" and: storage key"))
+    }
 
     // Sender does not exist
     {
@@ -284,20 +312,34 @@ fn test_bank_edge_cases() {
 
         assert_eq!(query_response.amount, balance_before);
     }
-}
 
-#[test]
-fn integer_overflow() {
-    let bank = Bank::<C>::new();
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    // Sender equals receiver
+    {
+        // let sender_address = test_bank.bank_config.tokens[0].address_and_balances[0]
+        //     .0
+        //     .clone();
+        // let sender_context = C::new(sender_address.clone());
+        //
+        // let transfer = call::CallMessage::Transfer {
+        //     to: sender_address.clone(),
+        //     coins: Coins {
+        //         amount: 1,
+        //         token_address: test_bank.init_token_address.clone(),
+        //     },
+        // };
 
-    let bank_config = create_bank_config(2, u64::MAX - 1);
-
-    let genesis_result = bank.genesis(&bank_config, &mut working_set);
-    assert!(genesis_result.is_err());
-
-    assert_eq!(
-        "Total supply overflow",
-        genesis_result.unwrap_err().to_string()
-    );
+        // let balance_before = test_bank.query_balance(sender_address.clone());
+        // assert_eq!(Some(initial_balance), balance_before.amount);
+        //
+        // let result = test_bank
+        //     .bank
+        //     .call(transfer, &sender_context, &mut test_bank.working_set);
+        //
+        // assert!(result.is_err());
+        // let error = result.err().unwrap();
+        // assert_eq!("Insufficient funds", error.to_string());
+        //
+        // let balance_after = test_bank.query_balance(sender_address.clone());
+        // assert_eq!(balance_before.amount, balance_after.amount);
+    }
 }

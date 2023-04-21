@@ -23,10 +23,10 @@ impl MockPublicKey {
     }
 }
 
-impl TryFrom<&'static str> for MockPublicKey {
+impl TryFrom<&str> for MockPublicKey {
     type Error = Infallible;
 
-    fn try_from(key: &'static str) -> Result<Self, Self::Error> {
+    fn try_from(key: &str) -> Result<Self, Self::Error> {
         let key = key.as_bytes().to_vec();
         Ok(Self { pub_key: key })
     }
