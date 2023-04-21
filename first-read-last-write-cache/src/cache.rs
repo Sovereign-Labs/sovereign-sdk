@@ -39,6 +39,7 @@ impl CacheLog {
 }
 
 impl CacheLog {
+    #![allow(clippy::type_complexity)]
     /// Split a cachelog into an iterator of reads and an iterator of writes.
     /// The return value is (first_reads, last_writes)
     pub fn split(
@@ -120,7 +121,7 @@ impl CacheLog {
     ///     k2 => v2
     ///     k3 => v3
     pub fn merge_left(&mut self, rhs: Self) -> Result<(), MergeError> {
-        self.merge_left_with_filter_map(rhs, |x| Some(x))
+        self.merge_left_with_filter_map(rhs, Some)
     }
 
     pub fn merge_reads_left(&mut self, rhs: Self) -> Result<(), MergeError> {
