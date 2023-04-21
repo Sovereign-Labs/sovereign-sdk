@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sovereign_sdk::rpc::TxIdentifier;
+use sovereign_sdk::{rpc::TxIdentifier, stf::EventKey};
 
 /// A cheaply cloneable bytes abstraction for use within the trust boundary of the node
 /// (i.e. when interfacing with the database). Serializes and deserializes more efficiently,
@@ -72,10 +72,10 @@ pub struct StoredTransaction {
 }
 
 /// An identifier that specifies a single event
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum EventIdentifier {
     TxIdAndIndex((TxIdentifier, u64)),
-    TxIdAndKey((TxIdentifier, DbBytes)),
+    TxIdAndKey((TxIdentifier, EventKey)),
     /// The monotonically increasing number of the event, ordered by the DA layer For example, if the first tx
     /// contains 7 events, tx 2 contains 11 events, and tx 3 contains 7 txs,
     /// the last event in tx 3 would have number 25. The counter never resets.
@@ -83,7 +83,7 @@ pub enum EventIdentifier {
 }
 
 /// An identifier for a group of related events
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum EventGroupIdentifier {
     TxId(TxIdentifier),
     Key(Vec<u8>),
