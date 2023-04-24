@@ -202,6 +202,11 @@ impl QueryGenerator {
         Runtime::<MockContext>::encode_election_query(query_message)
     }
 
+    pub(crate) fn generate_query_election_nb_of_votes_message() -> Vec<u8> {
+        let query_message = election::query::QueryMessage::GenNbOfVotes;
+        Runtime::<MockContext>::encode_election_query(query_message)
+    }
+
     pub(crate) fn generate_query_value_setter_message() -> Vec<u8> {
         let query_message = value_setter::query::QueryMessage::GetValue;
         Runtime::<MockContext>::encode_value_setter_query(query_message)
