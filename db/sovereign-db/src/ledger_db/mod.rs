@@ -28,7 +28,7 @@ use crate::{
 
 mod rpc;
 
-const LEDGER_DB_PATH_SUFFIX: &'static str = "ledger";
+const LEDGER_DB_PATH_SUFFIX: &str = "ledger";
 
 #[derive(Clone)]
 /// A database which stores the ledger history (slots, transactions, events, etc).
