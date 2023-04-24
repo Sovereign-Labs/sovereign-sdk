@@ -1,8 +1,9 @@
 mod data_generation;
 mod helpers;
 mod runtime;
-
 mod tx_hooks_impl;
+#[cfg(test)]
+mod tx_revert_tests;
 mod tx_verifier_impl;
 
 use std::path::Path;

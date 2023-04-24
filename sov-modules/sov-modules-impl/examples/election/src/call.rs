@@ -63,6 +63,10 @@ impl<C: sov_modules_api::Context> Election<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
+        // TODO testing
+        let number_of_votes = self.number_of_votes.get(working_set).unwrap_or_default();
+        self.number_of_votes.set(number_of_votes + 1, working_set);
+
         self.exit_if_frozen(working_set)?;
 
         let voter = self

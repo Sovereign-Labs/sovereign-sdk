@@ -37,6 +37,9 @@ pub struct Election<C: sov_modules_api::Context> {
 
     #[state]
     pub(crate) allowed_voters: sov_state::StateMap<C::Address, Voter>,
+
+    #[state]
+    pub(crate) number_of_votes: sov_state::StateValue<u64>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
@@ -90,6 +93,11 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
         match msg {
             Self::QueryMessage::GetResult => {
                 let response = serde_json::to_vec(&self.results(working_set)).unwrap();
+                sov_modules_api::QueryResponse { response }
+            }
+
+            query::QueryMessage::GenNbOfVotes => {
+                let response = serde_json::to_vec(&self.number_of_votes(working_set)).unwrap();
                 sov_modules_api::QueryResponse { response }
             }
         }

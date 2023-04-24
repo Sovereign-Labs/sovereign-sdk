@@ -1,6 +1,6 @@
 use super::{
     call::CallMessage,
-    query::{QueryMessage, Response},
+    query::{GetResultResponse, QueryMessage},
     types::Candidate,
     Election,
 };
@@ -99,11 +99,11 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(working_set: &mut WorkingS
     {
         let query = QueryMessage::GetResult;
         let query = election.query(query, working_set);
-        let query_response: Response = serde_json::from_slice(&query.response).unwrap();
+        let query_response: GetResultResponse = serde_json::from_slice(&query.response).unwrap();
 
         assert_eq!(
             query_response,
-            Response::Result(Some(Candidate {
+            GetResultResponse::Result(Some(Candidate {
                 name: "candidate_2".to_owned(),
                 count: 2
             }))

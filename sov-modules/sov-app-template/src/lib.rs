@@ -158,7 +158,7 @@ where
                             batch_workspace = batch_workspace.commit();
                         }
                         Err(e) => {
-                            self.revert_and_slash(batch_workspace);
+                            //    self.revert_and_slash(batch_workspace);
                             panic!("Demo app txs must succeed but failed with err: {}", e)
                         }
                     }
