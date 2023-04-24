@@ -24,7 +24,7 @@ pub struct StateDB {
     next_version: Arc<Mutex<Version>>,
 }
 
-const STATE_DB_PATH_SUFFIX: &'static str = "state";
+const STATE_DB_PATH_SUFFIX: &str = "state";
 
 impl StateDB {
     pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {

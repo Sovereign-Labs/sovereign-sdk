@@ -19,6 +19,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2.2.0
       - name: Run cargo check
         run: cargo check
+      - name: Run cargo fmt check
+        run: |
+          if ! cargo fmt --check ; then
+            echo "Formatting errors detected, please rune `cargo fmt` to fix it";
+            exit 1
+          fi
 
   test:
     runs-on: ubuntu-latest

@@ -5,7 +5,7 @@ use crate::{
 };
 use sov_modules_api::{
     mocks::{MockContext, MockPublicKey},
-    Context, Module, ModuleInfo, PublicKey, Spec, AddressBech32,
+    AddressBech32, Context, Module, ModuleInfo, PublicKey, Spec,
 };
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -181,7 +181,10 @@ fn test_get_acc_after_pub_key_update() {
 fn test_response_serialization() {
     let addr: Vec<u8> = (1..=32).collect();
     let nonce = 123456789;
-    let response = Response::AccountExists { addr: AddressBech32::try_from(addr.as_slice()).unwrap(), nonce };
+    let response = Response::AccountExists {
+        addr: AddressBech32::try_from(addr.as_slice()).unwrap(),
+        nonce,
+    };
 
     let json = serde_json::to_string(&response).unwrap();
     assert_eq!(

@@ -99,10 +99,10 @@ pub struct ConsensusSetUpdate<Address> {
 impl ConsensusSetUpdate<OpaqueAddress> {
     pub fn slashing(sequencer: &[u8]) -> ConsensusSetUpdate<OpaqueAddress> {
         let faulty_sequencer = Rc::new(sequencer.to_vec());
-        return ConsensusSetUpdate {
+        ConsensusSetUpdate {
             address: faulty_sequencer,
             new_role: None,
-        };
+        }
     }
 }
 
