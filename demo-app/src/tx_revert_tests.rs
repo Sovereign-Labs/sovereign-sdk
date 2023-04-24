@@ -33,6 +33,8 @@ fn test_tx_revert() {
     {
         let runtime = &mut Runtime::<MockContext>::new();
         let storage = ProverStorage::with_path(&path).unwrap();
+
+        // We sent 4 vote messages but one of them is invalid and should be reverted.
         check_query(
             runtime,
             QueryGenerator::generate_query_election_nb_of_votes_message(),

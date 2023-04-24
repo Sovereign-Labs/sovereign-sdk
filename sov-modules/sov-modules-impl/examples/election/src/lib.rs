@@ -38,7 +38,7 @@ pub struct Election<C: sov_modules_api::Context> {
     #[state]
     pub(crate) allowed_voters: sov_state::StateMap<C::Address, Voter>,
 
-    //  This is used for testing revert functionality in demo-app.
+    //  This is used for testing revert functionality in the demo-app.
     #[state]
     pub(crate) number_of_votes: sov_state::StateValue<u64>,
 }

@@ -129,7 +129,7 @@ impl CallGenerator {
         let create_voter_messages = self.create_voters_and_vote();
         messages.extend(create_voter_messages.into_iter());
 
-        // This voter already voted
+        // Invalid message: This voter already voted.
         {
             let voter = MockPublicKey::try_from("voter_1").unwrap();
             let vote_message = election::call::CallMessage::Vote(1);

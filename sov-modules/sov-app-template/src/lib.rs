@@ -158,6 +158,8 @@ where
                             batch_workspace = batch_workspace.commit();
                         }
                         Err(_e) => {
+                            // The transaction causing invalid state transition is reverted but we don't slash and we continue
+                            // processing remaining transactions.
                             batch_workspace = batch_workspace.revert();
                         }
                     }
