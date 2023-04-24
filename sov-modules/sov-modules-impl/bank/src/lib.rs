@@ -2,8 +2,6 @@ pub mod call;
 mod create_token;
 pub mod genesis;
 pub mod query;
-#[cfg(test)]
-mod tests;
 mod token;
 
 pub use create_token::create_token_address;

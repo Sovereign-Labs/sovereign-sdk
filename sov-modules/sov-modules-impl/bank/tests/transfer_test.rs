@@ -179,6 +179,7 @@ fn transfer_initial_token() {
 
     // Sender equals receiver
     {
+        let total_supply_before = query_total_supply(&mut working_set);
         let sender_balance_before = query_user_balance(sender_address.clone(), &mut working_set);
         assert!(sender_balance_before.is_some());
 
@@ -196,6 +197,8 @@ fn transfer_initial_token() {
 
         let sender_balance_after = query_user_balance(sender_address, &mut working_set);
         assert_eq!(sender_balance_before, sender_balance_after);
+        let total_supply_after = query_total_supply(&mut working_set);
+        assert_eq!(total_supply_after, total_supply_before);
     }
 }
 
