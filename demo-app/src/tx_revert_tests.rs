@@ -1,8 +1,8 @@
 use crate::{
-    create_new_demo,
     data_generation::{simulate_da_with_revert_msg, QueryGenerator},
     helpers::check_query,
     runtime::Runtime,
+    test_utils::create_new_demo,
 };
 use sov_app_template::Batch;
 use sov_modules_api::mocks::MockContext;

@@ -157,9 +157,7 @@ where
                             events.push(resp.events);
                             batch_workspace = batch_workspace.commit();
                         }
-                        Err(e) => {
-                            println!("Error:{}", e);
-                            //    self.revert_and_slash(batch_workspace);
+                        Err(_e) => {
                             batch_workspace = batch_workspace.revert();
                         }
                     }
