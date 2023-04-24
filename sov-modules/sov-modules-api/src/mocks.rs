@@ -23,10 +23,19 @@ impl MockPublicKey {
     }
 }
 
-impl TryFrom<&'static str> for MockPublicKey {
+impl TryFrom<&str> for MockPublicKey {
     type Error = Infallible;
 
-    fn try_from(key: &'static str) -> Result<Self, Self::Error> {
+    fn try_from(key: &str) -> Result<Self, Self::Error> {
+        let key = key.as_bytes().to_vec();
+        Ok(Self { pub_key: key })
+    }
+}
+
+impl TryFrom<String> for MockPublicKey {
+    type Error = Infallible;
+
+    fn try_from(key: String) -> Result<Self, Self::Error> {
         let key = key.as_bytes().to_vec();
         Ok(Self { pub_key: key })
     }
@@ -68,8 +77,8 @@ pub struct MockContext {
 impl Spec for MockContext {
     type Address = Address;
     type Storage = ProverStorage<MockStorageSpec>;
-    type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
+    type Hasher = sha2::Sha256;
     type Signature = MockSignature;
     type Witness = ArrayWitness;
 }
@@ -92,8 +101,8 @@ pub struct ZkMockContext {
 impl Spec for ZkMockContext {
     type Address = Address;
     type Storage = ZkStorage<MockStorageSpec>;
-    type Hasher = sha2::Sha256;
     type PublicKey = MockPublicKey;
+    type Hasher = sha2::Sha256;
     type Signature = MockSignature;
     type Witness = ArrayWitness;
 }

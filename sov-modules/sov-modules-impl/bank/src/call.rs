@@ -4,7 +4,7 @@ use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
 /// This enumeration represents the available call messages for interacting with the bank module.
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: sov_modules_api::Context> {
     /// Creates a new token with the specified name and initial balance.
     CreateToken {

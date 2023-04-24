@@ -31,6 +31,9 @@ impl<C: sov_modules_api::Context> Token<C> {
         amount: Amount,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
+        if from == to {
+            return Ok(CallResponse::default());
+        }
         let from_balance = self.balances.get_or_err(from, working_set)?;
 
         let from_balance = match from_balance.checked_sub(amount) {
