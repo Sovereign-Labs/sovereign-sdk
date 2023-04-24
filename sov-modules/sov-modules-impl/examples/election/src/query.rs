@@ -7,16 +7,22 @@ use sov_state::WorkingSet;
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 pub enum QueryMessage {
     GetResult,
+    GenNbOfVotes,
 }
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
-pub enum Response {
+pub enum GetResultResponse {
     Result(Option<Candidate>),
     Err(String),
 }
 
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
+pub enum GetNbOfVotesResponse {
+    Result(u64),
+}
+
 impl<C: sov_modules_api::Context> Election<C> {
-    pub fn results(&self, working_set: &mut WorkingSet<C::Storage>) -> Response {
+    pub fn results(&self, working_set: &mut WorkingSet<C::Storage>) -> GetResultResponse {
         let is_frozen = self.is_frozen.get(working_set).unwrap_or_default();
 
         if is_frozen {
@@ -27,9 +33,17 @@ impl<C: sov_modules_api::Context> Election<C> {
                 .into_iter()
                 .max_by(|c1, c2| c1.count.cmp(&c2.count));
 
-            Response::Result(candidate)
+            GetResultResponse::Result(candidate)
         } else {
-            Response::Err("Election is not frozen".to_owned())
+            GetResultResponse::Err("Election is not frozen".to_owned())
         }
+    }
+
+    pub fn number_of_votes(
+        &self,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> GetNbOfVotesResponse {
+        let number_of_votes = self.number_of_votes.get(working_set).unwrap_or_default();
+        GetNbOfVotesResponse::Result(number_of_votes)
     }
 }

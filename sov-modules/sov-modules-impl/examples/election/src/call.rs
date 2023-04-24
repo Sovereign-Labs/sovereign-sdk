@@ -63,6 +63,14 @@ impl<C: sov_modules_api::Context> Election<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
+        let new_number_of_votes = self
+            .number_of_votes
+            .get(working_set)
+            .unwrap_or_default()
+            .checked_add(1)
+            .ok_or(anyhow!("Vote count overflow"))?;
+
+        self.number_of_votes.set(new_number_of_votes, working_set);
         self.exit_if_frozen(working_set)?;
 
         let voter = self

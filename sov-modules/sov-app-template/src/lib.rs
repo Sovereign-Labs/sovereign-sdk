@@ -157,9 +157,10 @@ where
                             events.push(resp.events);
                             batch_workspace = batch_workspace.commit();
                         }
-                        Err(e) => {
-                            self.revert_and_slash(batch_workspace);
-                            panic!("Demo app txs must succeed but failed with err: {}", e)
+                        Err(_e) => {
+                            // The transaction causing invalid state transition is reverted but we don't slash and we continue
+                            // processing remaining transactions.
+                            batch_workspace = batch_workspace.revert();
                         }
                     }
                 }

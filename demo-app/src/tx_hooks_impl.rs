@@ -28,6 +28,7 @@ pub(crate) struct DemoAppTxHooks<C: Context> {
 }
 
 impl<C: Context> DemoAppTxHooks<C> {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             accounts_hooks: accounts::hooks::Hooks::<C>::new(),

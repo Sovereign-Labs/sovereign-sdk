@@ -14,6 +14,7 @@ pub(crate) struct Transaction<C: sov_modules_api::Context> {
 }
 
 impl<C: sov_modules_api::Context> Transaction<C> {
+    #[allow(dead_code)]
     pub fn new(msg: Vec<u8>, pub_key: C::PublicKey, signature: C::Signature, nonce: u64) -> Self {
         Self {
             signature,
@@ -29,6 +30,7 @@ pub(crate) struct DemoAppTxVerifier<C: Context> {
 }
 
 impl<C: Context> DemoAppTxVerifier<C> {
+    #[allow(dead_code)]
     pub fn new() -> Self {
         Self {
             _phantom: PhantomData,
