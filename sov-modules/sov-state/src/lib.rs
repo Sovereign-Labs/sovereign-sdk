@@ -65,10 +65,6 @@ impl Prefix {
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
-
-    pub fn extend(mut self, other: &Self) {
-        self.prefix.extend(&other.prefix);
-    }
 }
 
 pub trait StorageSpec {
