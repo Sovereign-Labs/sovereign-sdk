@@ -2,15 +2,12 @@ use crate::{
     data_generation::{simulate_da_with_revert_msg, QueryGenerator},
     helpers::check_query,
     runtime::Runtime,
-    test_utils::create_new_demo,
+    test_utils::{create_new_demo, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
 };
 use sov_app_template::Batch;
 use sov_modules_api::mocks::MockContext;
 use sov_state::ProverStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
-
-const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
-const LOCKED_AMOUNT: u64 = 200;
 
 #[test]
 fn test_tx_revert() {
