@@ -2,6 +2,7 @@
 mod data_generation;
 #[cfg(test)]
 mod helpers;
+#[cfg(test)]
 mod runtime;
 #[cfg(test)]
 mod test_utils;
