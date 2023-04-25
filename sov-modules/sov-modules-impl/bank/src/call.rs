@@ -76,7 +76,11 @@ impl<C: sov_modules_api::Context> Bank<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        token.burn(context.sender(), coins.amount, working_set)
+        let burn_result = token.burn(context.sender(), coins.amount, working_set)?;
+        token.total_supply -= coins.amount;
+        self.tokens.set(&coins.token_address, token, working_set);
+
+        Ok(burn_result)
     }
 }
 
