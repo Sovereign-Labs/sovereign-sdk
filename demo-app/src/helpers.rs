@@ -1,7 +1,6 @@
 use serde::de::DeserializeOwned;
 use sov_modules_api::{mocks::MockContext, DispatchQuery};
 use sov_state::{mocks::MockStorageSpec, ProverStorage, WorkingSet};
-use std::str;
 
 use crate::runtime::Runtime;
 

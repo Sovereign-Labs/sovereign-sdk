@@ -9,11 +9,13 @@ use sov_modules_api::mocks::MockContext;
 use sov_state::ProverStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
 
+const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + 1;
+
 #[test]
 fn test_tx_revert() {
     let path = schemadb::temppath::TempPath::new();
     {
-        let mut demo = create_new_demo(LOCKED_AMOUNT + 1, &path);
+        let mut demo = create_new_demo(SEQUENCER_BALANCE, &path);
 
         demo.init_chain(());
         demo.begin_slot();
@@ -43,7 +45,7 @@ fn test_tx_revert() {
         let resp = query_and_deserialize::<election::query::GetResultResponse>(
             runtime,
             QueryGenerator::generate_query_election_message(),
-            storage,
+            storage.clone(),
         );
 
         assert_eq!(
@@ -53,6 +55,14 @@ fn test_tx_revert() {
                 count: 3
             }))
         );
+
+        let resp = query_and_deserialize::<sequencer::query::SequencerAndBalanceResponse>(
+            runtime,
+            QueryGenerator::generate_query_check_balance(),
+            storage,
+        );
+
+        assert_eq!(resp.data.unwrap().balance, SEQUENCER_BALANCE);
     }
 }
 
@@ -61,7 +71,7 @@ fn test_tx_bad_sig() {
     let path = schemadb::temppath::TempPath::new();
 
     {
-        let mut demo = create_new_demo(LOCKED_AMOUNT + 1, &path);
+        let mut demo = create_new_demo(SEQUENCER_BALANCE, &path);
 
         demo.init_chain(());
         demo.begin_slot();
