@@ -1,16 +1,11 @@
 use std::{
-    collections::HashMap,
     path::Path,
     sync::{Arc, Mutex},
 };
 
 use anyhow::ensure;
 use schemadb::{Schema, DB};
-use sovereign_sdk::{
-    db::{SeekKeyEncoder, SlotStore},
-    spec::RollupSpec,
-    stf::Event,
-};
+use sovereign_sdk::{db::SeekKeyEncoder, stf::Event};
 
 use crate::{
     rocks_db_config::gen_rocksdb_options,
@@ -34,12 +29,10 @@ const LEDGER_DB_PATH_SUFFIX: &str = "ledger";
 /// A database which stores the ledger history (slots, transactions, events, etc).
 /// Ledger data is first ingested into an in-memory map before being fed to the state-transition function.
 /// Once the state-transition function has been executed and finalzied, the results are committed to the final db
-pub struct LedgerDB<R: RollupSpec> {
+pub struct LedgerDB {
     /// The RocksDB which stores the committed ledger. Uses an optimized layout which
     /// requires transactions to be executed before being committed.
     db: Arc<DB>,
-    /// In memory storage for slots that have not yet been executed.
-    slots_to_execute: Arc<Mutex<HashMap<[u8; 32], R::SlotData>>>,
     next_item_numbers: Arc<Mutex<ItemNumbers>>,
 }
 
@@ -87,7 +80,7 @@ pub struct SlotCommit {
 
 impl SlotCommitBuilder {}
 
-impl<S: RollupSpec> LedgerDB<S> {
+impl LedgerDB {
     pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
         let path = path.as_ref().join(LEDGER_DB_PATH_SUFFIX);
         let inner = DB::open(
@@ -108,7 +101,6 @@ impl<S: RollupSpec> LedgerDB<S> {
 
         Ok(Self {
             db: Arc::new(inner),
-            slots_to_execute: Default::default(),
             next_item_numbers: Arc::new(Mutex::new(next_item_numbers)),
         })
     }
@@ -212,6 +204,8 @@ impl<S: RollupSpec> LedgerDB<S> {
             .put::<EventByKey>(&(event.key.clone(), tx_number, *event_number), &())
     }
 
+    /// Commits a slot to the database by inserting its events, transactions, and batches before
+    /// inserting the slot metadata.
     pub fn commit_slot(&self, data_to_commit: SlotCommit) -> Result<(), anyhow::Error> {
         // Create a scope to ensure that the lock is released before we commit to the db
         let item_numbers = {
@@ -288,20 +282,5 @@ impl<S: RollupSpec> LedgerDB<S> {
             Some(Err(e)) => Err(e),
             _ => Ok(None),
         };
-    }
-}
-
-impl<S: RollupSpec> SlotStore for LedgerDB<S> {
-    type Slot = S::SlotData;
-
-    fn get(&self, hash: &[u8; 32]) -> Option<Self::Slot> {
-        self.slots_to_execute.lock().unwrap().remove(hash)
-    }
-
-    fn insert(&self, hash: [u8; 32], slot_data: Self::Slot) {
-        self.slots_to_execute
-            .lock()
-            .unwrap()
-            .insert(hash, slot_data);
     }
 }

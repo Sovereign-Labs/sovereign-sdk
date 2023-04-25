@@ -19,12 +19,12 @@ pub trait DaSpec {
     type BlobTransaction: BlobTransactionTrait<Self::Address>;
 
     /// A proof that each tx in a set of blob transactions is included in a given block.
-    type InclusionMultiProof;
+    type InclusionMultiProof: Encode + Decode;
 
     /// A proof that a claimed set of transactions is complete. For example, this could be a range
     /// proof demonstrating that the provided BlobTransactions represent the entire contents of Celestia namespace
     /// in a given block
-    type CompletenessProof;
+    type CompletenessProof: Encode + Decode;
 }
 
 /// A DaLayer implements the logic required to create a zk proof that some data
@@ -40,10 +40,6 @@ pub trait DaVerifier {
     /// The error type returned by the DA layer's verificaiton function
     type Error: Debug;
 
-    /// The hash of the DA layer block which is the genesis of the logical chain defined by this app.
-    /// This is *not* necessarily the DA layer's genesis block.
-    const RELATIVE_GENESIS: <Self::Spec as DaSpec>::SlotHash;
-
     /// Verify a claimed set of transactions against a block header.
     fn verify_relevant_tx_list(
         &self,
@@ -55,7 +51,7 @@ pub trait DaVerifier {
 }
 
 /// A transaction on a data availability layer, including the address of the sender.
-pub trait BlobTransactionTrait<Addr> {
+pub trait BlobTransactionTrait<Addr>: Encode + Decode {
     type Data: Buf;
     /// Returns the address (on the DA layer) of the entity which submitted the blob transaction
     fn sender(&self) -> Addr;

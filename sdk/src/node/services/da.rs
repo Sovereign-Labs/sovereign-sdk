@@ -56,12 +56,6 @@ pub trait DaService {
     // fn send_transaction(tx: Self::Transaction, sender: Self::Address)
 }
 
-/// A trait for data from the DA layer that will be stored in the rollup's database.
 pub trait SlotData: Encode + Decode + PartialEq + core::fmt::Debug + Clone {
-    type BatchData;
-    /// Encode any *non-batch* data (i.e. header, metadata, etc.) from this slot for storage. Batches contained
-    /// in this slot are encoded and stored separately
-    fn extra_data_for_storage(&self) -> Vec<u8>;
-    fn reconstruct_from_storage(extra_data: &[u8], batches: Vec<Self::BatchData>) -> Self;
     fn hash(&self) -> [u8; 32];
 }
