@@ -184,22 +184,22 @@ define_table_without_codec!(
 
 impl KeyEncoder<JmtNodes> for NodeKey {
     fn encode_key(&self) -> sovereign_sdk::db::Result<Vec<u8>> {
-        Ok(self.encode()?)
+        Ok(self.encode_to_vec())
     }
 }
 impl KeyDecoder<JmtNodes> for NodeKey {
     fn decode_key(data: &[u8]) -> sovereign_sdk::db::Result<Self> {
-        Ok(Self::decode(data)?)
+        Ok(Self::decode(&mut &data[..])?)
     }
 }
 
 impl ValueCodec<JmtNodes> for Node {
     fn encode_value(&self) -> sovereign_sdk::db::Result<Vec<u8>> {
-        Ok(self.encode()?)
+        Ok(self.encode_to_vec())
     }
 
     fn decode_value(data: &[u8]) -> sovereign_sdk::db::Result<Self> {
-        Ok(Self::decode(data)?)
+        Ok(Self::decode(&mut &data[..])?)
     }
 }
 
