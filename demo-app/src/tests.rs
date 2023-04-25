@@ -7,7 +7,7 @@ mod test {
 
     use crate::{
         data_generation::{simulate_da, QueryGenerator},
-        helpers::check_query,
+        helpers::query_and_deserialize,
         runtime::Runtime,
         test_utils::{create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
     };
@@ -33,19 +33,28 @@ mod test {
         {
             let runtime = &mut Runtime::<MockContext>::new();
             let storage = ProverStorage::with_path(&path).unwrap();
-            check_query(
+
+            let resp = query_and_deserialize::<election::query::GetResultResponse>(
                 runtime,
                 QueryGenerator::generate_query_election_message(),
-                r#"{"Result":{"name":"candidate_2","count":3}}"#,
                 storage.clone(),
             );
 
-            check_query(
+            assert_eq!(
+                resp,
+                election::query::GetResultResponse::Result(Some(election::Candidate {
+                    name: "candidate_2".to_owned(),
+                    count: 3
+                }))
+            );
+
+            let resp = query_and_deserialize::<value_setter::query::Response>(
                 runtime,
                 QueryGenerator::generate_query_value_setter_message(),
-                r#"{"value":33}"#,
                 storage,
             );
+
+            assert_eq!(resp, value_setter::query::Response { value: Some(33) });
         }
     }
 
@@ -64,19 +73,27 @@ mod test {
         demo.end_slot();
 
         let runtime = &mut Runtime::<MockContext>::new();
-        check_query(
+        let resp = query_and_deserialize::<election::query::GetResultResponse>(
             runtime,
             QueryGenerator::generate_query_election_message(),
-            r#"{"Result":{"name":"candidate_2","count":3}}"#,
             demo.current_storage.clone(),
         );
 
-        check_query(
+        assert_eq!(
+            resp,
+            election::query::GetResultResponse::Result(Some(election::Candidate {
+                name: "candidate_2".to_owned(),
+                count: 3
+            }))
+        );
+
+        let resp = query_and_deserialize::<value_setter::query::Response>(
             runtime,
             QueryGenerator::generate_query_value_setter_message(),
-            r#"{"value":33}"#,
-            demo.current_storage,
+            demo.current_storage.clone(),
         );
+
+        assert_eq!(resp, value_setter::query::Response { value: Some(33) });
     }
 
     #[test]
@@ -98,19 +115,24 @@ mod test {
         {
             let runtime = &mut Runtime::<C>::new();
             let storage = ProverStorage::with_path(&path).unwrap();
-            check_query(
+            let resp = query_and_deserialize::<election::query::GetResultResponse>(
                 runtime,
                 QueryGenerator::generate_query_election_message(),
-                r#"{"Err":"Election is not frozen"}"#,
                 storage.clone(),
             );
 
-            check_query(
+            assert_eq!(
+                resp,
+                election::query::GetResultResponse::Err("Election is not frozen".to_owned())
+            );
+
+            let resp = query_and_deserialize::<value_setter::query::Response>(
                 runtime,
                 QueryGenerator::generate_query_value_setter_message(),
-                r#"{"value":null}"#,
                 storage,
             );
+
+            assert_eq!(resp, value_setter::query::Response { value: None });
         }
     }
 

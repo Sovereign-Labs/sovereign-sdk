@@ -16,10 +16,12 @@ pub(crate) fn simulate_da() -> Vec<RawTx> {
 
 pub(crate) fn simulate_da_with_revert_msg() -> Vec<RawTx> {
     let call_generator = &mut CallGenerator::new();
-    let mut messages = Vec::default();
-    messages.extend(call_generator.election_call_messages_with_revert());
+    call_generator.election_call_messages_with_revert()
+}
 
-    messages
+pub(crate) fn simulate_da_with_bad_sig() -> Vec<RawTx> {
+    let call_generator = &mut CallGenerator::new();
+    call_generator.election_call_messages_bad_sig()
 }
 
 // Test helpers
@@ -155,6 +157,36 @@ impl CallGenerator {
             .collect()
     }
 
+    fn election_call_messages_bad_sig(&mut self) -> Vec<RawTx> {
+        let mut messages = Vec::default();
+        messages.extend(self.create_voters_and_vote());
+        messages.extend(self.freeze_vote());
+
+        let mut messages_iter = messages.into_iter().peekable();
+
+        let mut serialized_messages = Vec::default();
+        while let Some((sender, m, nonce)) = messages_iter.next() {
+            // The last message has a bad signature.
+            let should_fail = messages_iter.peek().is_none();
+
+            serialized_messages.push(RawTx {
+                data: Transaction::<MockContext>::new(
+                    Runtime::<MockContext>::encode_election_call(m),
+                    sender,
+                    MockSignature {
+                        msg_sig: Vec::default(),
+                        should_fail,
+                    },
+                    nonce,
+                )
+                .try_to_vec()
+                .unwrap(),
+            });
+        }
+
+        serialized_messages
+    }
+
     fn value_setter_call_messages(&mut self) -> Vec<RawTx> {
         let mut messages = Vec::default();
 
@@ -210,5 +242,10 @@ impl QueryGenerator {
     pub(crate) fn generate_query_value_setter_message() -> Vec<u8> {
         let query_message = value_setter::query::QueryMessage::GetValue;
         Runtime::<MockContext>::encode_value_setter_query(query_message)
+    }
+
+    pub(crate) fn generate_query_check_balance() -> Vec<u8> {
+        let query_message = sequencer::query::QueryMessage::GetSequencerAddressAndBalance;
+        Runtime::<MockContext>::encode_sequencer_query(query_message)
     }
 }
