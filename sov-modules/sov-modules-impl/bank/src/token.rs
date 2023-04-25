@@ -52,13 +52,21 @@ impl<C: sov_modules_api::Context> Token<C> {
     }
 
     pub(crate) fn burn(
-        &self,
+        &mut self,
         from: &C::Address,
-        burn: &C::Address,
         amount: Amount,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        self.transfer(from, burn, amount, working_set)
+        let balance = self.balances.get_or_err(from, working_set)?;
+        // TODO: Should we burn as much as we can or error if it was more than balance?
+        let new_balance = match balance.checked_sub(amount) {
+            Some(from_balance) => from_balance,
+            // TODO: Add `from` address to the message (we need pretty print for Address first)
+            None => bail!("Insufficient funds"),
+        };
+        self.balances.set(from, new_balance, working_set);
+        self.total_supply -= amount;
+        Ok(CallResponse::default())
     }
 
     pub(crate) fn create(
