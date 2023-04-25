@@ -6,7 +6,7 @@ use std::str::FromStr;
 pub fn vec_to_bech32(vec: &[u8], hrp: &str) -> Result<String, Error> {
     let data = vec.to_base32();
     let bech32_addr = bech32::encode(hrp, data, bech32::Variant::Bech32)?;
-    Ok(bech32_addr.to_string())
+    Ok(bech32_addr)
 }
 
 pub fn bech32_to_vec(bech32_addr: &str) -> Result<(String, Vec<u8>), Error> {

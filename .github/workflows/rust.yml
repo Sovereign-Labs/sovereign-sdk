@@ -14,9 +14,14 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RUSTFLAGS: -D warnings
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v2.2.0
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: "v0.4.0"
       - name: Run cargo check
         run: cargo check
       - name: Run cargo fmt check
@@ -28,8 +33,14 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v2
-      - uses: Swatinem/rust-cache@v2.2.0
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: "v0.4.0"
       - name: Run cargo test
         run: cargo test

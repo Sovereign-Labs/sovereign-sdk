@@ -171,7 +171,7 @@ pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStrea
     const SERIALIZE: &str = "Serialize";
     const DESERIALIZE: &str = "Deserialize";
 
-    let serialization_attrs = get_attribute_values(&item, "serialization");
+    let serialization_attrs = get_attribute_values(item, "serialization");
 
     let mut has_serialize = false;
     let mut has_deserialize = false;

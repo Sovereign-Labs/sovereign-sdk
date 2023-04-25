@@ -65,7 +65,7 @@ impl<'a> TryFrom<&'a [u8]> for Address {
             anyhow::bail!("Address must be 32 bytes long");
         }
         let mut addr_bytes = [0u8; 32];
-        addr_bytes.copy_from_slice(&addr);
+        addr_bytes.copy_from_slice(addr);
         Ok(Self { addr: addr_bytes })
     }
 }
