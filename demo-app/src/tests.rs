@@ -7,7 +7,7 @@ mod test {
 
     use crate::{
         data_generation::{simulate_da, QueryGenerator},
-        helpers::{check_query, query_and_deserialize},
+        helpers::query_and_deserialize,
         runtime::Runtime,
         test_utils::{create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
     };
@@ -48,12 +48,13 @@ mod test {
                 }))
             );
 
-            check_query(
+            let resp = query_and_deserialize::<value_setter::query::Response>(
                 runtime,
                 QueryGenerator::generate_query_value_setter_message(),
-                r#"{"value":33}"#,
                 storage,
             );
+
+            assert_eq!(resp, value_setter::query::Response { value: Some(33) });
         }
     }
 
@@ -86,12 +87,13 @@ mod test {
             }))
         );
 
-        check_query(
+        let resp = query_and_deserialize::<value_setter::query::Response>(
             runtime,
             QueryGenerator::generate_query_value_setter_message(),
-            r#"{"value":33}"#,
-            demo.current_storage,
+            demo.current_storage.clone(),
         );
+
+        assert_eq!(resp, value_setter::query::Response { value: Some(33) });
     }
 
     #[test]
@@ -124,12 +126,13 @@ mod test {
                 election::query::GetResultResponse::Err("Election is not frozen".to_owned())
             );
 
-            check_query(
+            let resp = query_and_deserialize::<value_setter::query::Response>(
                 runtime,
                 QueryGenerator::generate_query_value_setter_message(),
-                r#"{"value":null}"#,
                 storage,
             );
+
+            assert_eq!(resp, value_setter::query::Response { value: None });
         }
     }
 

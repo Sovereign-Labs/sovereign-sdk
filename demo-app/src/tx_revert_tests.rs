@@ -1,6 +1,6 @@
 use crate::{
     data_generation::{simulate_da_with_bad_sig, simulate_da_with_revert_msg, QueryGenerator},
-    helpers::{check_query, query_and_deserialize},
+    helpers::query_and_deserialize,
     runtime::Runtime,
     test_utils::{create_new_demo, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
 };
