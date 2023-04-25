@@ -166,7 +166,7 @@ impl CallGenerator {
 
         let mut serialized_messages = Vec::default();
         while let Some((sender, m, nonce)) = messages_iter.next() {
-            // The last message has bad signature.
+            // The last message has a bad signature.
             let should_fail = messages_iter.peek().is_none();
 
             serialized_messages.push(RawTx {

@@ -62,6 +62,7 @@ fn test_tx_revert() {
             storage,
         );
 
+        // Sequencer is rewarded
         assert_eq!(resp.data.unwrap().balance, SEQUENCER_BALANCE);
     }
 }
@@ -108,6 +109,7 @@ fn test_tx_bad_sig() {
             storage,
         );
 
+        // Sequencer is slashed
         assert_eq!(resp.data.unwrap().balance, 1);
     }
 }
