@@ -9,7 +9,8 @@ use sov_modules_api::mocks::MockContext;
 use sov_state::ProverStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
 
-const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + 1;
+const SEQUENCER_BALANCE_DELTA: u64 = 1;
+const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + SEQUENCER_BALANCE_DELTA;
 
 #[test]
 fn test_tx_revert() {
@@ -110,6 +111,6 @@ fn test_tx_bad_sig() {
         );
 
         // Sequencer is slashed
-        assert_eq!(resp.data.unwrap().balance, 1);
+        assert_eq!(resp.data.unwrap().balance, SEQUENCER_BALANCE_DELTA);
     }
 }
