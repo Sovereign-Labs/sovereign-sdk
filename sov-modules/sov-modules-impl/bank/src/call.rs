@@ -66,7 +66,10 @@ impl<C: sov_modules_api::Context> Bank<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        self.transfer_from(context.sender(), &to, coins, workinburn(
+        self.transfer_from(context.sender(), &to, coins, working_set)
+    }
+
+    pub(crate) fn burn(
         &self,
         coins: Coins<C::Address>,
         context: &C,

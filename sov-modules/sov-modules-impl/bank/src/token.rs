@@ -64,8 +64,9 @@ impl<C: sov_modules_api::Context> Token<C> {
             // TODO: Add `from` address to the message (we need pretty print for Address first)
             None => bail!("Insufficient funds"),
         };
-        self.balances.set(from, new_balance, working_set);
         self.total_supply -= amount;
+        self.balances.set(from, new_balance, working_set);
+
         Ok(CallResponse::default())
     }
 
