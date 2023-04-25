@@ -32,18 +32,26 @@ fn test_tx_revert() {
         let storage = ProverStorage::with_path(&path).unwrap();
 
         // We sent 4 vote messages but one of them is invalid and should be reverted.
-        check_query(
+        let resp = query_and_deserialize::<election::query::GetNbOfVotesResponse>(
             runtime,
             QueryGenerator::generate_query_election_nb_of_votes_message(),
-            r#"{"Result":3}"#,
             storage.clone(),
         );
 
-        check_query(
+        assert_eq!(resp, election::query::GetNbOfVotesResponse::Result(3));
+
+        let resp = query_and_deserialize::<election::query::GetResultResponse>(
             runtime,
             QueryGenerator::generate_query_election_message(),
-            r#"{"Result":{"name":"candidate_2","count":3}}"#,
             storage,
+        );
+
+        assert_eq!(
+            resp,
+            election::query::GetResultResponse::Result(Some(election::Candidate {
+                name: "candidate_2".to_owned(),
+                count: 3
+            }))
         );
     }
 }
