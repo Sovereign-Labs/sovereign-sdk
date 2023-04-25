@@ -19,7 +19,10 @@ impl MockPublicKey {
     }
 
     pub fn sign(&self, _msg: [u8; 32]) -> MockSignature {
-        MockSignature { msg_sig: vec![] }
+        MockSignature {
+            msg_sig: vec![],
+            should_fail: false,
+        }
     }
 }
 
@@ -52,6 +55,7 @@ impl PublicKey for MockPublicKey {
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, PartialEq, Eq, Debug, Clone, Default)]
 pub struct MockSignature {
     pub msg_sig: Vec<u8>,
+    pub should_fail: bool,
 }
 
 impl Signature for MockSignature {
@@ -62,7 +66,11 @@ impl Signature for MockSignature {
         _pub_key: &Self::PublicKey,
         _msg_hash: [u8; 32],
     ) -> Result<(), SigVerificationError> {
-        Ok(())
+        if self.should_fail {
+            Err(SigVerificationError::BadSignature)
+        } else {
+            Ok(())
+        }
     }
 }
 
