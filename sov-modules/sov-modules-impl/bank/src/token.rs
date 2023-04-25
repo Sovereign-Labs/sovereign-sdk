@@ -58,7 +58,6 @@ impl<C: sov_modules_api::Context> Token<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let balance = self.balances.get_or_err(from, working_set)?;
-        // TODO: Should we burn as much as we can or error if it was more than balance?
         let new_balance = match balance.checked_sub(amount) {
             Some(from_balance) => from_balance,
             // TODO: Add `from` address to the message (we need pretty print for Address first)
