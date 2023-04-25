@@ -243,4 +243,9 @@ impl QueryGenerator {
         let query_message = value_setter::query::QueryMessage::GetValue;
         Runtime::<MockContext>::encode_value_setter_query(query_message)
     }
+
+    pub(crate) fn generate_query_check_balance() -> Vec<u8> {
+        let query_message = sequencer::query::QueryMessage::GetSequencerAddressAndBalance;
+        Runtime::<MockContext>::encode_sequencer_query(query_message)
+    }
 }

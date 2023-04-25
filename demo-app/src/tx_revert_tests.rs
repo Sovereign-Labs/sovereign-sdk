@@ -1,6 +1,6 @@
 use crate::{
     data_generation::{simulate_da_with_bad_sig, simulate_da_with_revert_msg, QueryGenerator},
-    helpers::check_query,
+    helpers::{check_query, query_and_deserialize},
     runtime::Runtime,
     test_utils::{create_new_demo, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
 };
@@ -73,11 +73,23 @@ fn test_tx_bad_sig() {
         let runtime = &mut Runtime::<MockContext>::new();
         let storage = ProverStorage::with_path(&path).unwrap();
 
-        check_query(
+        let resp = query_and_deserialize::<election::query::GetResultResponse>(
             runtime,
             QueryGenerator::generate_query_election_message(),
-            r#"{"Err":"Election is not frozen"}"#,
+            storage.clone(),
+        );
+
+        assert_eq!(
+            resp,
+            election::query::GetResultResponse::Err("Election is not frozen".to_owned())
+        );
+
+        let resp = query_and_deserialize::<sequencer::query::SequencerAndBalanceResponse>(
+            runtime,
+            QueryGenerator::generate_query_check_balance(),
             storage,
         );
+
+        assert_eq!(resp.data.unwrap().balance, 1);
     }
 }
