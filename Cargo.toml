@@ -27,7 +27,7 @@ authors = ["Sovereign Labs <info@sovereign.xyz>"]
 homepage = "sovereign.xyz"
 publish = false
 repository = "https://github.com/sovereign-labs/sovereign"
-rust-version = "1.67"
+rust-version = "1.66"
 
 [workspace.dependencies]
 # Internal dependencies
@@ -47,7 +47,7 @@ sov-modules-macros = {path = "sov-modules/sov-modules-macros"}
 
 # Dependencies maintained by sovereign
 #jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "2475dfb7b73bf16de518c2de34f10e00cd4fa909" }
-jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "3d374ed7de884d50cbcd9559ef0a53adaacbf828" }
+jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "3ca60665bee78549b37bab5ec461d108dada874d", default-features = false }
 
 # External dependencies
 anyhow = "1.0.68"

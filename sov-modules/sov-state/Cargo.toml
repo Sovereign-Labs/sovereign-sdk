@@ -11,7 +11,7 @@ thiserror = { workspace = true }
 sovereign-db = { workspace = true }
 sovereign-sdk = { workspace = true, features = ["mocks"] }
 first-read-last-write-cache = { workspace = true }
-jmt = { workspace = true, features = ["borsh"] }
+jmt = { workspace = true }
 hex = { workspace = true}
 sha2 = { workspace = true}
 
