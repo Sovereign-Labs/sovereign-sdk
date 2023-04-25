@@ -5,7 +5,6 @@ use sovereign_sdk::{
         BatchIdentifier, EventIdentifier, LedgerRpcProvider, QueryMode, SlotIdentifier,
         TxIdentifier,
     },
-    spec::RollupSpec,
     stf::Event,
 };
 
@@ -63,7 +62,7 @@ impl From<StoredTransaction> for TxResponse {
     }
 }
 
-impl<S: RollupSpec> LedgerRpcProvider for LedgerDB<S> {
+impl LedgerRpcProvider for LedgerDB {
     type SlotResponse = SlotResponse;
 
     type BatchResponse = BatchResponse;
@@ -175,7 +174,7 @@ impl<S: RollupSpec> LedgerRpcProvider for LedgerDB<S> {
     }
 }
 
-impl<S: RollupSpec> LedgerDB<S> {
+impl LedgerDB {
     fn resolve_slot_identifier(
         &self,
         slot_id: &SlotIdentifier,
