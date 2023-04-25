@@ -59,7 +59,7 @@ impl<'a, T: Witness> TreeReader for TreeWitnessReader<'a, T> {
     ) -> anyhow::Result<Option<jmt::storage::Node>> {
         let serialized_node_opt: Option<Vec<u8>> = self.0.get_hint();
         match serialized_node_opt {
-            Some(val) => Ok(Some(jmt::storage::Node::decode(&val)?)),
+            Some(val) => Ok(Some(jmt::storage::Node::decode(&mut &val[..])?)),
             None => Ok(None),
         }
     }
