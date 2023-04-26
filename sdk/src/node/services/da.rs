@@ -52,8 +52,7 @@ pub trait DaService {
         <Self::Spec as DaSpec>::CompletenessProof,
     );
 
-    // TODO: add a send_transaction method
-    // fn send_transaction(tx: Self::Transaction, sender: Self::Address)
+    // TODO: add a send_transaction method https://github.com/Sovereign-Labs/sovereign/issues/208
 }
 
 pub trait SlotData: Encode + Decode + PartialEq + core::fmt::Debug + Clone {
