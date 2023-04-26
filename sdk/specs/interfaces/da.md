@@ -102,7 +102,7 @@ this could be a list of merkle siblings.
 
 ### Type: `CompletenessProof`
 
-A proof showing that each an associated vector does not omit any "relevant" transactions. For example, this could be a
+A proof showing that an associated vector does not omit any "relevant" transactions. For example, this could be a
 merkle proof of the items immediately preceding and following a particular Celestia namespace. This type may be
 the unit struct if no completeness proof is required.
 
