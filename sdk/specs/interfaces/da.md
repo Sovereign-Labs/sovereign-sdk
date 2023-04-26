@@ -148,7 +148,7 @@ the DA layer's consensus translates into rollup state.
   - An adaptation of the `get_relevant_txs` method designed for use by verifiers. This method
     returns a `Result` containing the unit type on success, and an error message on failure. An invocation
     succeeds if and only if the provided set of `txs` was included on the L1 (as demonstrated by `inclusion_proof`),
-    is complete (as demonstrated by `completeness_proof`). The list of blob transactions verified by this trait will be
+    and is complete (as demonstrated by `completeness_proof`). The list of blob transactions verified by this trait will be
     processed by rollups in order - which means that the verification must be careful to enforce a deterministic ordering
     to prevent consensus failures on the rollup. Except for the "Error" response, all of the types required by this function are
     defined in the `DaSpec` trait.
