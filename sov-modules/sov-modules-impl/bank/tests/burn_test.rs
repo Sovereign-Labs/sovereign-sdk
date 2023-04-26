@@ -80,7 +80,6 @@ fn burn_deployed_tokens() {
     assert!(burned.events.is_empty());
 
     let current_total_supply = query_total_supply(&mut working_set);
-    // Total supply does not change
     assert_eq!(Some(initial_balance - burn_amount), current_total_supply);
     let minter_balance = query_user_balance(minter_address.clone(), &mut working_set);
     assert_eq!(Some(initial_balance - burn_amount), minter_balance);

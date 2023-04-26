@@ -34,13 +34,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         if from == to {
             return Ok(CallResponse::default());
         }
-        let from_balance = self.balances.get_or_err(from, working_set)?;
-
-        let from_balance = match from_balance.checked_sub(amount) {
-            Some(from_balance) => from_balance,
-            // TODO: Add `from` address to the message (we need pretty print for Address first)
-            None => bail!("Insufficient funds"),
-        };
+        let from_balance = self.check_balance(from, amount, working_set)?;
 
         // We can't overflow here because the sum must be smaller or eq to `total_supply` which is u64.
         let to_balance = self.balances.get(to, working_set).unwrap_or_default() + amount;
@@ -57,15 +51,26 @@ impl<C: sov_modules_api::Context> Token<C> {
         amount: Amount,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let balance = self.balances.get_or_err(from, working_set)?;
-        let new_balance = match balance.checked_sub(amount) {
-            Some(from_balance) => from_balance,
-            // TODO: Add `from` address to the message (we need pretty print for Address first)
-            None => bail!("Insufficient funds"),
-        };
+        let new_balance = self.check_balance(from, amount, working_set)?;
         self.balances.set(from, new_balance, working_set);
 
         Ok(CallResponse::default())
+    }
+
+    // Check that amount can be deducted from address
+    // Returns new balance after subtraction.
+    fn check_balance(
+        &self,
+        from: &C::Address,
+        amount: Amount,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<Amount> {
+        let balance = self.balances.get_or_err(from, working_set)?;
+        let new_balance = match balance.checked_sub(amount) {
+            Some(from_balance) => from_balance,
+            None => bail!("Insufficient funds for {}", from),
+        };
+        Ok(new_balance)
     }
 
     pub(crate) fn create(

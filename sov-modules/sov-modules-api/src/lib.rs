@@ -119,7 +119,8 @@ pub trait Spec {
         + Into<AddressBech32>
         + Serialize
         + for<'a> Deserialize<'a>
-        + Send;
+        + Send
+        + Display;
 
     type Storage: Storage + Clone;
 
