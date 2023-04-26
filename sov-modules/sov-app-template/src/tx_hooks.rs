@@ -36,12 +36,6 @@ pub trait TxHooks {
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> Result<()>;
 
-    /// runs after batch reverts.
-    fn post_revert_apply_batch(
-        &self,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> Result<()>;
-
     /// runs at the end of apply_batch.
     fn exit_apply_batch(
         &self,

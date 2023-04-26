@@ -85,13 +85,6 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
         self.sequencer_hooks.lock(working_set)
     }
 
-    fn post_revert_apply_batch(
-        &self,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> Result<()> {
-        self.sequencer_hooks.lock(working_set)
-    }
-
     fn exit_apply_batch(
         &self,
         amount: u64,
