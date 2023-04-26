@@ -9,10 +9,17 @@ use sov_modules_api::PublicKey;
 
 pub(crate) fn simulate_da() -> Vec<RawTx> {
     let em = election_messages::ElectionCallMessages {};
-    let call_generator = &mut CallGenerator::new();
+
     let mut messages = Vec::default();
     messages.extend(em.create_raw_txs());
-    messages.extend(call_generator.value_setter_call_messages());
+
+    let call_generator = value_setter_messages::CallGenerator {
+        value_setter_admin: MockPublicKey::try_from("value_setter_admin").unwrap(),
+    };
+
+    let vm = value_setter_messages::ValueSetterMessages { call_generator };
+
+    messages.extend(vm.create_raw_txs());
     messages
 }
 
@@ -232,13 +239,82 @@ mod election_messages {
         }
     }
 }
-// Test helpers
+
+mod value_setter_messages {
+
+    use super::*;
+
+    pub struct CallGenerator {
+        pub value_setter_admin: MockPublicKey,
+    }
+
+    impl CallGenerator {
+        fn value_setter_call_messages(
+            &self,
+        ) -> Vec<(MockPublicKey, value_setter::call::CallMessage, u64)> {
+            let mut value_setter_admin_nonce = 0;
+            let mut messages = Vec::default();
+
+            let new_value = 99;
+
+            let set_value_msg_1 =
+                value_setter::call::CallMessage::DoSetValue(value_setter::call::SetValue {
+                    new_value,
+                });
+
+            let new_value = 33;
+            let set_value_msg_2 =
+                value_setter::call::CallMessage::DoSetValue(value_setter::call::SetValue {
+                    new_value,
+                });
+
+            messages.push((
+                self.value_setter_admin.clone(),
+                set_value_msg_1,
+                value_setter_admin_nonce,
+            ));
+
+            value_setter_admin_nonce += 1;
+            messages.push((
+                self.value_setter_admin.clone(),
+                set_value_msg_2,
+                value_setter_admin_nonce,
+            ));
+
+            messages
+        }
+    }
+    pub struct ValueSetterMessages {
+        pub call_generator: CallGenerator,
+    }
+
+    impl MessageGenerator for ValueSetterMessages {
+        type Call = value_setter::call::CallMessage;
+
+        fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)> {
+            self.call_generator.value_setter_call_messages()
+        }
+
+        fn create_txs(
+            &self,
+            sender: MockPublicKey,
+            message: Self::Call,
+            nonce: u64,
+            _flag: bool,
+        ) -> Transaction<MockContext> {
+            Transaction::<MockContext>::new(
+                Runtime::<MockContext>::encode_value_setter_call(message),
+                sender,
+                MockSignature::default(),
+                nonce,
+            )
+        }
+    }
+}
 
 struct CallGenerator {
     election_admin_nonce: u64,
     election_admin: MockPublicKey,
-    value_setter_admin_nonce: u64,
-    value_setter_admin: MockPublicKey,
 }
 
 impl CallGenerator {
@@ -246,8 +322,6 @@ impl CallGenerator {
         Self {
             election_admin_nonce: 0,
             election_admin: MockPublicKey::try_from("election_admin").unwrap(),
-            value_setter_admin_nonce: 0,
-            value_setter_admin: MockPublicKey::try_from("value_setter_admin").unwrap(),
         }
     }
 
@@ -302,44 +376,6 @@ impl CallGenerator {
             self.election_admin_nonce,
         ));
         self.election_admin_nonce += 1;
-
-        messages
-    }
-
-    fn value_setter_call_messages(&mut self) -> Vec<RawTx> {
-        let mut messages = Vec::default();
-
-        let new_value = 99;
-
-        let set_value_msg_1 =
-            value_setter::call::CallMessage::DoSetValue(value_setter::call::SetValue { new_value });
-
-        let new_value = 33;
-        let set_value_msg_2 =
-            value_setter::call::CallMessage::DoSetValue(value_setter::call::SetValue { new_value });
-
-        messages.push(RawTx {
-            data: Transaction::<MockContext>::new(
-                Runtime::<MockContext>::encode_value_setter_call(set_value_msg_1),
-                self.value_setter_admin.clone(),
-                MockSignature::default(),
-                self.value_setter_admin_nonce,
-            )
-            .try_to_vec()
-            .unwrap(),
-        });
-
-        self.value_setter_admin_nonce += 1;
-        messages.push(RawTx {
-            data: Transaction::<MockContext>::new(
-                Runtime::<MockContext>::encode_value_setter_call(set_value_msg_2),
-                self.value_setter_admin.clone(),
-                MockSignature::default(),
-                self.value_setter_admin_nonce,
-            )
-            .try_to_vec()
-            .unwrap(),
-        });
 
         messages
     }
