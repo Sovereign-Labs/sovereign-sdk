@@ -46,19 +46,6 @@ where
             working_set: None,
         }
     }
-
-    fn revert_and_slash(&mut self, batch_workspace: WorkingSet<C::Storage>) {
-        // Revert all the changes (the sequencer funds are no longer locked)
-        let mut batch_workspace = batch_workspace.revert();
-
-        // Locks funds again, we know there are enough coins to lock.
-        self.tx_hooks
-            .post_revert_apply_batch(&mut batch_workspace)
-            .unwrap();
-
-        // Only the locked_coins are saved in the `AppTemplate`.
-        self.working_set = Some(batch_workspace);
-    }
 }
 
 impl<C: Context, V, RT, H, GenesisConfig> StateTransitionFunction
@@ -116,30 +103,41 @@ where
             )
         }
 
+        // Commit `enter_apply_batch` changes.
+        batch_workspace = batch_workspace.commit().to_revertable();
+
         let mut events = Vec::new();
 
-        // Run the stateless verification.
+        // Run the stateless verification, since it is stateless we don't commit.
         let txs = match self
             .tx_verifier
             .verify_txs_stateless(batch.take_transactions())
         {
             Ok(txs) => txs,
             Err(e) => {
-                self.revert_and_slash(batch_workspace);
+                // Revert on error
+                let batch_workspace = batch_workspace.revert();
+                self.working_set = Some(batch_workspace);
                 anyhow::bail!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}", e);
             }
         };
 
+        // Process transactions in a loop, commit changes after every step of the loop.
         for tx in txs {
             batch_workspace = batch_workspace.to_revertable();
             // Run the stateful verification, possibly modifies the state.
             let verified_tx = match self.tx_hooks.pre_dispatch_tx_hook(tx, &mut batch_workspace) {
                 Ok(verified_tx) => verified_tx,
                 Err(e) => {
-                    // TODO check if we want to slash here.
-                    let batch_workspace = batch_workspace.revert();
-                    self.working_set = Some(batch_workspace);
+                    // Revert the batch.
+                    batch_workspace = batch_workspace.revert();
 
+                    // We reward sequencer funds inside `exit_apply_batch`.
+                    self.tx_hooks
+                        .exit_apply_batch(0, &mut batch_workspace)
+                        .expect("Impossible happened: error in exit_apply_batch");
+
+                    self.working_set = Some(batch_workspace);
                     anyhow::bail!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
                 }
             };
@@ -155,7 +153,6 @@ where
                     match tx_result {
                         Ok(resp) => {
                             events.push(resp.events);
-                            batch_workspace = batch_workspace.commit();
                         }
                         Err(_e) => {
                             // The transaction causing invalid state transition is reverted but we don't slash and we continue
@@ -165,11 +162,14 @@ where
                     }
                 }
                 Err(e) => {
-                    // If the serialization is invalid, the sequencer is malicious. Slash them.
-                    self.revert_and_slash(batch_workspace);
+                    // If the serialization is invalid, the sequencer is malicious. Slash them (we don't run exit_apply_batch here)
+                    let batch_workspace = batch_workspace.revert();
+                    self.working_set = Some(batch_workspace);
                     anyhow::bail!("Tx decoding error: {}", e);
                 }
             }
+            // commit each step of the loop
+            batch_workspace = batch_workspace.commit();
         }
 
         // TODO: calculate the amount based of gas and fees
