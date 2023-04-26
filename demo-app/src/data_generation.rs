@@ -29,6 +29,11 @@ pub(crate) fn simulate_da_with_bad_nonce() -> Vec<RawTx> {
     call_generator.election_call_messages_bad_nonce()
 }
 
+pub(crate) fn simulate_da_with_bad_serialization() -> Vec<RawTx> {
+    let call_generator = &mut CallGenerator::new();
+    call_generator.election_call_messages_serialication_error()
+}
+
 // Test helpers
 
 struct CallGenerator {
@@ -211,6 +216,36 @@ impl CallGenerator {
             serialized_messages.push(RawTx {
                 data: Transaction::<MockContext>::new(
                     Runtime::<MockContext>::encode_election_call(m),
+                    sender,
+                    MockSignature::default(),
+                    nonce,
+                )
+                .try_to_vec()
+                .unwrap(),
+            });
+        }
+
+        serialized_messages
+    }
+
+    fn election_call_messages_serialication_error(&mut self) -> Vec<RawTx> {
+        let mut messages = Vec::default();
+        messages.extend(self.create_voters_and_vote());
+        messages.extend(self.freeze_vote());
+
+        let mut messages_iter = messages.into_iter().peekable();
+
+        let mut serialized_messages = Vec::default();
+        while let Some((sender, m, nonce)) = messages_iter.next() {
+            let call_data = if messages_iter.peek().is_none() {
+                vec![1, 2, 3]
+            } else {
+                Runtime::<MockContext>::encode_election_call(m)
+            };
+
+            serialized_messages.push(RawTx {
+                data: Transaction::<MockContext>::new(
+                    call_data,
                     sender,
                     MockSignature::default(),
                     nonce,
