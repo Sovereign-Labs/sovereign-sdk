@@ -2,38 +2,236 @@ use crate::runtime::Runtime;
 use crate::tx_verifier_impl::Transaction;
 
 use borsh::BorshSerialize;
+
 use sov_app_template::RawTx;
 use sov_modules_api::mocks::{MockContext, MockPublicKey, MockSignature};
 use sov_modules_api::PublicKey;
 
 pub(crate) fn simulate_da() -> Vec<RawTx> {
+    let em = election_messages::ElectionCallMessages {};
     let call_generator = &mut CallGenerator::new();
     let mut messages = Vec::default();
-    messages.extend(call_generator.election_call_messages());
+    messages.extend(em.create_raw_txs());
     messages.extend(call_generator.value_setter_call_messages());
     messages
 }
 
 pub(crate) fn simulate_da_with_revert_msg() -> Vec<RawTx> {
-    let call_generator = &mut CallGenerator::new();
-    call_generator.election_call_messages_with_revert()
+    let em = election_messages::InvalidElectionCallMessages {};
+    em.create_raw_txs()
 }
 
 pub(crate) fn simulate_da_with_bad_sig() -> Vec<RawTx> {
-    let call_generator = &mut CallGenerator::new();
-    call_generator.election_call_messages_bad_sig()
+    let em = election_messages::BadSigElectionCallMessages {};
+    em.create_raw_txs()
 }
 
 pub(crate) fn simulate_da_with_bad_nonce() -> Vec<RawTx> {
-    let call_generator = &mut CallGenerator::new();
-    call_generator.election_call_messages_bad_nonce()
+    let em = election_messages::BadNonceElectionCallMessages {};
+    em.create_raw_txs()
 }
 
 pub(crate) fn simulate_da_with_bad_serialization() -> Vec<RawTx> {
-    let call_generator = &mut CallGenerator::new();
-    call_generator.election_call_messages_serialication_error()
+    let em = election_messages::BadSerializationElectionCallMessages {};
+    em.create_raw_txs()
 }
 
+trait MessageGenerator {
+    type Call;
+
+    fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)>;
+
+    fn create_txs(
+        &self,
+        sender: MockPublicKey,
+        message: Self::Call,
+        nonce: u64,
+        flag: bool,
+    ) -> Transaction<MockContext>;
+
+    fn create_raw_txs(&self) -> Vec<RawTx> {
+        let mut messages_iter = self.create_messages().into_iter().peekable();
+        let mut serialized_messages = Vec::default();
+        while let Some((sender, m, nonce)) = messages_iter.next() {
+            let flag = messages_iter.peek().is_none();
+
+            let tx = self.create_txs(sender, m, nonce, flag);
+
+            serialized_messages.push(RawTx {
+                data: tx.try_to_vec().unwrap(),
+            })
+        }
+        serialized_messages
+    }
+}
+
+mod election_messages {
+    use super::*;
+
+    pub struct ElectionCallMessages {}
+
+    impl MessageGenerator for ElectionCallMessages {
+        type Call = election::call::CallMessage<MockContext>;
+
+        fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)> {
+            let call_generator = &mut CallGenerator::new();
+            let mut messages = Vec::default();
+
+            messages.extend(call_generator.create_voters_and_vote());
+            messages.extend(call_generator.freeze_vote());
+            messages
+        }
+
+        fn create_txs(
+            &self,
+            sender: MockPublicKey,
+            message: Self::Call,
+            nonce: u64,
+            _flag: bool,
+        ) -> Transaction<MockContext> {
+            Transaction::<MockContext>::new(
+                Runtime::<MockContext>::encode_election_call(message),
+                sender,
+                MockSignature::default(),
+                nonce,
+            )
+        }
+    }
+
+    pub struct InvalidElectionCallMessages {}
+
+    impl MessageGenerator for InvalidElectionCallMessages {
+        type Call = election::call::CallMessage<MockContext>;
+
+        fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)> {
+            let call_generator = &mut CallGenerator::new();
+            let mut messages = Vec::default();
+
+            messages.extend(call_generator.create_voters_and_vote());
+
+            // Invalid message: This voter already voted.
+            {
+                let voter = MockPublicKey::try_from("voter_1").unwrap();
+                let vote_message = election::call::CallMessage::Vote(1);
+                messages.push((voter, vote_message, 1));
+            }
+
+            messages.extend(call_generator.freeze_vote());
+            messages
+        }
+
+        fn create_txs(
+            &self,
+            sender: MockPublicKey,
+            message: Self::Call,
+            nonce: u64,
+            _flag: bool,
+        ) -> Transaction<MockContext> {
+            Transaction::<MockContext>::new(
+                Runtime::<MockContext>::encode_election_call(message),
+                sender,
+                MockSignature::default(),
+                nonce,
+            )
+        }
+    }
+
+    pub struct BadSigElectionCallMessages {}
+
+    impl MessageGenerator for BadSigElectionCallMessages {
+        type Call = election::call::CallMessage<MockContext>;
+
+        fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)> {
+            let call_generator = &mut CallGenerator::new();
+            let mut messages = Vec::default();
+
+            messages.extend(call_generator.create_voters_and_vote());
+            messages.extend(call_generator.freeze_vote());
+            messages
+        }
+
+        fn create_txs(
+            &self,
+            sender: MockPublicKey,
+            message: Self::Call,
+            nonce: u64,
+            flag: bool,
+        ) -> Transaction<MockContext> {
+            Transaction::<MockContext>::new(
+                Runtime::<MockContext>::encode_election_call(message),
+                sender,
+                MockSignature {
+                    msg_sig: Vec::default(),
+                    should_fail: flag,
+                },
+                nonce,
+            )
+        }
+    }
+
+    pub struct BadNonceElectionCallMessages {}
+
+    impl MessageGenerator for BadNonceElectionCallMessages {
+        type Call = election::call::CallMessage<MockContext>;
+
+        fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)> {
+            let call_generator = &mut CallGenerator::new();
+            let mut messages = Vec::default();
+
+            messages.extend(call_generator.create_voters_and_vote());
+            messages.extend(call_generator.freeze_vote());
+            messages
+        }
+
+        fn create_txs(
+            &self,
+            sender: MockPublicKey,
+            message: Self::Call,
+            nonce: u64,
+            flag: bool,
+        ) -> Transaction<MockContext> {
+            let nonce = if flag { nonce + 1 } else { nonce };
+
+            Transaction::<MockContext>::new(
+                Runtime::<MockContext>::encode_election_call(message),
+                sender,
+                MockSignature::default(),
+                nonce,
+            )
+        }
+    }
+
+    pub struct BadSerializationElectionCallMessages {}
+
+    impl MessageGenerator for BadSerializationElectionCallMessages {
+        type Call = election::call::CallMessage<MockContext>;
+
+        fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)> {
+            let call_generator = &mut CallGenerator::new();
+            let mut messages = Vec::default();
+
+            messages.extend(call_generator.create_voters_and_vote());
+            messages.extend(call_generator.freeze_vote());
+            messages
+        }
+
+        fn create_txs(
+            &self,
+            sender: MockPublicKey,
+            message: Self::Call,
+            nonce: u64,
+            flag: bool,
+        ) -> Transaction<MockContext> {
+            let call_data = if flag {
+                vec![1, 2, 3]
+            } else {
+                Runtime::<MockContext>::encode_election_call(message)
+            };
+
+            Transaction::<MockContext>::new(call_data, sender, MockSignature::default(), nonce)
+        }
+    }
+}
 // Test helpers
 
 struct CallGenerator {
@@ -106,157 +304,6 @@ impl CallGenerator {
         self.election_admin_nonce += 1;
 
         messages
-    }
-
-    fn election_call_messages(&mut self) -> Vec<RawTx> {
-        let mut messages = Vec::default();
-
-        {
-            let create_voter_messages = self.create_voters_and_vote();
-            messages.extend(create_voter_messages.into_iter());
-        }
-
-        {
-            let freeze_vote_messages = self.freeze_vote();
-            messages.extend(freeze_vote_messages.into_iter());
-        }
-
-        messages
-            .into_iter()
-            .map(|(sender, m, nonce)| RawTx {
-                data: Transaction::<MockContext>::new(
-                    Runtime::<MockContext>::encode_election_call(m),
-                    sender,
-                    MockSignature::default(),
-                    nonce,
-                )
-                .try_to_vec()
-                .unwrap(),
-            })
-            .collect()
-    }
-
-    fn election_call_messages_with_revert(&mut self) -> Vec<RawTx> {
-        let mut messages = Vec::default();
-        let create_voter_messages = self.create_voters_and_vote();
-        messages.extend(create_voter_messages.into_iter());
-
-        // Invalid message: This voter already voted.
-        {
-            let voter = MockPublicKey::try_from("voter_1").unwrap();
-            let vote_message = election::call::CallMessage::Vote(1);
-            messages.push((voter, vote_message, 1));
-        }
-
-        {
-            let freeze_vote_messages = self.freeze_vote();
-            messages.extend(freeze_vote_messages.into_iter());
-        }
-        messages
-            .into_iter()
-            .map(|(sender, m, nonce)| RawTx {
-                data: Transaction::<MockContext>::new(
-                    Runtime::<MockContext>::encode_election_call(m),
-                    sender,
-                    MockSignature::default(),
-                    nonce,
-                )
-                .try_to_vec()
-                .unwrap(),
-            })
-            .collect()
-    }
-
-    fn election_call_messages_bad_sig(&mut self) -> Vec<RawTx> {
-        let mut messages = Vec::default();
-        messages.extend(self.create_voters_and_vote());
-        messages.extend(self.freeze_vote());
-
-        let mut messages_iter = messages.into_iter().peekable();
-
-        let mut serialized_messages = Vec::default();
-        while let Some((sender, m, nonce)) = messages_iter.next() {
-            // The last message has a bad signature.
-            let should_fail = messages_iter.peek().is_none();
-
-            serialized_messages.push(RawTx {
-                data: Transaction::<MockContext>::new(
-                    Runtime::<MockContext>::encode_election_call(m),
-                    sender,
-                    MockSignature {
-                        msg_sig: Vec::default(),
-                        should_fail,
-                    },
-                    nonce,
-                )
-                .try_to_vec()
-                .unwrap(),
-            });
-        }
-
-        serialized_messages
-    }
-
-    fn election_call_messages_bad_nonce(&mut self) -> Vec<RawTx> {
-        let mut messages = Vec::default();
-        messages.extend(self.create_voters_and_vote());
-        messages.extend(self.freeze_vote());
-
-        let mut messages_iter = messages.into_iter().peekable();
-
-        let mut serialized_messages = Vec::default();
-        while let Some((sender, m, nonce)) = messages_iter.next() {
-            // The last message has a bad nonce.
-            let nonce = if messages_iter.peek().is_none() {
-                nonce + 1
-            } else {
-                nonce
-            };
-
-            serialized_messages.push(RawTx {
-                data: Transaction::<MockContext>::new(
-                    Runtime::<MockContext>::encode_election_call(m),
-                    sender,
-                    MockSignature::default(),
-                    nonce,
-                )
-                .try_to_vec()
-                .unwrap(),
-            });
-        }
-
-        serialized_messages
-    }
-
-    fn election_call_messages_serialication_error(&mut self) -> Vec<RawTx> {
-        let mut messages = Vec::default();
-        messages.extend(self.create_voters_and_vote());
-        messages.extend(self.freeze_vote());
-
-        let mut messages_iter = messages.into_iter().peekable();
-
-        let mut serialized_messages = Vec::default();
-        while let Some((sender, m, nonce)) = messages_iter.next() {
-            // The last message is misformatted.
-            let call_data = if messages_iter.peek().is_none() {
-                vec![1, 2, 3]
-            } else {
-                Runtime::<MockContext>::encode_election_call(m)
-            };
-
-            serialized_messages.push(RawTx {
-                data: Transaction::<MockContext>::new(
-                    call_data,
-                    sender,
-                    MockSignature::default(),
-                    nonce,
-                )
-                .try_to_vec()
-                .unwrap(),
-            });
-        }
-
-        serialized_messages
     }
 
     fn value_setter_call_messages(&mut self) -> Vec<RawTx> {
