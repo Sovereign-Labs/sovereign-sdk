@@ -108,7 +108,7 @@ the unit struct if no completeness proof is required.
 
 ### Type: `Blockheader`
 
-Must include a `prev_hash` field. Must provide a function to compute its canonical hash
+Must include a `prev_hash` field. Must provide a function to compute its canonical hash.
 
 | Name        | Type       | Description                         |
 | ----------- | ---------- | ----------------------------------- |
