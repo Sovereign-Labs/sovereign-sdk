@@ -13,13 +13,9 @@ pub(crate) fn simulate_da() -> Vec<RawTx> {
     let mut messages = Vec::default();
     messages.extend(em.create_raw_txs());
 
-    let call_generator = value_setter_messages::CallGenerator {
-        value_setter_admin: MockPublicKey::try_from("value_setter_admin").unwrap(),
-    };
-
-    let vm = value_setter_messages::ValueSetterMessages { call_generator };
-
+    let vm = value_setter_messages::ValueSetterMessages {};
     messages.extend(vm.create_raw_txs());
+
     messages
 }
 
@@ -74,6 +70,75 @@ trait MessageGenerator {
 
 mod election_messages {
     use super::*;
+
+    struct CallGenerator {
+        election_admin_nonce: u64,
+        election_admin: MockPublicKey,
+    }
+
+    impl CallGenerator {
+        fn new() -> Self {
+            Self {
+                election_admin_nonce: 0,
+                election_admin: MockPublicKey::try_from("election_admin").unwrap(),
+            }
+        }
+
+        fn create_voters_and_vote(
+            &mut self,
+        ) -> Vec<(MockPublicKey, election::call::CallMessage<MockContext>, u64)> {
+            let mut messages = Vec::default();
+
+            let set_candidates_message = election::call::CallMessage::SetCandidates {
+                names: vec!["candidate_1".to_owned(), "candidate_2".to_owned()],
+            };
+
+            messages.push((
+                self.election_admin.clone(),
+                set_candidates_message,
+                self.election_admin_nonce,
+            ));
+            self.election_admin_nonce += 1;
+
+            let voters = vec![
+                MockPublicKey::try_from("voter_1").unwrap(),
+                MockPublicKey::try_from("voter_2").unwrap(),
+                MockPublicKey::try_from("voter_3").unwrap(),
+            ];
+
+            for voter in voters {
+                let add_voter_message = election::call::CallMessage::AddVoter(voter.to_address());
+
+                messages.push((
+                    self.election_admin.clone(),
+                    add_voter_message,
+                    self.election_admin_nonce,
+                ));
+
+                let vote_message = election::call::CallMessage::Vote(1);
+                messages.push((voter, vote_message, 0));
+                self.election_admin_nonce += 1;
+            }
+
+            messages
+        }
+
+        fn freeze_vote(
+            &mut self,
+        ) -> Vec<(MockPublicKey, election::call::CallMessage<MockContext>, u64)> {
+            let mut messages = Vec::default();
+
+            let freeze_message = election::call::CallMessage::FreezeElection;
+            messages.push((
+                self.election_admin.clone(),
+                freeze_message,
+                self.election_admin_nonce,
+            ));
+            self.election_admin_nonce += 1;
+
+            messages
+        }
+    }
 
     pub struct ElectionCallMessages {}
 
@@ -249,6 +314,14 @@ mod value_setter_messages {
     }
 
     impl CallGenerator {
+        fn new() -> Self {
+            Self {
+                value_setter_admin: MockPublicKey::try_from("value_setter_admin").unwrap(),
+            }
+        }
+    }
+
+    impl CallGenerator {
         fn value_setter_call_messages(
             &self,
         ) -> Vec<(MockPublicKey, value_setter::call::CallMessage, u64)> {
@@ -284,15 +357,14 @@ mod value_setter_messages {
             messages
         }
     }
-    pub struct ValueSetterMessages {
-        pub call_generator: CallGenerator,
-    }
+    pub struct ValueSetterMessages {}
 
     impl MessageGenerator for ValueSetterMessages {
         type Call = value_setter::call::CallMessage;
 
         fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)> {
-            self.call_generator.value_setter_call_messages()
+            let call_generator = &mut CallGenerator::new();
+            call_generator.value_setter_call_messages()
         }
 
         fn create_txs(
@@ -309,75 +381,6 @@ mod value_setter_messages {
                 nonce,
             )
         }
-    }
-}
-
-struct CallGenerator {
-    election_admin_nonce: u64,
-    election_admin: MockPublicKey,
-}
-
-impl CallGenerator {
-    fn new() -> Self {
-        Self {
-            election_admin_nonce: 0,
-            election_admin: MockPublicKey::try_from("election_admin").unwrap(),
-        }
-    }
-
-    fn create_voters_and_vote(
-        &mut self,
-    ) -> Vec<(MockPublicKey, election::call::CallMessage<MockContext>, u64)> {
-        let mut messages = Vec::default();
-
-        let set_candidates_message = election::call::CallMessage::SetCandidates {
-            names: vec!["candidate_1".to_owned(), "candidate_2".to_owned()],
-        };
-
-        messages.push((
-            self.election_admin.clone(),
-            set_candidates_message,
-            self.election_admin_nonce,
-        ));
-        self.election_admin_nonce += 1;
-
-        let voters = vec![
-            MockPublicKey::try_from("voter_1").unwrap(),
-            MockPublicKey::try_from("voter_2").unwrap(),
-            MockPublicKey::try_from("voter_3").unwrap(),
-        ];
-
-        for voter in voters {
-            let add_voter_message = election::call::CallMessage::AddVoter(voter.to_address());
-
-            messages.push((
-                self.election_admin.clone(),
-                add_voter_message,
-                self.election_admin_nonce,
-            ));
-
-            let vote_message = election::call::CallMessage::Vote(1);
-            messages.push((voter, vote_message, 0));
-            self.election_admin_nonce += 1;
-        }
-
-        messages
-    }
-
-    fn freeze_vote(
-        &mut self,
-    ) -> Vec<(MockPublicKey, election::call::CallMessage<MockContext>, u64)> {
-        let mut messages = Vec::default();
-
-        let freeze_message = election::call::CallMessage::FreezeElection;
-        messages.push((
-            self.election_admin.clone(),
-            freeze_message,
-            self.election_admin_nonce,
-        ));
-        self.election_admin_nonce += 1;
-
-        messages
     }
 }
 
