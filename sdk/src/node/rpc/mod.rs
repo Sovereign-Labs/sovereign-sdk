@@ -83,41 +83,56 @@ pub trait LedgerRpcProvider {
         &self,
         event_ids: &[EventIdentifier],
     ) -> Result<Vec<Option<Self::EventResponse>>, anyhow::Error>;
-    fn get_slot_by_hash(&self, 
-        hash: &[u8; 32]
+    fn get_slot_by_hash(
+        &self,
+        hash: &[u8; 32],
+        query_mode: QueryMode,
     ) -> Result<Option<Self::SlotResponse>, anyhow::Error>;
-    fn get_batch_by_hash(&self, 
-        hash: &[u8; 32]
+    fn get_batch_by_hash(
+        &self,
+        hash: &[u8; 32],
+        query_mode: QueryMode,
     ) -> Result<Option<Self::BatchResponse>, anyhow::Error>;
-    fn get_tx_by_hash(&self, 
-        hash: &[u8; 32]
+    fn get_tx_by_hash(
+        &self,
+        hash: &[u8; 32],
+        query_mode: QueryMode,
     ) -> Result<Option<Self::TxResponse>, anyhow::Error>;
-    fn get_slot_by_number(&self, 
-        number: u64
+    fn get_slot_by_number(
+        &self,
+        number: u64,
+        query_mode: QueryMode,
     ) -> Result<Option<Self::SlotResponse>, anyhow::Error>;
-    fn get_batch_by_number(&self, 
-        number: u64
+    fn get_batch_by_number(
+        &self,
+        number: u64,
+        query_mode: QueryMode,
     ) -> Result<Option<Self::BatchResponse>, anyhow::Error>;
-    fn get_event_by_number(&self, 
-        number: u64
+    fn get_event_by_number(
+        &self,
+        number: u64,
     ) -> Result<Option<Self::EventResponse>, anyhow::Error>;
-    fn get_tx_by_number(&self, 
-        number: u64
+    fn get_tx_by_number(
+        &self,
+        number: u64,
+        query_mode: QueryMode,
     ) -> Result<Option<Self::TxResponse>, anyhow::Error>;
-    fn get_slots_range(&self, 
-        start: u64, 
-        end: u64, 
-        query_mode: QueryMode
+    fn get_slots_range(
+        &self,
+        start: u64,
+        end: u64,
+        query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::SlotResponse>>, anyhow::Error>;
-    fn get_batches_range(&self, 
-        start: u64, 
-        end: u64, 
-        query_mode: QueryMode
+    fn get_batches_range(
+        &self,
+        start: u64,
+        end: u64,
+        query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::BatchResponse>>, anyhow::Error>;
-    fn get_transactions_range(&self, 
-        start: u64, 
-        end: u64, 
-        query_mode: QueryMode
+    fn get_transactions_range(
+        &self,
+        start: u64,
+        end: u64,
+        query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::TxResponse>>, anyhow::Error>;
-
 }
