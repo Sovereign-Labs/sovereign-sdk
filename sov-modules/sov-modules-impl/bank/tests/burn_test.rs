@@ -61,8 +61,8 @@ fn burn_deployed_tokens() {
             balance.amount
         };
 
-    let current_total_supply = query_total_supply(&mut working_set);
-    assert_eq!(Some(initial_balance), current_total_supply);
+    let previous_total_supply = query_total_supply(&mut working_set);
+    assert_eq!(Some(initial_balance), previous_total_supply);
 
     // -----
     // Burn
@@ -80,11 +80,11 @@ fn burn_deployed_tokens() {
     assert!(burned.events.is_empty());
 
     let current_total_supply = query_total_supply(&mut working_set);
-    // Total supply does not change
-    assert_eq!(Some(initial_balance), current_total_supply);
+    assert_eq!(Some(initial_balance - burn_amount), current_total_supply);
     let minter_balance = query_user_balance(minter_address.clone(), &mut working_set);
     assert_eq!(Some(initial_balance - burn_amount), minter_balance);
 
+    let previous_total_supply = current_total_supply;
     // ---
     // Burn by another user, who doesn't have tokens at all
     let failed_to_burn = bank.call(burn_message, &sender_context, &mut working_set);
@@ -99,7 +99,7 @@ fn burn_deployed_tokens() {
         .to_string()
         .contains(&expected_error));
     let current_total_supply = query_total_supply(&mut working_set);
-    assert_eq!(Some(initial_balance), current_total_supply);
+    assert_eq!(previous_total_supply, current_total_supply);
     let sender_balance = query_user_balance(sender_address, &mut working_set);
     assert_eq!(None, sender_balance);
 
@@ -120,6 +120,22 @@ fn burn_deployed_tokens() {
     assert_eq!(minter_balance, minter_balance_after);
 
     // ---
+    // Burn more than available
+    let burn_message = CallMessage::Burn {
+        coins: Coins {
+            amount: initial_balance + 10,
+            token_address,
+        },
+    };
+
+    let failed_to_burn = bank.call(burn_message, &minter_context, &mut working_set);
+    assert!(failed_to_burn.is_err());
+    assert_eq!(
+        "Insufficient funds for sov1h6t805h2vjfzpa3m9n8kyadyng9xf604nhvev8tf5qdg65jh3ruqfckjuq",
+        failed_to_burn.err().unwrap().to_string()
+    );
+
+    // ---
     // Try to burn non existing token
     let token_address = create_token_address::<C>("NotRealToken2", minter_address.as_ref(), salt);
     let burn_message = CallMessage::Burn {
@@ -136,9 +152,6 @@ fn burn_deployed_tokens() {
         .unwrap()
         .to_string()
         .contains("Value not found for prefix: \"bank/Bank/tokens/\" and: storage key"));
-
-    // ---
-    // Burn more than available
 }
 
 #[test]

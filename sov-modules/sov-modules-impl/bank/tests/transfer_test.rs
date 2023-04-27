@@ -95,7 +95,10 @@ fn transfer_initial_token() {
         let result = bank.call(transfer_message, &sender_context, &mut working_set);
         assert!(result.is_err());
         let error = result.err().unwrap();
-        assert_eq!("Insufficient funds", error.to_string());
+        assert_eq!(
+            "Insufficient funds for sov1h5567we4l0ne5vyrkvqd6jq5qp2cs7sa780vut0vrwr8pytwrzess8mu2s",
+            error.to_string()
+        );
     }
 
     // Non existent token
