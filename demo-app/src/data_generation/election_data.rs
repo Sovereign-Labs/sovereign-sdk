@@ -13,6 +13,10 @@ impl CallGenerator {
         }
     }
 
+    fn inc_nonce(&mut self) {
+        self.election_admin_nonce += 1;
+    }
+
     fn create_voters_and_vote(
         &mut self,
     ) -> Vec<(MockPublicKey, election::call::CallMessage<MockContext>, u64)> {
@@ -27,7 +31,7 @@ impl CallGenerator {
             set_candidates_message,
             self.election_admin_nonce,
         ));
-        self.election_admin_nonce += 1;
+        self.inc_nonce();
 
         let voters = vec![
             MockPublicKey::try_from("voter_1").unwrap(),
@@ -46,7 +50,7 @@ impl CallGenerator {
 
             let vote_message = election::call::CallMessage::Vote(1);
             messages.push((voter, vote_message, 0));
-            self.election_admin_nonce += 1;
+            self.inc_nonce();
         }
 
         messages
@@ -63,8 +67,18 @@ impl CallGenerator {
             freeze_message,
             self.election_admin_nonce,
         ));
-        self.election_admin_nonce += 1;
+        self.inc_nonce();
 
+        messages
+    }
+
+    fn all_messages(
+        &mut self,
+    ) -> Vec<(MockPublicKey, election::call::CallMessage<MockContext>, u64)> {
+        let mut messages = Vec::default();
+
+        messages.extend(self.create_voters_and_vote());
+        messages.extend(self.freeze_vote());
         messages
     }
 }
@@ -76,14 +90,10 @@ impl MessageGenerator for ElectionCallMessages {
 
     fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)> {
         let call_generator = &mut CallGenerator::new();
-        let mut messages = Vec::default();
-
-        messages.extend(call_generator.create_voters_and_vote());
-        messages.extend(call_generator.freeze_vote());
-        messages
+        call_generator.all_messages()
     }
 
-    fn create_txs(
+    fn create_tx(
         &self,
         sender: MockPublicKey,
         message: Self::Call,
@@ -121,7 +131,7 @@ impl MessageGenerator for InvalidElectionCallMessages {
         messages
     }
 
-    fn create_txs(
+    fn create_tx(
         &self,
         sender: MockPublicKey,
         message: Self::Call,
@@ -144,14 +154,10 @@ impl MessageGenerator for BadSigElectionCallMessages {
 
     fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)> {
         let call_generator = &mut CallGenerator::new();
-        let mut messages = Vec::default();
-
-        messages.extend(call_generator.create_voters_and_vote());
-        messages.extend(call_generator.freeze_vote());
-        messages
+        call_generator.all_messages()
     }
 
-    fn create_txs(
+    fn create_tx(
         &self,
         sender: MockPublicKey,
         message: Self::Call,
@@ -177,14 +183,10 @@ impl MessageGenerator for BadNonceElectionCallMessages {
 
     fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)> {
         let call_generator = &mut CallGenerator::new();
-        let mut messages = Vec::default();
-
-        messages.extend(call_generator.create_voters_and_vote());
-        messages.extend(call_generator.freeze_vote());
-        messages
+        call_generator.all_messages()
     }
 
-    fn create_txs(
+    fn create_tx(
         &self,
         sender: MockPublicKey,
         message: Self::Call,
@@ -209,14 +211,10 @@ impl MessageGenerator for BadSerializationElectionCallMessages {
 
     fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)> {
         let call_generator = &mut CallGenerator::new();
-        let mut messages = Vec::default();
-
-        messages.extend(call_generator.create_voters_and_vote());
-        messages.extend(call_generator.freeze_vote());
-        messages
+        call_generator.all_messages()
     }
 
-    fn create_txs(
+    fn create_tx(
         &self,
         sender: MockPublicKey,
         message: Self::Call,

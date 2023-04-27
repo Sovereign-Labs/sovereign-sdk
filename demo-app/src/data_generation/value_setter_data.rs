@@ -39,7 +39,7 @@ impl MessageGenerator for ValueSetterMessages {
         value_setter_call_messages()
     }
 
-    fn create_txs(
+    fn create_tx(
         &self,
         sender: MockPublicKey,
         message: Self::Call,

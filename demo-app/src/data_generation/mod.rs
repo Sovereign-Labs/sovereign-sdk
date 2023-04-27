@@ -46,7 +46,7 @@ trait MessageGenerator {
 
     fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)>;
 
-    fn create_txs(
+    fn create_tx(
         &self,
         sender: MockPublicKey,
         message: Self::Call,
@@ -60,7 +60,7 @@ trait MessageGenerator {
         while let Some((sender, m, nonce)) = messages_iter.next() {
             let is_last = messages_iter.peek().is_none();
 
-            let tx = self.create_txs(sender, m, nonce, is_last);
+            let tx = self.create_tx(sender, m, nonce, is_last);
 
             serialized_messages.push(RawTx {
                 data: tx.try_to_vec().unwrap(),
