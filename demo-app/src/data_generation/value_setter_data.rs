@@ -44,7 +44,7 @@ impl MessageGenerator for ValueSetterMessages {
         sender: MockPublicKey,
         message: Self::Call,
         nonce: u64,
-        _flag: bool,
+        _is_last: bool,
     ) -> Transaction<MockContext> {
         Transaction::<MockContext>::new(
             Runtime::<MockContext>::encode_value_setter_call(message),

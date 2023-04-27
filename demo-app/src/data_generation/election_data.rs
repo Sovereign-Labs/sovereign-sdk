@@ -88,7 +88,7 @@ impl MessageGenerator for ElectionCallMessages {
         sender: MockPublicKey,
         message: Self::Call,
         nonce: u64,
-        _flag: bool,
+        _is_last: bool,
     ) -> Transaction<MockContext> {
         Transaction::<MockContext>::new(
             Runtime::<MockContext>::encode_election_call(message),
@@ -126,7 +126,7 @@ impl MessageGenerator for InvalidElectionCallMessages {
         sender: MockPublicKey,
         message: Self::Call,
         nonce: u64,
-        _flag: bool,
+        _is_last: bool,
     ) -> Transaction<MockContext> {
         Transaction::<MockContext>::new(
             Runtime::<MockContext>::encode_election_call(message),
@@ -156,14 +156,14 @@ impl MessageGenerator for BadSigElectionCallMessages {
         sender: MockPublicKey,
         message: Self::Call,
         nonce: u64,
-        flag: bool,
+        is_last: bool,
     ) -> Transaction<MockContext> {
         Transaction::<MockContext>::new(
             Runtime::<MockContext>::encode_election_call(message),
             sender,
             MockSignature {
                 msg_sig: Vec::default(),
-                should_fail: flag,
+                should_fail: is_last,
             },
             nonce,
         )
@@ -221,9 +221,9 @@ impl MessageGenerator for BadSerializationElectionCallMessages {
         sender: MockPublicKey,
         message: Self::Call,
         nonce: u64,
-        flag: bool,
+        is_last: bool,
     ) -> Transaction<MockContext> {
-        let call_data = if flag {
+        let call_data = if is_last {
             vec![1, 2, 3]
         } else {
             Runtime::<MockContext>::encode_election_call(message)

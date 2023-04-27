@@ -51,16 +51,16 @@ trait MessageGenerator {
         sender: MockPublicKey,
         message: Self::Call,
         nonce: u64,
-        flag: bool,
+        is_last: bool,
     ) -> Transaction<MockContext>;
 
     fn create_raw_txs(&self) -> Vec<RawTx> {
         let mut messages_iter = self.create_messages().into_iter().peekable();
         let mut serialized_messages = Vec::default();
         while let Some((sender, m, nonce)) = messages_iter.next() {
-            let flag = messages_iter.peek().is_none();
+            let is_last = messages_iter.peek().is_none();
 
-            let tx = self.create_txs(sender, m, nonce, flag);
+            let tx = self.create_txs(sender, m, nonce, is_last);
 
             serialized_messages.push(RawTx {
                 data: tx.try_to_vec().unwrap(),
