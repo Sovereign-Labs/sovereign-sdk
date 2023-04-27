@@ -52,8 +52,8 @@ pub trait DaService {
         <Self::Spec as DaSpec>::CompletenessProof,
     );
 
-    // TODO: add a send_transaction method
-    // fn send_transaction(tx: Self::Transaction, sender: Self::Address)
+    /// A method to send a transaction. Takes in some arbitrary transaction payload and the address of the sender
+    fn send_transaction(&self, tx: <Self::Spec as DaSpec>::BlobTransaction, sender: <Self::Spec as DaSpec>::Address);
 }
 
 pub trait SlotData: Encode + Decode + PartialEq + core::fmt::Debug + Clone {
