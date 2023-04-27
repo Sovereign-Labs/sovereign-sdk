@@ -23,7 +23,6 @@ pub trait Zkvm {
 
 /// A proof that a program was executed in a zkVM.
 pub trait ZkvmGuest: Zkvm {
-    type Error: Debug;
     fn read_from_host<T: Decode>(&self) -> T;
 }
 
