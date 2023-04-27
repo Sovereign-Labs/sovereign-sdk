@@ -1,6 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use crate::zk::traits::{Matches, ProofTrait, ZkVm};
+use crate::zk::traits::{Matches, ProofTrait, Zkvm};
 
 use super::{traits::Witness, types::ArrayWitness};
 
@@ -32,7 +32,7 @@ impl ProofTrait<MockZkvm> for MockProof {
 
 pub struct MockZkvm(ArrayWitness);
 
-impl ZkVm for MockZkvm {
+impl Zkvm for MockZkvm {
     type CodeCommitment = MockCodeCommitment;
 
     type Proof = MockProof;
@@ -50,7 +50,7 @@ impl ZkVm for MockZkvm {
     fn verify(
         proof: Self::Proof,
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<<<Self as ZkVm>::Proof as crate::zk::traits::ProofTrait<Self>>::Output, Self::Error>
+    ) -> Result<<<Self as Zkvm>::Proof as crate::zk::traits::ProofTrait<Self>>::Output, Self::Error>
     {
         proof.verify(code_commitment)
     }
