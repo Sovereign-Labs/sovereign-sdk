@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::zk::traits::{Matches, ProofTrait, Zkvm};
 
-use super::{traits::Witness, types::ArrayWitness};
+use super::types::ArrayWitness;
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
 pub struct MockCodeCommitment(pub [u8; 32]);
@@ -38,14 +38,6 @@ impl Zkvm for MockZkvm {
     type Proof = MockProof;
 
     type Error = anyhow::Error;
-
-    fn write_to_guest<T: crate::serial::Encode>(&self, hint: T) {
-        self.0.add_hint(hint)
-    }
-
-    fn read_from_host<T: crate::serial::Decode>(&self) -> T {
-        self.0.get_hint()
-    }
 
     fn verify(
         proof: Self::Proof,
