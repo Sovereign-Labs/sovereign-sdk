@@ -172,6 +172,59 @@ impl LedgerRpcProvider for LedgerDB {
         }
         Ok(None)
     }
+
+    // Get X by hash
+    fn get_slot_by_hash(&self, hash: &[u8; 32]) -> Result<Option<Self::SlotResponse>, anyhow::Error> {
+        self.get_slots(&[SlotIdentifier::Hash(*hash)], QueryMode::Compact)
+            .map(|mut batches| batches.pop().unwrap_or(None))
+    }
+
+    fn get_batch_by_hash(&self, hash: &[u8; 32]) -> Result<Option<Self::BatchResponse>, anyhow::Error> {
+        self.get_batches(&[BatchIdentifier::Hash(*hash)], QueryMode::Compact)
+            .map(|mut batches| batches.pop().unwrap_or(None))
+    }
+
+    fn get_tx_by_hash(&self, hash: &[u8; 32]) -> Result<Option<Self::TxResponse>, anyhow::Error> {
+        self.get_transactions(&[TxIdentifier::Hash(*hash)], QueryMode::Compact)
+            .map(|mut txs| txs.pop().unwrap_or(None))
+    }
+
+     // Get X by number
+    fn get_slot_by_number(&self, number: u64) -> Result<Option<Self::SlotResponse>, anyhow::Error> {
+        self.get_slots(&[SlotIdentifier::Number(number)], QueryMode::Compact)
+            .map(|mut slots| slots.pop().unwrap_or(None))
+    }
+
+    fn get_batch_by_number(&self, number: u64) -> Result<Option<Self::BatchResponse>, anyhow::Error> {
+        self.get_batches(&[BatchIdentifier::Number(number)], QueryMode::Compact)
+            .map(|mut slots| slots.pop().unwrap_or(None))
+    }
+
+    fn get_tx_by_number(&self, number: u64) -> Result<Option<Self::TxResponse>, anyhow::Error> {
+        self.get_transactions(&[TxIdentifier::Number(number)], QueryMode::Compact)
+            .map(|mut txs| txs.pop().unwrap_or(None))
+    }
+
+    fn get_event_by_number(&self, number: u64) -> Result<Option<Self::EventResponse>, anyhow::Error> {
+        self.get_events(&[EventIdentifier::Number(number)])
+            .map(|mut events| events.pop().unwrap_or(None))
+    }
+
+    fn get_slots_range(&self, start: u64, end: u64, query_mode: QueryMode) -> Result<Vec<Option<Self::SlotResponse>>, anyhow::Error> {
+        let ids: Vec<_> = (start..=end).map(|n| SlotIdentifier::Number(n)).collect();
+        self.get_slots(&ids, query_mode)
+    }
+
+    fn get_batches_range(&self, start: u64, end: u64, query_mode: QueryMode) -> Result<Vec<Option<Self::BatchResponse>>, anyhow::Error> {
+        let ids: Vec<_> = (start..=end).map(|n| sovereign_sdk::rpc::BatchIdentifier::Number(n)).collect();
+        self.get_batches(&ids, query_mode)
+    }
+
+    fn get_transactions_range(&self, start: u64, end: u64, query_mode: QueryMode) -> Result<Vec<Option<Self::TxResponse>>, anyhow::Error> {
+        let ids: Vec<_> = (start..=end).map(|n| sovereign_sdk::rpc::TxIdentifier::Number(n)).collect();
+        self.get_transactions(&ids, query_mode)
+    }
+
 }
 
 impl LedgerDB {
