@@ -7,9 +7,6 @@ use crate::{
 
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer
 /// It is *not* part of the logic that is zk-proven.
-///
-/// The DaService has two responsibilities - fetching data from the DA layer, transforming the
-/// data into a representation that can be efficiently verified in circuit.
 pub trait DaService {
     /// A handle to the types used by the DA layer.
     type Spec: DaSpec;
@@ -38,7 +35,14 @@ pub trait DaService {
         &self,
         block: Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction>;
+    // TODO: add a send_transaction method https://github.com/Sovereign-Labs/sovereign/issues/208
+}
 
+/// The VerifiableDaService extends a DaService with the ability to fetch proofs of data availability. 
+/// Like the DaService, it is *not* part of the logic that is zk-proven.
+/// 
+/// The service should transform its output data into a representation that can be efficiently verified in circuit.
+pub trait VerifiableDaService: DaService {
     /// Extract the relevant transactions from a block, along with a proof that the extraction has been done correctly.
     /// For example, this method might return all of the blob transactions in rollup's namespace on Celestia,
     /// together with a range proof against the root of the namespaced-merkle-tree, demonstrating that the entire
@@ -51,9 +55,8 @@ pub trait DaService {
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,
     );
-
-    // TODO: add a send_transaction method https://github.com/Sovereign-Labs/sovereign/issues/208
 }
+
 
 pub trait SlotData: Encode + Decode + PartialEq + core::fmt::Debug + Clone {
     fn hash(&self) -> [u8; 32];
