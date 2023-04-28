@@ -34,8 +34,7 @@ impl From<&str> for MockPublicKey {
 
 impl From<String> for MockPublicKey {
     fn from(key: String) -> Self {
-        let key = key.as_bytes().to_vec();
-        Self { pub_key: key }
+        key.into()
     }
 }
 
