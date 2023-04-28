@@ -1,7 +1,7 @@
 use super::*;
 
 fn value_setter_call_messages() -> Vec<(MockPublicKey, value_setter::call::CallMessage, u64)> {
-    let value_setter_admin = MockPublicKey::try_from("value_setter_admin").unwrap();
+    let value_setter_admin = MockPublicKey::from("value_setter_admin");
     let mut value_setter_admin_nonce = 0;
     let mut messages = Vec::default();
 

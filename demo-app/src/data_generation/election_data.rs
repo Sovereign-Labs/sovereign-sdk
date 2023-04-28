@@ -9,7 +9,7 @@ impl CallGenerator {
     fn new() -> Self {
         Self {
             election_admin_nonce: 0,
-            election_admin: MockPublicKey::try_from("election_admin").unwrap(),
+            election_admin: MockPublicKey::from("election_admin"),
         }
     }
 
@@ -34,9 +34,9 @@ impl CallGenerator {
         self.inc_nonce();
 
         let voters = vec![
-            MockPublicKey::try_from("voter_1").unwrap(),
-            MockPublicKey::try_from("voter_2").unwrap(),
-            MockPublicKey::try_from("voter_3").unwrap(),
+            MockPublicKey::from("voter_1"),
+            MockPublicKey::from("voter_2"),
+            MockPublicKey::from("voter_3"),
         ];
 
         for voter in voters {
@@ -122,7 +122,7 @@ impl MessageGenerator for InvalidElectionCallMessages {
 
         // Invalid message: This voter already voted.
         {
-            let voter = MockPublicKey::try_from("voter_1").unwrap();
+            let voter = MockPublicKey::from("voter_1");
             let vote_message = election::call::CallMessage::Vote(1);
             messages.push((voter, vote_message, 1));
         }
