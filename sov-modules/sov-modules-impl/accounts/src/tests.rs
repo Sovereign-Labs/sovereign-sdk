@@ -13,7 +13,7 @@ type C = MockContext;
 
 #[test]
 fn test_config_account() {
-    let init_pub_key = MockPublicKey::try_from("init_pub_key").unwrap();
+    let init_pub_key = MockPublicKey::from("init_pub_key");
     let init_pub_key_addr = init_pub_key.to_address::<<C as Spec>::Address>();
 
     let account_config = AccountConfig::<C> {
@@ -52,7 +52,7 @@ fn test_update_account() {
     let accounts = &mut Accounts::<C>::new();
     let hooks = hooks::Hooks::<C>::new();
 
-    let sender = MockPublicKey::try_from("pub_key").unwrap();
+    let sender = MockPublicKey::from("pub_key");
     let sender_addr = sender.to_address::<<C as Spec>::Address>();
     let sender_context = C::new(sender_addr.clone());
 
@@ -80,7 +80,7 @@ fn test_update_account() {
 
     // Test public key update
     {
-        let new_pub_key = MockPublicKey::try_from("new_pub_key").unwrap();
+        let new_pub_key = MockPublicKey::from("new_pub_key");
         let sig = new_pub_key.sign(call::UPDATE_ACCOUNT_MSG);
         accounts
             .call(
@@ -124,13 +124,13 @@ fn test_update_account_fails() {
     let accounts = &mut Accounts::<C>::new();
     let hooks = hooks::Hooks::<C>::new();
 
-    let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();
+    let sender_1 = MockPublicKey::from("pub_key_1");
     let sender_context_1 = C::new(sender_1.to_address());
     hooks
         .get_or_create_default_account(sender_1, native_working_set)
         .unwrap();
 
-    let sender_2 = MockPublicKey::try_from("pub_key_2").unwrap();
+    let sender_2 = MockPublicKey::from("pub_key_2");
     let sig_2 = sender_2.sign(call::UPDATE_ACCOUNT_MSG);
 
     hooks
@@ -153,7 +153,7 @@ fn test_get_acc_after_pub_key_update() {
     let accounts = &mut Accounts::<C>::new();
     let hooks = hooks::Hooks::<C>::new();
 
-    let sender_1 = MockPublicKey::try_from("pub_key_1").unwrap();
+    let sender_1 = MockPublicKey::from("pub_key_1");
     let sender_1_addr = sender_1.to_address::<<C as Spec>::Address>();
     let sender_context_1 = C::new(sender_1_addr.clone());
 
@@ -161,7 +161,7 @@ fn test_get_acc_after_pub_key_update() {
         .get_or_create_default_account(sender_1, native_working_set)
         .unwrap();
 
-    let new_pub_key = MockPublicKey::try_from("pub_key_2").unwrap();
+    let new_pub_key = MockPublicKey::from("pub_key_2");
     let sig = new_pub_key.sign(call::UPDATE_ACCOUNT_MSG);
     accounts
         .call(
