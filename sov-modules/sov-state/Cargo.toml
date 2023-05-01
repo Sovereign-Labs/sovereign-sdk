@@ -8,7 +8,7 @@ edition = "2021"
 anyhow = { workspace = true }
 borsh = { workspace = true}
 thiserror = { workspace = true }
-sovereign-db = { workspace = true }
+sovereign-db = { workspace = true, optional = true}
 sovereign-sdk = { workspace = true, features = ["mocks"] }
 first-read-last-write-cache = { workspace = true }
 jmt = { workspace = true }
@@ -20,6 +20,7 @@ sovereign-db = { workspace = true, features = ["temp"] }
 schemadb = { workspace = true, features = ["temppath"] }
 
 [features]
-default = []
+default = ["native"]
 mocks = []
 temp = ["sovereign-db/temp"]
+native = ["sovereign-db"]

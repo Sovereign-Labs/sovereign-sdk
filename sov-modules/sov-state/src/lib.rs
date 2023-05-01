@@ -1,8 +1,10 @@
 mod internal_cache;
 mod map;
+#[cfg(feature = "native")]
 mod prover_storage;
 mod scratchpad;
 pub mod storage;
+#[cfg(feature = "native")]
 mod tree_db;
 mod utils;
 mod value;
@@ -13,6 +15,7 @@ mod state_tests;
 
 pub use first_read_last_write_cache::cache::CacheLog;
 pub use map::StateMap;
+#[cfg(feature = "native")]
 pub use prover_storage::{delete_storage, ProverStorage};
 pub use scratchpad::*;
 use sovereign_sdk::core::traits::Witness;
