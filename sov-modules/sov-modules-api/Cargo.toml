@@ -5,7 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-sov-state = { workspace = true }
+sov-state = { workspace = true, default-features = false }
 sovereign-sdk = { workspace = true }
 serde = { workspace = true }
 borsh = { workspace = true}
@@ -16,4 +16,6 @@ bech32 = { workspace = true }
 derive_more = { workspace = true }
 
 [features]
+default = ["native"]
+native = ["sov-state/native"]
 mocks = ["sov-state/mocks"]

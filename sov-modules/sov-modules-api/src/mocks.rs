@@ -1,9 +1,12 @@
 use crate::{Address, AddressTrait, Context, PublicKey, SigVerificationError, Signature, Spec};
 use borsh::{BorshDeserialize, BorshSerialize};
 use jmt::SimpleHasher;
+#[cfg(feature = "native")]
 use serde::{Deserialize, Serialize};
+use sov_state::mocks::MockStorageSpec;
+#[cfg(feature = "native")]
+use sov_state::ProverStorage;
 use sov_state::ZkStorage;
-use sov_state::{mocks::MockStorageSpec, ProverStorage};
 use sovereign_sdk::core::types::ArrayWitness;
 use std::convert::Infallible;
 
@@ -46,7 +49,7 @@ impl TryFrom<String> for MockPublicKey {
 
 impl PublicKey for MockPublicKey {
     fn to_address<A: AddressTrait>(&self) -> A {
-        let pub_key_hash = <MockContext as Spec>::Hasher::hash(&self.pub_key);
+        let pub_key_hash = <ZkMockContext as Spec>::Hasher::hash(&self.pub_key);
         A::try_from(&pub_key_hash).expect("todo")
     }
 }
@@ -77,11 +80,13 @@ impl Signature for MockSignature {
 /// Mock for Context, useful for testing.
 // TODO: consider feature gating the serde implementations, since they are only needed for RPC
 // https://github.com/Sovereign-Labs/sovereign/issues/175
+#[cfg(feature = "native")]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MockContext {
     pub sender: Address,
 }
 
+#[cfg(feature = "native")]
 impl Spec for MockContext {
     type Address = Address;
     type Storage = ProverStorage<MockStorageSpec>;
@@ -91,6 +96,7 @@ impl Spec for MockContext {
     type Witness = ArrayWitness;
 }
 
+#[cfg(feature = "native")]
 impl Context for MockContext {
     fn sender(&self) -> &Self::Address {
         &self.sender
