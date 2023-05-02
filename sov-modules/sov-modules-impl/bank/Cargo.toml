@@ -10,9 +10,9 @@ sov-state = { path = "../../sov-state", features = ["temp"] }
 [dependencies]
 anyhow = { workspace = true }
 sov-modules-api = { path = "../../sov-modules-api", default-features = false}
-sov-modules-macros = { workspace = true }
+sov-modules-macros = { path = "../../sov-modules-macros" }
 sov-state = { path = "../../sov-state", default-features = false }
-sovereign-sdk = { workspace = true }
+sovereign-sdk = { path = "../../../sdk" }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }

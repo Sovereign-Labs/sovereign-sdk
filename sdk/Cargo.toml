@@ -11,7 +11,6 @@ serde = { workspace = true, features = ["derive"]}
 bytes = { workspace = true }
 jmt = { workspace = true }
 sha2 = { workspace = true }
-first-read-last-write-cache = { workspace = true }
 
 anyhow = { workspace = true }
 thiserror = { workspace = true }

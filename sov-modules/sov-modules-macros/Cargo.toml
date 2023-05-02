@@ -16,7 +16,7 @@ trybuild = "1.0"
 sov-modules-api = { path = "../sov-modules-api", features = ["mocks"] }
 jsonrpsee = { version = "0.16.2", features = ["macros", "client-core", "server"] }
 sov-state = { path = "../sov-state", features = ["temp"] }
-sovereign-db = { workspace = true, features = ["temp"] }
+sovereign-db = { path = "../../db/sovereign-db", features = ["temp"] }
 
 [dependencies]
 anyhow = { workspace = true }
