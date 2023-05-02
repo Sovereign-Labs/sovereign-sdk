@@ -23,7 +23,6 @@ pub trait Zkvm {
     ) -> Result<<<Self as Zkvm>::Proof as ProofTrait<Self>>::Output, Self::Error>;
 }
 
-
 /// A trait which is acessible from within a zkVM program.
 pub trait ZkvmGuest: Zkvm {
     /// Obtain "advice" non-deterministically from the host
