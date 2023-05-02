@@ -1,22 +1,21 @@
 [workspace]
 resolver = "2"
 members = [
-	"db/schemadb",
-	"db/sovereign-db",
-	"demo-app",
-	"sdk",
-	"first-read-last-write-cache",
-	"sov-modules/sov-app-template",
-	"sov-modules/sov-modules-macros",
-	"sov-modules/sov-state",
-	"sov-modules/sov-modules-api",
-	"sov-modules/sov-modules-impl/accounts",
-	"sov-modules/sov-modules-impl/bank",
-	"sov-modules/sov-modules-impl/sequencer",
-	"sov-modules/sov-modules-impl/examples/value-setter",
-	"sov-modules/sov-modules-impl/examples/election",
-	"sov-modules/sov-modules-impl/integration-tests",
-
+    "db/schemadb",
+    "db/sovereign-db",
+    "demo-app",
+    "sdk",
+    "first-read-last-write-cache",
+    "sov-modules/sov-app-template",
+    "sov-modules/sov-modules-macros",
+    "sov-modules/sov-state",
+    "sov-modules/sov-modules-api",
+    "sov-modules/sov-modules-impl/accounts",
+    "sov-modules/sov-modules-impl/bank",
+    "sov-modules/sov-modules-impl/sequencer",
+    "sov-modules/sov-modules-impl/examples/value-setter",
+    "sov-modules/sov-modules-impl/examples/election",
+    "sov-modules/sov-modules-impl/integration-tests",
 ]
 
 [workspace.package]
@@ -30,28 +29,12 @@ repository = "https://github.com/sovereign-labs/sovereign"
 rust-version = "1.66"
 
 [workspace.dependencies]
-# Internal dependencies
-sovereign-sdk = {path= "sdk" }
-first-read-last-write-cache = {path = "first-read-last-write-cache"}
-sov-app-template = { path = "sov-modules/sov-app-template" }
-election = { path = "sov-modules/sov-modules-impl/examples/election" }
-value-setter = { path = "sov-modules/sov-modules-impl/examples/value-setter" }
-accounts = { path = "sov-modules/sov-modules-impl/accounts" }
-sequencer = { path = "sov-modules/sov-modules-impl/sequencer" }
-bank = { path = "sov-modules/sov-modules-impl/bank" }
-schemadb = {path = "db/schemadb"}
-sovereign-db = {path = "db/sovereign-db"}
-sov-state = {path = "sov-modules/sov-state"}
-sov-modules-api = {path = "sov-modules/sov-modules-api"}
-sov-modules-macros = {path = "sov-modules/sov-modules-macros"}
-
 # Dependencies maintained by sovereign
-#jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "2475dfb7b73bf16de518c2de34f10e00cd4fa909" }
 jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "3ca60665bee78549b37bab5ec461d108dada874d", default-features = false }
 
 # External dependencies
 anyhow = "1.0.68"
-borsh = { version = "0.10.2", features = ["rc"]}
+borsh = { version = "0.10.2", features = ["rc"] }
 byteorder = "1.4.3"
 bytes = "1.2.1"
 hex = "0.4.3"
@@ -61,9 +44,9 @@ proptest = "1.0.0"
 proptest-derive = "0.3.0"
 rand = "0.8"
 rayon = "1.5.2"
-rocksdb =  { version = "0.19.0", features = ["lz4"] }
+rocksdb = { version = "0.19.0", features = ["lz4"] }
 serde = { version = "1.0.137", features = ["derive"] }
-serde_json = { version = "1.0"}
+serde_json = { version = "1.0" }
 sha2 = "0.10.6"
 thiserror = "1.0.38"
 tiny-keccak = "2.0.2"

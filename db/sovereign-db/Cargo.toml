@@ -8,8 +8,8 @@ edition = "2021"
 [dependencies]
 # Maintained by sovereign labs
 jmt = { workspace = true }
-schemadb = { workspace = true }
-sovereign-sdk = { workspace = true }
+schemadb = { path = "../../db/schemadb" }
+sovereign-sdk = { path = "../../sdk" }
 
 
 # External
@@ -21,7 +21,7 @@ rocksdb = { workspace = true }
 
 
 [dev-dependencies]
-schemadb = { workspace = true, features = ["temppath"] }
+schemadb = { path = "../../db/schemadb", features = ["temppath"] }
 
 [features]
 default = []

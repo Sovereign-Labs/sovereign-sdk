@@ -4,12 +4,14 @@ use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::serial::{Decode, Encode};
 
-/// A proof that a program was executed in a zkVM.
+/// A trait implemented by the prover ("host") of a zkVM program.
 pub trait ZkvmHost: Zkvm {
+    /// Give the guest a piece of advice non-deterministically
     fn write_to_guest<T: Encode>(&self, item: T);
 }
 
 /// A Zk proof system capable of proving and verifying arbitrary Rust code
+/// Must support recursive proofs.
 pub trait Zkvm {
     type CodeCommitment: Matches<Self::CodeCommitment> + Clone;
     type Proof: ProofTrait<Self>;
@@ -21,11 +23,13 @@ pub trait Zkvm {
     ) -> Result<<<Self as Zkvm>::Proof as ProofTrait<Self>>::Output, Self::Error>;
 }
 
-/// A proof that a program was executed in a zkVM.
+/// A trait which is acessible from within a zkVM program.
 pub trait ZkvmGuest: Zkvm {
+    /// Obtain "advice" non-deterministically from the host
     fn read_from_host<T: Decode>(&self) -> T;
 }
 
+/// A trait implemented by a zkVM proof.
 pub trait ProofTrait<VM: Zkvm + ?Sized> {
     type Output: Encode + Decode;
     /// Verify the proof, deserializing the result if successful.

@@ -7,20 +7,19 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-sovereign-sdk = { workspace = true, features = ["mocks"] }
-election = { workspace = true }
-sequencer = { workspace = true }
-bank = { workspace = true }
-sov-app-template = { workspace = true }
-value-setter = { workspace = true }
-accounts = { workspace = true }
-sov-state = { workspace = true, features = ["temp"] }
-sovereign-db = { workspace = true }
-sov-modules-api = { workspace = true, features = ["mocks"] }
-sov-modules-macros = { workspace = true }
+sovereign-sdk = { path = "../sdk", features = ["mocks"] }
+election = { path = "../sov-modules/sov-modules-impl/examples/election" }
+sequencer = { path = "../sov-modules/sov-modules-impl/sequencer" }
+bank = { path = "../sov-modules/sov-modules-impl/bank" } 
+sov-app-template = { path = "../sov-modules/sov-app-template" }
+value-setter = { path = "../sov-modules/sov-modules-impl/examples/value-setter" }
+accounts = { path = "../sov-modules/sov-modules-impl/accounts" }
+sov-state = { path = "../sov-modules/sov-state", features = ["temp"] }
+sovereign-db = { path = "../db/sovereign-db" }
+sov-modules-api = { path = "../sov-modules/sov-modules-api", features = ["mocks"] }
+sov-modules-macros = { path = "../sov-modules/sov-modules-macros" }
 borsh = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
-first-read-last-write-cache = { workspace = true }
-schemadb = { workspace = true, features = ["temppath"] }
+schemadb = { path = "../db/schemadb", features = ["temppath"] }

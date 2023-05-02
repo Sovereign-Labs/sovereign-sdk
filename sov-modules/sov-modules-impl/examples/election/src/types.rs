@@ -1,8 +1,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
 
 // Represents a candidate.
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Eq, PartialEq, Clone)]
+#[cfg_attr(feature = "native", derive(serde::Deserialize, serde::Serialize))]
+#[derive(BorshDeserialize, BorshSerialize, Debug, Eq, PartialEq, Clone)]
 pub struct Candidate {
     pub name: String,
     pub count: u32,

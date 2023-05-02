@@ -9,7 +9,7 @@ use crate::serial::{Decode, Encode};
 
 pub trait BlockHeaderTrait: PartialEq + Debug + CanonicalHash<Output = Self::Hash> {
     type Hash: Clone;
-    fn prev_hash(&self) -> &Self::Hash;
+    fn prev_hash(&self) -> Self::Hash;
 }
 
 pub trait CanonicalHash {

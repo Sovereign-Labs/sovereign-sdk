@@ -5,11 +5,12 @@ edition = "2021"
 
 [dev-dependencies]
 anyhow = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
 serde_json = { workspace = true }
-sov-modules-api = { workspace = true ,  features = ["mocks"]}
-sov-modules-macros = { workspace = true }
-sov-state = { workspace = true, features = ["temp"] }
-borsh = { workspace = true, features = ["rc"]}
-sovereign-sdk = { workspace = true}
 serial_test = "*"
-schemadb = { workspace = true, features = ["temppath"] }
+
+sov-modules-api = { path = "../../sov-modules-api", features = ["mocks"] }
+sov-modules-macros = { path = "../../sov-modules-macros" }
+sov-state = { path = "../../sov-state", features = ["temp"] }
+sovereign-sdk = { path = "../../../sdk" }
+schemadb = { path = "../../../db/schemadb", features = ["temppath"] }
