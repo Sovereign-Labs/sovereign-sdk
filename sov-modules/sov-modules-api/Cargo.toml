@@ -5,10 +5,10 @@ edition = "2021"
 
 [dependencies]
 anyhow = { workspace = true }
-sov-state = { workspace = true, default-features = false }
-sovereign-sdk = { workspace = true }
+sov-state = { path = "../sov-state", default-features = false }
+sovereign-sdk = { path = "../../sdk" }
 serde = { workspace = true }
-borsh = { workspace = true}
+borsh = { workspace = true }
 thiserror = { workspace = true }
 jmt = { workspace = true }
 sha2 = { workspace = true }

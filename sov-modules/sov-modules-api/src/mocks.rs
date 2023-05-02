@@ -28,16 +28,10 @@ impl MockPublicKey {
     }
 }
 
-impl From<&str> for MockPublicKey {
-    fn from(key: &str) -> Self {
-        let key = key.as_bytes().to_vec();
+impl<T: AsRef<str>> From<T> for MockPublicKey {
+    fn from(key: T) -> Self {
+        let key = key.as_ref().as_bytes().to_vec();
         Self { pub_key: key }
-    }
-}
-
-impl From<String> for MockPublicKey {
-    fn from(key: String) -> Self {
-        key.into()
     }
 }
 

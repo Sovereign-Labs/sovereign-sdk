@@ -40,12 +40,9 @@ sequencer = { path = "sov-modules/sov-modules-impl/sequencer" }
 bank = { path = "sov-modules/sov-modules-impl/bank" }
 schemadb = { path = "db/schemadb" }
 sovereign-db = { path = "db/sovereign-db" }
-sov-state = { path = "sov-modules/sov-state", default-features = false }
-sov-modules-api = { path = "sov-modules/sov-modules-api", default-features = false }
 sov-modules-macros = { path = "sov-modules/sov-modules-macros" }
 
 # Dependencies maintained by sovereign
-#jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "2475dfb7b73bf16de518c2de34f10e00cd4fa909" }
 jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "3ca60665bee78549b37bab5ec461d108dada874d", default-features = false }
 
 # External dependencies
