@@ -1,5 +1,6 @@
 use super::{types::Candidate, Election};
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(feature = "native")]
 use serde::{Deserialize, Serialize};
 use sov_state::WorkingSet;
 
@@ -10,13 +11,15 @@ pub enum QueryMessage {
     GenNbOfVotes,
 }
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "native", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Debug, Eq, PartialEq)]
 pub enum GetResultResponse {
     Result(Option<Candidate>),
     Err(String),
 }
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
+#[cfg_attr(feature = "native", derive(serde::Deserialize, serde::Serialize))]
+#[derive(Debug, Eq, PartialEq)]
 pub enum GetNbOfVotesResponse {
     Result(u64),
 }
