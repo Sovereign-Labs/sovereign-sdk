@@ -40,8 +40,8 @@ sequencer = { path = "sov-modules/sov-modules-impl/sequencer" }
 bank = { path = "sov-modules/sov-modules-impl/bank" }
 schemadb = { path = "db/schemadb" }
 sovereign-db = { path = "db/sovereign-db" }
-sov-state = { path = "sov-modules/sov-state" }
-sov-modules-api = { path = "sov-modules/sov-modules-api" }
+sov-state = { path = "sov-modules/sov-state", default-features = false }
+sov-modules-api = { path = "sov-modules/sov-modules-api", default-features = false }
 sov-modules-macros = { path = "sov-modules/sov-modules-macros" }
 
 # Dependencies maintained by sovereign
