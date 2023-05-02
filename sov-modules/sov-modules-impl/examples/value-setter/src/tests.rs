@@ -11,9 +11,8 @@ use sovereign_sdk::stf::Event;
 
 #[test]
 fn test_value_setter() {
-    let sender = MockPublicKey::try_from("value_setter_admin")
-        .unwrap()
-        .to_address::<<MockContext as Spec>::Address>();
+    let sender =
+        MockPublicKey::from("value_setter_admin").to_address::<<MockContext as Spec>::Address>();
     let mut working_set = WorkingSet::new(ProverStorage::temporary());
 
     // Test Native-Context

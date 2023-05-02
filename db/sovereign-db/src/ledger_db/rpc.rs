@@ -76,8 +76,8 @@ impl LedgerRpcProvider for LedgerDB {
         slot_ids: &[sovereign_sdk::rpc::SlotIdentifier],
         query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::SlotResponse>>, anyhow::Error> {
-        // TODO: Sort the input and use an iterator instead of querying for each slot individually
-        // https://github.com/Sovereign-Labs/sovereign/issues/191
+        // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
+        //      and use an iterator instead of querying for each slot individually
         let mut out = Vec::with_capacity(slot_ids.len());
         for slot_id in slot_ids {
             let slot_num = self.resolve_slot_identifier(slot_id)?;
@@ -100,8 +100,8 @@ impl LedgerRpcProvider for LedgerDB {
         batch_ids: &[sovereign_sdk::rpc::BatchIdentifier],
         query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::BatchResponse>>, anyhow::Error> {
-        // TODO: Sort the input and use an iterator instead of querying for each slot individually
-        // https://github.com/Sovereign-Labs/sovereign/issues/191
+        // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
+        //      and use an iterator instead of querying for each slot individually
         let mut out = Vec::with_capacity(batch_ids.len());
         for batch_id in batch_ids {
             let batch_num = self.resolve_batch_identifier(batch_id)?;
@@ -124,8 +124,8 @@ impl LedgerRpcProvider for LedgerDB {
         tx_ids: &[sovereign_sdk::rpc::TxIdentifier],
         _query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::TxResponse>>, anyhow::Error> {
-        // TODO: Sort the input and use an iterator instead of querying for each slot individually
-        // https://github.com/Sovereign-Labs/sovereign/issues/191
+        // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
+        //      and use an iterator instead of querying for each slot individually
         let mut out = Vec::with_capacity(tx_ids.len());
         for id in tx_ids {
             let num = self.resolve_tx_identifier(id)?;

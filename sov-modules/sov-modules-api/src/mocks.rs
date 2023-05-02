@@ -8,7 +8,6 @@ use sov_state::mocks::MockStorageSpec;
 use sov_state::ProverStorage;
 use sov_state::ZkStorage;
 use sovereign_sdk::core::types::ArrayWitness;
-use std::convert::Infallible;
 
 /// Mock for Spec::PublicKey, useful for testing.
 #[derive(PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize, Debug)]
@@ -29,21 +28,16 @@ impl MockPublicKey {
     }
 }
 
-impl TryFrom<&str> for MockPublicKey {
-    type Error = Infallible;
-
-    fn try_from(key: &str) -> Result<Self, Self::Error> {
+impl From<&str> for MockPublicKey {
+    fn from(key: &str) -> Self {
         let key = key.as_bytes().to_vec();
-        Ok(Self { pub_key: key })
+        Self { pub_key: key }
     }
 }
 
-impl TryFrom<String> for MockPublicKey {
-    type Error = Infallible;
-
-    fn try_from(key: String) -> Result<Self, Self::Error> {
-        let key = key.as_bytes().to_vec();
-        Ok(Self { pub_key: key })
+impl From<String> for MockPublicKey {
+    fn from(key: String) -> Self {
+        key.into()
     }
 }
 

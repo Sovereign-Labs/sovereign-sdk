@@ -48,15 +48,9 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(working_set: &mut WorkingS
             .unwrap();
     }
 
-    let voter_1 = MockPublicKey::try_from("voter_1")
-        .unwrap()
-        .to_address::<C::Address>();
-    let voter_2 = MockPublicKey::try_from("voter_2")
-        .unwrap()
-        .to_address::<C::Address>();
-    let voter_3 = MockPublicKey::try_from("voter_3")
-        .unwrap()
-        .to_address::<C::Address>();
+    let voter_1 = MockPublicKey::from("voter_1").to_address::<C::Address>();
+    let voter_2 = MockPublicKey::from("voter_2").to_address::<C::Address>();
+    let voter_3 = MockPublicKey::from("voter_3").to_address::<C::Address>();
 
     // Register voters
     {
