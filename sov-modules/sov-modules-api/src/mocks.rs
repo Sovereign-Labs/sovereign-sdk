@@ -49,10 +49,8 @@ impl TryFrom<String> for MockPublicKey {
 
 impl PublicKey for MockPublicKey {
     fn to_address<A: AddressTrait>(&self) -> A {
-        let mut hasher = sha2::Sha256::new();
-        hasher.update(&self.pub_key);
-        let hash = hasher.finalize();
-        A::try_from(&hash).expect("todo")
+        let pub_key_hash = <ZkMockContext as Spec>::Hasher::hash(&self.pub_key);
+        A::try_from(&pub_key_hash).expect("todo")
     }
 }
 
