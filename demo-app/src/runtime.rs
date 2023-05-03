@@ -1,4 +1,4 @@
-use sov_modules_api::{Context, Module, ModuleInfo};
+use sov_modules_api::{Context, Module};
 use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 
 /// On a high level, the rollup node receives serialized call messages from the DA layer and executes them as atomic transactions.
@@ -40,7 +40,7 @@ use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 
 #[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub(crate) struct Runtime<C: Context> {
+pub struct Runtime<C: Context> {
     #[allow(unused)]
     sequencer: sequencer::Sequencer<C>,
 
@@ -59,7 +59,9 @@ pub(crate) struct Runtime<C: Context> {
 
 // TODO add macro to generate the following code.
 impl<C: Context> Runtime<C> {
+    #[cfg(test)]
     pub(crate) fn new() -> Self {
+        use sov_modules_api::ModuleInfo;
         Self {
             sequencer: sequencer::Sequencer::new(),
             bank: bank::Bank::new(),

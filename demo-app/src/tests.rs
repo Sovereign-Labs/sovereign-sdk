@@ -6,10 +6,10 @@ mod test {
     use sovereign_sdk::stf::StateTransitionFunction;
 
     use crate::{
+        app::{create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
         data_generation::{simulate_da, QueryGenerator},
         helpers::query_and_deserialize,
         runtime::Runtime,
-        test_utils::{create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
     };
 
     #[test]

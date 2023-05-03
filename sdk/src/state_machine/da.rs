@@ -37,7 +37,7 @@ pub trait DaVerifier {
     /// The set of types required by the DA layer.
     type Spec: DaSpec;
 
-    /// The error type returned by the DA layer's verificaiton function
+    /// The error type returned by the DA layer's verification function
     type Error: Debug;
 
     /// Verify a claimed set of transactions against a block header.

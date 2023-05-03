@@ -1,11 +1,9 @@
+pub mod app;
 #[cfg(test)]
 mod data_generation;
 #[cfg(test)]
 mod helpers;
-#[cfg(test)]
 mod runtime;
-#[cfg(test)]
-mod test_utils;
 #[cfg(test)]
 mod tests;
 mod tx_hooks_impl;

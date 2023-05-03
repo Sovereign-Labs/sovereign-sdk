@@ -4,7 +4,7 @@ use sov_app_template::{TxHooks, VerifiedTx};
 use sov_modules_api::{Context, Spec};
 use sov_state::WorkingSet;
 
-pub(crate) struct AppVerifiedTx<C: Context> {
+pub struct AppVerifiedTx<C: Context> {
     pub(crate) pub_key: C::PublicKey,
     pub(crate) sender: C::Address,
     pub(crate) runtime_msg: Vec<u8>,
@@ -22,7 +22,7 @@ impl<C: Context> VerifiedTx for AppVerifiedTx<C> {
     }
 }
 
-pub(crate) struct DemoAppTxHooks<C: Context> {
+pub struct DemoAppTxHooks<C: Context> {
     accounts_hooks: accounts::hooks::Hooks<C>,
     sequencer_hooks: sequencer::hooks::Hooks<C>,
 }

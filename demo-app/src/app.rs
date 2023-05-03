@@ -2,20 +2,27 @@ use crate::runtime::{GenesisConfig, Runtime};
 use crate::tx_hooks_impl::DemoAppTxHooks;
 use crate::tx_verifier_impl::DemoAppTxVerifier;
 use sov_app_template::AppTemplate;
-use sov_modules_api::{mocks::MockContext, PublicKey, Spec};
+use sov_modules_api::mocks::MockContext;
+use sov_modules_api::Context;
+#[cfg(test)]
+use sov_modules_api::{PublicKey, Spec};
+#[cfg(test)]
 use sov_state::ProverStorage;
+#[cfg(test)]
 use std::path::Path;
 
+#[cfg(test)]
 pub(crate) type C = MockContext;
-pub(crate) type DemoApp =
+pub type DemoApp<C> =
     AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>, GenesisConfig<C>>;
 
-pub(crate) const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
-pub(crate) const LOCKED_AMOUNT: u64 = 200;
-pub(crate) const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
-pub(crate) const TOKEN_NAME: &str = "Token0";
+pub const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
+pub const LOCKED_AMOUNT: u64 = 200;
+pub const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
+pub const TOKEN_NAME: &str = "Token0";
 
-pub(crate) fn create_sequencer_config(
+#[cfg(test)]
+pub(crate) fn create_sequencer_config<C: Context>(
     seq_rollup_address: <C as Spec>::Address,
     token_address: <C as Spec>::Address,
 ) -> sequencer::SequencerConfig<C> {
@@ -29,6 +36,7 @@ pub(crate) fn create_sequencer_config(
     }
 }
 
+#[cfg(test)]
 pub(crate) fn create_config(initial_sequencer_balance: u64) -> GenesisConfig<C> {
     let pub_key = <C as Spec>::PublicKey::try_from(SEQ_PUB_KEY_STR).unwrap();
     let seq_address = pub_key.to_address::<<C as Spec>::Address>();
@@ -59,7 +67,11 @@ pub(crate) fn create_config(initial_sequencer_balance: u64) -> GenesisConfig<C> 
     )
 }
 
-pub(crate) fn create_new_demo(initial_sequencer_balance: u64, path: impl AsRef<Path>) -> DemoApp {
+#[cfg(test)]
+pub(crate) fn create_new_demo(
+    initial_sequencer_balance: u64,
+    path: impl AsRef<Path>,
+) -> DemoApp<C> {
     let runtime = Runtime::new();
     let storage = ProverStorage::with_path(path).unwrap();
     let tx_hooks = DemoAppTxHooks::new();

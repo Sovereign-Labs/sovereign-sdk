@@ -81,4 +81,10 @@ impl<S: StorageSpec> Storage for ZkStorage<S> {
     }
 
     type Witness = S::Witness;
+
+    type RuntimeConfig = [u8; 32];
+
+    fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
+        Ok(Self::new(config))
+    }
 }

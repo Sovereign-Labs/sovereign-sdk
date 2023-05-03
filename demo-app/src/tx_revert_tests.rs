@@ -1,11 +1,11 @@
 use crate::{
+    app::{create_new_demo, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
     data_generation::{
         simulate_da_with_bad_nonce, simulate_da_with_bad_serialization, simulate_da_with_bad_sig,
         simulate_da_with_revert_msg, QueryGenerator,
     },
     helpers::query_and_deserialize,
     runtime::Runtime,
-    test_utils::{create_new_demo, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
 };
 use sov_app_template::Batch;
 use sov_modules_api::mocks::MockContext;

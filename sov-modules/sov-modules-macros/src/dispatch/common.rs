@@ -111,7 +111,7 @@ impl<'a> StructDef<'a> {
             // This is generated code (won't be exposed to the users) and we allow non camel case for enum variants.
             #[allow(non_camel_case_types)]
             #[derive(::core::fmt::Debug, PartialEq, #(#serialization_attrs),*)]
-            pub (crate) enum #enum_ident #impl_generics #where_clause {
+            pub enum #enum_ident #impl_generics #where_clause {
                 #(#enum_legs)*
             }
         }
