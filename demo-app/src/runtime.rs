@@ -59,7 +59,6 @@ pub struct Runtime<C: Context> {
 
 // TODO add macro to generate the following code.
 impl<C: Context> Runtime<C> {
-    #[cfg(test)]
     pub(crate) fn new() -> Self {
         use sov_modules_api::ModuleInfo;
         Self {

@@ -1,31 +1,84 @@
-use crate::runtime::{GenesisConfig, Runtime};
+#[cfg(test)]
+use crate::runtime::GenesisConfig;
+use crate::runtime::Runtime;
 use crate::tx_hooks_impl::DemoAppTxHooks;
 use crate::tx_verifier_impl::DemoAppTxVerifier;
 use sov_app_template::AppTemplate;
-use sov_modules_api::mocks::MockContext;
+use sov_modules_api::mocks::{MockContext, ZkMockContext};
 use sov_modules_api::Context;
 #[cfg(test)]
 use sov_modules_api::{PublicKey, Spec};
-#[cfg(test)]
-use sov_state::ProverStorage;
+use sov_state::{ProverStorage, ZkStorage};
+use sovereign_sdk::stf::{ProverConfig, StateTransitionRunner, ZkConfig};
 #[cfg(test)]
 use std::path::Path;
 
 #[cfg(test)]
 pub(crate) type C = MockContext;
-pub type DemoApp<C> =
-    AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>, GenesisConfig<C>>;
 
-pub const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
-pub const LOCKED_AMOUNT: u64 = 200;
-pub const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
-pub const TOKEN_NAME: &str = "Token0";
+pub struct DemoAppRunner<C: Context>(pub DemoApp<C>);
+
+pub type DemoApp<C> = AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>>;
 
 #[cfg(test)]
-pub(crate) fn create_sequencer_config<C: Context>(
-    seq_rollup_address: <C as Spec>::Address,
-    token_address: <C as Spec>::Address,
-) -> sequencer::SequencerConfig<C> {
+pub const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
+#[cfg(test)]
+pub const LOCKED_AMOUNT: u64 = 200;
+#[cfg(test)]
+pub const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
+#[cfg(test)]
+pub const TOKEN_NAME: &str = "Token0";
+
+impl StateTransitionRunner<ProverConfig> for DemoAppRunner<MockContext> {
+    type RuntimeConfig = &'static str;
+    type Inner = DemoApp<MockContext>;
+
+    fn new(runtime_config: Self::RuntimeConfig) -> Self {
+        let runtime = Runtime::new();
+        let storage =
+            ProverStorage::with_path(runtime_config).expect("Failed to open prover storage");
+        let tx_verifier = DemoAppTxVerifier::new();
+        let tx_hooks = DemoAppTxHooks::new();
+        let app = AppTemplate::new(storage, runtime, tx_verifier, tx_hooks);
+        Self(app)
+    }
+
+    fn inner(&self) -> &Self::Inner {
+        &self.0
+    }
+
+    fn inner_mut(&mut self) -> &mut Self::Inner {
+        &mut self.0
+    }
+}
+
+impl StateTransitionRunner<ZkConfig> for DemoAppRunner<ZkMockContext> {
+    type RuntimeConfig = [u8; 32];
+    type Inner = DemoApp<ZkMockContext>;
+
+    fn new(runtime_config: Self::RuntimeConfig) -> Self {
+        let runtime = Runtime::new();
+        let storage = ZkStorage::new(runtime_config);
+        let tx_verifier = DemoAppTxVerifier::new();
+        let tx_hooks = DemoAppTxHooks::new();
+        let app = AppTemplate::new(storage, runtime, tx_verifier, tx_hooks);
+        Self(app)
+    }
+
+    fn inner(&self) -> &Self::Inner {
+        &self.0
+    }
+
+    fn inner_mut(&mut self) -> &mut Self::Inner {
+        &mut self.0
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn create_sequencer_config(
+    seq_rollup_address: <MockContext as Spec>::Address,
+    token_address: <MockContext as Spec>::Address,
+) -> sequencer::SequencerConfig<MockContext> {
     sequencer::SequencerConfig {
         seq_rollup_address,
         seq_da_address: SEQUENCER_DA_ADDRESS.to_vec(),
@@ -37,11 +90,12 @@ pub(crate) fn create_sequencer_config<C: Context>(
 }
 
 #[cfg(test)]
-pub(crate) fn create_config(initial_sequencer_balance: u64) -> GenesisConfig<C> {
+pub(crate) fn create_config(initial_sequencer_balance: u64) -> GenesisConfig<MockContext> {
+    type C = MockContext;
     let pub_key = <C as Spec>::PublicKey::try_from(SEQ_PUB_KEY_STR).unwrap();
     let seq_address = pub_key.to_address::<<C as Spec>::Address>();
 
-    let token_config = bank::TokenConfig {
+    let token_config: bank::TokenConfig<MockContext> = bank::TokenConfig {
         token_name: TOKEN_NAME.to_owned(),
         address_and_balances: vec![(seq_address.clone(), initial_sequencer_balance)],
     };
@@ -68,14 +122,10 @@ pub(crate) fn create_config(initial_sequencer_balance: u64) -> GenesisConfig<C> 
 }
 
 #[cfg(test)]
-pub(crate) fn create_new_demo(
-    initial_sequencer_balance: u64,
-    path: impl AsRef<Path>,
-) -> DemoApp<C> {
+pub(crate) fn create_new_demo(path: impl AsRef<Path>) -> DemoApp<MockContext> {
     let runtime = Runtime::new();
     let storage = ProverStorage::with_path(path).unwrap();
     let tx_hooks = DemoAppTxHooks::new();
     let tx_verifier = DemoAppTxVerifier::new();
-    let genesis_config = create_config(initial_sequencer_balance);
-    AppTemplate::new(storage, runtime, tx_verifier, tx_hooks, genesis_config)
+    AppTemplate::new(storage, runtime, tx_verifier, tx_hooks)
 }

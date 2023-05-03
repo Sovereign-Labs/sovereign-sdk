@@ -4,7 +4,7 @@ use crate::{utils::AlignedVec, Prefix};
 use borsh::{BorshDeserialize, BorshSerialize};
 use first_read_last_write_cache::{cache::CacheLog, CacheKey, CacheValue};
 use hex;
-use sovereign_sdk::{core::traits::Witness, serial::Encode, stf::StateTransitionConfig};
+use sovereign_sdk::{core::traits::Witness, serial::Encode};
 
 // `Key` type for the `Storage`
 #[derive(Clone, PartialEq, Eq, Debug)]

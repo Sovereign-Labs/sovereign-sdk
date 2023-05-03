@@ -71,6 +71,8 @@ impl<S: StorageSpec> Storage for ZkStorage<S> {
         });
 
         let next_version = latest_version + 1;
+        // TODO: Make updates verifiable. Currently, writes don't verify that the provided siblings existed in the old tree
+        // because the TreeReader is trusted
         let jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&reader);
 
         let (new_root, _tree_update) = jmt

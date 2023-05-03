@@ -15,49 +15,40 @@ use sovereign_sdk::{
     stf::{OpaqueAddress, StateTransitionFunction},
 };
 
-pub struct AppTemplate<C: Context, V, RT, H, GenesisConfig> {
+pub struct AppTemplate<C: Context, V, RT, H> {
     pub current_storage: C::Storage,
     pub runtime: RT,
     tx_verifier: V,
     tx_hooks: H,
-    genesis_config: GenesisConfig,
     working_set: Option<WorkingSet<C::Storage>>,
 }
 
-impl<C: Context, V, RT, H, GenesisConfig> AppTemplate<C, V, RT, H, GenesisConfig>
+impl<C: Context, V, RT, H> AppTemplate<C, V, RT, H>
 where
-    RT: DispatchCall<Context = C> + Genesis<Context = C, Config = GenesisConfig>,
+    RT: DispatchCall<Context = C> + Genesis<Context = C>,
     V: TxVerifier,
     H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
 {
-    pub fn new(
-        storage: C::Storage,
-        runtime: RT,
-        tx_verifier: V,
-        tx_hooks: H,
-        genesis_config: GenesisConfig,
-    ) -> Self {
+    pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
         Self {
             runtime,
             current_storage: storage,
             tx_verifier,
             tx_hooks,
-            genesis_config,
             working_set: None,
         }
     }
 }
 
-impl<C: Context, V, RT, H, GenesisConfig> StateTransitionFunction
-    for AppTemplate<C, V, RT, H, GenesisConfig>
+impl<C: Context, V, RT, H> StateTransitionFunction for AppTemplate<C, V, RT, H>
 where
-    RT: DispatchCall<Context = C> + Genesis<Context = C, Config = GenesisConfig>,
+    RT: DispatchCall<Context = C> + Genesis<Context = C>,
     V: TxVerifier,
     H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
 {
     type StateRoot = jmt::RootHash;
 
-    type ChainParams = ();
+    type InitialState = <RT as Genesis>::Config;
 
     type Transaction = RawTx;
 
@@ -67,11 +58,11 @@ where
 
     type MisbehaviorProof = ();
 
-    fn init_chain(&mut self, _params: Self::ChainParams) {
+    fn init_chain(&mut self, params: Self::InitialState) {
         let working_set = &mut WorkingSet::new(self.current_storage.clone());
 
         self.runtime
-            .genesis(&self.genesis_config, working_set)
+            .genesis(&params, working_set)
             .expect("module initialization must succeed");
 
         let (log, witness) = working_set.freeze();
