@@ -4,7 +4,6 @@ members = [
     "db/schemadb",
     "db/sovereign-db",
     "demo-app",
-    "demo-rollup",
     "sdk",
     "first-read-last-write-cache",
     "sov-modules/sov-app-template",
