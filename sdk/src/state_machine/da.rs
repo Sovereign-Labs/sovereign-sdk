@@ -25,6 +25,10 @@ pub trait DaSpec {
     /// proof demonstrating that the provided BlobTransactions represent the entire contents of Celestia namespace
     /// in a given block
     type CompletenessProof: Encode + Decode;
+
+    /// The parameters of the rollup which are baked into the state-transition function.
+    /// For example, this could include the namespace of the rollup on Celestia.
+    type ChainParams;
 }
 
 /// A DaLayer implements the logic required to create a zk proof that some data
@@ -39,6 +43,8 @@ pub trait DaVerifier {
 
     /// The error type returned by the DA layer's verification function
     type Error: Debug;
+
+    fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self;
 
     /// Verify a claimed set of transactions against a block header.
     fn verify_relevant_tx_list(
