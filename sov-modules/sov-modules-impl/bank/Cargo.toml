@@ -23,6 +23,6 @@ jsonrpsee = { version = "0.16.2", features = ["macros", "client-core", "server"]
 
 
 [features]
-default = ["native", "dep:jsonrpsee"]
+default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-state/native"]
+native = ["serde", "sov-state/native", "dep:jsonrpsee"]
