@@ -92,6 +92,11 @@ impl StorageValue {
 /// An interface for storing and retrieving values in the storage.
 pub trait Storage: Clone {
     type Witness: Witness;
+    /// The runtime config for this storage instance.
+    type RuntimeConfig;
+
+    fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error>;
+
     /// Returns the value corresponding to the key or None if key is absent.
     fn get(&self, key: StorageKey, witness: &Self::Witness) -> Option<StorageValue>;
 

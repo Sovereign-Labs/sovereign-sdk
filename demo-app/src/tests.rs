@@ -6,19 +6,19 @@ mod test {
     use sovereign_sdk::stf::StateTransitionFunction;
 
     use crate::{
+        app::{create_config, create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
         data_generation::{simulate_da, QueryGenerator},
         helpers::query_and_deserialize,
         runtime::Runtime,
-        test_utils::{create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
     };
 
     #[test]
     fn test_demo_values_in_db() {
         let path = schemadb::temppath::TempPath::new();
         {
-            let mut demo = create_new_demo(LOCKED_AMOUNT + 1, &path);
+            let mut demo = create_new_demo(&path);
 
-            demo.init_chain(());
+            demo.init_chain(create_config(LOCKED_AMOUNT + 1));
             demo.begin_slot();
 
             let txs = simulate_da();
@@ -61,9 +61,9 @@ mod test {
     #[test]
     fn test_demo_values_in_cache() {
         let path = schemadb::temppath::TempPath::new();
-        let mut demo = create_new_demo(LOCKED_AMOUNT + 1, &path);
+        let mut demo = create_new_demo(&path);
 
-        demo.init_chain(());
+        demo.init_chain(create_config(LOCKED_AMOUNT + 1));
         demo.begin_slot();
 
         let txs = simulate_da();
@@ -100,9 +100,9 @@ mod test {
     fn test_demo_values_not_in_db() {
         let path = schemadb::temppath::TempPath::new();
         {
-            let mut demo = create_new_demo(LOCKED_AMOUNT + 1, &path);
+            let mut demo = create_new_demo(&path);
 
-            demo.init_chain(());
+            demo.init_chain(create_config(LOCKED_AMOUNT + 1));
             demo.begin_slot();
 
             let txs = simulate_da();
@@ -139,9 +139,9 @@ mod test {
     #[test]
     fn test_sequencer_insufficient_funds() {
         let path = schemadb::temppath::TempPath::new();
-        let mut demo = create_new_demo(LOCKED_AMOUNT - 1, &path);
+        let mut demo = create_new_demo(&path);
 
-        demo.init_chain(());
+        demo.init_chain(create_config(LOCKED_AMOUNT - 1));
         demo.begin_slot();
 
         let txs = simulate_da();

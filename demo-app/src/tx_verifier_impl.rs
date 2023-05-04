@@ -6,7 +6,7 @@ use std::{io::Cursor, marker::PhantomData};
 
 /// Transaction represents a deserialized RawTx.
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub(crate) struct Transaction<C: sov_modules_api::Context> {
+pub struct Transaction<C: sov_modules_api::Context> {
     pub(crate) signature: C::Signature,
     pub(crate) pub_key: C::PublicKey,
     pub(crate) runtime_msg: Vec<u8>,
@@ -25,7 +25,7 @@ impl<C: sov_modules_api::Context> Transaction<C> {
     }
 }
 
-pub(crate) struct DemoAppTxVerifier<C: Context> {
+pub struct DemoAppTxVerifier<C: Context> {
     _phantom: PhantomData<C>,
 }
 

@@ -1,5 +1,7 @@
 use std::future::Future;
 
+use serde::de::DeserializeOwned;
+
 use crate::{
     da::DaSpec,
     serial::{Decode, Encode},
@@ -12,6 +14,9 @@ use crate::{
 /// data into a representation that can be efficiently verified in circuit.
 pub trait DaService {
     /// A handle to the types used by the DA layer.
+    type RuntimeConfig: DeserializeOwned;
+
+    /// A handle to the types used by the DA layer.
     type Spec: DaSpec;
 
     /// A DA layer block, possibly excluding some irrelevant information.
@@ -22,6 +27,9 @@ pub trait DaService {
 
     /// The error type for fallible methods.
     type Error: Send + Sync;
+
+    /// Create a new instance of the DaService
+    fn new(config: Self::RuntimeConfig, chain_params: <Self::Spec as DaSpec>::ChainParams) -> Self;
 
     /// Retrieve the data for the given height, waiting for it to be
     /// finalized if necessary. The block, once returned, must not be reverted

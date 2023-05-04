@@ -1,11 +1,11 @@
 use crate::{
+    app::{create_config, create_new_demo, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
     data_generation::{
         simulate_da_with_bad_nonce, simulate_da_with_bad_serialization, simulate_da_with_bad_sig,
         simulate_da_with_revert_msg, QueryGenerator,
     },
     helpers::query_and_deserialize,
     runtime::Runtime,
-    test_utils::{create_new_demo, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
 };
 use sov_app_template::Batch;
 use sov_modules_api::mocks::MockContext;
@@ -19,9 +19,9 @@ const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + SEQUENCER_BALANCE_DELTA;
 fn test_tx_revert() {
     let path = schemadb::temppath::TempPath::new();
     {
-        let mut demo = create_new_demo(SEQUENCER_BALANCE, &path);
+        let mut demo = create_new_demo(&path);
 
-        demo.init_chain(());
+        demo.init_chain(create_config(SEQUENCER_BALANCE));
         demo.begin_slot();
 
         let txs = simulate_da_with_revert_msg();
@@ -76,9 +76,9 @@ fn test_tx_bad_sig() {
     let path = schemadb::temppath::TempPath::new();
 
     {
-        let mut demo = create_new_demo(SEQUENCER_BALANCE, &path);
+        let mut demo = create_new_demo(&path);
 
-        demo.init_chain(());
+        demo.init_chain(create_config(SEQUENCER_BALANCE));
         demo.begin_slot();
 
         let txs = simulate_da_with_bad_sig();
@@ -123,9 +123,9 @@ fn test_tx_bad_nonce() {
     let path = schemadb::temppath::TempPath::new();
 
     {
-        let mut demo = create_new_demo(SEQUENCER_BALANCE, &path);
+        let mut demo = create_new_demo(&path);
 
-        demo.init_chain(());
+        demo.init_chain(create_config(SEQUENCER_BALANCE));
         demo.begin_slot();
 
         let txs = simulate_da_with_bad_nonce();
@@ -170,9 +170,9 @@ fn test_tx_bad_serialization() {
     let path = schemadb::temppath::TempPath::new();
 
     {
-        let mut demo = create_new_demo(SEQUENCER_BALANCE, &path);
+        let mut demo = create_new_demo(&path);
 
-        demo.init_chain(());
+        demo.init_chain(create_config(SEQUENCER_BALANCE));
         demo.begin_slot();
 
         let txs = simulate_da_with_bad_serialization();
