@@ -190,8 +190,9 @@ where
         let (cache_log, witness) = self.working_set.take().unwrap().freeze();
         let root_hash = self
             .current_storage
-            .validate_and_commit(cache_log, &witness)
+            .validate_and_commit(&cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
+
         (jmt::RootHash(root_hash), vec![])
     }
 }

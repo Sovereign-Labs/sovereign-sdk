@@ -39,7 +39,7 @@ impl<S: StorageSpec> Storage for ZkStorage<S> {
 
     fn validate_and_commit(
         &self,
-        cache_log: cache::CacheLog,
+        cache_log: &cache::CacheLog,
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error> {
         let latest_version: Version = witness.get_hint();

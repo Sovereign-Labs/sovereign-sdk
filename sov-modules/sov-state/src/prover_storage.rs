@@ -67,7 +67,7 @@ impl<S: StorageSpec> Storage for ProverStorage<S> {
 
     fn validate_and_commit(
         &self,
-        cache_log: CacheLog,
+        cache_log: &CacheLog,
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error> {
         let latest_version = self.db.get_next_version() - 1;
