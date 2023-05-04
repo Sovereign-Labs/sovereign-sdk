@@ -1,6 +1,9 @@
+#[cfg(feature = "native")]
 use crate::{Account, Accounts};
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(feature = "native")]
 use sov_modules_api::AddressBech32;
+#[cfg(feature = "native")]
 use sov_state::WorkingSet;
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
@@ -8,8 +11,8 @@ pub enum QueryMessage<C: sov_modules_api::Context> {
     GetAccount(C::PublicKey),
 }
 
-#[cfg_attr(feature = "native", derive(serde::Deserialize, serde::Serialize))]
-#[derive(Debug, Eq, PartialEq)]
+#[cfg(feature = "native")]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum Response {
     AccountExists { addr: AddressBech32, nonce: u64 },
     AccountEmpty,

@@ -12,12 +12,13 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
+    name: ubuntu / check
     env:
       RUSTFLAGS: -D warnings
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.3
         with:
@@ -31,13 +32,26 @@ jobs:
             exit 1
           fi
 
+  # Check that every combination of features is working properly.
+  hack:
+    runs-on: ubuntu-latest
+    name: features
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - name: cargo install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
+      # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
+      - name: cargo hack
+        run: cargo hack --feature-powerset check
   test:
     runs-on: ubuntu-latest
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Run sccache-cache
         uses: mozilla-actions/sccache-action@v0.0.3
         with:
