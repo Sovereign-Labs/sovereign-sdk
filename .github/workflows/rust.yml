@@ -31,6 +31,7 @@ jobs:
             exit 1
           fi
 
+  # Check that every combination of features is working properly.
   hack:
     runs-on: ubuntu-latest
     name: ubuntu / stable / features
