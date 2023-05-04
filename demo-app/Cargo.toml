@@ -2,24 +2,34 @@
 name = "demo-app"
 version = "0.1.0"
 edition = "2021"
+resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = { workspace = true }
 sovereign-sdk = { path = "../sdk", features = ["mocks"] }
-election = { path = "../sov-modules/sov-modules-impl/examples/election" }
-sequencer = { path = "../sov-modules/sov-modules-impl/sequencer" }
-bank = { path = "../sov-modules/sov-modules-impl/bank" } 
-sov-app-template = { path = "../sov-modules/sov-app-template" }
-value-setter = { path = "../sov-modules/sov-modules-impl/examples/value-setter" }
-accounts = { path = "../sov-modules/sov-modules-impl/accounts" }
-sov-state = { path = "../sov-modules/sov-state", features = ["temp"] }
-sovereign-db = { path = "../db/sovereign-db" }
-sov-modules-api = { path = "../sov-modules/sov-modules-api", features = ["mocks"] }
+election = { path = "../sov-modules/sov-modules-impl/examples/election", default-features = false }
+sequencer = { path = "../sov-modules/sov-modules-impl/sequencer", default-features = false }
+bank = { path = "../sov-modules/sov-modules-impl/bank", default-features = false } 
+sov-app-template = { path = "../sov-modules/sov-app-template" } # no features available
+value-setter = { path = "../sov-modules/sov-modules-impl/examples/value-setter", default-features = false }
+accounts = { path = "../sov-modules/sov-modules-impl/accounts", default-features = false }
+sov-state = { path = "../sov-modules/sov-state", default-features = false }
+sov-modules-api = { path = "../sov-modules/sov-modules-api", default-features = false, features = ["mocks"] }
 sov-modules-macros = { path = "../sov-modules/sov-modules-macros" }
 borsh = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
-schemadb = { path = "../db/schemadb", features = ["temppath"] }
+
+# Only enable the db on "native" feature
+schemadb = { path = "../db/schemadb", features = ["temppath"], optional = true }
+sovereign-db = { path = "../db/sovereign-db", optional = true }
+
+
+[features]
+default = ["native"]
+native = ["sov-state/temp", "dep:sovereign-db", "dep:schemadb", "bank/native", "accounts/native", "election/native", 
+	"sequencer/native", "value-setter/native", "sov-modules-api/native"]
+verifier = []

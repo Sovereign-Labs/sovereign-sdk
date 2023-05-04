@@ -2,6 +2,7 @@
 name = "first-read-last-write-cache"
 version = "0.1.0"
 edition = "2021"
+resolver = "2"
 
 
 [dependencies]
