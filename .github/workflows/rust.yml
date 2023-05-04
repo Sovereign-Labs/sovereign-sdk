@@ -12,6 +12,7 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
+    name: ubuntu / check
     env:
       RUSTFLAGS: -D warnings
       SCCACHE_GHA_ENABLED: "true"
@@ -34,13 +35,11 @@ jobs:
   # Check that every combination of features is working properly.
   hack:
     runs-on: ubuntu-latest
-    name: ubuntu / stable / features
+    name: features
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - name: Install stable
-        uses: dtolnay/rust-toolchain@stable
       - name: cargo install cargo-hack
         uses: taiki-e/install-action@cargo-hack
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
