@@ -49,7 +49,7 @@ pub mod test {
             let mut demo = create_new_demo(&path);
 
             demo.init_chain(create_config(LOCKED_AMOUNT + 1));
-            demo.begin_slot();
+            demo.begin_slot(Default::default());
 
             let txs = simulate_da();
 
@@ -98,7 +98,7 @@ pub mod test {
         let mut demo = create_new_demo(&path);
 
         demo.init_chain(create_config(LOCKED_AMOUNT + 1));
-        demo.begin_slot();
+        demo.begin_slot(Default::default());
 
         let txs = simulate_da();
 
@@ -142,7 +142,7 @@ pub mod test {
             let mut demo = create_new_demo(&path);
 
             demo.init_chain(create_config(LOCKED_AMOUNT + 1));
-            demo.begin_slot();
+            demo.begin_slot(Default::default());
 
             let txs = simulate_da();
 
@@ -186,7 +186,7 @@ pub mod test {
         let mut demo = create_new_demo(&path);
 
         demo.init_chain(create_config(LOCKED_AMOUNT - 1));
-        demo.begin_slot();
+        demo.begin_slot(Default::default());
 
         let txs = simulate_da();
 

@@ -13,8 +13,7 @@ pub use tx_hooks::VerifiedTx;
 pub use tx_verifier::{RawTx, TxVerifier};
 
 use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
-use sov_state::{CacheLog, Storage, WorkingSet};
-use sovereign_sdk::core::traits::Witness;
+use sov_state::{Storage, WorkingSet};
 use sovereign_sdk::{
     core::traits::BatchTrait,
     jmt,
@@ -75,11 +74,10 @@ pub enum SlashingReason {
 //     pub cache_log: CacheLog,
 // }
 
-#[derive(Default)]
-pub struct WitnessAndLog<W: Witness> {
-    pub witness: W,
-    pub cache_log: CacheLog,
-}
+// #[derive(Default, borsh::BorshDeserialize, borsh::BorshSerialize)]
+// pub struct WitnessImpl<W: Witness> {
+//     pub witness: W,
+// }
 
 impl<C: Context, V, RT, H> StateTransitionFunction for AppTemplate<C, V, RT, H>
 where
@@ -95,8 +93,7 @@ where
 
     type BatchReceiptContents = SequencerOutcome;
 
-    // type Witness = WitnessAndLog<<C as Spec>::Witness>;
-    type Witness = WitnessAndLog<<<C as Spec>::Storage as Storage>::Witness>;
+    type Witness = <<C as Spec>::Storage as Storage>::Witness;
 
     type MisbehaviorProof = ();
 
@@ -113,8 +110,11 @@ where
             .expect("Storage update must succeed");
     }
 
-    fn begin_slot(&mut self, _witness: Self::Witness) {
-        self.working_set = Some(WorkingSet::new(self.current_storage.clone()));
+    fn begin_slot(&mut self, witness: Self::Witness) {
+        self.working_set = Some(WorkingSet::with_witness(
+            self.current_storage.clone(),
+            witness,
+        ));
     }
 
     fn apply_blob(
@@ -265,6 +265,15 @@ where
         }
     }
 
+    // Host
+    // 1. Init empty witness
+    // 2. call begin_slot(witness)
+    // 3. self.working_set.set_witness(witness)
+    //      Prover - ignores
+    //      ZK - stores
+
+    // Guest
+
     fn end_slot(
         &mut self,
     ) -> (
@@ -278,7 +287,6 @@ where
             .current_storage
             .validate_and_commit(cache_log.clone(), &witness) // TODO: Remove clone after merge https://github.com/Sovereign-Labs/sovereign/pull/226
             .expect("jellyfish merkle tree update must succeed");
-        let witness_and_log = WitnessAndLog { witness, cache_log };
-        (jmt::RootHash(root_hash), witness_and_log, vec![])
+        (jmt::RootHash(root_hash), witness, vec![])
     }
 }
