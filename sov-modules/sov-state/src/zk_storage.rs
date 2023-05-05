@@ -6,16 +6,15 @@ use sovereign_sdk::core::traits::{TreeWitnessReader, Witness};
 
 use crate::{
     storage::{StorageKey, StorageValue},
-    Storage, StorageSpec,
+    MerkleProofSpec, Storage,
 };
 
-#[derive(Default)]
-pub struct ZkStorage<S: StorageSpec> {
+pub struct ZkStorage<S: MerkleProofSpec> {
     prev_state_root: [u8; 32],
     _phantom_hasher: PhantomHasher<S::Hasher>,
 }
 
-impl<S: StorageSpec> Clone for ZkStorage<S> {
+impl<S: MerkleProofSpec> Clone for ZkStorage<S> {
     fn clone(&self) -> Self {
         Self {
             prev_state_root: self.prev_state_root,
@@ -24,7 +23,7 @@ impl<S: StorageSpec> Clone for ZkStorage<S> {
     }
 }
 
-impl<S: StorageSpec> ZkStorage<S> {
+impl<S: MerkleProofSpec> ZkStorage<S> {
     pub fn new(prev_state_root: [u8; 32]) -> Self {
         Self {
             prev_state_root,
@@ -33,7 +32,7 @@ impl<S: StorageSpec> ZkStorage<S> {
     }
 }
 
-impl<S: StorageSpec> Storage for ZkStorage<S> {
+impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     type Witness = S::Witness;
 
     type RuntimeConfig = [u8; 32];

@@ -3,19 +3,19 @@ use std::{fs, path::Path, sync::Arc};
 use crate::{
     storage::{StorageKey, StorageValue},
     tree_db::TreeReadLogger,
-    Storage, StorageSpec,
+    MerkleProofSpec, Storage,
 };
 use first_read_last_write_cache::cache::CacheLog;
 use jmt::{storage::TreeWriter, JellyfishMerkleTree, KeyHash, PhantomHasher, SimpleHasher};
 use sovereign_db::state_db::StateDB;
 use sovereign_sdk::core::traits::Witness;
 
-pub struct ProverStorage<S: StorageSpec> {
+pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,
     _phantom_hasher: PhantomHasher<S::Hasher>,
 }
 
-impl<S: StorageSpec> Clone for ProverStorage<S> {
+impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
     fn clone(&self) -> Self {
         Self {
             db: self.db.clone(),
@@ -24,7 +24,7 @@ impl<S: StorageSpec> Clone for ProverStorage<S> {
     }
 }
 
-impl<S: StorageSpec> ProverStorage<S> {
+impl<S: MerkleProofSpec> ProverStorage<S> {
     #[cfg(any(test, feature = "temp"))]
     pub fn temporary() -> Self {
         let db = StateDB::temporary();
@@ -55,7 +55,7 @@ impl<S: StorageSpec> ProverStorage<S> {
     }
 }
 
-impl<S: StorageSpec> Storage for ProverStorage<S> {
+impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type Witness = S::Witness;
     type RuntimeConfig = &'static str;
 
