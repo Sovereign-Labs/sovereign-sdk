@@ -31,6 +31,8 @@ pub fn simulate_da_with_bad_sig() -> Vec<RawTx> {
     election.create_raw_txs()
 }
 
+// TODO: Remove once we fix test with bad nonce
+#[allow(unused)]
 pub fn simulate_da_with_bad_nonce() -> Vec<RawTx> {
     let election = election_data::BadNonceElectionCallMessages {};
     election.create_raw_txs()

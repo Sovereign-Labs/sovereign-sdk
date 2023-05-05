@@ -27,7 +27,6 @@ sha2 = { workspace = true }
 schemadb = { path = "../db/schemadb", features = ["temppath"], optional = true }
 sovereign-db = { path = "../db/sovereign-db", optional = true }
 
-
 [features]
 default = ["native"]
 native = ["sov-state/temp", "dep:sovereign-db", "dep:schemadb", "bank/native", "accounts/native", "election/native", 

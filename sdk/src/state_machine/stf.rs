@@ -1,11 +1,8 @@
-use crate::maybestd::rc::Rc;
+use crate::{da::BlobTransactionTrait, maybestd::rc::Rc};
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::{
-    core::traits::{BatchTrait, TransactionTrait},
-    serial::{Decode, DecodeBorrowed},
-};
+use crate::serial::DecodeBorrowed;
 
 /// An address on the DA layer. Opaque to the StateTransitionFunction
 pub type OpaqueAddress = Rc<Vec<u8>>;
@@ -32,17 +29,47 @@ mod sealed {
     impl Sealed for StandardConfig {}
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransactionReceipt<R> {
+    /// The canonical hash of this transaction
+    pub tx_hash: [u8; 32],
+    /// The canonically serialized body of the transaction, if it should be persisted
+    /// in the database
+    pub body_to_save: Option<Vec<u8>>,
+    /// The events output by this transaction
+    pub events: Vec<Event>,
+    /// Any additional structured data to be saved in the database and served over RPC
+    /// For example, this might contain a status code.
+    pub receipt: R,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
+    /// The canonical hash of this batch
+    pub batch_hash: [u8; 32],
+    /// The receipt of each transaction in the batch
+    pub tx_receipts: Vec<TransactionReceipt<TxReceiptContents>>,
+    /// Any additional structered data to be saved in the database and served over RPC
+    pub inner: BatchReceiptContents,
+}
+
 // TODO(@preston-evans98): update spec with simplified API
 pub trait StateTransitionFunction {
     type StateRoot;
     /// The intial state of the rollup.
     type InitialState;
 
-    type Transaction: TransactionTrait;
-    /// A batch of transactions. Also known as a "block" in most systems: we use
-    /// the term batch in this context to avoid ambiguity with DA layer blocks
-    type Batch: BatchTrait<Transaction = Self::Transaction>;
-    type Proof: Decode;
+    // TODO: remove unused types and their corresponding traits
+    // type Transaction: TransactionTrait;
+    // /// A batch of transactions. Also known as a "block" in most systems: we use
+    // /// the term batch in this context to avoid ambiguity with DA layer blocks
+    // type Batch: BatchTrait<Transaction = Self::Transaction>;
+    // type Proof: Decode;
+
+    /// The contents of a transaction receipt. This is the data that is persisted in the database
+    type TxReceiptContents: Serialize + DeserializeOwned + Clone;
+    /// The contents of a batch receipt. This is the data that is persisted in the database
+    type BatchReceiptContents: Serialize + DeserializeOwned + Clone;
 
     /// A proof that the sequencer has misbehaved. For example, this could be a merkle proof of a transaction
     /// with an invalid signature
@@ -56,18 +83,11 @@ pub trait StateTransitionFunction {
     fn begin_slot(&mut self);
 
     /// Apply a batch of transactions to the rollup, slashing the sequencer who proposed the batch on failure
-    fn apply_batch(
+    fn apply_blob(
         &mut self,
-        batch: Self::Batch,
-        sequencer: &[u8],
+        blob: impl BlobTransactionTrait,
         misbehavior_hint: Option<Self::MisbehaviorProof>,
-    ) -> anyhow::Result<Vec<Vec<Event>>>;
-
-    fn apply_proof(
-        &self,
-        proof: Self::Proof,
-        prover: &[u8],
-    ) -> Result<(), ConsensusSetUpdate<OpaqueAddress>>;
+    ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents>;
 
     /// Called once at the *end* of each DA layer block (i.e. after all rollup batches and proofs have been processed)
     /// Commits state changes to the database
@@ -102,7 +122,7 @@ pub enum ConsensusRole {
 }
 
 /// A key-value pair representing a change to the rollup state
-#[derive(Debug, PartialEq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone)]
 pub struct Event {
     pub key: EventKey,
     pub value: EventValue,
@@ -132,7 +152,7 @@ impl Event {
 )]
 pub struct EventKey(Vec<u8>);
 
-#[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone)]
 pub struct EventValue(Vec<u8>);
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]

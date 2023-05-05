@@ -3,6 +3,11 @@ mod tx_hooks;
 mod tx_verifier;
 
 pub use batch::Batch;
+use sovereign_sdk::serial::Decode;
+use sovereign_sdk::stf::BatchReceipt;
+use sovereign_sdk::stf::TransactionReceipt;
+use sovereign_sdk::Buf;
+use tracing::error;
 pub use tx_hooks::TxHooks;
 pub use tx_hooks::VerifiedTx;
 pub use tx_verifier::{RawTx, TxVerifier};
@@ -10,7 +15,7 @@ pub use tx_verifier::{RawTx, TxVerifier};
 use sov_modules_api::{Context, DispatchCall, Genesis};
 use sov_state::{Storage, WorkingSet};
 use sovereign_sdk::{
-    core::{mocks::MockProof, traits::BatchTrait},
+    core::traits::BatchTrait,
     jmt,
     stf::{OpaqueAddress, StateTransitionFunction},
 };
@@ -40,6 +45,26 @@ where
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum TxEffect {
+    Reverted,
+    Successful,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SequencerOutcome {
+    Rewarded,
+    Slashed(SlashingReason),
+    Ignored,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SlashingReason {
+    InvalidBatchEncoding,
+    StatelessVerificationFailed,
+    InvalidTransactionEncoding,
+}
+
 impl<C: Context, V, RT, H> StateTransitionFunction for AppTemplate<C, V, RT, H>
 where
     RT: DispatchCall<Context = C> + Genesis<Context = C>,
@@ -49,12 +74,6 @@ where
     type StateRoot = jmt::RootHash;
 
     type InitialState = <RT as Genesis>::Config;
-
-    type Transaction = RawTx;
-
-    type Batch = Batch;
-
-    type Proof = MockProof;
 
     type MisbehaviorProof = ();
 
@@ -75,29 +94,47 @@ where
         self.working_set = Some(WorkingSet::new(self.current_storage.clone()));
     }
 
-    fn apply_batch(
+    fn apply_blob(
         &mut self,
-        batch: Self::Batch,
-        sequencer: &[u8],
+        blob: impl sovereign_sdk::da::BlobTransactionTrait,
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
-    ) -> anyhow::Result<Vec<Vec<sovereign_sdk::stf::Event>>> {
+    ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
         let mut batch_workspace = WorkingSet::new(self.current_storage.clone());
         batch_workspace = batch_workspace.to_revertable();
+        let sequencer = blob.sender();
+        let sequencer = sequencer.as_ref();
 
         if let Err(e) = self
             .tx_hooks
             .enter_apply_batch(sequencer, &mut batch_workspace)
         {
-            anyhow::bail!(
-                "Error: The transaction was rejected by the 'enter_apply_batch' hook. {}",
+            error!(
+                "Error: The transaction was rejected by the 'enter_apply_batch' hook. Skipping batch without slashing the sequencer {}",
                 e
-            )
+            );
+            // TODO: consider slashing the sequencer in this case. cc @bkolad
+            return BatchReceipt {
+                batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
+                tx_receipts: Vec::new(),
+                inner: SequencerOutcome::Ignored,
+            };
         }
 
         // Commit `enter_apply_batch` changes.
         batch_workspace = batch_workspace.commit().to_revertable();
 
-        let mut events = Vec::new();
+        // let batch: Vec<u8> = blob.data().collect();
+        let batch = match Batch::decode(&mut blob.data().reader()) {
+            Ok(batch) => batch,
+            Err(e) => {
+                error!("Unable to decode batch provided by the sequencer {}", e);
+                return BatchReceipt {
+                    batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
+                    tx_receipts: Vec::new(),
+                    inner: SequencerOutcome::Slashed(SlashingReason::InvalidBatchEncoding),
+                };
+            }
+        };
 
         // Run the stateless verification, since it is stateless we don't commit.
         let txs = match self
@@ -109,9 +146,16 @@ where
                 // Revert on error
                 let batch_workspace = batch_workspace.revert();
                 self.working_set = Some(batch_workspace);
-                anyhow::bail!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}", e);
+                error!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}", e);
+                return BatchReceipt {
+                    batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
+                    tx_receipts: Vec::new(),
+                    inner: SequencerOutcome::Slashed(SlashingReason::StatelessVerificationFailed),
+                };
             }
         };
+
+        let mut tx_receipts = Vec::with_capacity(txs.len());
 
         // Process transactions in a loop, commit changes after every step of the loop.
         for tx in txs {
@@ -120,16 +164,24 @@ where
             let verified_tx = match self.tx_hooks.pre_dispatch_tx_hook(tx, &mut batch_workspace) {
                 Ok(verified_tx) => verified_tx,
                 Err(e) => {
-                    // Revert the batch.
-                    batch_workspace = batch_workspace.revert();
+                    // // Revert the batch.
+                    // batch_workspace = batch_workspace.revert();
 
-                    // We reward sequencer funds inside `exit_apply_batch`.
-                    self.tx_hooks
-                        .exit_apply_batch(0, &mut batch_workspace)
-                        .expect("Impossible happened: error in exit_apply_batch");
+                    // // We reward sequencer funds inside `exit_apply_batch`.
+                    // self.tx_hooks
+                    //     .exit_apply_batch(0, &mut batch_workspace)
+                    //     .expect("Impossible happened: error in exit_apply_batch");
 
-                    self.working_set = Some(batch_workspace);
-                    anyhow::bail!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
+                    // self.working_set = Some(batch_workspace);
+                    error!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
+                    let receipt = TransactionReceipt {
+                        tx_hash: [0u8; 32],
+                        body_to_save: None,
+                        events: vec![],
+                        receipt: TxEffect::Reverted,
+                    };
+                    tx_receipts.push(receipt);
+                    continue;
                 }
             };
 
@@ -143,7 +195,14 @@ where
 
                     match tx_result {
                         Ok(resp) => {
-                            events.push(resp.events);
+                            let receipt = TransactionReceipt {
+                                tx_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
+                                body_to_save: None,
+                                events: resp.events,
+                                receipt: TxEffect::Successful,
+                            };
+
+                            tx_receipts.push(receipt);
                         }
                         Err(_e) => {
                             // The transaction causing invalid state transition is reverted but we don't slash and we continue
@@ -156,7 +215,14 @@ where
                     // If the serialization is invalid, the sequencer is malicious. Slash them (we don't run exit_apply_batch here)
                     let batch_workspace = batch_workspace.revert();
                     self.working_set = Some(batch_workspace);
-                    anyhow::bail!("Tx decoding error: {}", e);
+                    error!("Tx decoding error: {}", e);
+                    return BatchReceipt {
+                        batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
+                        tx_receipts: Vec::new(),
+                        inner: SequencerOutcome::Slashed(
+                            SlashingReason::InvalidTransactionEncoding,
+                        ),
+                    };
                 }
             }
             // commit each step of the loop
@@ -169,16 +235,13 @@ where
             .expect("Impossible happened: error in exit_apply_batch");
 
         self.working_set = Some(batch_workspace);
+        let batch_receipt = BatchReceipt {
+            batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
+            tx_receipts,
+            inner: SequencerOutcome::Rewarded,
+        };
 
-        Ok(events)
-    }
-
-    fn apply_proof(
-        &self,
-        _proof: Self::Proof,
-        _prover: &[u8],
-    ) -> Result<(), sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>> {
-        todo!()
+        batch_receipt
     }
 
     fn end_slot(
@@ -194,4 +257,8 @@ where
             .expect("jellyfish merkle tree update must succeed");
         (jmt::RootHash(root_hash), vec![])
     }
+
+    type TxReceiptContents = TxEffect;
+
+    type BatchReceiptContents = SequencerOutcome;
 }

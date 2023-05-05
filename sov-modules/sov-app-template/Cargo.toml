@@ -9,6 +9,8 @@ resolver = "2"
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+tracing = { workspace = true }
 
 sovereign-sdk = { path = "../../sdk" }
 sov-state = { path = "../sov-state", default-features = false }
