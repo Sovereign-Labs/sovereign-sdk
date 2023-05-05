@@ -65,20 +65,6 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-// #[derive(Default)]
-// pub struct WitnessAndLog<W>
-// where
-//     W: StorageSpec<Witness = W>,
-// {
-//     pub witness: W,
-//     pub cache_log: CacheLog,
-// }
-
-// #[derive(Default, borsh::BorshDeserialize, borsh::BorshSerialize)]
-// pub struct WitnessImpl<W: Witness> {
-//     pub witness: W,
-// }
-
 impl<C: Context, V, RT, H> StateTransitionFunction for AppTemplate<C, V, RT, H>
 where
     RT: DispatchCall<Context = C> + Genesis<Context = C>,
@@ -272,11 +258,10 @@ where
         Self::Witness,
         Vec<sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>>,
     ) {
-        // `WitnessAndLog<<<C as Spec>::Storage as Storage>::Witness>`
         let (cache_log, witness) = self.working_set.take().unwrap().freeze();
         let root_hash = self
             .current_storage
-            .validate_and_commit(cache_log.clone(), &witness) // TODO: Remove clone after merge https://github.com/Sovereign-Labs/sovereign/pull/226
+            .validate_and_commit(cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
         (jmt::RootHash(root_hash), witness, vec![])
     }
