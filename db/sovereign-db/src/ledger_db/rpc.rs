@@ -1,3 +1,4 @@
+use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sovereign_sdk::{
@@ -78,19 +79,51 @@ impl LedgerRpcProvider for LedgerDB {
     ) -> Result<Vec<Option<Self::SlotResponse>>, anyhow::Error> {
         // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
         //      and use an iterator instead of querying for each slot individually
-        let mut out = Vec::with_capacity(slot_ids.len());
-        for slot_id in slot_ids {
-            let slot_num = self.resolve_slot_identifier(slot_id)?;
-            out.push(match slot_num {
-                Some(num) => {
-                    if let Some(stored_slot) = self.db.get::<SlotByNumber>(&num)? {
-                        Some(self.populate_slot_response(num.into(), stored_slot, query_mode)?)
-                    } else {
-                        None
+
+        // First resolve the slot identifiers and store the slot numbers
+        let mut slot_nums: Vec<Option<SlotNumber>> = slot_ids.iter()
+            .map(|slot_id| self.resolve_slot_identifier(slot_id))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Then sort the slot numbers
+        slot_nums.sort_unstable();
+
+        // Then identify sequential ranges
+        let mut slot_ranges: Vec<(SlotNumber, SlotNumber)> = Vec::new();
+        let mut current_range: Option<(SlotNumber, SlotNumber)> = None;
+
+        for slot_num in slot_nums {
+            if let Some(num) = slot_num {
+                match current_range {
+                    Some((start, end)) if SlotNumber(Into::<u64>::into(end) + 1) == num => {
+                        current_range = Some((start, num));
+                    }
+                    _ => {
+                        if let Some(range) = current_range {
+                            slot_ranges.push(range);
+                        }
+                        current_range = Some((num, num));
                     }
                 }
-                None => None,
-            })
+            }
+        }
+
+        if let Some(range) = current_range {
+            slot_ranges.push(range);
+        }
+
+        // For each identified range, make a single query to fetch tx's
+        // From the corresponding blocks, then store into result vector.
+        let mut out = Vec::with_capacity(slot_ids.len());
+        for (start, end) in slot_ranges {
+            let stored_slots = self.db.get_range::<SlotByNumber>(start, end)?;
+            for num in start..=end {
+                if let Some(stored_slot) = stored_slots.get(&num) {
+                    out.push(Some(self.populate_slot_response(num.into(), stored_slot.clone(), query_mode)?));
+                } else {
+                    out.push(None);
+                }
+            }
         }
         Ok(out)
     }
@@ -102,6 +135,7 @@ impl LedgerRpcProvider for LedgerDB {
     ) -> Result<Vec<Option<Self::BatchResponse>>, anyhow::Error> {
         // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
         //      and use an iterator instead of querying for each slot individually
+        
         let mut out = Vec::with_capacity(batch_ids.len());
         for batch_id in batch_ids {
             let batch_num = self.resolve_batch_identifier(batch_id)?;
