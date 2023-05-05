@@ -59,6 +59,10 @@ impl<S: StorageSpec> Storage for ProverStorage<S> {
     type Witness = S::Witness;
     type RuntimeConfig = &'static str;
 
+    fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
+        Self::with_path(&config)
+    }
+
     fn get(&self, key: StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
         let val = self.read_value(key);
         witness.add_hint(val.clone());
@@ -129,10 +133,6 @@ impl<S: StorageSpec> Storage for ProverStorage<S> {
             .expect("db write must succeed");
         self.db.inc_next_version();
         Ok(new_root.0)
-    }
-
-    fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
-        Self::with_path(&config)
     }
 }
 

@@ -9,7 +9,7 @@ pub type OpaqueAddress = Rc<Vec<u8>>;
 
 /// The configuration of a full node of the rollup which creates zk proofs.
 pub struct ProverConfig;
-/// The configuration used to intiailize the "Verifier" of the state transition function
+/// The configuration used to initialize the "Verifier" of the state transition function
 /// which runs inside of the zkvm.
 pub struct ZkConfig;
 /// The configuration of a standard full node of the rollup which does not create zk proofs
@@ -56,7 +56,7 @@ pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
 // TODO(@preston-evans98): update spec with simplified API
 pub trait StateTransitionFunction {
     type StateRoot;
-    /// The intial state of the rollup.
+    /// The initial state of the rollup.
     type InitialState;
 
     // TODO: remove unused types and their corresponding traits

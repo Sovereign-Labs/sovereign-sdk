@@ -14,6 +14,7 @@ pub use tx_verifier::{RawTx, TxVerifier};
 
 use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
 use sov_state::{CacheLog, Storage, WorkingSet};
+use sovereign_sdk::core::traits::Witness;
 use sovereign_sdk::{
     core::traits::BatchTrait,
     jmt,
@@ -65,9 +66,18 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
+// #[derive(Default)]
+// pub struct WitnessAndLog<W>
+// where
+//     W: StorageSpec<Witness = W>,
+// {
+//     pub witness: W,
+//     pub cache_log: CacheLog,
+// }
+
 #[derive(Default)]
-pub struct WitnessAndLog<S: Storage> {
-    pub witness: S::Witness,
+pub struct WitnessAndLog<W: Witness> {
+    pub witness: W,
     pub cache_log: CacheLog,
 }
 
@@ -76,7 +86,6 @@ where
     RT: DispatchCall<Context = C> + Genesis<Context = C>,
     V: TxVerifier,
     H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
-    <C as Spec>::Storage: Default,
 {
     type StateRoot = jmt::RootHash;
 
@@ -86,7 +95,8 @@ where
 
     type BatchReceiptContents = SequencerOutcome;
 
-    type Witness = WitnessAndLog<C::Storage>;
+    // type Witness = WitnessAndLog<<C as Spec>::Witness>;
+    type Witness = WitnessAndLog<<<C as Spec>::Storage as Storage>::Witness>;
 
     type MisbehaviorProof = ();
 
@@ -262,6 +272,7 @@ where
         Self::Witness,
         Vec<sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>>,
     ) {
+        // `WitnessAndLog<<<C as Spec>::Storage as Storage>::Witness>`
         let (cache_log, witness) = self.working_set.take().unwrap().freeze();
         let root_hash = self
             .current_storage

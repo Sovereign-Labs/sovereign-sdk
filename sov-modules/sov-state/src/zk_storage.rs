@@ -9,6 +9,7 @@ use crate::{
     Storage, StorageSpec,
 };
 
+#[derive(Default)]
 pub struct ZkStorage<S: StorageSpec> {
     prev_state_root: [u8; 32],
     _phantom_hasher: PhantomHasher<S::Hasher>,
@@ -33,6 +34,14 @@ impl<S: StorageSpec> ZkStorage<S> {
 }
 
 impl<S: StorageSpec> Storage for ZkStorage<S> {
+    type Witness = S::Witness;
+
+    type RuntimeConfig = [u8; 32];
+
+    fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
+        Ok(Self::new(config))
+    }
+
     fn get(&self, _key: StorageKey, witness: &S::Witness) -> Option<StorageValue> {
         witness.get_hint()
     }
@@ -80,13 +89,5 @@ impl<S: StorageSpec> Storage for ZkStorage<S> {
             .expect("JMT update must succeed");
 
         Ok(new_root.0)
-    }
-
-    type Witness = S::Witness;
-
-    type RuntimeConfig = [u8; 32];
-
-    fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
-        Ok(Self::new(config))
     }
 }
