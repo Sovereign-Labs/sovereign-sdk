@@ -93,7 +93,7 @@ fn nested_module_call_test() {
     }
     let (log, witness) = working_set.freeze();
     native_storage
-        .validate_and_commit(log, &witness)
+        .validate_and_commit(&log, &witness)
         .expect("State update is valid");
 
     // Test the `zk` execution.

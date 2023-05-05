@@ -190,7 +190,7 @@ mod test {
                 storage.set(test.key.clone(), test.value.clone());
                 let (cache, witness) = storage.freeze();
                 prover_storage
-                    .validate_and_commit(cache, &witness)
+                    .validate_and_commit(&cache, &witness)
                     .expect("storage is valid");
 
                 assert_eq!(test.value, prover_storage.get(test.key, &witness).unwrap());

@@ -67,7 +67,7 @@ where
 
         let (log, witness) = working_set.freeze();
         self.current_storage
-            .validate_and_commit(log, &witness)
+            .validate_and_commit(&log, &witness)
             .expect("Storage update must succeed");
     }
 

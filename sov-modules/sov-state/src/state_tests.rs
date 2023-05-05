@@ -18,7 +18,7 @@ impl Operation {
             Operation::Finalize => {
                 let (cache_log, witness) = working_set.freeze();
                 let db = working_set.backing();
-                db.validate_and_commit(cache_log, &witness)
+                db.validate_and_commit(&cache_log, &witness)
                     .expect("JMT update is valid");
                 working_set
             }
