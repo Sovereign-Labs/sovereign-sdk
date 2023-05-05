@@ -70,7 +70,6 @@ impl Prefix {
     }
 }
 
-/// TODO: What is this and how it is different from
 pub trait StorageSpec {
     type Witness: Witness;
     type Hasher: jmt::SimpleHasher;
@@ -83,7 +82,7 @@ pub mod mocks {
 
     use crate::StorageSpec;
 
-    #[derive(Default, Clone)]
+    #[derive(Clone)]
     pub struct MockStorageSpec;
 
     impl StorageSpec for MockStorageSpec {
