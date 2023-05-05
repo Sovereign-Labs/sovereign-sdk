@@ -265,15 +265,6 @@ where
         }
     }
 
-    // Host
-    // 1. Init empty witness
-    // 2. call begin_slot(witness)
-    // 3. self.working_set.set_witness(witness)
-    //      Prover - ignores
-    //      ZK - stores
-
-    // Guest
-
     fn end_slot(
         &mut self,
     ) -> (
