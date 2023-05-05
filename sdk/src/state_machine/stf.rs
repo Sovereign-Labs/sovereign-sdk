@@ -71,6 +71,10 @@ pub trait StateTransitionFunction {
     /// The contents of a batch receipt. This is the data that is persisted in the database
     type BatchReceiptContents: Serialize + DeserializeOwned + Clone;
 
+    /// Witness is a data that is produced during actual batch execution
+    /// or validated together with proof during verification
+    type Witness: Default;
+
     /// A proof that the sequencer has misbehaved. For example, this could be a merkle proof of a transaction
     /// with an invalid signature
     type MisbehaviorProof;
@@ -80,7 +84,9 @@ pub trait StateTransitionFunction {
 
     /// Called at the beginning of each DA-layer block - whether or not that block contains any
     /// data relevant to the rollup.
-    fn begin_slot(&mut self);
+    /// If slot is started in Node context, default witness should be provided
+    /// if slot is tarted in Zero Knowledge context, witness from execution should be provided
+    fn begin_slot(&mut self, witness: Self::Witness);
 
     /// Apply a batch of transactions to the rollup, slashing the sequencer who proposed the batch on failure
     fn apply_blob(
@@ -91,7 +97,14 @@ pub trait StateTransitionFunction {
 
     /// Called once at the *end* of each DA layer block (i.e. after all rollup batches and proofs have been processed)
     /// Commits state changes to the database
-    fn end_slot(&mut self) -> (Self::StateRoot, Vec<ConsensusSetUpdate<OpaqueAddress>>);
+    ///
+    fn end_slot(
+        &mut self,
+    ) -> (
+        Self::StateRoot,
+        Self::Witness,
+        Vec<ConsensusSetUpdate<OpaqueAddress>>,
+    );
 }
 
 pub trait StateTransitionRunner<T: StateTransitionConfig> {

@@ -12,8 +12,8 @@ pub use tx_hooks::TxHooks;
 pub use tx_hooks::VerifiedTx;
 pub use tx_verifier::{RawTx, TxVerifier};
 
-use sov_modules_api::{Context, DispatchCall, Genesis};
-use sov_state::{Storage, WorkingSet};
+use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
+use sov_state::{CacheLog, Storage, WorkingSet};
 use sovereign_sdk::{
     core::traits::BatchTrait,
     jmt,
@@ -65,17 +65,26 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
+#[derive(Default)]
+pub struct WitnessAndLog<S: Storage> {
+    pub witness: S::Witness,
+    pub cache_log: CacheLog,
+}
+
 impl<C: Context, V, RT, H> StateTransitionFunction for AppTemplate<C, V, RT, H>
 where
     RT: DispatchCall<Context = C> + Genesis<Context = C>,
     V: TxVerifier,
     H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
+    <C as Spec>::Storage: Default,
 {
     type StateRoot = jmt::RootHash;
 
     type InitialState = <RT as Genesis>::Config;
 
     type MisbehaviorProof = ();
+
+    type Witness = WitnessAndLog<C::Storage>;
 
     fn init_chain(&mut self, params: Self::InitialState) {
         let working_set = &mut WorkingSet::new(self.current_storage.clone());
@@ -90,7 +99,7 @@ where
             .expect("Storage update must succeed");
     }
 
-    fn begin_slot(&mut self) {
+    fn begin_slot(&mut self, _witness: Self::Witness) {
         self.working_set = Some(WorkingSet::new(self.current_storage.clone()));
     }
 
@@ -248,14 +257,16 @@ where
         &mut self,
     ) -> (
         Self::StateRoot,
+        Self::Witness,
         Vec<sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>>,
     ) {
         let (cache_log, witness) = self.working_set.take().unwrap().freeze();
         let root_hash = self
             .current_storage
-            .validate_and_commit(cache_log, &witness)
+            .validate_and_commit(cache_log.clone(), &witness) // TODO: Remove clone after merge
             .expect("jellyfish merkle tree update must succeed");
-        (jmt::RootHash(root_hash), vec![])
+        let witness_and_log = WitnessAndLog { witness, cache_log };
+        (jmt::RootHash(root_hash), witness_and_log, vec![])
     }
 
     type TxReceiptContents = TxEffect;

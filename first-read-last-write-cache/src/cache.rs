@@ -25,7 +25,8 @@ pub enum ValueExists {
 }
 
 /// CacheLog keeps track of the first write and the last read for a given key.
-#[derive(Default)]
+// TODO: Remove clone
+#[derive(Default, Clone)]
 pub struct CacheLog {
     log: HashMap<CacheKey, Access>,
 }
