@@ -1,4 +1,5 @@
 mod batch;
+mod state_machine;
 mod tx_hooks;
 mod tx_verifier;
 
@@ -103,13 +104,18 @@ where
         ));
     }
 
+    // TODO: implement a state machine instead of manually deciding when to commit and when to revert
     fn apply_blob(
         &mut self,
         blob: impl sovereign_sdk::da::BlobTransactionTrait,
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
-        let mut batch_workspace = WorkingSet::new(self.current_storage.clone());
-        batch_workspace = batch_workspace.to_revertable();
+        let mut batch_workspace = self
+            .working_set
+            .take()
+            .expect("Working_set was initialized in begin_slot")
+            .to_revertable();
+
         let sequencer = blob.sender();
         let sequencer = sequencer.as_ref();
 
@@ -121,6 +127,7 @@ where
                 "Error: The transaction was rejected by the 'enter_apply_batch' hook. Skipping batch without slashing the sequencer {}",
                 e
             );
+            self.working_set = Some(batch_workspace.revert());
             // TODO: consider slashing the sequencer in this case. cc @bkolad
             return BatchReceipt {
                 batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
@@ -137,6 +144,7 @@ where
             Ok(batch) => batch,
             Err(e) => {
                 error!("Unable to decode batch provided by the sequencer {}", e);
+                self.working_set = Some(batch_workspace.revert());
                 return BatchReceipt {
                     batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
                     tx_receipts: Vec::new(),
@@ -154,7 +162,7 @@ where
             Err(e) => {
                 // Revert on error
                 let batch_workspace = batch_workspace.revert();
-                self.working_set = Some(batch_workspace);
+                self.working_set = Some(batch_workspace.revert());
                 error!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}", e);
                 return BatchReceipt {
                     batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
@@ -182,7 +190,10 @@ where
                     //     .expect("Impossible happened: error in exit_apply_batch");
 
                     // self.working_set = Some(batch_workspace);
+
+                    // Don't revert any state changes made by the pre_dispatch_hook even if it rejects
                     error!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
+                    batch_workspace = batch_workspace.revert();
                     let receipt = TransactionReceipt {
                         tx_hash: [0u8; 32],
                         body_to_save: None,

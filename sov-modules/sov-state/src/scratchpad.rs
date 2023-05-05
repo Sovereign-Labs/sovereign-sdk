@@ -6,10 +6,7 @@ use crate::{
     Prefix, Storage,
 };
 use first_read_last_write_cache::cache::CacheLog;
-use sovereign_sdk::{
-    core::traits::Witness,
-    serial::{Decode, Encode},
-};
+use sovereign_sdk::serial::{Decode, Encode};
 
 /// A working set accumulates reads and writes on top of the underlying DB,
 /// automating witness creation.
@@ -25,7 +22,6 @@ pub struct Delta<S: Storage> {
 /// operation reverts.
 pub struct RevertableDelta<S: Storage> {
     inner: Delta<S>,
-    witness: S::Witness,
     cache: StorageInternalCache,
 }
 
@@ -52,10 +48,10 @@ impl<S: Storage> WorkingSet<S> {
         Self::Standard(Delta::with_witness(inner, witness))
     }
 
-    pub fn to_revertable(self) -> WorkingSet<S> {
+    pub fn to_revertable(self) -> Self {
         match self {
             WorkingSet::Standard(delta) => WorkingSet::Revertable(delta.get_revertable_wrapper()),
-            r @ WorkingSet::Revertable(_) => r,
+            WorkingSet::Revertable(_) => self,
         }
     }
 
@@ -115,9 +111,7 @@ impl<S: Storage> RevertableDelta<S> {
             first_read_last_write_cache::cache::ValueExists::Yes(val) => {
                 val.map(StorageValue::new_from_cache_value)
             }
-            first_read_last_write_cache::cache::ValueExists::No => {
-                self.inner.get_with_witness(key, &self.witness)
-            }
+            first_read_last_write_cache::cache::ValueExists::No => self.inner.get(key),
         }
     }
 
@@ -139,7 +133,6 @@ impl<S: Storage> RevertableDelta<S> {
             .merge_left(self.cache)
             .expect("caches must be consistent");
 
-        inner.witness.merge(&self.witness);
         inner
     }
 
@@ -151,7 +144,6 @@ impl<S: Storage> RevertableDelta<S> {
             .merge_reads_left(self.cache)
             .expect("caches must be consistent");
 
-        inner.witness.merge(&self.witness);
         inner
     }
 }
@@ -180,7 +172,7 @@ impl<S: Storage> Delta<S> {
     fn get_revertable_wrapper_with_witness(self, witness: S::Witness) -> RevertableDelta<S> {
         RevertableDelta {
             inner: self,
-            witness,
+            // witness,
             cache: Default::default(),
         }
     }
