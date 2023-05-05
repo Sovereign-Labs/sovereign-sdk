@@ -20,7 +20,7 @@ pub struct Delta<S: Storage> {
 }
 
 /// A wrapper that adds additional reads and writes on top of an underlying Delta.
-/// These are handly for implementing operations that might revert on top of an existing
+/// These are handy for implementing operations that might revert on top of an existing
 /// working set, without running the risk that the whole working set will be discarded if some particular
 /// operation reverts.
 pub struct RevertableDelta<S: Storage> {

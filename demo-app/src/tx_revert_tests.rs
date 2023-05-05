@@ -25,7 +25,7 @@ fn test_tx_revert() {
         let mut demo = create_new_demo(&path);
 
         demo.init_chain(create_config(SEQUENCER_BALANCE));
-        demo.begin_slot();
+        demo.begin_slot(Default::default());
 
         let txs = simulate_da_with_revert_msg();
 
@@ -87,7 +87,7 @@ fn test_tx_bad_sig() {
         let mut demo = create_new_demo(&path);
 
         demo.init_chain(create_config(SEQUENCER_BALANCE));
-        demo.begin_slot();
+        demo.begin_slot(Default::default());
 
         let txs = simulate_da_with_bad_sig();
 
@@ -183,7 +183,7 @@ fn test_tx_bad_serialization() {
         let mut demo = create_new_demo(&path);
 
         demo.init_chain(create_config(SEQUENCER_BALANCE));
-        demo.begin_slot();
+        demo.begin_slot(Default::default());
 
         let txs = simulate_da_with_bad_serialization();
 

@@ -8,6 +8,5 @@ resolver = "2"
 [dependencies]
 thiserror = { workspace = true }
 
-
 [dev-dependencies]
 proptest = { workspace = true }

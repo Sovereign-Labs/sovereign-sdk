@@ -12,7 +12,7 @@ pub use tx_hooks::TxHooks;
 pub use tx_hooks::VerifiedTx;
 pub use tx_verifier::{RawTx, TxVerifier};
 
-use sov_modules_api::{Context, DispatchCall, Genesis};
+use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
 use sov_state::{Storage, WorkingSet};
 use sovereign_sdk::{
     core::traits::BatchTrait,
@@ -75,6 +75,12 @@ where
 
     type InitialState = <RT as Genesis>::Config;
 
+    type TxReceiptContents = TxEffect;
+
+    type BatchReceiptContents = SequencerOutcome;
+
+    type Witness = <<C as Spec>::Storage as Storage>::Witness;
+
     type MisbehaviorProof = ();
 
     fn init_chain(&mut self, params: Self::InitialState) {
@@ -90,8 +96,11 @@ where
             .expect("Storage update must succeed");
     }
 
-    fn begin_slot(&mut self) {
-        self.working_set = Some(WorkingSet::new(self.current_storage.clone()));
+    fn begin_slot(&mut self, witness: Self::Witness) {
+        self.working_set = Some(WorkingSet::with_witness(
+            self.current_storage.clone(),
+            witness,
+        ));
     }
 
     fn apply_blob(
@@ -235,19 +244,18 @@ where
             .expect("Impossible happened: error in exit_apply_batch");
 
         self.working_set = Some(batch_workspace);
-        let batch_receipt = BatchReceipt {
+        BatchReceipt {
             batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
             tx_receipts,
             inner: SequencerOutcome::Rewarded,
-        };
-
-        batch_receipt
+        }
     }
 
     fn end_slot(
         &mut self,
     ) -> (
         Self::StateRoot,
+        Self::Witness,
         Vec<sovereign_sdk::stf::ConsensusSetUpdate<OpaqueAddress>>,
     ) {
         let (cache_log, witness) = self.working_set.take().unwrap().freeze();
@@ -255,10 +263,6 @@ where
             .current_storage
             .validate_and_commit(cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
-        (jmt::RootHash(root_hash), vec![])
+        (jmt::RootHash(root_hash), witness, vec![])
     }
-
-    type TxReceiptContents = TxEffect;
-
-    type BatchReceiptContents = SequencerOutcome;
 }
