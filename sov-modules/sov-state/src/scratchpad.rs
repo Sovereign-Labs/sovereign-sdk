@@ -166,13 +166,8 @@ impl<S: Storage> Delta<S> {
     }
 
     fn get_revertable_wrapper(self) -> RevertableDelta<S> {
-        self.get_revertable_wrapper_with_witness(Default::default())
-    }
-
-    fn get_revertable_wrapper_with_witness(self, witness: S::Witness) -> RevertableDelta<S> {
         RevertableDelta {
             inner: self,
-            // witness,
             cache: Default::default(),
         }
     }
@@ -204,10 +199,6 @@ impl<S: Storage> Delta<S> {
         let witness = std::mem::take(&mut self.witness);
 
         (cache.into(), witness)
-    }
-
-    fn get_with_witness(&mut self, key: StorageKey, witness: &S::Witness) -> Option<StorageValue> {
-        self.cache.get_or_fetch(key, &self.inner, witness)
     }
 }
 
