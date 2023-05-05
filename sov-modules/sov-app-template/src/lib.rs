@@ -82,9 +82,13 @@ where
 
     type InitialState = <RT as Genesis>::Config;
 
-    type MisbehaviorProof = ();
+    type TxReceiptContents = TxEffect;
+
+    type BatchReceiptContents = SequencerOutcome;
 
     type Witness = WitnessAndLog<C::Storage>;
+
+    type MisbehaviorProof = ();
 
     fn init_chain(&mut self, params: Self::InitialState) {
         let working_set = &mut WorkingSet::new(self.current_storage.clone());
@@ -244,13 +248,11 @@ where
             .expect("Impossible happened: error in exit_apply_batch");
 
         self.working_set = Some(batch_workspace);
-        let batch_receipt = BatchReceipt {
+        BatchReceipt {
             batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
             tx_receipts,
             inner: SequencerOutcome::Rewarded,
-        };
-
-        batch_receipt
+        }
     }
 
     fn end_slot(
@@ -263,13 +265,9 @@ where
         let (cache_log, witness) = self.working_set.take().unwrap().freeze();
         let root_hash = self
             .current_storage
-            .validate_and_commit(cache_log.clone(), &witness) // TODO: Remove clone after merge
+            .validate_and_commit(cache_log.clone(), &witness) // TODO: Remove clone after merge https://github.com/Sovereign-Labs/sovereign/pull/226
             .expect("jellyfish merkle tree update must succeed");
         let witness_and_log = WitnessAndLog { witness, cache_log };
         (jmt::RootHash(root_hash), witness_and_log, vec![])
     }
-
-    type TxReceiptContents = TxEffect;
-
-    type BatchReceiptContents = SequencerOutcome;
 }
