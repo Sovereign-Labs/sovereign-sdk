@@ -1,12 +1,11 @@
 use std::{fs, path::Path, sync::Arc};
 
 use crate::{
-    internal_cache::StorageInternalCache,
+    internal_cache::OrderedReadsAndWrites,
     storage::{StorageKey, StorageValue},
     tree_db::TreeReadLogger,
     MerkleProofSpec, Storage,
 };
-use first_read_last_write_cache::cache::CacheLog;
 use jmt::{storage::TreeWriter, JellyfishMerkleTree, KeyHash, PhantomHasher, SimpleHasher};
 use sovereign_db::state_db::StateDB;
 use sovereign_sdk::core::traits::Witness;
@@ -72,13 +71,12 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 
     fn validate_and_commit(
         &self,
-        cache_log: StorageInternalCache,
+        state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error> {
         let latest_version = self.db.get_next_version() - 1;
         witness.add_hint(latest_version);
 
-        // let (reads, writes) = cache_log.split();
         let read_logger = TreeReadLogger::with_db_and_witness(self.db.clone(), witness);
         let untracked_jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&self.db);
 
@@ -99,12 +97,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         }
 
         // For each value that's been read from the tree, read it from the logged JMT to populate hints
-        for (key, read_value) in cache_log.ordered_db_reads {
-            println!(
-                "Storing read in native. key: {:?}, value:{:?} ",
-                hex::encode(key.key.as_ref()),
-                read_value.clone().map(|v| hex::encode(v.value.as_ref()))
-            );
+        for (key, read_value) in state_accesses.ordered_reads {
             let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
             // TODO: Switch to the batch read API once it becomes available
             let (result, proof) = untracked_jmt.get_with_proof(key_hash, latest_version)?;
@@ -116,18 +109,20 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         }
 
         let tracked_jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&read_logger);
-        let (_, writes) = cache_log.tx_cache.split();
         // Compute the jmt update from the write batch
-        let batch = writes.into_iter().map(|(key, value)| {
-            let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
-            self.db
-                .put_preimage(key_hash, key.key.as_ref())
-                .expect("preimage must succeed");
-            (
-                key_hash,
-                value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
-            )
-        });
+        let batch = state_accesses
+            .ordered_writes
+            .into_iter()
+            .map(|(key, value)| {
+                let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
+                self.db
+                    .put_preimage(key_hash, key.key.as_ref())
+                    .expect("preimage must succeed");
+                (
+                    key_hash,
+                    value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
+                )
+            });
 
         let next_version = self.db.get_next_version();
 

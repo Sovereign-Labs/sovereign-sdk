@@ -24,7 +24,9 @@ pub enum ValueExists {
     No,
 }
 
-/// CacheLog keeps track of the first write and the last read for a given key.
+/// CacheLog keeps track of the original and current values of each key accessed.
+/// By tracking original values, we can detect and eliminate write patterns where a key is
+/// changed temporarily and then reset to its original value
 #[derive(Default)]
 pub struct CacheLog {
     log: HashMap<CacheKey, Access>,
@@ -39,28 +41,11 @@ impl CacheLog {
 }
 
 impl CacheLog {
-    #![allow(clippy::type_complexity)]
-    /// Split a cachelog into an iterator of reads and an iterator of writes.
-    /// The return value is (first_reads, last_writes)
-    pub fn split(
-        &self,
-    ) -> (
-        Vec<(CacheKey, Option<CacheValue>)>,
-        Vec<(CacheKey, Option<CacheValue>)>,
-    ) {
-        let reads = self
-            .log
-            .iter()
-            .filter_map(|(k, v)| filter_first_reads(k.clone(), v.clone()))
-            .collect();
-
-        let writes = self
-            .log
-            .iter()
-            .filter_map(|(k, v)| filter_writes(k.clone(), v.clone()))
-            .collect();
-
-        (reads, writes)
+    pub fn take_writes(self) -> Vec<(CacheKey, Option<CacheValue>)> {
+        self.log
+            .into_iter()
+            .filter_map(|(k, v)| filter_writes(k, v))
+            .collect()
     }
 
     /// Returns a value corresponding to the key.
@@ -162,14 +147,6 @@ impl CacheLog {
 
     pub fn is_empty(&self) -> bool {
         self.log.is_empty()
-    }
-}
-
-fn filter_first_reads(k: CacheKey, access: Access) -> Option<(CacheKey, Option<CacheValue>)> {
-    match access {
-        Access::Read(read) => Some((k, read)),
-        Access::ReadThenWrite { original, .. } => Some((k, original)),
-        Access::Write(_) => None,
     }
 }
 

@@ -16,6 +16,25 @@ pub struct StorageInternalCache {
     pub ordered_db_reads: Vec<(CacheKey, Option<CacheValue>)>,
 }
 
+/// A struct that contains the values read from the DB and the values to be written, both in
+/// deterministic order.
+pub struct OrderedReadsAndWrites {
+    pub ordered_reads: Vec<(CacheKey, Option<CacheValue>)>,
+    pub ordered_writes: Vec<(CacheKey, Option<CacheValue>)>,
+}
+
+impl From<StorageInternalCache> for OrderedReadsAndWrites {
+    fn from(val: StorageInternalCache) -> Self {
+        let mut writes = val.tx_cache.take_writes();
+        // TODO: Make this more efficient
+        writes.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
+        Self {
+            ordered_reads: val.ordered_db_reads,
+            ordered_writes: writes,
+        }
+    }
+}
+
 impl From<StorageInternalCache> for CacheLog {
     fn from(val: StorageInternalCache) -> Self {
         val.tx_cache
@@ -35,13 +54,10 @@ impl StorageInternalCache {
 
         match cache_value {
             cache::ValueExists::Yes(cache_value_exists) => {
-                // self.add_read(cache_key, cache_value_exists.clone());
-                println!("Found value in inner cache");
                 cache_value_exists.map(StorageValue::new_from_cache_value)
             }
             // If the value does not exist in the cache, then fetch it from an external source.
             cache::ValueExists::No => {
-                println!("Value not found in inner cache. Fetching from storage.");
                 let storage_value = value_reader.get(key, witness);
                 let cache_value = storage_value.as_ref().map(|v| v.clone().as_cache_value());
 

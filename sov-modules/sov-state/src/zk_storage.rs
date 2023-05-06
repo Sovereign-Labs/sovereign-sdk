@@ -4,7 +4,7 @@ use jmt::{JellyfishMerkleTree, KeyHash, PhantomHasher, SimpleHasher, Version};
 use sovereign_sdk::core::traits::{TreeWitnessReader, Witness};
 
 use crate::{
-    internal_cache::StorageInternalCache,
+    internal_cache::OrderedReadsAndWrites,
     storage::{StorageKey, StorageValue},
     MerkleProofSpec, Storage,
 };
@@ -47,21 +47,14 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
 
     fn validate_and_commit(
         &self,
-        cache_log: StorageInternalCache,
+        state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error> {
         let latest_version: Version = witness.get_hint();
-        let (_, writes) = cache_log.tx_cache.split();
         let reader = TreeWitnessReader::new(witness);
 
         // For each value that's been read from the tree, verify the provided smt proof
-        for (key, read_value) in cache_log.ordered_db_reads.into_iter() {
-            // TODO: Remove
-            println!(
-                "validating read in zk. key: {:?}, value:{:?} ",
-                hex::encode(key.key.as_ref()),
-                read_value.clone().map(|v| hex::encode(v.value.as_ref()))
-            );
+        for (key, read_value) in state_accesses.ordered_reads {
             let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
             // TODO: Switch to the batch read API once it becomes available
             let proof: jmt::proof::SparseMerkleProof<S::Hasher> = witness.get_hint();
@@ -76,13 +69,16 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         }
 
         // Compute the jmt update from the write batch
-        let batch = writes.into_iter().map(|(key, value)| {
-            let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
-            (
-                key_hash,
-                value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
-            )
-        });
+        let batch = state_accesses
+            .ordered_writes
+            .into_iter()
+            .map(|(key, value)| {
+                let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
+                (
+                    key_hash,
+                    value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
+                )
+            });
 
         let next_version = latest_version + 1;
         // TODO: Make updates verifiable. Currently, writes don't verify that the provided siblings existed in the old tree

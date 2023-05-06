@@ -45,6 +45,11 @@ impl Access {
         match self {
             // If we've already read this slot, turn it into a readThenWrite access
             Access::Read(original) => {
+                // If we're resetting the key to its original value, we can just discard the write history
+                if original == &new_value {
+                    return;
+                }
+                // Otherwise, keep track of the original value and the new value
                 *self = Access::ReadThenWrite {
                     original: original.take(),
 
@@ -52,8 +57,16 @@ impl Access {
                 };
             }
             // For ReadThenWrite override the modified value with a new value
-            Access::ReadThenWrite { modified, .. } => *modified = new_value,
+            Access::ReadThenWrite { original, modified } => {
+                // If we're resetting the key to its original value, we can just discard the write history
+                if original == &new_value {
+                    *self = Access::Read(new_value)
+                } else {
+                    *modified = new_value
+                }
+            }
             // For Write override the original value with a new value
+            // We can do this unconditionally, since overwriting a value with itself is a no-op
             Access::Write(value) => *value = new_value,
         }
     }
