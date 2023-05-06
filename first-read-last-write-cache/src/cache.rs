@@ -124,6 +124,14 @@ impl CacheLog {
         self.merge_left_with_filter_map(rhs, Some)
     }
 
+    pub fn merge_writes_left(&mut self, rhs: Self) -> Result<(), MergeError> {
+        self.merge_left_with_filter_map(rhs, |(key, access)| match access {
+            Access::Read(_) => None,
+            Access::ReadThenWrite { modified, .. } => Some((key, Access::Write(modified))),
+            Access::Write(w) => Some((key, Access::Write(w))),
+        })
+    }
+
     pub fn merge_reads_left(&mut self, rhs: Self) -> Result<(), MergeError> {
         self.merge_left_with_filter_map(rhs, |(key, access)| match access {
             Access::Read(read) => Some((key, Access::Read(read))),

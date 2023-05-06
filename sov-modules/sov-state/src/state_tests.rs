@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use sovereign_sdk::core::types::ArrayWitness;
+
 use super::*;
 use crate::{mocks::MockStorageSpec, ProverStorage};
 
@@ -8,11 +10,10 @@ enum Operation {
     Finalize,
 }
 
+const EMPTY_ROOT: [u8; 32] = *b"SPARSE_MERKLE_PLACEHOLDER_HASH__";
+
 impl Operation {
-    fn execute(
-        &self,
-        mut working_set: WorkingSet<ProverStorage<MockStorageSpec>>,
-    ) -> WorkingSet<ProverStorage<MockStorageSpec>> {
+    fn execute<S: Storage>(&self, mut working_set: WorkingSet<S>) -> WorkingSet<S> {
         match self {
             Operation::Merge => working_set.commit(),
             Operation::Finalize => {
@@ -20,6 +21,7 @@ impl Operation {
                 let db = working_set.backing();
                 db.validate_and_commit(cache_log, &witness)
                     .expect("JMT update is valid");
+
                 working_set
             }
         }
@@ -31,10 +33,7 @@ struct StorageOperation {
 }
 
 impl StorageOperation {
-    fn execute(
-        &self,
-        mut working_set: WorkingSet<ProverStorage<MockStorageSpec>>,
-    ) -> WorkingSet<ProverStorage<MockStorageSpec>> {
+    fn execute<S: Storage>(&self, mut working_set: WorkingSet<S>) -> WorkingSet<S> {
         for op in self.operations.iter() {
             working_set = op.execute(working_set)
         }
@@ -164,4 +163,38 @@ fn test_state_value_with_delete() {
         working_set = after_delete.execute(working_set);
         assert!(state_value.get(&mut working_set).is_none());
     }
+}
+
+#[test]
+fn test_witness_roundtrip() {
+    let path: schemadb::temppath::TempPath = schemadb::temppath::TempPath::new();
+    let state_value = StateValue::new(Prefix::new(vec![0]));
+
+    // Native execution
+    let witness: ArrayWitness = {
+        let storage = ProverStorage::<MockStorageSpec>::with_path(&path).unwrap();
+        let mut working_set = WorkingSet::new(storage.clone());
+        state_value.set(11, &mut working_set);
+        let _ = state_value.get(&mut working_set);
+        state_value.set(22, &mut working_set);
+        let (cache_log, witness) = working_set.freeze();
+
+        let _ = storage
+            .validate_and_commit(cache_log, &witness)
+            .expect("Native jmt validation should succeed");
+        witness
+    };
+
+    {
+        let storage = ZkStorage::<MockStorageSpec>::new(EMPTY_ROOT);
+        let mut working_set = WorkingSet::with_witness(storage.clone(), witness);
+        state_value.set(11, &mut working_set);
+        let _ = state_value.get(&mut working_set);
+        state_value.set(22, &mut working_set);
+        let (cache_log, witness) = working_set.freeze();
+
+        let _ = storage
+            .validate_and_commit(cache_log, &witness)
+            .expect("ZK validation should succeed");
+    };
 }

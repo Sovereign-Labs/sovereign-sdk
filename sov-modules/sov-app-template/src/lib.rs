@@ -1,5 +1,4 @@
 mod batch;
-mod state_machine;
 mod tx_hooks;
 mod tx_verifier;
 

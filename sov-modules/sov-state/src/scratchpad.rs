@@ -70,6 +70,7 @@ impl<S: Storage> WorkingSet<S> {
     }
 
     pub fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
+        println!("Searching for key {:?} in cache", hex::encode(key.as_ref()));
         match self {
             WorkingSet::Standard(s) => s.get(key),
             WorkingSet::Revertable(s) => s.get(key),
@@ -90,7 +91,7 @@ impl<S: Storage> WorkingSet<S> {
         }
     }
 
-    pub fn freeze(&mut self) -> (CacheLog, S::Witness) {
+    pub fn freeze(&mut self) -> (StorageInternalCache, S::Witness) {
         match self {
             WorkingSet::Standard(delta) => delta.freeze(),
             WorkingSet::Revertable(_) => todo!(),
@@ -109,9 +110,13 @@ impl<S: Storage> RevertableDelta<S> {
     fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
         match self.cache.try_get(key.clone()) {
             first_read_last_write_cache::cache::ValueExists::Yes(val) => {
+                println!("Key found in *revertable* cache");
                 val.map(StorageValue::new_from_cache_value)
             }
-            first_read_last_write_cache::cache::ValueExists::No => self.inner.get(key),
+            first_read_last_write_cache::cache::ValueExists::No => {
+                println!("Key not found in *revertable* cache. Checking inner cache.");
+                self.inner.get(key)
+            }
         }
     }
 
@@ -137,14 +142,7 @@ impl<S: Storage> RevertableDelta<S> {
     }
 
     fn revert(self) -> Delta<S> {
-        let mut inner = self.inner;
-
-        inner
-            .cache
-            .merge_reads_left(self.cache)
-            .expect("caches must be consistent");
-
-        inner
+        self.inner
     }
 }
 
@@ -181,6 +179,7 @@ impl<S: Storage> Debug for Delta<S> {
 
 impl<S: Storage> Delta<S> {
     fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
+        println!("Checking non-revertable cache");
         self.cache.get_or_fetch(key, &self.inner, &self.witness)
     }
 
@@ -194,7 +193,7 @@ impl<S: Storage> Delta<S> {
 }
 
 impl<S: Storage> Delta<S> {
-    fn freeze(&mut self) -> (CacheLog, S::Witness) {
+    fn freeze(&mut self) -> (StorageInternalCache, S::Witness) {
         let cache = std::mem::take(&mut self.cache);
         let witness = std::mem::take(&mut self.witness);
 

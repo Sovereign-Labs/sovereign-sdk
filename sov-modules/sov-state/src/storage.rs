@@ -1,6 +1,6 @@
 use std::{fmt::Display, sync::Arc};
 
-use crate::{utils::AlignedVec, Prefix};
+use crate::{internal_cache::StorageInternalCache, utils::AlignedVec, Prefix};
 use borsh::{BorshDeserialize, BorshSerialize};
 use first_read_last_write_cache::{cache::CacheLog, CacheKey, CacheValue};
 use hex;
@@ -104,7 +104,7 @@ pub trait Storage: Clone {
     /// returning the new state root after applying all writes
     fn validate_and_commit(
         &self,
-        cache_log: CacheLog,
+        cache_log: StorageInternalCache,
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error>;
 }
