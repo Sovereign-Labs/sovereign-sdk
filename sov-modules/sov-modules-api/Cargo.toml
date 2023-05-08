@@ -18,4 +18,3 @@ derive_more = { workspace = true }
 [features]
 default = ["native"]
 native = ["sov-state/native"]
-mocks = ["sov-state/mocks"]

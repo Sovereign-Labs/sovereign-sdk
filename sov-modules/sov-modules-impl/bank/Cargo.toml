@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dev-dependencies]
-sov-modules-api = { path = "../../sov-modules-api", features = ["mocks"] }
+sov-modules-api = { path = "../../sov-modules-api"}
 sov-state = { path = "../../sov-state", features = ["temp"] }
 
 [dependencies]

@@ -21,6 +21,5 @@ schemadb = { path = "../../db/schemadb", features = ["temppath"] }
 
 [features]
 default = ["native"]
-mocks = []
 temp = ["sovereign-db/temp"]
 native = ["sovereign-db"]
