@@ -54,6 +54,12 @@ pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
 }
 
 // TODO(@preston-evans98): update spec with simplified API
+/// State transition function defines business logic that responsible for changing state.
+/// Terminology:
+///  - state root: root hash of state merkle tree
+///  - block: DA layer block
+///  - batch: Set of transactions grouped together, or block on L2
+///  - blob: Non serialised batch
 pub trait StateTransitionFunction {
     type StateRoot;
     /// The initial state of the rollup.
@@ -88,7 +94,7 @@ pub trait StateTransitionFunction {
     /// if slot is tarted in Zero Knowledge context, witness from execution should be provided
     fn begin_slot(&mut self, witness: Self::Witness);
 
-    /// Apply a batch of transactions to the rollup, slashing the sequencer who proposed the batch on failure
+    /// Apply a blob/batch of transactions to the rollup, slashing the sequencer who proposed the blob on failure
     /// blob is DA specific implementation, that's why it is generic and not associated type
     fn apply_blob(
         &mut self,
@@ -96,7 +102,7 @@ pub trait StateTransitionFunction {
         misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents>;
 
-    /// Called once at the *end* of each DA layer block (i.e. after all rollup batches and proofs have been processed)
+    /// Called once at the *end* of each DA layer block (i.e. after all rollup blob have been processed)
     /// Commits state changes to the database
     ///
     fn end_slot(
