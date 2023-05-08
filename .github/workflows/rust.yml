@@ -12,7 +12,7 @@ env:
 jobs:
   check:
     runs-on: ubuntu-latest
-    name: ubuntu / check
+    name: check
     env:
       RUSTFLAGS: -D warnings
       SCCACHE_GHA_ENABLED: "true"
@@ -36,10 +36,15 @@ jobs:
   hack:
     runs-on: ubuntu-latest
     name: features
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
       - name: cargo install cargo-hack
         uses: taiki-e/install-action@cargo-hack
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
@@ -66,6 +71,8 @@ jobs:
           submodules: true
       - name: add llvm component
         run: rustup component add llvm-tools-preview
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
       - name: cargo install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: cargo generate-lockfile
