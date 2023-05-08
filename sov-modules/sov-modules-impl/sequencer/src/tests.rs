@@ -1,4 +1,4 @@
-use sov_modules_api::mocks::MockContext;
+use sov_modules_api::mocks::DefaultContext;
 use sov_modules_api::{Module, ModuleInfo, PublicKey, Spec};
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -6,7 +6,7 @@ use crate::hooks::Hooks;
 use crate::query;
 use crate::{Sequencer, SequencerConfig};
 
-type C = MockContext;
+type C = DefaultContext;
 
 const SEQUENCER_DA_ADDRESS: [u8; 32] = [0; 32];
 const INITIAL_BALANCE: u64 = 201;

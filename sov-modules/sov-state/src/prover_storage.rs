@@ -146,7 +146,7 @@ pub fn delete_storage(path: impl AsRef<Path>) {
 mod test {
     use jmt::Version;
 
-    use crate::{mocks::MockStorageSpec, WorkingSet};
+    use crate::{mocks::DefaultStorageSpec, WorkingSet};
 
     use super::*;
 
@@ -183,7 +183,7 @@ mod test {
         let tests = create_tests();
         {
             for test in tests.clone() {
-                let prover_storage = ProverStorage::<MockStorageSpec>::with_path(&path).unwrap();
+                let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
                 let mut storage = WorkingSet::new(prover_storage.clone());
                 assert_eq!(prover_storage.db.get_next_version(), test.version);
 
@@ -199,7 +199,7 @@ mod test {
         }
 
         {
-            let storage = ProverStorage::<MockStorageSpec>::with_path(&path).unwrap();
+            let storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
             assert_eq!(storage.db.get_next_version(), (tests.len() + 1) as u64);
             for test in tests {
                 assert_eq!(

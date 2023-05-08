@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod test {
     use sov_app_template::Batch;
-    use sov_modules_api::mocks::MockContext;
+    use sov_modules_api::mocks::DefaultContext;
     use sov_state::ProverStorage;
     use sovereign_sdk::stf::StateTransitionFunction;
 
@@ -31,7 +31,7 @@ mod test {
 
         // Generate a new storage instance after dumping data to the db.
         {
-            let runtime = &mut Runtime::<MockContext>::new();
+            let runtime = &mut Runtime::<DefaultContext>::new();
             let storage = ProverStorage::with_path(&path).unwrap();
 
             let resp = query_and_deserialize::<election::query::GetResultResponse>(
@@ -72,7 +72,7 @@ mod test {
             .expect("Batch is valid");
         demo.end_slot();
 
-        let runtime = &mut Runtime::<MockContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::new();
         let resp = query_and_deserialize::<election::query::GetResultResponse>(
             runtime,
             QueryGenerator::generate_query_election_message(),

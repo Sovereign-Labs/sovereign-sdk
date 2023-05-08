@@ -83,9 +83,9 @@ pub mod mocks {
     use crate::StorageSpec;
 
     #[derive(Clone)]
-    pub struct MockStorageSpec;
+    pub struct DefaultStorageSpec;
 
-    impl StorageSpec for MockStorageSpec {
+    impl StorageSpec for DefaultStorageSpec {
         type Witness = ArrayWitness;
 
         type Hasher = Sha256;

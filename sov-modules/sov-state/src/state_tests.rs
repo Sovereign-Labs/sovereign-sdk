@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use super::*;
-use crate::{mocks::MockStorageSpec, ProverStorage};
+use crate::{mocks::DefaultStorageSpec, ProverStorage};
 
 enum Operation {
     Merge,
@@ -11,8 +11,8 @@ enum Operation {
 impl Operation {
     fn execute(
         &self,
-        mut working_set: WorkingSet<ProverStorage<MockStorageSpec>>,
-    ) -> WorkingSet<ProverStorage<MockStorageSpec>> {
+        mut working_set: WorkingSet<ProverStorage<DefaultStorageSpec>>,
+    ) -> WorkingSet<ProverStorage<DefaultStorageSpec>> {
         match self {
             Operation::Merge => working_set.commit(),
             Operation::Finalize => {
@@ -33,8 +33,8 @@ struct StorageOperation {
 impl StorageOperation {
     fn execute(
         &self,
-        mut working_set: WorkingSet<ProverStorage<MockStorageSpec>>,
-    ) -> WorkingSet<ProverStorage<MockStorageSpec>> {
+        mut working_set: WorkingSet<ProverStorage<DefaultStorageSpec>>,
+    ) -> WorkingSet<ProverStorage<DefaultStorageSpec>> {
         for op in self.operations.iter() {
             working_set = op.execute(working_set)
         }
@@ -84,7 +84,7 @@ fn create_state_map_and_storage(
     path: impl AsRef<Path>,
 ) -> (
     StateMap<u32, u32>,
-    WorkingSet<ProverStorage<MockStorageSpec>>,
+    WorkingSet<ProverStorage<DefaultStorageSpec>>,
 ) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
@@ -128,7 +128,10 @@ fn test_state_map_with_delete() {
 fn create_state_value_and_storage(
     value: u32,
     path: impl AsRef<Path>,
-) -> (StateValue<u32>, WorkingSet<ProverStorage<MockStorageSpec>>) {
+) -> (
+    StateValue<u32>,
+    WorkingSet<ProverStorage<DefaultStorageSpec>>,
+) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
     let state_value = StateValue::new(Prefix::new(vec![0]));

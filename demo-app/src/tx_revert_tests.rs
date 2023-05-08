@@ -8,7 +8,7 @@ use crate::{
     runtime::Runtime,
 };
 use sov_app_template::Batch;
-use sov_modules_api::mocks::MockContext;
+use sov_modules_api::mocks::DefaultContext;
 use sov_state::ProverStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
 
@@ -34,7 +34,7 @@ fn test_tx_revert() {
 
     // Checks
     {
-        let runtime = &mut Runtime::<MockContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::new();
         let storage = ProverStorage::with_path(&path).unwrap();
 
         // We sent 4 vote messages but one of them is invalid and should be reverted.
@@ -93,7 +93,7 @@ fn test_tx_bad_sig() {
     }
 
     {
-        let runtime = &mut Runtime::<MockContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::new();
         let storage = ProverStorage::with_path(&path).unwrap();
 
         let resp = query_and_deserialize::<election::query::GetResultResponse>(
@@ -140,7 +140,7 @@ fn test_tx_bad_nonce() {
     }
 
     {
-        let runtime = &mut Runtime::<MockContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::new();
         let storage = ProverStorage::with_path(&path).unwrap();
 
         let resp = query_and_deserialize::<election::query::GetResultResponse>(
@@ -190,7 +190,7 @@ fn test_tx_bad_serialization() {
     }
 
     {
-        let runtime = &mut Runtime::<MockContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::new();
         let storage = ProverStorage::with_path(&path).unwrap();
 
         let resp = query_and_deserialize::<election::query::GetResultResponse>(

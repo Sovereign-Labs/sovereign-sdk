@@ -1,4 +1,4 @@
-use sov_modules_api::mocks::MockContext;
+use sov_modules_api::mocks::DefaultContext;
 use sov_modules_api::{Context, ModuleInfo};
 use sov_modules_macros::ModuleInfo;
 use sov_state::{StateMap, StateValue};
@@ -25,7 +25,7 @@ mod test_module {
 }
 
 fn main() {
-    type C = MockContext;
+    type C = DefaultContext;
     let test_struct = <test_module::TestStruct<C> as ModuleInfo>::new();
 
     let prefix1 = test_struct.test_state1.prefix();

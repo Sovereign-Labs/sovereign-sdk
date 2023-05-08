@@ -1,7 +1,7 @@
 mod modules;
 
 use modules::{first_test_module, second_test_module};
-use sov_modules_api::mocks::MockContext;
+use sov_modules_api::mocks::DefaultContext;
 use sov_modules_api::{Context, Module, ModuleInfo};
 use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 use sov_state::ProverStorage;
@@ -29,7 +29,7 @@ impl<C: Context> Runtime<C> {
 fn main() {
     use sov_modules_api::{DispatchQuery, Genesis};
 
-    type C = MockContext;
+    type C = DefaultContext;
     let storage = ProverStorage::temporary();
     let working_set = &mut sov_state::WorkingSet::new(storage);
     let runtime = &mut Runtime::<C>::new();
