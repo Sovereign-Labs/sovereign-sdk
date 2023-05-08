@@ -32,6 +32,7 @@ pub fn simulate_da_with_bad_sig() -> Vec<RawTx> {
 }
 
 // TODO: Remove once we fix test with bad nonce
+//   https://github.com/Sovereign-Labs/sovereign/issues/235
 #[allow(unused)]
 pub fn simulate_da_with_bad_nonce() -> Vec<RawTx> {
     let election = election_data::BadNonceElectionCallMessages {};
