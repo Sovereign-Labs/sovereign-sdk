@@ -2,7 +2,7 @@ use serde::de::DeserializeOwned;
 
 use bank::query::QueryMessage;
 use bank::{Bank, BankConfig, TokenConfig};
-use sov_modules_api::context::DefaultContext;
+use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Module, PublicKey, Spec};
 use sov_state::DefaultStorageSpec;
 use sov_state::{ProverStorage, WorkingSet};

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod test {
     use sov_app_template::Batch;
-    use sov_modules_api::context::DefaultContext;
+    use sov_modules_api::default_context::DefaultContext;
     use sov_state::ProverStorage;
     use sovereign_sdk::stf::StateTransitionFunction;
 

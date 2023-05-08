@@ -1,4 +1,4 @@
-use sov_modules_api::context::DefaultContext;
+use sov_modules_api::default_context::DefaultContext;
 
 use super::*;
 

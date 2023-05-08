@@ -1,6 +1,6 @@
 #![feature(associated_type_defaults)]
 
-pub mod context;
+pub mod default_context;
 pub mod mocks;
 
 mod bech32;

@@ -1,4 +1,4 @@
-use sov_modules_api::context::DefaultContext;
+use sov_modules_api::default_context::DefaultContext;
 use sov_modules_macros::rpc_gen;
 use sov_state::{ProverStorage, WorkingSet};
 
