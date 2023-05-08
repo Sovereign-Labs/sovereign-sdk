@@ -13,6 +13,7 @@ use sov_modules_api::Context;
 use sov_modules_api::{PublicKey, Spec};
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
+use sov_state::Storage;
 use sov_state::ZkStorage;
 #[cfg(feature = "native")]
 use sovereign_sdk::stf::ProverConfig;
@@ -51,7 +52,7 @@ impl StateTransitionRunner<ProverConfig> for DemoAppRunner<MockContext> {
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let runtime = Runtime::new();
         let storage =
-            ProverStorage::with_path(runtime_config).expect("Failed to open prover storage");
+            ProverStorage::with_config(runtime_config).expect("Failed to open prover storage");
         let tx_verifier = DemoAppTxVerifier::new();
         let tx_hooks = DemoAppTxHooks::new();
         let app = AppTemplate::new(storage, runtime, tx_verifier, tx_hooks);
@@ -73,7 +74,7 @@ impl StateTransitionRunner<ZkConfig> for DemoAppRunner<ZkMockContext> {
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let runtime = Runtime::new();
-        let storage = ZkStorage::new(runtime_config);
+        let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
         let tx_verifier = DemoAppTxVerifier::new();
         let tx_hooks = DemoAppTxHooks::new();
         let app = AppTemplate::new(storage, runtime, tx_verifier, tx_hooks);
