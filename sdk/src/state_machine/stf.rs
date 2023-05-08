@@ -89,6 +89,7 @@ pub trait StateTransitionFunction {
     fn begin_slot(&mut self, witness: Self::Witness);
 
     /// Apply a batch of transactions to the rollup, slashing the sequencer who proposed the batch on failure
+    /// blob is DA specific implementation, that's why it is generic and not associated type
     fn apply_blob(
         &mut self,
         blob: impl BlobTransactionTrait,
