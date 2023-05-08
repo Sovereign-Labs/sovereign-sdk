@@ -4,7 +4,7 @@ use crate::runtime::Runtime;
 use crate::tx_hooks_impl::DemoAppTxHooks;
 use crate::tx_verifier_impl::DemoAppTxVerifier;
 use sov_app_template::AppTemplate;
-use sov_modules_api::mocks::{DefaultContext, ZkDefaultContext};
+use sov_modules_api::context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::Context;
 #[cfg(test)]
 use sov_modules_api::{PublicKey, Spec};

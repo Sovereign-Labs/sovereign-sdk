@@ -1,4 +1,4 @@
-use sov_modules_api::mocks::DefaultContext;
+use sov_modules_api::context::DefaultContext;
 use sov_modules_api::{Module, ModuleInfo, PublicKey, Spec};
 use sov_state::{ProverStorage, WorkingSet};
 

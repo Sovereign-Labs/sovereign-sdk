@@ -3,7 +3,8 @@ use crate::tx_verifier_impl::Transaction;
 
 use borsh::BorshSerialize;
 use sov_app_template::RawTx;
-use sov_modules_api::mocks::{DefaultContext, DefaultPublicKey, DefaultSignature};
+use sov_modules_api::context::DefaultContext;
+use sov_modules_api::mocks::{DefaultPublicKey, DefaultSignature};
 use sov_modules_api::PublicKey;
 
 mod election_data;

@@ -7,7 +7,8 @@ use super::{
 
 use anyhow::anyhow;
 use sov_modules_api::{
-    mocks::{DefaultContext, DefaultPublicKey, ZkDefaultContext},
+    context::{DefaultContext, ZkDefaultContext},
+    mocks::DefaultPublicKey,
     Context, Module, ModuleInfo, PublicKey,
 };
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};

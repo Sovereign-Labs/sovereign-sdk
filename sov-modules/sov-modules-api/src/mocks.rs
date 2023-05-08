@@ -1,17 +1,9 @@
-use crate::{Address, AddressTrait, Context, PublicKey, SigVerificationError, Signature, Spec};
+use crate::{SigVerificationError, Signature};
 use borsh::{BorshDeserialize, BorshSerialize};
-use jmt::SimpleHasher;
-#[cfg(feature = "native")]
-use serde::{Deserialize, Serialize};
-use sov_state::mocks::DefaultStorageSpec;
-#[cfg(feature = "native")]
-use sov_state::ProverStorage;
-use sov_state::ZkStorage;
-use sovereign_sdk::core::types::ArrayWitness;
 
 #[derive(PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize, Debug)]
 pub struct DefaultPublicKey {
-    pub_key: Vec<u8>,
+    pub(crate) pub_key: Vec<u8>,
 }
 
 impl DefaultPublicKey {
@@ -34,13 +26,6 @@ impl<T: AsRef<str>> From<T> for DefaultPublicKey {
     }
 }
 
-impl PublicKey for DefaultPublicKey {
-    fn to_address<A: AddressTrait>(&self) -> A {
-        let pub_key_hash = <ZkDefaultContext as Spec>::Hasher::hash(&self.pub_key);
-        A::try_from(&pub_key_hash).expect("todo")
-    }
-}
-
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, PartialEq, Eq, Debug, Clone, Default)]
 pub struct DefaultSignature {
     pub msg_sig: Vec<u8>,
@@ -60,58 +45,5 @@ impl Signature for DefaultSignature {
         } else {
             Ok(())
         }
-    }
-}
-
-// TODO: consider feature gating the serde implementations, since they are only needed for RPC
-// https://github.com/Sovereign-Labs/sovereign/issues/175
-#[cfg(feature = "native")]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct DefaultContext {
-    pub sender: Address,
-}
-
-#[cfg(feature = "native")]
-impl Spec for DefaultContext {
-    type Address = Address;
-    type Storage = ProverStorage<DefaultStorageSpec>;
-    type PublicKey = DefaultPublicKey;
-    type Hasher = sha2::Sha256;
-    type Signature = DefaultSignature;
-    type Witness = ArrayWitness;
-}
-
-#[cfg(feature = "native")]
-impl Context for DefaultContext {
-    fn sender(&self) -> &Self::Address {
-        &self.sender
-    }
-
-    fn new(sender: Self::Address) -> Self {
-        Self { sender }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ZkDefaultContext {
-    pub sender: Address,
-}
-
-impl Spec for ZkDefaultContext {
-    type Address = Address;
-    type Storage = ZkStorage<DefaultStorageSpec>;
-    type PublicKey = DefaultPublicKey;
-    type Hasher = sha2::Sha256;
-    type Signature = DefaultSignature;
-    type Witness = ArrayWitness;
-}
-
-impl Context for ZkDefaultContext {
-    fn sender(&self) -> &Self::Address {
-        &self.sender
-    }
-
-    fn new(sender: Self::Address) -> Self {
-        Self { sender }
     }
 }

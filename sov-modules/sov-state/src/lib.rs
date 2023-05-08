@@ -75,19 +75,14 @@ pub trait StorageSpec {
     type Hasher: jmt::SimpleHasher;
 }
 
-#[cfg(any(test, feature = "mocks"))]
-pub mod mocks {
-    use sha2::Sha256;
-    use sovereign_sdk::core::types::ArrayWitness;
+use sha2::Sha256;
+use sovereign_sdk::core::types::ArrayWitness;
 
-    use crate::StorageSpec;
+#[derive(Clone)]
+pub struct DefaultStorageSpec;
 
-    #[derive(Clone)]
-    pub struct DefaultStorageSpec;
+impl StorageSpec for DefaultStorageSpec {
+    type Witness = ArrayWitness;
 
-    impl StorageSpec for DefaultStorageSpec {
-        type Witness = ArrayWitness;
-
-        type Hasher = Sha256;
-    }
+    type Hasher = Sha256;
 }

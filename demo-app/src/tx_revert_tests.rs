@@ -8,7 +8,7 @@ use crate::{
     runtime::Runtime,
 };
 use sov_app_template::Batch;
-use sov_modules_api::mocks::DefaultContext;
+use sov_modules_api::context::DefaultContext;
 use sov_state::ProverStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
 

@@ -4,8 +4,8 @@ use crate::{
     AccountConfig, Accounts,
 };
 use sov_modules_api::{
-    mocks::{DefaultContext, DefaultPublicKey},
-    AddressBech32, Context, Module, ModuleInfo, PublicKey, Spec,
+    context::DefaultContext, mocks::DefaultPublicKey, AddressBech32, Context, Module, ModuleInfo,
+    PublicKey, Spec,
 };
 use sov_state::{ProverStorage, WorkingSet};
 

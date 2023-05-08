@@ -1,6 +1,6 @@
 #![feature(associated_type_defaults)]
 
-#[cfg(feature = "mocks")]
+pub mod context;
 pub mod mocks;
 
 mod bech32;

@@ -1,4 +1,4 @@
-use sov_modules_api::mocks::DefaultContext;
+use sov_modules_api::context::DefaultContext;
 use sov_modules_api::{Context, ModuleInfo};
 use sov_modules_macros::ModuleInfo;
 use sov_state::{StateMap, StateValue};

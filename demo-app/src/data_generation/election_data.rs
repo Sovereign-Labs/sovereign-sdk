@@ -1,3 +1,5 @@
+use sov_modules_api::context::DefaultContext;
+
 use super::*;
 
 struct CallGenerator {

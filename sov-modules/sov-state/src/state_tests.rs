@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use super::*;
-use crate::{mocks::DefaultStorageSpec, ProverStorage};
+use crate::{DefaultStorageSpec, ProverStorage};
 
 enum Operation {
     Merge,

@@ -1,4 +1,4 @@
-use sov_modules_api::mocks::{DefaultContext, ZkDefaultContext};
+use sov_modules_api::context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::{Context, ModuleInfo, Prefix};
 use sov_modules_macros::ModuleInfo;
 use sov_state::storage::{StorageKey, StorageValue};

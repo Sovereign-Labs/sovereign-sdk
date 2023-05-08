@@ -1,6 +1,6 @@
 use serde::de::DeserializeOwned;
-use sov_modules_api::{mocks::DefaultContext, DispatchQuery};
-use sov_state::{mocks::DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_modules_api::{context::DefaultContext, DispatchQuery};
+use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 use crate::runtime::Runtime;
 

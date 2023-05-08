@@ -1,10 +1,9 @@
 use super::ValueSetter;
 use crate::{call, query};
 
-use sov_modules_api::{
-    mocks::{DefaultContext, DefaultPublicKey, ZkDefaultContext},
-    Address, Context, PublicKey, Spec,
-};
+use sov_modules_api::context::{DefaultContext, ZkDefaultContext};
+use sov_modules_api::mocks::DefaultPublicKey;
+use sov_modules_api::{Address, Context, PublicKey, Spec};
 use sov_modules_api::{Module, ModuleInfo};
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 use sovereign_sdk::stf::Event;
