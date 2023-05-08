@@ -123,7 +123,7 @@ where
             .enter_apply_blob(sequencer, &mut batch_workspace)
         {
             error!(
-                "Error: The transaction was rejected by the 'enter_apply_batch' hook. Skipping batch without slashing the sequencer {}",
+                "Error: The transaction was rejected by the 'enter_apply_blob' hook. Skipping batch without slashing the sequencer {}",
                 e
             );
             self.working_set = Some(batch_workspace.revert());

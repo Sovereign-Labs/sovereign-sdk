@@ -53,14 +53,14 @@ pub mod test {
 
             let txs = simulate_da();
 
-            if let SequencerOutcome::Rewarded = demo
+            let apply_blob_outcome = demo
                 .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
-                .inner
-            {
-                demo.end_slot();
-            } else {
-                panic!("Sequencer execution should have succeeded but failed ")
-            }
+                .inner;
+            assert!(
+                matches!(apply_blob_outcome, SequencerOutcome::Rewarded,),
+                "Sequencer execution should have succeeded but failed "
+            );
+            demo.end_slot();
         }
 
         // Generate a new storage instance after dumping data to the db.
@@ -102,14 +102,14 @@ pub mod test {
 
         let txs = simulate_da();
 
-        if let SequencerOutcome::Rewarded = demo
+        let apply_blob_outcome = demo
             .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
-            .inner
-        {
-            demo.end_slot();
-        } else {
-            panic!("Sequencer execution should have succeeded but failed ")
-        }
+            .inner;
+        assert!(
+            matches!(apply_blob_outcome, SequencerOutcome::Rewarded,),
+            "Sequencer execution should have succeeded but failed "
+        );
+        demo.end_slot();
 
         let runtime = &mut Runtime::<MockContext>::new();
         let resp = query_and_deserialize::<election::query::GetResultResponse>(
@@ -146,13 +146,13 @@ pub mod test {
 
             let txs = simulate_da();
 
-            if let SequencerOutcome::Rewarded = demo
+            let apply_blob_outcome = demo
                 .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
-                .inner
-            {
-            } else {
-                panic!("Sequencer execution should have succeeded but failed ")
-            }
+                .inner;
+            assert!(
+                matches!(apply_blob_outcome, SequencerOutcome::Rewarded,),
+                "Sequencer execution should have succeeded but failed "
+            );
         }
 
         // Generate a new storage instance, value are missing because we didn't call `end_slot()`;
@@ -190,12 +190,12 @@ pub mod test {
 
         let txs = simulate_da();
 
-        match demo
+        let apply_blob_result = demo
             .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
-            .inner
-        {
-            SequencerOutcome::Ignored => {}
-            _ => panic!("Batch should have been skipped due to insufficient funds"),
-        }
+            .inner;
+        assert!(
+            matches!(apply_blob_result, SequencerOutcome::Ignored),
+            "Batch should have been skipped due to insufficient funds"
+        );
     }
 }
