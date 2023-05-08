@@ -65,6 +65,9 @@ jobs:
         run: cargo test
   coverage:
     runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
         with:
