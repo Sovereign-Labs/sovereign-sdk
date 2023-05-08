@@ -29,15 +29,15 @@ pub trait TxHooks {
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     );
 
-    /// runs at the beginning of apply_batch.
-    fn enter_apply_batch(
+    /// runs at the beginning of apply_blob.
+    fn enter_apply_blob(
         &self,
         sequencer: &[u8],
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> Result<()>;
 
     /// runs at the end of apply_batch.
-    fn exit_apply_batch(
+    fn exit_apply_blob(
         &self,
         amount: u64,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,

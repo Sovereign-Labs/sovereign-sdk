@@ -120,7 +120,7 @@ where
 
         if let Err(e) = self
             .tx_hooks
-            .enter_apply_batch(sequencer, &mut batch_workspace)
+            .enter_apply_blob(sequencer, &mut batch_workspace)
         {
             error!(
                 "Error: The transaction was rejected by the 'enter_apply_batch' hook. Skipping batch without slashing the sequencer {}",
@@ -250,7 +250,7 @@ where
 
         // TODO: calculate the amount based of gas and fees
         self.tx_hooks
-            .exit_apply_batch(0, &mut batch_workspace)
+            .exit_apply_blob(0, &mut batch_workspace)
             .expect("Impossible happened: error in exit_apply_batch");
 
         self.working_set = Some(batch_workspace);

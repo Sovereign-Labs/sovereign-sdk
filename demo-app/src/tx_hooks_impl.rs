@@ -68,7 +68,7 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
             .unwrap_or_else(|e| panic!("Inconsistent nonce {e}"));
     }
 
-    fn enter_apply_batch(
+    fn enter_apply_blob(
         &self,
         sequencer: &[u8],
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
@@ -85,7 +85,7 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
         self.sequencer_hooks.lock(working_set)
     }
 
-    fn exit_apply_batch(
+    fn exit_apply_blob(
         &self,
         amount: u64,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
