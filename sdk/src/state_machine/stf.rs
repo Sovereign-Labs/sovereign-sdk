@@ -94,8 +94,9 @@ pub trait StateTransitionFunction {
     /// if slot is tarted in Zero Knowledge context, witness from execution should be provided
     fn begin_slot(&mut self, witness: Self::Witness);
 
-    /// Apply a blob/batch of transactions to the rollup, slashing the sequencer who proposed the blob on failure
-    /// blob is DA specific implementation, that's why it is generic and not associated type
+    /// Apply a blob/batch of transactions to the rollup, slashing the sequencer who proposed the blob on failure.
+    /// The concrete blob type is defined by the DA layer implementation, which is why we use a generic here instead
+    /// of an associated type.
     fn apply_blob(
         &mut self,
         blob: impl BlobTransactionTrait,
