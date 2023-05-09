@@ -21,12 +21,15 @@ use sov_state::WorkingSet;
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[derive(ModuleInfo)]
 pub struct ValueSetter<C: sov_modules_api::Context> {
+    /// Address of the module.
     #[address]
     pub address: C::Address,
 
+    /// Some value kept in the state.
     #[state]
     pub value: sov_state::StateValue<u32>,
 
+    /// Holds the address of the admin user who is allowed to update the value.
     #[state]
     pub admin: sov_state::StateValue<C::Address>,
 }
