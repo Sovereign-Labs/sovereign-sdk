@@ -7,7 +7,7 @@ use thiserror::Error;
 
 use super::ValueSetter;
 
-/// This enumeration represents the available call messages for interacting with the ValueSetter module.
+/// This enumeration represents the available call messages for interacting with the `ValueSetter` module.
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage {
     SetValue(u32),
@@ -30,7 +30,7 @@ impl<C: sov_modules_api::Context> ValueSetter<C> {
     ) -> Result<sov_modules_api::CallResponse> {
         let mut response = CallResponse::default();
 
-        // If admin was not set by a `genesis()` we would early return here:
+        // If admin is not then early return:
         let admin = self.admin.get_or_err(working_set)?;
 
         if &admin != context.sender() {
