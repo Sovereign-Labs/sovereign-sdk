@@ -138,12 +138,12 @@ impl LedgerRpcProvider for LedgerDB {
             let stored_slots = self.get_slot_range(&slot_range.inner)?;
 
             for ((queried_slot, original_idx), slot_num) in stored_slots
-                .iter()
+                .into_iter()
                 .zip(slot_range.original_indices)
                 .zip(slot_range.inner.start.into()..slot_range.inner.end.into())
             {
                 out[original_idx] =
-                    Some(self.populate_slot_response(slot_num, *queried_slot, query_mode)?);
+                    Some(self.populate_slot_response(slot_num, queried_slot, query_mode)?);
             }
         }
         Ok(out)
