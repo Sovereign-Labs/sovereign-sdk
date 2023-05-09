@@ -2,7 +2,6 @@ use super::{errors::CodecError, ColumnFamilyName, Schema, ValueCodec};
 use super::{KeyDecoder, KeyEncoder, Result};
 use std::fmt::Debug;
 
-use crate::serial::Decode;
 use crate::services::da::SlotData;
 
 pub const SLOT_CF_NAME: ColumnFamilyName = "slot";
@@ -11,33 +10,30 @@ pub type SlotNumber = u64;
 #[derive(Debug)]
 pub struct SlotSchema<T>(std::marker::PhantomData<T>);
 
-impl<T, E> Schema for SlotSchema<T>
+impl<T> Schema for SlotSchema<T>
 where
-    CodecError: From<E>,
-    T: SlotData + Send + Sync + 'static + Decode<Error = E>,
+    T: SlotData + Send + Sync + 'static,
 {
-    type Key = SlotNumber;
-    type Value = T;
-
     const COLUMN_FAMILY_NAME: ColumnFamilyName = SLOT_CF_NAME;
+    type Key = SlotNumber;
+
+    type Value = T;
 }
 
-impl<T, E> KeyEncoder<SlotSchema<T>> for SlotNumber
+impl<T> KeyEncoder<SlotSchema<T>> for SlotNumber
 where
-    CodecError: From<E>,
-    T: SlotData + Send + Sync + 'static + Decode<Error = E>,
+    T: SlotData + Send + Sync + 'static,
 {
-    fn encode_key(&self) -> super::Result<Vec<u8>> {
+    fn encode_key(&self) -> Result<Vec<u8>> {
         Ok(self.to_be_bytes().to_vec())
     }
 }
 
-impl<T, E> KeyDecoder<SlotSchema<T>> for SlotNumber
+impl<T> KeyDecoder<SlotSchema<T>> for SlotNumber
 where
-    CodecError: From<E>,
-    T: SlotData + Send + Sync + 'static + Decode<Error = E>,
+    T: SlotData + Send + Sync + 'static,
 {
-    fn decode_key(data: &[u8]) -> super::Result<Self> {
+    fn decode_key(data: &[u8]) -> Result<Self> {
         if data.len() != 8 {
             return Err(CodecError::InvalidKeyLength {
                 expected: 8,
@@ -49,16 +45,15 @@ where
     }
 }
 
-impl<T, E> ValueCodec<SlotSchema<T>> for T
+impl<T> ValueCodec<SlotSchema<T>> for T
 where
-    CodecError: From<E>,
-    T: SlotData + Decode<Error = E> + Send + Sync + 'static,
+    T: SlotData + Send + Sync + 'static,
 {
     fn encode_value(&self) -> Result<Vec<u8>> {
-        Ok(self.encode_to_vec())
+        self.try_to_vec().map_err(CodecError::from)
     }
 
     fn decode_value(mut data: &[u8]) -> Result<Self> {
-        Ok(<T as Decode>::decode(&mut data)?)
+        T::deserialize(&mut data).map_err(CodecError::from)
     }
 }

@@ -1,20 +1,14 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use std::marker::PhantomData;
 
 use crate::{Prefix, Storage, WorkingSet};
-use sovereign_sdk::serial::{Decode, Encode};
 use thiserror::Error;
 
 // SingletonKey is very similar to the unit type `()` i.e. it has only one value.
 // We provide a custom efficient Encode implementation for SingletonKey while Encode for `()`
 // is likely already implemented by an external library (like borsh), which is outside of our control.
-#[derive(Debug)]
+#[derive(Debug, BorshSerialize)]
 pub struct SingletonKey;
-
-impl Encode for SingletonKey {
-    fn encode(&self, _: &mut impl std::io::Write) {
-        // Do nothing.
-    }
-}
 
 /// Container for a single value.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Eq, Clone)]
@@ -30,7 +24,7 @@ pub enum Error {
     MissingValue(Prefix),
 }
 
-impl<V: Encode + Decode> StateValue<V> {
+impl<V: BorshSerialize + BorshDeserialize> StateValue<V> {
     pub fn new(prefix: Prefix) -> Self {
         Self {
             _phantom: PhantomData,

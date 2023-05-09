@@ -4,7 +4,7 @@ use crate::{internal_cache::OrderedReadsAndWrites, utils::AlignedVec, Prefix};
 use borsh::{BorshDeserialize, BorshSerialize};
 use first_read_last_write_cache::{CacheKey, CacheValue};
 use hex;
-use sovereign_sdk::{core::traits::Witness, serial::Encode};
+use sovereign_sdk::core::traits::Witness;
 
 // `Key` type for the `Storage`
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -42,10 +42,10 @@ impl Display for StorageKey {
 
 impl StorageKey {
     /// Creates a new StorageKey that combines a prefix and a key.
-    pub fn new<K: Encode>(prefix: &Prefix, key: &K) -> Self {
-        let mut encoded_key = Vec::default();
-        key.encode(&mut encoded_key);
-
+    pub fn new<K: BorshSerialize>(prefix: &Prefix, key: &K) -> Self {
+        let encoded_key = key
+            .try_to_vec()
+            .expect("Memory serialization should never fail, OOM potentially");
         let encoded_key = AlignedVec::new(encoded_key);
 
         let full_key = Vec::<u8>::with_capacity(prefix.len() + encoded_key.len());
@@ -66,9 +66,10 @@ pub struct StorageValue {
 }
 
 impl StorageValue {
-    pub fn new<V: Encode>(value: V) -> Self {
-        let mut encoded_value = Vec::default();
-        value.encode(&mut encoded_value);
+    pub fn new<V: BorshSerialize>(value: V) -> Self {
+        let encoded_value = value
+            .try_to_vec()
+            .expect("StorageValue in memory serialization failed, probably OOM");
         Self {
             value: Arc::new(encoded_value),
         }

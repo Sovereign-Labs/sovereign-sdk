@@ -1,7 +1,7 @@
+use borsh::BorshSerialize;
 use jmt::{storage::TreeReader, OwnedValue};
 use sovereign_db::state_db::StateDB;
 use sovereign_sdk::core::traits::Witness;
-use sovereign_sdk::serial::Encode;
 
 pub struct TreeReadLogger<'a, W> {
     state_db: StateDB,
@@ -25,8 +25,10 @@ impl<'a, W: Witness> TreeReader for TreeReadLogger<'a, W> {
         node_key: &jmt::storage::NodeKey,
     ) -> anyhow::Result<Option<jmt::storage::Node>> {
         let node_opt = self.state_db.get_node_option(node_key)?;
-        self.witness
-            .add_hint(node_opt.as_ref().map(|node| node.encode_to_vec()));
+        self.witness.add_hint(node_opt.as_ref().map(|node| {
+            node.try_to_vec()
+                .expect("Node serialization should never fail")
+        }));
         Ok(node_opt)
     }
 

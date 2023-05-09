@@ -2,8 +2,6 @@ use crate::{da::BlobTransactionTrait, maybestd::rc::Rc};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::serial::DecodeBorrowed;
-
 /// An address on the DA layer. Opaque to the StateTransitionFunction
 pub type OpaqueAddress = Rc<Vec<u8>>;
 
@@ -198,38 +196,10 @@ pub enum ConsensusMessage<B, P> {
     Proof(P),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, BorshDeserialize)]
 pub enum ConsensusMessageDecodeError<BatchErr, ProofErr> {
     Batch(BatchErr),
     Proof(ProofErr),
     NoTag,
     InvalidTag { max_allowed: u8, got: u8 },
-}
-
-impl<'de, P: DecodeBorrowed<'de>, B: DecodeBorrowed<'de>> DecodeBorrowed<'de>
-    for ConsensusMessage<B, P>
-{
-    type Error = ConsensusMessageDecodeError<B::Error, P::Error>;
-    fn decode_from_slice(target: &'de [u8]) -> Result<Self, Self::Error> {
-        Ok(
-            match *target
-                .iter()
-                .next()
-                .ok_or(ConsensusMessageDecodeError::NoTag)?
-            {
-                0 => Self::Batch(
-                    B::decode_from_slice(&target[1..])
-                        .map_err(ConsensusMessageDecodeError::Batch)?,
-                ),
-                1 => Self::Proof(
-                    P::decode_from_slice(&target[1..])
-                        .map_err(ConsensusMessageDecodeError::Proof)?,
-                ),
-                _ => Err(ConsensusMessageDecodeError::InvalidTag {
-                    max_allowed: 1,
-                    got: target[0],
-                })?,
-            },
-        )
-    }
 }

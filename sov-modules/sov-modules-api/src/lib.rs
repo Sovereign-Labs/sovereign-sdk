@@ -12,6 +12,7 @@ mod response;
 mod tests;
 
 pub use crate::bech32::AddressBech32;
+use borsh::{BorshDeserialize, BorshSerialize};
 pub use dispatch::{DispatchCall, DispatchQuery, Genesis};
 pub use error::Error;
 pub use jmt::SimpleHasher as Hasher;
@@ -21,10 +22,7 @@ pub use response::{CallResponse, QueryResponse};
 
 use sov_state::{Storage, WorkingSet};
 pub use sovereign_sdk::core::traits::AddressTrait;
-use sovereign_sdk::{
-    core::traits::Witness,
-    serial::{Decode, Encode},
-};
+use sovereign_sdk::core::traits::Witness;
 
 use core::fmt::{self, Debug, Display};
 use thiserror::Error;
@@ -86,7 +84,7 @@ pub trait Signature {
 }
 
 /// A type that can't be instantiated.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum NonInstantiable {}
 
 /// PublicKey used in the module system.
@@ -149,10 +147,10 @@ pub trait Module {
     type Config;
 
     /// Module defined argument to the call method.
-    type CallMessage: Decode + Encode + Debug = NonInstantiable;
+    type CallMessage: BorshSerialize + BorshDeserialize + Debug = NonInstantiable;
 
     /// Module defined argument to the query method.
-    type QueryMessage: Decode + Encode + Debug = NonInstantiable;
+    type QueryMessage: BorshSerialize + BorshDeserialize + Debug = NonInstantiable;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(

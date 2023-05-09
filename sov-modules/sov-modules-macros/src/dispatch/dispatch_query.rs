@@ -47,7 +47,7 @@ impl<'a> StructDef<'a> {
 
                 fn decode_query(serialized_message: &[u8]) -> core::result::Result<Self::Decodable, std::io::Error> {
                     let mut data = std::io::Cursor::new(serialized_message);
-                    <#query_enum #ty_generics as sovereign_sdk::serial::Decode>::decode(&mut data)
+                    <#query_enum #ty_generics as ::borsh::BorshDeserialize>::deserialize_reader(&mut data)
                 }
 
                 fn dispatch_query(

@@ -1,3 +1,4 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
@@ -6,7 +7,6 @@ use crate::{
     Prefix, Storage,
 };
 use first_read_last_write_cache::{CacheKey, CacheValue};
-use sovereign_sdk::serial::{Decode, Encode};
 
 /// A working set accumulates reads and writes on top of the underlying DB,
 /// automating witness creation.
@@ -205,7 +205,7 @@ impl<S: Storage> Delta<S> {
 }
 
 impl<S: Storage> WorkingSet<S> {
-    pub(crate) fn set_value<K: Encode, V: Encode>(
+    pub(crate) fn set_value<K: BorshSerialize, V: BorshSerialize + BorshDeserialize>(
         &mut self,
         prefix: &Prefix,
         storage_key: &K,
@@ -216,7 +216,7 @@ impl<S: Storage> WorkingSet<S> {
         self.set(storage_key, storage_value);
     }
 
-    pub(crate) fn get_value<K: Encode, V: Decode>(
+    pub(crate) fn get_value<K: BorshSerialize, V: BorshDeserialize>(
         &mut self,
         prefix: &Prefix,
         storage_key: &K,
@@ -225,7 +225,7 @@ impl<S: Storage> WorkingSet<S> {
         self.get_decoded(storage_key)
     }
 
-    pub(crate) fn remove_value<K: Encode, V: Decode>(
+    pub(crate) fn remove_value<K: BorshSerialize, V: BorshDeserialize>(
         &mut self,
         prefix: &Prefix,
         storage_key: &K,
@@ -236,17 +236,17 @@ impl<S: Storage> WorkingSet<S> {
         Some(storage_value)
     }
 
-    pub(crate) fn delete_value<K: Encode>(&mut self, prefix: &Prefix, storage_key: &K) {
+    pub(crate) fn delete_value<K: BorshSerialize>(&mut self, prefix: &Prefix, storage_key: &K) {
         let storage_key = StorageKey::new(prefix, storage_key);
         self.delete(storage_key);
     }
 
-    fn get_decoded<V: Decode>(&mut self, storage_key: StorageKey) -> Option<V> {
+    fn get_decoded<V: BorshDeserialize>(&mut self, storage_key: StorageKey) -> Option<V> {
         let storage_value = self.get(storage_key)?;
 
         // It is ok to panic here. Deserialization problem means that something is terribly wrong.
         Some(
-            V::decode(&mut storage_value.value())
+            V::deserialize_reader(&mut storage_value.value())
                 .unwrap_or_else(|e| panic!("Unable to deserialize storage value {e:?}")),
         )
     }

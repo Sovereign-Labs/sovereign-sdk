@@ -1,8 +1,7 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use core::fmt::{Debug, Display};
 
 use jmt::storage::TreeReader;
-
-use crate::serial::{Decode, Encode};
 
 // NOTE: When naming traits, we use the naming convention below:
 // *Trait IFF there's an associated type that would otherwise have the same name
@@ -17,14 +16,14 @@ pub trait CanonicalHash {
     fn hash(&self) -> Self::Output;
 }
 
-pub trait BatchTrait: PartialEq + Debug + Encode + Decode + Clone {
+pub trait BatchTrait: PartialEq + Debug + BorshSerialize + BorshDeserialize + Clone {
     type Transaction: TransactionTrait;
     fn transactions(&self) -> &[Self::Transaction];
     fn take_transactions(self) -> Vec<Self::Transaction>;
 }
 
 pub trait TransactionTrait:
-    PartialEq + Debug + CanonicalHash<Output = Self::Hash> + Encode + Decode
+    PartialEq + Debug + CanonicalHash<Output = Self::Hash> + BorshSerialize + BorshDeserialize
 {
     type Hash: AsRef<[u8]>;
 }
@@ -48,8 +47,8 @@ pub trait AddressTrait:
 pub struct InvalidAddress;
 
 pub trait Witness: Default {
-    fn add_hint<T: Encode>(&self, hint: T);
-    fn get_hint<T: Decode>(&self) -> T;
+    fn add_hint<T: BorshSerialize>(&self, hint: T);
+    fn get_hint<T: BorshDeserialize>(&self) -> T;
     fn merge(&self, rhs: &Self);
 }
 
@@ -69,7 +68,7 @@ impl<'a, T: Witness> TreeReader for TreeWitnessReader<'a, T> {
     ) -> anyhow::Result<Option<jmt::storage::Node>> {
         let serialized_node_opt: Option<Vec<u8>> = self.0.get_hint();
         match serialized_node_opt {
-            Some(val) => Ok(Some(jmt::storage::Node::decode(&mut &val[..])?)),
+            Some(val) => Ok(Some(jmt::storage::Node::deserialize_reader(&mut &val[..])?)),
             None => Ok(None),
         }
     }

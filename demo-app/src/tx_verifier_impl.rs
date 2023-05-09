@@ -1,8 +1,8 @@
 use sov_app_template::{RawTx, TxVerifier};
 use sov_modules_api::{Context, Signature};
 use sovereign_sdk::jmt::SimpleHasher;
-use sovereign_sdk::serial::Decode;
 use std::{io::Cursor, marker::PhantomData};
+use borsh::BorshDeserialize;
 
 /// Transaction represents a deserialized RawTx.
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
@@ -43,7 +43,7 @@ impl<C: Context> TxVerifier for DemoAppTxVerifier<C> {
 
     fn verify_tx_stateless(&self, raw_tx: RawTx) -> anyhow::Result<Self::Transaction> {
         let mut data = Cursor::new(&raw_tx.data);
-        let tx = Transaction::<C>::decode(&mut data)?;
+        let tx = Transaction::<C>::deserialize_reader(&mut data)?;
 
         // We check signature against runtime_msg and nonce.
         let mut hasher = C::Hasher::new();

@@ -3,7 +3,7 @@ mod tx_hooks;
 mod tx_verifier;
 
 pub use batch::Batch;
-use sovereign_sdk::serial::Decode;
+use borsh::BorshDeserialize;
 use sovereign_sdk::stf::BatchReceipt;
 use sovereign_sdk::stf::TransactionReceipt;
 use sovereign_sdk::Buf;
@@ -139,7 +139,7 @@ where
         batch_workspace = batch_workspace.commit().to_revertable();
 
         // let batch: Vec<u8> = blob.data().collect();
-        let batch = match Batch::decode(&mut blob.data().reader()) {
+        let batch = match Batch::deserialize_reader(&mut blob.data().reader()) {
             Ok(batch) => batch,
             Err(e) => {
                 error!("Unable to decode batch provided by the sequencer {}", e);
