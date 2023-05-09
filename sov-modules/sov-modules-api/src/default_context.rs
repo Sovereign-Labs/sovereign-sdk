@@ -10,8 +10,6 @@ use sov_state::ProverStorage;
 use sov_state::ZkStorage;
 use sovereign_sdk::core::types::ArrayWitness;
 
-// TODO: consider feature gating the serde implementations, since they are only needed for RPC
-// https://github.com/Sovereign-Labs/sovereign/issues/175
 #[cfg(feature = "native")]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DefaultContext {
