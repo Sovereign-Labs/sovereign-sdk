@@ -1,4 +1,4 @@
-use core::fmt::Debug;
+use core::fmt::{Debug, Display};
 
 use jmt::storage::TreeReader;
 
@@ -30,7 +30,17 @@ pub trait TransactionTrait:
 }
 
 pub trait AddressTrait:
-    PartialEq + Debug + Clone + AsRef<[u8]> + for<'a> TryFrom<&'a [u8], Error = anyhow::Error> + Eq
+    PartialEq
+    + Debug
+    + Clone
+    + AsRef<[u8]>
+    + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+    + Eq
+    + borsh::BorshDeserialize
+    + borsh::BorshSerialize
+    + From<[u8; 32]>
+    + Send
+    + Display
 {
 }
 
