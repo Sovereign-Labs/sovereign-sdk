@@ -7,11 +7,13 @@ use thiserror::Error;
 
 use super::ValueSetter;
 
+/// This enumeration represents the available call messages for interacting with the ValueSetter module.
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage {
     SetValue(u32),
 }
 
+/// Example of a custom error.
 #[derive(Debug, Error)]
 enum SetValueError {
     #[error("Only admin can change the value")]
