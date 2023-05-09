@@ -1,6 +1,7 @@
 use crate::{SigVerificationError, Signature};
 use borsh::{BorshDeserialize, BorshSerialize};
 
+// TODO: https://github.com/Sovereign-Labs/sovereign/issues/253
 #[derive(PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize, Debug)]
 pub struct DefaultPublicKey {
     pub(crate) pub_key: Vec<u8>,
