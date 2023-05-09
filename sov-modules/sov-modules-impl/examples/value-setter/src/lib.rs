@@ -15,6 +15,10 @@ use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
+/// A new module:
+/// - Must derive `ModuleInfo`
+/// - Must contain `[address]` field
+/// - Can contain any number of ` #[state]` or `[module]` fields
 #[derive(ModuleInfo)]
 pub struct ValueSetter<C: sov_modules_api::Context> {
     #[address]
@@ -42,6 +46,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
         _config: &Self::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(), Error> {
+        // The initialization logic
         Ok(self.init_module(working_set)?)
     }
 
