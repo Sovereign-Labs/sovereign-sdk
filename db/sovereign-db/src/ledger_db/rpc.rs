@@ -81,19 +81,31 @@ impl LedgerRpcProvider for LedgerDB {
         //      and use an iterator instead of querying for each slot individually
 
         // First resolve the slot identifiers and store the slot numbers
-        let mut slot_nums: Vec<Option<SlotNumber>> = slot_ids.iter()
-            .map(|slot_id| self.resolve_slot_identifier(slot_id))
-            .collect::<Result<Vec<_>, _>>()?;
+        let slot_nums_result: Result<Vec<(usize, Option<SlotNumber>)>, anyhow::Error> = slot_ids
+            .iter()
+            .enumerate()
+            .map(
+                |(idx, slot_id)| match self.resolve_slot_identifier(slot_id) {
+                    Ok(slot_number) => Ok((idx, slot_number)),
+                    Err(e) => Err(e),
+                },
+            )
+            .collect();
 
-        // Then sort the slot numbers
-        slot_nums.sort_unstable();
+        let mut slot_nums = match slot_nums_result {
+            Ok(slot_numbers) => slot_numbers,
+            Err(e) => return Err(e),
+        };
+
+        // Then sort the slot numbers by requested order
+        slot_nums.sort_unstable_by(|(_, slot_id_a), (_, slot_id_b)| slot_id_a.cmp(slot_id_b));
 
         // Then identify sequential ranges
         let mut slot_ranges: Vec<(SlotNumber, SlotNumber)> = Vec::new();
         let mut current_range: Option<(SlotNumber, SlotNumber)> = None;
 
-        for slot_num in slot_nums {
-            if let Some(num) = slot_num {
+        for (_, slot_num_opt) in slot_nums {
+            if let Some(num) = slot_num_opt {
                 match current_range {
                     Some((start, end)) if SlotNumber(Into::<u64>::into(end) + 1) == num => {
                         current_range = Some((start, num));
@@ -116,13 +128,17 @@ impl LedgerRpcProvider for LedgerDB {
         // From the corresponding blocks, then store into result vector.
         let mut out = Vec::with_capacity(slot_ids.len());
         for (start, end) in slot_ranges {
-            let stored_slots = self.db.get_range::<SlotByNumber>(start, end)?;
-            for num in start..=end {
-                if let Some(stored_slot) = stored_slots.get(&num) {
-                    out.push(Some(self.populate_slot_response(num.into(), stored_slot.clone(), query_mode)?));
-                } else {
-                    out.push(None);
-                }
+            let range = std::ops::Range {
+                start: start.into(),
+                end: end.into(),
+            };
+            let stored_slots = self._get_slot_range(&range)?;
+            for (stored_slot, slot_num) in stored_slots.iter().zip(range.iter()) {
+                out.push(Some(self.populate_slot_response(
+                    slot_num,
+                    stored_slot,
+                    query_mode,
+                )?));
             }
         }
         Ok(out)
@@ -135,7 +151,7 @@ impl LedgerRpcProvider for LedgerDB {
     ) -> Result<Vec<Option<Self::BatchResponse>>, anyhow::Error> {
         // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
         //      and use an iterator instead of querying for each slot individually
-        
+
         let mut out = Vec::with_capacity(batch_ids.len());
         for batch_id in batch_ids {
             let batch_num = self.resolve_batch_identifier(batch_id)?;
