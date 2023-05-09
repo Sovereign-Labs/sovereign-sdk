@@ -13,10 +13,7 @@ pub struct ArrayWitness {
 
 impl Witness for ArrayWitness {
     fn add_hint<T: BorshSerialize>(&self, hint: T) {
-        self.hints.borrow_mut().push(
-            hint.try_to_vec()
-                .expect("Hint serialization should never fail"),
-        )
+        self.hints.borrow_mut().push(hint.try_to_vec().unwrap())
     }
 
     fn get_hint<T: BorshDeserialize>(&self) -> T {

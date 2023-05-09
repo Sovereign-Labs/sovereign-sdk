@@ -25,10 +25,8 @@ impl<'a, W: Witness> TreeReader for TreeReadLogger<'a, W> {
         node_key: &jmt::storage::NodeKey,
     ) -> anyhow::Result<Option<jmt::storage::Node>> {
         let node_opt = self.state_db.get_node_option(node_key)?;
-        self.witness.add_hint(node_opt.as_ref().map(|node| {
-            node.try_to_vec()
-                .expect("Node serialization should never fail")
-        }));
+        self.witness
+            .add_hint(node_opt.as_ref().map(|node| node.try_to_vec().unwrap()));
         Ok(node_opt)
     }
 

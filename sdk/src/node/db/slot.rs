@@ -50,10 +50,10 @@ where
     T: SlotData + Send + Sync + 'static,
 {
     fn encode_value(&self) -> Result<Vec<u8>> {
-        self.try_to_vec().map_err(CodecError::from)
+        self.try_to_vec().map_err(|e| e.into())
     }
 
     fn decode_value(mut data: &[u8]) -> Result<Self> {
-        T::deserialize(&mut data).map_err(CodecError::from)
+        T::deserialize(&mut data).map_err(|e| e.into())
     }
 }

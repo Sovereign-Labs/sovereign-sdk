@@ -43,9 +43,7 @@ impl Display for StorageKey {
 impl StorageKey {
     /// Creates a new StorageKey that combines a prefix and a key.
     pub fn new<K: BorshSerialize>(prefix: &Prefix, key: &K) -> Self {
-        let encoded_key = key
-            .try_to_vec()
-            .expect("Memory serialization should never fail, OOM potentially");
+        let encoded_key = key.try_to_vec().unwrap();
         let encoded_key = AlignedVec::new(encoded_key);
 
         let full_key = Vec::<u8>::with_capacity(prefix.len() + encoded_key.len());
@@ -67,9 +65,7 @@ pub struct StorageValue {
 
 impl StorageValue {
     pub fn new<V: BorshSerialize>(value: V) -> Self {
-        let encoded_value = value
-            .try_to_vec()
-            .expect("StorageValue in memory serialization failed, probably OOM");
+        let encoded_value = value.try_to_vec().unwrap();
         Self {
             value: Arc::new(encoded_value),
         }
