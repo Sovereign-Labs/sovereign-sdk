@@ -84,7 +84,7 @@ pub trait Signature {
 }
 
 /// A type that can't be instantiated.
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq)]
 pub enum NonInstantiable {}
 
 /// PublicKey used in the module system.
