@@ -25,8 +25,8 @@ use sovereign_sdk::{
     core::traits::Witness,
     serial::{Decode, Encode},
 };
-use std::fmt;
 
+use core::fmt::{self, Debug, Display};
 use thiserror::Error;
 
 impl AsRef<[u8]> for Address {
@@ -62,7 +62,7 @@ impl From<[u8; 32]> for Address {
     }
 }
 
-impl fmt::Display for Address {
+impl Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", AddressBech32::from(self))
     }
@@ -99,7 +99,6 @@ pub trait Spec {
     #[cfg(feature = "native")]
     type Address: AddressTrait
         + Into<AddressBech32>
-        + fmt::Display
         + serde::Serialize
         + for<'a> serde::Deserialize<'a>;
 
@@ -113,7 +112,7 @@ pub trait Spec {
         + Eq
         + TryFrom<&'static str>
         + Clone
-        + fmt::Debug
+        + Debug
         + PublicKey;
 
     type Hasher: Hasher;
@@ -122,14 +121,14 @@ pub trait Spec {
         + borsh::BorshSerialize
         + Eq
         + Clone
-        + fmt::Debug
+        + Debug
         + Signature<PublicKey = Self::PublicKey>;
 
     type Witness: Witness;
 }
 
 /// Context contains functionality common for all modules.
-pub trait Context: Spec + Clone + fmt::Debug + PartialEq {
+pub trait Context: Spec + Clone + Debug + PartialEq {
     /// Sender of the transaction.
     fn sender(&self) -> &Self::Address;
 
@@ -150,10 +149,10 @@ pub trait Module {
     type Config;
 
     /// Module defined argument to the call method.
-    type CallMessage: Decode + Encode + fmt::Debug = NonInstantiable;
+    type CallMessage: Decode + Encode + Debug = NonInstantiable;
 
     /// Module defined argument to the query method.
-    type QueryMessage: Decode + Encode + fmt::Debug = NonInstantiable;
+    type QueryMessage: Decode + Encode + Debug = NonInstantiable;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(

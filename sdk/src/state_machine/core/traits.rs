@@ -1,4 +1,4 @@
-use core::fmt::Debug;
+use core::fmt::{Debug, Display};
 
 use jmt::storage::TreeReader;
 
@@ -40,6 +40,7 @@ pub trait AddressTrait:
     + borsh::BorshSerialize
     + From<[u8; 32]>
     + Send
+    + Display
 {
 }
 
