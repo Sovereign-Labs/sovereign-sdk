@@ -11,7 +11,6 @@ mod prefix;
 mod response;
 mod tests;
 
-#[cfg(feature = "native")]
 pub use crate::bech32::AddressBech32;
 pub use dispatch::{DispatchCall, DispatchQuery, Genesis};
 pub use error::Error;
@@ -63,7 +62,6 @@ impl From<[u8; 32]> for Address {
     }
 }
 
-#[cfg(feature = "native")]
 impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", AddressBech32::from(self))
