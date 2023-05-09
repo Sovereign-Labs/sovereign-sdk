@@ -11,6 +11,7 @@ mod prefix;
 mod response;
 mod tests;
 
+#[cfg(feature = "native")]
 pub use crate::bech32::AddressBech32;
 pub use dispatch::{DispatchCall, DispatchQuery, Genesis};
 pub use error::Error;
@@ -76,11 +77,14 @@ impl From<[u8; 32]> for Address {
     }
 }
 
+#[cfg(feature = "native")]
 impl Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", AddressBech32::from(self))
     }
 }
+
+impl ModuleAddressTrait for Address {}
 
 #[derive(Error, Debug)]
 pub enum SigVerificationError {
@@ -108,19 +112,27 @@ pub trait PublicKey {
     fn to_address<A: AddressTrait>(&self) -> A;
 }
 
+pub trait ModuleAddressTrait:
+    AddressTrait
+    + borsh::BorshDeserialize
+    + borsh::BorshSerialize
+    + From<[u8; 32]>
+    + Serialize
+    + for<'a> Deserialize<'a>
+    + Send
+{
+}
+
 /// Spec contains types common for all modules.
 pub trait Spec {
     // TODO: https://github.com/Sovereign-Labs/sovereign/issues/175 feature gate the serde
     //      consider feature gating  the serde implementations, since they are only needed for RPC
-    type Address: AddressTrait
-        + borsh::BorshDeserialize
-        + borsh::BorshSerialize
-        + From<[u8; 32]>
-        + Into<AddressBech32>
-        + Serialize
-        + for<'a> Deserialize<'a>
-        + Send
-        + Display;
+
+    #[cfg(feature = "native")]
+    type Address: ModuleAddressTrait + Into<AddressBech32> + Display;
+
+    #[cfg(not(feature = "native"))]
+    type Address: ModuleAddressTrait;
 
     type Storage: Storage + Clone;
 
