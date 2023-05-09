@@ -7,16 +7,13 @@ use thiserror::Error;
 
 use super::ValueSetter;
 
-#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
-pub struct SetValue {
-    pub new_value: u32,
-}
-
+/// This enumeration represents the available call messages for interacting with the `ValueSetter` module.
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage {
-    DoSetValue(SetValue),
+    SetValue(u32),
 }
 
+/// Example of a custom error.
 #[derive(Debug, Error)]
 enum SetValueError {
     #[error("Only admin can change the value")]
@@ -33,6 +30,7 @@ impl<C: sov_modules_api::Context> ValueSetter<C> {
     ) -> Result<sov_modules_api::CallResponse> {
         let mut response = CallResponse::default();
 
+        // If admin is not then early return:
         let admin = self.admin.get_or_err(working_set)?;
 
         if &admin != context.sender() {
@@ -40,6 +38,7 @@ impl<C: sov_modules_api::Context> ValueSetter<C> {
             Err(SetValueError::WrongSender)?;
         }
 
+        // This is how we set a new value:
         self.value.set(new_value, working_set);
         response.add_event("set", &format!("value_set: {new_value:?}"));
 

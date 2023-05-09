@@ -22,4 +22,4 @@ borsh = { workspace = true, features = ["rc"] }
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde"]
+native = ["serde", "sov-modules-api/native"]

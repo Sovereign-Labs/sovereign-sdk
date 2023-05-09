@@ -35,7 +35,7 @@ fn test_value_setter_helper<C: Context>(context: C, working_set: &mut WorkingSet
     module.genesis(&(), working_set).unwrap();
 
     let new_value = 99;
-    let call_msg = call::CallMessage::DoSetValue(call::SetValue { new_value });
+    let call_msg = call::CallMessage::SetValue(new_value);
 
     // Test events
     {

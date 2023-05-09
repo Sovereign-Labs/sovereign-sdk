@@ -9,12 +9,10 @@ fn value_setter_call_messages() -> Vec<(DefaultPublicKey, value_setter::call::Ca
 
     let new_value = 99;
 
-    let set_value_msg_1 =
-        value_setter::call::CallMessage::DoSetValue(value_setter::call::SetValue { new_value });
+    let set_value_msg_1 = value_setter::call::CallMessage::SetValue(new_value);
 
     let new_value = 33;
-    let set_value_msg_2 =
-        value_setter::call::CallMessage::DoSetValue(value_setter::call::SetValue { new_value });
+    let set_value_msg_2 = value_setter::call::CallMessage::SetValue(new_value);
 
     messages.push((
         value_setter_admin.clone(),
