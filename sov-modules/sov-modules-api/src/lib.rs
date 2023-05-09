@@ -21,14 +21,12 @@ pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
 
 use sov_state::{Storage, WorkingSet};
+pub use sovereign_sdk::core::traits::AddressTrait;
 use sovereign_sdk::{
     core::traits::Witness,
     serial::{Decode, Encode},
 };
-
-pub use sovereign_sdk::core::traits::AddressTrait;
-
-use std::fmt::{self, Debug, Display};
+use std::fmt;
 
 use thiserror::Error;
 
@@ -66,13 +64,11 @@ impl From<[u8; 32]> for Address {
 }
 
 #[cfg(feature = "native")]
-impl Display for Address {
+impl fmt::Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", AddressBech32::from(self))
     }
 }
-
-impl ModuleAddressTrait for Address {}
 
 #[derive(Error, Debug)]
 pub enum SigVerificationError {
@@ -100,25 +96,17 @@ pub trait PublicKey {
     fn to_address<A: AddressTrait>(&self) -> A;
 }
 
-pub trait ModuleAddressTrait:
-    AddressTrait + borsh::BorshDeserialize + borsh::BorshSerialize + From<[u8; 32]> + Send
-{
-}
-
 /// Spec contains types common for all modules.
 pub trait Spec {
-    // TODO: https://github.com/Sovereign-Labs/sovereign/issues/175 feature gate the serde
-    //      consider feature gating  the serde implementations, since they are only needed for RPC
-
     #[cfg(feature = "native")]
-    type Address: ModuleAddressTrait
+    type Address: AddressTrait
         + Into<AddressBech32>
-        + Display
+        + fmt::Display
         + serde::Serialize
         + for<'a> serde::Deserialize<'a>;
 
     #[cfg(not(feature = "native"))]
-    type Address: ModuleAddressTrait;
+    type Address: AddressTrait;
 
     type Storage: Storage + Clone;
 
@@ -127,7 +115,7 @@ pub trait Spec {
         + Eq
         + TryFrom<&'static str>
         + Clone
-        + Debug
+        + fmt::Debug
         + PublicKey;
 
     type Hasher: Hasher;
@@ -136,14 +124,14 @@ pub trait Spec {
         + borsh::BorshSerialize
         + Eq
         + Clone
-        + Debug
+        + fmt::Debug
         + Signature<PublicKey = Self::PublicKey>;
 
     type Witness: Witness;
 }
 
 /// Context contains functionality common for all modules.
-pub trait Context: Spec + Clone + Debug + PartialEq {
+pub trait Context: Spec + Clone + fmt::Debug + PartialEq {
     /// Sender of the transaction.
     fn sender(&self) -> &Self::Address;
 
@@ -164,10 +152,10 @@ pub trait Module {
     type Config;
 
     /// Module defined argument to the call method.
-    type CallMessage: Decode + Encode + Debug = NonInstantiable;
+    type CallMessage: Decode + Encode + fmt::Debug = NonInstantiable;
 
     /// Module defined argument to the query method.
-    type QueryMessage: Decode + Encode + Debug = NonInstantiable;
+    type QueryMessage: Decode + Encode + fmt::Debug = NonInstantiable;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(
