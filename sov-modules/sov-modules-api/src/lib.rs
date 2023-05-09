@@ -1,7 +1,7 @@
 #![feature(associated_type_defaults)]
 
 pub mod default_context;
-pub mod mocks;
+pub mod default_signature;
 
 mod bech32;
 mod dispatch;

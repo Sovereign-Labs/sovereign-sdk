@@ -1,4 +1,4 @@
-use crate::mocks::{DefaultPublicKey, DefaultSignature};
+use crate::default_signature::{DefaultPublicKey, DefaultSignature};
 use crate::{Address, AddressTrait, Context, PublicKey, Spec};
 
 use jmt::SimpleHasher;
