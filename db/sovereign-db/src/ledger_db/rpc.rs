@@ -52,6 +52,11 @@ pub struct TxResponse {
     pub status: Status,
 }
 
+struct QueriedRange {
+    pub inner: std::ops::Range<SlotNumber>,
+    pub original_indices: Vec<usize>,
+}
+
 impl From<StoredTransaction> for TxResponse {
     fn from(tx: StoredTransaction) -> Self {
         Self {
@@ -101,44 +106,44 @@ impl LedgerRpcProvider for LedgerDB {
         slot_nums.sort_unstable_by(|(_, slot_id_a), (_, slot_id_b)| slot_id_a.cmp(slot_id_b));
 
         // Then identify sequential ranges
-        let mut slot_ranges: Vec<(SlotNumber, SlotNumber)> = Vec::new();
-        let mut current_range: Option<(SlotNumber, SlotNumber)> = None;
+        let mut slot_ranges: Vec<QueriedRange> = Vec::new();
+        let mut current_range: Option<QueriedRange> = None;
 
-        for (_, slot_num_opt) in slot_nums {
+        for (orig_idx, slot_num_opt) in slot_nums {
             if let Some(num) = slot_num_opt {
                 match current_range {
-                    Some((start, end)) if SlotNumber(Into::<u64>::into(end) + 1) == num => {
-                        current_range = Some((start, num));
+                    Some(range) if SlotNumber(Into::<u64>::into(range.inner.end) + 1) == num => {
+                        current_range = Some(QueriedRange {
+                            inner: range.inner.start..num,
+                            original_indices: range.original_indices,
+                        });
                     }
                     _ => {
                         if let Some(range) = current_range {
                             slot_ranges.push(range);
                         }
-                        current_range = Some((num, num));
+                        current_range = Some(QueriedRange {
+                            inner: num..SlotNumber(Into::<u64>::into(num) + 1),
+                            original_indices: vec![orig_idx],
+                        });
                     }
                 }
             }
         }
 
-        if let Some(range) = current_range {
-            slot_ranges.push(range);
-        }
-
         // For each identified range, make a single query to fetch tx's
         // From the corresponding blocks, then store into result vector.
         let mut out = Vec::with_capacity(slot_ids.len());
-        for (start, end) in slot_ranges {
-            let range = std::ops::Range {
-                start: start.into(),
-                end: end.into(),
-            };
-            let stored_slots = self._get_slot_range(&range)?;
-            for (stored_slot, slot_num) in stored_slots.iter().zip(range.iter()) {
-                out.push(Some(self.populate_slot_response(
-                    slot_num,
-                    stored_slot,
-                    query_mode,
-                )?));
+        for slot_range in slot_ranges {
+            let stored_slots = self.get_slot_range(&slot_range.inner)?;
+
+            for ((queried_slot, original_idx), slot_num) in stored_slots
+                .iter()
+                .zip(slot_range.original_indices)
+                .zip(slot_range.inner.start.into()..slot_range.inner.end.into())
+            {
+                out[original_idx] =
+                    Some(self.populate_slot_response(slot_num, *queried_slot, query_mode)?);
             }
         }
         Ok(out)

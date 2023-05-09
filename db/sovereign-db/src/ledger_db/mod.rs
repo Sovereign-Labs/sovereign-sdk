@@ -120,7 +120,7 @@ impl LedgerDB {
     /// the range of the database, the result will smaller than the requested range.
     /// Note that this method blindly preallocates for the requested range, so it should not be exposed
     /// directly via rpc.
-    pub(crate) fn _get_slot_range(
+    pub(crate) fn get_slot_range(
         &self,
         range: &std::ops::Range<SlotNumber>,
     ) -> Result<Vec<StoredSlot>, anyhow::Error> {
