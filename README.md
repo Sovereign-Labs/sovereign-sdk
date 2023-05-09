@@ -7,7 +7,7 @@
     <img alt="License: Apache-2.0" src="https://img.shields.io/github/license/cosmos/cosmos-sdk.svg" />
     </a>
     <a href="https://codecov.io/gh/Sovereign-Labs/sovereign" > 
-       <img alt="Coverage" src="https://codecov.io/gh/Sovereign-Labs/sovereign/branch/ci/add-coverage/graph/badge.svg"/> 
+       <img alt="Coverage" src="https://codecov.io/gh/Sovereign-Labs/sovereign/branch/main/graph/badge.svg"/> 
     </a>
 </div>
 
