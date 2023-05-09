@@ -25,4 +25,4 @@ sovereign-sdk = { path = "../../../sdk" }
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-state/native"]
+native = ["serde", "sov-state/native", "sov-modules-api/native"]
