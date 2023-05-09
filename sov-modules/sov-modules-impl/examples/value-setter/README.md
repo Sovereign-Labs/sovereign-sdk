@@ -7,4 +7,4 @@ It demonstrates the following concepts:
     - `call.rs` contains methods that change module state in response to `CallMessage`
     - `query.rs` contains function for querying the module state.
 
-2. The `ValueSetter` module shows how to interact with state (in our case `u32`). In order 
+2. The `ValueSetter` module shows how to interact with state (in our case `u32`). In order to trigger a 

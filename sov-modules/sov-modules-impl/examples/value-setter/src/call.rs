@@ -8,13 +8,8 @@ use thiserror::Error;
 use super::ValueSetter;
 
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
-pub struct SetValue {
-    pub new_value: u32,
-}
-
-#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage {
-    DoSetValue(SetValue),
+    SetValue(u32),
 }
 
 #[derive(Debug, Error)]

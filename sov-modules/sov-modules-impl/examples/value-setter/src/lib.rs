@@ -57,8 +57,8 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
-            CallMessage::DoSetValue(set_value) => {
-                Ok(self.set_value(set_value.new_value, context, working_set)?)
+            CallMessage::SetValue(new_value) => {
+                Ok(self.set_value(new_value, context, working_set)?)
             }
         }
     }
