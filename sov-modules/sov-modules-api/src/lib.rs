@@ -16,7 +16,6 @@ pub use crate::bech32::AddressBech32;
 pub use dispatch::{DispatchCall, DispatchQuery, Genesis};
 pub use error::Error;
 pub use jmt::SimpleHasher as Hasher;
-use serde::{Deserialize, Serialize};
 
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
@@ -41,19 +40,8 @@ impl AsRef<[u8]> for Address {
 
 impl AddressTrait for Address {}
 
-/// Default implementation of AddressTrait for the module system
-// TODO: https://github.com/Sovereign-Labs/sovereign/issues/175 feature gate the serde
-//     consider feature gating  the serde implementations, since they are only needed for RPC
-#[derive(
-    borsh::BorshDeserialize,
-    borsh::BorshSerialize,
-    Debug,
-    PartialEq,
-    Clone,
-    Eq,
-    Serialize,
-    Deserialize,
-)]
+#[cfg_attr(feature = "native", derive(serde::Serialize, serde::Deserialize))]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Eq)]
 pub struct Address {
     addr: [u8; 32],
 }
@@ -113,13 +101,7 @@ pub trait PublicKey {
 }
 
 pub trait ModuleAddressTrait:
-    AddressTrait
-    + borsh::BorshDeserialize
-    + borsh::BorshSerialize
-    + From<[u8; 32]>
-    + Serialize
-    + for<'a> Deserialize<'a>
-    + Send
+    AddressTrait + borsh::BorshDeserialize + borsh::BorshSerialize + From<[u8; 32]> + Send
 {
 }
 
@@ -129,7 +111,11 @@ pub trait Spec {
     //      consider feature gating  the serde implementations, since they are only needed for RPC
 
     #[cfg(feature = "native")]
-    type Address: ModuleAddressTrait + Into<AddressBech32> + Display;
+    type Address: ModuleAddressTrait
+        + Into<AddressBech32>
+        + Display
+        + serde::Serialize
+        + for<'a> serde::Deserialize<'a>;
 
     #[cfg(not(feature = "native"))]
     type Address: ModuleAddressTrait;
