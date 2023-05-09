@@ -66,6 +66,6 @@ impl Context for ZkDefaultContext {
 impl PublicKey for DefaultPublicKey {
     fn to_address<A: AddressTrait>(&self) -> A {
         let pub_key_hash = <ZkDefaultContext as Spec>::Hasher::hash(&self.pub_key);
-        A::try_from(&pub_key_hash).expect("todo")
+        A::from(pub_key_hash)
     }
 }
