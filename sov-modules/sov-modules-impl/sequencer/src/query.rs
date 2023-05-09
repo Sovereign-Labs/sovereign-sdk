@@ -1,7 +1,11 @@
-use sov_modules_api::{AddressBech32, Context};
-use sov_state::WorkingSet;
-
+#[cfg(feature = "native")]
 use crate::Sequencer;
+use sov_modules_api::AddressBech32;
+#[cfg(feature = "native")]
+use sov_modules_api::Context;
+
+#[cfg(feature = "native")]
+use sov_state::WorkingSet;
 
 /// This enumeration represents the available query messages for querying the sequencer module.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]

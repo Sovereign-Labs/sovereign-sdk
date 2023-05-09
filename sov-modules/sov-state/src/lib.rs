@@ -70,8 +70,12 @@ impl Prefix {
     }
 }
 
-pub trait StorageSpec {
+/// A trait specifying the hash function and format of the witness used in
+/// merkle proofs for storage access
+pub trait MerkleProofSpec {
+    /// The structure that accumulates the witness data
     type Witness: Witness;
+    /// The hash function used to compute the merkle root
     type Hasher: jmt::SimpleHasher;
 }
 
@@ -80,12 +84,12 @@ pub mod mocks {
     use sha2::Sha256;
     use sovereign_sdk::core::types::ArrayWitness;
 
-    use crate::StorageSpec;
+    use crate::MerkleProofSpec;
 
     #[derive(Clone)]
     pub struct MockStorageSpec;
 
-    impl StorageSpec for MockStorageSpec {
+    impl MerkleProofSpec for MockStorageSpec {
         type Witness = ArrayWitness;
 
         type Hasher = Sha256;
