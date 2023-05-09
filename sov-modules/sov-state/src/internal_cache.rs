@@ -11,8 +11,28 @@ use first_read_last_write_cache::{
 /// from an external source represented by the `ValueReader` trait. On following reads,
 /// the cache checks if the value we read was inserted before.
 #[derive(Default)]
-pub(crate) struct StorageInternalCache {
-    tx_cache: CacheLog,
+pub struct StorageInternalCache {
+    pub tx_cache: CacheLog,
+    pub ordered_db_reads: Vec<(CacheKey, Option<CacheValue>)>,
+}
+
+/// A struct that contains the values read from the DB and the values to be written, both in
+/// deterministic order.
+pub struct OrderedReadsAndWrites {
+    pub ordered_reads: Vec<(CacheKey, Option<CacheValue>)>,
+    pub ordered_writes: Vec<(CacheKey, Option<CacheValue>)>,
+}
+
+impl From<StorageInternalCache> for OrderedReadsAndWrites {
+    fn from(val: StorageInternalCache) -> Self {
+        let mut writes = val.tx_cache.take_writes();
+        // TODO: Make this more efficient
+        writes.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
+        Self {
+            ordered_reads: val.ordered_db_reads,
+            ordered_writes: writes,
+        }
+    }
 }
 
 impl From<StorageInternalCache> for CacheLog {
@@ -34,7 +54,6 @@ impl StorageInternalCache {
 
         match cache_value {
             cache::ValueExists::Yes(cache_value_exists) => {
-                self.add_read(cache_key, cache_value_exists.clone());
                 cache_value_exists.map(StorageValue::new_from_cache_value)
             }
             // If the value does not exist in the cache, then fetch it from an external source.
@@ -79,10 +98,18 @@ impl StorageInternalCache {
         self.tx_cache.merge_reads_left(rhs.tx_cache)
     }
 
+    pub fn merge_writes_left(
+        &mut self,
+        rhs: Self,
+    ) -> Result<(), first_read_last_write_cache::MergeError> {
+        self.tx_cache.merge_writes_left(rhs.tx_cache)
+    }
+
     fn add_read(&mut self, key: CacheKey, value: Option<CacheValue>) {
         self.tx_cache
-            .add_read(key, value)
+            .add_read(key.clone(), value.clone())
             // It is ok to panic here, we must guarantee that the cache is consistent.
             .unwrap_or_else(|e| panic!("Inconsistent read from the cache: {e:?}"));
+        self.ordered_db_reads.push((key, value))
     }
 }

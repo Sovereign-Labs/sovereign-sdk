@@ -1,8 +1,8 @@
 use std::{fmt::Display, sync::Arc};
 
-use crate::{utils::AlignedVec, Prefix};
+use crate::{internal_cache::OrderedReadsAndWrites, utils::AlignedVec, Prefix};
 use borsh::{BorshDeserialize, BorshSerialize};
-use first_read_last_write_cache::{cache::CacheLog, CacheKey, CacheValue};
+use first_read_last_write_cache::{CacheKey, CacheValue};
 use hex;
 use sovereign_sdk::{core::traits::Witness, serial::Encode};
 
@@ -10,6 +10,12 @@ use sovereign_sdk::{core::traits::Witness, serial::Encode};
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct StorageKey {
     key: Arc<Vec<u8>>,
+}
+
+impl From<CacheKey> for StorageKey {
+    fn from(cache_key: CacheKey) -> Self {
+        Self { key: cache_key.key }
+    }
 }
 
 impl StorageKey {
@@ -104,7 +110,7 @@ pub trait Storage: Clone {
     /// returning the new state root after applying all writes
     fn validate_and_commit(
         &self,
-        cache_log: CacheLog,
+        state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error>;
 }

@@ -2,12 +2,15 @@
 name = "sov-app-template"
 version = "0.1.0"
 edition = "2021"
+resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+tracing = { workspace = true }
 
 sovereign-sdk = { path = "../../sdk" }
 sov-state = { path = "../sov-state", default-features = false }

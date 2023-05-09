@@ -2,6 +2,7 @@
 name = "sov-modules-api"
 version = "0.1.0"
 edition = "2021"
+resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -18,3 +19,4 @@ derive_more = { workspace = true }
 [features]
 default = ["native"]
 native = ["sov-state/native"]
+

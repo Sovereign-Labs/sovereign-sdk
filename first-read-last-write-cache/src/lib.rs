@@ -8,7 +8,7 @@ mod utils;
 pub use access::MergeError;
 use std::{fmt::Display, sync::Arc};
 
-#[derive(Error, Debug, Eq, PartialEq, Clone, Hash)]
+#[derive(Error, Debug, Eq, PartialEq, Clone, Hash, PartialOrd, Ord)]
 pub struct CacheKey {
     pub key: Arc<Vec<u8>>,
 }

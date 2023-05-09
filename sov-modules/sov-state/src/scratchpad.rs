@@ -1,15 +1,12 @@
-use std::fmt::Debug;
+use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
-    internal_cache::StorageInternalCache,
+    internal_cache::{OrderedReadsAndWrites, StorageInternalCache},
     storage::{StorageKey, StorageValue},
     Prefix, Storage,
 };
-use first_read_last_write_cache::cache::CacheLog;
-use sovereign_sdk::{
-    core::traits::Witness,
-    serial::{Decode, Encode},
-};
+use first_read_last_write_cache::{CacheKey, CacheValue};
+use sovereign_sdk::serial::{Decode, Encode};
 
 /// A working set accumulates reads and writes on top of the underlying DB,
 /// automating witness creation.
@@ -19,14 +16,19 @@ pub struct Delta<S: Storage> {
     cache: StorageInternalCache,
 }
 
-/// A wrapper that adds additional reads and writes on top of an underlying Delta.
-/// These are handly for implementing operations that might revert on top of an existing
+/// A wrapper that adds additional writes on top of an underlying Delta.
+/// These are handy for implementing operations that might revert on top of an existing
 /// working set, without running the risk that the whole working set will be discarded if some particular
 /// operation reverts.
+///
+/// All reads are recorded in the underlying delta, because even reverted transactions have to be proven to have
+/// executed against the correct state. (If the state was different, the transaction may not have reverted.)
 pub struct RevertableDelta<S: Storage> {
+    /// The inner (non-revertable) delta
     inner: Delta<S>,
-    witness: S::Witness,
-    cache: StorageInternalCache,
+    /// A cache containing the most recent values written. Reads are first checked
+    /// against this map, and if the key is not present, the underlying Delta is checked.
+    writes: HashMap<CacheKey, Option<CacheValue>>,
 }
 
 impl<S: Storage> Debug for RevertableDelta<S> {
@@ -52,10 +54,10 @@ impl<S: Storage> WorkingSet<S> {
         Self::Standard(Delta::with_witness(inner, witness))
     }
 
-    pub fn to_revertable(self) -> WorkingSet<S> {
+    pub fn to_revertable(self) -> Self {
         match self {
             WorkingSet::Standard(delta) => WorkingSet::Revertable(delta.get_revertable_wrapper()),
-            r @ WorkingSet::Revertable(_) => r,
+            WorkingSet::Revertable(_) => self,
         }
     }
 
@@ -94,7 +96,7 @@ impl<S: Storage> WorkingSet<S> {
         }
     }
 
-    pub fn freeze(&mut self) -> (CacheLog, S::Witness) {
+    pub fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
         match self {
             WorkingSet::Standard(delta) => delta.freeze(),
             WorkingSet::Revertable(_) => todo!(),
@@ -111,22 +113,20 @@ impl<S: Storage> WorkingSet<S> {
 
 impl<S: Storage> RevertableDelta<S> {
     fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
-        match self.cache.try_get(key.clone()) {
-            first_read_last_write_cache::cache::ValueExists::Yes(val) => {
-                val.map(StorageValue::new_from_cache_value)
-            }
-            first_read_last_write_cache::cache::ValueExists::No => {
-                self.inner.get_with_witness(key, &self.witness)
-            }
+        let key = key.as_cache_key();
+        if let Some(value) = self.writes.get(&key) {
+            return value.clone().map(StorageValue::new_from_cache_value);
         }
+        self.inner.get(key.into())
     }
 
     fn set(&mut self, key: StorageKey, value: StorageValue) {
-        self.cache.set(key, value)
+        self.writes
+            .insert(key.as_cache_key(), Some(value.as_cache_value()));
     }
 
     fn delete(&mut self, key: StorageKey) {
-        self.cache.delete(key)
+        self.writes.insert(key.as_cache_key(), None);
     }
 }
 
@@ -134,25 +134,19 @@ impl<S: Storage> RevertableDelta<S> {
     fn commit(self) -> Delta<S> {
         let mut inner = self.inner;
 
-        inner
-            .cache
-            .merge_left(self.cache)
-            .expect("caches must be consistent");
+        for (k, v) in self.writes.into_iter() {
+            if let Some(v) = v {
+                inner.set(k.into(), StorageValue::new_from_cache_value(v));
+            } else {
+                inner.delete(k.into());
+            }
+        }
 
-        inner.witness.merge(&self.witness);
         inner
     }
 
     fn revert(self) -> Delta<S> {
-        let mut inner = self.inner;
-
-        inner
-            .cache
-            .merge_reads_left(self.cache)
-            .expect("caches must be consistent");
-
-        inner.witness.merge(&self.witness);
-        inner
+        self.inner
     }
 }
 
@@ -174,14 +168,9 @@ impl<S: Storage> Delta<S> {
     }
 
     fn get_revertable_wrapper(self) -> RevertableDelta<S> {
-        self.get_revertable_wrapper_with_witness(Default::default())
-    }
-
-    fn get_revertable_wrapper_with_witness(self, witness: S::Witness) -> RevertableDelta<S> {
         RevertableDelta {
             inner: self,
-            witness,
-            cache: Default::default(),
+            writes: Default::default(),
         }
     }
 }
@@ -207,15 +196,11 @@ impl<S: Storage> Delta<S> {
 }
 
 impl<S: Storage> Delta<S> {
-    fn freeze(&mut self) -> (CacheLog, S::Witness) {
+    fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
         let cache = std::mem::take(&mut self.cache);
         let witness = std::mem::take(&mut self.witness);
 
         (cache.into(), witness)
-    }
-
-    fn get_with_witness(&mut self, key: StorageKey, witness: &S::Witness) -> Option<StorageValue> {
-        self.cache.get_or_fetch(key, &self.inner, witness)
     }
 }
 
