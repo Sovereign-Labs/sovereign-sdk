@@ -5,12 +5,16 @@
 <div align="center">
   <a href="https://github.com/Sovereign-Labs/sovereign/blob/research/LICENSE">
     <img alt="License: Apache-2.0" src="https://img.shields.io/github/license/cosmos/cosmos-sdk.svg" />
+    </a>
+  <a href="https://codecov.io/github/Sovereign-Labs/sovereign/coverage.svg?branch=ci/add-coverage">
+    <img alt="Coverage" src="https://codecov.io/github/Sovereign-Labs/sovereign/coverage.svg?branch=ci/add-coverage" />
+  </a>
 </div>
 
 ## What is Sovereign?
 
-The Sovereign SDK is a free and open-source toolkit for building zk-rollups **that is currently under development**. 
-This monorepo contains the SDK and, for boring development reasons, several of its dependencies. To get started, 
+The Sovereign SDK is a free and open-source toolkit for building zk-rollups **that is currently under development**.
+This monorepo contains the SDK and, for boring development reasons, several of its dependencies. To get started,
 look at the contents of the [`sdk`](sdk) folder
 
 ## How does it work?
