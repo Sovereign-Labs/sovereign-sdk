@@ -1,9 +1,10 @@
 #[cfg(test)]
-mod test {
-    use sov_app_template::Batch;
-    use sov_modules_api::mocks::MockContext;
+pub mod test {
+    use borsh::{BorshDeserialize, BorshSerialize};
+    use sov_app_template::{Batch, SequencerOutcome};
+    use sov_modules_api::{mocks::MockContext, Address};
     use sov_state::ProverStorage;
-    use sovereign_sdk::stf::StateTransitionFunction;
+    use sovereign_sdk::{da::BlobTransactionTrait, serial::Encode, stf::StateTransitionFunction};
 
     use crate::{
         app::{create_config, create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
@@ -12,6 +13,35 @@ mod test {
         runtime::Runtime,
     };
 
+    #[derive(BorshDeserialize, BorshSerialize, Debug, Clone)]
+    pub struct TestBlob {
+        address: Address,
+        data: Vec<u8>,
+    }
+
+    impl BlobTransactionTrait for TestBlob {
+        type Data = std::io::Cursor<Vec<u8>>;
+
+        type Address = Address;
+
+        fn sender(&self) -> Self::Address {
+            self.address.clone()
+        }
+
+        fn data(&self) -> Self::Data {
+            std::io::Cursor::new(self.data.clone())
+        }
+    }
+
+    impl TestBlob {
+        pub fn new(batch: Batch, address: &[u8]) -> Self {
+            Self {
+                address: TryInto::<Address>::try_into(address).unwrap(),
+                data: batch.encode_to_vec(),
+            }
+        }
+    }
+
     #[test]
     fn test_demo_values_in_db() {
         let path = schemadb::temppath::TempPath::new();
@@ -19,13 +49,17 @@ mod test {
             let mut demo = create_new_demo(&path);
 
             demo.init_chain(create_config(LOCKED_AMOUNT + 1));
-            demo.begin_slot();
+            demo.begin_slot(Default::default());
 
             let txs = simulate_da();
 
-            demo.apply_batch(Batch { txs }, &SEQUENCER_DA_ADDRESS, None)
-                .expect("Batch is valid");
-
+            let apply_blob_outcome = demo
+                .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
+                .inner;
+            assert!(
+                matches!(apply_blob_outcome, SequencerOutcome::Rewarded,),
+                "Sequencer execution should have succeeded but failed "
+            );
             demo.end_slot();
         }
 
@@ -64,12 +98,17 @@ mod test {
         let mut demo = create_new_demo(&path);
 
         demo.init_chain(create_config(LOCKED_AMOUNT + 1));
-        demo.begin_slot();
+        demo.begin_slot(Default::default());
 
         let txs = simulate_da();
 
-        demo.apply_batch(Batch { txs }, &SEQUENCER_DA_ADDRESS, None)
-            .expect("Batch is valid");
+        let apply_blob_outcome = demo
+            .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
+            .inner;
+        assert!(
+            matches!(apply_blob_outcome, SequencerOutcome::Rewarded,),
+            "Sequencer execution should have succeeded but failed "
+        );
         demo.end_slot();
 
         let runtime = &mut Runtime::<MockContext>::new();
@@ -103,12 +142,17 @@ mod test {
             let mut demo = create_new_demo(&path);
 
             demo.init_chain(create_config(LOCKED_AMOUNT + 1));
-            demo.begin_slot();
+            demo.begin_slot(Default::default());
 
             let txs = simulate_da();
 
-            demo.apply_batch(Batch { txs }, &SEQUENCER_DA_ADDRESS, None)
-                .expect("Batch is valid");
+            let apply_blob_outcome = demo
+                .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
+                .inner;
+            assert!(
+                matches!(apply_blob_outcome, SequencerOutcome::Rewarded,),
+                "Sequencer execution should have succeeded but failed "
+            );
         }
 
         // Generate a new storage instance, value are missing because we didn't call `end_slot()`;
@@ -142,17 +186,16 @@ mod test {
         let mut demo = create_new_demo(&path);
 
         demo.init_chain(create_config(LOCKED_AMOUNT - 1));
-        demo.begin_slot();
+        demo.begin_slot(Default::default());
 
         let txs = simulate_da();
 
-        let err = demo
-            .apply_batch(Batch { txs }, &SEQUENCER_DA_ADDRESS, None)
-            .unwrap_err();
-
-        assert_eq!(
-            err.to_string(),
-            "Error: The transaction was rejected by the 'enter_apply_batch' hook. Insufficient funds for sov1hvyghdfvsmz4lvpd6k89cqlqashtjt7nda88awgwsc8wsg08c8hq66wka3"
+        let apply_blob_result = demo
+            .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
+            .inner;
+        assert!(
+            matches!(apply_blob_result, SequencerOutcome::Ignored),
+            "Batch should have been skipped due to insufficient funds"
         );
     }
 }

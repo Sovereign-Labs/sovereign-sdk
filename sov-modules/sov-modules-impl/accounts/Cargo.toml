@@ -2,6 +2,7 @@
 name = "accounts"
 version = "0.1.0"
 edition = "2021"
+resolver = "2"
 
 [dev-dependencies]
 sov-modules-api = { path = "../../sov-modules-api", features = ["mocks"] }
@@ -24,4 +25,4 @@ sovereign-sdk = { path = "../../../sdk" }
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-state/native"]
+native = ["serde", "sov-state/native", "sov-modules-api/native"]

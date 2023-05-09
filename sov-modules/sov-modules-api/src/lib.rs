@@ -15,21 +15,18 @@ pub use crate::bech32::AddressBech32;
 pub use dispatch::{DispatchCall, DispatchQuery, Genesis};
 pub use error::Error;
 pub use jmt::SimpleHasher as Hasher;
-use serde::{Deserialize, Serialize};
 
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
 
 use sov_state::{Storage, WorkingSet};
+pub use sovereign_sdk::core::traits::AddressTrait;
 use sovereign_sdk::{
     core::traits::Witness,
     serial::{Decode, Encode},
 };
 
-pub use sovereign_sdk::core::traits::AddressTrait;
-
-use std::fmt::{self, Debug, Display};
-
+use core::fmt::{self, Debug, Display};
 use thiserror::Error;
 
 impl AsRef<[u8]> for Address {
@@ -40,19 +37,8 @@ impl AsRef<[u8]> for Address {
 
 impl AddressTrait for Address {}
 
-/// Default implementation of AddressTrait for the module system
-// TODO: https://github.com/Sovereign-Labs/sovereign/issues/175 feature gate the serde
-//     consider feature gating  the serde implementations, since they are only needed for RPC
-#[derive(
-    borsh::BorshDeserialize,
-    borsh::BorshSerialize,
-    Debug,
-    PartialEq,
-    Clone,
-    Eq,
-    Serialize,
-    Deserialize,
-)]
+#[cfg_attr(feature = "native", derive(serde::Serialize, serde::Deserialize))]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Eq)]
 pub struct Address {
     addr: [u8; 32],
 }
@@ -110,17 +96,14 @@ pub trait PublicKey {
 
 /// Spec contains types common for all modules.
 pub trait Spec {
-    // TODO: https://github.com/Sovereign-Labs/sovereign/issues/175 feature gate the serde
-    //      consider feature gating  the serde implementations, since they are only needed for RPC
+    #[cfg(feature = "native")]
     type Address: AddressTrait
-        + borsh::BorshDeserialize
-        + borsh::BorshSerialize
-        + From<[u8; 32]>
         + Into<AddressBech32>
-        + Serialize
-        + for<'a> Deserialize<'a>
-        + Send
-        + Display;
+        + serde::Serialize
+        + for<'a> serde::Deserialize<'a>;
+
+    #[cfg(not(feature = "native"))]
+    type Address: AddressTrait;
 
     type Storage: Storage + Clone;
 

@@ -2,6 +2,7 @@
 name = "value-setter"
 version = "0.1.0"
 edition = "2021"
+resolver = "2"
 
 [dev-dependencies]
 sov-modules-api = { path = "../../../sov-modules-api", features = ["mocks"] }
@@ -21,4 +22,4 @@ borsh = { workspace = true, features = ["rc"] }
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde"]
+native = ["serde", "sov-modules-api/native"]
