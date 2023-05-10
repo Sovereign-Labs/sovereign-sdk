@@ -1,4 +1,4 @@
-use crate::{da::BlobTransactionTrait, maybestd::rc::Rc};
+use crate::{da::BlobTransactionTrait, maybestd::rc::Rc, zk::traits::Zkvm};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
@@ -58,7 +58,7 @@ pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
 ///  - block: DA layer block
 ///  - batch: Set of transactions grouped together, or block on L2
 ///  - blob: Non serialised batch
-pub trait StateTransitionFunction {
+pub trait StateTransitionFunction<Vm: Zkvm> {
     type StateRoot;
     /// The initial state of the rollup.
     type InitialState;
@@ -113,11 +113,11 @@ pub trait StateTransitionFunction {
     );
 }
 
-pub trait StateTransitionRunner<T: StateTransitionConfig> {
+pub trait StateTransitionRunner<T: StateTransitionConfig, Vm: Zkvm> {
     /// The parameters of the state transition function which are set at runtime. For example,
     /// the runtime config might contain path to a data directory.
     type RuntimeConfig;
-    type Inner: StateTransitionFunction;
+    type Inner: StateTransitionFunction<Vm>;
     // TODO: decide if `new` also requires <Self as StateTransitionFunction>::ChainParams as an argument
     /// Create a state transition runner
     fn new(runtime_config: Self::RuntimeConfig) -> Self;

@@ -11,7 +11,7 @@ borsh = { workspace = true}
 serde = { workspace = true }
 thiserror = { workspace = true }
 sovereign-db = { path = "../../db/sovereign-db", optional = true}
-sovereign-sdk = { path = "../../sdk", features = ["mocks"] }
+sovereign-sdk = { path = "../../sdk" }
 first-read-last-write-cache = { path = "../../first-read-last-write-cache" }
 jmt = { workspace = true }
 hex = { workspace = true}

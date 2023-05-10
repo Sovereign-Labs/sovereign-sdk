@@ -8,7 +8,7 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
-sovereign-sdk = { path = "../sdk", features = ["mocks"] }
+sovereign-sdk = { path = "../sdk" }
 election = { path = "../sov-modules/sov-modules-impl/examples/election", default-features = false }
 sequencer = { path = "../sov-modules/sov-modules-impl/sequencer", default-features = false }
 bank = { path = "../sov-modules/sov-modules-impl/bank", default-features = false } 

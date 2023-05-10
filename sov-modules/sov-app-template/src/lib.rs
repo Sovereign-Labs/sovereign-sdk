@@ -6,6 +6,7 @@ pub use batch::Batch;
 use borsh::BorshDeserialize;
 use sovereign_sdk::stf::BatchReceipt;
 use sovereign_sdk::stf::TransactionReceipt;
+use sovereign_sdk::zk::traits::Zkvm;
 use sovereign_sdk::Buf;
 use tracing::error;
 pub use tx_hooks::TxHooks;
@@ -43,80 +44,32 @@ where
             working_set: None,
         }
     }
-}
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum TxEffect {
-    Reverted,
-    Successful,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum SequencerOutcome {
-    Rewarded,
-    Slashed(SlashingReason),
-    Ignored,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum SlashingReason {
-    InvalidBatchEncoding,
-    StatelessVerificationFailed,
-    InvalidTransactionEncoding,
-}
-
-impl<C: Context, V, RT, H> StateTransitionFunction for AppTemplate<C, V, RT, H>
-where
-    RT: DispatchCall<Context = C> + Genesis<Context = C>,
-    V: TxVerifier,
-    H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
-{
-    type StateRoot = jmt::RootHash;
-
-    type InitialState = <RT as Genesis>::Config;
-
-    type TxReceiptContents = TxEffect;
-
-    type BatchReceiptContents = SequencerOutcome;
-
-    type Witness = <<C as Spec>::Storage as Storage>::Witness;
-
-    type MisbehaviorProof = ();
-
-    fn init_chain(&mut self, params: Self::InitialState) {
-        let working_set = &mut WorkingSet::new(self.current_storage.clone());
-
-        self.runtime
-            .genesis(&params, working_set)
-            .expect("module initialization must succeed");
-
-        let (log, witness) = working_set.freeze();
-        self.current_storage
-            .validate_and_commit(log, &witness)
-            .expect("Storage update must succeed");
-    }
-
-    fn begin_slot(&mut self, witness: Self::Witness) {
-        self.working_set = Some(WorkingSet::with_witness(
-            self.current_storage.clone(),
-            witness,
-        ));
-    }
-
-    // TODO: implement a state machine instead of manually deciding when to commit and when to revert
-    fn apply_blob(
+    pub fn apply_proof<Vm: Zkvm>(
         &mut self,
-        blob: impl sovereign_sdk::da::BlobTransactionTrait,
-        _misbehavior_hint: Option<Self::MisbehaviorProof>,
-    ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
+        _sequencer: &[u8],
+        _batch: impl Buf,
+    ) -> BatchReceipt<SequencerOutcome, TxEffect> {
+        // Since no proof systems actually support verification as of right now, this is a no-op
+        // TODO: Implement zk-optimstic design
+
+        BatchReceipt {
+            batch_hash: [0u8; 32],
+            tx_receipts: vec![],
+            inner: SequencerOutcome::Ignored,
+        }
+    }
+
+    pub fn apply_batch(
+        &mut self,
+        sequencer: &[u8],
+        batch: impl Buf,
+    ) -> BatchReceipt<SequencerOutcome, TxEffect> {
         let mut batch_workspace = self
             .working_set
             .take()
             .expect("Working_set was initialized in begin_slot")
             .to_revertable();
-
-        let sequencer = blob.sender();
-        let sequencer = sequencer.as_ref();
 
         if let Err(e) = self
             .tx_hooks
@@ -139,7 +92,7 @@ where
         batch_workspace = batch_workspace.commit().to_revertable();
 
         // let batch: Vec<u8> = blob.data().collect();
-        let batch = match Batch::deserialize_reader(&mut blob.data().reader()) {
+        let batch = match Batch::deserialize_reader(&mut batch.reader()) {
             Ok(batch) => batch,
             Err(e) => {
                 error!(
@@ -262,6 +215,114 @@ where
             tx_receipts,
             inner: SequencerOutcome::Rewarded,
         }
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum TxEffect {
+    Reverted,
+    Successful,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SequencerOutcome {
+    Rewarded,
+    Slashed(SlashingReason),
+    Ignored,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SlashingReason {
+    InvalidBatchEncoding,
+    StatelessVerificationFailed,
+    InvalidTransactionEncoding,
+}
+
+#[repr(u8)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum BlobType<B: Buf> {
+    Proof(B),
+    Batch(B),
+}
+
+impl<B: Buf> BlobType<B> {
+    pub fn into_inner(self) -> B {
+        match self {
+            BlobType::Proof(b) => b,
+            BlobType::Batch(b) => b,
+        }
+    }
+
+    pub fn from_buffer(buf: B) -> Result<Self, anyhow::Error> {
+        let mut buf = buf;
+        let ty = buf.get_u8();
+        match ty {
+            0 => Ok(BlobType::Proof(buf)),
+            1 => Ok(BlobType::Batch(buf)),
+            _ => anyhow::bail!("Invalid blob discriminant"),
+        }
+    }
+}
+
+impl<C: Context, V, RT, H, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, V, RT, H>
+where
+    RT: DispatchCall<Context = C> + Genesis<Context = C>,
+    V: TxVerifier,
+    H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
+{
+    type StateRoot = jmt::RootHash;
+
+    type InitialState = <RT as Genesis>::Config;
+
+    type TxReceiptContents = TxEffect;
+
+    type BatchReceiptContents = SequencerOutcome;
+
+    type Witness = <<C as Spec>::Storage as Storage>::Witness;
+
+    type MisbehaviorProof = ();
+
+    fn init_chain(&mut self, params: Self::InitialState) {
+        let working_set = &mut WorkingSet::new(self.current_storage.clone());
+
+        self.runtime
+            .genesis(&params, working_set)
+            .expect("module initialization must succeed");
+
+        let (log, witness) = working_set.freeze();
+        self.current_storage
+            .validate_and_commit(log, &witness)
+            .expect("Storage update must succeed");
+    }
+
+    fn begin_slot(&mut self, witness: Self::Witness) {
+        self.working_set = Some(WorkingSet::with_witness(
+            self.current_storage.clone(),
+            witness,
+        ));
+    }
+
+    // TODO: implement a state machine instead of manually deciding when to commit and when to revert
+    fn apply_blob(
+        &mut self,
+        blob: impl sovereign_sdk::da::BlobTransactionTrait,
+        _misbehavior_hint: Option<Self::MisbehaviorProof>,
+    ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
+        let sequencer = blob.sender();
+        let sequencer = sequencer.as_ref();
+
+        return match BlobType::from_buffer(blob.data()) {
+            Ok(BlobType::Proof(proof)) => self.apply_proof::<Vm>(sequencer, proof),
+            Ok(BlobType::Batch(batch)) => self.apply_batch(sequencer, batch),
+            Err(e) => {
+                error!("Blob decoding error: {}", e);
+                BatchReceipt {
+                    batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
+                    tx_receipts: Vec::new(),
+                    inner: SequencerOutcome::Ignored,
+                }
+            }
+        };
     }
 
     fn end_slot(
