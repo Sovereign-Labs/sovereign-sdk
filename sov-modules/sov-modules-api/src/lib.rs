@@ -1,7 +1,7 @@
 #![feature(associated_type_defaults)]
 
-#[cfg(feature = "mocks")]
-pub mod mocks;
+pub mod default_context;
+pub mod default_signature;
 
 mod bech32;
 mod dispatch;

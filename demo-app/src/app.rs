@@ -4,8 +4,8 @@ use crate::tx_hooks_impl::DemoAppTxHooks;
 use crate::tx_verifier_impl::DemoAppTxVerifier;
 use sov_app_template::AppTemplate;
 #[cfg(feature = "native")]
-use sov_modules_api::mocks::MockContext;
-use sov_modules_api::mocks::ZkMockContext;
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
 use sov_modules_api::Address;
 use sov_modules_api::Context;
@@ -22,14 +22,14 @@ use sovereign_sdk::stf::{StateTransitionRunner, ZkConfig};
 use std::path::Path;
 
 #[cfg(test)]
-pub(crate) type C = MockContext;
+pub(crate) type C = DefaultContext;
 
 pub struct DemoAppRunner<C: Context>(pub DemoApp<C>);
 
-pub type ZkAppRunner = DemoAppRunner<ZkMockContext>;
+pub type ZkAppRunner = DemoAppRunner<ZkDefaultContext>;
 
 #[cfg(feature = "native")]
-pub type NativeAppRunner = DemoAppRunner<MockContext>;
+pub type NativeAppRunner = DemoAppRunner<DefaultContext>;
 
 pub type DemoApp<C> = AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>>;
 
@@ -45,9 +45,9 @@ pub const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
 pub const TOKEN_NAME: &str = "Token0";
 
 #[cfg(feature = "native")]
-impl StateTransitionRunner<ProverConfig> for DemoAppRunner<MockContext> {
+impl StateTransitionRunner<ProverConfig> for DemoAppRunner<DefaultContext> {
     type RuntimeConfig = &'static str;
-    type Inner = DemoApp<MockContext>;
+    type Inner = DemoApp<DefaultContext>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let runtime = Runtime::new();
@@ -68,9 +68,9 @@ impl StateTransitionRunner<ProverConfig> for DemoAppRunner<MockContext> {
     }
 }
 
-impl StateTransitionRunner<ZkConfig> for DemoAppRunner<ZkMockContext> {
+impl StateTransitionRunner<ZkConfig> for DemoAppRunner<ZkDefaultContext> {
     type RuntimeConfig = [u8; 32];
-    type Inner = DemoApp<ZkMockContext>;
+    type Inner = DemoApp<ZkDefaultContext>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let runtime = Runtime::new();
@@ -94,8 +94,8 @@ impl StateTransitionRunner<ZkConfig> for DemoAppRunner<ZkMockContext> {
 pub fn create_mock_context_genesis_config(
     sequencer_address: Address,
     sequencer_da_address: Vec<u8>,
-) -> GenesisConfig<MockContext> {
-    create_demo_genesis_config::<MockContext>(sequencer_address, sequencer_da_address)
+) -> GenesisConfig<DefaultContext> {
+    create_demo_genesis_config::<DefaultContext>(sequencer_address, sequencer_da_address)
 }
 
 pub fn create_demo_genesis_config<C: Context>(
@@ -133,9 +133,9 @@ pub fn create_demo_genesis_config<C: Context>(
 
 #[cfg(test)]
 pub(crate) fn create_sequencer_config(
-    seq_rollup_address: <MockContext as Spec>::Address,
-    token_address: <MockContext as Spec>::Address,
-) -> sequencer::SequencerConfig<MockContext> {
+    seq_rollup_address: <DefaultContext as Spec>::Address,
+    token_address: <DefaultContext as Spec>::Address,
+) -> sequencer::SequencerConfig<DefaultContext> {
     sequencer::SequencerConfig {
         seq_rollup_address,
         seq_da_address: SEQUENCER_DA_ADDRESS.to_vec(),
@@ -147,12 +147,12 @@ pub(crate) fn create_sequencer_config(
 }
 
 #[cfg(test)]
-pub(crate) fn create_config(initial_sequencer_balance: u64) -> GenesisConfig<MockContext> {
-    type C = MockContext;
+pub(crate) fn create_config(initial_sequencer_balance: u64) -> GenesisConfig<DefaultContext> {
+    type C = DefaultContext;
     let pub_key = <C as Spec>::PublicKey::try_from(SEQ_PUB_KEY_STR).unwrap();
     let seq_address = pub_key.to_address::<<C as Spec>::Address>();
 
-    let token_config: bank::TokenConfig<MockContext> = bank::TokenConfig {
+    let token_config: bank::TokenConfig<DefaultContext> = bank::TokenConfig {
         token_name: TOKEN_NAME.to_owned(),
         address_and_balances: vec![(seq_address.clone(), initial_sequencer_balance)],
     };
@@ -179,7 +179,7 @@ pub(crate) fn create_config(initial_sequencer_balance: u64) -> GenesisConfig<Moc
 }
 
 #[cfg(test)]
-pub(crate) fn create_new_demo(path: impl AsRef<Path>) -> DemoApp<MockContext> {
+pub(crate) fn create_new_demo(path: impl AsRef<Path>) -> DemoApp<DefaultContext> {
     let runtime = Runtime::new();
     let storage = ProverStorage::with_path(path).unwrap();
     let tx_hooks = DemoAppTxHooks::new();

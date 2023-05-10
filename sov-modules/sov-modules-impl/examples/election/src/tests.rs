@@ -7,7 +7,8 @@ use super::{
 
 use anyhow::anyhow;
 use sov_modules_api::{
-    mocks::{MockContext, MockPublicKey, ZkMockContext},
+    default_context::{DefaultContext, ZkDefaultContext},
+    default_signature::DefaultPublicKey,
     Context, Module, ModuleInfo, PublicKey,
 };
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
@@ -16,15 +17,15 @@ use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 fn test_election() {
     let native_storage = ProverStorage::temporary();
     let mut native_working_set = WorkingSet::new(native_storage);
-    test_module::<MockContext>(&mut native_working_set);
+    test_module::<DefaultContext>(&mut native_working_set);
 
     let (_log, witness) = native_working_set.freeze();
     let zk_storage = ZkStorage::new([0u8; 32]);
     let mut zk_working_set = WorkingSet::with_witness(zk_storage, witness);
-    test_module::<ZkMockContext>(&mut zk_working_set);
+    test_module::<ZkDefaultContext>(&mut zk_working_set);
 }
 
-fn test_module<C: Context<PublicKey = MockPublicKey>>(working_set: &mut WorkingSet<C::Storage>) {
+fn test_module<C: Context<PublicKey = DefaultPublicKey>>(working_set: &mut WorkingSet<C::Storage>) {
     let admin_pub_key = C::PublicKey::try_from("election_admin")
         .map_err(|_| anyhow!("Admin initialization failed"))
         .unwrap();
@@ -48,9 +49,9 @@ fn test_module<C: Context<PublicKey = MockPublicKey>>(working_set: &mut WorkingS
             .unwrap();
     }
 
-    let voter_1 = MockPublicKey::from("voter_1").to_address::<C::Address>();
-    let voter_2 = MockPublicKey::from("voter_2").to_address::<C::Address>();
-    let voter_3 = MockPublicKey::from("voter_3").to_address::<C::Address>();
+    let voter_1 = DefaultPublicKey::from("voter_1").to_address::<C::Address>();
+    let voter_2 = DefaultPublicKey::from("voter_2").to_address::<C::Address>();
+    let voter_3 = DefaultPublicKey::from("voter_3").to_address::<C::Address>();
 
     // Register voters
     {

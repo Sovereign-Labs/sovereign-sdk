@@ -14,7 +14,7 @@ path = "tests/all_tests.rs"
 
 [dev-dependencies]
 trybuild = "1.0"
-sov-modules-api = { path = "../sov-modules-api", features = ["mocks"] }
+sov-modules-api = { path = "../sov-modules-api"}
 jsonrpsee = { version = "0.16.2", features = ["macros", "client-core", "server"] }
 sov-state = { path = "../sov-state", features = ["temp"] }
 sovereign-db = { path = "../../db/sovereign-db", features = ["temp"] }

@@ -10,7 +10,7 @@ borsh = { workspace = true, features = ["rc"] }
 serde_json = { workspace = true }
 serial_test = "*"
 
-sov-modules-api = { path = "../../sov-modules-api", features = ["mocks"] }
+sov-modules-api = { path = "../../sov-modules-api"}
 sov-modules-macros = { path = "../../sov-modules-macros" }
 sov-state = { path = "../../sov-state", features = ["temp"] }
 sovereign-sdk = { path = "../../../sdk" }

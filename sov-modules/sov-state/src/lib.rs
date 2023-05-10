@@ -79,19 +79,14 @@ pub trait MerkleProofSpec {
     type Hasher: jmt::SimpleHasher;
 }
 
-#[cfg(any(test, feature = "mocks"))]
-pub mod mocks {
-    use sha2::Sha256;
-    use sovereign_sdk::core::types::ArrayWitness;
+use sha2::Sha256;
+use sovereign_sdk::core::types::ArrayWitness;
 
-    use crate::MerkleProofSpec;
+#[derive(Clone)]
+pub struct DefaultStorageSpec;
 
-    #[derive(Clone)]
-    pub struct MockStorageSpec;
+impl MerkleProofSpec for DefaultStorageSpec {
+    type Witness = ArrayWitness;
 
-    impl MerkleProofSpec for MockStorageSpec {
-        type Witness = ArrayWitness;
-
-        type Hasher = Sha256;
-    }
+    type Hasher = Sha256;
 }

@@ -2,7 +2,7 @@
 pub mod test {
     use borsh::{BorshDeserialize, BorshSerialize};
     use sov_app_template::{Batch, SequencerOutcome};
-    use sov_modules_api::{mocks::MockContext, Address};
+    use sov_modules_api::{default_context::DefaultContext, Address};
     use sov_state::ProverStorage;
     use sovereign_sdk::{da::BlobTransactionTrait, serial::Encode, stf::StateTransitionFunction};
 
@@ -65,7 +65,7 @@ pub mod test {
 
         // Generate a new storage instance after dumping data to the db.
         {
-            let runtime = &mut Runtime::<MockContext>::new();
+            let runtime = &mut Runtime::<DefaultContext>::new();
             let storage = ProverStorage::with_path(&path).unwrap();
 
             let resp = query_and_deserialize::<election::query::GetResultResponse>(
@@ -111,7 +111,7 @@ pub mod test {
         );
         demo.end_slot();
 
-        let runtime = &mut Runtime::<MockContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::new();
         let resp = query_and_deserialize::<election::query::GetResultResponse>(
             runtime,
             QueryGenerator::generate_query_election_message(),

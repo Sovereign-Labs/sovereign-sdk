@@ -1,23 +1,22 @@
 use super::ValueSetter;
 use crate::{call, query};
 
-use sov_modules_api::{
-    mocks::{MockContext, MockPublicKey, ZkMockContext},
-    Address, Context, PublicKey, Spec,
-};
+use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
+use sov_modules_api::default_signature::DefaultPublicKey;
+use sov_modules_api::{Address, Context, PublicKey, Spec};
 use sov_modules_api::{Module, ModuleInfo};
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 use sovereign_sdk::stf::Event;
 
 #[test]
 fn test_value_setter() {
-    let sender =
-        MockPublicKey::from("value_setter_admin").to_address::<<MockContext as Spec>::Address>();
+    let sender = DefaultPublicKey::from("value_setter_admin")
+        .to_address::<<DefaultContext as Spec>::Address>();
     let mut working_set = WorkingSet::new(ProverStorage::temporary());
 
     // Test Native-Context
     {
-        let context = MockContext::new(sender.clone());
+        let context = DefaultContext::new(sender.clone());
         test_value_setter_helper(context, &mut working_set);
     }
 
@@ -25,7 +24,7 @@ fn test_value_setter() {
 
     // Test Zk-Context
     {
-        let zk_context = ZkMockContext::new(sender);
+        let zk_context = ZkDefaultContext::new(sender);
         let mut zk_working_set = WorkingSet::with_witness(ZkStorage::new([0u8; 32]), witness);
         test_value_setter_helper(zk_context, &mut zk_working_set);
     }
@@ -69,7 +68,7 @@ fn test_err_on_sender_is_not_admin() {
 
     // Test Native-Context
     {
-        let context = MockContext::new(sender.clone());
+        let context = DefaultContext::new(sender.clone());
         test_err_on_sender_is_not_admin_helper(context, native_working_set);
     }
     let (_, witness) = native_working_set.freeze();
@@ -77,7 +76,7 @@ fn test_err_on_sender_is_not_admin() {
     // Test Zk-Context
     {
         let zk_backing_store = ZkStorage::new([0u8; 32]);
-        let zk_context = ZkMockContext::new(sender);
+        let zk_context = ZkDefaultContext::new(sender);
         let zk_working_set = &mut WorkingSet::with_witness(zk_backing_store, witness);
         test_err_on_sender_is_not_admin_helper(zk_context, zk_working_set);
     }

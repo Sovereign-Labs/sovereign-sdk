@@ -1,7 +1,9 @@
+use sov_modules_api::default_context::DefaultContext;
+
 use super::*;
 
-fn value_setter_call_messages() -> Vec<(MockPublicKey, value_setter::call::CallMessage, u64)> {
-    let value_setter_admin = MockPublicKey::from("value_setter_admin");
+fn value_setter_call_messages() -> Vec<(DefaultPublicKey, value_setter::call::CallMessage, u64)> {
+    let value_setter_admin = DefaultPublicKey::from("value_setter_admin");
     let mut value_setter_admin_nonce = 0;
     let mut messages = Vec::default();
 
@@ -33,21 +35,21 @@ pub struct ValueSetterMessages {}
 impl MessageGenerator for ValueSetterMessages {
     type Call = value_setter::call::CallMessage;
 
-    fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)> {
+    fn create_messages(&self) -> Vec<(DefaultPublicKey, Self::Call, u64)> {
         value_setter_call_messages()
     }
 
     fn create_tx(
         &self,
-        sender: MockPublicKey,
+        sender: DefaultPublicKey,
         message: Self::Call,
         nonce: u64,
         _is_last: bool,
-    ) -> Transaction<MockContext> {
-        Transaction::<MockContext>::new(
-            Runtime::<MockContext>::encode_value_setter_call(message),
+    ) -> Transaction<DefaultContext> {
+        Transaction::<DefaultContext>::new(
+            Runtime::<DefaultContext>::encode_value_setter_call(message),
             sender,
-            MockSignature::default(),
+            DefaultSignature::default(),
             nonce,
         )
     }

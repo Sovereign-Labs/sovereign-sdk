@@ -2,13 +2,13 @@ use serde::de::DeserializeOwned;
 
 use bank::query::QueryMessage;
 use bank::{Bank, BankConfig, TokenConfig};
-use sov_modules_api::mocks::MockContext;
+use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Module, PublicKey, Spec};
-use sov_state::mocks::MockStorageSpec;
+use sov_state::DefaultStorageSpec;
 use sov_state::{ProverStorage, WorkingSet};
 
-pub type C = MockContext;
-pub type Storage = ProverStorage<MockStorageSpec>;
+pub type C = DefaultContext;
+pub type Storage = ProverStorage<DefaultStorageSpec>;
 
 pub fn query_and_deserialize<R: DeserializeOwned>(
     bank: &Bank<C>,

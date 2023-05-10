@@ -3,7 +3,8 @@ use crate::tx_verifier_impl::Transaction;
 
 use borsh::BorshSerialize;
 use sov_app_template::RawTx;
-use sov_modules_api::mocks::{MockContext, MockPublicKey, MockSignature};
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_signature::{DefaultPublicKey, DefaultSignature};
 use sov_modules_api::PublicKey;
 
 mod election_data;
@@ -47,15 +48,15 @@ pub fn simulate_da_with_bad_serialization() -> Vec<RawTx> {
 trait MessageGenerator {
     type Call;
 
-    fn create_messages(&self) -> Vec<(MockPublicKey, Self::Call, u64)>;
+    fn create_messages(&self) -> Vec<(DefaultPublicKey, Self::Call, u64)>;
 
     fn create_tx(
         &self,
-        sender: MockPublicKey,
+        sender: DefaultPublicKey,
         message: Self::Call,
         nonce: u64,
         is_last: bool,
-    ) -> Transaction<MockContext>;
+    ) -> Transaction<DefaultContext>;
 
     fn create_raw_txs(&self) -> Vec<RawTx> {
         let mut messages_iter = self.create_messages().into_iter().peekable();
@@ -78,21 +79,21 @@ pub(crate) struct QueryGenerator {}
 impl QueryGenerator {
     pub(crate) fn generate_query_election_message() -> Vec<u8> {
         let query_message = election::query::QueryMessage::GetResult;
-        Runtime::<MockContext>::encode_election_query(query_message)
+        Runtime::<DefaultContext>::encode_election_query(query_message)
     }
 
     pub(crate) fn generate_query_election_nb_of_votes_message() -> Vec<u8> {
         let query_message = election::query::QueryMessage::GenNbOfVotes;
-        Runtime::<MockContext>::encode_election_query(query_message)
+        Runtime::<DefaultContext>::encode_election_query(query_message)
     }
 
     pub(crate) fn generate_query_value_setter_message() -> Vec<u8> {
         let query_message = value_setter::query::QueryMessage::GetValue;
-        Runtime::<MockContext>::encode_value_setter_query(query_message)
+        Runtime::<DefaultContext>::encode_value_setter_query(query_message)
     }
 
     pub(crate) fn generate_query_check_balance() -> Vec<u8> {
         let query_message = sequencer::query::QueryMessage::GetSequencerAddressAndBalance;
-        Runtime::<MockContext>::encode_sequencer_query(query_message)
+        Runtime::<DefaultContext>::encode_sequencer_query(query_message)
     }
 }

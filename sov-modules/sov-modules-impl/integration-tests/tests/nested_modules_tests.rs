@@ -1,4 +1,4 @@
-use sov_modules_api::mocks::{MockContext, ZkMockContext};
+use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::{Context, ModuleInfo, Prefix};
 use sov_modules_macros::ModuleInfo;
 use sov_state::storage::{StorageKey, StorageValue};
@@ -88,8 +88,8 @@ fn nested_module_call_test() {
 
     // Test the `native` execution.
     {
-        execute_module_logic::<MockContext>(working_set);
-        test_state_update::<MockContext>(working_set);
+        execute_module_logic::<DefaultContext>(working_set);
+        test_state_update::<DefaultContext>(working_set);
     }
     let (log, witness) = working_set.freeze();
     native_storage
@@ -100,8 +100,8 @@ fn nested_module_call_test() {
     {
         let zk_storage = ZkStorage::new([0u8; 32]);
         let working_set = &mut WorkingSet::with_witness(zk_storage, witness);
-        execute_module_logic::<ZkMockContext>(working_set);
-        test_state_update::<ZkMockContext>(working_set);
+        execute_module_logic::<ZkDefaultContext>(working_set);
+        test_state_update::<ZkDefaultContext>(working_set);
     }
 }
 

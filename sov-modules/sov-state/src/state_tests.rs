@@ -3,7 +3,7 @@ use std::path::Path;
 use sovereign_sdk::core::types::ArrayWitness;
 
 use super::*;
-use crate::{mocks::MockStorageSpec, ProverStorage};
+use crate::{DefaultStorageSpec, ProverStorage};
 
 enum Operation {
     Merge,
@@ -83,7 +83,7 @@ fn create_state_map_and_storage(
     path: impl AsRef<Path>,
 ) -> (
     StateMap<u32, u32>,
-    WorkingSet<ProverStorage<MockStorageSpec>>,
+    WorkingSet<ProverStorage<DefaultStorageSpec>>,
 ) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
@@ -127,7 +127,10 @@ fn test_state_map_with_delete() {
 fn create_state_value_and_storage(
     value: u32,
     path: impl AsRef<Path>,
-) -> (StateValue<u32>, WorkingSet<ProverStorage<MockStorageSpec>>) {
+) -> (
+    StateValue<u32>,
+    WorkingSet<ProverStorage<DefaultStorageSpec>>,
+) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
     let state_value = StateValue::new(Prefix::new(vec![0]));
@@ -172,7 +175,7 @@ fn test_witness_roundtrip() {
 
     // Native execution
     let witness: ArrayWitness = {
-        let storage = ProverStorage::<MockStorageSpec>::with_path(&path).unwrap();
+        let storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
         let mut working_set = WorkingSet::new(storage.clone());
         state_value.set(11, &mut working_set);
         let _ = state_value.get(&mut working_set);
@@ -186,7 +189,7 @@ fn test_witness_roundtrip() {
     };
 
     {
-        let storage = ZkStorage::<MockStorageSpec>::new(EMPTY_ROOT);
+        let storage = ZkStorage::<DefaultStorageSpec>::new(EMPTY_ROOT);
         let mut working_set = WorkingSet::with_witness(storage.clone(), witness);
         state_value.set(11, &mut working_set);
         let _ = state_value.get(&mut working_set);

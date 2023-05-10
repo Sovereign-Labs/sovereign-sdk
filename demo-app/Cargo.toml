@@ -16,7 +16,7 @@ sov-app-template = { path = "../sov-modules/sov-app-template" } # no features av
 value-setter = { path = "../sov-modules/sov-modules-impl/examples/value-setter", default-features = false }
 accounts = { path = "../sov-modules/sov-modules-impl/accounts", default-features = false }
 sov-state = { path = "../sov-modules/sov-state", default-features = false }
-sov-modules-api = { path = "../sov-modules/sov-modules-api", default-features = false, features = ["mocks"] }
+sov-modules-api = { path = "../sov-modules/sov-modules-api", default-features = false }
 sov-modules-macros = { path = "../sov-modules/sov-modules-macros" }
 borsh = { workspace = true }
 serde_json = { workspace = true }
