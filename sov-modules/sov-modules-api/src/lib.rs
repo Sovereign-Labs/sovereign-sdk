@@ -32,11 +32,18 @@ impl AsRef<[u8]> for Address {
     }
 }
 
-#[cfg(feature = "native")]
 impl AddressTrait for Address {}
 
-#[cfg_attr(feature = "native", derive(serde::Serialize, serde::Deserialize))]
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Eq)]
+#[derive(
+    Debug,
+    PartialEq,
+    Clone,
+    Eq,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct Address {
     addr: [u8; 32],
 }
