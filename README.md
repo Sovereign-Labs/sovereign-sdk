@@ -70,7 +70,7 @@ implementing and deploying a custom module here (TODO: insert link!)
 ### The Sovereign Node: a Full Node that "Just Works"
 
 The final component of this repository is the node implementation. This full-node implementation provides an easy way to deploy
-and run your rollup. With the default configuration, it can automatically stores chain data in its database,
+and run your rollup. With the default configuration, it can automatically store chain data in its database,
 serve RPC requests for chain data and application state, and interact with the DA layer to sync its state and send transactions.
 While the full node implementation should be compatible with custom state transition functions, it is currently only tested for
 rollups built with the module system. If you encounter any difficulties running the full node, please reach out or open an
