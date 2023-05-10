@@ -4,27 +4,6 @@ use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, Spec,
 };
 
-fn value_setter_call_messages(
-    admin: Rc<DefaultPrivateKey>,
-) -> Vec<(Rc<DefaultPrivateKey>, value_setter::call::CallMessage, u64)> {
-    let mut value_setter_admin_nonce = 0;
-    let mut messages = Vec::default();
-
-    let new_value = 99;
-
-    let set_value_msg_1 = value_setter::call::CallMessage::SetValue(new_value);
-
-    let new_value = 33;
-    let set_value_msg_2 = value_setter::call::CallMessage::SetValue(new_value);
-
-    messages.push((admin.clone(), set_value_msg_1, value_setter_admin_nonce));
-
-    value_setter_admin_nonce += 1;
-    messages.push((admin, set_value_msg_2, value_setter_admin_nonce));
-
-    messages
-}
-
 pub struct ValueSetterMessages {
     pub(crate) admin: Rc<DefaultPrivateKey>,
 }
@@ -33,7 +12,23 @@ impl MessageGenerator for ValueSetterMessages {
     type Call = value_setter::call::CallMessage;
 
     fn create_messages(&self) -> Vec<(Rc<DefaultPrivateKey>, Self::Call, u64)> {
-        value_setter_call_messages(self.admin.clone())
+        let admin = self.admin.clone();
+        let mut value_setter_admin_nonce = 0;
+        let mut messages = Vec::default();
+
+        let new_value = 99;
+
+        let set_value_msg_1 = value_setter::call::CallMessage::SetValue(new_value);
+
+        let new_value = 33;
+        let set_value_msg_2 = value_setter::call::CallMessage::SetValue(new_value);
+
+        messages.push((admin.clone(), set_value_msg_1, value_setter_admin_nonce));
+
+        value_setter_admin_nonce += 1;
+        messages.push((admin, set_value_msg_2, value_setter_admin_nonce));
+
+        messages
     }
 
     fn create_tx(
