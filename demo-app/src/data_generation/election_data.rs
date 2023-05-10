@@ -7,12 +7,21 @@ use super::*;
 
 struct CallGenerator {
     election_admin_nonce: u64,
+    election_admin: Rc<DefaultPrivateKey>,
+    voters: Vec<Rc<DefaultPrivateKey>>,
 }
 
 impl CallGenerator {
-    fn new() -> Self {
+    fn new(election_admin: Rc<DefaultPrivateKey>) -> Self {
+        let voters = vec![
+            Rc::new(DefaultPrivateKey::generate()),
+            Rc::new(DefaultPrivateKey::generate()),
+            Rc::new(DefaultPrivateKey::generate()),
+        ];
         Self {
             election_admin_nonce: 0,
+            election_admin,
+            voters,
         }
     }
 
@@ -22,8 +31,6 @@ impl CallGenerator {
 
     fn create_voters_and_vote(
         &mut self,
-        election_admin: Rc<DefaultPrivateKey>,
-        voters: &[Rc<DefaultPrivateKey>],
     ) -> Vec<(
         Rc<DefaultPrivateKey>,
         election::call::CallMessage<DefaultContext>,
@@ -36,24 +43,24 @@ impl CallGenerator {
         };
 
         messages.push((
-            election_admin.clone(),
+            self.election_admin.clone(),
             set_candidates_message,
             self.election_admin_nonce,
         ));
         self.inc_nonce();
 
-        for voter in voters {
+        for voter in self.voters.clone() {
             let add_voter_message =
                 election::call::CallMessage::AddVoter(voter.pub_key().to_address());
 
             messages.push((
-                election_admin.clone(),
+                self.election_admin.clone(),
                 add_voter_message,
                 self.election_admin_nonce,
             ));
 
             let vote_message = election::call::CallMessage::Vote(1);
-            messages.push((voter.clone(), vote_message, 0));
+            messages.push((voter, vote_message, 0));
             self.inc_nonce();
         }
 
@@ -62,7 +69,6 @@ impl CallGenerator {
 
     fn freeze_vote(
         &mut self,
-        election_admin: Rc<DefaultPrivateKey>,
     ) -> Vec<(
         Rc<DefaultPrivateKey>,
         election::call::CallMessage<DefaultContext>,
@@ -71,7 +77,11 @@ impl CallGenerator {
         let mut messages = Vec::default();
 
         let freeze_message = election::call::CallMessage::FreezeElection;
-        messages.push((election_admin, freeze_message, self.election_admin_nonce));
+        messages.push((
+            self.election_admin.clone(),
+            freeze_message,
+            self.election_admin_nonce,
+        ));
         self.inc_nonce();
 
         messages
@@ -79,8 +89,6 @@ impl CallGenerator {
 
     fn all_messages(
         &mut self,
-        election_admin: Rc<DefaultPrivateKey>,
-        voters: &[Rc<DefaultPrivateKey>],
     ) -> Vec<(
         Rc<DefaultPrivateKey>,
         election::call::CallMessage<DefaultContext>,
@@ -88,23 +96,30 @@ impl CallGenerator {
     )> {
         let mut messages = Vec::default();
 
-        messages.extend(self.create_voters_and_vote(election_admin.clone(), voters));
-        messages.extend(self.freeze_vote(election_admin));
+        messages.extend(self.create_voters_and_vote());
+        messages.extend(self.freeze_vote());
         messages
     }
 }
 
 pub struct ElectionCallMessages {
-    pub(crate) election_admin: Rc<DefaultPrivateKey>,
-    pub(crate) voters: Vec<Rc<DefaultPrivateKey>>,
+    election_admin: Rc<DefaultPrivateKey>,
+}
+
+impl ElectionCallMessages {
+    pub fn new(election_admin: DefaultPrivateKey) -> Self {
+        Self {
+            election_admin: Rc::new(election_admin),
+        }
+    }
 }
 
 impl MessageGenerator for ElectionCallMessages {
     type Call = election::call::CallMessage<DefaultContext>;
 
     fn create_messages(&self) -> Vec<(Rc<DefaultPrivateKey>, Self::Call, u64)> {
-        let call_generator = &mut CallGenerator::new();
-        call_generator.all_messages(self.election_admin.clone(), &self.voters)
+        let call_generator = &mut CallGenerator::new(self.election_admin.clone());
+        call_generator.all_messages()
     }
 
     fn create_tx(

@@ -17,23 +17,12 @@ pub fn simulate_da(
     value_setter_admin: DefaultPrivateKey,
     election_admin: DefaultPrivateKey,
 ) -> Vec<RawTx> {
-    let voters = vec![
-        Rc::new(DefaultPrivateKey::generate()),
-        Rc::new(DefaultPrivateKey::generate()),
-        Rc::new(DefaultPrivateKey::generate()),
-    ];
-
-    let election = election_data::ElectionCallMessages {
-        election_admin: Rc::new(election_admin),
-        voters,
-    };
+    let election = election_data::ElectionCallMessages::new(election_admin);
 
     let mut messages = Vec::default();
     messages.extend(election.create_raw_txs());
 
-    let value_setter = value_setter_data::ValueSetterMessages {
-        admin: Rc::new(value_setter_admin),
-    };
+    let value_setter = value_setter_data::ValueSetterMessages::new(value_setter_admin);
     messages.extend(value_setter.create_raw_txs());
 
     messages

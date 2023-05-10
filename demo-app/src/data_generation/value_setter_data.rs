@@ -5,7 +5,15 @@ use sov_modules_api::{
 };
 
 pub struct ValueSetterMessages {
-    pub(crate) admin: Rc<DefaultPrivateKey>,
+    admin: Rc<DefaultPrivateKey>,
+}
+
+impl ValueSetterMessages {
+    pub fn new(admin: DefaultPrivateKey) -> Self {
+        Self {
+            admin: Rc::new(admin),
+        }
+    }
 }
 
 impl MessageGenerator for ValueSetterMessages {
