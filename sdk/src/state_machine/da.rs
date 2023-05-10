@@ -1,8 +1,9 @@
 use bytes::Buf;
 
 use crate::core::traits::{AddressTrait, BlockHeaderTrait};
-use crate::serial::{Decode, DeserializationError, Encode};
 use core::fmt::Debug;
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 /// A specification for the types used by a DA layer.
 pub trait DaSpec {
@@ -16,12 +17,12 @@ pub trait DaSpec {
     type BlobTransaction: BlobTransactionTrait;
 
     /// A proof that each tx in a set of blob transactions is included in a given block.
-    type InclusionMultiProof: Encode + Decode;
+    type InclusionMultiProof: Serialize + DeserializeOwned;
 
     /// A proof that a claimed set of transactions is complete. For example, this could be a range
     /// proof demonstrating that the provided BlobTransactions represent the entire contents of Celestia namespace
     /// in a given block
-    type CompletenessProof: Encode + Decode;
+    type CompletenessProof: Serialize + DeserializeOwned;
 
     /// The parameters of the rollup which are baked into the state-transition function.
     /// For example, this could include the namespace of the rollup on Celestia.
@@ -54,7 +55,7 @@ pub trait DaVerifier {
 }
 
 /// A transaction on a data availability layer, including the address of the sender.
-pub trait BlobTransactionTrait: Encode + Decode {
+pub trait BlobTransactionTrait: Serialize + DeserializeOwned {
     type Data: Buf;
     type Address: AddressTrait;
     /// Returns the address (on the DA layer) of the entity which submitted the blob transaction
@@ -63,7 +64,4 @@ pub trait BlobTransactionTrait: Encode + Decode {
     fn data(&self) -> Self::Data;
 }
 
-pub trait BlockHashTrait:
-    Encode + Decode<Error = DeserializationError> + PartialEq + Debug + Send + Sync
-{
-}
+pub trait BlockHashTrait: Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync {}

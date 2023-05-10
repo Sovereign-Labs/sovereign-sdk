@@ -1,7 +1,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
 
 /// RawTx represents a serialized rollup transaction received from the DA.
-#[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize, Clone)]
+#[derive(Debug, PartialEq, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct RawTx {
     pub data: Vec<u8>,
 }

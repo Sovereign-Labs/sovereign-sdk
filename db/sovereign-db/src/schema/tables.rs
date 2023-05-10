@@ -21,15 +21,15 @@ use super::types::{
     StoredTransaction, TxNumber,
 };
 
-use borsh::maybestd;
+use borsh::{maybestd, BorshDeserialize, BorshSerialize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use jmt::{
     storage::{Node, NodeKey},
     Version,
 };
+use sovereign_sdk::db::errors::CodecError;
 use sovereign_sdk::{
     db::{KeyDecoder, KeyEncoder, ValueCodec},
-    serial::{Decode, Encode},
     stf::{Event, EventKey},
 };
 
@@ -78,7 +78,7 @@ macro_rules! define_table_without_codec {
         pub(crate) struct $table_name;
 
         impl ::sovereign_sdk::db::Schema for $table_name {
-			const COLUMN_FAMILY_NAME: &'static str = $table_name::table_name();
+            const COLUMN_FAMILY_NAME: &'static str = $table_name::table_name();
             type Key = $key;
             type Value = $value;
         }
@@ -109,31 +109,31 @@ macro_rules! define_table_without_codec {
 /// )
 /// ```
 macro_rules! define_table_with_default_codec {
-	($(#[$docs:meta])+ ($table_name:ident) $key:ty => $value:ty) => {
-		define_table_without_codec!($(#[$docs])+ ( $table_name ) $key => $value);
+    ($(#[$docs:meta])+ ($table_name:ident) $key:ty => $value:ty) => {
+        define_table_without_codec!($(#[$docs])+ ( $table_name ) $key => $value);
 
-		impl ::sovereign_sdk::db::KeyEncoder<$table_name> for $key {
-			fn encode_key(&self) -> ::std::result::Result<::sovereign_sdk::maybestd::vec::Vec<u8>, ::sovereign_sdk::db::errors::CodecError> {
-				::std::result::Result::Ok(<Self as ::sovereign_sdk::serial::Encode>::encode_to_vec(self))
-			}
-		}
+        impl ::sovereign_sdk::db::KeyEncoder<$table_name> for $key {
+            fn encode_key(&self) -> ::std::result::Result<::sovereign_sdk::maybestd::vec::Vec<u8>, ::sovereign_sdk::db::errors::CodecError> {
+                <Self as ::borsh::BorshSerialize>::try_to_vec(self).map_err(|e| e.into())
+            }
+        }
 
         impl ::sovereign_sdk::db::KeyDecoder<$table_name> for $key {
-			fn decode_key(data: &[u8]) -> ::std::result::Result<Self, ::sovereign_sdk::db::errors::CodecError> {
-				<Self as ::sovereign_sdk::serial::Decode>::decode(&mut &data[..]).map_err(|e| e.into())
-			}
-		}
+            fn decode_key(data: &[u8]) -> ::std::result::Result<Self, ::sovereign_sdk::db::errors::CodecError> {
+                <Self as ::borsh::BorshDeserialize>::deserialize_reader(&mut &data[..]).map_err(|e| e.into())
+            }
+        }
 
-		impl ::sovereign_sdk::db::ValueCodec<$table_name> for $value {
-			fn encode_value(&self) -> ::std::result::Result<::sovereign_sdk::maybestd::vec::Vec<u8>, ::sovereign_sdk::db::errors::CodecError> {
-				::std::result::Result::Ok(<Self as ::sovereign_sdk::serial::Encode>::encode_to_vec(self))
-			}
+        impl ::sovereign_sdk::db::ValueCodec<$table_name> for $value {
+            fn encode_value(&self) -> ::std::result::Result<::sovereign_sdk::maybestd::vec::Vec<u8>, ::sovereign_sdk::db::errors::CodecError> {
+                <Self as ::borsh::BorshSerialize>::try_to_vec(self).map_err(|e| e.into())
+            }
 
-			fn decode_value(data: &[u8]) -> ::std::result::Result<Self, ::sovereign_sdk::db::errors::CodecError> {
-				<Self as ::sovereign_sdk::serial::Decode>::decode(&mut &data[..]).map_err(|e| e.into())
-			}
-		}
-	};
+            fn decode_value(data: &[u8]) -> ::std::result::Result<Self, ::sovereign_sdk::db::errors::CodecError> {
+                <Self as ::borsh::BorshDeserialize>::deserialize_reader(&mut &data[..]).map_err(|e| e.into())
+            }
+        }
+    };
 }
 
 // fn deser(target: &mut &[u8]) -> Result<Self, DeserializationError>;
@@ -184,22 +184,22 @@ define_table_without_codec!(
 
 impl KeyEncoder<JmtNodes> for NodeKey {
     fn encode_key(&self) -> sovereign_sdk::db::Result<Vec<u8>> {
-        Ok(self.encode_to_vec())
+        self.try_to_vec().map_err(CodecError::from)
     }
 }
 impl KeyDecoder<JmtNodes> for NodeKey {
     fn decode_key(data: &[u8]) -> sovereign_sdk::db::Result<Self> {
-        Ok(Self::decode(&mut &data[..])?)
+        Ok(Self::deserialize_reader(&mut &data[..])?)
     }
 }
 
 impl ValueCodec<JmtNodes> for Node {
     fn encode_value(&self) -> sovereign_sdk::db::Result<Vec<u8>> {
-        Ok(self.encode_to_vec())
+        self.try_to_vec().map_err(CodecError::from)
     }
 
     fn decode_value(data: &[u8]) -> sovereign_sdk::db::Result<Self> {
-        Ok(Self::decode(&mut &data[..])?)
+        Ok(Self::deserialize_reader(&mut &data[..])?)
     }
 }
 
@@ -212,7 +212,10 @@ impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> KeyEncoder<JmtValues> for (T
     fn encode_key(&self) -> sovereign_sdk::db::Result<Vec<u8>> {
         let mut out =
             Vec::with_capacity(self.0.as_ref().len() + std::mem::size_of::<Version>() + 8);
-        self.0.as_ref().encode(&mut out);
+        self.0
+            .as_ref()
+            .serialize(&mut out)
+            .map_err(CodecError::from)?;
         // Write the version in big-endian order so that sorting order is based on the most-significant bytes of the key
         out.write_u64::<BigEndian>(self.1)
             .expect("serialization to vec is infallible");
@@ -223,7 +226,7 @@ impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> KeyEncoder<JmtValues> for (T
 impl KeyDecoder<JmtValues> for (StateKey, Version) {
     fn decode_key(data: &[u8]) -> sovereign_sdk::db::Result<Self> {
         let mut cursor = maybestd::io::Cursor::new(data);
-        let key = Vec::<u8>::decode(&mut cursor)?;
+        let key = Vec::<u8>::deserialize_reader(&mut cursor)?;
         let version = cursor.read_u64::<BigEndian>()?;
         Ok((key, version))
     }
@@ -231,11 +234,11 @@ impl KeyDecoder<JmtValues> for (StateKey, Version) {
 
 impl ValueCodec<JmtValues> for JmtValue {
     fn encode_value(&self) -> sovereign_sdk::db::Result<Vec<u8>> {
-        Ok(self.encode_to_vec())
+        self.try_to_vec().map_err(CodecError::from)
     }
 
     fn decode_value(data: &[u8]) -> sovereign_sdk::db::Result<Self> {
-        Ok(Self::decode(&mut &data[..])?)
+        Ok(Self::deserialize_reader(&mut &data[..])?)
     }
 }
 

@@ -1,23 +1,26 @@
+use borsh::{BorshDeserialize, BorshSerialize};
+use std::io::Write;
 use std::marker::PhantomData;
 
 use crate::{Prefix, Storage, WorkingSet};
-use sovereign_sdk::serial::{Decode, Encode};
 use thiserror::Error;
 
 // SingletonKey is very similar to the unit type `()` i.e. it has only one value.
-// We provide a custom efficient Encode implementation for SingletonKey while Encode for `()`
-// is likely already implemented by an external library (like borsh), which is outside of our control.
-#[derive(Debug)]
+#[derive(Debug, BorshDeserialize)]
 pub struct SingletonKey;
 
-impl Encode for SingletonKey {
-    fn encode(&self, _: &mut impl std::io::Write) {
-        // Do nothing.
+impl BorshSerialize for SingletonKey {
+    fn serialize<W: Write>(&self, _writer: &mut W) -> std::io::Result<()> {
+        Ok(())
+    }
+
+    fn try_to_vec(&self) -> std::io::Result<Vec<u8>> {
+        Ok(vec![])
     }
 }
 
 /// Container for a single value.
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize)]
 pub struct StateValue<V> {
     _phantom: PhantomData<V>,
     prefix: Prefix,
@@ -30,7 +33,7 @@ pub enum Error {
     MissingValue(Prefix),
 }
 
-impl<V: Encode + Decode> StateValue<V> {
+impl<V: BorshSerialize + BorshDeserialize> StateValue<V> {
     pub fn new(prefix: Prefix) -> Self {
         Self {
             _phantom: PhantomData,

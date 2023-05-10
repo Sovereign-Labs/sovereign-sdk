@@ -1,11 +1,9 @@
 use std::future::Future;
 
 use serde::de::DeserializeOwned;
+use serde::Serialize;
 
-use crate::{
-    da::DaSpec,
-    serial::{Decode, Encode},
-};
+use crate::da::DaSpec;
 
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer
 /// It is *not* part of the logic that is zk-proven.
@@ -63,6 +61,6 @@ pub trait DaService {
     // TODO: add a send_transaction method https://github.com/Sovereign-Labs/sovereign/issues/208
 }
 
-pub trait SlotData: Encode + Decode + PartialEq + core::fmt::Debug + Clone {
+pub trait SlotData: Serialize + DeserializeOwned + PartialEq + core::fmt::Debug + Clone {
     fn hash(&self) -> [u8; 32];
 }

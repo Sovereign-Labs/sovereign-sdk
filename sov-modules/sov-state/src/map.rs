@@ -1,7 +1,7 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use std::marker::PhantomData;
 
 use crate::{storage::StorageKey, Prefix, Storage, WorkingSet};
-use sovereign_sdk::serial::{Decode, Encode};
 use thiserror::Error;
 
 /// A container that maps keys to values.
@@ -19,7 +19,7 @@ pub enum Error {
     MissingValue(Prefix, StorageKey),
 }
 
-impl<K: Encode, V: Encode + Decode> StateMap<K, V> {
+impl<K: BorshSerialize, V: BorshSerialize + BorshDeserialize> StateMap<K, V> {
     pub fn new(prefix: Prefix) -> Self {
         Self {
             _phantom: (PhantomData, PhantomData),

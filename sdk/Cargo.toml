@@ -8,7 +8,7 @@ resolver = "2"
 
 [dependencies]
 borsh = { workspace = true, features = ["rc"]}
-serde = { workspace = true, features = ["derive"]}
+serde = { workspace = true }
 bytes = { workspace = true }
 jmt = { workspace = true }
 sha2 = { workspace = true }

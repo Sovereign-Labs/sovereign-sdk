@@ -8,17 +8,18 @@ pub mod storage;
 mod tree_db;
 mod utils;
 mod value;
+mod witness;
 mod zk_storage;
 
 #[cfg(test)]
 mod state_tests;
 
+pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 pub use first_read_last_write_cache::cache::CacheLog;
 pub use map::StateMap;
 #[cfg(feature = "native")]
 pub use prover_storage::{delete_storage, ProverStorage};
 pub use scratchpad::*;
-use sovereign_sdk::core::traits::Witness;
 use std::{fmt::Display, str};
 pub use storage::Storage;
 use utils::AlignedVec;
@@ -80,7 +81,6 @@ pub trait MerkleProofSpec {
 }
 
 use sha2::Sha256;
-use sovereign_sdk::core::types::ArrayWitness;
 
 #[derive(Clone)]
 pub struct DefaultStorageSpec;

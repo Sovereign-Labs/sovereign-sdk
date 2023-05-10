@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
+use crate::witness::{TreeWitnessReader, Witness};
 use jmt::{JellyfishMerkleTree, KeyHash, PhantomHasher, SimpleHasher, Version};
-use sovereign_sdk::core::traits::{TreeWitnessReader, Witness};
 
 use crate::{
     internal_cache::OrderedReadsAndWrites,

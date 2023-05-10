@@ -8,6 +8,7 @@ resolver = "2"
 # TODO remove this dependency once the  Decode/Encode traits are extracted to a separate crate.
 anyhow = { workspace = true }
 borsh = { workspace = true}
+serde = { workspace = true }
 thiserror = { workspace = true }
 sovereign-db = { path = "../../db/sovereign-db", optional = true}
 sovereign-sdk = { path = "../../sdk", features = ["mocks"] }

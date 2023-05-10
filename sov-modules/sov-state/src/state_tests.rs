@@ -1,9 +1,7 @@
 use std::path::Path;
 
-use sovereign_sdk::core::types::ArrayWitness;
-
 use super::*;
-use crate::{DefaultStorageSpec, ProverStorage};
+use crate::{ArrayWitness, DefaultStorageSpec, ProverStorage};
 
 enum Operation {
     Merge,
