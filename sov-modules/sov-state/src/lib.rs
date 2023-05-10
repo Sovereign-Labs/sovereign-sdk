@@ -82,7 +82,6 @@ pub trait MerkleProofSpec {
     type Hasher: jmt::SimpleHasher;
 }
 
-use crate::witness::ArrayWitness;
 use sha2::Sha256;
 
 #[derive(Clone)]
