@@ -17,9 +17,9 @@ bech32 = { workspace = true }
 derive_more = { workspace = true }
 
 ed25519-dalek = { version = "1.0.1" }
-rand = "0.7"
+rand = {version = "0.7", optional = true}
 
 [features]
 default = ["native"]
-native = ["sov-state/native"]
+native = ["sov-state/native", "rand"]
 

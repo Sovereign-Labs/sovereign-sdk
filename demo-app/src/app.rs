@@ -165,6 +165,8 @@ pub(crate) fn create_config(
     DefaultPrivateKey,
     DefaultPrivateKey,
 ) {
+    use value_setter::ValueSetterConfig;
+
     let seq_address = generate_address(SEQ_PUB_KEY_STR);
 
     let token_config: bank::TokenConfig<DefaultContext> = bank::TokenConfig {
@@ -186,7 +188,9 @@ pub(crate) fn create_config(
 
     let value_setter_admin_private_key = DefaultPrivateKey::generate();
     let value_setter_admin_pub_key = value_setter_admin_private_key.pub_key();
-    let value_setter_admin_address: <C as Spec>::Address = value_setter_admin_pub_key.to_address();
+    let value_setter_config = ValueSetterConfig {
+        admin: value_setter_admin_pub_key.to_address(),
+    };
 
     let election_admin_private_key = DefaultPrivateKey::generate();
     let election_admin_pub_key = election_admin_private_key.pub_key();
@@ -197,7 +201,7 @@ pub(crate) fn create_config(
             sequencer_config,
             bank_config,
             election_admin_address,
-            value_setter_admin_address,
+            value_setter_config,
             accounts::AccountConfig { pub_keys: vec![] },
         ),
         value_setter_admin_private_key,

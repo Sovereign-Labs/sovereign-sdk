@@ -1,7 +1,9 @@
 use crate::{SigVerificationError, Signature};
 use borsh::{BorshDeserialize, BorshSerialize};
-use ed25519_dalek::ed25519::signature::Signature as DalekSignatureTrait;
-use ed25519_dalek::{PublicKey as DalekPublicKey, Signature as DalekSignature, Verifier};
+use ed25519_dalek::{
+    ed25519::signature::Signature as DalekSignatureTrait, PublicKey as DalekPublicKey,
+    Signature as DalekSignature, Verifier,
+};
 
 use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 
@@ -9,8 +11,6 @@ use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 pub mod private_key {
     use super::{DefaultPublicKey, DefaultSignature};
     use ed25519_dalek::{Keypair, Signer};
-
-    // TODO feature gate it in Cargo.toml
     use rand::rngs::OsRng;
 
     pub struct DefaultPrivateKey {
