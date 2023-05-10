@@ -101,12 +101,10 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
             // TODO: Switch to the batch read API once it becomes available
             let (result, proof) = untracked_jmt.get_with_proof(key_hash, latest_version)?;
-            // TODO: Question, wouldn't witness be "polluted" in case of error from below?
+            if result.as_ref() != read_value.as_ref().map(|f| f.value.as_ref()) {
+                anyhow::bail!("Bug! Incorrect value read from jmt");
+            }
             witness.add_hint(proof);
-            anyhow::ensure!(
-                result.as_ref() == read_value.as_ref().map(|f| f.value.as_ref()),
-                "Bug! Incorrect value read from jmt"
-            )
         }
 
         let tracked_jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&read_logger);
