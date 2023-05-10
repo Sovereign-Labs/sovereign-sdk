@@ -14,6 +14,10 @@ use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use types::Voter;
 
+pub struct ElectionConfig<C: sov_modules_api::Context> {
+    pub admin: C::Address,
+}
+
 #[derive(ModuleInfo, Clone)]
 pub struct Election<C: sov_modules_api::Context> {
     #[address]
@@ -46,7 +50,7 @@ pub struct Election<C: sov_modules_api::Context> {
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
     type Context = C;
 
-    type Config = C::Address;
+    type Config = ElectionConfig<C>;
 
     type CallMessage = call::CallMessage<C>;
 

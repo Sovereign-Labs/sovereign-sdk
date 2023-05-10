@@ -1,3 +1,5 @@
+use crate::ElectionConfig;
+
 use super::{
     call::CallMessage,
     query::{GetResultResponse, QueryMessage},
@@ -8,7 +10,7 @@ use sov_modules_api::Address;
 
 use sov_modules_api::{
     default_context::{DefaultContext, ZkDefaultContext},
-    default_signature::{private_key::DefaultPrivateKey, DefaultPublicKey},
+    default_signature::private_key::DefaultPrivateKey,
     Context, Module, ModuleInfo, PublicKey,
 };
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
@@ -34,7 +36,8 @@ fn test_module<C: Context>(admin: C::Address, working_set: &mut WorkingSet<C::St
 
     // Init module
     {
-        election.genesis(&admin, working_set).unwrap();
+        let config = ElectionConfig { admin };
+        election.genesis(&config, working_set).unwrap();
     }
 
     // Send candidates
