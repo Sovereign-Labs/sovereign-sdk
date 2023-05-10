@@ -101,16 +101,25 @@ pub mod test {
             assert_eq!(resp, value_setter::query::Response { value: Some(33) });
         }
     }
-    /*
+
     #[test]
     fn test_demo_values_in_cache() {
         let path = schemadb::temppath::TempPath::new();
         let mut demo = create_new_demo(&path);
 
-        demo.init_chain(create_config(LOCKED_AMOUNT + 1));
+        let value_setter_admin_private_key = DefaultPrivateKey::generate();
+        let election_admin_private_key = DefaultPrivateKey::generate();
+
+        let config = create_config(
+            LOCKED_AMOUNT + 1,
+            &value_setter_admin_private_key,
+            &election_admin_private_key,
+        );
+
+        demo.init_chain(config);
         demo.begin_slot(Default::default());
 
-        let txs = simulate_da();
+        let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
         let apply_blob_outcome = demo
             .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
@@ -148,13 +157,22 @@ pub mod test {
     #[test]
     fn test_demo_values_not_in_db() {
         let path = schemadb::temppath::TempPath::new();
+
+        let value_setter_admin_private_key = DefaultPrivateKey::generate();
+        let election_admin_private_key = DefaultPrivateKey::generate();
+
+        let config = create_config(
+            LOCKED_AMOUNT + 1,
+            &value_setter_admin_private_key,
+            &election_admin_private_key,
+        );
         {
             let mut demo = create_new_demo(&path);
 
-            demo.init_chain(create_config(LOCKED_AMOUNT + 1));
+            demo.init_chain(config);
             demo.begin_slot(Default::default());
 
-            let txs = simulate_da();
+            let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
             let apply_blob_outcome = demo
                 .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
@@ -193,12 +211,22 @@ pub mod test {
     #[test]
     fn test_sequencer_insufficient_funds() {
         let path = schemadb::temppath::TempPath::new();
+
+        let value_setter_admin_private_key = DefaultPrivateKey::generate();
+        let election_admin_private_key = DefaultPrivateKey::generate();
+
+        let config = create_config(
+            LOCKED_AMOUNT - 1,
+            &value_setter_admin_private_key,
+            &election_admin_private_key,
+        );
+
         let mut demo = create_new_demo(&path);
 
-        demo.init_chain(create_config(LOCKED_AMOUNT - 1));
+        demo.init_chain(config);
         demo.begin_slot(Default::default());
 
-        let txs = simulate_da();
+        let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
         let apply_blob_result = demo
             .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
@@ -207,5 +235,5 @@ pub mod test {
             matches!(apply_blob_result, SequencerOutcome::Ignored),
             "Batch should have been skipped due to insufficient funds"
         );
-    }*/
+    }
 }
