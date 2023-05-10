@@ -160,11 +160,9 @@ pub fn generate_address(key: &str) -> <C as Spec>::Address {
 #[cfg(test)]
 pub(crate) fn create_config(
     initial_sequencer_balance: u64,
-) -> (
-    GenesisConfig<DefaultContext>,
-    DefaultPrivateKey,
-    DefaultPrivateKey,
-) {
+    value_setter_admin_private_key: &DefaultPrivateKey,
+    election_admin_private_key: &DefaultPrivateKey,
+) -> GenesisConfig<DefaultContext> {
     use election::ElectionConfig;
     use value_setter::ValueSetterConfig;
 
@@ -187,28 +185,20 @@ pub(crate) fn create_config(
 
     let sequencer_config = create_sequencer_config(seq_address, token_address);
 
-    let value_setter_admin_private_key = DefaultPrivateKey::generate();
-    let value_setter_admin_pub_key = value_setter_admin_private_key.pub_key();
     let value_setter_config = ValueSetterConfig {
-        admin: value_setter_admin_pub_key.to_address(),
+        admin: value_setter_admin_private_key.pub_key().to_address(),
     };
 
-    let election_admin_private_key = DefaultPrivateKey::generate();
-    let election_admin_pub_key = election_admin_private_key.pub_key();
     let election_config = ElectionConfig {
-        admin: election_admin_pub_key.to_address(),
+        admin: election_admin_private_key.pub_key().to_address(),
     };
 
-    (
-        GenesisConfig::new(
-            sequencer_config,
-            bank_config,
-            election_config,
-            value_setter_config,
-            accounts::AccountConfig { pub_keys: vec![] },
-        ),
-        value_setter_admin_private_key,
-        election_admin_private_key,
+    GenesisConfig::new(
+        sequencer_config,
+        bank_config,
+        election_config,
+        value_setter_config,
+        accounts::AccountConfig { pub_keys: vec![] },
     )
 }
 

@@ -2,7 +2,9 @@
 pub mod test {
     use borsh::{BorshDeserialize, BorshSerialize};
     use sov_app_template::{Batch, SequencerOutcome};
-    use sov_modules_api::{default_context::DefaultContext, Address};
+    use sov_modules_api::{
+        default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, Address,
+    };
     use sov_state::ProverStorage;
     use sovereign_sdk::{da::BlobTransactionTrait, serial::Encode, stf::StateTransitionFunction};
 
@@ -45,14 +47,21 @@ pub mod test {
     #[test]
     fn test_demo_values_in_db() {
         let path = schemadb::temppath::TempPath::new();
-        let (config, value_setter_admin, election_admin) = create_config(LOCKED_AMOUNT + 1);
+        let value_setter_admin_private_key = DefaultPrivateKey::generate();
+        let election_admin_private_key = DefaultPrivateKey::generate();
+
+        let config = create_config(
+            LOCKED_AMOUNT + 1,
+            &value_setter_admin_private_key,
+            &election_admin_private_key,
+        );
         {
             let mut demo = create_new_demo(&path);
 
             demo.init_chain(config);
             demo.begin_slot(Default::default());
 
-            let txs = simulate_da(value_setter_admin, election_admin);
+            let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
             let apply_blob_outcome = demo
                 .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
