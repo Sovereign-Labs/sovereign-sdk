@@ -26,8 +26,6 @@ use utils::AlignedVec;
 pub use value::StateValue;
 pub use zk_storage::ZkStorage;
 
-use serde::Serialize;
-
 // A prefix prepended to each key before insertion and retrieval from the storage.
 // All the collection types in this crate are backed by the same storage instance, this means that insertions of the same key
 // to two different `StorageMaps` would collide with each other. We solve it by instantiating every collection type with a unique
@@ -77,7 +75,7 @@ impl Prefix {
 /// merkle proofs for storage access
 pub trait MerkleProofSpec {
     /// The structure that accumulates the witness data
-    type Witness: Witness + Serialize;
+    type Witness: Witness;
     /// The hash function used to compute the merkle root
     type Hasher: jmt::SimpleHasher;
 }

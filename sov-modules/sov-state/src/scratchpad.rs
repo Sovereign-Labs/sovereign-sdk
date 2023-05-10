@@ -9,7 +9,7 @@ use crate::{
 use first_read_last_write_cache::{CacheKey, CacheValue};
 
 /// A working set accumulates reads and writes on top of the underlying DB,
-/// automating witness creation.d
+/// automating witness creation.
 pub struct Delta<S: Storage> {
     inner: S,
     witness: S::Witness,

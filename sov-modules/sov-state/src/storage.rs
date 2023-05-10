@@ -95,7 +95,7 @@ impl StorageValue {
 
 /// An interface for storing and retrieving values in the storage.
 pub trait Storage: Clone {
-    type Witness: Witness + Serialize;
+    type Witness: Witness;
     /// The runtime config for this storage instance.
     type RuntimeConfig;
 
