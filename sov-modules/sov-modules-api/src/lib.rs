@@ -109,7 +109,7 @@ pub trait Spec {
         + for<'a> serde::Deserialize<'a>;
 
     #[cfg(not(feature = "native"))]
-    type Address: AddressTrait;
+    type Address: AddressTrait + BorshSerialize + BorshDeserialize;
 
     type Storage: Storage + Clone;
 
