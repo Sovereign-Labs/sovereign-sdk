@@ -1,9 +1,15 @@
-use proc_macro2::Ident;
-use quote::{format_ident, quote};
+use proc_macro2::{Ident,Span};
+use quote::{format_ident, quote, ToTokens};
 use std::str::FromStr;
-use syn::{
-    Attribute, FnArg, ImplItem, Meta, MetaList, PatType, Path, PathSegment, Signature, Type,
-};
+use syn::{Attribute, FnArg, ImplItem, Meta,
+          MetaList, PatType, Path, PathSegment, Signature, Type,
+          AngleBracketedGenericArguments, Data, DeriveInput, Field,
+          GenericArgument, Lit, NestedMeta, parse_str, PathArguments,
+          TypeParam, TypePath, Fields, FieldsNamed, parse_macro_input,
+          Generics, TypeParamBound, Token, ItemImpl};
+use syn::punctuated::Punctuated;
+use syn::spanned::Spanned;
+
 
 /// Returns an attribute with the name `rpc_method` replaced with `method`, and the index
 /// into the argument array where the attribute was found.
@@ -57,6 +63,59 @@ fn find_working_set_argument(sig: &Signature) -> Option<(usize, syn::Type)> {
     None
 }
 
+fn add_param_to_signature(signature: &mut Signature, working_set_type: &Type) {
+    let working_set_ident = syn::Ident::new("working_set", Span::call_site());
+    let pat: syn::Pat = syn::parse_quote! { #working_set_ident };
+    let ty = syn::Type::Reference(syn::TypeReference {
+        and_token: syn::token::And { spans: [Span::call_site()] },
+        lifetime: None,
+        mutability: Some(syn::token::Mut { span: Span::call_site() }),
+        elem: Box::new(working_set_type.clone()),
+    });
+    let pat_type = syn::PatType { attrs: vec![],
+        pat: Box::new(pat),
+        colon_token: syn::token::Colon { spans: [Span::call_site()] },
+        ty: Box::new(ty) };
+    let arg = syn::FnArg::Typed(pat_type);
+    signature.inputs.push(arg);
+}
+
+fn construct_working_set_ident(generic_ident: Ident) -> Type {
+    let workingset_ident = Ident::new("WorkingSet", Span::call_site());
+    let storage_ident = Ident::new("Storage", Span::call_site());
+
+    let segment_storage = PathSegment {
+        ident: storage_ident,
+        arguments: PathArguments::None,
+    };
+
+    let path_c_storage = Path {
+        leading_colon: None,
+        segments: Punctuated::from_iter(vec![generic_ident.into(), segment_storage]),
+    };
+
+    let arguments = Punctuated::from_iter(vec![
+        GenericArgument::Type(Type::Path(TypePath {
+            qself: None,
+            path: path_c_storage,
+        })),
+    ]);
+
+    let segment_workingset = PathSegment {
+        ident: workingset_ident,
+        arguments: PathArguments::AngleBracketed(AngleBracketedGenericArguments {
+            colon2_token: None,
+            lt_token: Token![<](Span::call_site()),
+            args: arguments,
+            gt_token: Token![>](Span::call_site()),
+        }),
+    };
+
+    let path_workingset = Path::from(segment_workingset);
+    Type::Path(TypePath { qself: None, path: path_workingset })
+}
+
+
 struct RpcImplBlock {
     pub(crate) type_name: Ident,
     pub(crate) methods: Vec<RpcEnabledMethod>,
@@ -86,9 +145,21 @@ impl RpcImplBlock {
             })
             .collect::<Vec<_>>();
 
+
+        // let debug_var = quote! { println!("STUFF {:?}", #(#generics_params)*,); };
+        // println!("DBG: {}", debug_var);
+
         let mut impl_trait_methods = vec![];
         let mut blanket_impl_methods = vec![];
-        let impl_trait_name = format_ident!("{}RpcImpl", self.type_name);
+        let mut outer_impl_trait_methods = vec![];
+
+        // separating to inner and outer impl
+        // we want inner to behave as the "router"
+        // while the outer acts at the AppTemplateRunner level and passes
+        // a concrete storage implementation to the router
+        let impl_trait_name = format_ident!("{}InnerRpcImpl", self.type_name);
+        let outer_impl_trait_name = format_ident!("{}OuterRpcImpl", self.type_name);
+
         for method in self.methods.iter() {
             // Extract the names of the formal arguments
             let arg_values = method
@@ -111,7 +182,19 @@ impl RpcImplBlock {
 
             let method_name = &method.method_name;
 
-            let impl_trait_method = if let Some(idx) = method.idx_of_working_set_arg {
+            // Remove the "self" argument, since the method is invoked on `self` using dot notation
+            let inner_arg_values = arg_values
+                .clone()
+                .filter(|arg| arg.to_string() != quote! { self }.to_string());
+            let impl_trait_method = quote! {
+                    #signature {
+                        Self::get_backing_impl(self).#method_name(#(#inner_arg_values,)*)
+                    }
+            };
+            impl_trait_methods.push(impl_trait_method);
+
+            // commenting because we want working set for inner
+            let outer_impl_trait_method = if let Some(idx) = method.idx_of_working_set_arg {
                 // If necessary, adjust the signature to remove the working set argument and replace it with one generated by the implementer.
                 // Remove the "self" argument as well
                 let pre_working_set_args = arg_values
@@ -124,12 +207,18 @@ impl RpcImplBlock {
                     .filter(|arg| arg.to_string() != quote! { self }.to_string());
                 let mut inputs: Vec<syn::FnArg> = signature.inputs.clone().into_iter().collect();
                 inputs.remove(idx);
+
                 signature.inputs = inputs.into_iter().collect();
+                // if let Some(ty) = &self.working_set_type {
+                //     add_param_to_signature(&mut signature,ty);
+                // }
+                // CHANGE
                 quote! {
                     #signature {
-                        Self::get_backing_impl(self).#method_name(#(#pre_working_set_args,)* &mut Self::get_working_set(self), #(#post_working_set_args),* )
+                        Self::get_runtime(self).#method_name(#(#pre_working_set_args,)* &mut Self::get_working_set(self), #(#post_working_set_args),* )
                     }
                 }
+                // CHANGE
             } else {
                 // Remove the "self" argument, since the method is invoked on `self` using dot notation
                 let arg_values = arg_values
@@ -137,11 +226,13 @@ impl RpcImplBlock {
                     .filter(|arg| arg.to_string() != quote! { self }.to_string());
                 quote! {
                     #signature {
-                        Self::get_backing_impl(self).#method_name(#(#arg_values),* )
+                        Self::get_runtime(self).#method_name(#(#arg_values),*)
                     }
                 }
             };
-            impl_trait_methods.push(impl_trait_method);
+
+            outer_impl_trait_methods.push(outer_impl_trait_method);
+
 
             signature.output = wrap_in_jsonprsee_result(&signature.output);
             let blanket_impl_method = if let Some(idx) = method.idx_of_working_set_arg {
@@ -150,36 +241,46 @@ impl RpcImplBlock {
                 let post_working_set_args = arg_values.clone().skip(idx + 1);
                 quote! {
                     #signature {
-                        Ok(<Self as #impl_trait_name < #(#generics_params)*, >>::#method_name(#(#pre_working_set_args,)* #(#post_working_set_args),* ))
+                        Ok(<Self as #outer_impl_trait_name < #(#generics_params)*, >>::#method_name(#(#pre_working_set_args,)* #(#post_working_set_args),* ))
                     }
                 }
             } else {
                 quote! {
                     #signature {
-                        Ok(<Self as #impl_trait_name < #(#generics_params)*, >>::#method_name(#(#arg_values),*))
+                        Ok(<Self as #outer_impl_trait_name < #(#generics_params)*, >>::#method_name(#(#arg_values),*))
                     }
                 }
             };
 
             blanket_impl_methods.push(blanket_impl_method);
         }
+        // let base_type = format_ident!("TestRuntime");
+        // let generic_param = format_ident!("MockContext");
 
         let rpc_impl_trait = if let Some(ref working_set_type) = self.working_set_type {
             quote! {
+
                 pub trait #impl_trait_name #generics {
                     fn get_backing_impl(&self) -> & #type_name < #(#generics_params)*, >;
-                    // TODO: Extract this method into a trait
-                    fn get_working_set(&self) -> #working_set_type;
 
                     #(#impl_trait_methods)*
+                }
+
+                pub trait #outer_impl_trait_name #generics {
+                    type InnerTraitType: #impl_trait_name < #(#generics_params)*, >;
+                    fn get_working_set(&self) -> #working_set_type;
+                    fn get_runtime(&self) -> &Self::InnerTraitType;
+                    #(#outer_impl_trait_methods)*
                 }
             }
         } else {
             quote! {
                 pub trait #impl_trait_name #generics {
                     fn get_backing_impl(&self) -> & #type_name < #(#generics_params)*, >;
-
                     #(#impl_trait_methods)*
+                }
+                pub trait #outer_impl_trait_name #generics {
+                    #(#outer_impl_trait_methods)*
                 }
             }
         };
@@ -195,7 +296,10 @@ impl RpcImplBlock {
         .expect("Failed to parse generics without braces as token stream");
         let rpc_server_trait_name = format_ident!("{}RpcServer", self.type_name);
         let blanket_impl = quote! {
-            impl <MacroGeneratedTypeWithLongNameToAvoidCollisions: #impl_trait_name #ty_generics + Send + Sync + 'static,  #blanket_impl_generics_without_braces > #rpc_server_trait_name #ty_generics for MacroGeneratedTypeWithLongNameToAvoidCollisions #where_clause {
+            impl <MacroGeneratedTypeWithLongNameToAvoidCollisions: #outer_impl_trait_name #ty_generics
+            + Send
+            + Sync
+            + 'static,  #blanket_impl_generics_without_braces > #rpc_server_trait_name #ty_generics for MacroGeneratedTypeWithLongNameToAvoidCollisions #where_clause {
                 #(#blanket_impl_methods)*
             }
         };
@@ -339,3 +443,191 @@ pub(crate) fn derive_rpc(
 
     build_rpc_trait(&attrs, type_name.clone(), input)
 }
+
+fn extract_type_name_and_generics(ty: &Type) -> Option<(String, Vec<GenericArgument>)> {
+    match ty {
+        Type::Path(TypePath { path, .. }) => {
+            path.segments.last().map(|segment| {
+                let type_name = segment.ident.to_string();
+                let generics = match &segment.arguments {
+                    PathArguments::AngleBracketed(AngleBracketedGenericArguments { args, .. }) => {
+                        args.iter().map(|x| x.clone())
+                            .collect::<Vec<GenericArgument>>()
+                    }
+                    _ => vec![],
+                };
+                (type_name, generics)
+            })
+        }
+        _ => None,
+    }
+}
+
+fn extract_type_name(ty: &Type) -> Option<String> {
+    match ty {
+        Type::Path(TypePath { path, .. }) => {
+            path.segments.last().map(|segment| segment.ident.to_string())
+        }
+        _ => None,
+    }
+}
+
+
+fn get_generic_matching_constraint(gens: &Generics, trait_bound: &Path) -> Option<Ident> {
+    let trait_bound_last_segment = trait_bound.segments.last()?.ident.to_string();
+    gens.type_params().find_map(|type_param| {
+        for bound in &type_param.bounds {
+            if let syn::TypeParamBound::Trait(ref trait_bound_ref) = bound {
+                let bound_last_segment = trait_bound_ref.path.segments.last()?.ident.to_string();
+                if bound_last_segment == trait_bound_last_segment {
+                    return Some(type_param.ident.clone());
+                }
+            }
+        }
+        None
+    })
+}
+
+fn get_first_generic_with_constraint(gens: &Generics) -> Option<Ident> {
+    gens.type_params().find_map(|type_param| {
+        let TypeParam { ident, bounds, .. } = type_param;
+
+        if bounds.iter().any(|bound| match bound {
+            TypeParamBound::Trait(_) => true,
+            _ => false,
+        }) {
+            Some(ident.clone())
+        } else {
+            None
+        }
+    })
+}
+
+pub(crate) fn rpc_impls(input: DeriveInput) -> Result<proc_macro::TokenStream, syn::Error> {
+
+    // removing parameter
+    // // currently, we're just letting the storage name "ProverStorage" or "MockStorage" etc be
+    // // passed in directly using an attribute. the reason is that runtime doesn't have any
+    // // visibility into the actual storage type being used. would require some modifications
+    // // to get around it. One useful thing would be to do this optionally and default to the
+    // // most common kind of storage used.
+    // let storage_parameter = input.attrs.iter().find_map(|attr| {
+    //     if attr.path.is_ident("storage") {
+    //         if let Ok(Meta::NameValue(name_value)) = attr.parse_meta() {
+    //             if let Lit::Str(lit_str) = name_value.lit {
+    //                 let storage_ident: Ident = parse_str(&lit_str.value()).unwrap();
+    //                 return Some(storage_ident);
+    //             }
+    //         }
+    //     }
+    //     None
+    // }).expect("Rpc derive macro requires a storage parameter");
+
+    let struct_name = input.ident;
+    let struct_generics = input.generics;
+    let struct_generics_params: Vec<Ident> =
+        struct_generics
+            .type_params()
+            .into_iter()
+            .map(|x| x.ident.clone())
+            .collect();
+
+    // we're checking to see which generic param of the struct the "Context" trait bound applies to
+    // I'm not sure if there's a better way to handle this. would be ideal to somehow pass in the actual
+    // trait itself, but i'm not sure if a there's a way to do that
+    let trait_path: Path = parse_str("::Context").unwrap();
+
+    // the logic here is to find the first generic param that has the traitbound "Context" specified
+    // failing that, the code looks for the first generic param that has ANY trait bound. we can
+    // make this more robust going forward
+    let generic_ident = get_generic_matching_constraint(&struct_generics, &trait_path);
+    let generic_ident = match generic_ident {
+        None => get_first_generic_with_constraint(&struct_generics).expect("no matches to extract generics for RPC"),
+        Some(id) => id
+    };
+    let fields = if let Data::Struct(data_struct) = input.data {
+        data_struct.fields
+    } else {
+        panic!("rpc macro is only valid for struct");
+    };
+
+    let impls = fields.into_iter().map(|field| {
+        let (field_type_name, field_type_generics) =
+            extract_type_name_and_generics(&field.ty)
+                .expect("couldn't parse types in runtime");
+        let rpc_impl_ident = Ident::new(&format!("{}InnerRpcImpl", field_type_name), field.span());
+        let field_name = field.ident.as_ref().expect("must have named fields");
+        let field_type = field.ty;
+
+        // the actual impls being generated
+        quote! {
+            impl #struct_generics #rpc_impl_ident<#(#field_type_generics),*> for #struct_name <#(#struct_generics_params),*>  {
+                fn get_backing_impl(&self) -> &#field_type {
+                    &self.#field_name
+                }
+            }
+        }
+    });
+
+    let rpc_storage_trait = quote! {
+        pub trait RpcStorage<S: Storage> {
+            fn get_storage(&self) -> S;
+        }
+    };
+
+    let output = quote! {
+        #(#impls)*
+        #rpc_storage_trait
+    };
+    Ok(output.into())
+}
+
+pub(crate) fn rpc_outer_impls(args: proc_macro2::TokenStream,
+                              input: syn::ItemImpl,) -> Result<proc_macro::TokenStream, syn::Error> {
+    let type_name = &input.self_ty;
+    let generics = &input.generics;
+    let attrs = &input.attrs;
+    // let original_impl = input;
+    let trait_type: syn::Type = syn::parse2(args)
+        .expect("Expected a valid type");
+
+    let mut trait_type_path = match &trait_type {
+        syn::Type::Path(type_path) => type_path.clone(),
+        _ => panic!("Expected a path type"),
+    };
+
+    let last_segment = trait_type_path.path.segments.last_mut().unwrap();
+    last_segment.ident = syn::Ident::new(&format!("{}OuterRpcImpl", last_segment.ident), last_segment.ident.span());
+
+    let inner_trait_type_path: syn::TypePath = syn::parse_str(&format!("Runtime<{}>", quote! { #trait_type })).unwrap();
+
+    let output = quote! {
+
+        #(#attrs)*
+        #input
+
+        impl #generics #trait_type_path for #type_name
+        where
+        {
+            // type InnerTraitType = #inner_trait_type_path;
+            type InnerTraitType = TestRuntime::<MockContext>;
+            fn get_working_set(&self) -> WorkingSet<<MockContext as Spec>::Storage> {
+                // WorkingSet::new(self.inner().current_storage.clone())
+                WorkingSet::new(self.get_storage())
+            }
+            fn get_runtime(&self) -> &Self::InnerTraitType {
+                // &self.inner().runtime
+                &self
+            }
+        }
+
+    };
+
+    Ok(output.into())
+}
+
+
+
+
+
+

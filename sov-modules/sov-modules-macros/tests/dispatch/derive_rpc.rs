@@ -2,6 +2,10 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_macros::rpc_gen;
 use sov_state::{ProverStorage, WorkingSet};
 
+// pub struct TestAppRunner<C: Context>(pub TestApp<C>);
+// pub type NativeAppRunner = TestAppRunner<MockContext>;
+// pub type TestApp<C> = AppTemplate<C, TestAppTxVerifier<C>, TestRuntime<C>, TestAppTxHooks<C>>;
+
 pub struct TestStruct<C: sov_modules_api::Context> {
     pub phantom: std::marker::PhantomData<C>,
 }
@@ -33,9 +37,17 @@ pub struct TestRuntime<C: sov_modules_api::Context> {
     test_struct: TestStruct<C>,
 }
 
-impl TestStructRpcImpl<DefaultContext> for TestRuntime<DefaultContext> {
+
+impl TestStructInnerRpcImpl<MockContext> for TestRuntime<DefaultContext> {
     fn get_backing_impl(&self) -> &TestStruct<DefaultContext> {
         &self.test_struct
+    }
+}
+
+impl TestStructOuterRpcImpl<MockContext> for TestRuntime<DefaultContext> {
+    type InnerTraitType = TestRuntime<DefaultContext>;
+    fn get_runtime(&self) -> &Self::InnerTraitType {
+        self
     }
     fn get_working_set(&self) -> WorkingSet<<DefaultContext as sov_modules_api::Spec>::Storage> {
         let native_storage = ProverStorage::temporary();

@@ -146,3 +146,19 @@ fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> To
         Err(err) => err.to_compile_error().into(),
     }
 }
+
+/// This proc macro generates the actual implementations for the trait created above for the module
+/// It iterates over each struct
+#[proc_macro_derive(rpc)]
+pub fn rpc_impls(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+    handle_macro_error(dispatch::derive_rpc::rpc_impls(input))
+}
+
+/// This proc macro generates the actual implementations for the trait created above for the module
+/// It iterates over each struct
+#[proc_macro_attribute]
+pub fn expose_rpc(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as syn::ItemImpl);
+    handle_macro_error(dispatch::derive_rpc::rpc_outer_impls(attr.into(), input).map(|ok| ok.into()))
+}
