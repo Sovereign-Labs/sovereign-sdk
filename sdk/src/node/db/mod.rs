@@ -8,8 +8,6 @@ use std::fmt::Debug;
 
 use self::errors::CodecError;
 pub mod errors;
-mod slot;
-pub use slot::*;
 
 pub type ColumnFamilyName = &'static str;
 

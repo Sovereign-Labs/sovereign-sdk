@@ -19,13 +19,10 @@ pub use jmt::SimpleHasher as Hasher;
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
 
-use sov_state::{Storage, WorkingSet};
+use sov_state::{Storage, Witness, WorkingSet};
 pub use sovereign_sdk::core::traits::AddressTrait;
-use sovereign_sdk::{
-    core::traits::Witness,
-    serial::{Decode, Encode},
-};
 
+use borsh::{BorshDeserialize, BorshSerialize};
 use core::fmt::{self, Debug, Display};
 use thiserror::Error;
 
@@ -35,6 +32,7 @@ impl AsRef<[u8]> for Address {
     }
 }
 
+#[cfg(feature = "native")]
 impl AddressTrait for Address {}
 
 #[cfg_attr(feature = "native", derive(serde::Serialize, serde::Deserialize))]
@@ -98,8 +96,9 @@ pub trait PublicKey {
 pub trait Spec {
     #[cfg(feature = "native")]
     type Address: AddressTrait
+        + BorshSerialize
+        + BorshDeserialize
         + Into<AddressBech32>
-        + serde::Serialize
         + for<'a> serde::Deserialize<'a>;
 
     #[cfg(not(feature = "native"))]
@@ -149,10 +148,10 @@ pub trait Module {
     type Config;
 
     /// Module defined argument to the call method.
-    type CallMessage: Decode + Encode + Debug = NonInstantiable;
+    type CallMessage: Debug + BorshSerialize + BorshDeserialize = NonInstantiable;
 
     /// Module defined argument to the query method.
-    type QueryMessage: Decode + Encode + Debug = NonInstantiable;
+    type QueryMessage: Debug + BorshSerialize + BorshDeserialize = NonInstantiable;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(

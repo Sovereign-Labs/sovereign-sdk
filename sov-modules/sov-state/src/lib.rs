@@ -8,22 +8,25 @@ pub mod storage;
 mod tree_db;
 mod utils;
 mod value;
+mod witness;
 mod zk_storage;
 
 #[cfg(test)]
 mod state_tests;
 
+pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 pub use first_read_last_write_cache::cache::CacheLog;
 pub use map::StateMap;
 #[cfg(feature = "native")]
 pub use prover_storage::{delete_storage, ProverStorage};
 pub use scratchpad::*;
-use sovereign_sdk::core::traits::Witness;
 use std::{fmt::Display, str};
 pub use storage::Storage;
 use utils::AlignedVec;
 pub use value::StateValue;
 pub use zk_storage::ZkStorage;
+
+use serde::Serialize;
 
 // A prefix prepended to each key before insertion and retrieval from the storage.
 // All the collection types in this crate are backed by the same storage instance, this means that insertions of the same key
@@ -74,13 +77,13 @@ impl Prefix {
 /// merkle proofs for storage access
 pub trait MerkleProofSpec {
     /// The structure that accumulates the witness data
-    type Witness: Witness;
+    type Witness: Witness + Serialize;
     /// The hash function used to compute the merkle root
     type Hasher: jmt::SimpleHasher;
 }
 
+use crate::witness::ArrayWitness;
 use sha2::Sha256;
-use sovereign_sdk::core::types::ArrayWitness;
 
 #[derive(Clone)]
 pub struct DefaultStorageSpec;

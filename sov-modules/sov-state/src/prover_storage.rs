@@ -1,5 +1,6 @@
 use std::{fs, path::Path, sync::Arc};
 
+use crate::witness::Witness;
 use crate::{
     internal_cache::OrderedReadsAndWrites,
     storage::{StorageKey, StorageValue},
@@ -8,7 +9,6 @@ use crate::{
 };
 use jmt::{storage::TreeWriter, JellyfishMerkleTree, KeyHash, PhantomHasher, SimpleHasher};
 use sovereign_db::state_db::StateDB;
-use sovereign_sdk::core::traits::Witness;
 
 pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,
@@ -101,6 +101,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
             // TODO: Switch to the batch read API once it becomes available
             let (result, proof) = untracked_jmt.get_with_proof(key_hash, latest_version)?;
+            // TODO: Question, wouldn't witness be "polluted" in case of error from below?
             witness.add_hint(proof);
             anyhow::ensure!(
                 result.as_ref() == read_value.as_ref().map(|f| f.value.as_ref()),

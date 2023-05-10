@@ -1,10 +1,11 @@
 #[cfg(test)]
 pub mod test {
     use borsh::{BorshDeserialize, BorshSerialize};
+    use serde::{Deserialize, Serialize};
     use sov_app_template::{Batch, SequencerOutcome};
     use sov_modules_api::{default_context::DefaultContext, Address};
     use sov_state::ProverStorage;
-    use sovereign_sdk::{da::BlobTransactionTrait, serial::Encode, stf::StateTransitionFunction};
+    use sovereign_sdk::{da::BlobTransactionTrait, stf::StateTransitionFunction};
 
     use crate::{
         app::{create_config, create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
@@ -13,7 +14,7 @@ pub mod test {
         runtime::Runtime,
     };
 
-    #[derive(BorshDeserialize, BorshSerialize, Debug, Clone)]
+    #[derive(Debug, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
     pub struct TestBlob {
         address: Address,
         data: Vec<u8>,
@@ -37,7 +38,7 @@ pub mod test {
         pub fn new(batch: Batch, address: &[u8]) -> Self {
             Self {
                 address: TryInto::<Address>::try_into(address).unwrap(),
-                data: batch.encode_to_vec(),
+                data: batch.try_to_vec().unwrap(),
             }
         }
     }

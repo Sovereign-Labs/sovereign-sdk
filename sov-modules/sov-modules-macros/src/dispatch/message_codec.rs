@@ -22,12 +22,12 @@ impl<'a> StructDef<'a> {
             quote::quote! {
                 pub (crate) fn #fn_call_name(data: <#ty as sov_modules_api::Module>::CallMessage) -> std::vec::Vec<u8> {
                     let call = #call_enum::<C>::#variant(data);
-                    sovereign_sdk::serial::Encode::encode_to_vec(&call)
+                    ::borsh::BorshSerialize::try_to_vec(&call).unwrap()
                 }
 
                 pub (crate) fn #fn_query_name(data: <#ty as sov_modules_api::Module>::QueryMessage)-> std::vec::Vec<u8>{
                     let query = #query_enum::<C>::#variant(data);
-                    sovereign_sdk::serial::Encode::encode_to_vec(&query)
+                    ::borsh::BorshSerialize::try_to_vec(&query).unwrap()
                 }
             }
         });

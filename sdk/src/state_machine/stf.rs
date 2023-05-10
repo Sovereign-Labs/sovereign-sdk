@@ -2,8 +2,6 @@ use crate::{da::BlobTransactionTrait, maybestd::rc::Rc};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::serial::DecodeBorrowed;
-
 /// An address on the DA layer. Opaque to the StateTransitionFunction
 pub type OpaqueAddress = Rc<Vec<u8>>;
 
@@ -79,7 +77,7 @@ pub trait StateTransitionFunction {
 
     /// Witness is a data that is produced during actual batch execution
     /// or validated together with proof during verification
-    type Witness: Default;
+    type Witness: Default + Serialize;
 
     /// A proof that the sequencer has misbehaved. For example, this could be a merkle proof of a transaction
     /// with an invalid signature
@@ -135,6 +133,7 @@ pub trait StateTransitionRunner<T: StateTransitionConfig> {
     // fn has_been_initialized(&self) -> bool;
 }
 
+// TODO: derive if fine, new feature and make default "borsh"
 #[derive(Debug, Clone, Copy, BorshSerialize, BorshDeserialize)]
 pub enum ConsensusRole {
     Prover,
@@ -189,47 +188,5 @@ impl ConsensusSetUpdate<OpaqueAddress> {
             address: faulty_sequencer,
             new_role: None,
         }
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum ConsensusMessage<B, P> {
-    Batch(B),
-    Proof(P),
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum ConsensusMessageDecodeError<BatchErr, ProofErr> {
-    Batch(BatchErr),
-    Proof(ProofErr),
-    NoTag,
-    InvalidTag { max_allowed: u8, got: u8 },
-}
-
-impl<'de, P: DecodeBorrowed<'de>, B: DecodeBorrowed<'de>> DecodeBorrowed<'de>
-    for ConsensusMessage<B, P>
-{
-    type Error = ConsensusMessageDecodeError<B::Error, P::Error>;
-    fn decode_from_slice(target: &'de [u8]) -> Result<Self, Self::Error> {
-        Ok(
-            match *target
-                .iter()
-                .next()
-                .ok_or(ConsensusMessageDecodeError::NoTag)?
-            {
-                0 => Self::Batch(
-                    B::decode_from_slice(&target[1..])
-                        .map_err(ConsensusMessageDecodeError::Batch)?,
-                ),
-                1 => Self::Proof(
-                    P::decode_from_slice(&target[1..])
-                        .map_err(ConsensusMessageDecodeError::Proof)?,
-                ),
-                _ => Err(ConsensusMessageDecodeError::InvalidTag {
-                    max_allowed: 1,
-                    got: target[0],
-                })?,
-            },
-        )
     }
 }
