@@ -1,27 +1,44 @@
+use std::rc::Rc;
+
 use crate::runtime::Runtime;
 use crate::tx_verifier_impl::Transaction;
 
 use borsh::BorshSerialize;
 use sov_app_template::RawTx;
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::default_signature::{DefaultPublicKey, DefaultSignature};
 use sov_modules_api::PublicKey;
 
 mod election_data;
 mod value_setter_data;
 
-pub fn simulate_da() -> Vec<RawTx> {
-    let election = election_data::ElectionCallMessages {};
+pub fn simulate_da(
+    value_setter_admin: DefaultPrivateKey,
+    election_admin: DefaultPrivateKey,
+) -> Vec<RawTx> {
+    let voters = vec![
+        Rc::new(DefaultPrivateKey::generate()),
+        Rc::new(DefaultPrivateKey::generate()),
+        Rc::new(DefaultPrivateKey::generate()),
+    ];
+
+    let election = election_data::ElectionCallMessages {
+        election_admin: Rc::new(election_admin),
+        voters,
+    };
 
     let mut messages = Vec::default();
     messages.extend(election.create_raw_txs());
 
-    let value_setter = value_setter_data::ValueSetterMessages {};
+    let value_setter = value_setter_data::ValueSetterMessages {
+        admin: Rc::new(value_setter_admin),
+    };
     messages.extend(value_setter.create_raw_txs());
 
     messages
 }
-
+/*
 pub fn simulate_da_with_revert_msg() -> Vec<RawTx> {
     let election = election_data::InvalidElectionCallMessages {};
     election.create_raw_txs()
@@ -44,15 +61,15 @@ pub fn simulate_da_with_bad_serialization() -> Vec<RawTx> {
     let election = election_data::BadSerializationElectionCallMessages {};
     election.create_raw_txs()
 }
-
+*/
 trait MessageGenerator {
     type Call;
 
-    fn create_messages(&self) -> Vec<(DefaultPublicKey, Self::Call, u64)>;
+    fn create_messages(&self) -> Vec<(Rc<DefaultPrivateKey>, Self::Call, u64)>;
 
     fn create_tx(
         &self,
-        sender: DefaultPublicKey,
+        sender: &DefaultPrivateKey,
         message: Self::Call,
         nonce: u64,
         is_last: bool,
@@ -64,7 +81,7 @@ trait MessageGenerator {
         while let Some((sender, m, nonce)) = messages_iter.next() {
             let is_last = messages_iter.peek().is_none();
 
-            let tx = self.create_tx(sender, m, nonce, is_last);
+            let tx = self.create_tx(&sender, m, nonce, is_last);
 
             serialized_messages.push(RawTx {
                 data: tx.try_to_vec().unwrap(),

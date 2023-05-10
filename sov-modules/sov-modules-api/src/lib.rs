@@ -107,13 +107,7 @@ pub trait Spec {
 
     type Storage: Storage + Clone;
 
-    type PublicKey: borsh::BorshDeserialize
-        + borsh::BorshSerialize
-        + Eq
-        + TryFrom<&'static str>
-        + Clone
-        + Debug
-        + PublicKey;
+    type PublicKey: borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug + PublicKey;
 
     type Hasher: Hasher;
 

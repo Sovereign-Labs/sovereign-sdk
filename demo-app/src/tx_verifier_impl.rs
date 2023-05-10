@@ -49,6 +49,7 @@ impl<C: Context> TxVerifier for DemoAppTxVerifier<C> {
         let mut hasher = C::Hasher::new();
         hasher.update(&tx.runtime_msg);
         hasher.update(&tx.nonce.to_le_bytes());
+
         let msg_hash = hasher.finalize();
 
         tx.signature.verify(&tx.pub_key, msg_hash)?;

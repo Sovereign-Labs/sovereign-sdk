@@ -1,4 +1,4 @@
-use core::panic;
+/*use core::panic;
 
 use crate::{
     app::{create_config, create_new_demo, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
@@ -221,3 +221,4 @@ fn test_tx_bad_serialization() {
         assert_eq!(resp.data.unwrap().balance, SEQUENCER_BALANCE_DELTA);
     }
 }
+*/

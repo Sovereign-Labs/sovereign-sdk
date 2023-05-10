@@ -118,6 +118,8 @@ where
         let sequencer = blob.sender();
         let sequencer = sequencer.as_ref();
 
+        println!("1");
+
         if let Err(e) = self
             .tx_hooks
             .enter_apply_blob(sequencer, &mut batch_workspace)
@@ -134,6 +136,8 @@ where
                 inner: SequencerOutcome::Ignored,
             };
         }
+
+        println!("2");
 
         // Commit `enter_apply_batch` changes.
         batch_workspace = batch_workspace.commit().to_revertable();
@@ -152,6 +156,7 @@ where
             }
         };
 
+        println!("3");
         // Run the stateless verification, since it is stateless we don't commit.
         let txs = match self
             .tx_verifier
@@ -159,6 +164,7 @@ where
         {
             Ok(txs) => txs,
             Err(e) => {
+                println!("Error {:?}", e);
                 // Revert on error
                 let batch_workspace = batch_workspace.revert();
                 self.working_set = Some(batch_workspace.revert());
@@ -170,6 +176,8 @@ where
                 };
             }
         };
+
+        println!("4");
 
         let mut tx_receipts = Vec::with_capacity(txs.len());
 

@@ -16,6 +16,9 @@ sha2 = { workspace = true }
 bech32 = { workspace = true }
 derive_more = { workspace = true }
 
+ed25519-dalek = { version = "1.0.1" }
+rand = "0.7"
+
 [features]
 default = ["native"]
 native = ["sov-state/native"]
