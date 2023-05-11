@@ -9,8 +9,9 @@ mod encode;
 mod error;
 mod prefix;
 mod response;
-mod tests;
 
+#[cfg(test)]
+mod tests;
 pub use crate::bech32::AddressBech32;
 pub use dispatch::{DispatchCall, DispatchQuery, Genesis};
 pub use error::Error;
