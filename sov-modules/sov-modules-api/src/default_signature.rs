@@ -70,7 +70,7 @@ pub struct DefaultSignature {
 impl BorshDeserialize for DefaultSignature {
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
         let mut buffer = [0; SIGNATURE_LENGTH];
-        reader.read_exact(&mut buffer).unwrap();
+        reader.read_exact(&mut buffer)?;
 
         Ok(Self {
             msg_sig: DalekSignature::from_bytes(&buffer).unwrap(),
