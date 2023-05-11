@@ -51,7 +51,7 @@ impl BorshDeserialize for DefaultPublicKey {
         reader.read_exact(&mut buffer)?;
 
         Ok(Self {
-            pub_key: DalekPublicKey::from_bytes(&buffer).unwrap(),
+            msg_sig: DalekSignature::from_bytes(&buffer)?,
         })
     }
 }
