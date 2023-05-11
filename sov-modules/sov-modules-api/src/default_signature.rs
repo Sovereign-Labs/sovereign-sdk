@@ -73,7 +73,7 @@ impl BorshDeserialize for DefaultSignature {
         reader.read_exact(&mut buffer)?;
 
         Ok(Self {
-            msg_sig: DalekSignature::from_bytes(&buffer).unwrap(),
+            msg_sig: DalekSignature::from_bytes(&buffer)?,
         })
     }
 }
