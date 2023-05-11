@@ -13,6 +13,7 @@ members = [
     "sov-modules/sov-modules-impl/accounts",
     "sov-modules/sov-modules-impl/bank",
     "sov-modules/sov-modules-impl/sequencer",
+    "sov-modules/sov-modules-impl/module-template",
     "sov-modules/sov-modules-impl/examples/value-setter",
     "sov-modules/sov-modules-impl/examples/election",
     "sov-modules/sov-modules-impl/integration-tests",
