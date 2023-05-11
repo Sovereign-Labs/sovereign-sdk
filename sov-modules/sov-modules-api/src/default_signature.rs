@@ -48,7 +48,7 @@ pub struct DefaultPublicKey {
 impl BorshDeserialize for DefaultPublicKey {
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
         let mut buffer = [0; PUBLIC_KEY_LENGTH];
-        reader.read_exact(&mut buffer).unwrap();
+        reader.read_exact(&mut buffer)?;
 
         Ok(Self {
             pub_key: DalekPublicKey::from_bytes(&buffer).unwrap(),
