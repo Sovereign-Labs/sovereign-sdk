@@ -9,7 +9,7 @@ pub mod test {
     use sovereign_sdk::{da::BlobTransactionTrait, serial::Encode, stf::StateTransitionFunction};
 
     use crate::{
-        app::{create_config, create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
+        app::{create_demo_config, create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
         data_generation::{simulate_da, QueryGenerator},
         helpers::query_and_deserialize,
         runtime::Runtime,
@@ -50,7 +50,7 @@ pub mod test {
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = create_config(
+        let config = create_demo_config(
             LOCKED_AMOUNT + 1,
             &value_setter_admin_private_key,
             &election_admin_private_key,
@@ -110,7 +110,7 @@ pub mod test {
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = create_config(
+        let config = create_demo_config(
             LOCKED_AMOUNT + 1,
             &value_setter_admin_private_key,
             &election_admin_private_key,
@@ -161,7 +161,7 @@ pub mod test {
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = create_config(
+        let config = create_demo_config(
             LOCKED_AMOUNT + 1,
             &value_setter_admin_private_key,
             &election_admin_private_key,
@@ -215,7 +215,7 @@ pub mod test {
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = create_config(
+        let config = create_demo_config(
             LOCKED_AMOUNT - 1,
             &value_setter_admin_private_key,
             &election_admin_private_key,

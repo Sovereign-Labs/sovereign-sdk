@@ -1,7 +1,7 @@
 use core::panic;
 
 use crate::{
-    app::{create_config, create_new_demo, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
+    app::{create_demo_config, create_new_demo, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
     data_generation::{
         simulate_da_with_bad_serialization, simulate_da_with_bad_sig, simulate_da_with_revert_msg,
         QueryGenerator,
@@ -26,7 +26,7 @@ fn test_tx_revert() {
     let value_setter_admin_private_key = DefaultPrivateKey::generate();
     let election_admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_config(
+    let config = create_demo_config(
         SEQUENCER_BALANCE,
         &value_setter_admin_private_key,
         &election_admin_private_key,
@@ -96,7 +96,7 @@ fn test_tx_bad_sig() {
     let value_setter_admin_private_key = DefaultPrivateKey::generate();
     let election_admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_config(
+    let config = create_demo_config(
         SEQUENCER_BALANCE,
         &value_setter_admin_private_key,
         &election_admin_private_key,
@@ -201,7 +201,7 @@ fn test_tx_bad_serialization() {
     let value_setter_admin_private_key = DefaultPrivateKey::generate();
     let election_admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_config(
+    let config = create_demo_config(
         SEQUENCER_BALANCE,
         &value_setter_admin_private_key,
         &election_admin_private_key,

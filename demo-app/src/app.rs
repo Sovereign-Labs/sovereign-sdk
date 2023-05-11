@@ -36,7 +36,7 @@ pub type DemoApp<C> = AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTx
 pub const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 pub const LOCKED_AMOUNT: u64 = 200;
 pub const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
-pub const TOKEN_NAME: &str = "test-token";
+pub const TOKEN_NAME: &str = "sov-test-token";
 
 #[cfg(feature = "native")]
 impl StateTransitionRunner<ProverConfig> for DemoAppRunner<DefaultContext> {
@@ -85,7 +85,11 @@ impl StateTransitionRunner<ZkConfig> for DemoAppRunner<ZkDefaultContext> {
 }
 
 #[cfg(feature = "native")]
-pub fn create_config(
+/// Creates config for a rollup with some default settings, the config is used in demos and tests.
+///
+/// * `value_setter_admin_private_key` - Private key for the ValueSetter module admin.
+/// * `election_admin_private_key` - Private key for the Election module admin.
+pub fn create_demo_config(
     initial_sequencer_balance: u64,
     value_setter_admin_private_key: &DefaultPrivateKey,
     election_admin_private_key: &DefaultPrivateKey,

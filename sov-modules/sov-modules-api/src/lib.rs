@@ -70,8 +70,8 @@ impl Display for Address {
 
 #[derive(Error, Debug)]
 pub enum SigVerificationError {
-    #[error("Bad signature")]
-    BadSignature,
+    #[error("Bad signature {0}")]
+    BadSignature(String),
 }
 
 /// Signature used in the module system.

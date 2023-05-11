@@ -97,6 +97,6 @@ impl Signature for DefaultSignature {
         pub_key
             .pub_key
             .verify_strict(&msg_hash, &self.msg_sig)
-            .map_err(|_| SigVerificationError::BadSignature)
+            .map_err(|e| SigVerificationError::BadSignature(e.to_string()))
     }
 }
