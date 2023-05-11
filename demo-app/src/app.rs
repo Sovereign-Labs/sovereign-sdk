@@ -9,7 +9,7 @@ use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
 use sov_modules_api::Address;
 use sov_modules_api::Context;
-//#[cfg(test)]
+#[cfg(test)]
 use sov_modules_api::{PublicKey, Spec};
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
@@ -24,7 +24,7 @@ use std::path::Path;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Hasher;
 
-//#[cfg(test)]
+#[cfg(test)]
 pub(crate) type C = DefaultContext;
 
 pub struct DemoAppRunner<C: Context>(pub DemoApp<C>);
@@ -152,6 +152,7 @@ pub(crate) fn create_sequencer_config(
     }
 }
 
+#[cfg(test)]
 pub fn generate_address(key: &str) -> <C as Spec>::Address {
     let hash = <C as Spec>::Hasher::hash(key.as_bytes());
     Address::from(hash)

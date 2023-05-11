@@ -8,7 +8,6 @@ resolver = "2"
 sov-modules-api = { path = "../../sov-modules-api"}
 sov-state = { path = "../../sov-state", features = ["temp"] }
 
-
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }

@@ -2,7 +2,7 @@ use crate::{SigVerificationError, Signature};
 use borsh::{BorshDeserialize, BorshSerialize};
 use ed25519_dalek::{
     ed25519::signature::Signature as DalekSignatureTrait, PublicKey as DalekPublicKey,
-    Signature as DalekSignature, Verifier,
+    Signature as DalekSignature,
 };
 
 use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
@@ -94,7 +94,7 @@ impl Signature for DefaultSignature {
     ) -> Result<(), SigVerificationError> {
         pub_key
             .pub_key
-            .verify(&msg_hash, &self.msg_sig)
+            .verify_strict(&msg_hash, &self.msg_sig)
             .map_err(|_| SigVerificationError::BadSignature)
     }
 }
