@@ -159,7 +159,6 @@ where
         {
             Ok(txs) => txs,
             Err(e) => {
-                println!("Error {:?}", e);
                 // Revert on error
                 let batch_workspace = batch_workspace.revert();
                 self.working_set = Some(batch_workspace.revert());

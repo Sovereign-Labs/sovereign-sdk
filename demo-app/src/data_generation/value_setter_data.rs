@@ -1,7 +1,6 @@
 use super::*;
-use sov_modules_api::Hasher;
 use sov_modules_api::{
-    default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, Spec,
+    default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
 };
 
 pub struct ValueSetterMessages {
@@ -47,14 +46,7 @@ impl MessageGenerator for ValueSetterMessages {
         _is_last: bool,
     ) -> Transaction<DefaultContext> {
         let message = Runtime::<DefaultContext>::encode_value_setter_call(message);
-
-        let mut hasher = <DefaultContext as Spec>::Hasher::new();
-        hasher.update(&message);
-        hasher.update(&nonce.to_le_bytes());
-
-        let msg_hash = hasher.finalize();
-        let sig = sender.sign(msg_hash);
-
+        let sig = sign_tx(sender, &message, nonce);
         Transaction::<DefaultContext>::new(message, sender.pub_key(), sig, nonce)
     }
 }
