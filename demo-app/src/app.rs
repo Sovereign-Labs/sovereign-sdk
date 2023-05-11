@@ -1,16 +1,18 @@
+#[cfg(feature = "native")]
 use crate::runtime::GenesisConfig;
 use crate::runtime::Runtime;
 use crate::tx_hooks_impl::DemoAppTxHooks;
 use crate::tx_verifier_impl::DemoAppTxVerifier;
 use sov_app_template::AppTemplate;
+pub use sov_app_template::Batch;
 #[cfg(feature = "native")]
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
-use sov_modules_api::Address;
+use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Context;
-#[cfg(test)]
-use sov_modules_api::{PublicKey, Spec};
+use sov_modules_api::PublicKey;
+use sov_modules_api::{Hasher, Spec};
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
 use sov_state::Storage;
@@ -23,9 +25,7 @@ use std::path::Path;
 
 #[cfg(test)]
 pub(crate) type C = DefaultContext;
-
 pub struct DemoAppRunner<C: Context>(pub DemoApp<C>);
-
 pub type ZkAppRunner = DemoAppRunner<ZkDefaultContext>;
 
 #[cfg(feature = "native")]
@@ -33,16 +33,10 @@ pub type NativeAppRunner = DemoAppRunner<DefaultContext>;
 
 pub type DemoApp<C> = AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>>;
 
-pub use sov_app_template::Batch;
-
-#[cfg(test)]
 pub const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
-#[cfg(test)]
 pub const LOCKED_AMOUNT: u64 = 200;
-#[cfg(test)]
 pub const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
-#[cfg(test)]
-pub const TOKEN_NAME: &str = "Token0";
+pub const TOKEN_NAME: &str = "sov-test-token";
 
 #[cfg(feature = "native")]
 impl StateTransitionRunner<ProverConfig> for DemoAppRunner<DefaultContext> {
@@ -91,91 +85,79 @@ impl StateTransitionRunner<ZkConfig> for DemoAppRunner<ZkDefaultContext> {
 }
 
 #[cfg(feature = "native")]
-pub fn create_mock_context_genesis_config(
-    sequencer_address: Address,
-    sequencer_da_address: Vec<u8>,
+/// Creates config for a rollup with some default settings, the config is used in demos and tests.
+///
+/// * `value_setter_admin_private_key` - Private key for the ValueSetter module admin.
+/// * `election_admin_private_key` - Private key for the Election module admin.
+pub fn create_demo_config(
+    initial_sequencer_balance: u64,
+    value_setter_admin_private_key: &DefaultPrivateKey,
+    election_admin_private_key: &DefaultPrivateKey,
 ) -> GenesisConfig<DefaultContext> {
-    create_demo_genesis_config::<DefaultContext>(sequencer_address, sequencer_da_address)
+    create_genesis_config::<DefaultContext>(
+        initial_sequencer_balance,
+        generate_address::<DefaultContext>(SEQ_PUB_KEY_STR),
+        SEQUENCER_DA_ADDRESS.to_vec(),
+        value_setter_admin_private_key,
+        election_admin_private_key,
+    )
 }
 
-pub fn create_demo_genesis_config<C: Context>(
+#[cfg(feature = "native")]
+fn create_genesis_config<C: Context>(
+    initial_sequencer_balance: u64,
     sequencer_address: C::Address,
     sequencer_da_address: Vec<u8>,
+    value_setter_admin_private_key: &DefaultPrivateKey,
+    election_admin_private_key: &DefaultPrivateKey,
 ) -> GenesisConfig<C> {
+    use election::ElectionConfig;
+    use value_setter::ValueSetterConfig;
+
     let token_config: bank::TokenConfig<C> = bank::TokenConfig {
-        token_name: "sov-test-token".to_owned(),
-        address_and_balances: vec![(sequencer_address.clone(), 10_000)],
+        token_name: TOKEN_NAME.to_owned(),
+        address_and_balances: vec![(sequencer_address.clone(), initial_sequencer_balance)],
     };
+
     let bank_config = bank::BankConfig {
         tokens: vec![token_config],
     };
+
     let token_address = bank::create_token_address::<C>(
         &bank_config.tokens[0].token_name,
         &bank::genesis::DEPLOYER,
         bank::genesis::SALT,
     );
+
     let sequencer_config = sequencer::SequencerConfig {
         seq_rollup_address: sequencer_address,
-        seq_da_address: sequencer_da_address,
-        coins_to_lock: bank::Coins {
-            amount: 1000,
-            token_address,
-        },
-    };
-    GenesisConfig::new(
-        sequencer_config,
-        bank_config,
-        (),
-        (),
-        accounts::AccountConfig { pub_keys: vec![] },
-    )
-}
-
-#[cfg(test)]
-pub(crate) fn create_sequencer_config(
-    seq_rollup_address: <DefaultContext as Spec>::Address,
-    token_address: <DefaultContext as Spec>::Address,
-) -> sequencer::SequencerConfig<DefaultContext> {
-    sequencer::SequencerConfig {
-        seq_rollup_address,
-        seq_da_address: SEQUENCER_DA_ADDRESS.to_vec(),
+        seq_da_address: sequencer_da_address.to_vec(),
         coins_to_lock: bank::Coins {
             amount: LOCKED_AMOUNT,
             token_address,
         },
-    }
-}
-
-#[cfg(test)]
-pub(crate) fn create_config(initial_sequencer_balance: u64) -> GenesisConfig<DefaultContext> {
-    type C = DefaultContext;
-    let pub_key = <C as Spec>::PublicKey::try_from(SEQ_PUB_KEY_STR).unwrap();
-    let seq_address = pub_key.to_address::<<C as Spec>::Address>();
-
-    let token_config: bank::TokenConfig<DefaultContext> = bank::TokenConfig {
-        token_name: TOKEN_NAME.to_owned(),
-        address_and_balances: vec![(seq_address.clone(), initial_sequencer_balance)],
     };
 
-    let bank_config = bank::BankConfig {
-        tokens: vec![token_config],
+    let value_setter_config = ValueSetterConfig {
+        admin: value_setter_admin_private_key.pub_key().to_address(),
     };
 
-    let token_address = bank::create_token_address::<C>(
-        &bank_config.tokens[0].token_name,
-        &bank::genesis::DEPLOYER,
-        bank::genesis::SALT,
-    );
-
-    let sequencer_config = create_sequencer_config(seq_address, token_address);
+    let election_config = ElectionConfig {
+        admin: election_admin_private_key.pub_key().to_address(),
+    };
 
     GenesisConfig::new(
         sequencer_config,
         bank_config,
-        (),
-        (),
+        election_config,
+        value_setter_config,
         accounts::AccountConfig { pub_keys: vec![] },
     )
+}
+
+pub fn generate_address<C: Context>(key: &str) -> <C as Spec>::Address {
+    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
+    <C as Spec>::Address::from(hash)
 }
 
 #[cfg(test)]

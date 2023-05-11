@@ -11,6 +11,10 @@ use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
+pub struct ValueSetterConfig<C: sov_modules_api::Context> {
+    pub admin: C::Address,
+}
+
 /// A new module:
 /// - Must derive `ModuleInfo`
 /// - Must contain `[address]` field
@@ -33,7 +37,7 @@ pub struct ValueSetter<C: sov_modules_api::Context> {
 impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
     type Context = C;
 
-    type Config = ();
+    type Config = ValueSetterConfig<C>;
 
     type CallMessage = call::CallMessage;
 
@@ -42,11 +46,11 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
 
     fn genesis(
         &self,
-        _config: &Self::Config,
+        config: &Self::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(), Error> {
         // The initialization logic
-        Ok(self.init_module(working_set)?)
+        Ok(self.init_module(config, working_set)?)
     }
 
     fn call(

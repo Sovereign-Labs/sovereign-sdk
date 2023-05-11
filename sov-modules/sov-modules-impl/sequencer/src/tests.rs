@@ -1,5 +1,6 @@
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Module, ModuleInfo, PublicKey, Spec};
+use sov_modules_api::Hasher;
+use sov_modules_api::{Address, Module, ModuleInfo, Spec};
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::hooks::Hooks;
@@ -53,8 +54,7 @@ impl TestSequencer {
 }
 
 fn create_bank_config() -> (bank::BankConfig<C>, <C as Spec>::Address) {
-    let pub_key = <C as Spec>::PublicKey::try_from("seq_pub_key").unwrap();
-    let seq_address = pub_key.to_address::<<C as Spec>::Address>();
+    let seq_address = generate_address("seq_pub_key");
 
     let token_config = bank::TokenConfig {
         token_name: "InitialToken".to_owned(),
@@ -145,4 +145,9 @@ fn test_sequencer() {
         let resp = test_sequencer.query_balance_via_sequencer(working_set);
         assert_eq!(INITIAL_BALANCE, resp.data.unwrap().balance);
     }
+}
+
+pub fn generate_address(key: &str) -> <C as Spec>::Address {
+    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
+    Address::from(hash)
 }

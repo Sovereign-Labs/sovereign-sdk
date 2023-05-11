@@ -3,7 +3,8 @@ use serde::de::DeserializeOwned;
 use bank::query::QueryMessage;
 use bank::{Bank, BankConfig, TokenConfig};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Module, PublicKey, Spec};
+use sov_modules_api::Hasher;
+use sov_modules_api::{Address, Module, Spec};
 use sov_state::DefaultStorageSpec;
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -20,8 +21,8 @@ pub fn query_and_deserialize<R: DeserializeOwned>(
 }
 
 pub fn generate_address(key: &str) -> <C as Spec>::Address {
-    let pk = <C as Spec>::PublicKey::try_from(key).unwrap();
-    pk.to_address::<<C as Spec>::Address>()
+    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
+    Address::from(hash)
 }
 
 pub fn create_bank_config_with_token(

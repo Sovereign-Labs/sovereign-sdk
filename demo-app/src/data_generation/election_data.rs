@@ -1,17 +1,24 @@
-use sov_modules_api::default_context::DefaultContext;
-
 use super::*;
+use sov_modules_api::default_context::DefaultContext;
+use std::rc::Rc;
 
 struct CallGenerator {
     election_admin_nonce: u64,
-    election_admin: DefaultPublicKey,
+    election_admin: Rc<DefaultPrivateKey>,
+    voters: Vec<Rc<DefaultPrivateKey>>,
 }
 
 impl CallGenerator {
-    fn new() -> Self {
+    fn new(election_admin: Rc<DefaultPrivateKey>) -> Self {
+        let voters = vec![
+            Rc::new(DefaultPrivateKey::generate()),
+            Rc::new(DefaultPrivateKey::generate()),
+            Rc::new(DefaultPrivateKey::generate()),
+        ];
         Self {
             election_admin_nonce: 0,
-            election_admin: DefaultPublicKey::from("election_admin"),
+            election_admin,
+            voters,
         }
     }
 
@@ -22,7 +29,7 @@ impl CallGenerator {
     fn create_voters_and_vote(
         &mut self,
     ) -> Vec<(
-        DefaultPublicKey,
+        Rc<DefaultPrivateKey>,
         election::call::CallMessage<DefaultContext>,
         u64,
     )> {
@@ -39,14 +46,9 @@ impl CallGenerator {
         ));
         self.inc_nonce();
 
-        let voters = vec![
-            DefaultPublicKey::from("voter_1"),
-            DefaultPublicKey::from("voter_2"),
-            DefaultPublicKey::from("voter_3"),
-        ];
-
-        for voter in voters {
-            let add_voter_message = election::call::CallMessage::AddVoter(voter.to_address());
+        for voter in self.voters.clone() {
+            let add_voter_message =
+                election::call::CallMessage::AddVoter(voter.pub_key().to_address());
 
             messages.push((
                 self.election_admin.clone(),
@@ -65,7 +67,7 @@ impl CallGenerator {
     fn freeze_vote(
         &mut self,
     ) -> Vec<(
-        DefaultPublicKey,
+        Rc<DefaultPrivateKey>,
         election::call::CallMessage<DefaultContext>,
         u64,
     )> {
@@ -85,7 +87,7 @@ impl CallGenerator {
     fn all_messages(
         &mut self,
     ) -> Vec<(
-        DefaultPublicKey,
+        Rc<DefaultPrivateKey>,
         election::call::CallMessage<DefaultContext>,
         u64,
     )> {
@@ -97,46 +99,64 @@ impl CallGenerator {
     }
 }
 
-pub struct ElectionCallMessages {}
+pub struct ElectionCallMessages {
+    election_admin: Rc<DefaultPrivateKey>,
+}
+
+impl ElectionCallMessages {
+    pub fn new(election_admin: DefaultPrivateKey) -> Self {
+        Self {
+            election_admin: Rc::new(election_admin),
+        }
+    }
+}
 
 impl MessageGenerator for ElectionCallMessages {
     type Call = election::call::CallMessage<DefaultContext>;
 
-    fn create_messages(&self) -> Vec<(DefaultPublicKey, Self::Call, u64)> {
-        let call_generator = &mut CallGenerator::new();
+    fn create_messages(&self) -> Vec<(Rc<DefaultPrivateKey>, Self::Call, u64)> {
+        let call_generator = &mut CallGenerator::new(self.election_admin.clone());
         call_generator.all_messages()
     }
 
     fn create_tx(
         &self,
-        sender: DefaultPublicKey,
+        sender: &DefaultPrivateKey,
         message: Self::Call,
         nonce: u64,
         _is_last: bool,
     ) -> Transaction<DefaultContext> {
-        Transaction::<DefaultContext>::new(
-            Runtime::<DefaultContext>::encode_election_call(message),
-            sender,
-            DefaultSignature::default(),
-            nonce,
-        )
+        let message = Runtime::<DefaultContext>::encode_election_call(message);
+        let sig = sign_tx(sender, &message, nonce);
+        Transaction::<DefaultContext>::new(message, sender.pub_key(), sig, nonce)
     }
 }
 
-pub struct InvalidElectionCallMessages {}
+pub struct InvalidElectionCallMessages {
+    election_admin: Rc<DefaultPrivateKey>,
+}
+
+impl InvalidElectionCallMessages {
+    pub fn new(election_admin: DefaultPrivateKey) -> Self {
+        Self {
+            election_admin: Rc::new(election_admin),
+        }
+    }
+}
 
 impl MessageGenerator for InvalidElectionCallMessages {
     type Call = election::call::CallMessage<DefaultContext>;
 
-    fn create_messages(&self) -> Vec<(DefaultPublicKey, Self::Call, u64)> {
-        let call_generator = &mut CallGenerator::new();
+    fn create_messages(&self) -> Vec<(Rc<DefaultPrivateKey>, Self::Call, u64)> {
+        let call_generator = &mut CallGenerator::new(self.election_admin.clone());
+
         let mut messages = Vec::default();
 
         messages.extend(call_generator.create_voters_and_vote());
 
         // Invalid message: This voter already voted.
         {
-            let voter = DefaultPublicKey::from("voter_1");
+            let voter = call_generator.voters[0].clone();
             let vote_message = election::call::CallMessage::Vote(1);
             messages.push((voter, vote_message, 1));
         }
@@ -147,90 +167,114 @@ impl MessageGenerator for InvalidElectionCallMessages {
 
     fn create_tx(
         &self,
-        sender: DefaultPublicKey,
+        sender: &DefaultPrivateKey,
         message: Self::Call,
         nonce: u64,
         _is_last: bool,
     ) -> Transaction<DefaultContext> {
-        Transaction::<DefaultContext>::new(
-            Runtime::<DefaultContext>::encode_election_call(message),
-            sender,
-            DefaultSignature::default(),
-            nonce,
-        )
+        let message = Runtime::<DefaultContext>::encode_election_call(message);
+        let sig = sign_tx(sender, &message, nonce);
+        Transaction::<DefaultContext>::new(message, sender.pub_key(), sig, nonce)
     }
 }
 
-pub struct BadSigElectionCallMessages {}
+pub struct BadSigElectionCallMessages {
+    election_admin: Rc<DefaultPrivateKey>,
+}
+
+impl BadSigElectionCallMessages {
+    pub fn new(election_admin: DefaultPrivateKey) -> Self {
+        Self {
+            election_admin: Rc::new(election_admin),
+        }
+    }
+}
 
 impl MessageGenerator for BadSigElectionCallMessages {
     type Call = election::call::CallMessage<DefaultContext>;
 
-    fn create_messages(&self) -> Vec<(DefaultPublicKey, Self::Call, u64)> {
-        let call_generator = &mut CallGenerator::new();
+    fn create_messages(&self) -> Vec<(Rc<DefaultPrivateKey>, Self::Call, u64)> {
+        let call_generator = &mut CallGenerator::new(self.election_admin.clone());
         call_generator.all_messages()
     }
 
     fn create_tx(
         &self,
-        sender: DefaultPublicKey,
+        sender: &DefaultPrivateKey,
         message: Self::Call,
         nonce: u64,
         is_last: bool,
     ) -> Transaction<DefaultContext> {
-        Transaction::<DefaultContext>::new(
-            Runtime::<DefaultContext>::encode_election_call(message),
-            sender,
-            DefaultSignature {
-                msg_sig: Vec::default(),
-                should_fail: is_last,
-            },
-            nonce,
-        )
+        let message = Runtime::<DefaultContext>::encode_election_call(message);
+        let sig = if is_last {
+            let bad_msg = vec![0; 32];
+            sign_tx(sender, &bad_msg, nonce + 1)
+        } else {
+            sign_tx(sender, &message, nonce)
+        };
+
+        Transaction::<DefaultContext>::new(message, sender.pub_key(), sig, nonce)
     }
 }
 
-pub struct BadNonceElectionCallMessages {}
+pub struct BadNonceElectionCallMessages {
+    election_admin: Rc<DefaultPrivateKey>,
+}
+
+impl BadNonceElectionCallMessages {
+    pub fn new(election_admin: DefaultPrivateKey) -> Self {
+        Self {
+            election_admin: Rc::new(election_admin),
+        }
+    }
+}
 
 impl MessageGenerator for BadNonceElectionCallMessages {
     type Call = election::call::CallMessage<DefaultContext>;
 
-    fn create_messages(&self) -> Vec<(DefaultPublicKey, Self::Call, u64)> {
-        let call_generator = &mut CallGenerator::new();
+    fn create_messages(&self) -> Vec<(Rc<DefaultPrivateKey>, Self::Call, u64)> {
+        let call_generator = &mut CallGenerator::new(self.election_admin.clone());
         call_generator.all_messages()
     }
 
     fn create_tx(
         &self,
-        sender: DefaultPublicKey,
+        sender: &DefaultPrivateKey,
         message: Self::Call,
         nonce: u64,
         flag: bool,
     ) -> Transaction<DefaultContext> {
         let nonce = if flag { nonce + 1 } else { nonce };
 
-        Transaction::<DefaultContext>::new(
-            Runtime::<DefaultContext>::encode_election_call(message),
-            sender,
-            DefaultSignature::default(),
-            nonce,
-        )
+        let message = Runtime::<DefaultContext>::encode_election_call(message);
+        let sig = sign_tx(sender, &message, nonce);
+        Transaction::<DefaultContext>::new(message, sender.pub_key(), sig, nonce)
     }
 }
 
-pub struct BadSerializationElectionCallMessages {}
+pub struct BadSerializationElectionCallMessages {
+    election_admin: Rc<DefaultPrivateKey>,
+}
+
+impl BadSerializationElectionCallMessages {
+    pub fn new(election_admin: DefaultPrivateKey) -> Self {
+        Self {
+            election_admin: Rc::new(election_admin),
+        }
+    }
+}
 
 impl MessageGenerator for BadSerializationElectionCallMessages {
     type Call = election::call::CallMessage<DefaultContext>;
 
-    fn create_messages(&self) -> Vec<(DefaultPublicKey, Self::Call, u64)> {
-        let call_generator = &mut CallGenerator::new();
+    fn create_messages(&self) -> Vec<(Rc<DefaultPrivateKey>, Self::Call, u64)> {
+        let call_generator = &mut CallGenerator::new(self.election_admin.clone());
         call_generator.all_messages()
     }
 
     fn create_tx(
         &self,
-        sender: DefaultPublicKey,
+        sender: &DefaultPrivateKey,
         message: Self::Call,
         nonce: u64,
         is_last: bool,
@@ -241,6 +285,7 @@ impl MessageGenerator for BadSerializationElectionCallMessages {
             Runtime::<DefaultContext>::encode_election_call(message)
         };
 
-        Transaction::<DefaultContext>::new(call_data, sender, DefaultSignature::default(), nonce)
+        let sig = sign_tx(sender, &call_data, nonce);
+        Transaction::<DefaultContext>::new(call_data, sender.pub_key(), sig, nonce)
     }
 }

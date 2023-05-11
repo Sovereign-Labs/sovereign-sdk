@@ -9,8 +9,9 @@ mod encode;
 mod error;
 mod prefix;
 mod response;
-mod tests;
 
+#[cfg(test)]
+mod tests;
 pub use crate::bech32::AddressBech32;
 pub use dispatch::{DispatchCall, DispatchQuery, Genesis};
 pub use error::Error;
@@ -75,8 +76,8 @@ impl Display for Address {
 
 #[derive(Error, Debug)]
 pub enum SigVerificationError {
-    #[error("Bad signature")]
-    BadSignature,
+    #[error("Bad signature {0}")]
+    BadSignature(String),
 }
 
 /// Signature used in the module system.
@@ -113,13 +114,7 @@ pub trait Spec {
 
     type Storage: Storage + Clone;
 
-    type PublicKey: borsh::BorshDeserialize
-        + borsh::BorshSerialize
-        + Eq
-        + TryFrom<&'static str>
-        + Clone
-        + Debug
-        + PublicKey;
+    type PublicKey: borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug + PublicKey;
 
     type Hasher: Hasher;
 

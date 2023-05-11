@@ -3,12 +3,14 @@ pub mod test {
     use borsh::{BorshDeserialize, BorshSerialize};
     use serde::{Deserialize, Serialize};
     use sov_app_template::{Batch, SequencerOutcome};
-    use sov_modules_api::{default_context::DefaultContext, Address};
+    use sov_modules_api::{
+        default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, Address,
+    };
     use sov_state::ProverStorage;
     use sovereign_sdk::{da::BlobTransactionTrait, stf::StateTransitionFunction};
 
     use crate::{
-        app::{create_config, create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
+        app::{create_demo_config, create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
         data_generation::{simulate_da, QueryGenerator},
         helpers::query_and_deserialize,
         runtime::Runtime,
@@ -46,13 +48,21 @@ pub mod test {
     #[test]
     fn test_demo_values_in_db() {
         let path = schemadb::temppath::TempPath::new();
+        let value_setter_admin_private_key = DefaultPrivateKey::generate();
+        let election_admin_private_key = DefaultPrivateKey::generate();
+
+        let config = create_demo_config(
+            LOCKED_AMOUNT + 1,
+            &value_setter_admin_private_key,
+            &election_admin_private_key,
+        );
         {
             let mut demo = create_new_demo(&path);
 
-            demo.init_chain(create_config(LOCKED_AMOUNT + 1));
+            demo.init_chain(config);
             demo.begin_slot(Default::default());
 
-            let txs = simulate_da();
+            let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
             let apply_blob_outcome = demo
                 .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
@@ -98,10 +108,19 @@ pub mod test {
         let path = schemadb::temppath::TempPath::new();
         let mut demo = create_new_demo(&path);
 
-        demo.init_chain(create_config(LOCKED_AMOUNT + 1));
+        let value_setter_admin_private_key = DefaultPrivateKey::generate();
+        let election_admin_private_key = DefaultPrivateKey::generate();
+
+        let config = create_demo_config(
+            LOCKED_AMOUNT + 1,
+            &value_setter_admin_private_key,
+            &election_admin_private_key,
+        );
+
+        demo.init_chain(config);
         demo.begin_slot(Default::default());
 
-        let txs = simulate_da();
+        let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
         let apply_blob_outcome = demo
             .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
@@ -139,13 +158,22 @@ pub mod test {
     #[test]
     fn test_demo_values_not_in_db() {
         let path = schemadb::temppath::TempPath::new();
+
+        let value_setter_admin_private_key = DefaultPrivateKey::generate();
+        let election_admin_private_key = DefaultPrivateKey::generate();
+
+        let config = create_demo_config(
+            LOCKED_AMOUNT + 1,
+            &value_setter_admin_private_key,
+            &election_admin_private_key,
+        );
         {
             let mut demo = create_new_demo(&path);
 
-            demo.init_chain(create_config(LOCKED_AMOUNT + 1));
+            demo.init_chain(config);
             demo.begin_slot(Default::default());
 
-            let txs = simulate_da();
+            let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
             let apply_blob_outcome = demo
                 .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
@@ -184,12 +212,22 @@ pub mod test {
     #[test]
     fn test_sequencer_insufficient_funds() {
         let path = schemadb::temppath::TempPath::new();
+
+        let value_setter_admin_private_key = DefaultPrivateKey::generate();
+        let election_admin_private_key = DefaultPrivateKey::generate();
+
+        let config = create_demo_config(
+            LOCKED_AMOUNT - 1,
+            &value_setter_admin_private_key,
+            &election_admin_private_key,
+        );
+
         let mut demo = create_new_demo(&path);
 
-        demo.init_chain(create_config(LOCKED_AMOUNT - 1));
+        demo.init_chain(config);
         demo.begin_slot(Default::default());
 
-        let txs = simulate_da();
+        let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
         let apply_blob_result = demo
             .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
