@@ -50,9 +50,10 @@ impl BorshDeserialize for DefaultPublicKey {
         let mut buffer = [0; PUBLIC_KEY_LENGTH];
         reader.read_exact(&mut buffer)?;
 
-        Ok(Self {
-            msg_sig: DalekSignature::from_bytes(&buffer)?,
-        })
+        let pub_key = DalekPublicKey::from_bytes(&buffer)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        Ok(Self { pub_key })
     }
 }
 
@@ -72,9 +73,10 @@ impl BorshDeserialize for DefaultSignature {
         let mut buffer = [0; SIGNATURE_LENGTH];
         reader.read_exact(&mut buffer)?;
 
-        Ok(Self {
-            msg_sig: DalekSignature::from_bytes(&buffer)?,
-        })
+        let msg_sig = DalekSignature::from_bytes(&buffer)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        Ok(Self { msg_sig })
     }
 }
 
