@@ -87,7 +87,8 @@ impl LedgerRpcProvider for LedgerDB {
     ) -> Result<Vec<Option<Self::SlotResponse>>, anyhow::Error> {
         anyhow::ensure!(
             slot_ids.len() <= MAX_SLOTS_PER_REQUEST as usize,
-            "requested too many slots. Max: {}",
+            "requested too many slots. Requested: {}. Max: {}",
+            slot_ids.len(),
             MAX_SLOTS_PER_REQUEST
         );
         // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
@@ -116,7 +117,8 @@ impl LedgerRpcProvider for LedgerDB {
     ) -> Result<Vec<Option<Self::BatchResponse>>, anyhow::Error> {
         anyhow::ensure!(
             batch_ids.len() <= MAX_BATCHES_PER_REQUEST as usize,
-            "requested too many batches. Max: {}",
+            "requested too many batches. Requested: {}. Max: {}",
+            batch_ids.len(),
             MAX_BATCHES_PER_REQUEST
         );
         // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
@@ -145,7 +147,8 @@ impl LedgerRpcProvider for LedgerDB {
     ) -> Result<Vec<Option<Self::TxResponse>>, anyhow::Error> {
         anyhow::ensure!(
             tx_ids.len() <= MAX_TRANSACTIONS_PER_REQUEST as usize,
-            "requested too many batches. Max: {}",
+            "requested too many transactions. Requested: {}. Max: {}",
+            tx_ids.len(),
             MAX_TRANSACTIONS_PER_REQUEST
         );
         // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
@@ -167,7 +170,8 @@ impl LedgerRpcProvider for LedgerDB {
     ) -> Result<Vec<Option<Self::EventResponse>>, anyhow::Error> {
         anyhow::ensure!(
             event_ids.len() <= MAX_EVENTS_PER_REQUEST as usize,
-            "requested too many events. Max: {}",
+            "requested too many events. Requested: {}. Max: {}",
+            event_ids.len(),
             MAX_EVENTS_PER_REQUEST
         );
         // TODO: Sort the input and use an iterator instead of querying for each slot individually
