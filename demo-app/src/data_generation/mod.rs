@@ -1,14 +1,13 @@
-use std::rc::Rc;
-
 use crate::runtime::Runtime;
 use crate::tx_verifier_impl::Transaction;
-
 use borsh::BorshSerialize;
 use sov_app_template::RawTx;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::default_signature::{DefaultPublicKey, DefaultSignature};
-use sov_modules_api::PublicKey;
+use sov_modules_api::default_signature::DefaultSignature;
+use sov_modules_api::Hasher;
+use sov_modules_api::{PublicKey, Spec};
+use std::rc::Rc;
 
 mod election_data;
 mod value_setter_data;
@@ -27,30 +26,42 @@ pub fn simulate_da(
 
     messages
 }
-/*
-pub fn simulate_da_with_revert_msg() -> Vec<RawTx> {
-    let election = election_data::InvalidElectionCallMessages {};
+
+pub fn simulate_da_with_revert_msg(election_admin: DefaultPrivateKey) -> Vec<RawTx> {
+    let election = election_data::InvalidElectionCallMessages::new(election_admin);
     election.create_raw_txs()
 }
 
-pub fn simulate_da_with_bad_sig() -> Vec<RawTx> {
-    let election = election_data::BadSigElectionCallMessages {};
+pub fn simulate_da_with_bad_sig(election_admin: DefaultPrivateKey) -> Vec<RawTx> {
+    let election = election_data::BadSigElectionCallMessages::new(election_admin);
     election.create_raw_txs()
 }
 
 // TODO: Remove once we fix test with bad nonce
 //   https://github.com/Sovereign-Labs/sovereign/issues/235
 #[allow(unused)]
-pub fn simulate_da_with_bad_nonce() -> Vec<RawTx> {
-    let election = election_data::BadNonceElectionCallMessages {};
+pub fn simulate_da_with_bad_nonce(election_admin: DefaultPrivateKey) -> Vec<RawTx> {
+    let election = election_data::BadNonceElectionCallMessages::new(election_admin);
     election.create_raw_txs()
 }
 
-pub fn simulate_da_with_bad_serialization() -> Vec<RawTx> {
-    let election = election_data::BadSerializationElectionCallMessages {};
+pub fn simulate_da_with_bad_serialization(election_admin: DefaultPrivateKey) -> Vec<RawTx> {
+    let election = election_data::BadSerializationElectionCallMessages::new(election_admin);
     election.create_raw_txs()
 }
-*/
+
+pub(crate) fn sign_tx(
+    priv_key: &DefaultPrivateKey,
+    message: &[u8],
+    nonce: u64,
+) -> DefaultSignature {
+    let mut hasher = <DefaultContext as Spec>::Hasher::new();
+    hasher.update(message);
+    hasher.update(&nonce.to_le_bytes());
+    let msg_hash = hasher.finalize();
+    priv_key.sign(msg_hash)
+}
+
 trait MessageGenerator {
     type Call;
 

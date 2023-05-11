@@ -1,4 +1,4 @@
-/*use core::panic;
+use core::panic;
 
 use crate::{
     app::{create_config, create_new_demo, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
@@ -11,7 +11,9 @@ use crate::{
     tests::test::TestBlob,
 };
 use sov_app_template::{Batch, SlashingReason};
-use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::{
+    default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
+};
 use sov_state::ProverStorage;
 use sovereign_sdk::stf::StateTransitionFunction;
 
@@ -21,13 +23,22 @@ const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + SEQUENCER_BALANCE_DELTA;
 #[test]
 fn test_tx_revert() {
     let path = schemadb::temppath::TempPath::new();
+    let value_setter_admin_private_key = DefaultPrivateKey::generate();
+    let election_admin_private_key = DefaultPrivateKey::generate();
+
+    let config = create_config(
+        SEQUENCER_BALANCE,
+        &value_setter_admin_private_key,
+        &election_admin_private_key,
+    );
+
     {
         let mut demo = create_new_demo(&path);
 
-        demo.init_chain(create_config(SEQUENCER_BALANCE));
+        demo.init_chain(config);
         demo.begin_slot(Default::default());
 
-        let txs = simulate_da_with_revert_msg();
+        let txs = simulate_da_with_revert_msg(election_admin_private_key);
 
         match demo
             .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
@@ -82,14 +93,22 @@ fn test_tx_revert() {
 #[test]
 fn test_tx_bad_sig() {
     let path = schemadb::temppath::TempPath::new();
+    let value_setter_admin_private_key = DefaultPrivateKey::generate();
+    let election_admin_private_key = DefaultPrivateKey::generate();
+
+    let config = create_config(
+        SEQUENCER_BALANCE,
+        &value_setter_admin_private_key,
+        &election_admin_private_key,
+    );
 
     {
         let mut demo = create_new_demo(&path);
 
-        demo.init_chain(create_config(SEQUENCER_BALANCE));
+        demo.init_chain(config);
         demo.begin_slot(Default::default());
 
-        let txs = simulate_da_with_bad_sig();
+        let txs = simulate_da_with_bad_sig(election_admin_private_key);
 
         match demo
             .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None).inner {
@@ -179,13 +198,22 @@ fn test_tx_bad_sig() {
 fn test_tx_bad_serialization() {
     let path = schemadb::temppath::TempPath::new();
 
+    let value_setter_admin_private_key = DefaultPrivateKey::generate();
+    let election_admin_private_key = DefaultPrivateKey::generate();
+
+    let config = create_config(
+        SEQUENCER_BALANCE,
+        &value_setter_admin_private_key,
+        &election_admin_private_key,
+    );
+
     {
         let mut demo = create_new_demo(&path);
 
-        demo.init_chain(create_config(SEQUENCER_BALANCE));
+        demo.init_chain(config);
         demo.begin_slot(Default::default());
 
-        let txs = simulate_da_with_bad_serialization();
+        let txs = simulate_da_with_bad_serialization(election_admin_private_key);
 
         match demo
             .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None).inner {
@@ -221,4 +249,3 @@ fn test_tx_bad_serialization() {
         assert_eq!(resp.data.unwrap().balance, SEQUENCER_BALANCE_DELTA);
     }
 }
-*/
