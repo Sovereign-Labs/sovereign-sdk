@@ -1,14 +1,18 @@
-use crate::runtime::{GenesisConfig, Runtime};
+#[cfg(feature = "native")]
+use crate::runtime::GenesisConfig;
+use crate::runtime::Runtime;
 use crate::tx_hooks_impl::DemoAppTxHooks;
 use crate::tx_verifier_impl::DemoAppTxVerifier;
 use sov_app_template::AppTemplate;
 pub use sov_app_template::Batch;
 #[cfg(feature = "native")]
-use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
+use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Context;
-use sov_modules_api::{Hasher, PublicKey, Spec};
+use sov_modules_api::PublicKey;
+use sov_modules_api::{Hasher, Spec};
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
 use sov_state::Storage;
@@ -80,6 +84,7 @@ impl StateTransitionRunner<ZkConfig> for DemoAppRunner<ZkDefaultContext> {
     }
 }
 
+#[cfg(feature = "native")]
 pub fn create_config(
     initial_sequencer_balance: u64,
     value_setter_admin_private_key: &DefaultPrivateKey,
@@ -94,6 +99,7 @@ pub fn create_config(
     )
 }
 
+#[cfg(feature = "native")]
 fn create_genesis_config<C: Context>(
     initial_sequencer_balance: u64,
     sequencer_address: C::Address,
