@@ -1,6 +1,8 @@
 use sov_modules_api::{Context, Module};
 use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 
+/// The Rollup entrypoint.
+///
 /// On a high level, the rollup node receives serialized call messages from the DA layer and executes them as atomic transactions.
 /// Upon reception, the message has to be deserialized and forwarded to an appropriate module.
 ///

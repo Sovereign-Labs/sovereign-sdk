@@ -76,14 +76,15 @@ impl GenesisMacro {
                 let ty = &field.ty;
 
                 quote::quote! {
-                  #name: <#ty as sov_modules_api::Module>::Config,
+                    #name: <#ty as sov_modules_api::Module>::Config,
                 }
             })
             .collect();
 
         quote::quote! {
+            #[doc = "Initial configuration for the rollup."]
             pub struct GenesisConfig<#generic_param: sov_modules_api::Context>{
-                #(#fields)*
+                #(pub #fields)*
             }
 
             impl<#generic_param: sov_modules_api::Context> GenesisConfig #type_generics {

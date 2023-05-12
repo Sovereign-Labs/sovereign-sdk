@@ -141,10 +141,8 @@ pub trait Context: Spec + Clone + Debug + PartialEq {
 /// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
 /// This allows developers to override only some of the methods in their implementation and safely ignore the others.
 pub trait Module {
-    /// Types and functionality common for all modules:
+    /// Execution context.
     type Context: Context;
-
-    /// Types and functionality defined per module:
 
     /// Configuration for the genesis method.
     type Config;
@@ -189,7 +187,9 @@ pub trait Module {
 pub trait ModuleInfo {
     type Context: Context;
 
+    /// Module constructor.
     fn new() -> Self;
 
+    /// Returns address of the module.
     fn address(&self) -> &<Self::Context as Spec>::Address;
 }

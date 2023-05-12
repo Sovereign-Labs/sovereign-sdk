@@ -3,7 +3,7 @@ pub mod app;
 mod data_generation;
 #[cfg(test)]
 mod helpers;
-mod runtime;
+pub mod runtime;
 #[cfg(test)]
 mod tests;
 mod tx_hooks_impl;

@@ -108,6 +108,7 @@ impl DispatchQueryMacro {
         let create_dispatch_impl = struct_def.create_query_dispatch();
 
         Ok(quote::quote! {
+            #[doc="This enum is generated from the underlying Runtime, the variants correspond to query messages from the relevant modules"]
             #query_enum
 
             #create_dispatch_impl
