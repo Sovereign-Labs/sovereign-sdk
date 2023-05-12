@@ -16,16 +16,22 @@ impl<'a> StructDef<'a> {
             let fn_call_name = format_ident!("encode_{}_call", &field.ident);
             let fn_query_name = format_ident!("encode_{}_query", &field.ident);
 
+
+            let call_doc = format!("Encodes {} call message.",field.ident);
+            let query_doc = format!("Encodes {} query message.",field.ident);
+
             // Creates functions like:
             //  encode_*module_name*_call(data: ..) -> Vec<u8>
             //  encode_*module_name*_query(data: ..) -> Vec<u8>
             quote::quote! {
-                pub (crate) fn #fn_call_name(data: <#ty as sov_modules_api::Module>::CallMessage) -> std::vec::Vec<u8> {
+                #[doc = #call_doc]
+                pub fn #fn_call_name(data: <#ty as sov_modules_api::Module>::CallMessage) -> std::vec::Vec<u8> {
                     let call = #call_enum::<C>::#variant(data);
                     ::borsh::BorshSerialize::try_to_vec(&call).unwrap()
                 }
 
-                pub (crate) fn #fn_query_name(data: <#ty as sov_modules_api::Module>::QueryMessage)-> std::vec::Vec<u8>{
+                #[doc = #query_doc]
+                pub fn #fn_query_name(data: <#ty as sov_modules_api::Module>::QueryMessage)-> std::vec::Vec<u8>{
                     let query = #query_enum::<C>::#variant(data);
                     ::borsh::BorshSerialize::try_to_vec(&query).unwrap()
                 }

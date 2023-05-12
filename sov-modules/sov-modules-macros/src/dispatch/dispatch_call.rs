@@ -130,7 +130,7 @@ impl DispatchCallMacro {
         let create_dispatch_impl = struct_def.create_call_dispatch();
 
         Ok(quote::quote! {
-
+            #[doc="This enum is generated from the underlying Runtime, the variants correspond to call messages from the relevant modules"]
             #call_enum
 
             #create_dispatch_impl

@@ -108,7 +108,6 @@ impl<'a> StructDef<'a> {
         let where_clause = &self.where_clause;
 
         quote::quote! {
-            // This is generated code (won't be exposed to the users) and we allow non camel case for enum variants.
             #[allow(non_camel_case_types)]
             #[derive(::core::fmt::Debug, PartialEq, #(#serialization_attrs),*)]
             pub enum #enum_ident #impl_generics #where_clause {
