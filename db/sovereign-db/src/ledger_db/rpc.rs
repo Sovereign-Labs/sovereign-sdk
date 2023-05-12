@@ -18,6 +18,15 @@ use crate::schema::{
     },
 };
 
+/// The maximum number of slots that can be requested in a single RPC range query
+const MAX_SLOTS_PER_REQUEST: u64 = 10;
+/// The maximum number of batches that can be requested in a single RPC range query
+const MAX_BATCHES_PER_REQUEST: u64 = 20;
+/// The maximum number of transactions that can be requested in a single RPC range query
+const MAX_TRANSACTIONS_PER_REQUEST: u64 = 100;
+/// The maximum number of events that can be requested in a single RPC range query
+const MAX_EVENTS_PER_REQUEST: u64 = 500;
+
 use super::LedgerDB;
 
 #[derive(Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
@@ -76,6 +85,12 @@ impl LedgerRpcProvider for LedgerDB {
         slot_ids: &[sovereign_sdk::rpc::SlotIdentifier],
         query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::SlotResponse>>, anyhow::Error> {
+        anyhow::ensure!(
+            slot_ids.len() <= MAX_SLOTS_PER_REQUEST as usize,
+            "requested too many slots. Requested: {}. Max: {}",
+            slot_ids.len(),
+            MAX_SLOTS_PER_REQUEST
+        );
         // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
         //      and use an iterator instead of querying for each slot individually
         let mut out = Vec::with_capacity(slot_ids.len());
@@ -100,6 +115,12 @@ impl LedgerRpcProvider for LedgerDB {
         batch_ids: &[sovereign_sdk::rpc::BatchIdentifier],
         query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::BatchResponse>>, anyhow::Error> {
+        anyhow::ensure!(
+            batch_ids.len() <= MAX_BATCHES_PER_REQUEST as usize,
+            "requested too many batches. Requested: {}. Max: {}",
+            batch_ids.len(),
+            MAX_BATCHES_PER_REQUEST
+        );
         // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
         //      and use an iterator instead of querying for each slot individually
         let mut out = Vec::with_capacity(batch_ids.len());
@@ -124,6 +145,12 @@ impl LedgerRpcProvider for LedgerDB {
         tx_ids: &[sovereign_sdk::rpc::TxIdentifier],
         _query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::TxResponse>>, anyhow::Error> {
+        anyhow::ensure!(
+            tx_ids.len() <= MAX_TRANSACTIONS_PER_REQUEST as usize,
+            "requested too many transactions. Requested: {}. Max: {}",
+            tx_ids.len(),
+            MAX_TRANSACTIONS_PER_REQUEST
+        );
         // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
         //      and use an iterator instead of querying for each slot individually
         let mut out = Vec::with_capacity(tx_ids.len());
@@ -141,6 +168,12 @@ impl LedgerRpcProvider for LedgerDB {
         &self,
         event_ids: &[sovereign_sdk::rpc::EventIdentifier],
     ) -> Result<Vec<Option<Self::EventResponse>>, anyhow::Error> {
+        anyhow::ensure!(
+            event_ids.len() <= MAX_EVENTS_PER_REQUEST as usize,
+            "requested too many events. Requested: {}. Max: {}",
+            event_ids.len(),
+            MAX_EVENTS_PER_REQUEST
+        );
         // TODO: Sort the input and use an iterator instead of querying for each slot individually
         // https://github.com/Sovereign-Labs/sovereign/issues/191
         let mut out = Vec::with_capacity(event_ids.len());
@@ -243,6 +276,12 @@ impl LedgerRpcProvider for LedgerDB {
         end: u64,
         query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::SlotResponse>>, anyhow::Error> {
+        anyhow::ensure!(start <= end, "start must be <= end");
+        anyhow::ensure!(
+            end - start <= MAX_SLOTS_PER_REQUEST,
+            "requested slot range too large. Max: {}",
+            MAX_SLOTS_PER_REQUEST
+        );
         let ids: Vec<_> = (start..=end).map(|n| SlotIdentifier::Number(n)).collect();
         self.get_slots(&ids, query_mode)
     }
@@ -253,6 +292,12 @@ impl LedgerRpcProvider for LedgerDB {
         end: u64,
         query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::BatchResponse>>, anyhow::Error> {
+        anyhow::ensure!(start <= end, "start must be <= end");
+        anyhow::ensure!(
+            end - start <= MAX_BATCHES_PER_REQUEST,
+            "requested batch range too large. Max: {}",
+            MAX_BATCHES_PER_REQUEST
+        );
         let ids: Vec<_> = (start..=end)
             .map(|n| sovereign_sdk::rpc::BatchIdentifier::Number(n))
             .collect();
@@ -265,6 +310,12 @@ impl LedgerRpcProvider for LedgerDB {
         end: u64,
         query_mode: QueryMode,
     ) -> Result<Vec<Option<Self::TxResponse>>, anyhow::Error> {
+        anyhow::ensure!(start <= end, "start must be <= end");
+        anyhow::ensure!(
+            end - start <= MAX_TRANSACTIONS_PER_REQUEST,
+            "requested transaction range too large. Max: {}",
+            MAX_TRANSACTIONS_PER_REQUEST
+        );
         let ids: Vec<_> = (start..=end)
             .map(|n| sovereign_sdk::rpc::TxIdentifier::Number(n))
             .collect();
