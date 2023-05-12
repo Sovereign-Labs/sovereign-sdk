@@ -45,21 +45,7 @@ where
         }
     }
 
-    pub fn apply_proof<Vm: Zkvm>(
-        &mut self,
-        _sequencer: &[u8],
-        _batch: impl Buf,
-    ) -> BatchReceipt<SequencerOutcome, TxEffect> {
-        // Since no proof systems actually support verification as of right now, this is a no-op
-        // TODO: Implement zk-optimstic design
-
-        BatchReceipt {
-            batch_hash: [0u8; 32],
-            tx_receipts: vec![],
-            inner: SequencerOutcome::Ignored,
-        }
-    }
-
+    // TODO: implement a state machine instead of manually deciding when to commit and when to revert
     pub fn apply_batch(
         &mut self,
         sequencer: &[u8],
@@ -238,32 +224,6 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-#[repr(u8)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum BlobType<B: Buf> {
-    Proof(B),
-    Batch(B),
-}
-
-impl<B: Buf> BlobType<B> {
-    pub fn into_inner(self) -> B {
-        match self {
-            BlobType::Proof(b) => b,
-            BlobType::Batch(b) => b,
-        }
-    }
-
-    pub fn from_buffer(buf: B) -> Result<Self, anyhow::Error> {
-        let mut buf = buf;
-        let ty = buf.get_u8();
-        match ty {
-            0 => Ok(BlobType::Proof(buf)),
-            1 => Ok(BlobType::Batch(buf)),
-            _ => anyhow::bail!("Invalid blob discriminant"),
-        }
-    }
-}
-
 impl<C: Context, V, RT, H, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, V, RT, H>
 where
     RT: DispatchCall<Context = C> + Genesis<Context = C>,
@@ -302,7 +262,6 @@ where
         ));
     }
 
-    // TODO: implement a state machine instead of manually deciding when to commit and when to revert
     fn apply_blob(
         &mut self,
         blob: impl sovereign_sdk::da::BlobTransactionTrait,
@@ -311,18 +270,7 @@ where
         let sequencer = blob.sender();
         let sequencer = sequencer.as_ref();
 
-        return match BlobType::from_buffer(blob.data()) {
-            Ok(BlobType::Proof(proof)) => self.apply_proof::<Vm>(sequencer, proof),
-            Ok(BlobType::Batch(batch)) => self.apply_batch(sequencer, batch),
-            Err(e) => {
-                error!("Blob decoding error: {}", e);
-                BatchReceipt {
-                    batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
-                    tx_receipts: Vec::new(),
-                    inner: SequencerOutcome::Ignored,
-                }
-            }
-        };
+        self.apply_batch(sequencer, blob.data())
     }
 
     fn end_slot(

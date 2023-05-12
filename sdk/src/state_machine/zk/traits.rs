@@ -12,7 +12,11 @@ pub trait ZkvmHost: Zkvm {
 /// A Zk proof system capable of proving and verifying arbitrary Rust code
 /// Must support recursive proofs.
 pub trait Zkvm {
-    type CodeCommitment: Matches<Self::CodeCommitment> + Clone;
+    type CodeCommitment: Matches<Self::CodeCommitment>
+        + Clone
+        + Debug
+        + Serialize
+        + DeserializeOwned;
     type Error: Debug;
 
     fn verify<'a>(

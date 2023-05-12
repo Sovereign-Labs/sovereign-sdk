@@ -12,6 +12,7 @@ members = [
     "sov-modules/sov-modules-api",
     "sov-modules/sov-modules-impl/accounts",
     "sov-modules/sov-modules-impl/bank",
+    "sov-modules/sov-modules-impl/prover-incentives",
     "sov-modules/sov-modules-impl/sequencer",
     "sov-modules/sov-modules-impl/module-template",
     "sov-modules/sov-modules-impl/examples/value-setter",
