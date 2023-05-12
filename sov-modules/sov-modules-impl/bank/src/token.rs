@@ -1,8 +1,8 @@
 use anyhow::{bail, Result};
 use sov_modules_api::CallResponse;
-use sov_state::WorkingSet;
+use sov_state::{Prefix, WorkingSet};
 
-use crate::call::prefix_from_address;
+use crate::call::prefix_from_address_with_parent;
 
 pub type Amount = u64;
 
@@ -78,11 +78,12 @@ impl<C: sov_modules_api::Context> Token<C> {
         address_and_balances: &[(C::Address, u64)],
         sender: &[u8],
         salt: u64,
+        parent_prefix: &Prefix,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(C::Address, Self)> {
         let token_address = super::create_token_address::<C>(token_name, sender, salt);
 
-        let token_prefix = prefix_from_address::<C>(&token_address);
+        let token_prefix = prefix_from_address_with_parent::<C>(parent_prefix, &token_address);
         let balances = sov_state::StateMap::new(token_prefix);
 
         let mut total_supply: Option<u64> = Some(0);
