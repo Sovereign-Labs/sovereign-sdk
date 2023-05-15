@@ -193,3 +193,39 @@ fn test_unbonding() {
         Some(BOND_AMOUNT + initial_unlocked_balance)
     );
 }
+
+#[test]
+fn test_prover_not_bonded() {
+    let storage = ProverStorage::temporary();
+    let mut working_set = WorkingSet::new(storage);
+    let (module, prover_address) = setup(&mut working_set);
+    let context = DefaultContext {
+        sender: prover_address.clone(),
+    };
+
+    // Unbond the prover
+    module
+        .unbond_prover(&context, &mut working_set)
+        .expect("Unbonding should succeed");
+
+    // Assert that the prover no longer has bonded tokens
+    assert_eq!(
+        module
+            .get_bond_amount(prover_address.clone(), &mut working_set)
+            .value,
+        0
+    );
+
+    // Process a valid proof
+    {
+        let proof = MockProof {
+            program_id: MOCK_CODE_COMMITMENT,
+            is_valid: true,
+            log: &[],
+        };
+        // Assert that processing a valid proof fails
+        assert!(module
+            .process_proof(proof.encode_to_vec().as_ref(), &context, &mut working_set)
+            .is_err())
+    }
+}

@@ -19,6 +19,8 @@ pub trait Zkvm {
         + DeserializeOwned;
     type Error: Debug;
 
+    /// Interpret a sequence of a bytes as a proof and attempt to verify it against the code commitment.
+    /// If the proof is valid, return a reference to the public outputs of the proof.
     fn verify<'a>(
         serialized_proof: &'a [u8],
         code_commitment: &Self::CodeCommitment,

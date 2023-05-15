@@ -26,7 +26,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
         bond_amount: u64,
         prover: &C::Address,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse> {
+    ) -> Result<CallResponse> {
         let mut response = CallResponse::default();
 
         // Transfer the bond amount from the sender to the module's address.
@@ -116,53 +116,46 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
         let mut response = CallResponse::default();
 
         // Get the prover's old balance.
-        if let Some(old_balance) = self.bonded_provers.get(context.sender(), working_set) {
-            // Check that the prover has enough balance to process the proof.
+        // Revert if they aren't bonded
+        let old_balance = self
+            .bonded_provers
+            .get_or_err(context.sender(), working_set)?;
 
-            let minimum_bond = self
-                .minimum_bond
-                .get(working_set)
-                .expect("Minimum bond must have been set at genesis");
+        // Check that the prover has enough balance to process the proof.
+        let minimum_bond = self.minimum_bond.get_or_err(working_set)?;
 
-            if old_balance < minimum_bond {
-                // If the prover does not have enough balance, don't validate the proof
-                return Ok(response);
-            }
+        anyhow::ensure!(old_balance >= minimum_bond, "Prover is not bonded");
+        let code_commitment = self
+            .commitment_of_allowed_verifier_method
+            .get_or_err(working_set)?
+            .commitment;
 
-            let code_commitment = self
-                .commitment_of_allowed_verifier_method
-                .get(working_set)
-                .expect("Verifier method must have been intialized")
-                .commitment;
+        // Lock the prover's bond amount.
+        self.bonded_provers
+            .set(context.sender(), old_balance - minimum_bond, working_set);
 
-            // Lock the prover's bond amount.
+        // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
+        if let Ok(_public_outputs) =
+            Vm::verify(proof, &code_commitment).map_err(|e| anyhow::format_err!("{:?}", e))
+        {
+            // TODO: decide what the proof output is and do something with it
+            // https://github.com/Sovereign-Labs/sovereign/issues/272
+
+            // Unlock the prover's bond
+            // TODO: reward the prover with newly minted tokens as appropriate based on gas fees.
+            // https://github.com/Sovereign-Labs/sovereign/issues/271
             self.bonded_provers
-                .set(context.sender(), old_balance - minimum_bond, working_set);
+                .set(context.sender(), old_balance, working_set);
 
-            // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
-            if let Ok(_public_outputs) =
-                Vm::verify(proof, &code_commitment).map_err(|e| anyhow::format_err!("{:?}", e))
-            {
-                // TODO: decide what the proof output is and do something with it
-                // https://github.com/Sovereign-Labs/sovereign/issues/272
-
-                // Unlock the prover's bond
-                // TODO: reward the prover with newly minted tokens as appropriate based on gas fees.
-                // https://github.com/Sovereign-Labs/sovereign/issues/271
-                self.bonded_provers
-                    .set(context.sender(), old_balance, working_set);
-
-                response.add_event(
-                    "processed_valid_proof",
-                    &format!("prover: {:?}", context.sender()),
-                );
-            } else {
-                println!("Proof faied to verify. Slashing!");
-                response.add_event(
-                    "processed_invalid_proof",
-                    &format!("slashed_prover: {:?}", context.sender()),
-                );
-            }
+            response.add_event(
+                "processed_valid_proof",
+                &format!("prover: {:?}", context.sender()),
+            );
+        } else {
+            response.add_event(
+                "processed_invalid_proof",
+                &format!("slashed_prover: {:?}", context.sender()),
+            );
         }
 
         Ok(response)

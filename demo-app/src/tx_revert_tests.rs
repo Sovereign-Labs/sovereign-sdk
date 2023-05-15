@@ -217,10 +217,16 @@ fn test_tx_bad_serialization() {
 
         let txs = simulate_da_with_bad_serialization(election_admin_private_key);
 
-        match StateTransitionFunction::<MockZkvm>::apply_blob(&mut demo, TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None).inner {
-                sov_app_template::SequencerOutcome::Slashed(SlashingReason::InvalidTransactionEncoding) => {}
-                _ => panic!("Unexpected outcome: Stateless verification should have failed due to invalid signature")
-            }
+        let outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+            &mut demo,
+            TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS),
+            None,
+        )
+        .inner;
+        assert!(
+            matches!(outcome, sov_app_template::SequencerOutcome::Slashed(SlashingReason::InvalidTransactionEncoding)),
+            "Unexpected outcome: Stateless verification should have failed due to invalid signature"
+        );
 
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
     }
