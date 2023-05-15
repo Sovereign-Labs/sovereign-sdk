@@ -18,7 +18,7 @@ To do so, the sender must prove that they possess the private key that correspon
 
 ### The Accounts module makes the following guarantees:
 
-1. The mapping between public keys and addresses is one-to-one (bijective).
+1. The mapping between public keys and addresses is one-to-one.
 
 1. At some point in time, the sender has provided proof that they possessed the private key corresponding to the public key associated with the address.
 
