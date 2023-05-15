@@ -10,9 +10,9 @@ The module will then add a mapping between the public key and the address to its
 
 1. It is possible to update the public key associated with a given address using the `CallMessage::UpdatePublicKey(..)` message. To do so, the sender must prove that they possess the private key that corresponds to the new public key.
 
-1. Account nonce is increased on every processed message, the nonce guards against double spending attack and introduces a transaction ordering.
+1. Each processed message increases the account nonce. This serves to protect against double-spending attacks and ensures proper transaction ordering.
 
-1. It is possible to query the `Accounts` module with `QueryMessage::GetAccount(..)` message ang get account corresponding to the given public key.
+1. It is possible to query the `Accounts` module with a `QueryMessage::GetAccount(..)` message and get the account corresponding to the given public key.
 
 ### The Accounts module makes the following guarantees:
 
@@ -20,7 +20,7 @@ The module will then add a mapping between the public key and the address to its
 
 1. At some point in time, the sender has provided proof that they possessed the private key corresponding to the public key associated with the address.
 
-1. Account nonce is increased on every processed message by 1.
+1. The account nonce is increased on every processed message by 1.
 
 
 
