@@ -1,5 +1,4 @@
 pub mod crypto;
-pub mod traits;
-
-#[cfg(any(test, feature = "mocks"))]
+#[cfg(feature = "mocks")]
 pub mod mocks;
+pub mod traits;

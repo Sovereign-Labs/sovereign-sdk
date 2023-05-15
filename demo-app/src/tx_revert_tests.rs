@@ -15,7 +15,7 @@ use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
 };
 use sov_state::ProverStorage;
-use sovereign_sdk::stf::StateTransitionFunction;
+use sovereign_sdk::{core::mocks::MockZkvm, stf::StateTransitionFunction};
 
 const SEQUENCER_BALANCE_DELTA: u64 = 1;
 const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + SEQUENCER_BALANCE_DELTA;
@@ -35,20 +35,23 @@ fn test_tx_revert() {
     {
         let mut demo = create_new_demo(&path);
 
-        demo.init_chain(config);
-        demo.begin_slot(Default::default());
+        StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
+        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
 
         let txs = simulate_da_with_revert_msg(election_admin_private_key);
 
-        match demo
-            .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
-            .inner
+        match StateTransitionFunction::<MockZkvm>::apply_blob(
+            &mut demo,
+            TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS),
+            None,
+        )
+        .inner
         {
             sov_app_template::SequencerOutcome::Rewarded => {}
             _ => panic!("Unexpected outcome: Batch exeuction should have succeeded"),
         }
 
-        demo.end_slot();
+        StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
     }
 
     // Checks
@@ -105,18 +108,17 @@ fn test_tx_bad_sig() {
     {
         let mut demo = create_new_demo(&path);
 
-        demo.init_chain(config);
-        demo.begin_slot(Default::default());
+        StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
+        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
 
         let txs = simulate_da_with_bad_sig(election_admin_private_key);
 
-        match demo
-            .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None).inner {
+        match StateTransitionFunction::<MockZkvm>::apply_blob(&mut demo, TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None).inner {
                 sov_app_template::SequencerOutcome::Slashed(SlashingReason::StatelessVerificationFailed) => {}
                 _ => panic!("Unexpected outcome: Stateless verification should have failed due to invalid signature")
             }
 
-        demo.end_slot();
+        StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
     }
 
     {
@@ -210,18 +212,23 @@ fn test_tx_bad_serialization() {
     {
         let mut demo = create_new_demo(&path);
 
-        demo.init_chain(config);
-        demo.begin_slot(Default::default());
+        StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
+        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
 
         let txs = simulate_da_with_bad_serialization(election_admin_private_key);
 
-        match demo
-            .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None).inner {
-                sov_app_template::SequencerOutcome::Slashed(SlashingReason::InvalidTransactionEncoding) => {}
-                _ => panic!("Unexpected outcome: Stateless verification should have failed due to invalid signature")
-            }
+        let outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+            &mut demo,
+            TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS),
+            None,
+        )
+        .inner;
+        assert!(
+            matches!(outcome, sov_app_template::SequencerOutcome::Slashed(SlashingReason::InvalidTransactionEncoding)),
+            "Unexpected outcome: Stateless verification should have failed due to invalid signature"
+        );
 
-        demo.end_slot();
+        StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
     }
 
     {

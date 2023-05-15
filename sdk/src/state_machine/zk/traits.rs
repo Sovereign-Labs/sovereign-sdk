@@ -1,6 +1,5 @@
 use core::fmt::Debug;
 
-use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -13,14 +12,19 @@ pub trait ZkvmHost: Zkvm {
 /// A Zk proof system capable of proving and verifying arbitrary Rust code
 /// Must support recursive proofs.
 pub trait Zkvm {
-    type CodeCommitment: Matches<Self::CodeCommitment> + Clone;
-    type Proof: ProofTrait<Self>;
+    type CodeCommitment: Matches<Self::CodeCommitment>
+        + Clone
+        + Debug
+        + Serialize
+        + DeserializeOwned;
     type Error: Debug;
 
-    fn verify(
-        proof: Self::Proof,
+    /// Interpret a sequence of a bytes as a proof and attempt to verify it against the code commitment.
+    /// If the proof is valid, return a reference to the public outputs of the proof.
+    fn verify<'a>(
+        serialized_proof: &'a [u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<<<Self as Zkvm>::Proof as ProofTrait<Self>>::Output, Self::Error>;
+    ) -> Result<&'a [u8], Self::Error>;
 }
 
 /// A trait which is accessible from within a zkVM program.
@@ -29,26 +33,8 @@ pub trait ZkvmGuest: Zkvm {
     fn read_from_host<T: DeserializeOwned>(&self) -> T;
 }
 
-/// A trait implemented by a zkVM proof.
-pub trait ProofTrait<VM: Zkvm + ?Sized> {
-    type Output: Serialize + DeserializeOwned;
-    /// Verify the proof, deserializing the result if successful.
-    fn verify(self, code_commitment: &VM::CodeCommitment) -> Result<Self::Output, VM::Error>;
-}
-
 pub trait Matches<T> {
     fn matches(&self, other: &T) -> bool;
-}
-
-pub enum RecursiveProofInput<Vm: Zkvm, T, Pf: ProofTrait<Vm, Output = T>> {
-    Base(T),
-    Recursive(Pf, std::marker::PhantomData<Vm>),
-}
-
-#[derive(BorshSerialize, BorshDeserialize)]
-pub struct RecursiveProofOutput<Vm: Zkvm, T> {
-    pub claimed_method_id: Vm::CodeCommitment,
-    pub output: T,
 }
 
 // TODO!

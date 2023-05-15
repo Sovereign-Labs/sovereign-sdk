@@ -20,6 +20,7 @@ use sov_state::ZkStorage;
 #[cfg(feature = "native")]
 use sovereign_sdk::stf::ProverConfig;
 use sovereign_sdk::stf::{StateTransitionRunner, ZkConfig};
+use sovereign_sdk::zk::traits::Zkvm;
 #[cfg(test)]
 use std::path::Path;
 
@@ -39,7 +40,7 @@ pub const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
 pub const TOKEN_NAME: &str = "sov-test-token";
 
 #[cfg(feature = "native")]
-impl StateTransitionRunner<ProverConfig> for DemoAppRunner<DefaultContext> {
+impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext> {
     type RuntimeConfig = &'static str;
     type Inner = DemoApp<DefaultContext>;
 
@@ -62,7 +63,7 @@ impl StateTransitionRunner<ProverConfig> for DemoAppRunner<DefaultContext> {
     }
 }
 
-impl StateTransitionRunner<ZkConfig> for DemoAppRunner<ZkDefaultContext> {
+impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultContext> {
     type RuntimeConfig = [u8; 32];
     type Inner = DemoApp<ZkDefaultContext>;
 

@@ -108,12 +108,7 @@ impl<'a> StructDef<'a> {
                     impl_self_body.push(&field.ident);
                 }
                 FieldKind::Address(field) => {
-                    impl_self_init.push(make_init_address(
-                        field,
-                        &self.ident,
-                        module_address,
-                        type_generics,
-                    )?);
+                    impl_self_init.push(make_init_address(field, &self.ident, module_address)?);
                     impl_self_body.push(&field.ident);
                     module_address = Some(&field.ident);
                 }
@@ -296,7 +291,6 @@ fn make_init_address(
     field: &StructNamedField,
     struct_ident: &Ident,
     address: Option<&Ident>,
-    type_generics: &TypeGenerics,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let field_ident = &field.ident;
 
@@ -313,7 +307,7 @@ fn make_init_address(
             let module_path = module_path!();
             let prefix = sov_modules_api::Prefix::new_module(module_path, stringify!(#struct_ident));
             let #field_ident =
-                <Self::Context as sov_modules_api::Spec>::Address::try_from(&prefix.hash:: #type_generics ())
+                <Self::Context as sov_modules_api::Spec>::Address::try_from(&prefix.hash:: <Self::Context> ())
                     .unwrap_or_else(|e| panic!("ModuleInfo macro error, unable to create an Address for module: {}", e));
         }),
     }
