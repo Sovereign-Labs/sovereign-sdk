@@ -92,8 +92,6 @@ fn burn_deployed_tokens() {
         token_address
     );
     let actual_msg = failed_to_burn.err().unwrap().to_string();
-    println!("EXPECTED: {}", &expected_error);
-    println!("ACTUAL  : {}", &actual_msg);
     assert!(actual_msg.contains(&expected_error));
     let current_total_supply = query_total_supply(&mut working_set);
     assert_eq!(previous_total_supply, current_total_supply);
