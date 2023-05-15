@@ -9,7 +9,7 @@ pub use sov_app_template::Batch;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
-use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+pub use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Context;
 use sov_modules_api::PublicKey;
 use sov_modules_api::{Hasher, Spec};
