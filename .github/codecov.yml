@@ -10,6 +10,7 @@ coverage:
       default:
         # Avoid false negatives
         threshold: 1%
+    patch: off
 
 # Test files aren't important for coverage
 ignore:
