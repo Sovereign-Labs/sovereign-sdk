@@ -5,7 +5,7 @@ members = [
     "db/sovereign-db",
     "demo-app",
     "sdk",
-    "risc0-adapter",
+    "adapters/risc0",
     "first-read-last-write-cache",
     "sov-modules/sov-app-template",
     "sov-modules/sov-modules-macros",

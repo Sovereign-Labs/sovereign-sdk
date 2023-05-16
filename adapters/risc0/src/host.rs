@@ -2,7 +2,6 @@ use std::cell::RefCell;
 
 use risc0_zkp::{core::config::HashSuiteSha256, field::baby_bear::BabyBear};
 use risc0_zkvm::{receipt::verify_with_hal, serde::to_vec, sha::Impl, Prover, Receipt};
-use serde::{Deserialize, Serialize};
 use sovereign_sdk::zk::traits::{Zkvm, ZkvmHost};
 
 use crate::Risc0MethodId;
@@ -28,7 +27,7 @@ impl<'a> Risc0Host<'a> {
 }
 
 impl<'a> ZkvmHost for Risc0Host<'a> {
-    fn write_to_guest<T: Serialize>(&self, item: T) {
+    fn write_to_guest<T: serde::Serialize>(&self, item: T) {
         let serialized = to_vec(&item).expect("Serialization to vec is infallible");
         self.prover.borrow_mut().add_input_u32_slice(&serialized);
     }
@@ -43,7 +42,6 @@ impl<'prover> Zkvm for Risc0Host<'prover> {
         serialized_proof: &'a [u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error> {
-        // let journal:  = bincode::deserialize(serialized_proof)?;
         let receipt: Risc0Proof<'a> = bincode::deserialize(serialized_proof)?;
         verify_with_hal(
             &risc0_zkp::verify::CpuVerifyHal::<BabyBear, HashSuiteSha256<BabyBear, Impl>, _>::new(
@@ -57,7 +55,7 @@ impl<'prover> Zkvm for Risc0Host<'prover> {
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Risc0Proof<'a> {
     pub journal: &'a [u8],
     pub seal: Vec<u32>,
