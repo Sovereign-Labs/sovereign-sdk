@@ -56,6 +56,17 @@ pub struct SlotCommit<S: SlotData, B, T> {
 }
 
 impl<S: SlotData, B, T> SlotCommit<S, B, T> {
+    pub fn new(slot_data: S) -> Self {
+        Self {
+            slot_data,
+            batch_receipts: vec![],
+            num_txs: 0,
+            num_events: 0,
+        }
+    }
+}
+
+impl<S: SlotData, B, T> SlotCommit<S, B, T> {
     pub fn add_batch(&mut self, batch: BatchReceipt<B, T>) {
         self.num_txs += batch.tx_receipts.len();
         let events_this_batch: usize = batch.tx_receipts.iter().map(|r| r.events.len()).sum();
