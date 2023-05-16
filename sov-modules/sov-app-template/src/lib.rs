@@ -2,6 +2,8 @@ mod batch;
 mod tx_hooks;
 mod tx_verifier;
 
+use std::marker::PhantomData;
+
 pub use batch::Batch;
 use borsh::BorshDeserialize;
 use sovereign_sdk::stf::BatchReceipt;
@@ -21,15 +23,16 @@ use sovereign_sdk::{
     stf::{OpaqueAddress, StateTransitionFunction},
 };
 
-pub struct AppTemplate<C: Context, V, RT, H> {
+pub struct AppTemplate<C: Context, V, RT, H, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
     tx_verifier: V,
     tx_hooks: H,
     working_set: Option<WorkingSet<C::Storage>>,
+    phantom_vm: PhantomData<Vm>,
 }
 
-impl<C: Context, V, RT, H> AppTemplate<C, V, RT, H>
+impl<C: Context, V, RT, H, Vm> AppTemplate<C, V, RT, H, Vm>
 where
     RT: DispatchCall<Context = C> + Genesis<Context = C>,
     V: TxVerifier,
@@ -42,6 +45,7 @@ where
             tx_verifier,
             tx_hooks,
             working_set: None,
+            phantom_vm: PhantomData,
         }
     }
 
@@ -224,7 +228,7 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-impl<C: Context, V, RT, H, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, V, RT, H>
+impl<C: Context, V, RT, H, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, V, RT, H, Vm>
 where
     RT: DispatchCall<Context = C> + Genesis<Context = C>,
     V: TxVerifier,
