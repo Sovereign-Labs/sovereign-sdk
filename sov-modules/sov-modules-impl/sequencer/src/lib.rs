@@ -43,6 +43,7 @@ pub struct Sequencer<C: sov_modules_api::Context> {
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Sequencer<C> {
     type Context = C;
 
+    #[cfg(feature = "native")]
     type QueryMessage = query::QueryMessage;
 
     type Config = SequencerConfig<C>;

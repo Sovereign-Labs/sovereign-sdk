@@ -41,6 +41,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
 
     type CallMessage = call::CallMessage<C>;
 
+    #[cfg(feature = "native")]
     type QueryMessage = query::QueryMessage<C>;
 
     fn genesis(

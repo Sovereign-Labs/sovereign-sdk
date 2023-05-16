@@ -45,6 +45,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
 
     type CallMessage = call::CallMessage<C>;
 
+    #[cfg(feature = "native")]
     type QueryMessage = query::QueryMessage<C>;
 
     fn genesis(

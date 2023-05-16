@@ -11,6 +11,7 @@ use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Context;
+#[cfg(feature = "native")]
 use sov_modules_api::PublicKey;
 use sov_modules_api::{Hasher, Spec};
 #[cfg(feature = "native")]
