@@ -1,6 +1,5 @@
 use std::future::Future;
 
-use crate::core::traits::AddressTrait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
