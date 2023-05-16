@@ -1,8 +1,11 @@
 use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
-use sovereign_sdk::{rpc::TxIdentifier, stf::EventKey};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use sovereign_sdk::{
+    rpc::{BatchResponse, TxIdentifier, TxResponse},
+    stf::{Event, EventKey, TransactionReceipt},
+};
 
 /// A cheaply cloneable bytes abstraction for use within the trust boundary of the node
 /// (i.e. when interfacing with the database). Serializes and deserializes more efficiently,
@@ -18,6 +21,12 @@ pub struct DbBytes(Arc<Vec<u8>>);
 impl DbBytes {
     pub fn new(contents: Vec<u8>) -> Self {
         Self(Arc::new(contents))
+    }
+}
+
+impl From<Vec<u8>> for DbBytes {
+    fn from(value: Vec<u8>) -> Self {
+        Self(Arc::new(value))
     }
 }
 
@@ -53,11 +62,21 @@ pub struct StoredSlot {
 /// included in the batch
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct StoredBatch {
-    pub sender: Vec<u8>,
     pub hash: DbHash,
-    pub extra_data: DbBytes,
     pub txs: std::ops::Range<TxNumber>,
-    pub status: Status,
+    pub custom_receipt: DbBytes,
+}
+
+impl<B: DeserializeOwned, T> TryFrom<StoredBatch> for BatchResponse<B, T> {
+    type Error = anyhow::Error;
+    fn try_from(value: StoredBatch) -> Result<Self, Self::Error> {
+        Ok(Self {
+            hash: value.hash,
+            custom_receipt: bincode::deserialize(&value.custom_receipt.0)?,
+            tx_range: value.txs.start.into()..value.txs.end.into(),
+            txs: None,
+        })
+    }
 }
 
 /// The on-disk format of a transaction. Includes the txhash, the serialized tx data,
@@ -67,8 +86,36 @@ pub struct StoredTransaction {
     pub hash: DbHash,
     /// The range of event-numbers emitted by this transaction
     pub events: std::ops::Range<EventNumber>,
-    pub data: DbBytes,
-    pub status: Status,
+    pub body: Option<Vec<u8>>,
+    pub custom_receipt: DbBytes,
+}
+
+impl<R: DeserializeOwned> TryFrom<StoredTransaction> for TxResponse<R> {
+    type Error = anyhow::Error;
+    fn try_from(value: StoredTransaction) -> Result<Self, Self::Error> {
+        Ok(Self {
+            hash: value.hash,
+            event_range: value.events.start.into()..value.events.end.into(),
+            body: value.body,
+            custom_receipt: bincode::deserialize(&value.custom_receipt.0)?,
+        })
+    }
+}
+
+pub fn split_tx_for_storage<R: Serialize>(
+    tx: TransactionReceipt<R>,
+    event_offset: u64,
+) -> (StoredTransaction, Vec<Event>) {
+    let event_range = EventNumber(event_offset)..EventNumber(event_offset + tx.events.len() as u64);
+    let tx_for_storage = StoredTransaction {
+        hash: tx.tx_hash,
+        events: event_range,
+        body: tx.body_to_save,
+        custom_receipt: DbBytes::new(
+            bincode::serialize(&tx.receipt).expect("Serialization to vec is infallible"),
+        ),
+    };
+    (tx_for_storage, tx.events)
 }
 
 /// An identifier that specifies a single event
