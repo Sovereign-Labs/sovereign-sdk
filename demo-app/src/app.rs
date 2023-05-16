@@ -168,7 +168,9 @@ pub fn generate_address<C: Context>(key: &str) -> <C as Spec>::Address {
 }
 
 #[cfg(test)]
-pub(crate) fn create_new_demo(path: impl AsRef<Path>) -> DemoApp<DefaultContext> {
+pub(crate) fn create_new_demo(
+    path: impl AsRef<Path>,
+) -> DemoApp<DefaultContext, sovereign_sdk::core::mocks::MockZkvm> {
     let runtime = Runtime::new();
     let storage = ProverStorage::with_path(path).unwrap();
     let tx_hooks = DemoAppTxHooks::new();
