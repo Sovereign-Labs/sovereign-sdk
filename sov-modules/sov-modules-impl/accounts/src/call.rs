@@ -1,13 +1,12 @@
 use crate::Accounts;
 use anyhow::{ensure, Result};
-use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::CallResponse;
 use sov_modules_api::Signature;
 use sov_state::WorkingSet;
 
 pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 
-#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage<C: sov_modules_api::Context> {
     // Updates a PublicKey for the corresponding Account.
     // The sender must be in possession of the new PublicKey.

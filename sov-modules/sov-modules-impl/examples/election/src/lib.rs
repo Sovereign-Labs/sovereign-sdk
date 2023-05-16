@@ -1,5 +1,6 @@
 pub mod call;
 pub mod genesis;
+#[cfg(feature = "native")]
 pub mod query;
 
 #[cfg(test)]

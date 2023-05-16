@@ -1,5 +1,4 @@
 use crate::{Amount, Bank};
-#[cfg(feature = "native")]
 use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
 
@@ -15,19 +14,16 @@ pub enum QueryMessage<C: sov_modules_api::Context> {
     GetTotalSupply { token_address: C::Address },
 }
 
-#[cfg_attr(feature = "native", derive(serde::Deserialize, serde::Serialize))]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct BalanceResponse {
     pub amount: Option<Amount>,
 }
 
-#[cfg_attr(feature = "native", derive(serde::Deserialize, serde::Serialize))]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct TotalSupplyResponse {
     pub amount: Option<Amount>,
 }
 
-#[cfg(feature = "native")]
 #[rpc_gen(client, server, namespace = "bank")]
 impl<C: sov_modules_api::Context> Bank<C> {
     #[rpc_method(name = "balanceOf")]

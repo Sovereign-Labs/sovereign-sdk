@@ -1,6 +1,7 @@
 pub mod call;
 mod create_token;
 pub mod genesis;
+#[cfg(feature = "native")]
 pub mod query;
 mod token;
 
