@@ -1,14 +1,12 @@
 use super::ValueSetter;
-use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
 use sov_state::WorkingSet;
 
-#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum QueryMessage {
     GetValue,
 }
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq)]
 pub struct Response {
     pub value: Option<u32>,
 }

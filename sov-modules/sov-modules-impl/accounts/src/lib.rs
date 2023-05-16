@@ -2,11 +2,11 @@ pub mod hooks;
 
 mod call;
 mod genesis;
+#[cfg(feature = "native")]
 mod query;
 #[cfg(test)]
 mod tests;
 
-use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
@@ -16,7 +16,7 @@ pub struct AccountConfig<C: sov_modules_api::Context> {
     pub pub_keys: Vec<C::PublicKey>,
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq, Copy, Clone)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Copy, Clone)]
 pub struct Account<C: sov_modules_api::Context> {
     pub addr: C::Address,
     pub nonce: u64,
@@ -41,6 +41,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
 
     type CallMessage = call::CallMessage<C>;
 
+    #[cfg(feature = "native")]
     type QueryMessage = query::QueryMessage<C>;
 
     fn genesis(
