@@ -26,13 +26,13 @@ use std::path::Path;
 
 #[cfg(test)]
 pub(crate) type C = DefaultContext;
-pub struct DemoAppRunner<C: Context>(pub DemoApp<C>);
-pub type ZkAppRunner = DemoAppRunner<ZkDefaultContext>;
+pub struct DemoAppRunner<C: Context, Vm: Zkvm>(pub DemoApp<C, Vm>);
+pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;
 
 #[cfg(feature = "native")]
-pub type NativeAppRunner = DemoAppRunner<DefaultContext>;
+pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
 
-pub type DemoApp<C> = AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>>;
+pub type DemoApp<C, Vm> = AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>, Vm>;
 
 pub const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 pub const LOCKED_AMOUNT: u64 = 200;
@@ -40,9 +40,9 @@ pub const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
 pub const TOKEN_NAME: &str = "sov-test-token";
 
 #[cfg(feature = "native")]
-impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext> {
+impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
     type RuntimeConfig = &'static str;
-    type Inner = DemoApp<DefaultContext>;
+    type Inner = DemoApp<DefaultContext, Vm>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let runtime = Runtime::new();
@@ -63,16 +63,22 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
     }
 }
 
-impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultContext> {
+impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultContext, Vm> {
     type RuntimeConfig = [u8; 32];
-    type Inner = DemoApp<ZkDefaultContext>;
+    type Inner = DemoApp<ZkDefaultContext, Vm>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let runtime = Runtime::new();
         let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
         let tx_verifier = DemoAppTxVerifier::new();
         let tx_hooks = DemoAppTxHooks::new();
-        let app = AppTemplate::new(storage, runtime, tx_verifier, tx_hooks);
+        let app: AppTemplate<
+            ZkDefaultContext,
+            DemoAppTxVerifier<ZkDefaultContext>,
+            Runtime<ZkDefaultContext>,
+            DemoAppTxHooks<ZkDefaultContext>,
+            Vm,
+        > = AppTemplate::new(storage, runtime, tx_verifier, tx_hooks);
         Self(app)
     }
 
