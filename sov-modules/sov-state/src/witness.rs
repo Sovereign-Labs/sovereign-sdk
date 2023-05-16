@@ -1,8 +1,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use jmt::storage::TreeReader;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
 use std::sync::atomic::AtomicUsize;
+use std::sync::Mutex;
 
 // TODO: Refactor witness trait so it only require Serialize / Deserialize
 //   https://github.com/Sovereign-Labs/sovereign/issues/263
@@ -51,27 +51,27 @@ impl<'a, T: Witness> TreeReader for TreeWitnessReader<'a, T> {
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct ArrayWitness {
     next_idx: AtomicUsize,
-    hints: RefCell<Vec<Vec<u8>>>,
+    hints: Mutex<Vec<Vec<u8>>>,
 }
 
 impl Witness for ArrayWitness {
     fn add_hint<T: BorshSerialize>(&self, hint: T) {
-        self.hints.borrow_mut().push(hint.try_to_vec().unwrap())
+        self.hints.lock().unwrap().push(hint.try_to_vec().unwrap())
     }
 
     fn get_hint<T: BorshDeserialize>(&self) -> T {
         let idx = self
             .next_idx
             .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-
-        T::deserialize_reader(&mut std::io::Cursor::new(&self.hints.borrow()[idx]))
+        let hints_lock = self.hints.lock().unwrap();
+        T::deserialize_reader(&mut std::io::Cursor::new(&hints_lock[idx]))
             .expect("Hint deserialization should never fail")
     }
 
     fn merge(&self, rhs: &Self) {
         let rhs_next_idx = rhs.next_idx.load(std::sync::atomic::Ordering::SeqCst);
-        self.hints
-            .borrow_mut()
-            .extend(rhs.hints.borrow_mut().drain(rhs_next_idx..))
+        let mut lhs_hints_lock = self.hints.lock().unwrap();
+        let mut rhs_hints_lock = rhs.hints.lock().unwrap();
+        lhs_hints_lock.extend(rhs_hints_lock.drain(rhs_next_idx..))
     }
 }
