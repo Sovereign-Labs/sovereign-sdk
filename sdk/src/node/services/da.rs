@@ -58,7 +58,10 @@ pub trait DaService {
         <Self::Spec as DaSpec>::CompletenessProof,
     );
 
-    // TODO: add a send_transaction method https://github.com/Sovereign-Labs/sovereign/issues/208
+    /// Send a transaction directly to the DA layer.
+    /// blob is the serialized and signed transaction.
+    /// Returns nothing if the transaction was successfully sent.
+    fn send_transaction(&self, blob: &[u8]) -> Self::Future<()>;
 }
 
 pub trait SlotData: Serialize + DeserializeOwned + PartialEq + core::fmt::Debug + Clone {
