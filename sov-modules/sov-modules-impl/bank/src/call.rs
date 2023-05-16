@@ -48,11 +48,16 @@ impl<C: sov_modules_api::Context> Bank<C> {
             &[(minter_address, initial_balance)],
             context.sender().as_ref(),
             salt,
+            self.tokens.prefix(),
             working_set,
         )?;
 
         if self.tokens.get(&token_address, working_set).is_some() {
-            bail!("Token address already exists");
+            bail!(
+                "Token {} at {} address already exists",
+                token_name,
+                token_address
+            );
         }
 
         self.tokens.set(&token_address, token, working_set);
@@ -97,8 +102,11 @@ impl<C: sov_modules_api::Context> Bank<C> {
     }
 }
 
-pub(crate) fn prefix_from_address<C: sov_modules_api::Context>(
+pub(crate) fn prefix_from_address_with_parent<C: sov_modules_api::Context>(
+    parent_prefix: &sov_state::Prefix,
     token_address: &C::Address,
 ) -> sov_state::Prefix {
-    sov_state::Prefix::new(token_address.as_ref().to_vec())
+    let mut prefix = parent_prefix.as_aligned_vec().clone().into_inner();
+    prefix.extend_from_slice(format!("{}", token_address).as_bytes());
+    sov_state::Prefix::new(prefix)
 }

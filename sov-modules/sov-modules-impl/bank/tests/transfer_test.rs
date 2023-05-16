@@ -144,12 +144,14 @@ fn transfer_initial_token() {
 
         let result = bank.call(transfer_message, &unknown_sender_context, &mut working_set);
         assert!(result.is_err());
-
         let error = result.err().unwrap();
-        // TODO: Prefix just address https://github.com/Sovereign-Labs/sovereign/issues/185
-        assert!(error
-            .to_string()
-            .contains("Value not found for prefix: 0xc166b1b9c394ac408de38dd16fdba54edfcb3f7502f42ed59f296b93216f34f4 and: storage key"));
+
+        let expected_message_part = format!(
+            "Value not found for prefix: \"bank/Bank/tokens/{}\" and: storage key",
+            token_address
+        );
+        let actual_message = error.to_string();
+        assert!(actual_message.contains(&expected_message_part));
 
         let receiver_balance_after = query_user_balance(receiver_address, &mut working_set);
         assert_eq!(receiver_balance_before, receiver_balance_after);

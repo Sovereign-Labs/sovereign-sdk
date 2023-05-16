@@ -11,12 +11,14 @@ impl<C: sov_modules_api::Context> Bank<C> {
         config: &<Self as sov_modules_api::Module>::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
+        let parent_prefix = self.tokens.prefix();
         for token_config in config.tokens.iter() {
             let (token_address, token) = Token::<C>::create(
                 &token_config.token_name,
                 &token_config.address_and_balances,
                 &DEPLOYER,
                 SALT,
+                parent_prefix,
                 working_set,
             )?;
 
