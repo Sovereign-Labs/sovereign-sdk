@@ -254,8 +254,6 @@ impl RpcImplBlock {
 
             blanket_impl_methods.push(blanket_impl_method);
         }
-        // let base_type = format_ident!("TestRuntime");
-        // let generic_param = format_ident!("MockContext");
 
         let rpc_impl_trait = if let Some(ref working_set_type) = self.working_set_type {
             quote! {
@@ -599,8 +597,6 @@ pub(crate) fn rpc_outer_impls(args: proc_macro2::TokenStream,
     let last_segment = trait_type_path.path.segments.last_mut().unwrap();
     last_segment.ident = syn::Ident::new(&format!("{}OuterRpcImpl", last_segment.ident), last_segment.ident.span());
 
-    let inner_trait_type_path: syn::TypePath = syn::parse_str(&format!("Runtime<{}>", quote! { #trait_type })).unwrap();
-
     let output = quote! {
 
         #(#attrs)*
@@ -609,15 +605,12 @@ pub(crate) fn rpc_outer_impls(args: proc_macro2::TokenStream,
         impl #generics #trait_type_path for #type_name
         where
         {
-            // type InnerTraitType = #inner_trait_type_path;
-            type InnerTraitType = TestRuntime::<MockContext>;
-            fn get_working_set(&self) -> WorkingSet<<MockContext as Spec>::Storage> {
-                // WorkingSet::new(self.inner().current_storage.clone())
-                WorkingSet::new(self.get_storage())
+            type InnerTraitType = TestRuntime::<DefaultContext>;
+            fn get_working_set(&self) -> WorkingSet<<DefaultContext as Spec>::Storage> {
+                WorkingSet::new(self.inner().current_storage.clone())
             }
             fn get_runtime(&self) -> &Self::InnerTraitType {
-                // &self.inner().runtime
-                &self
+                &self.inner().runtime
             }
         }
 
