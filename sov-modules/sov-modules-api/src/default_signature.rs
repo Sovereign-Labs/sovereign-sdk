@@ -17,7 +17,7 @@ pub mod private_key {
     pub enum DefaultPrivateKeyHexDeserializationError {
         #[error("Hex deserialization error")]
         FromHexError(#[from] hex::FromHexError),
-        #[error("PrivateKey deserialization deserialization error")]
+        #[error("PrivateKey deserialization error")]
         PrivateKeyError(#[from] SignatureError),
     }
 

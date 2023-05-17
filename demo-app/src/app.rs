@@ -22,7 +22,7 @@ use sov_state::ZkStorage;
 use sovereign_sdk::stf::ProverConfig;
 use sovereign_sdk::stf::{StateTransitionRunner, ZkConfig};
 use sovereign_sdk::zk::traits::Zkvm;
-
+#[cfg(feature = "native")]
 use std::path::Path;
 
 #[cfg(test)]
