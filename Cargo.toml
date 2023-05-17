@@ -56,3 +56,5 @@ tiny-keccak = "2.0.2"
 tracing = "0.1.37"
 bech32 = "0.9.1"
 derive_more = "0.99.11"
+clap = {version = "4.2.7", features= ["derive"]}
+toml = "0.7.3"

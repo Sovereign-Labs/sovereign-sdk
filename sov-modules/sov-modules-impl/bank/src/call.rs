@@ -1,9 +1,15 @@
 use crate::{Amount, Bank, Coins, Token};
 use anyhow::{bail, Result};
+
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
 /// This enumeration represents the available call messages for interacting with the bank module.
+#[cfg_attr(
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
+)]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: sov_modules_api::Context> {
     /// Creates a new token with the specified name and initial balance.
@@ -23,13 +29,13 @@ pub enum CallMessage<C: sov_modules_api::Context> {
         /// The address to which the tokens will be transferred.
         to: C::Address,
         /// The amount of tokens to transfer.
-        coins: Coins<C::Address>,
+        coins: Coins<C>,
     },
 
     /// Burns a specified amount of tokens.
     Burn {
         /// The amount of tokens to burn.
-        coins: Coins<C::Address>,
+        coins: Coins<C>,
     },
 }
 
@@ -67,7 +73,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
     pub fn transfer(
         &self,
         to: C::Address,
-        coins: Coins<C::Address>,
+        coins: Coins<C>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
@@ -76,7 +82,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
 
     pub(crate) fn burn(
         &self,
-        coins: Coins<C::Address>,
+        coins: Coins<C>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
@@ -94,7 +100,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         &self,
         from: &C::Address,
         to: &C::Address,
-        coins: Coins<C::Address>,
+        coins: Coins<C>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let token = self.tokens.get_or_err(&coins.token_address, working_set)?;

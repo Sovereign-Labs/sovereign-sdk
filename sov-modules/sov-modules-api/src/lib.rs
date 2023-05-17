@@ -2,6 +2,7 @@
 
 pub mod default_context;
 pub mod default_signature;
+mod serde_address;
 
 mod bech32;
 mod dispatch;
@@ -35,16 +36,7 @@ impl AsRef<[u8]> for Address {
 
 impl AddressTrait for Address {}
 
-#[derive(
-    Debug,
-    PartialEq,
-    Clone,
-    Eq,
-    borsh::BorshDeserialize,
-    borsh::BorshSerialize,
-    serde::Serialize,
-    serde::Deserialize,
-)]
+#[derive(PartialEq, Clone, Eq, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Address {
     addr: [u8; 32],
 }
@@ -71,6 +63,20 @@ impl From<[u8; 32]> for Address {
 impl Display for Address {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", AddressBech32::from(self))
+    }
+}
+
+impl Debug for Address {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}", AddressBech32::from(self))
+    }
+}
+
+impl From<AddressBech32> for Address {
+    fn from(addr: AddressBech32) -> Self {
+        Self {
+            addr: addr.to_byte_array(),
+        }
     }
 }
 
@@ -107,7 +113,7 @@ pub trait Spec {
         + BorshSerialize
         + BorshDeserialize
         + Into<AddressBech32>
-        + for<'a> serde::Deserialize<'a>;
+        + From<AddressBech32>;
 
     #[cfg(not(feature = "native"))]
     type Address: AddressTrait + BorshSerialize + BorshDeserialize;

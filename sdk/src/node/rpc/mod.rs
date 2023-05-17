@@ -1,4 +1,6 @@
-use serde::{Deserialize, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
+
+use crate::stf::Event;
 
 /// An identifier that specifies a single batch
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -56,83 +58,110 @@ pub enum QueryMode {
     Full,
 }
 
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub struct SlotResponse<B, Tx> {
+    pub number: u64,
+    pub hash: [u8; 32],
+    pub batch_range: std::ops::Range<u64>,
+    pub batches: Option<Vec<ItemOrHash<BatchResponse<B, Tx>>>>,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub struct BatchResponse<B, Tx> {
+    pub hash: [u8; 32],
+    pub tx_range: std::ops::Range<u64>,
+    pub txs: Option<Vec<ItemOrHash<TxResponse<Tx>>>>,
+    pub custom_receipt: B,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+pub struct TxResponse<Tx> {
+    pub hash: [u8; 32],
+    pub event_range: std::ops::Range<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub body: Option<Vec<u8>>,
+    #[serde(flatten)]
+    pub custom_receipt: Tx,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum ItemOrHash<T> {
+    Hash([u8; 32]),
+    Full(T),
+}
+
 pub trait LedgerRpcProvider {
-    type SlotResponse: Serialize;
-    type BatchResponse: Serialize;
-    type TxResponse: Serialize;
-    type EventResponse: Serialize;
+    fn get_head<B: DeserializeOwned, T: DeserializeOwned>(
+        &self,
+    ) -> Result<Option<SlotResponse<B, T>>, anyhow::Error>;
 
-    fn get_head(&self) -> Result<Option<Self::SlotResponse>, anyhow::Error>;
-
-    fn get_slots(
+    fn get_slots<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         slot_ids: &[SlotIdentifier],
         query_mode: QueryMode,
-    ) -> Result<Vec<Option<Self::SlotResponse>>, anyhow::Error>;
-    fn get_batches(
+    ) -> Result<Vec<Option<SlotResponse<B, T>>>, anyhow::Error>;
+    fn get_batches<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         batch_ids: &[BatchIdentifier],
         query_mode: QueryMode,
-    ) -> Result<Vec<Option<Self::BatchResponse>>, anyhow::Error>;
-    fn get_transactions(
+    ) -> Result<Vec<Option<BatchResponse<B, T>>>, anyhow::Error>;
+    fn get_transactions<T: DeserializeOwned>(
         &self,
         tx_ids: &[TxIdentifier],
         query_mode: QueryMode,
-    ) -> Result<Vec<Option<Self::TxResponse>>, anyhow::Error>;
+    ) -> Result<Vec<Option<TxResponse<T>>>, anyhow::Error>;
     fn get_events(
         &self,
         event_ids: &[EventIdentifier],
-    ) -> Result<Vec<Option<Self::EventResponse>>, anyhow::Error>;
-    fn get_slot_by_hash(
+    ) -> Result<Vec<Option<Event>>, anyhow::Error>;
+    fn get_slot_by_hash<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         hash: &[u8; 32],
         query_mode: QueryMode,
-    ) -> Result<Option<Self::SlotResponse>, anyhow::Error>;
-    fn get_batch_by_hash(
+    ) -> Result<Option<SlotResponse<B, T>>, anyhow::Error>;
+    fn get_batch_by_hash<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         hash: &[u8; 32],
         query_mode: QueryMode,
-    ) -> Result<Option<Self::BatchResponse>, anyhow::Error>;
-    fn get_tx_by_hash(
+    ) -> Result<Option<BatchResponse<B, T>>, anyhow::Error>;
+    fn get_tx_by_hash<T: DeserializeOwned>(
         &self,
         hash: &[u8; 32],
         query_mode: QueryMode,
-    ) -> Result<Option<Self::TxResponse>, anyhow::Error>;
-    fn get_slot_by_number(
+    ) -> Result<Option<TxResponse<T>>, anyhow::Error>;
+    fn get_slot_by_number<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         number: u64,
         query_mode: QueryMode,
-    ) -> Result<Option<Self::SlotResponse>, anyhow::Error>;
-    fn get_batch_by_number(
+    ) -> Result<Option<SlotResponse<B, T>>, anyhow::Error>;
+    fn get_batch_by_number<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         number: u64,
         query_mode: QueryMode,
-    ) -> Result<Option<Self::BatchResponse>, anyhow::Error>;
-    fn get_event_by_number(
-        &self,
-        number: u64,
-    ) -> Result<Option<Self::EventResponse>, anyhow::Error>;
-    fn get_tx_by_number(
+    ) -> Result<Option<BatchResponse<B, T>>, anyhow::Error>;
+    fn get_event_by_number(&self, number: u64) -> Result<Option<Event>, anyhow::Error>;
+    fn get_tx_by_number<T: DeserializeOwned>(
         &self,
         number: u64,
         query_mode: QueryMode,
-    ) -> Result<Option<Self::TxResponse>, anyhow::Error>;
-    fn get_slots_range(
+    ) -> Result<Option<TxResponse<T>>, anyhow::Error>;
+    fn get_slots_range<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         start: u64,
         end: u64,
         query_mode: QueryMode,
-    ) -> Result<Vec<Option<Self::SlotResponse>>, anyhow::Error>;
-    fn get_batches_range(
+    ) -> Result<Vec<Option<SlotResponse<B, T>>>, anyhow::Error>;
+    fn get_batches_range<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         start: u64,
         end: u64,
         query_mode: QueryMode,
-    ) -> Result<Vec<Option<Self::BatchResponse>>, anyhow::Error>;
-    fn get_transactions_range(
+    ) -> Result<Vec<Option<BatchResponse<B, T>>>, anyhow::Error>;
+    fn get_transactions_range<T: DeserializeOwned>(
         &self,
         start: u64,
         end: u64,
         query_mode: QueryMode,
-    ) -> Result<Vec<Option<Self::TxResponse>>, anyhow::Error>;
+    ) -> Result<Vec<Option<TxResponse<T>>>, anyhow::Error>;
 }

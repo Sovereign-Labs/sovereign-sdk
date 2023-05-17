@@ -36,3 +36,11 @@ fn test_signature_serialization() {
     let pub_key = priv_key.pub_key();
     deserialized_sig.verify(&pub_key, msg).unwrap()
 }
+
+#[test]
+fn test_hex_conversion() {
+    let priv_key = DefaultPrivateKey::generate();
+    let hex = priv_key.as_hex();
+    let deserialized_pub_key = DefaultPrivateKey::from_hex(&hex).unwrap().pub_key();
+    assert_eq!(priv_key.pub_key(), deserialized_pub_key)
+}

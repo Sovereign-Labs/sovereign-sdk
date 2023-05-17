@@ -9,7 +9,7 @@ pub fn vec_to_bech32(vec: &[u8], hrp: &str) -> Result<String, Error> {
     Ok(bech32_addr)
 }
 
-pub fn bech32_to_vec(bech32_addr: &str) -> Result<(String, Vec<u8>), Error> {
+pub fn bech32_to_decoded_vec(bech32_addr: &str) -> Result<(String, Vec<u8>), Error> {
     let (hrp, data, _) = bech32::decode(bech32_addr)?;
     let vec = Vec::<u8>::from_base32(&data)?;
     Ok((hrp, vec))
@@ -17,14 +17,37 @@ pub fn bech32_to_vec(bech32_addr: &str) -> Result<(String, Vec<u8>), Error> {
 
 const HRP: &str = "sov";
 
-#[cfg_attr(feature = "native", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "native", serde(try_from = "String"), serde(into = "String"))]
 #[derive(
-    borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Eq, Into, Display,
+    serde::Serialize,
+    serde::Deserialize,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    Debug,
+    PartialEq,
+    Clone,
+    Eq,
+    Into,
+    Display,
 )]
+#[serde(try_from = "String", into = "String")]
 #[display(fmt = "{}", "value")]
 pub struct AddressBech32 {
     value: String,
+}
+
+impl AddressBech32 {
+    pub(crate) fn to_byte_array(&self) -> [u8; 32] {
+        let (_, data) = bech32_to_decoded_vec(&self.value).unwrap();
+
+        if data.len() != 32 {
+            panic!("Invalid length {}, should be 32", data.len())
+        }
+
+        let mut addr_bytes = [0u8; 32];
+        addr_bytes.copy_from_slice(&data);
+
+        addr_bytes
+    }
 }
 
 impl TryFrom<&[u8]> for AddressBech32 {
@@ -73,7 +96,7 @@ impl FromStr for AddressBech32 {
     type Err = Bech32ParseError;
 
     fn from_str(s: &str) -> Result<Self, Bech32ParseError> {
-        let (hrp, _) = bech32_to_vec(s)?;
+        let (hrp, _) = bech32_to_decoded_vec(s)?;
 
         if HRP != hrp {
             return Err(Bech32ParseError::WrongHPR(hrp));

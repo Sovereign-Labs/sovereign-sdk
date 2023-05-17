@@ -66,7 +66,7 @@ where
             .enter_apply_blob(sequencer, &mut batch_workspace)
         {
             error!(
-                "Error: The transaction was rejected by the 'enter_apply_blob' hook. Skipping batch without slashing the sequencer {}",
+                "Error: The transaction was rejected by the 'enter_apply_blob' hook. Skipping batch without slashing the sequencer: {}",
                 e
             );
             self.working_set = Some(batch_workspace.revert());
@@ -108,7 +108,7 @@ where
                 // Revert on error
                 let batch_workspace = batch_workspace.revert();
                 self.working_set = Some(batch_workspace.revert());
-                error!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}", e);
+                error!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}\n", e);
                 return BatchReceipt {
                     batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
                     tx_receipts: Vec::new(),
@@ -190,6 +190,7 @@ where
                     };
                 }
             }
+
             // commit each step of the loop
             batch_workspace = batch_workspace.commit();
         }

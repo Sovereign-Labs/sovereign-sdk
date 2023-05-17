@@ -20,6 +20,7 @@ borsh = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 rocksdb = { workspace = true }
 
+bincode = "1.3.3"
 
 [dev-dependencies]
 schemadb = { path = "../../db/schemadb", features = ["temppath"] }
