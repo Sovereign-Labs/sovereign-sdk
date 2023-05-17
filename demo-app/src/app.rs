@@ -97,7 +97,6 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
 ///
 /// * `value_setter_admin_private_key` - Private key for the ValueSetter module admin.
 /// * `election_admin_private_key` - Private key for the Election module admin.
-#[cfg(test)]
 pub fn create_demo_config(
     initial_sequencer_balance: u64,
     value_setter_admin_private_key: &DefaultPrivateKey,
