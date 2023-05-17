@@ -1,3 +1,4 @@
+#[cfg(feature = "native")]
 use crate::config::Config;
 #[cfg(feature = "native")]
 use crate::runtime::GenesisConfig;

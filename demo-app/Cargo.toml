@@ -12,7 +12,7 @@ required-features = ["native"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = { workspace = true, optional = true}
+anyhow = { workspace = true}
 borsh = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
@@ -41,5 +41,5 @@ tempfile = "3.5.0"
 [features]
 default = ["native"]
 native = ["sov-state/temp", "dep:sovereign-db", "dep:schemadb", "bank/native", "accounts/native", "election/native", 
-	"sequencer/native", "value-setter/native", "sov-modules-api/native","sovereign-sdk/mocks", "clap", "serde_json", "anyhow", "toml"]
+	"sequencer/native", "value-setter/native", "sov-modules-api/native","sovereign-sdk/mocks", "clap", "serde_json", "toml"]
 verifier = []
