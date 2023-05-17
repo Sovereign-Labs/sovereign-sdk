@@ -146,14 +146,14 @@ fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> To
         Err(err) => err.to_compile_error().into(),
     }
 }
-
+/// TODO: this isn't needed anymore
 /// This proc macro generates the actual implementations for the trait created above for the module
 /// It iterates over each struct
-#[proc_macro_derive(rpc)]
-pub fn rpc_impls(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input);
-    handle_macro_error(dispatch::derive_rpc::rpc_impls(input))
-}
+// #[proc_macro_derive(rpc)]
+// pub fn rpc_impls(input: TokenStream) -> TokenStream {
+//     let input = parse_macro_input!(input);
+//     handle_macro_error(dispatch::derive_rpc::rpc_impls(input))
+// }
 
 /// This proc macro generates the actual implementations for the trait created above for the module
 /// It iterates over each struct
