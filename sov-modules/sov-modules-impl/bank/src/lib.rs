@@ -1,6 +1,7 @@
 pub mod call;
 mod create_token;
 pub mod genesis;
+#[cfg(feature = "native")]
 pub mod query;
 mod token;
 
@@ -44,6 +45,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
 
     type CallMessage = call::CallMessage<C>;
 
+    #[cfg(feature = "native")]
     type QueryMessage = query::QueryMessage<C>;
 
     fn genesis(

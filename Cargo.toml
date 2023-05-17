@@ -5,6 +5,7 @@ members = [
     "db/sovereign-db",
     "demo-app",
     "sdk",
+    "adapters/risc0",
     "first-read-last-write-cache",
     "sov-modules/sov-app-template",
     "sov-modules/sov-modules-macros",
@@ -12,6 +13,7 @@ members = [
     "sov-modules/sov-modules-api",
     "sov-modules/sov-modules-impl/accounts",
     "sov-modules/sov-modules-impl/bank",
+    "sov-modules/sov-modules-impl/prover-incentives",
     "sov-modules/sov-modules-impl/sequencer",
     "sov-modules/sov-modules-impl/module-template",
     "sov-modules/sov-modules-impl/examples/value-setter",
@@ -54,3 +56,5 @@ tiny-keccak = "2.0.2"
 tracing = "0.1.37"
 bech32 = "0.9.1"
 derive_more = "0.99.11"
+clap = {version = "4.2.7", features= ["derive"]}
+toml = "0.7.3"

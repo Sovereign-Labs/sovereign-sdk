@@ -4,11 +4,15 @@ version = "0.1.0"
 edition = "2021"
 resolver = "2"
 
+[[bin]]
+name = "bank-cmd"
+path = "src/bank_cmd/main.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 anyhow = { workspace = true }
-sovereign-sdk = { path = "../sdk", features = ["mocks"] }
+sovereign-sdk = { path = "../sdk"}
 election = { path = "../sov-modules/sov-modules-impl/examples/election", default-features = false }
 sequencer = { path = "../sov-modules/sov-modules-impl/sequencer", default-features = false }
 bank = { path = "../sov-modules/sov-modules-impl/bank", default-features = false } 
@@ -22,13 +26,20 @@ borsh = { workspace = true }
 serde_json = { workspace = true }
 serde = { workspace = true }
 sha2 = { workspace = true }
+clap = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
+
+
 
 # Only enable the db on "native" feature
 schemadb = { path = "../db/schemadb", features = ["temppath"], optional = true }
 sovereign-db = { path = "../db/sovereign-db", optional = true }
 
+[dev-dependencies]
+sovereign-sdk = { path = "../sdk", features = ["mocks"] }
+
 [features]
 default = ["native"]
 native = ["sov-state/temp", "dep:sovereign-db", "dep:schemadb", "bank/native", "accounts/native", "election/native", 
-	"sequencer/native", "value-setter/native", "sov-modules-api/native"]
+	"sequencer/native", "value-setter/native", "sov-modules-api/native","sovereign-sdk/mocks", "clap", "toml"]
 verifier = []

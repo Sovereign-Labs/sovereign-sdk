@@ -18,8 +18,9 @@ derive_more = { workspace = true }
 
 ed25519-dalek = { version = "1.0.1" }
 rand = {version = "0.7", optional = true}
+hex = { workspace = true, optional = true }
 
 [features]
 default = ["native"]
-native = ["sov-state/native", "rand"]
+native = ["sov-state/native", "rand", "hex"]
 

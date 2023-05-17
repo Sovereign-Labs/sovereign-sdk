@@ -11,7 +11,7 @@ use sov_state::{StateValue, WorkingSet};
 pub struct SequencerConfig<C: sov_modules_api::Context> {
     pub seq_rollup_address: C::Address,
     pub seq_da_address: Vec<u8>,
-    pub coins_to_lock: bank::Coins<C::Address>,
+    pub coins_to_lock: bank::Coins<C>,
 }
 
 #[derive(ModuleInfo)]
@@ -37,12 +37,13 @@ pub struct Sequencer<C: sov_modules_api::Context> {
     /// The coins will be transferred from `self.seq_rollup_address` to `self.address`
     /// and locked forever.
     #[state]
-    pub(crate) coins_to_lock: StateValue<bank::Coins<C::Address>>,
+    pub(crate) coins_to_lock: StateValue<bank::Coins<C>>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Sequencer<C> {
     type Context = C;
 
+    #[cfg(feature = "native")]
     type QueryMessage = query::QueryMessage;
 
     type Config = SequencerConfig<C>;

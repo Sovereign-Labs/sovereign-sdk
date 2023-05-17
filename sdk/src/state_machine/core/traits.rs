@@ -1,12 +1,12 @@
 use core::fmt::{Debug, Display};
 
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 // NOTE: When naming traits, we use the naming convention below:
 // *Trait IFF there's an associated type that would otherwise have the same name
 
-pub trait BlockHeaderTrait: PartialEq + Debug + CanonicalHash<Output = Self::Hash> {
+pub trait BlockHeaderTrait: PartialEq + Debug + CanonicalHash<Output = Self::Hash> + Clone {
     type Hash: Clone;
     fn prev_hash(&self) -> Self::Hash;
 }
@@ -36,6 +36,7 @@ pub trait AddressTrait:
     + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
     + Eq
     + Serialize
+    + for<'a> Deserialize<'a>
     + DeserializeOwned
     + From<[u8; 32]>
     + Send

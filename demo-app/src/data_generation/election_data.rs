@@ -1,3 +1,5 @@
+use crate::sign_tx;
+
 use super::*;
 use sov_modules_api::default_context::DefaultContext;
 use std::rc::Rc;

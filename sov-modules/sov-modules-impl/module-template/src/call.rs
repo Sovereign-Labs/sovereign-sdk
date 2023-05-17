@@ -1,5 +1,4 @@
 use anyhow::Result;
-use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 use std::fmt::Debug;
@@ -8,7 +7,7 @@ use thiserror::Error;
 use crate::ExampleModule;
 
 /// This enumeration represents the available call messages for interacting with the `ExampleModule` module.
-#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage {
     SetValue(u32),
 }

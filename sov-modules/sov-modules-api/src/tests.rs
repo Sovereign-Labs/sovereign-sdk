@@ -12,6 +12,8 @@ fn test_account_bech32_display() {
         account.to_string(),
         "sov1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5z5tpwxqergd3c8g7rusq4vrkje"
     );
+
+    //assert_eq!(account.try_to_vec().unwrap(), expected_addr);
 }
 
 #[test]
@@ -35,4 +37,12 @@ fn test_signature_serialization() {
 
     let pub_key = priv_key.pub_key();
     deserialized_sig.verify(&pub_key, msg).unwrap()
+}
+
+#[test]
+fn test_signature_hex_serialization() {
+    let priv_key = DefaultPrivateKey::generate();
+    let hex = priv_key.as_hex();
+    let deserialized_pub_key = DefaultPrivateKey::from_hex(&hex).unwrap().pub_key();
+    assert_eq!(priv_key.pub_key(), deserialized_pub_key)
 }

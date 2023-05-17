@@ -1,49 +1,19 @@
 #[cfg(test)]
 pub mod test {
-    use borsh::{BorshDeserialize, BorshSerialize};
-    use serde::{Deserialize, Serialize};
+
     use sov_app_template::{Batch, SequencerOutcome};
     use sov_modules_api::{
-        default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, Address,
+        default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
     };
     use sov_state::ProverStorage;
-    use sovereign_sdk::{da::BlobTransactionTrait, stf::StateTransitionFunction};
+    use sovereign_sdk::{core::mocks::MockZkvm, stf::StateTransitionFunction};
 
     use crate::{
         app::{create_demo_config, create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
         data_generation::{simulate_da, QueryGenerator},
-        helpers::query_and_deserialize,
+        helpers::{query_and_deserialize, TestBlob},
         runtime::Runtime,
     };
-
-    #[derive(Debug, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
-    pub struct TestBlob {
-        address: Address,
-        data: Vec<u8>,
-    }
-
-    impl BlobTransactionTrait for TestBlob {
-        type Data = std::io::Cursor<Vec<u8>>;
-
-        type Address = Address;
-
-        fn sender(&self) -> Self::Address {
-            self.address.clone()
-        }
-
-        fn data(&self) -> Self::Data {
-            std::io::Cursor::new(self.data.clone())
-        }
-    }
-
-    impl TestBlob {
-        pub fn new(batch: Batch, address: &[u8]) -> Self {
-            Self {
-                address: TryInto::<Address>::try_into(address).unwrap(),
-                data: batch.try_to_vec().unwrap(),
-            }
-        }
-    }
 
     #[test]
     fn test_demo_values_in_db() {
@@ -59,19 +29,22 @@ pub mod test {
         {
             let mut demo = create_new_demo(&path);
 
-            demo.init_chain(config);
-            demo.begin_slot(Default::default());
+            StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
+            StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
 
             let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
-            let apply_blob_outcome = demo
-                .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
-                .inner;
+            let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+                &mut demo,
+                TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS),
+                None,
+            )
+            .inner;
             assert!(
                 matches!(apply_blob_outcome, SequencerOutcome::Rewarded,),
                 "Sequencer execution should have succeeded but failed "
             );
-            demo.end_slot();
+            StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
         }
 
         // Generate a new storage instance after dumping data to the db.
@@ -117,19 +90,22 @@ pub mod test {
             &election_admin_private_key,
         );
 
-        demo.init_chain(config);
-        demo.begin_slot(Default::default());
+        StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
+        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
 
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
-        let apply_blob_outcome = demo
-            .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
-            .inner;
+        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+            &mut demo,
+            TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS),
+            None,
+        )
+        .inner;
         assert!(
             matches!(apply_blob_outcome, SequencerOutcome::Rewarded,),
             "Sequencer execution should have succeeded but failed "
         );
-        demo.end_slot();
+        StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
 
         let runtime = &mut Runtime::<DefaultContext>::new();
         let resp = query_and_deserialize::<election::query::GetResultResponse>(
@@ -170,14 +146,17 @@ pub mod test {
         {
             let mut demo = create_new_demo(&path);
 
-            demo.init_chain(config);
-            demo.begin_slot(Default::default());
+            StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
+            StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
 
             let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
-            let apply_blob_outcome = demo
-                .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
-                .inner;
+            let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+                &mut demo,
+                TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS),
+                None,
+            )
+            .inner;
             assert!(
                 matches!(apply_blob_outcome, SequencerOutcome::Rewarded,),
                 "Sequencer execution should have succeeded but failed "
@@ -224,14 +203,17 @@ pub mod test {
 
         let mut demo = create_new_demo(&path);
 
-        demo.init_chain(config);
-        demo.begin_slot(Default::default());
+        StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
+        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
 
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
-        let apply_blob_result = demo
-            .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
-            .inner;
+        let apply_blob_result = StateTransitionFunction::<MockZkvm>::apply_blob(
+            &mut demo,
+            TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS),
+            None,
+        )
+        .inner;
         assert!(
             matches!(apply_blob_result, SequencerOutcome::Ignored),
             "Batch should have been skipped due to insufficient funds"

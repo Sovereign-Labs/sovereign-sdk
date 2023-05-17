@@ -27,6 +27,21 @@ pub struct AddressBech32 {
     value: String,
 }
 
+impl AddressBech32 {
+    pub(crate) fn to_byte_array(&self) -> [u8; 32] {
+        let (_, data) = bech32_to_vec(&self.value).unwrap();
+
+        if data.len() != 32 {
+            panic!("Invalid length {}, should be 32", data.len())
+        }
+
+        let mut addr_bytes = [0u8; 32];
+        addr_bytes.copy_from_slice(&data);
+
+        addr_bytes
+    }
+}
+
 impl TryFrom<&[u8]> for AddressBech32 {
     type Error = bech32::Error;
 

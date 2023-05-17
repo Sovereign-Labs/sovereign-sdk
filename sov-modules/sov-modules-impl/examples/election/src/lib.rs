@@ -1,5 +1,6 @@
 pub mod call;
 pub mod genesis;
+#[cfg(feature = "native")]
 pub mod query;
 
 #[cfg(test)]
@@ -54,6 +55,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
 
     type CallMessage = call::CallMessage<C>;
 
+    #[cfg(feature = "native")]
     type QueryMessage = query::QueryMessage;
 
     fn genesis(

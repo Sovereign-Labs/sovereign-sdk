@@ -1,23 +1,20 @@
 use super::{types::Candidate, Election};
-use borsh::{BorshDeserialize, BorshSerialize};
 use sov_state::WorkingSet;
 
 /// Queries supported by the module.
-#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum QueryMessage {
     GetResult,
     GenNbOfVotes,
 }
 
-#[cfg_attr(feature = "native", derive(serde::Deserialize, serde::Serialize))]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum GetResultResponse {
     Result(Option<Candidate>),
     Err(String),
 }
 
-#[cfg_attr(feature = "native", derive(serde::Deserialize, serde::Serialize))]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum GetNbOfVotesResponse {
     Result(u64),
 }
