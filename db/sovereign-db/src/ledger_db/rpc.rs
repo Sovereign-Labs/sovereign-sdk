@@ -1,3 +1,4 @@
+use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sovereign_sdk::{
@@ -60,6 +61,11 @@ pub struct TxResponse {
     pub status: Status,
 }
 
+struct QueriedRange {
+    pub inner: std::ops::Range<SlotNumber>,
+    pub original_indices: Vec<usize>,
+}
+
 impl From<StoredTransaction> for TxResponse {
     fn from(tx: StoredTransaction) -> Self {
         Self {
@@ -93,19 +99,67 @@ impl LedgerRpcProvider for LedgerDB {
         );
         // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
         //      and use an iterator instead of querying for each slot individually
-        let mut out = Vec::with_capacity(slot_ids.len());
-        for slot_id in slot_ids {
-            let slot_num = self.resolve_slot_identifier(slot_id)?;
-            out.push(match slot_num {
-                Some(num) => {
-                    if let Some(stored_slot) = self.db.get::<SlotByNumber>(&num)? {
-                        Some(self.populate_slot_response(num.into(), stored_slot, query_mode)?)
-                    } else {
-                        None
+
+        // First resolve the slot identifiers and store the slot numbers
+        let slot_nums_result: Result<Vec<(usize, Option<SlotNumber>)>, anyhow::Error> = slot_ids
+            .iter()
+            .enumerate()
+            .map(
+                |(idx, slot_id)| match self.resolve_slot_identifier(slot_id) {
+                    Ok(slot_number) => Ok((idx, slot_number)),
+                    Err(e) => Err(e),
+                },
+            )
+            .collect();
+
+        let mut slot_nums = match slot_nums_result {
+            Ok(slot_numbers) => slot_numbers,
+            Err(e) => return Err(e),
+        };
+
+        // Then sort the slot numbers by requested order
+        slot_nums.sort_unstable_by(|(_, slot_id_a), (_, slot_id_b)| slot_id_a.cmp(slot_id_b));
+
+        // Then identify sequential ranges
+        let mut slot_ranges: Vec<QueriedRange> = Vec::new();
+        let mut current_range: Option<QueriedRange> = None;
+
+        for (orig_idx, slot_num_opt) in slot_nums {
+            if let Some(num) = slot_num_opt {
+                match current_range {
+                    Some(range) if SlotNumber(Into::<u64>::into(range.inner.end) + 1) == num => {
+                        current_range = Some(QueriedRange {
+                            inner: range.inner.start..num,
+                            original_indices: range.original_indices,
+                        });
+                    }
+                    _ => {
+                        if let Some(range) = current_range {
+                            slot_ranges.push(range);
+                        }
+                        current_range = Some(QueriedRange {
+                            inner: num..SlotNumber(Into::<u64>::into(num) + 1),
+                            original_indices: vec![orig_idx],
+                        });
                     }
                 }
-                None => None,
-            })
+            }
+        }
+
+        // For each identified range, make a single query to fetch tx's
+        // From the corresponding blocks, then store into result vector.
+        let mut out = Vec::with_capacity(slot_ids.len());
+        for slot_range in slot_ranges {
+            let stored_slots = self.get_slot_range(&slot_range.inner)?;
+
+            for ((queried_slot, original_idx), slot_num) in stored_slots
+                .into_iter()
+                .zip(slot_range.original_indices)
+                .zip(slot_range.inner.start.into()..slot_range.inner.end.into())
+            {
+                out[original_idx] =
+                    Some(self.populate_slot_response(slot_num, queried_slot, query_mode)?);
+            }
         }
         Ok(out)
     }
@@ -123,6 +177,7 @@ impl LedgerRpcProvider for LedgerDB {
         );
         // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
         //      and use an iterator instead of querying for each slot individually
+
         let mut out = Vec::with_capacity(batch_ids.len());
         for batch_id in batch_ids {
             let batch_num = self.resolve_batch_identifier(batch_id)?;
