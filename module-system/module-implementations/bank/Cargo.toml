@@ -19,7 +19,7 @@ serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
-jsonrpsee = { version = "0.16.2", features = ["macros", "client-core", "server"], optional = true }
+jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
 [features]
 default = ["native"]

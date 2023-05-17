@@ -1,11 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
-    "full-node/db/schemadb",
-    "full-node/db/sovereign-db",
-    "examples/demo-stf",
     "core",
     "adapters/risc0",
+    "examples/demo-stf",
+    "examples/demo-rollup",
+    "full-node/db/schemadb",
+    "full-node/db/sovereign-db",
     "module-system/sov-app-template",
     "module-system/sov-modules-macros",
     "module-system/sov-state",
@@ -58,3 +59,4 @@ bech32 = "0.9.1"
 derive_more = "0.99.11"
 clap = {version = "4.2.7", features= ["derive"]}
 toml = "0.7.3"
+jsonrpsee = "0.16.2"

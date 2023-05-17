@@ -8,22 +8,24 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
-borsh = { version = "0.10.3", features = ["bytes"] }
-jsonrpsee = { version = "0.16.2", features = ["http-client", "server"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-sha2 = "0.10.6"
-tokio = { version = "1", features = ["full"] }
-tracing = "0.1.37"
-tracing-subscriber = "0.3.16"
-hex = "0.4.3"
-tendermint = "0.32"
+borsh = { workspace = true, features = ["bytes"] }
+jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tracing = { workspace = true }
+hex = { workspace = true }
 
-jupiter = { git = "https://github.com/Sovereign-Labs/Jupiter.git", rev = "33fba8c86640414f0b31022918dd7e7839fb8e64" }
-demo-stf = { path = "../demo-stf" features = ["native"] }
+# Crates which only this package depends on 
+tendermint = "0.32"
+tokio = { version = "1", features = ["full"] }
+tracing-subscriber = "0.3.16"
+
+jupiter = { git = "https://github.com/Sovereign-Labs/Jupiter.git", rev = "afe0beacd4eeb1ea1ccc7b7020e3ba6b9e6b9446" }
+demo-stf = { path = "../demo-stf", features = ["native"] }
 sovereign-core = { path = "../../core" }
-sovereign-db = { path = "../../full-node/sovereign-db" }
-risc0-adapter = { path = "adapters/risc0" }
+sovereign-db = { path = "../../full-node/db/sovereign-db" }
+risc0-adapter = { path = "../../adapters/risc0" }
 
 [dev-dependencies]
 tempfile = "3.5.0"
