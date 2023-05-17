@@ -1,7 +1,7 @@
 use core::fmt::{Debug, Display};
 
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 // NOTE: When naming traits, we use the naming convention below:
 // *Trait IFF there's an associated type that would otherwise have the same name
@@ -36,7 +36,6 @@ pub trait AddressTrait:
     + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
     + Eq
     + Serialize
-    + for<'a> Deserialize<'a>
     + DeserializeOwned
     + From<[u8; 32]>
     + Send

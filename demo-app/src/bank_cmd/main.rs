@@ -77,13 +77,13 @@ fn main() {
                 .unwrap_or_else(|e| panic!("Call message serialization error: {}", e));
 
             let mut bin_path = PathBuf::from(call_data_path);
-            bin_path.set_extension("bin");
+            bin_path.set_extension("dat");
 
             let mut file = File::create(bin_path)
-                .unwrap_or_else(|e| panic!("Unable to crate .bin file: {}", e));
+                .unwrap_or_else(|e| panic!("Unable to crate .dat file: {}", e));
 
             file.write_all(&serialized.raw.data)
-                .unwrap_or_else(|e| panic!("Unable to save .bin file: {}", e));
+                .unwrap_or_else(|e| panic!("Unable to save .dat file: {}", e));
         }
     };
 }
