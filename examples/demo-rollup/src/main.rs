@@ -9,10 +9,10 @@ use jupiter::types::NamespaceId;
 use jupiter::verifier::CelestiaVerifier;
 use jupiter::verifier::RollupParams;
 use risc0_adapter::host::Risc0Host;
-use sovereign_db::ledger_db::{LedgerDB, SlotCommit};
 use sovereign_core::da::DaVerifier;
 use sovereign_core::services::da::DaService;
 use sovereign_core::stf::{StateTransitionFunction, StateTransitionRunner};
+use sovereign_db::ledger_db::{LedgerDB, SlotCommit};
 use tracing::Level;
 
 // I sent 8 demo election transactions at height 293686, generated using the demo app data generator
