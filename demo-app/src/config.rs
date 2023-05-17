@@ -1,29 +1,25 @@
 use serde::de::DeserializeOwned;
-use sov_state::config::Config as StorageConfig;
+pub use sov_state::config::Config as StorageConfig;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-pub trait FromTomlFile: DeserializeOwned {
-    fn from_path<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
-        let mut contents = String::new();
-        {
-            let mut file = File::open(path)?;
-            file.read_to_string(&mut contents)?;
-        }
-
-        let result: Self = toml::from_str(&contents)?;
-
-        Ok(result)
+pub fn from_toml_path<P: AsRef<Path>, R: DeserializeOwned>(path: P) -> anyhow::Result<R> {
+    let mut contents = String::new();
+    {
+        let mut file = File::open(path)?;
+        file.read_to_string(&mut contents)?;
     }
+
+    let result: R = toml::from_str(&contents)?;
+
+    Ok(result)
 }
 
 #[derive(serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Config {
     pub storage: StorageConfig,
 }
-
-impl FromTomlFile for Config {}
 
 #[cfg(test)]
 mod tests {
@@ -47,7 +43,7 @@ mod tests {
 
         let config_file = create_config_from(config);
 
-        let config = Config::from_path(config_file.path()).unwrap();
+        let config: Config = from_toml_path(config_file.path()).unwrap();
         let expected = Config {
             storage: StorageConfig {
                 path: PathBuf::from("/tmp"),
@@ -63,10 +59,9 @@ mod tests {
             [storage]
             path = "/tmp
         "#;
-
         let config_file = create_config_from(config);
 
-        let config = Config::from_path(config_file.path());
+        let config: anyhow::Result<Config> = from_toml_path(config_file.path());
 
         assert!(config.is_err());
         let error = config.unwrap_err().to_string();
@@ -82,10 +77,10 @@ mod tests {
     #[test]
     fn test_non_existent_config() {
         let dir = tempdir().unwrap();
-
         let path = dir.path().join("non_existing_config.toml");
 
-        let config = Config::from_path(path);
+        let config: anyhow::Result<Config> = from_toml_path(path);
+
         assert!(config.is_err());
         assert_eq!(
             config.unwrap_err().to_string(),
