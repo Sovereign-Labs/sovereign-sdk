@@ -12,6 +12,7 @@ mod tx_hooks_impl;
 mod tx_revert_tests;
 mod tx_verifier_impl;
 
+#[cfg(feature = "native")]
 use sov_modules_api::{
     default_context::DefaultContext,
     default_signature::{private_key::DefaultPrivateKey, DefaultSignature},

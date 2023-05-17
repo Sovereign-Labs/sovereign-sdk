@@ -7,6 +7,7 @@ resolver = "2"
 [[bin]]
 name = "bank-cmd"
 path = "src/bank_cmd/main.rs"
+required-features = ["native"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
