@@ -568,6 +568,12 @@ pub(crate) fn rpc_outer_impls(args: proc_macro2::TokenStream,
         _ => panic!("Expected a tuple of types"),
     };
 
+    let original_impl = quote! {
+        #(#attrs)*
+        #input
+    };
+    output_tokens.extend(original_impl);
+
     for arg in types {
         let mut trait_type_path = match arg {
             syn::Type::Path(type_path) => type_path.clone(),
@@ -591,9 +597,9 @@ pub(crate) fn rpc_outer_impls(args: proc_macro2::TokenStream,
         last_segment.ident = syn::Ident::new(&format!("{}RpcImpl", last_segment.ident), last_segment.ident.span());
 
         let output = quote! {
-
-            #(#attrs)*
-            #input
+            //
+            // #(#attrs)*
+            // #input
 
             impl #generics #trait_type_path for #type_name
             where
