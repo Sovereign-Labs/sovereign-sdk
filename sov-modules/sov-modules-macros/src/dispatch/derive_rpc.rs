@@ -1,8 +1,12 @@
+use std::str::FromStr;
+
 use proc_macro2::Ident;
 use quote::{format_ident, quote};
-use std::str::FromStr;
+use syn::parse::{Parse, ParseStream};
+use syn::punctuated::Punctuated;
 use syn::{
-    Attribute, FnArg, ImplItem, Meta, MetaList, PatType, Path, PathSegment, Signature, Type,
+    parenthesized, Attribute, FnArg, ImplItem, Meta, MetaList, PatType, Path, PathSegment,
+    Signature, Type,
 };
 
 /// Returns an attribute with the name `rpc_method` replaced with `method`, and the index
@@ -86,9 +90,16 @@ impl RpcImplBlock {
             })
             .collect::<Vec<_>>();
 
-        let mut impl_trait_methods = vec![];
+        // let debug_var = quote! { println!("STUFF {:?}", #(#generics_params)*,); };
+        // println!("DBG1: {}", debug_var);
+        // let debug_var = quote! { println!("STUFF {:?}", #type_name) };
+        // println!("DBG2: {}", debug_var);
+
         let mut blanket_impl_methods = vec![];
+        let mut impl_trait_methods = vec![];
+
         let impl_trait_name = format_ident!("{}RpcImpl", self.type_name);
+
         for method in self.methods.iter() {
             // Extract the names of the formal arguments
             let arg_values = method
@@ -108,7 +119,6 @@ impl RpcImplBlock {
                 });
 
             let mut signature = method.method_signature.clone();
-
             let method_name = &method.method_name;
 
             let impl_trait_method = if let Some(idx) = method.idx_of_working_set_arg {
@@ -124,10 +134,12 @@ impl RpcImplBlock {
                     .filter(|arg| arg.to_string() != quote! { self }.to_string());
                 let mut inputs: Vec<syn::FnArg> = signature.inputs.clone().into_iter().collect();
                 inputs.remove(idx);
+
                 signature.inputs = inputs.into_iter().collect();
+
                 quote! {
                     #signature {
-                        Self::get_backing_impl(self).#method_name(#(#pre_working_set_args,)* &mut Self::get_working_set(self), #(#post_working_set_args),* )
+                        <#type_name <#(#generics_params)*,> as ::sov_modules_api::ModuleInfo>::new().#method_name(#(#pre_working_set_args,)* &mut Self::get_working_set(self), #(#post_working_set_args),* )
                     }
                 }
             } else {
@@ -137,10 +149,11 @@ impl RpcImplBlock {
                     .filter(|arg| arg.to_string() != quote! { self }.to_string());
                 quote! {
                     #signature {
-                        Self::get_backing_impl(self).#method_name(#(#arg_values),* )
+                        <#type_name <#(#generics_params)*,> as ::sov_modules_api::ModuleInfo>::new().#method_name(#(#arg_values),*)
                     }
                 }
             };
+
             impl_trait_methods.push(impl_trait_method);
 
             signature.output = wrap_in_jsonprsee_result(&signature.output);
@@ -167,18 +180,13 @@ impl RpcImplBlock {
         let rpc_impl_trait = if let Some(ref working_set_type) = self.working_set_type {
             quote! {
                 pub trait #impl_trait_name #generics {
-                    fn get_backing_impl(&self) -> & #type_name < #(#generics_params)*, >;
-                    // TODO: Extract this method into a trait
                     fn get_working_set(&self) -> #working_set_type;
-
                     #(#impl_trait_methods)*
                 }
             }
         } else {
             quote! {
                 pub trait #impl_trait_name #generics {
-                    fn get_backing_impl(&self) -> & #type_name < #(#generics_params)*, >;
-
                     #(#impl_trait_methods)*
                 }
             }
@@ -195,7 +203,10 @@ impl RpcImplBlock {
         .expect("Failed to parse generics without braces as token stream");
         let rpc_server_trait_name = format_ident!("{}RpcServer", self.type_name);
         let blanket_impl = quote! {
-            impl <MacroGeneratedTypeWithLongNameToAvoidCollisions: #impl_trait_name #ty_generics + Send + Sync + 'static,  #blanket_impl_generics_without_braces > #rpc_server_trait_name #ty_generics for MacroGeneratedTypeWithLongNameToAvoidCollisions #where_clause {
+            impl <MacroGeneratedTypeWithLongNameToAvoidCollisions: #impl_trait_name #ty_generics
+            + Send
+            + Sync
+            + 'static,  #blanket_impl_generics_without_braces > #rpc_server_trait_name #ty_generics for MacroGeneratedTypeWithLongNameToAvoidCollisions #where_clause {
                 #(#blanket_impl_methods)*
             }
         };
@@ -338,4 +349,86 @@ pub(crate) fn derive_rpc(
     };
 
     build_rpc_trait(&attrs, type_name.clone(), input)
+}
+
+struct TypeList(pub Punctuated<Type, syn::token::Comma>);
+
+impl Parse for TypeList {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let content;
+        parenthesized!(content in input);
+        Ok(TypeList(content.parse_terminated(Type::parse)?))
+    }
+}
+
+pub(crate) fn rpc_outer_impls(
+    args: proc_macro2::TokenStream,
+    input: syn::ItemImpl,
+) -> Result<proc_macro::TokenStream, syn::Error> {
+    let attrs = &input.attrs;
+
+    let args: syn::Type = syn::parse2(args).expect("Expected a valid type list");
+
+    let mut output_tokens = proc_macro2::TokenStream::new();
+
+    let types = match args {
+        syn::Type::Tuple(tuple) => tuple.elems,
+        _ => panic!("Expected a tuple of types"),
+    };
+
+    let original_impl = quote! {
+        #(#attrs)*
+        #input
+    };
+    output_tokens.extend(original_impl);
+
+    for arg in types {
+        let mut trait_type_path = match arg {
+            syn::Type::Path(type_path) => type_path.clone(),
+            _ => panic!("Expected a path type"),
+        };
+
+        let last_segment = trait_type_path.path.segments.last_mut().unwrap();
+        let context_type = match last_segment.arguments {
+            syn::PathArguments::AngleBracketed(ref args) => {
+                match args
+                    .args
+                    .first()
+                    .expect("Expected at least one type argument")
+                {
+                    syn::GenericArgument::Type(syn::Type::Path(ref type_path)) => {
+                        // Assuming type path has only one segment
+                        type_path
+                            .path
+                            .segments
+                            .first()
+                            .expect("Expected at least one segment")
+                            .ident
+                            .clone()
+                    }
+                    _ => panic!("Expected a type argument"),
+                }
+            }
+            _ => panic!("Expected angle bracketed arguments"),
+        };
+
+        last_segment.ident = syn::Ident::new(
+            &format!("{}RpcImpl", last_segment.ident),
+            last_segment.ident.span(),
+        );
+
+        let output = quote! {
+            impl #trait_type_path for ::sov_modules_api::RpcStorage<#context_type>
+            {
+                fn get_working_set(&self) -> ::sov_state::WorkingSet<<#context_type
+                    as ::sov_modules_api::Spec>::Storage> {
+                    ::sov_state::WorkingSet::new(self.storage.clone())
+                }
+            }
+        };
+
+        output_tokens.extend(output);
+    }
+
+    Ok(output_tokens.into())
 }
