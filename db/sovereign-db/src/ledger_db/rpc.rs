@@ -1,9 +1,8 @@
-use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
 use sovereign_sdk::{
     rpc::{
-        BatchIdentifier, EventIdentifier, LedgerRpcProvider, QueryMode, SlotIdentifier,
-        TxIdentifier,
+        BatchIdentifier, BatchResponse, EventIdentifier, ItemOrHash, LedgerRpcProvider, QueryMode,
+        SlotIdentifier, SlotResponse, TxIdentifier, TxResponse,
     },
     stf::Event,
 };
@@ -12,10 +11,7 @@ use crate::schema::{
     tables::{
         BatchByHash, BatchByNumber, EventByNumber, SlotByHash, SlotByNumber, TxByHash, TxByNumber,
     },
-    types::{
-        BatchNumber, EventNumber, SlotNumber, Status, StoredBatch, StoredSlot, StoredTransaction,
-        TxNumber,
-    },
+    types::{BatchNumber, EventNumber, SlotNumber, StoredBatch, StoredSlot, TxNumber},
 };
 
 /// The maximum number of slots that can be requested in a single RPC range query
@@ -29,62 +25,12 @@ const MAX_EVENTS_PER_REQUEST: u64 = 500;
 
 use super::LedgerDB;
 
-#[derive(Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum ItemOrHash<T> {
-    Hash([u8; 32]),
-    Full(T),
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
-pub struct SlotResponse {
-    pub number: u64,
-    pub hash: [u8; 32],
-    pub batch_range: std::ops::Range<BatchNumber>,
-    pub batches: Option<Vec<ItemOrHash<BatchResponse>>>,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
-pub struct BatchResponse {
-    pub hash: [u8; 32],
-    pub tx_range: std::ops::Range<TxNumber>,
-    pub txs: Option<Vec<ItemOrHash<TxResponse>>>,
-    pub status: Status,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
-pub struct TxResponse {
-    pub hash: [u8; 32],
-    pub event_range: std::ops::Range<EventNumber>,
-    pub body: Option<Vec<u8>>,
-    pub status: Status,
-}
-
-impl From<StoredTransaction> for TxResponse {
-    fn from(tx: StoredTransaction) -> Self {
-        Self {
-            hash: tx.hash,
-            event_range: tx.events,
-            body: Some(tx.data.as_ref().to_vec()),
-            status: tx.status,
-        }
-    }
-}
-
 impl LedgerRpcProvider for LedgerDB {
-    type SlotResponse = SlotResponse;
-
-    type BatchResponse = BatchResponse;
-
-    type TxResponse = TxResponse;
-
-    type EventResponse = Event;
-
-    fn get_slots(
+    fn get_slots<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         slot_ids: &[sovereign_sdk::rpc::SlotIdentifier],
         query_mode: QueryMode,
-    ) -> Result<Vec<Option<Self::SlotResponse>>, anyhow::Error> {
+    ) -> Result<Vec<Option<SlotResponse<B, T>>>, anyhow::Error> {
         anyhow::ensure!(
             slot_ids.len() <= MAX_SLOTS_PER_REQUEST as usize,
             "requested too many slots. Requested: {}. Max: {}",
@@ -110,11 +56,11 @@ impl LedgerRpcProvider for LedgerDB {
         Ok(out)
     }
 
-    fn get_batches(
+    fn get_batches<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         batch_ids: &[sovereign_sdk::rpc::BatchIdentifier],
         query_mode: QueryMode,
-    ) -> Result<Vec<Option<Self::BatchResponse>>, anyhow::Error> {
+    ) -> Result<Vec<Option<BatchResponse<B, T>>>, anyhow::Error> {
         anyhow::ensure!(
             batch_ids.len() <= MAX_BATCHES_PER_REQUEST as usize,
             "requested too many batches. Requested: {}. Max: {}",
@@ -140,11 +86,11 @@ impl LedgerRpcProvider for LedgerDB {
         Ok(out)
     }
 
-    fn get_transactions(
+    fn get_transactions<T: DeserializeOwned>(
         &self,
         tx_ids: &[sovereign_sdk::rpc::TxIdentifier],
         _query_mode: QueryMode,
-    ) -> Result<Vec<Option<Self::TxResponse>>, anyhow::Error> {
+    ) -> Result<Vec<Option<TxResponse<T>>>, anyhow::Error> {
         anyhow::ensure!(
             tx_ids.len() <= MAX_TRANSACTIONS_PER_REQUEST as usize,
             "requested too many transactions. Requested: {}. Max: {}",
@@ -153,11 +99,17 @@ impl LedgerRpcProvider for LedgerDB {
         );
         // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
         //      and use an iterator instead of querying for each slot individually
-        let mut out = Vec::with_capacity(tx_ids.len());
+        let mut out: Vec<Option<TxResponse<T>>> = Vec::with_capacity(tx_ids.len());
         for id in tx_ids {
             let num = self.resolve_tx_identifier(id)?;
             out.push(match num {
-                Some(num) => self.db.get::<TxByNumber>(&num)?.map(|tx| tx.into()),
+                Some(num) => {
+                    if let Some(tx) = self.db.get::<TxByNumber>(&num)? {
+                        Some(tx.try_into()?)
+                    } else {
+                        None
+                    }
+                }
                 None => None,
             })
         }
@@ -167,7 +119,7 @@ impl LedgerRpcProvider for LedgerDB {
     fn get_events(
         &self,
         event_ids: &[sovereign_sdk::rpc::EventIdentifier],
-    ) -> Result<Vec<Option<Self::EventResponse>>, anyhow::Error> {
+    ) -> Result<Vec<Option<Event>>, anyhow::Error> {
         anyhow::ensure!(
             event_ids.len() <= MAX_EVENTS_PER_REQUEST as usize,
             "requested too many events. Requested: {}. Max: {}",
@@ -187,7 +139,9 @@ impl LedgerRpcProvider for LedgerDB {
         Ok(out)
     }
 
-    fn get_head(&self) -> Result<Option<Self::SlotResponse>, anyhow::Error> {
+    fn get_head<B: DeserializeOwned, T: DeserializeOwned>(
+        &self,
+    ) -> Result<Option<SlotResponse<B, T>>, anyhow::Error> {
         let next_ids = self.get_next_items_numbers();
         let next_slot = next_ids.slot_number;
 
@@ -207,75 +161,72 @@ impl LedgerRpcProvider for LedgerDB {
     }
 
     // Get X by hash
-    fn get_slot_by_hash(
+    fn get_slot_by_hash<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         hash: &[u8; 32],
         query_mode: QueryMode,
-    ) -> Result<Option<Self::SlotResponse>, anyhow::Error> {
+    ) -> Result<Option<SlotResponse<B, T>>, anyhow::Error> {
         self.get_slots(&[SlotIdentifier::Hash(*hash)], query_mode)
-            .map(|mut batches: Vec<Option<SlotResponse>>| batches.pop().unwrap_or(None))
+            .map(|mut batches: Vec<Option<SlotResponse<B, T>>>| batches.pop().unwrap_or(None))
     }
 
-    fn get_batch_by_hash(
+    fn get_batch_by_hash<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         hash: &[u8; 32],
         query_mode: QueryMode,
-    ) -> Result<Option<Self::BatchResponse>, anyhow::Error> {
+    ) -> Result<Option<BatchResponse<B, T>>, anyhow::Error> {
         self.get_batches(&[BatchIdentifier::Hash(*hash)], query_mode)
-            .map(|mut batches: Vec<Option<BatchResponse>>| batches.pop().unwrap_or(None))
+            .map(|mut batches: Vec<Option<BatchResponse<B, T>>>| batches.pop().unwrap_or(None))
     }
 
-    fn get_tx_by_hash(
+    fn get_tx_by_hash<T: DeserializeOwned>(
         &self,
         hash: &[u8; 32],
         query_mode: QueryMode,
-    ) -> Result<Option<Self::TxResponse>, anyhow::Error> {
+    ) -> Result<Option<TxResponse<T>>, anyhow::Error> {
         self.get_transactions(&[TxIdentifier::Hash(*hash)], query_mode)
-            .map(|mut txs: Vec<Option<TxResponse>>| txs.pop().unwrap_or(None))
+            .map(|mut txs: Vec<Option<TxResponse<T>>>| txs.pop().unwrap_or(None))
     }
 
     // Get X by number
-    fn get_slot_by_number(
+    fn get_slot_by_number<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         number: u64,
         query_mode: QueryMode,
-    ) -> Result<Option<Self::SlotResponse>, anyhow::Error> {
+    ) -> Result<Option<SlotResponse<B, T>>, anyhow::Error> {
         self.get_slots(&[SlotIdentifier::Number(number)], query_mode)
-            .map(|mut slots: Vec<Option<SlotResponse>>| slots.pop().unwrap_or(None))
+            .map(|mut slots: Vec<Option<SlotResponse<B, T>>>| slots.pop().unwrap_or(None))
     }
 
-    fn get_batch_by_number(
+    fn get_batch_by_number<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         number: u64,
         query_mode: QueryMode,
-    ) -> Result<Option<Self::BatchResponse>, anyhow::Error> {
+    ) -> Result<Option<BatchResponse<B, T>>, anyhow::Error> {
         self.get_batches(&[BatchIdentifier::Number(number)], query_mode)
             .map(|mut slots| slots.pop().unwrap_or(None))
     }
 
-    fn get_tx_by_number(
+    fn get_tx_by_number<T: DeserializeOwned>(
         &self,
         number: u64,
         query_mode: QueryMode,
-    ) -> Result<Option<Self::TxResponse>, anyhow::Error> {
+    ) -> Result<Option<TxResponse<T>>, anyhow::Error> {
         self.get_transactions(&[TxIdentifier::Number(number)], query_mode)
             .map(|mut txs| txs.pop().unwrap_or(None))
     }
 
-    fn get_event_by_number(
-        &self,
-        number: u64,
-    ) -> Result<Option<Self::EventResponse>, anyhow::Error> {
+    fn get_event_by_number(&self, number: u64) -> Result<Option<Event>, anyhow::Error> {
         self.get_events(&[EventIdentifier::Number(number)])
             .map(|mut events| events.pop().unwrap_or(None))
     }
 
-    fn get_slots_range(
+    fn get_slots_range<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         start: u64,
         end: u64,
         query_mode: QueryMode,
-    ) -> Result<Vec<Option<Self::SlotResponse>>, anyhow::Error> {
+    ) -> Result<Vec<Option<SlotResponse<B, T>>>, anyhow::Error> {
         anyhow::ensure!(start <= end, "start must be <= end");
         anyhow::ensure!(
             end - start <= MAX_SLOTS_PER_REQUEST,
@@ -286,12 +237,12 @@ impl LedgerRpcProvider for LedgerDB {
         self.get_slots(&ids, query_mode)
     }
 
-    fn get_batches_range(
+    fn get_batches_range<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         start: u64,
         end: u64,
         query_mode: QueryMode,
-    ) -> Result<Vec<Option<Self::BatchResponse>>, anyhow::Error> {
+    ) -> Result<Vec<Option<BatchResponse<B, T>>>, anyhow::Error> {
         anyhow::ensure!(start <= end, "start must be <= end");
         anyhow::ensure!(
             end - start <= MAX_BATCHES_PER_REQUEST,
@@ -304,12 +255,12 @@ impl LedgerRpcProvider for LedgerDB {
         self.get_batches(&ids, query_mode)
     }
 
-    fn get_transactions_range(
+    fn get_transactions_range<T: DeserializeOwned>(
         &self,
         start: u64,
         end: u64,
         query_mode: QueryMode,
-    ) -> Result<Vec<Option<Self::TxResponse>>, anyhow::Error> {
+    ) -> Result<Vec<Option<TxResponse<T>>>, anyhow::Error> {
         anyhow::ensure!(start <= end, "start must be <= end");
         anyhow::ensure!(
             end - start <= MAX_TRANSACTIONS_PER_REQUEST,
@@ -376,17 +327,17 @@ impl LedgerDB {
         }
     }
 
-    fn populate_slot_response(
+    fn populate_slot_response<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         number: u64,
         slot: StoredSlot,
         mode: QueryMode,
-    ) -> Result<SlotResponse, anyhow::Error> {
+    ) -> Result<SlotResponse<B, T>, anyhow::Error> {
         Ok(match mode {
             QueryMode::Compact => SlotResponse {
                 number,
                 hash: slot.hash,
-                batch_range: slot.batches,
+                batch_range: slot.batches.start.into()..slot.batches.end.into(),
                 batches: None,
             },
             QueryMode::Standard => {
@@ -400,7 +351,7 @@ impl LedgerDB {
                 SlotResponse {
                     number,
                     hash: slot.hash,
-                    batch_range: slot.batches,
+                    batch_range: slot.batches.start.into()..slot.batches.end.into(),
                     batches: batch_hashes,
                 }
             }
@@ -414,25 +365,20 @@ impl LedgerDB {
                 SlotResponse {
                     number,
                     hash: slot.hash,
-                    batch_range: slot.batches,
+                    batch_range: slot.batches.start.into()..slot.batches.end.into(),
                     batches: Some(batches),
                 }
             }
         })
     }
 
-    fn populate_batch_response(
+    fn populate_batch_response<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
         batch: StoredBatch,
         mode: QueryMode,
-    ) -> Result<BatchResponse, anyhow::Error> {
+    ) -> Result<BatchResponse<B, T>, anyhow::Error> {
         Ok(match mode {
-            QueryMode::Compact => BatchResponse {
-                hash: batch.hash,
-                tx_range: batch.txs,
-                txs: None,
-                status: batch.status,
-            },
+            QueryMode::Compact => batch.try_into()?,
 
             QueryMode::Standard => {
                 let txs = self.get_tx_range(&batch.txs)?;
@@ -441,26 +387,19 @@ impl LedgerDB {
                         .map(|tx| ItemOrHash::Hash(tx.hash))
                         .collect(),
                 );
-                BatchResponse {
-                    hash: batch.hash,
-                    tx_range: batch.txs,
-                    txs: tx_hashes,
-                    status: batch.status,
-                }
+                let mut batch_response: BatchResponse<B, T> = batch.try_into()?;
+                batch_response.txs = tx_hashes;
+                batch_response
             }
             QueryMode::Full => {
                 let num_txs = (batch.txs.end.0 - batch.txs.start.0) as usize;
                 let mut txs = Vec::with_capacity(num_txs);
                 for tx in self.get_tx_range(&batch.txs)? {
-                    txs.push(ItemOrHash::Full(tx.into()));
+                    txs.push(ItemOrHash::Full(tx.try_into()?));
                 }
-
-                BatchResponse {
-                    hash: batch.hash,
-                    tx_range: batch.txs,
-                    txs: Some(txs),
-                    status: batch.status,
-                }
+                let mut batch_response: BatchResponse<B, T> = batch.try_into()?;
+                batch_response.txs = Some(txs);
+                batch_response
             }
         })
     }
