@@ -11,6 +11,7 @@ mod value;
 mod witness;
 mod zk_storage;
 
+pub mod config;
 #[cfg(test)]
 mod state_tests;
 

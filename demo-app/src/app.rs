@@ -1,3 +1,4 @@
+use crate::config::Config;
 #[cfg(feature = "native")]
 use crate::runtime::GenesisConfig;
 use crate::runtime::Runtime;
@@ -42,13 +43,13 @@ pub const TOKEN_NAME: &str = "sov-test-token";
 
 #[cfg(feature = "native")]
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
-    type RuntimeConfig = &'static str;
+    type RuntimeConfig = Config;
     type Inner = DemoApp<DefaultContext, Vm>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let runtime = Runtime::new();
-        let storage =
-            ProverStorage::with_config(runtime_config).expect("Failed to open prover storage");
+        let storage = ProverStorage::with_config(runtime_config.storage)
+            .expect("Failed to open prover storage");
         let tx_verifier = DemoAppTxVerifier::new();
         let tx_hooks = DemoAppTxHooks::new();
         let app = AppTemplate::new(storage, runtime, tx_verifier, tx_hooks);
