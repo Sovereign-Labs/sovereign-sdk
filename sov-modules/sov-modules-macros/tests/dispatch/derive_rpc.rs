@@ -1,12 +1,16 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_macros::rpc_gen;
 use sov_state::{ProverStorage, WorkingSet};
+use sov_modules_api::RpcStorage;
+use sov_modules_macros::{ModuleInfo};
 
-pub struct TestStruct<C: sov_modules_api::Context> {
-    pub phantom: std::marker::PhantomData<C>,
+#[derive(ModuleInfo)]
+pub struct TestStruct<C: ::sov_modules_api::Context> {
+    #[address]
+    pub(crate) address: C::Address,
 }
 
-#[rpc_gen(client, server)]
+#[rpc_gen(client, server, namespace="test")]
 impl<C: sov_modules_api::Context> TestStruct<C> {
     #[rpc_method(name = "firstMethod")]
     pub fn first_method(&self, _working_set: &mut WorkingSet<C::Storage>) -> u32 {
@@ -33,65 +37,54 @@ pub struct TestRuntime<C: sov_modules_api::Context> {
     test_struct: TestStruct<C>,
 }
 
-
-impl TestStructInnerRpcImpl<DefaultContext> for TestRuntime<DefaultContext> {
-    fn get_backing_impl(&self) -> &TestStruct<DefaultContext> {
-        &self.test_struct
+impl TestStructRpcImpl<DefaultContext>
+for ::sov_modules_api::RpcStorage<DefaultContext> {
+    fn get_working_set(
+        &self,
+    ) -> ::sov_state::WorkingSet<<DefaultContext as ::sov_modules_api::Spec>::Storage> {
+        ::sov_state::WorkingSet::new(self.storage.clone())
     }
 }
 
-impl TestStructOuterRpcImpl<DefaultContext> for TestRuntime<DefaultContext> {
-    type InnerTraitType = TestRuntime<DefaultContext>;
-    fn get_runtime(&self) -> &Self::InnerTraitType {
-        self
-    }
-    fn get_working_set(&self) -> WorkingSet<<DefaultContext as sov_modules_api::Spec>::Storage> {
-        let native_storage = ProverStorage::temporary();
-        WorkingSet::new(native_storage)
-    }
-}
 
 fn main() {
-    let runtime: TestRuntime<DefaultContext> = TestRuntime {
-        test_struct: TestStruct {
-            phantom: std::marker::PhantomData,
-        },
-    };
+    let native_storage = ProverStorage::temporary();
+    let r: RpcStorage<DefaultContext> = RpcStorage { storage: native_storage.clone() };
     {
         let result =
-            <TestRuntime<DefaultContext> as TestStructRpcServer<DefaultContext>>::first_method(
-                &runtime,
+            <RpcStorage<DefaultContext> as TestStructRpcServer<DefaultContext>>::first_method(
+                &r,
             );
         assert_eq!(result.unwrap(), 11);
     }
 
     {
         let result =
-            <TestRuntime<DefaultContext> as TestStructRpcServer<DefaultContext>>::second_method(
-                &runtime, 22,
+            <RpcStorage<DefaultContext> as TestStructRpcServer<DefaultContext>>::second_method(
+                &r, 22,
             );
         assert_eq!(result.unwrap(), 22);
     }
 
     {
         let result =
-            <TestRuntime<DefaultContext> as TestStructRpcServer<DefaultContext>>::third_method(
-                &runtime, 33,
+            <RpcStorage<DefaultContext> as TestStructRpcServer<DefaultContext>>::third_method(
+                &r, 33,
             );
         assert_eq!(result.unwrap(), 33);
     }
 
     {
         let result =
-            <TestRuntime<DefaultContext> as TestStructRpcServer<DefaultContext>>::fourth_method(
-                &runtime, 44,
+            <RpcStorage<DefaultContext> as TestStructRpcServer<DefaultContext>>::fourth_method(
+                &r, 44,
             );
         assert_eq!(result.unwrap(), 44);
     }
 
     {
         let result =
-            <TestRuntime<DefaultContext> as TestStructRpcServer<DefaultContext>>::health(&runtime);
+            <RpcStorage<DefaultContext> as TestStructRpcServer<DefaultContext>>::health(&r);
         assert_eq!(result.unwrap(), ());
     }
 
