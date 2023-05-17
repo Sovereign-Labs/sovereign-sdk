@@ -529,15 +529,9 @@ pub(crate) fn rpc_impls(input: DeriveInput) -> Result<proc_macro::TokenStream, s
         }
     });
 
-    let rpc_storage_trait = quote! {
-        pub trait RpcStorage<S: Storage> {
-            fn get_storage(&self) -> S;
-        }
-    };
-
     let output = quote! {
         #(#impls)*
-        #rpc_storage_trait
+
     };
     Ok(output.into())
 }
@@ -597,15 +591,10 @@ pub(crate) fn rpc_outer_impls(args: proc_macro2::TokenStream,
         last_segment.ident = syn::Ident::new(&format!("{}RpcImpl", last_segment.ident), last_segment.ident.span());
 
         let output = quote! {
-            //
-            // #(#attrs)*
-            // #input
-
-            impl #generics #trait_type_path for #type_name
-            where
+            impl #trait_type_path for RpcStorage<#context_type>
             {
                 fn get_working_set(&self) -> WorkingSet<<#context_type as Spec>::Storage> {
-                    WorkingSet::new(self.inner().current_storage.clone())
+                    WorkingSet::new(self.storage.clone())
                 }
             }
 
