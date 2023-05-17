@@ -20,6 +20,9 @@ ed25519-dalek = { version = "1.0.1" }
 rand = {version = "0.7", optional = true}
 hex = { workspace = true, optional = true }
 
+[dev-dependencies]
+serde_json = { workspace = true }
+
 [features]
 default = ["native"]
 native = ["sov-state/native", "rand", "hex"]

@@ -17,11 +17,19 @@ pub fn bech32_to_decoded_vec(bech32_addr: &str) -> Result<(String, Vec<u8>), Err
 
 const HRP: &str = "sov";
 
-#[cfg_attr(feature = "native", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "native", serde(try_from = "String"), serde(into = "String"))]
 #[derive(
-    borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Eq, Into, Display,
+    serde::Serialize,
+    serde::Deserialize,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    Debug,
+    PartialEq,
+    Clone,
+    Eq,
+    Into,
+    Display,
 )]
+#[serde(try_from = "String", into = "String")]
 #[display(fmt = "{}", "value")]
 pub struct AddressBech32 {
     value: String,

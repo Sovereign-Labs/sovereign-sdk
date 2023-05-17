@@ -2,6 +2,7 @@
 
 pub mod default_context;
 pub mod default_signature;
+mod serde_address;
 
 mod bech32;
 mod dispatch;
@@ -35,20 +36,7 @@ impl AsRef<[u8]> for Address {
 
 impl AddressTrait for Address {}
 
-#[derive(
-    PartialEq,
-    Clone,
-    Eq,
-    borsh::BorshDeserialize,
-    borsh::BorshSerialize,
-    serde::Serialize,
-    serde::Deserialize,
-)]
-#[cfg_attr(
-    feature = "native",
-    serde(into = "AddressBech32"),
-    serde(try_from = "AddressBech32")
-)]
+#[derive(PartialEq, Clone, Eq, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Address {
     addr: [u8; 32],
 }
