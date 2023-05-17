@@ -12,8 +12,6 @@ fn test_account_bech32_display() {
         account.to_string(),
         "sov1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5z5tpwxqergd3c8g7rusq4vrkje"
     );
-
-    //assert_eq!(account.try_to_vec().unwrap(), expected_addr);
 }
 
 #[test]

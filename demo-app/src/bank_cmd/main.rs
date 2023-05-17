@@ -90,6 +90,7 @@ fn main() {
 
 struct SerializedTx {
     raw: RawTx,
+    #[allow(dead_code)]
     sender: Address,
 }
 
