@@ -6,9 +6,8 @@ use crate::{
         simulate_da_with_bad_serialization, simulate_da_with_bad_sig, simulate_da_with_revert_msg,
         QueryGenerator,
     },
-    helpers::query_and_deserialize,
+    helpers::{query_and_deserialize, TestBlob},
     runtime::Runtime,
-    tests::test::TestBlob,
 };
 use sov_app_template::{Batch, SlashingReason};
 use sov_modules_api::{

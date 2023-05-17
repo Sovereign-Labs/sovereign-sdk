@@ -4,7 +4,6 @@ use ed25519_dalek::{
     ed25519::signature::Signature as DalekSignatureTrait, PublicKey as DalekPublicKey,
     Signature as DalekSignature,
 };
-
 use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 
 #[cfg(feature = "native")]
@@ -13,8 +12,17 @@ pub mod private_key {
     use crate::{Address, PublicKey};
 
     use super::{DefaultPublicKey, DefaultSignature};
-    use ed25519_dalek::{Keypair, Signer};
+    use ed25519_dalek::{Keypair, SignatureError, Signer};
     use rand::rngs::OsRng;
+    use thiserror::Error;
+
+    #[derive(Error, Debug)]
+    pub enum DefaultPrivateKeyHexDeserializationError {
+        #[error("Hex deserialization error")]
+        FromHexError(#[from] hex::FromHexError),
+        #[error("PrivateKey deserialization error")]
+        PrivateKeyError(#[from] SignatureError),
+    }
 
     pub struct DefaultPrivateKey {
         key_pair: Keypair,
@@ -39,6 +47,17 @@ pub mod private_key {
             DefaultPublicKey {
                 pub_key: self.key_pair.public,
             }
+        }
+
+        pub fn as_hex(&self) -> String {
+            hex::encode(self.key_pair.to_bytes())
+        }
+
+        pub fn from_hex(hex: &str) -> Result<Self, DefaultPrivateKeyHexDeserializationError> {
+            let bytes = hex::decode(hex)?;
+            Ok(Self {
+                key_pair: Keypair::from_bytes(&bytes)?,
+            })
         }
 
         pub fn default_address(&self) -> Address {

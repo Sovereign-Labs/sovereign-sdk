@@ -6,10 +6,15 @@ use crate::call::prefix_from_address_with_parent;
 
 pub type Amount = u64;
 
+#[cfg_attr(
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
+)]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub struct Coins<Address: sov_modules_api::AddressTrait> {
+pub struct Coins<C: sov_modules_api::Context> {
     pub amount: Amount,
-    pub token_address: Address,
+    pub token_address: C::Address,
 }
 
 /// This struct represents a token in the bank module.

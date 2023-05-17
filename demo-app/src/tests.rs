@@ -1,51 +1,19 @@
 #[cfg(test)]
 pub mod test {
-    use borsh::{BorshDeserialize, BorshSerialize};
-    use serde::{Deserialize, Serialize};
+
     use sov_app_template::{Batch, SequencerOutcome};
     use sov_modules_api::{
-        default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, Address,
+        default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
     };
     use sov_state::ProverStorage;
-    use sovereign_sdk::{
-        core::mocks::MockZkvm, da::BlobTransactionTrait, stf::StateTransitionFunction,
-    };
+    use sovereign_sdk::{core::mocks::MockZkvm, stf::StateTransitionFunction};
 
     use crate::{
         app::{create_demo_config, create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
         data_generation::{simulate_da, QueryGenerator},
-        helpers::query_and_deserialize,
+        helpers::{query_and_deserialize, TestBlob},
         runtime::Runtime,
     };
-
-    #[derive(Debug, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
-    pub struct TestBlob {
-        address: Address,
-        data: Vec<u8>,
-    }
-
-    impl BlobTransactionTrait for TestBlob {
-        type Data = std::io::Cursor<Vec<u8>>;
-
-        type Address = Address;
-
-        fn sender(&self) -> Self::Address {
-            self.address.clone()
-        }
-
-        fn data(&self) -> Self::Data {
-            std::io::Cursor::new(self.data.clone())
-        }
-    }
-
-    impl TestBlob {
-        pub fn new(batch: Batch, address: &[u8]) -> Self {
-            Self {
-                address: TryInto::<Address>::try_into(address).unwrap(),
-                data: batch.try_to_vec().unwrap(),
-            }
-        }
-    }
 
     #[test]
     fn test_demo_values_in_db() {

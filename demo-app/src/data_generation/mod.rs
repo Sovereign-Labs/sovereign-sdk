@@ -4,9 +4,7 @@ use borsh::BorshSerialize;
 use sov_app_template::RawTx;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::default_signature::DefaultSignature;
-use sov_modules_api::Hasher;
-use sov_modules_api::{PublicKey, Spec};
+use sov_modules_api::PublicKey;
 use std::rc::Rc;
 
 mod election_data;
@@ -48,18 +46,6 @@ pub fn simulate_da_with_bad_nonce(election_admin: DefaultPrivateKey) -> Vec<RawT
 pub fn simulate_da_with_bad_serialization(election_admin: DefaultPrivateKey) -> Vec<RawTx> {
     let election = election_data::BadSerializationElectionCallMessages::new(election_admin);
     election.create_raw_txs()
-}
-
-pub(crate) fn sign_tx(
-    priv_key: &DefaultPrivateKey,
-    message: &[u8],
-    nonce: u64,
-) -> DefaultSignature {
-    let mut hasher = <DefaultContext as Spec>::Hasher::new();
-    hasher.update(message);
-    hasher.update(&nonce.to_le_bytes());
-    let msg_hash = hasher.finalize();
-    priv_key.sign(msg_hash)
 }
 
 trait MessageGenerator {

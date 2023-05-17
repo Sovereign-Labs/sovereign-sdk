@@ -1,3 +1,4 @@
+#[cfg(feature = "native")]
 use crate::config::Config;
 #[cfg(feature = "native")]
 use crate::runtime::GenesisConfig;
@@ -23,7 +24,7 @@ use sov_state::ZkStorage;
 use sovereign_sdk::stf::ProverConfig;
 use sovereign_sdk::stf::{StateTransitionRunner, ZkConfig};
 use sovereign_sdk::zk::traits::Zkvm;
-#[cfg(test)]
+#[cfg(feature = "native")]
 use std::path::Path;
 
 #[cfg(test)]
@@ -97,7 +98,6 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
 ///
 /// * `value_setter_admin_private_key` - Private key for the ValueSetter module admin.
 /// * `election_admin_private_key` - Private key for the Election module admin.
-#[cfg(test)]
 pub fn create_demo_config(
     initial_sequencer_balance: u64,
     value_setter_admin_private_key: &DefaultPrivateKey,
@@ -170,8 +170,8 @@ pub fn generate_address<C: Context>(key: &str) -> <C as Spec>::Address {
     <C as Spec>::Address::from(hash)
 }
 
-#[cfg(test)]
-pub(crate) fn create_new_demo(
+#[cfg(feature = "native")]
+pub fn create_new_demo(
     path: impl AsRef<Path>,
 ) -> DemoApp<DefaultContext, sovereign_sdk::core::mocks::MockZkvm> {
     let runtime = Runtime::new();

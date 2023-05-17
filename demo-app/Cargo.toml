@@ -4,15 +4,21 @@ version = "0.1.0"
 edition = "2021"
 resolver = "2"
 
+[[bin]]
+name = "bank-cmd"
+path = "src/bank_cmd/main.rs"
+required-features = ["native"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = { workspace = true }
+anyhow = { workspace = true}
 borsh = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
+serde_json = { workspace = true, optional = true }
 sha2 = { workspace = true }
-toml = { workspace = true }
+clap = { workspace = true, optional = true }
+toml = { workspace = true, optional = true }
 
 sovereign-sdk = { path = "../sdk" }
 election = { path = "../sov-modules/sov-modules-impl/examples/election", default-features = false }
@@ -34,6 +40,6 @@ tempfile = "3.5.0"
 
 [features]
 default = ["native"]
-native = ["sov-state/temp", "dep:sovereign-db", "dep:schemadb", "bank/native", "accounts/native", "election/native",
-    "sequencer/native", "value-setter/native", "sov-modules-api/native"]
+native = ["sov-state/temp", "dep:sovereign-db", "dep:schemadb", "bank/native", "accounts/native", "election/native", 
+	"sequencer/native", "value-setter/native", "sov-modules-api/native","sovereign-sdk/mocks", "clap", "serde_json", "toml"]
 verifier = []

@@ -190,6 +190,7 @@ where
                     };
                 }
             }
+
             // commit each step of the loop
             batch_workspace = batch_workspace.commit();
         }
