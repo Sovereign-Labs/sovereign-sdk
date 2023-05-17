@@ -1,0 +1,41 @@
+[package]
+name = "jupiter"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+borsh = { version = "0.10.3", features = ["bytes"] }
+prost = "0.11"
+prost-types = "0.11"
+tendermint = "0.32"
+tendermint-proto = "0.32"
+
+# Convenience
+anyhow = "1.0.62"
+base64 = "0.13.1"
+hex = { version = "0.4.3", features = ["serde"] }
+hex-literal = "0.3.4"
+jsonrpsee = { version = "0.16.2", features = ["http-client"], optional = true }
+reqwest = { version = "0.11.13", features = ["blocking"], optional = true }
+serde = { version = "1", features = ["derive"] }
+serde_cbor = "0.11.2"
+serde_json = "1"
+tokio = { version = "1", features = ["full"], optional = true }
+tracing = "0.1.37"
+
+sovereign-core = { path = "../../core" }
+nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "dd37588444fca72825d11fe4a46838f66525c49f", features = ["serde", "borsh"] }
+
+[dev-dependencies]
+postcard = { version = "1", features = ["use-std"] }
+
+[build-dependencies]
+prost-build = { version = "0.11" }
+
+
+[features]
+default = ["native"]
+native = ["dep:tokio", "dep:reqwest", "dep:jsonrpsee"]
+verifier = []

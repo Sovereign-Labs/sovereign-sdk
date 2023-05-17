@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "core",
     "adapters/risc0",
+    "adapters/celestia",
     "examples/demo-stf",
     "examples/demo-rollup",
     "full-node/db/schemadb",

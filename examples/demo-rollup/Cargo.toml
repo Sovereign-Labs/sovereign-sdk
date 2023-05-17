@@ -21,7 +21,7 @@ tendermint = "0.32"
 tokio = { version = "1", features = ["full"] }
 tracing-subscriber = "0.3.16"
 
-jupiter = { git = "https://github.com/Sovereign-Labs/Jupiter.git", rev = "afe0beacd4eeb1ea1ccc7b7020e3ba6b9e6b9446" }
+jupiter = { path = "../../adapters/celestia" }
 demo-stf = { path = "../demo-stf", features = ["native"] }
 sovereign-core = { path = "../../core" }
 sovereign-db = { path = "../../full-node/db/sovereign-db" }
