@@ -198,5 +198,5 @@ pub trait ModuleInfo {
 /// with a storage object to convert into an RPC
 #[derive(Clone)]
 pub struct RpcStorage<C: Context> {
-    pub storage: C::Storage
+    pub storage: C::Storage,
 }

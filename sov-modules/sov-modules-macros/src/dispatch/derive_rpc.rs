@@ -2,10 +2,12 @@ use std::str::FromStr;
 
 use proc_macro2::Ident;
 use quote::{format_ident, quote};
-use syn::{Attribute, FnArg, ImplItem, Meta, MetaList, parenthesized,
-          Path, PathSegment, PatType, Signature, Type};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
+use syn::{
+    parenthesized, Attribute, FnArg, ImplItem, Meta, MetaList, PatType, Path, PathSegment,
+    Signature, Type,
+};
 
 /// Returns an attribute with the name `rpc_method` replaced with `method`, and the index
 /// into the argument array where the attribute was found.
@@ -88,7 +90,6 @@ impl RpcImplBlock {
             })
             .collect::<Vec<_>>();
 
-
         // let debug_var = quote! { println!("STUFF {:?}", #(#generics_params)*,); };
         // println!("DBG1: {}", debug_var);
         // let debug_var = quote! { println!("STUFF {:?}", #type_name) };
@@ -155,7 +156,6 @@ impl RpcImplBlock {
 
             impl_trait_methods.push(impl_trait_method);
 
-
             signature.output = wrap_in_jsonprsee_result(&signature.output);
             let blanket_impl_method = if let Some(idx) = method.idx_of_working_set_arg {
                 // If necessary, adjust the signature to remove the working set argument.
@@ -196,11 +196,11 @@ impl RpcImplBlock {
         let blanket_impl_generics = quote! {
             #impl_generics
         }
-            .to_string();
+        .to_string();
         let blanket_impl_generics_without_braces = proc_macro2::TokenStream::from_str(
             &blanket_impl_generics[1..blanket_impl_generics.len() - 1],
         )
-            .expect("Failed to parse generics without braces as token stream");
+        .expect("Failed to parse generics without braces as token stream");
         let rpc_server_trait_name = format_ident!("{}RpcServer", self.type_name);
         let blanket_impl = quote! {
             impl <MacroGeneratedTypeWithLongNameToAvoidCollisions: #impl_trait_name #ty_generics
@@ -361,8 +361,10 @@ impl Parse for TypeList {
     }
 }
 
-pub(crate) fn rpc_outer_impls(args: proc_macro2::TokenStream,
-                              input: syn::ItemImpl, ) -> Result<proc_macro::TokenStream, syn::Error> {
+pub(crate) fn rpc_outer_impls(
+    args: proc_macro2::TokenStream,
+    input: syn::ItemImpl,
+) -> Result<proc_macro::TokenStream, syn::Error> {
     let attrs = &input.attrs;
 
     let args: syn::Type = syn::parse2(args).expect("Expected a valid type list");
@@ -389,10 +391,20 @@ pub(crate) fn rpc_outer_impls(args: proc_macro2::TokenStream,
         let last_segment = trait_type_path.path.segments.last_mut().unwrap();
         let context_type = match last_segment.arguments {
             syn::PathArguments::AngleBracketed(ref args) => {
-                match args.args.first().expect("Expected at least one type argument") {
+                match args
+                    .args
+                    .first()
+                    .expect("Expected at least one type argument")
+                {
                     syn::GenericArgument::Type(syn::Type::Path(ref type_path)) => {
                         // Assuming type path has only one segment
-                        type_path.path.segments.first().expect("Expected at least one segment").ident.clone()
+                        type_path
+                            .path
+                            .segments
+                            .first()
+                            .expect("Expected at least one segment")
+                            .ident
+                            .clone()
                     }
                     _ => panic!("Expected a type argument"),
                 }
@@ -400,7 +412,10 @@ pub(crate) fn rpc_outer_impls(args: proc_macro2::TokenStream,
             _ => panic!("Expected angle bracketed arguments"),
         };
 
-        last_segment.ident = syn::Ident::new(&format!("{}RpcImpl", last_segment.ident), last_segment.ident.span());
+        last_segment.ident = syn::Ident::new(
+            &format!("{}RpcImpl", last_segment.ident),
+            last_segment.ident.span(),
+        );
 
         let output = quote! {
             impl #trait_type_path for ::sov_modules_api::RpcStorage<#context_type>
@@ -417,9 +432,3 @@ pub(crate) fn rpc_outer_impls(args: proc_macro2::TokenStream,
 
     Ok(output_tokens.into())
 }
-
-
-
-
-
-
