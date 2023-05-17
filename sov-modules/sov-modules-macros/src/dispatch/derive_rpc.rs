@@ -591,13 +591,13 @@ pub(crate) fn rpc_outer_impls(args: proc_macro2::TokenStream,
         last_segment.ident = syn::Ident::new(&format!("{}RpcImpl", last_segment.ident), last_segment.ident.span());
 
         let output = quote! {
-            impl #trait_type_path for RpcStorage<#context_type>
+            impl #trait_type_path for ::sov_modules_api::RpcStorage<#context_type>
             {
-                fn get_working_set(&self) -> WorkingSet<<#context_type as Spec>::Storage> {
-                    WorkingSet::new(self.storage.clone())
+                fn get_working_set(&self) -> ::sov_state::WorkingSet<<#context_type
+                    as ::sov_modules_api::Spec>::Storage> {
+                    ::sov_state::WorkingSet::new(self.storage.clone())
                 }
             }
-
         };
 
         output_tokens.extend(output);
