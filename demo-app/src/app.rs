@@ -1,3 +1,4 @@
+use crate::config::Config;
 #[cfg(feature = "native")]
 use crate::runtime::GenesisConfig;
 use crate::runtime::Runtime;
@@ -42,13 +43,13 @@ pub const TOKEN_NAME: &str = "sov-test-token";
 
 #[cfg(feature = "native")]
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
-    type RuntimeConfig = &'static str;
+    type RuntimeConfig = Config;
     type Inner = DemoApp<DefaultContext, Vm>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let runtime = Runtime::new();
-        let storage =
-            ProverStorage::with_config(runtime_config).expect("Failed to open prover storage");
+        let storage = ProverStorage::with_config(runtime_config.storage)
+            .expect("Failed to open prover storage");
         let tx_verifier = DemoAppTxVerifier::new();
         let tx_hooks = DemoAppTxHooks::new();
         let app = AppTemplate::new(storage, runtime, tx_verifier, tx_hooks);
@@ -93,16 +94,16 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
 }
 
 #[cfg(feature = "native")]
-/// Creates config for a rollup with some default settings, the config is used in demos and tests.
 ///
 /// * `value_setter_admin_private_key` - Private key for the ValueSetter module admin.
 /// * `election_admin_private_key` - Private key for the Election module admin.
+#[cfg(test)]
 pub fn create_demo_config(
     initial_sequencer_balance: u64,
     value_setter_admin_private_key: &DefaultPrivateKey,
     election_admin_private_key: &DefaultPrivateKey,
 ) -> GenesisConfig<DefaultContext> {
-    create_genesis_config::<DefaultContext>(
+    create_demo_genesis_config::<DefaultContext>(
         initial_sequencer_balance,
         generate_address::<DefaultContext>(SEQ_PUB_KEY_STR),
         SEQUENCER_DA_ADDRESS.to_vec(),
@@ -112,7 +113,8 @@ pub fn create_demo_config(
 }
 
 #[cfg(feature = "native")]
-fn create_genesis_config<C: Context>(
+/// Creates config for a rollup with some default settings, the config is used in demos and tests.
+pub fn create_demo_genesis_config<C: Context>(
     initial_sequencer_balance: u64,
     sequencer_address: C::Address,
     sequencer_da_address: Vec<u8>,
@@ -139,7 +141,7 @@ fn create_genesis_config<C: Context>(
 
     let sequencer_config = sequencer::SequencerConfig {
         seq_rollup_address: sequencer_address,
-        seq_da_address: sequencer_da_address.to_vec(),
+        seq_da_address: sequencer_da_address,
         coins_to_lock: bank::Coins {
             amount: LOCKED_AMOUNT,
             token_address,

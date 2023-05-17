@@ -8,6 +8,9 @@ use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 
 #[cfg(feature = "native")]
 pub mod private_key {
+
+    use crate::{Address, PublicKey};
+
     use super::{DefaultPublicKey, DefaultSignature};
     use ed25519_dalek::{Keypair, SignatureError, Signer};
     use rand::rngs::OsRng;
@@ -55,6 +58,10 @@ pub mod private_key {
             Ok(Self {
                 key_pair: Keypair::from_bytes(&bytes)?,
             })
+        }
+
+        pub fn default_address(&self) -> Address {
+            self.pub_key().to_address::<Address>()
         }
     }
 }

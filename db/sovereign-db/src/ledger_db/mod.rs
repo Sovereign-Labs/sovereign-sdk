@@ -3,9 +3,13 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use anyhow::ensure;
 use schemadb::{Schema, DB};
-use sovereign_sdk::{db::SeekKeyEncoder, stf::Event};
+use serde::Serialize;
+use sovereign_sdk::{
+    db::SeekKeyEncoder,
+    services::da::SlotData,
+    stf::{BatchReceipt, Event},
+};
 
 use crate::{
     rocks_db_config::gen_rocksdb_options,
@@ -15,8 +19,8 @@ use crate::{
             TxByHash, TxByNumber, LEDGER_TABLES,
         },
         types::{
-            BatchNumber, EventNumber, SlotNumber, StoredBatch, StoredSlot, StoredTransaction,
-            TxNumber,
+            split_tx_for_storage, BatchNumber, EventNumber, SlotNumber, StoredBatch, StoredSlot,
+            StoredTransaction, TxNumber,
         },
     },
 };
@@ -44,41 +48,32 @@ pub struct ItemNumbers {
     pub event_number: u64,
 }
 
-#[derive(Default)]
-pub struct SlotCommitBuilder {
-    pub slot_data: Option<StoredSlot>,
-    pub batches: Vec<StoredBatch>,
-    pub txs: Vec<StoredTransaction>,
-    pub events: Vec<Vec<Event>>,
+pub struct SlotCommit<S: SlotData, B, T> {
+    slot_data: S,
+    batch_receipts: Vec<BatchReceipt<B, T>>,
+    num_txs: usize,
+    num_events: usize,
 }
 
-impl SlotCommitBuilder {
-    pub fn finalize(self) -> Result<SlotCommit, anyhow::Error> {
-        let commit = SlotCommit {
-            slot_data: self.slot_data.ok_or(anyhow::format_err!(
-                "Slot data is required to commit a slot."
-            ))?,
-            batches: self.batches,
-            txs: self.txs,
-            events: self.events,
-        };
-
-        ensure!(
-            commit.txs.len() == commit.events.len(),
-            "Number of transactions must match number of event groupss."
-        );
-        Ok(commit)
+impl<S: SlotData, B, T> SlotCommit<S, B, T> {
+    pub fn new(slot_data: S) -> Self {
+        Self {
+            slot_data,
+            batch_receipts: vec![],
+            num_txs: 0,
+            num_events: 0,
+        }
     }
 }
 
-pub struct SlotCommit {
-    pub slot_data: StoredSlot,
-    pub batches: Vec<StoredBatch>,
-    pub txs: Vec<StoredTransaction>,
-    pub events: Vec<Vec<Event>>,
+impl<S: SlotData, B, T> SlotCommit<S, B, T> {
+    pub fn add_batch(&mut self, batch: BatchReceipt<B, T>) {
+        self.num_txs += batch.tx_receipts.len();
+        let events_this_batch: usize = batch.tx_receipts.iter().map(|r| r.events.len()).sum();
+        self.batch_receipts.push(batch);
+        self.num_events += events_this_batch;
+    }
 }
-
-impl SlotCommitBuilder {}
 
 impl LedgerDB {
     pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
@@ -206,65 +201,70 @@ impl LedgerDB {
 
     /// Commits a slot to the database by inserting its events, transactions, and batches before
     /// inserting the slot metadata.
-    pub fn commit_slot(&self, data_to_commit: SlotCommit) -> Result<(), anyhow::Error> {
+    pub fn commit_slot<S: SlotData, B: Serialize, T: Serialize>(
+        &self,
+        data_to_commit: SlotCommit<S, B, T>,
+    ) -> Result<(), anyhow::Error> {
+        // TODO: expose a batch API on the db to commit everything atomically
         // Create a scope to ensure that the lock is released before we commit to the db
-        let item_numbers = {
+        let mut current_item_numbers = {
             let mut next_item_numbers = self.next_item_numbers.lock().unwrap();
             let item_numbers = next_item_numbers.clone();
-
-            ensure!(
-                next_item_numbers.batch_number == data_to_commit.slot_data.batches.start.into(),
-                "First batch number must be the next in sequence."
-            );
-            if let Some(first_batch) = data_to_commit.batches.first() {
-                ensure!(
-                    next_item_numbers.tx_number == first_batch.txs.start.into(),
-                    "first ransaction number must be the next in sequence."
-                );
-            }
-            if let Some(first_tx) = data_to_commit.txs.first() {
-                ensure!(
-                    next_item_numbers.event_number == first_tx.events.start.into(),
-                    "first event number must be the next in sequence."
-                );
-            }
-
             next_item_numbers.slot_number += 1;
-            next_item_numbers.batch_number += data_to_commit.batches.len() as u64;
-            next_item_numbers.tx_number += data_to_commit.txs.len() as u64;
-            next_item_numbers.event_number += data_to_commit.events.len() as u64;
+            next_item_numbers.batch_number += data_to_commit.batch_receipts.len() as u64;
+            next_item_numbers.tx_number += data_to_commit.num_txs as u64;
+            next_item_numbers.event_number += data_to_commit.num_events as u64;
             item_numbers
             // The lock is released here
         };
 
-        // Insert data from "bottom up" to ensure consistency is present if the application crashes during insert
-
-        let mut event_number = item_numbers.event_number;
-        // Insert transactions and events
-        for (idx, (tx, event_group)) in data_to_commit
-            .txs
-            .into_iter()
-            .zip(data_to_commit.events.into_iter())
-            .enumerate()
-        {
-            let tx_number = TxNumber(item_numbers.tx_number + idx as u64);
-            for event in event_group.into_iter() {
-                self.put_event(&event, &EventNumber(event_number), tx_number)?;
-                event_number += 1;
+        let first_batch_number = current_item_numbers.batch_number;
+        let last_batch_number = first_batch_number + data_to_commit.batch_receipts.len() as u64;
+        // Insert data from "bottom up" to ensure consistency if the application crashes during insertion
+        for batch_receipt in data_to_commit.batch_receipts.into_iter() {
+            let first_tx_number = current_item_numbers.tx_number;
+            let last_tx_number = first_tx_number + batch_receipt.tx_receipts.len() as u64;
+            // Insert transactions and events from each batch before inserting the batch
+            for tx in batch_receipt.tx_receipts.into_iter() {
+                let (tx_to_store, events) =
+                    split_tx_for_storage(tx, current_item_numbers.event_number);
+                for event in events.into_iter() {
+                    self.put_event(
+                        &event,
+                        &EventNumber(current_item_numbers.event_number),
+                        TxNumber(current_item_numbers.tx_number),
+                    )?;
+                    current_item_numbers.event_number += 1;
+                }
+                self.put_transaction(&tx_to_store, &TxNumber(current_item_numbers.tx_number))?;
+                current_item_numbers.tx_number += 1;
             }
-            self.put_transaction(&tx, &tx_number)?;
+
+            // Insert batch
+            let batch_to_store = StoredBatch {
+                hash: batch_receipt.batch_hash,
+                txs: TxNumber(first_tx_number)..TxNumber(last_tx_number),
+                custom_receipt: bincode::serialize(&batch_receipt.inner)
+                    .expect("serialization to vec is infallible")
+                    .into(),
+            };
+            self.put_batch(
+                &batch_to_store,
+                &BatchNumber(current_item_numbers.batch_number),
+            )?;
+            current_item_numbers.batch_number += 1;
         }
 
-        // Insert batches
-        for (idx, batch) in data_to_commit.batches.into_iter().enumerate() {
-            let batch_number = BatchNumber(item_numbers.batch_number + idx as u64);
-            self.put_batch(&batch, &batch_number)?;
-        }
-
-        // Insert slot
+        // Once all batches are inserted, Insert slot
+        let slot_to_store = StoredSlot {
+            hash: data_to_commit.slot_data.hash(),
+            // TODO: Add a method to the slotdata trait allowing additional data to be stored
+            extra_data: vec![].into(),
+            batches: BatchNumber(first_batch_number)..BatchNumber(last_batch_number),
+        };
         self.put_slot(
-            &data_to_commit.slot_data,
-            &SlotNumber(item_numbers.slot_number),
+            &slot_to_store,
+            &SlotNumber(current_item_numbers.slot_number),
         )?;
 
         Ok(())
