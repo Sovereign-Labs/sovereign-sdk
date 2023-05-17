@@ -18,7 +18,7 @@ serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 sha2 = { workspace = true }
 clap = { workspace = true, optional = true }
-
+toml = { workspace = true, optional = true }
 
 sovereign-sdk = { path = "../sdk" }
 election = { path = "../sov-modules/sov-modules-impl/examples/election", default-features = false }
@@ -41,5 +41,5 @@ tempfile = "3.5.0"
 [features]
 default = ["native"]
 native = ["sov-state/temp", "dep:sovereign-db", "dep:schemadb", "bank/native", "accounts/native", "election/native", 
-	"sequencer/native", "value-setter/native", "sov-modules-api/native","sovereign-sdk/mocks", "clap", "serde_json", "anyhow"]
+	"sequencer/native", "value-setter/native", "sov-modules-api/native","sovereign-sdk/mocks", "clap", "serde_json", "anyhow", "toml"]
 verifier = []
