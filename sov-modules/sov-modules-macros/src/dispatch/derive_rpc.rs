@@ -1,11 +1,11 @@
 use std::str::FromStr;
 
-use proc_macro2::{Ident, Span};
-use quote::{format_ident, quote, ToTokens};
-use syn::{AngleBracketedGenericArguments, Attribute, Data, DeriveInput, Field, Fields, FieldsNamed, FnArg, GenericArgument, Generics, ImplItem, ItemImpl, Lit, Meta, MetaList, NestedMeta, parenthesized, parse_macro_input, parse_str, Path, PathArguments, PathSegment, PatType, Signature, Token, Type, TypeParam, TypeParamBound, TypePath};
+use proc_macro2::Ident;
+use quote::{format_ident, quote};
+use syn::{Attribute, FnArg, ImplItem, Meta, MetaList, parenthesized,
+          Path, PathSegment, PatType, Signature, Type};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
 
 /// Returns an attribute with the name `rpc_method` replaced with `method`, and the index
 /// into the argument array where the attribute was found.
@@ -58,61 +58,6 @@ fn find_working_set_argument(sig: &Signature) -> Option<(usize, syn::Type)> {
     }
     None
 }
-
-fn add_param_to_signature(signature: &mut Signature, working_set_type: &Type) {
-    let working_set_ident = syn::Ident::new("working_set", Span::call_site());
-    let pat: syn::Pat = syn::parse_quote! { #working_set_ident };
-    let ty = syn::Type::Reference(syn::TypeReference {
-        and_token: syn::token::And { spans: [Span::call_site()] },
-        lifetime: None,
-        mutability: Some(syn::token::Mut { span: Span::call_site() }),
-        elem: Box::new(working_set_type.clone()),
-    });
-    let pat_type = syn::PatType {
-        attrs: vec![],
-        pat: Box::new(pat),
-        colon_token: syn::token::Colon { spans: [Span::call_site()] },
-        ty: Box::new(ty),
-    };
-    let arg = syn::FnArg::Typed(pat_type);
-    signature.inputs.push(arg);
-}
-
-fn construct_working_set_ident(generic_ident: Ident) -> Type {
-    let workingset_ident = Ident::new("WorkingSet", Span::call_site());
-    let storage_ident = Ident::new("Storage", Span::call_site());
-
-    let segment_storage = PathSegment {
-        ident: storage_ident,
-        arguments: PathArguments::None,
-    };
-
-    let path_c_storage = Path {
-        leading_colon: None,
-        segments: Punctuated::from_iter(vec![generic_ident.into(), segment_storage]),
-    };
-
-    let arguments = Punctuated::from_iter(vec![
-        GenericArgument::Type(Type::Path(TypePath {
-            qself: None,
-            path: path_c_storage,
-        })),
-    ]);
-
-    let segment_workingset = PathSegment {
-        ident: workingset_ident,
-        arguments: PathArguments::AngleBracketed(AngleBracketedGenericArguments {
-            colon2_token: None,
-            lt_token: Token![<](Span::call_site()),
-            args: arguments,
-            gt_token: Token![>](Span::call_site()),
-        }),
-    };
-
-    let path_workingset = Path::from(segment_workingset);
-    Type::Path(TypePath { qself: None, path: path_workingset })
-}
-
 
 struct RpcImplBlock {
     pub(crate) type_name: Ident,
@@ -406,65 +351,6 @@ pub(crate) fn derive_rpc(
     build_rpc_trait(&attrs, type_name.clone(), input)
 }
 
-fn extract_type_name_and_generics(ty: &Type) -> Option<(String, Vec<GenericArgument>)> {
-    match ty {
-        Type::Path(TypePath { path, .. }) => {
-            path.segments.last().map(|segment| {
-                let type_name = segment.ident.to_string();
-                let generics = match &segment.arguments {
-                    PathArguments::AngleBracketed(AngleBracketedGenericArguments { args, .. }) => {
-                        args.iter().map(|x| x.clone())
-                            .collect::<Vec<GenericArgument>>()
-                    }
-                    _ => vec![],
-                };
-                (type_name, generics)
-            })
-        }
-        _ => None,
-    }
-}
-
-fn extract_type_name(ty: &Type) -> Option<String> {
-    match ty {
-        Type::Path(TypePath { path, .. }) => {
-            path.segments.last().map(|segment| segment.ident.to_string())
-        }
-        _ => None,
-    }
-}
-
-
-fn get_generic_matching_constraint(gens: &Generics, trait_bound: &Path) -> Option<Ident> {
-    let trait_bound_last_segment = trait_bound.segments.last()?.ident.to_string();
-    gens.type_params().find_map(|type_param| {
-        for bound in &type_param.bounds {
-            if let syn::TypeParamBound::Trait(ref trait_bound_ref) = bound {
-                let bound_last_segment = trait_bound_ref.path.segments.last()?.ident.to_string();
-                if bound_last_segment == trait_bound_last_segment {
-                    return Some(type_param.ident.clone());
-                }
-            }
-        }
-        None
-    })
-}
-
-fn get_first_generic_with_constraint(gens: &Generics) -> Option<Ident> {
-    gens.type_params().find_map(|type_param| {
-        let TypeParam { ident, bounds, .. } = type_param;
-
-        if bounds.iter().any(|bound| match bound {
-            TypeParamBound::Trait(_) => true,
-            _ => false,
-        }) {
-            Some(ident.clone())
-        } else {
-            None
-        }
-    })
-}
-
 struct TypeList(pub Punctuated<Type, syn::token::Comma>);
 
 impl Parse for TypeList {
@@ -477,8 +363,6 @@ impl Parse for TypeList {
 
 pub(crate) fn rpc_outer_impls(args: proc_macro2::TokenStream,
                               input: syn::ItemImpl, ) -> Result<proc_macro::TokenStream, syn::Error> {
-    let type_name = &input.self_ty;
-    let generics = &input.generics;
     let attrs = &input.attrs;
 
     let args: syn::Type = syn::parse2(args).expect("Expected a valid type list");
