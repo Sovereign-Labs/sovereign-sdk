@@ -10,11 +10,10 @@ use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 #[cfg(feature = "native")]
 pub mod private_key {
 
-    use crate::Address;
+    use crate::{Address, PublicKey};
 
     use super::{DefaultPublicKey, DefaultSignature};
     use ed25519_dalek::{Keypair, Signer};
-    use jmt::SimpleHasher;
     use rand::rngs::OsRng;
 
     pub struct DefaultPrivateKey {
@@ -42,8 +41,8 @@ pub mod private_key {
             }
         }
 
-        pub fn default_address<H: SimpleHasher>(&self) -> Address {
-            H::hash(self.pub_key().pub_key.as_bytes()).into()
+        pub fn default_address(&self) -> Address {
+            self.pub_key().to_address::<Address>()
         }
     }
 }
