@@ -1,8 +1,8 @@
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::RpcStorage;
+use sov_modules_macros::ModuleInfo;
 use sov_modules_macros::rpc_gen;
 use sov_state::{ProverStorage, WorkingSet};
-use sov_modules_api::RpcStorage;
-use sov_modules_macros::{ModuleInfo};
 
 #[derive(ModuleInfo)]
 pub struct TestStruct<C: ::sov_modules_api::Context> {
@@ -10,7 +10,7 @@ pub struct TestStruct<C: ::sov_modules_api::Context> {
     pub(crate) address: C::Address,
 }
 
-#[rpc_gen(client, server, namespace="test")]
+#[rpc_gen(client, server, namespace = "test")]
 impl<C: sov_modules_api::Context> TestStruct<C> {
     #[rpc_method(name = "firstMethod")]
     pub fn first_method(&self, _working_set: &mut WorkingSet<C::Storage>) -> u32 {

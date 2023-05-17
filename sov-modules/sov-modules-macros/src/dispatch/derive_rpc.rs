@@ -1,11 +1,11 @@
-use proc_macro2::{Ident,Span};
-use quote::{format_ident, quote, ToTokens};
 use std::str::FromStr;
-use syn::{Attribute, FnArg, ImplItem, Meta, MetaList, PatType, Path, PathSegment, Signature, Type, AngleBracketedGenericArguments, Data, DeriveInput, Field, GenericArgument, Lit, NestedMeta, parse_str, PathArguments, TypeParam, TypePath, Fields, FieldsNamed, parse_macro_input, Generics, TypeParamBound, Token, ItemImpl, parenthesized};
+
+use proc_macro2::{Ident, Span};
+use quote::{format_ident, quote, ToTokens};
+use syn::{AngleBracketedGenericArguments, Attribute, Data, DeriveInput, Field, Fields, FieldsNamed, FnArg, GenericArgument, Generics, ImplItem, ItemImpl, Lit, Meta, MetaList, NestedMeta, parenthesized, parse_macro_input, parse_str, Path, PathArguments, PathSegment, PatType, Signature, Token, Type, TypeParam, TypeParamBound, TypePath};
+use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::parse::{Parse, ParseStream};
-
 
 /// Returns an attribute with the name `rpc_method` replaced with `method`, and the index
 /// into the argument array where the attribute was found.
@@ -68,10 +68,12 @@ fn add_param_to_signature(signature: &mut Signature, working_set_type: &Type) {
         mutability: Some(syn::token::Mut { span: Span::call_site() }),
         elem: Box::new(working_set_type.clone()),
     });
-    let pat_type = syn::PatType { attrs: vec![],
+    let pat_type = syn::PatType {
+        attrs: vec![],
         pat: Box::new(pat),
         colon_token: syn::token::Colon { spans: [Span::call_site()] },
-        ty: Box::new(ty) };
+        ty: Box::new(ty),
+    };
     let arg = syn::FnArg::Typed(pat_type);
     signature.inputs.push(arg);
 }
@@ -249,11 +251,11 @@ impl RpcImplBlock {
         let blanket_impl_generics = quote! {
             #impl_generics
         }
-        .to_string();
+            .to_string();
         let blanket_impl_generics_without_braces = proc_macro2::TokenStream::from_str(
             &blanket_impl_generics[1..blanket_impl_generics.len() - 1],
         )
-        .expect("Failed to parse generics without braces as token stream");
+            .expect("Failed to parse generics without braces as token stream");
         let rpc_server_trait_name = format_ident!("{}RpcServer", self.type_name);
         let blanket_impl = quote! {
             impl <MacroGeneratedTypeWithLongNameToAvoidCollisions: #impl_trait_name #ty_generics
@@ -463,80 +465,6 @@ fn get_first_generic_with_constraint(gens: &Generics) -> Option<Ident> {
     })
 }
 
-pub(crate) fn rpc_impls(input: DeriveInput) -> Result<proc_macro::TokenStream, syn::Error> {
-
-    // removing parameter
-    // // currently, we're just letting the storage name "ProverStorage" or "MockStorage" etc be
-    // // passed in directly using an attribute. the reason is that runtime doesn't have any
-    // // visibility into the actual storage type being used. would require some modifications
-    // // to get around it. One useful thing would be to do this optionally and default to the
-    // // most common kind of storage used.
-    // let storage_parameter = input.attrs.iter().find_map(|attr| {
-    //     if attr.path.is_ident("storage") {
-    //         if let Ok(Meta::NameValue(name_value)) = attr.parse_meta() {
-    //             if let Lit::Str(lit_str) = name_value.lit {
-    //                 let storage_ident: Ident = parse_str(&lit_str.value()).unwrap();
-    //                 return Some(storage_ident);
-    //             }
-    //         }
-    //     }
-    //     None
-    // }).expect("Rpc derive macro requires a storage parameter");
-
-    let struct_name = input.ident;
-    let struct_generics = input.generics;
-    let struct_generics_params: Vec<Ident> =
-        struct_generics
-            .type_params()
-            .into_iter()
-            .map(|x| x.ident.clone())
-            .collect();
-
-    // we're checking to see which generic param of the struct the "Context" trait bound applies to
-    // I'm not sure if there's a better way to handle this. would be ideal to somehow pass in the actual
-    // trait itself, but i'm not sure if a there's a way to do that
-    let trait_path: Path = parse_str("::Context").unwrap();
-
-    // the logic here is to find the first generic param that has the traitbound "Context" specified
-    // failing that, the code looks for the first generic param that has ANY trait bound. we can
-    // make this more robust going forward
-    let generic_ident = get_generic_matching_constraint(&struct_generics, &trait_path);
-    let generic_ident = match generic_ident {
-        None => get_first_generic_with_constraint(&struct_generics).expect("no matches to extract generics for RPC"),
-        Some(id) => id
-    };
-    let fields = if let Data::Struct(data_struct) = input.data {
-        data_struct.fields
-    } else {
-        panic!("rpc macro is only valid for struct");
-    };
-
-    let impls = fields.into_iter().map(|field| {
-        let (field_type_name, field_type_generics) =
-            extract_type_name_and_generics(&field.ty)
-                .expect("couldn't parse types in runtime");
-        let rpc_impl_ident = Ident::new(&format!("{}InnerRpcImpl", field_type_name), field.span());
-        let field_name = field.ident.as_ref().expect("must have named fields");
-        let field_type = field.ty;
-
-        // the actual impls being generated
-        quote! {
-            impl #struct_generics #rpc_impl_ident<#(#field_type_generics),*> for #struct_name <#(#struct_generics_params),*>  {
-                fn get_backing_impl(&self) -> &#field_type {
-                    &self.#field_name
-                }
-            }
-        }
-    });
-
-    let output = quote! {
-        #(#impls)*
-
-    };
-    Ok(output.into())
-}
-
-
 struct TypeList(pub Punctuated<Type, syn::token::Comma>);
 
 impl Parse for TypeList {
@@ -548,7 +476,7 @@ impl Parse for TypeList {
 }
 
 pub(crate) fn rpc_outer_impls(args: proc_macro2::TokenStream,
-                              input: syn::ItemImpl,) -> Result<proc_macro::TokenStream, syn::Error> {
+                              input: syn::ItemImpl, ) -> Result<proc_macro::TokenStream, syn::Error> {
     let type_name = &input.self_ty;
     let generics = &input.generics;
     let attrs = &input.attrs;
