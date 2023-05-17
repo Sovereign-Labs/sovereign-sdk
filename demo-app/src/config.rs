@@ -1,0 +1,92 @@
+use sov_state::config::Config as StorageConfig;
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
+
+#[derive(serde::Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct Config {
+    pub storage: StorageConfig,
+}
+
+impl Config {
+    pub fn from_path<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
+        let mut contents = String::new();
+        {
+            let mut file = File::open(path)?;
+            file.read_to_string(&mut contents)?;
+        }
+
+        let result: Config = toml::from_str(&contents)?;
+
+        Ok(result)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+    use std::path::PathBuf;
+    use tempfile::{tempdir, NamedTempFile};
+
+    fn create_config_from(content: &str) -> NamedTempFile {
+        let mut config_file = NamedTempFile::new().unwrap();
+        config_file.write_all(content.as_bytes()).unwrap();
+        config_file
+    }
+
+    #[test]
+    fn test_correct_config() {
+        let config = r#"
+            [storage]
+            path = "/tmp"
+        "#;
+
+        let config_file = create_config_from(config);
+
+        let config = Config::from_path(config_file.path()).unwrap();
+        let expected = Config {
+            storage: StorageConfig {
+                path: PathBuf::from("/tmp"),
+            },
+        };
+        assert_eq!(config, expected);
+    }
+
+    #[test]
+    fn test_incorrect_path() {
+        // Not closed quote
+        let config = r#"
+            [storage]
+            path = "/tmp
+        "#;
+
+        let config_file = create_config_from(config);
+
+        let config = Config::from_path(config_file.path());
+
+        assert!(config.is_err());
+        let error = config.unwrap_err().to_string();
+        let expected_error = format!(
+            "{}{}{}",
+            "TOML parse error at line 3, column 25\n  |\n3 |",
+            "             path = \"/tmp\n  |                         ^\n",
+            "invalid basic string\n"
+        );
+        assert_eq!(error, expected_error);
+    }
+    //
+    #[test]
+    fn test_non_existent_config() {
+        let dir = tempdir().unwrap();
+
+        let path = dir.path().join("non_existing_config.toml");
+
+        let config = Config::from_path(path);
+        assert!(config.is_err());
+        assert_eq!(
+            config.unwrap_err().to_string(),
+            "No such file or directory (os error 2)"
+        );
+    }
+}

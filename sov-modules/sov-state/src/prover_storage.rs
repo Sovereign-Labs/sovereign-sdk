@@ -1,5 +1,6 @@
 use std::{fs, path::Path, sync::Arc};
 
+use crate::config::Config;
 use crate::witness::Witness;
 use crate::{
     internal_cache::OrderedReadsAndWrites,
@@ -57,10 +58,10 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
 
 impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type Witness = S::Witness;
-    type RuntimeConfig = &'static str;
+    type RuntimeConfig = Config;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
-        Self::with_path(&config)
+        Self::with_path(config.path.as_path())
     }
 
     fn get(&self, key: StorageKey, witness: &Self::Witness) -> Option<StorageValue> {

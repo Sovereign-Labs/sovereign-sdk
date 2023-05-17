@@ -1,4 +1,5 @@
 pub mod app;
+pub mod config;
 #[cfg(test)]
 mod data_generation;
 #[cfg(test)]
