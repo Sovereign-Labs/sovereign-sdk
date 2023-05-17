@@ -1,14 +1,10 @@
 use proc_macro2::{Ident,Span};
 use quote::{format_ident, quote, ToTokens};
 use std::str::FromStr;
-use syn::{Attribute, FnArg, ImplItem, Meta,
-          MetaList, PatType, Path, PathSegment, Signature, Type,
-          AngleBracketedGenericArguments, Data, DeriveInput, Field,
-          GenericArgument, Lit, NestedMeta, parse_str, PathArguments,
-          TypeParam, TypePath, Fields, FieldsNamed, parse_macro_input,
-          Generics, TypeParamBound, Token, ItemImpl};
+use syn::{Attribute, FnArg, ImplItem, Meta, MetaList, PatType, Path, PathSegment, Signature, Type, AngleBracketedGenericArguments, Data, DeriveInput, Field, GenericArgument, Lit, NestedMeta, parse_str, PathArguments, TypeParam, TypePath, Fields, FieldsNamed, parse_macro_input, Generics, TypeParamBound, Token, ItemImpl, parenthesized};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
+use syn::parse::{Parse, ParseStream};
 
 
 /// Returns an attribute with the name `rpc_method` replaced with `method`, and the index
@@ -546,39 +542,73 @@ pub(crate) fn rpc_impls(input: DeriveInput) -> Result<proc_macro::TokenStream, s
     Ok(output.into())
 }
 
+
+struct TypeList(pub Punctuated<Type, syn::token::Comma>);
+
+impl Parse for TypeList {
+    fn parse(input: ParseStream) -> syn::Result<Self> {
+        let content;
+        parenthesized!(content in input);
+        Ok(TypeList(content.parse_terminated(Type::parse)?))
+    }
+}
+
 pub(crate) fn rpc_outer_impls(args: proc_macro2::TokenStream,
                               input: syn::ItemImpl,) -> Result<proc_macro::TokenStream, syn::Error> {
     let type_name = &input.self_ty;
     let generics = &input.generics;
     let attrs = &input.attrs;
 
-    let trait_type: syn::Type = syn::parse2(args)
-        .expect("Expected a valid type");
+    let args: syn::Type = syn::parse2(args).expect("Expected a valid type list");
 
-    let mut trait_type_path = match &trait_type {
-        syn::Type::Path(type_path) => type_path.clone(),
-        _ => panic!("Expected a path type"),
+    let mut output_tokens = proc_macro2::TokenStream::new();
+
+    let types = match args {
+        syn::Type::Tuple(tuple) => tuple.elems,
+        _ => panic!("Expected a tuple of types"),
     };
 
-    let last_segment = trait_type_path.path.segments.last_mut().unwrap();
-    last_segment.ident = syn::Ident::new(&format!("{}RpcImpl", last_segment.ident), last_segment.ident.span());
+    for arg in types {
+        let mut trait_type_path = match arg {
+            syn::Type::Path(type_path) => type_path.clone(),
+            _ => panic!("Expected a path type"),
+        };
 
-    let output = quote! {
-
-        #(#attrs)*
-        #input
-
-        impl #generics #trait_type_path for #type_name
-        where
-        {
-            fn get_working_set(&self) -> WorkingSet<<DefaultContext as Spec>::Storage> {
-                WorkingSet::new(self.inner().current_storage.clone())
+        let last_segment = trait_type_path.path.segments.last_mut().unwrap();
+        let context_type = match last_segment.arguments {
+            syn::PathArguments::AngleBracketed(ref args) => {
+                match args.args.first().expect("Expected at least one type argument") {
+                    syn::GenericArgument::Type(syn::Type::Path(ref type_path)) => {
+                        // Assuming type path has only one segment
+                        type_path.path.segments.first().expect("Expected at least one segment").ident.clone()
+                    }
+                    _ => panic!("Expected a type argument"),
+                }
             }
-        }
+            _ => panic!("Expected angle bracketed arguments"),
+        };
 
-    };
+        last_segment.ident = syn::Ident::new(&format!("{}RpcImpl", last_segment.ident), last_segment.ident.span());
 
-    Ok(output.into())
+        let output = quote! {
+
+            #(#attrs)*
+            #input
+
+            impl #generics #trait_type_path for #type_name
+            where
+            {
+                fn get_working_set(&self) -> WorkingSet<<#context_type as Spec>::Storage> {
+                    WorkingSet::new(self.inner().current_storage.clone())
+                }
+            }
+
+        };
+
+        output_tokens.extend(output);
+    }
+
+    Ok(output_tokens.into())
 }
 
 
