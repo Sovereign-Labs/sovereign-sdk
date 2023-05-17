@@ -1,26 +1,29 @@
+use serde::de::DeserializeOwned;
 use sov_state::config::Config as StorageConfig;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-#[derive(serde::Deserialize, Debug, Clone, PartialEq, Eq)]
-pub struct Config {
-    pub storage: StorageConfig,
-}
-
-impl Config {
-    pub fn from_path<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
+pub trait FromTomlFile: DeserializeOwned {
+    fn from_path<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
         let mut contents = String::new();
         {
             let mut file = File::open(path)?;
             file.read_to_string(&mut contents)?;
         }
 
-        let result: Config = toml::from_str(&contents)?;
+        let result: Self = toml::from_str(&contents)?;
 
         Ok(result)
     }
 }
+
+#[derive(serde::Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct Config {
+    pub storage: StorageConfig,
+}
+
+impl FromTomlFile for Config {}
 
 #[cfg(test)]
 mod tests {
