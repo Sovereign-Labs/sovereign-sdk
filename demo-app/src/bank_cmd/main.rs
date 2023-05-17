@@ -144,8 +144,13 @@ impl SerializedTx {
 
         let call_msg = serde_json::from_str::<bank::call::CallMessage<C>>(&call_data)?;
 
-        if let bank::call::CallMessage::CreateToken { .. } = call_msg {
-            let token_address = create_token_address(sender_address);
+        if let bank::call::CallMessage::CreateToken {
+            salt, token_name, ..
+        } = &call_msg
+        {
+            let token_address =
+                bank::create_token_address::<C>(token_name, sender_address.as_ref(), *salt);
+
             println!(
                 "This message will crate a new Token with Address: {}",
                 token_address
@@ -154,10 +159,6 @@ impl SerializedTx {
 
         Ok(Runtime::<C>::encode_bank_call(call_msg))
     }
-}
-
-fn create_token_address(token_deployer_address: &Address) -> Address {
-    bank::create_token_address::<C>("sov-test-token", token_deployer_address.as_ref(), 11)
 }
 
 #[cfg(test)]
@@ -307,5 +308,9 @@ mod test {
         );
 
         balance.amount
+    }
+
+    fn create_token_address(token_deployer_address: &Address) -> Address {
+        bank::create_token_address::<C>("sov-test-token", token_deployer_address.as_ref(), 11)
     }
 }
