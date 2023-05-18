@@ -1,0 +1,17 @@
+[package]
+name = "integration-tests"
+version = "0.1.0"
+edition = "2021"
+resolver = "2"
+
+[dev-dependencies]
+anyhow = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+serde_json = { workspace = true }
+serial_test = "*"
+
+sov-modules-api = { path = "../../sov-modules-api"}
+sov-modules-macros = { path = "../../sov-modules-macros" }
+sov-state = { path = "../../sov-state", features = ["temp"] }
+sovereign-core = { path = "../../../core" }
+schemadb = { path = "../../../full-node/db/schemadb", features = ["temppath"] }

@@ -1,6 +1,6 @@
 #[cfg(target_os = "zkvm")]
 use risc0_zkvm::guest::env;
-use sovereign_sdk::zk::traits::{Zkvm, ZkvmGuest};
+use sovereign_core::zk::traits::{Zkvm, ZkvmGuest};
 
 use crate::Risc0MethodId;
 

@@ -1,6 +1,6 @@
 use risc0_zkvm::sha::Digest;
 use serde::{Deserialize, Serialize};
-use sovereign_sdk::zk::traits::Matches;
+use sovereign_core::zk::traits::Matches;
 
 pub mod guest;
 #[cfg(feature = "native")]

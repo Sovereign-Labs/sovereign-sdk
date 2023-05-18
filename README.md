@@ -52,7 +52,7 @@ it has no built in notion of "state", accounts, tokens, and the like. This means
 a rollup as easy as deploying a smart contract. So, we've built out an additional set of tools for defining your state transition function
 called the Sovereign Module System.
 
-At the heart of the module system is the package [`sov-modules-api`](./sov-modules/sov-modules-api/). This package defines
+At the heart of the module system is the package [`sov-modules-api`](./module-system/sov-modules-api/). This package defines
 a group of core traits which express how functionality implemented in separate modules can be combined into a `Runtime`
 capable of processing transactions and serving RPC requests. It also defines macros for implementing most of these traits.
 For many applications, defining your state transition function using the module system should be as simple as picking
@@ -60,11 +60,11 @@ some modules off the shelf and defining a struct which glues them together.
 To deliver this experience, the module system relies on a set of common types and traits that are used in every module. The
 `sov-modules-api` crate defines these traits (like `Context` and `MerkleTreeSpec`) and types like `Address`.
 
-On top of the module API, we provide a [state storage layer](./sov-modules/sov-state/) backed by a [Jellyfish Merkle Tree](https://github.com/penumbra-zone/jmt)
+On top of the module API, we provide a [state storage layer](./module-system/sov-state/) backed by a [Jellyfish Merkle Tree](https://github.com/penumbra-zone/jmt)
 and a bunch of helpful utilities for working with stateful transactions. Finally, we provide a set of modules implementing common
 blockchain functionality like `Accounts`, and fungible `Tokens`.
 
-For more information on the sovereign module system, see its [README](./sov-modules/README.md). You can also find a tutorial on
+For more information on the sovereign module system, see its [README](./module-system/README.md). You can also find a tutorial on
 implementing and deploying a custom module here (TODO: insert link!)
 
 ### The Sovereign Node: a Full Node that "Just Works"

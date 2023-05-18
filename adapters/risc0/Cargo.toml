@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-sovereign-sdk = { path = "../../sdk" }
+sovereign-core = { path = "../../core" }
 risc0-zkvm = { version = "0.14", default-features = false, features = ['std'] }
 risc0-zkp = { version = "0.14", optional = true }
 risc0-circuit-rv32im = { version = "0.14", optional = true }
