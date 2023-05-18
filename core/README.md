@@ -3,8 +3,8 @@
 </div>
 
 <div align="center">
-  <a href="https://github.com/cosmos/cosmos-sdk/blob/main/LICENSE">
-    <img alt="License: Apache-2.0" src="https://img.shields.io/github/license/cosmos/cosmos-sdk.svg" />
+  <a href="https://github.com/Sovereign-Labs/sovereign/blob/main/LICENSE">
+    <img alt="License: Apache-2.0" src="https://img.shields.io/github/license/Sovereign-Labs/sovereign-sdk.svg" />
 </div>
 
 ## What is the Sovereign SDK?
@@ -13,7 +13,7 @@ The Sovereign SDK is a free and open-source toolkit for building zk-rollups **th
 
 ## How does it work?
 
-To learn how the Sovereign SDK works, see the ![Sovereign SDK Overview](specs/overview.md).
+To learn how the Sovereign SDK works, see the ![Sovereign SDK Overview](./specs/overview.md).
 
 ## Warning
 
@@ -22,8 +22,7 @@ circumstances.
 
 ## License
 
-Licensed under the [Apache License, Version
-2.0](./LICENSE).
+Licensed under the [Apache License, Version 2.0](../LICENSE).
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in this repository by you, as defined in the Apache-2.0 license, shall be
