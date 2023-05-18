@@ -15,14 +15,14 @@ pub use tx_hooks::TxHooks;
 pub use tx_hooks::VerifiedTx;
 pub use tx_verifier::{RawTx, TxVerifier};
 
-use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
+use sov_modules_api::{Context, DispatchCall, Genesis, Hasher, Spec};
 use sov_state::{Storage, WorkingSet};
 use sovereign_core::{
     jmt,
     stf::{OpaqueAddress, StateTransitionFunction},
     traits::BatchTrait,
 };
-
+use std::io::Read;
 pub struct AppTemplate<C: Context, V, RT, H, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
@@ -61,6 +61,12 @@ where
             .expect("Working_set was initialized in begin_slot")
             .to_revertable();
 
+        // Batch hash
+        let mut reader = batch.reader();
+        let mut batch_bytes = Vec::new();
+        reader.read_to_end(&mut batch_bytes).unwrap();
+        let batch_hash = <C as Spec>::Hasher::hash(&batch_bytes);
+
         if let Err(e) = self
             .tx_hooks
             .enter_apply_blob(sequencer, &mut batch_workspace)
@@ -72,7 +78,7 @@ where
             self.working_set = Some(batch_workspace.revert());
             // TODO: consider slashing the sequencer in this case. cc @bkolad
             return BatchReceipt {
-                batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
+                batch_hash,
                 tx_receipts: Vec::new(),
                 inner: SequencerOutcome::Ignored,
             };
@@ -81,8 +87,7 @@ where
         // Commit `enter_apply_batch` changes.
         batch_workspace = batch_workspace.commit().to_revertable();
 
-        // let batch: Vec<u8> = blob.data().collect();
-        let batch = match Batch::deserialize_reader(&mut batch.reader()) {
+        let batch = match Batch::deserialize(&mut batch_bytes.as_ref()) {
             Ok(batch) => batch,
             Err(e) => {
                 error!(
@@ -91,7 +96,7 @@ where
                 );
                 self.working_set = Some(batch_workspace.revert());
                 return BatchReceipt {
-                    batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
+                    batch_hash,
                     tx_receipts: Vec::new(),
                     inner: SequencerOutcome::Slashed(SlashingReason::InvalidBatchEncoding),
                 };
@@ -101,7 +106,7 @@ where
         // Run the stateless verification, since it is stateless we don't commit.
         let txs = match self
             .tx_verifier
-            .verify_txs_stateless(batch.take_transactions())
+            .verify_txs_stateless::<C>(batch.take_transactions())
         {
             Ok(txs) => txs,
             Err(e) => {
@@ -110,7 +115,7 @@ where
                 self.working_set = Some(batch_workspace.revert());
                 error!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}\n", e);
                 return BatchReceipt {
-                    batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
+                    batch_hash,
                     tx_receipts: Vec::new(),
                     inner: SequencerOutcome::Slashed(SlashingReason::StatelessVerificationFailed),
                 };
@@ -120,8 +125,10 @@ where
         let mut tx_receipts = Vec::with_capacity(txs.len());
 
         // Process transactions in a loop, commit changes after every step of the loop.
-        for tx in txs {
+        for (tx, raw_tx_hash) in txs {
             batch_workspace = batch_workspace.to_revertable();
+
+            //let tx_hash = tx.hash();
             // Run the stateful verification, possibly modifies the state.
             let verified_tx = match self.tx_hooks.pre_dispatch_tx_hook(tx, &mut batch_workspace) {
                 Ok(verified_tx) => verified_tx,
@@ -140,7 +147,7 @@ where
                     error!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
                     batch_workspace = batch_workspace.revert();
                     let receipt = TransactionReceipt {
-                        tx_hash: [0u8; 32],
+                        tx_hash: raw_tx_hash,
                         body_to_save: None,
                         events: vec![],
                         receipt: TxEffect::Reverted,
@@ -161,7 +168,7 @@ where
                     match tx_result {
                         Ok(resp) => {
                             let receipt = TransactionReceipt {
-                                tx_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
+                                tx_hash: raw_tx_hash,
                                 body_to_save: None,
                                 events: resp.events,
                                 receipt: TxEffect::Successful,
@@ -182,7 +189,7 @@ where
                     self.working_set = Some(batch_workspace);
                     error!("Tx decoding error: {}", e);
                     return BatchReceipt {
-                        batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
+                        batch_hash,
                         tx_receipts: Vec::new(),
                         inner: SequencerOutcome::Slashed(
                             SlashingReason::InvalidTransactionEncoding,
@@ -202,7 +209,7 @@ where
 
         self.working_set = Some(batch_workspace);
         BatchReceipt {
-            batch_hash: [0u8; 32], // TODO: calculate the hash using Context::Hasher;
+            batch_hash,
             tx_receipts,
             inner: SequencerOutcome::Rewarded,
         }

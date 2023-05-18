@@ -1,7 +1,7 @@
 use borsh::BorshDeserialize;
 use sov_app_template::{RawTx, TxVerifier};
 use sov_modules_api::{Context, Signature};
-use sovereign_core::jmt::SimpleHasher;
+use sovereign_core::{jmt::SimpleHasher, traits::CanonicalHash};
 use std::{io::Cursor, marker::PhantomData};
 
 /// Transaction represents a deserialized RawTx.
@@ -22,6 +22,14 @@ impl<C: Context> Transaction<C> {
             pub_key,
             nonce,
         }
+    }
+}
+
+impl<C: Context> CanonicalHash for Transaction<C> {
+    type Output = [u8; 32];
+
+    fn hash(&self) -> Self::Output {
+        todo!()
     }
 }
 
