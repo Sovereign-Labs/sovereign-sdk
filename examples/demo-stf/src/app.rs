@@ -32,6 +32,10 @@ pub(crate) type C = DefaultContext;
 pub struct DemoAppRunner<C: Context, Vm: Zkvm>(pub DemoApp<C, Vm>);
 pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;
 
+use bank::query::BankRpcImpl;
+use election::query::ElectionRpcImpl;
+use sov_modules_macros::expose_rpc;
+
 #[cfg(feature = "native")]
 pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
 
@@ -43,6 +47,7 @@ pub const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
 pub const TOKEN_NAME: &str = "sov-test-token";
 
 #[cfg(feature = "native")]
+#[expose_rpc((Bank<DefaultContext>,Election<DefaultContext>))]
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
     type RuntimeConfig = Config;
     type Inner = DemoApp<DefaultContext, Vm>;

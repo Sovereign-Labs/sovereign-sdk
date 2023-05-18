@@ -200,9 +200,9 @@ pub trait ModuleInfo {
     fn address(&self) -> &<Self::Context as Spec>::Address;
 }
 
-/// this is the struct that users need to instantiate
-/// with a storage object to convert into an RPC
-#[derive(Clone)]
-pub struct RpcStorage<C: Context> {
-    pub storage: C::Storage,
-}
+// /// this is the struct that users need to instantiate
+// /// with a storage object to convert into an RPC
+// #[derive(Clone)]
+// pub struct RpcStorage<C: Context> {
+//     pub storage: C::Storage,
+// }

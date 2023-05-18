@@ -1,6 +1,6 @@
 start_height = 293685
 [da]
-celestia_rpc_auth_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJBbGxvdyI6WyJwdWJsaWMiLCJyZWFkIiwid3JpdGUiLCJhZG1pbiJdfQ.nHzh7kWvC3puCYgcMJRuNlMudwf6xGagETNdQyRQQ_s"
+celestia_rpc_auth_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJBbGxvdyI6WyJwdWJsaWMiLCJyZWFkIiwid3JpdGUiLCJhZG1pbiJdfQ.FKMDx1fXGUYzEXrdw7K6ozZ_7khVGMP50s2A2T3mlOo"
 celestia_rpc_address = "http://localhost:11111/"
 # 100 MB
 max_celestia_response_body_size = 104_857_600

@@ -4,6 +4,7 @@ use crate::config::RollupConfig;
 use demo_stf::app::create_demo_genesis_config;
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
 use demo_stf::config::from_toml_path;
+use jsonrpsee::RpcModule;
 use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::CelestiaVerifier;
@@ -13,7 +14,12 @@ use sovereign_core::da::DaVerifier;
 use sovereign_core::services::da::DaService;
 use sovereign_core::stf::{StateTransitionFunction, StateTransitionRunner};
 use sovereign_db::ledger_db::{LedgerDB, SlotCommit};
+use std::net::SocketAddr;
 use tracing::Level;
+
+use demo_stf::app::RpcStorage;
+use sov_modules_api::default_context::DefaultContext;
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 // I sent 8 demo election transactions at height 293686, generated using the demo app data generator
 const DATA_DIR_LOCATION: &str = "demo_data";
@@ -22,6 +28,27 @@ const ROLLUP_NAMESPACE: NamespaceId = NamespaceId([115, 111, 118, 45, 116, 101, 
 pub fn initialize_ledger() -> LedgerDB {
     let ledger_db = LedgerDB::with_path(DATA_DIR_LOCATION).expect("Ledger DB failed to open");
     ledger_db
+}
+
+async fn rpc(storj: ProverStorage<DefaultStorageSpec>) {
+    let mut module = RpcModule::new(());
+    let r: RpcStorage<DefaultContext> = RpcStorage {
+        storage: storj.clone(),
+    };
+    module
+        .merge(bank::query::BankRpcServer::into_rpc(r.clone()))
+        .unwrap();
+    module
+        .merge(election::query::ElectionRpcServer::into_rpc(r.clone()))
+        .unwrap();
+
+    let address: SocketAddr = "127.0.0.1:12345".parse().unwrap();
+    let server = jsonrpsee::server::ServerBuilder::default()
+        .build([address].as_ref())
+        .await
+        .unwrap();
+    let _server_handle = server.start(module).unwrap();
+    futures::future::pending::<()>().await;
 }
 
 #[tokio::main]
@@ -40,6 +67,12 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Initialize the Celestia service
     let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
+    let storj = demo_runner.inner().current_storage.clone();
+
+    let _handle = tokio::spawn(async move {
+        rpc(storj).await;
+    });
+
     let da_service = CelestiaService::new(
         rollup_config.da.clone(),
         RollupParams {

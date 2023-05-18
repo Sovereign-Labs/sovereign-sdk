@@ -1,4 +1,5 @@
 use super::{types::Candidate, Election};
+use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
 
 /// Queries supported by the module.
@@ -19,7 +20,9 @@ pub enum GetNbOfVotesResponse {
     Result(u64),
 }
 
+#[rpc_gen(client, server, namespace = "election")]
 impl<C: sov_modules_api::Context> Election<C> {
+    #[rpc_method(name = "results")]
     pub fn results(&self, working_set: &mut WorkingSet<C::Storage>) -> GetResultResponse {
         let is_frozen = self.is_frozen.get(working_set).unwrap_or_default();
 
@@ -37,6 +40,7 @@ impl<C: sov_modules_api::Context> Election<C> {
         }
     }
 
+    #[rpc_method(name = "numberOfVotes")]
     pub fn number_of_votes(
         &self,
         working_set: &mut WorkingSet<C::Storage>,

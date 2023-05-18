@@ -376,9 +376,17 @@ pub(crate) fn rpc_outer_impls(
         _ => panic!("Expected a tuple of types"),
     };
 
+    let rpc_storage_struct = quote! {
+        #[derive(Clone)]
+        pub struct RpcStorage<C: Context> {
+            pub storage: C::Storage
+        }
+    };
+
     let original_impl = quote! {
         #(#attrs)*
         #input
+        #rpc_storage_struct
     };
     output_tokens.extend(original_impl);
 
@@ -418,7 +426,15 @@ pub(crate) fn rpc_outer_impls(
         );
 
         let output = quote! {
-            impl #trait_type_path for ::sov_modules_api::RpcStorage<#context_type>
+            // impl #trait_type_path for ::sov_modules_api::RpcStorage<#context_type>
+            // {
+            //     fn get_working_set(&self) -> ::sov_state::WorkingSet<<#context_type
+            //         as ::sov_modules_api::Spec>::Storage> {
+            //         ::sov_state::WorkingSet::new(self.storage.clone())
+            //     }
+            // }
+
+            impl #trait_type_path for RpcStorage<#context_type>
             {
                 fn get_working_set(&self) -> ::sov_state::WorkingSet<<#context_type
                     as ::sov_modules_api::Spec>::Storage> {
