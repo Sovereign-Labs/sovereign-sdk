@@ -61,11 +61,7 @@ where
             .expect("Working_set was initialized in begin_slot")
             .to_revertable();
 
-        // Batch hash
-        let mut reader = batch.reader();
-        let mut batch_bytes = Vec::new();
-        reader.read_to_end(&mut batch_bytes).unwrap();
-        let batch_hash = <C as Spec>::Hasher::hash(&batch_bytes);
+        let batch_data_and_hash = BatchDataAndHash::new::<C>(batch);
 
         if let Err(e) = self
             .tx_hooks
@@ -78,7 +74,7 @@ where
             self.working_set = Some(batch_workspace.revert());
             // TODO: consider slashing the sequencer in this case. cc @bkolad
             return BatchReceipt {
-                batch_hash,
+                batch_hash: batch_data_and_hash.hash,
                 tx_receipts: Vec::new(),
                 inner: SequencerOutcome::Ignored,
             };
@@ -87,7 +83,7 @@ where
         // Commit `enter_apply_batch` changes.
         batch_workspace = batch_workspace.commit().to_revertable();
 
-        let batch = match Batch::deserialize(&mut batch_bytes.as_ref()) {
+        let batch = match Batch::deserialize(&mut batch_data_and_hash.data.as_ref()) {
             Ok(batch) => batch,
             Err(e) => {
                 error!(
@@ -96,7 +92,7 @@ where
                 );
                 self.working_set = Some(batch_workspace.revert());
                 return BatchReceipt {
-                    batch_hash,
+                    batch_hash: batch_data_and_hash.hash,
                     tx_receipts: Vec::new(),
                     inner: SequencerOutcome::Slashed(SlashingReason::InvalidBatchEncoding),
                 };
@@ -115,7 +111,7 @@ where
                 self.working_set = Some(batch_workspace.revert());
                 error!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}\n", e);
                 return BatchReceipt {
-                    batch_hash,
+                    batch_hash: batch_data_and_hash.hash,
                     tx_receipts: Vec::new(),
                     inner: SequencerOutcome::Slashed(SlashingReason::StatelessVerificationFailed),
                 };
@@ -189,7 +185,7 @@ where
                     self.working_set = Some(batch_workspace);
                     error!("Tx decoding error: {}", e);
                     return BatchReceipt {
-                        batch_hash,
+                        batch_hash: batch_data_and_hash.hash,
                         tx_receipts: Vec::new(),
                         inner: SequencerOutcome::Slashed(
                             SlashingReason::InvalidTransactionEncoding,
@@ -209,13 +205,32 @@ where
 
         self.working_set = Some(batch_workspace);
         BatchReceipt {
-            batch_hash,
+            batch_hash: batch_data_and_hash.hash,
             tx_receipts,
             inner: SequencerOutcome::Rewarded,
         }
     }
 }
 
+struct BatchDataAndHash {
+    hash: [u8; 32],
+    data: Vec<u8>,
+}
+impl BatchDataAndHash {
+    fn new<C: Context>(batch: impl Buf) -> BatchDataAndHash {
+        let mut reader = batch.reader();
+        let mut batch_data = Vec::new();
+        reader
+            .read_to_end(&mut batch_data)
+            .unwrap_or_else(|e| panic!("Unable to read batch data {}", e));
+
+        let hash = <C as Spec>::Hasher::hash(&batch_data);
+        BatchDataAndHash {
+            hash,
+            data: batch_data,
+        }
+    }
+}
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TxEffect {
     Reverted,
