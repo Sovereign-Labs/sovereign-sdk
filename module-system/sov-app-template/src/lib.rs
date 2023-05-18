@@ -125,7 +125,6 @@ where
         for (tx, raw_tx_hash) in txs {
             batch_workspace = batch_workspace.to_revertable();
 
-            //let tx_hash = tx.hash();
             // Run the stateful verification, possibly modifies the state.
             let verified_tx = match self.tx_hooks.pre_dispatch_tx_hook(tx, &mut batch_workspace) {
                 Ok(verified_tx) => verified_tx,
