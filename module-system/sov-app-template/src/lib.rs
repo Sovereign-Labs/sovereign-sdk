@@ -23,6 +23,7 @@ use sovereign_core::{
     traits::BatchTrait,
 };
 use std::io::Read;
+
 pub struct AppTemplate<C: Context, V, RT, H, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
@@ -216,6 +217,7 @@ struct BatchDataAndHash {
     hash: [u8; 32],
     data: Vec<u8>,
 }
+
 impl BatchDataAndHash {
     fn new<C: Context>(batch: impl Buf) -> BatchDataAndHash {
         let mut reader = batch.reader();
