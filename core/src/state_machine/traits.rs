@@ -22,9 +22,7 @@ pub trait BatchTrait: PartialEq + Debug + Serialize + DeserializeOwned + Clone {
     fn take_transactions(self) -> Vec<Self::Transaction>;
 }
 
-pub trait TransactionTrait:
-    PartialEq + Debug + CanonicalHash<Output = Self::Hash> + Serialize + DeserializeOwned
-{
+pub trait TransactionTrait: PartialEq + Debug + Serialize + DeserializeOwned {
     type Hash: AsRef<[u8]>;
 }
 

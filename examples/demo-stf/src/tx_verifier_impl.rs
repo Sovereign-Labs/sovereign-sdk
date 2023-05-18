@@ -1,7 +1,6 @@
 use borsh::BorshDeserialize;
 use sov_app_template::{RawTx, TxVerifier};
-use sov_modules_api::{Context, Signature};
-use sovereign_core::jmt::SimpleHasher;
+use sov_modules_api::{Context, Hasher, Signature};
 use std::{io::Cursor, marker::PhantomData};
 
 /// Transaction represents a deserialized RawTx.
