@@ -1,15 +1,16 @@
 # sov-app-template
 
-This crate contains a generic `StateTransitionFunction` implementation (AppTemplate) that is suited to work with Sovereign `module-system`. The `AppTemplate` depends on set of traits   which assembled together define the rollup state transition logic.
+This crate contains an implementation of a generic `StateTransitionFunction` called `AppTemplate`, specifically designed to work with the Sovereign `module-system`. The `AppTemplate` relies on a set of traits that, when combined, define the logic for transitioning the rollup state.
 
-1. The `DispatchCall` trait decodes serialized message and forwards it to a dedicated module.
-1. The `Genesis` trait is responisble for the rollup initialization
-1. The `TxVerifier` trait is responsble for transaction validation.
-1. The `TxHooks` trait allows injecting custom logic into a transaction processing pipeline.
+1. The `DispatchCall`  trait is responsible for decoding serialized messages and forwarding them to the appropriate module.
+1. The `Genesis` trait handles the initialization process of the rollup. It sets up the initial state and configuration of the modules.
+1. The `TxVerifier` trait is responsible for validating transactions within the rollup. It ensures that incoming transactions meet the necessary criteria and are valid for execution.
+1. The `TxHooks` trait allows for the injection of custom logic into the transaction processing pipeline. It provides a mechanism to execute additional actions or perform specific operations during the transaction processing phase.
 
-The `DispatchCall` and `Genesis` traits can be auto derived for any set of `modules` in the following way:
+Both the `DispatchCall` and `Genesis` traits can be automatically derived for any set of modules using a code snippet like the following:
 
-`#[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
+```rust
+#[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
     sequencer: sequencer::Sequencer<C>,    
@@ -17,10 +18,10 @@ pub struct Runtime<C: Context> {
     accounts: accounts::Accounts<C>,
     ...
     some other modules
-}`
+}
+```
 
-`Runtime` the entry point where all the rollup `modules` are assembled together.
+The `Runtime` struct acts as the entry point where all the rollup modules are assembled together. The `#[derive]` macro generates the necessary implementations for the `Genesis, DispatchCall, and DispatchQuery` traits from the `sov-module-api` crate. Additionally, the macro handles some plumbing code to facilitate the integration of the modules within the rollup system.
 
-The macros will generate implementation for `Genesis, DispatchCall, DispatchQuery` traits from the `sov-module-api` together with some plumbing code.
 
 
