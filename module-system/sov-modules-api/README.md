@@ -1,12 +1,12 @@
 # sov-modules-api
-The `sov-modules-api` crate provides essential traits for the Sovereign module system. Here are the key traits defined by the crate:
+The `sov-modules-api` crate provides essential traits for the `Sovereign` module system. Here are the key traits defined by the crate:
 
 1. The `Module` trait: Defines how to initialize, change, and query the state of a module. This is the main trait that module developers need to implement. The author of a module must specify:
     - Configuration upon rollup deployment: This includes the `genesis()` method and the `Config` type, which determine how the module is set up initially.
     
     - Interaction with user messages: The module must define the `call` method and the `CallMessage` type, which handle user messages. These messages typically result in changes to the module's state.
     
-    - Querying the module through external APIs: The module must support queries through the `query`` method and the `QueryMessage` type. This enables external APIs to retrieve information from the module.
+    - Querying the module through external APIs: The module must support queries through the `query` method and the `QueryMessage` type. This enables external APIs to retrieve information from the module.
 
 1. The `ModuleInfo` trait: Provides additional information related to a module. This trait is automatically derived.
 
