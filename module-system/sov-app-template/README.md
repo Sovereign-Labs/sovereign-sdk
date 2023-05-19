@@ -28,7 +28,7 @@ where
 ```
 
 1. The `DispatchCall`  trait is responsible for decoding serialized messages and forwarding them to the appropriate module.
-1. The `Genesis` trait handles the initialization process of the rollup. It sets up the initial state and configuration of the modules.
+1. The `Genesis` trait handles the initialization process of the rollup. It sets up the initial state upon the rollup deployment.
 1. The `TxVerifier` trait is responsible for validating transactions within the rollup. It ensures that incoming transactions meet the necessary criteria and are valid for execution.
 1. The `TxHooks` trait allows for the injection of custom logic into the transaction processing pipeline. It provides a mechanism to execute additional actions or perform specific operations during the transaction processing phase.
 
@@ -47,7 +47,7 @@ pub struct Runtime<C: Context> {
 }
 ```
 
-The `Runtime` struct acts as the entry point where all the rollup modules are assembled together. The `#[derive]` macro generates the necessary implementations for the `Genesis and DispatchCall` traits from the `sov-module-api` crate. Additionally, the macro handles some plumbing code to facilitate the integration of the modules.
+The `Runtime` struct acts as the entry point where all the rollup modules are assembled together. The `#[derive]` macro generates the necessary implementations for the `Genesis and DispatchCall` traits from the `sov-module-api` crate. 
 
 To obtain an implementation of the `StateTransitionFunction`, you can pass an instance of the `Runtime`, along with implementations of the `TxVerifier` and `TxHooks` traits, to the `AppTemplate::new(..)` method. This ensures that the implementation of the `StateTransitionFunction` is straightforward and does not require manual integration or complex setup steps. 
 
