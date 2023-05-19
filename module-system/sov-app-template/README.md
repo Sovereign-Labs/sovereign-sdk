@@ -19,6 +19,10 @@ where
     V: TxVerifier,
     H: TxHooks<Context = C,..>,
 {
+
+    pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
+        ...
+    }
   ...
 }
 ```
@@ -43,7 +47,9 @@ pub struct Runtime<C: Context> {
 }
 ```
 
-The `Runtime` struct acts as the entry point where all the rollup modules are assembled together. The `#[derive]` macro generates the necessary implementations for the `Genesis, DispatchCall, and DispatchQuery` traits from the `sov-module-api` crate. Additionally, the macro handles some plumbing code to facilitate the integration of the modules.
+The `Runtime` struct acts as the entry point where all the rollup modules are assembled together. The `#[derive]` macro generates the necessary implementations for the `Genesis and DispatchCall` traits from the `sov-module-api` crate. Additionally, the macro handles some plumbing code to facilitate the integration of the modules.
+
+To obtain an implementation of the `StateTransitionFunction`, you can pass an instance of the `Runtime`, along with implementations of the `TxVerifier` and `TxHooks` traits, to the `AppTemplate::new(..)` method. This ensures that the implementation of the `StateTransitionFunction` is straightforward and does not require manual integration or complex setup steps. 
 
 
 
