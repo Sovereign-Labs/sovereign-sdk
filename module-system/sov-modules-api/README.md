@@ -14,6 +14,6 @@ The `sov-modules-api` crate provides essential traits for the `Sovereign` module
 
 1. The `Context` trait implements the `Spec`  and introduces additional methods accessible within modules. Currently, it includes the `sender()` method, which returns the address of the transaction sender. This trait will be further extended with other useful methods, such as `batch_hash()`, and more.
 
-This carte defines also the default implementation for the `Context` trait.
+This crate defines also the default implementation for the `Context` trait.
 
 
