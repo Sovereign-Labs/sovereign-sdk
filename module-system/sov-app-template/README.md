@@ -49,7 +49,7 @@ pub struct Runtime<C: Context> {
 
 The `Runtime` struct acts as the entry point where all the rollup modules are assembled together. The `#[derive]` macro generates the necessary implementations for the `Genesis and DispatchCall` traits from the `sov-module-api` crate. 
 
-To obtain an implementation of the `StateTransitionFunction`, you can pass an instance of the `Runtime`, along with implementations of the `TxVerifier` and `TxHooks` traits, to the `AppTemplate::new(..)` method. This ensures that the implementation of the `StateTransitionFunction` is straightforward and does not require manual integration or complex setup steps. 
+To obtain an instance of the `StateTransitionFunction`, you can pass a`Runtime`, along with implementations of the `TxVerifier` and `TxHooks` traits, to the `AppTemplate::new(..)` method. This ensures that the implementation of the `StateTransitionFunction` is straightforward and does not require manual integration or complex setup steps. 
 
 
 
