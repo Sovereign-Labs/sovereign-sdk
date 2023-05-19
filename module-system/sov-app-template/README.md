@@ -33,9 +33,9 @@ Both the `DispatchCall` and `Genesis` traits can be automatically derived (see `
 #[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
-    sequencer: sequencer::Sequencer<C>,    
-    bank: bank::Bank<C>,
     accounts: accounts::Accounts<C>,
+    bank: bank::Bank<C>,
+    sequencer: sequencer::Sequencer<C>,    
     ...
     some other modules
 }
