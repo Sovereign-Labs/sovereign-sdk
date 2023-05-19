@@ -6,7 +6,7 @@ The `Sequencer` module is responsible for sequencer registration, slashing, and 
 
 Hooks:
 
-The `Sequencer` module does not expose any call messages, and rollup users cannot directly modify the sequencer's state. Instead, the module provides hooks that can be inserted at various points in the rollup `state transition function` logic. The following hooks are supported:
+The `Sequencer` module does not expose any call messages, and rollup users cannot directly modify the state of the sequencer. Instead, the module provides hooks that can be inserted at various points in the logic of the rollup's `state transition function`. The module supports the following hooks:
 
 1. `lock`: Locks the sequencer bond.
 1. `next_sequencer`: Since only centralized sequencer is supported currently, this hook always returns the same value, which is the registered sequencer address.
