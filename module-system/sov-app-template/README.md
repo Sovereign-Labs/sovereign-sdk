@@ -1,5 +1,6 @@
 # sov-app-template
 
+### `AppTemplate`
 This crate contains an implementation of a `StateTransitionFunction` called `AppTemplate`, specifically designed to work with the Sovereign `module-system`. The `AppTemplate` relies on a set of traits that, when combined, define the logic for transitioning the rollup state.
 
 ```rust
@@ -27,6 +28,7 @@ where
 1. The `TxVerifier` trait is responsible for validating transactions within the rollup. It ensures that incoming transactions meet the necessary criteria and are valid for execution.
 1. The `TxHooks` trait allows for the injection of custom logic into the transaction processing pipeline. It provides a mechanism to execute additional actions or perform specific operations during the transaction processing phase.
 
+### `Runtime`
 Both the `DispatchCall` and `Genesis` traits can be automatically derived (see `RT` in the above snippet) for any set of modules:
 
 ```rust
