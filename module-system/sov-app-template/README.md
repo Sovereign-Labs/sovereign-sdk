@@ -43,7 +43,7 @@ pub struct Runtime<C: Context> {
 }
 ```
 
-The `Runtime` struct acts as the entry point where all the rollup modules are assembled together. The `#[derive]` macro generates the necessary implementations for the `Genesis, DispatchCall, and DispatchQuery` traits from the `sov-module-api` crate. Additionally, the macro handles some plumbing code to facilitate the integration of the modules within the rollup system.
+The `Runtime` struct acts as the entry point where all the rollup modules are assembled together. The `#[derive]` macro generates the necessary implementations for the `Genesis, DispatchCall, and DispatchQuery` traits from the `sov-module-api` crate. Additionally, the macro handles some plumbing code to facilitate the integration of the modules.
 
 
 
