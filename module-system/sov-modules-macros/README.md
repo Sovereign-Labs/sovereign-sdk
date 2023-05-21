@@ -1,6 +1,6 @@
 # sov-modules-macros
 
-This crate provides Rust macros specifically designed to be used with the `module-system`. When developing a module, the  developer's primary focus is on implementing the business logic, without having to worry about low-level details such as message serialization/deserialization or how messages are dispatched to the appropriate module.
+This crate provides Rust macros specifically designed to be used with the Sovereign `module-system`. When developing a module, the  developer's primary focus is on implementing the business logic, without having to worry about low-level details such as message serialization/deserialization or how messages are dispatched to the appropriate module.
 
 To alleviate the burden of writing repetitive and mechanical code, this crate offers a collection of macros that generate the necessary boilerplate code. 
 
@@ -10,7 +10,7 @@ The following derive macros are supported:
 1. The `Genesis`: Derives the `sov-modules-api::Genesis` implementation for the underlying type.
 1. The `DispatchCall`: Derives the `sov-modules-api::DispatchCall` implementation for the underlying type.
 1. The `DispatchQuery`: Derives the `sov-modules-api::DispatchQuery` implementation for the underlying type.
-1. The `MessageCodec`: Adds encoding functionality to the underlying type.
+1. The `MessageCodec`: Adds message serialization/deserialization functionality to the underlying type.
 
 Example of usage:
 
