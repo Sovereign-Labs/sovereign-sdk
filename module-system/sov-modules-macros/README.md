@@ -12,7 +12,7 @@ The following derive macros are supported:
 1. The `DispatchQuery`: Derives the `sov-modules-api::DispatchQuery` implementation for the underlying type.
 1. The `MessageCodec`: Adds encoding functionality to the underlying type.
 
-Intended usage:
+Example of usage:
 
 ```rust
 
