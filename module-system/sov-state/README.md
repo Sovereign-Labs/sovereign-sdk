@@ -45,7 +45,7 @@ let maybe_value = state.value.get(working_set);
 ## Low level explanation:
 It's important to note that this section focuses on explaining the underlying mechanisms and is not necessarily required for efficient usage of the `sov-state`.
 
-`Native` & `Zkp` execution: \
+### `Native` & `Zkp` execution: 
 During `Native` execution, the data is stored in a `key-value` store, which is accessed through the `WorkingSet`. It's worth mentioning that the actual storage mechanism, such as `RocksDB`, is only accessible during this phase when the full node executes the transaction and updates the state.
 
 
