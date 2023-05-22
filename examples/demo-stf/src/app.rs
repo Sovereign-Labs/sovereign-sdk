@@ -15,14 +15,14 @@ pub use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Context;
 #[cfg(feature = "native")]
 use sov_modules_api::PublicKey;
-use sov_modules_api::{Hasher, Spec};
+use sov_modules_api::{Hasher, Spec, StateTransitionRunner};
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
 use sov_state::Storage;
 use sov_state::ZkStorage;
 #[cfg(feature = "native")]
 use sovereign_core::stf::ProverConfig;
-use sovereign_core::stf::{StateTransitionRunner, ZkConfig};
+use sovereign_core::stf::ZkConfig;
 use sovereign_core::zk::traits::Zkvm;
 #[cfg(feature = "native")]
 use std::path::Path;
@@ -57,6 +57,7 @@ pub const TOKEN_NAME: &str = "sov-test-token";
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
     type RuntimeConfig = Config;
     type Inner = DemoApp<DefaultContext, Vm>;
+    type Context = DefaultContext;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let runtime = Runtime::new();
@@ -75,11 +76,16 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
     fn inner_mut(&mut self) -> &mut Self::Inner {
         &mut self.0
     }
+
+    fn get_storage(&self) -> <Self::Context as Spec>::Storage {
+        self.inner().current_storage.clone()
+    }
 }
 
 impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultContext, Vm> {
     type RuntimeConfig = [u8; 32];
     type Inner = DemoApp<ZkDefaultContext, Vm>;
+    type Context = ZkDefaultContext;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let runtime = Runtime::new();
@@ -102,6 +108,10 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
 
     fn inner_mut(&mut self) -> &mut Self::Inner {
         &mut self.0
+    }
+
+    fn get_storage(&self) -> <Self::Context as Spec>::Storage {
+        self.inner().current_storage.clone()
     }
 }
 

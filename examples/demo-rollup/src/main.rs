@@ -12,9 +12,10 @@ use jupiter::types::NamespaceId;
 use jupiter::verifier::CelestiaVerifier;
 use jupiter::verifier::RollupParams;
 use risc0_adapter::host::Risc0Host;
+use sov_modules_api::StateTransitionRunner;
 use sovereign_core::da::DaVerifier;
 use sovereign_core::services::da::{DaService, SlotData};
-use sovereign_core::stf::{StateTransitionFunction, StateTransitionRunner};
+use sovereign_core::stf::StateTransitionFunction;
 use sovereign_db::ledger_db::{LedgerDB, SlotCommit};
 use std::net::SocketAddr;
 use tracing::Level;
@@ -70,7 +71,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // RPC
     let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
 
-    let storj = demo_runner.inner().current_storage.clone();
+    let storj = demo_runner.get_storage();
     let module = get_rpc_module(storj);
 
     let _handle = tokio::spawn(async move {
