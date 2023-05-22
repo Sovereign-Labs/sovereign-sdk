@@ -11,9 +11,9 @@
   </a>
 </div>
 
-## What is Sovereign SDK?
+## What is the Sovereign SDK?
 
-Sovereign SDK is a free and open-source toolkit for building zk-rollups **that is currently under development**. Sovereign SDK consists of three logical components.
+The Sovereign SDK is a free and open-source toolkit for building zk-rollups **that is currently under development**. Sovereign SDK consists of three logical components.
 
 1. Sovereign Core, which defines a minimal interface for zk-rollups
 1. The Sovereign Module System, an opinionated framework for building rollups with Sovereign Core
@@ -21,7 +21,7 @@ Sovereign SDK is a free and open-source toolkit for building zk-rollups **that i
 
 ### Sovereign Core: the rollup interface
 
-At the heart of Sovereign SDK is [Sovereign Core](./core/specs/overview.md), which defines the _interfaces_ that rollups
+At the heart of the Sovereign SDK is [Sovereign Core](./core/specs/overview.md), which defines the _interfaces_ that rollups
 must implement. In the Sovereign SDK, we define a zk-rollup as the combination of three components:
 
 1. A [State Transition Function](./core/specs/interfaces/stf.md) ("STF") which defines the "business logic" of the rollup
