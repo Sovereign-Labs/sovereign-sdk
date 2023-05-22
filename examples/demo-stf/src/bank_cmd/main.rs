@@ -174,7 +174,7 @@ mod test {
     use sov_app_template::{Batch, RawTx, SequencerOutcome};
     use sov_modules_api::Address;
 
-    use sovereign_core::{mocks::MockZkvm, stf::StateTransitionFunction};
+    use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
 
     #[test]
     fn test_cmd() {

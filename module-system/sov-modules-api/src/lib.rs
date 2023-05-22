@@ -21,8 +21,8 @@ pub use jmt::SimpleHasher as Hasher;
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
 
+pub use sov_rollup_interface::traits::AddressTrait;
 use sov_state::{Storage, Witness, WorkingSet};
-pub use sovereign_core::traits::AddressTrait;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use core::fmt::{self, Debug, Display};

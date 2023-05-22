@@ -2,7 +2,7 @@ use std::cell::RefCell;
 
 use risc0_zkp::{core::config::HashSuiteSha256, field::baby_bear::BabyBear};
 use risc0_zkvm::{receipt::verify_with_hal, serde::to_vec, sha::Impl, Prover, Receipt};
-use sovereign_core::zk::traits::{Zkvm, ZkvmHost};
+use sov_rollup_interface::zk::traits::{Zkvm, ZkvmHost};
 
 use crate::Risc0MethodId;
 

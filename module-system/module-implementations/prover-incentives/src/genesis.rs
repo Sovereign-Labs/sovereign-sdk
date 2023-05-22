@@ -1,6 +1,6 @@
 use anyhow::Result;
+use sov_rollup_interface::zk::traits::Zkvm;
 use sov_state::WorkingSet;
-use sovereign_core::zk::traits::Zkvm;
 
 use crate::ProverIncentives;
 

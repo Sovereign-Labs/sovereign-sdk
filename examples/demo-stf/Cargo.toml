@@ -20,7 +20,7 @@ sha2 = { workspace = true }
 clap = { workspace = true, optional = true }
 toml = { workspace = true, optional = true }
 
-sovereign-core = { path = "../../core" }
+sov-rollup-interface = { path = "../../rollup-interface" }
 election = { path = "../../module-system/module-implementations/examples/election", default-features = false }
 sequencer = { path = "../../module-system/module-implementations/sequencer", default-features = false }
 bank = { path = "../../module-system/module-implementations/bank", default-features = false }
@@ -35,11 +35,11 @@ schemadb = { path = "../../full-node/db/schemadb", features = ["temppath"], opti
 sovereign-db = { path = "../../full-node/db/sovereign-db", optional = true }
 
 [dev-dependencies]
-sovereign-core = { path = "../../core", features = ["mocks"] }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
 tempfile = "3.5.0"
 
 [features]
 default = ["native"]
 native = ["sov-state/temp", "dep:sovereign-db", "dep:schemadb", "bank/native", "accounts/native", "election/native", 
-	"sequencer/native", "value-setter/native", "sov-modules-api/native","sovereign-core/mocks", "clap", "serde_json", "toml"]
+	"sequencer/native", "value-setter/native", "sov-modules-api/native","sov-rollup-interface/mocks", "clap", "serde_json", "toml"]
 verifier = []

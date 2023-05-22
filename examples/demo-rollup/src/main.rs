@@ -10,9 +10,9 @@ use jupiter::types::NamespaceId;
 use jupiter::verifier::CelestiaVerifier;
 use jupiter::verifier::RollupParams;
 use risc0_adapter::host::Risc0Host;
-use sovereign_core::da::DaVerifier;
-use sovereign_core::services::da::{DaService, SlotData};
-use sovereign_core::stf::{StateTransitionFunction, StateTransitionRunner};
+use sov_rollup_interface::da::DaVerifier;
+use sov_rollup_interface::services::da::{DaService, SlotData};
+use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner};
 use sovereign_db::ledger_db::{LedgerDB, SlotCommit};
 use tracing::Level;
 
