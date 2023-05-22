@@ -2,11 +2,11 @@ mod config;
 
 use crate::config::RollupConfig;
 use demo_stf::app::get_rpc_module;
+use demo_stf::app::{create_demo_genesis_config, DefaultContext};
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
 use demo_stf::config::from_toml_path;
-use jsonrpsee::RpcModule;
-use demo_stf::app::{create_demo_genesis_config, DefaultContext};
 use demo_stf::runtime::GenesisConfig;
+use jsonrpsee::RpcModule;
 use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::CelestiaVerifier;
@@ -19,7 +19,6 @@ use sovereign_db::ledger_db::{LedgerDB, SlotCommit};
 use std::net::SocketAddr;
 use tracing::Level;
 
-const DATA_DIR_LOCATION: &str = "demo_data";
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId([115, 111, 118, 45, 116, 101, 115, 116]);
 
@@ -27,7 +26,6 @@ pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
     let ledger_db = LedgerDB::with_path(path).expect("Ledger DB failed to open");
     ledger_db
 }
-
 
 async fn rpc(module: RpcModule<()>, address: SocketAddr) {
     let server = jsonrpsee::server::ServerBuilder::default()
@@ -44,9 +42,9 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
         100000000,
         sequencer_private_key.default_address(),
         vec![
-            99, 101, 108, 101, 115, 116, 105, 97, 49, 122, 102, 118, 114, 114, 102, 97, 113, 57,
-            117, 100, 54, 103, 57, 116, 52, 107, 122, 109, 115, 108, 112, 102, 50, 52, 121, 115,
-            97, 120, 113, 102, 110, 122, 101, 101, 53, 119, 57,
+            99, 101, 108, 101, 115, 116, 105, 97, 49, 113, 112, 48, 57, 121, 115, 121, 103, 99,
+            120, 54, 110, 112, 116, 101, 100, 53, 121, 99, 48, 97, 117, 54, 107, 57, 108, 110, 101,
+            114, 48, 53, 121, 118, 115, 57, 50, 48, 56,
         ],
         &sequencer_private_key,
         &sequencer_private_key,
@@ -69,7 +67,6 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
 
-
     // RPC
     let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
 
@@ -91,8 +88,6 @@ async fn main() -> Result<(), anyhow::Error> {
         namespace: ROLLUP_NAMESPACE,
     });
 
-    // Create an instance of the demo app using the provided config
-    let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
     let demo = demo_runner.inner_mut();
 
     // Check if the rollup has previously processed any data. If not, run it's "genesis" initialization code
