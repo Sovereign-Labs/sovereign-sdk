@@ -15,12 +15,12 @@ serde_json = { workspace = true }
 sha2 = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
+bytes = { workspace = true }
 
 # Crates which only this package depends on 
 tendermint = "0.32"
 tokio = { version = "1", features = ["full"] }
 tracing-subscriber = "0.3.16"
-bytes = "1.1.0"
 
 jupiter = { path = "../../adapters/celestia" }
 demo-stf = { path = "../demo-stf", features = ["native"] }

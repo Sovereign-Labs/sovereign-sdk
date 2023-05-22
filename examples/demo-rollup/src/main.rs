@@ -27,7 +27,7 @@ pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
     ledger_db
 }
 
-async fn rpc(module: RpcModule<()>, address: SocketAddr) {
+async fn start_rpc_server(module: RpcModule<()>, address: SocketAddr) {
     let server = jsonrpsee::server::ServerBuilder::default()
         .build([address].as_ref())
         .await
@@ -74,7 +74,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let module = get_rpc_module(storj);
 
     let _handle = tokio::spawn(async move {
-        rpc(module, address).await;
+        start_rpc_server(module, address).await;
     });
 
     // Initialize the Celestia service
@@ -144,11 +144,6 @@ async fn main() -> Result<(), anyhow::Error> {
         ledger_db.commit_slot(data_to_commit)?;
         prev_state_root = next_state_root.0;
     }
-
-    // uncomment this if we need to process a smaller range of blocks
-    // and we want to use the rpc to query the storage
-    // println!("waiting on RPC");
-    // futures::future::pending::<()>().await;
 
     Ok(())
 }
