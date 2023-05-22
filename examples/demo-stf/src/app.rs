@@ -8,8 +8,8 @@ use crate::tx_verifier_impl::DemoAppTxVerifier;
 use sov_app_template::AppTemplate;
 pub use sov_app_template::Batch;
 #[cfg(feature = "native")]
-use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::default_context::ZkDefaultContext;
+pub use sov_modules_api::default_context::DefaultContext;
+pub use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Context;
