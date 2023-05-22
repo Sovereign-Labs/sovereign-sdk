@@ -1,0 +1,24 @@
+[package]
+name = "starter"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+borsh = { workspace = true }
+hex = { workspace = true }
+jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+risc0-zkvm = { version = "0.14" }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = "0.10.6"
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1.37"
+tracing-subscriber = "0.3.16"
+
+jupiter = { path = "../../../adapters/celestia", features = ["native"] }
+demo-stf = { path = "../../demo-stf" }
+sovereign-core = { path = "../../../core" }
+risc0-adapter = { path = "../../../adapters/risc0" }
+
+methods = { path = "../methods" }

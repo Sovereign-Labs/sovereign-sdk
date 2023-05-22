@@ -117,7 +117,7 @@ async fn main() -> Result<(), anyhow::Error> {
         println!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
-            hex::encode(&prev_state_root)
+            hex::encode(prev_state_root)
         );
 
         // Fetch the relevant subset of the next Celestia block

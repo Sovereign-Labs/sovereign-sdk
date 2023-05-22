@@ -13,7 +13,7 @@ tendermint = "0.32"
 tendermint-proto = "0.32"
 
 # Convenience
-anyhow = "1.0.62"
+anyhow = "1.0.68"
 base64 = "0.13.1"
 hex = { version = "0.4.3", features = ["serde"] }
 hex-literal = "0.3.4"
