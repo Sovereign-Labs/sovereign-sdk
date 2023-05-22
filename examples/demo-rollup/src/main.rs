@@ -131,8 +131,10 @@ async fn main() -> Result<(), anyhow::Error> {
         prev_state_root = next_state_root.0;
     }
 
-    println!("waiting on RPC");
-    futures::future::pending::<()>().await;
+    // uncomment this if we need to process a smaller range of blocks
+    // and we want to use the rpc to query the storage
+    // println!("waiting on RPC");
+    // futures::future::pending::<()>().await;
 
     Ok(())
 }
