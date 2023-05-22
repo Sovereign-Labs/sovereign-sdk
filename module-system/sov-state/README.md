@@ -1,5 +1,4 @@
 # sov-state
-
 This crate provides abstractions specifically designed for storing and retrieving data from a permanent storage, tailored to be used within the Sovereign `module-system`.
 
 ## High level explanation:
@@ -76,7 +75,8 @@ pub trait Storage: Clone {
 The `sov-state` crate offers two implementations of the `Storage` trait, namely `ZkStorage` and `ProverStorage`, which handle the storage and retrieval of data in the context of the `Zkp` and `Prover` execution modes, respectively. These implementations encapsulate the necessary logic and interactions with the storage system, allowing module developers to work with a consistent interface regardless of the execution mode.
 
 
-`WorkingSet`:
+### `WorkingSet`:
+Performing state updates and generating witnesses is a costly process. Thus, it is logical to incorporate caching layers to alleviate these issues. For more information about our cache, refer to the `first-read-last-write-cache` crate. Furthermore, caches simplify the process of implementing state reverts. In the event that a specific transaction needs to be reverted, we can simply discard all the writes made to the relevant cache.
 
 
-`Prefix`:
+
