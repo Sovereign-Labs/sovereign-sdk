@@ -2,6 +2,7 @@ mod config;
 
 use crate::config::RollupConfig;
 use demo_stf::app::create_demo_genesis_config;
+use demo_stf::app::get_rpc_module;
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
 use demo_stf::config::from_toml_path;
 use jsonrpsee::RpcModule;
@@ -17,11 +18,6 @@ use sovereign_db::ledger_db::{LedgerDB, SlotCommit};
 use std::net::SocketAddr;
 use tracing::Level;
 
-use demo_stf::app::RpcStorage;
-use sov_modules_api::default_context::DefaultContext;
-use sov_state::{DefaultStorageSpec, ProverStorage};
-
-// I sent 8 demo election transactions at height 293686, generated using the demo app data generator
 const DATA_DIR_LOCATION: &str = "demo_data";
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId([115, 111, 118, 45, 116, 101, 115, 116]);
 
@@ -30,19 +26,7 @@ pub fn initialize_ledger() -> LedgerDB {
     ledger_db
 }
 
-async fn rpc(storj: ProverStorage<DefaultStorageSpec>) {
-    let mut module = RpcModule::new(());
-    let r: RpcStorage<DefaultContext> = RpcStorage {
-        storage: storj.clone(),
-    };
-    module
-        .merge(bank::query::BankRpcServer::into_rpc(r.clone()))
-        .unwrap();
-    module
-        .merge(election::query::ElectionRpcServer::into_rpc(r.clone()))
-        .unwrap();
-
-    let address: SocketAddr = "127.0.0.1:12345".parse().unwrap();
+async fn rpc(module: RpcModule<()>, address: SocketAddr) {
     let server = jsonrpsee::server::ServerBuilder::default()
         .build([address].as_ref())
         .await
@@ -54,6 +38,8 @@ async fn rpc(storj: ProverStorage<DefaultStorageSpec>) {
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let rollup_config: RollupConfig = from_toml_path("rollup_config.toml")?;
+    let rpc_config = rollup_config.rpc_config;
+    let address = SocketAddr::new(rpc_config.bind_host.parse()?, rpc_config.bind_port);
 
     // Initializing logging
     let subscriber = tracing_subscriber::fmt()
@@ -67,10 +53,12 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Initialize the Celestia service
     let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
+
     let storj = demo_runner.inner().current_storage.clone();
+    let module = get_rpc_module(storj);
 
     let _handle = tokio::spawn(async move {
-        rpc(storj).await;
+        rpc(module, address).await;
     });
 
     let da_service = CelestiaService::new(
@@ -90,13 +78,14 @@ async fn main() -> Result<(), anyhow::Error> {
         100000000,
         sequencer_private_key.default_address(),
         vec![
-            99, 101, 108, 101, 115, 116, 105, 97, 49, 122, 102, 118, 114, 114, 102, 97, 113, 57,
-            117, 100, 54, 103, 57, 116, 52, 107, 122, 109, 115, 108, 112, 102, 50, 52, 121, 115,
-            97, 120, 113, 102, 110, 122, 101, 101, 53, 119, 57,
+            99, 101, 108, 101, 115, 116, 105, 97, 49, 113, 112, 48, 57, 121, 115, 121, 103, 99,
+            120, 54, 110, 112, 116, 101, 100, 53, 121, 99, 48, 97, 117, 54, 107, 57, 108, 110, 101,
+            114, 48, 53, 121, 118, 115, 57, 50, 48, 56,
         ],
         &sequencer_private_key,
         &sequencer_private_key,
     );
+    println!("priv: {}", sequencer_private_key.as_hex());
 
     let item_numbers = ledger_db.get_next_items_numbers();
     let last_slot_processed_before_shutdown = item_numbers.slot_number - 1;
@@ -113,7 +102,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut prev_state_root = prev_state_root.0;
 
     let start_height = rollup_config.start_height + last_slot_processed_before_shutdown;
-    // Request data from the DA layer and apply it to the demo app
+
     for height in start_height.. {
         println!(
             "Requesting data for height {} and prev_state_root 0x{}",
@@ -130,15 +119,20 @@ async fn main() -> Result<(), anyhow::Error> {
         println!("Received {} blobs", blob_txs.len());
 
         let mut data_to_commit = SlotCommit::new(filtered_block);
+
         demo.begin_slot(Default::default());
         for blob in blob_txs.clone() {
             let receipts = demo.apply_blob(blob, None);
+            println!("er: {:?}", receipts);
             data_to_commit.add_batch(receipts);
         }
         let (next_state_root, _witness, _) = demo.end_slot();
         ledger_db.commit_slot(data_to_commit)?;
         prev_state_root = next_state_root.0;
     }
+
+    println!("waiting on RPC");
+    futures::future::pending::<()>().await;
 
     Ok(())
 }

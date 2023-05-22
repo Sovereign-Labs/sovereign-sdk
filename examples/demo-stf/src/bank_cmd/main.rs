@@ -82,7 +82,7 @@ fn main() {
             let mut file = File::create(bin_path)
                 .unwrap_or_else(|e| panic!("Unable to crate .dat file: {}", e));
 
-            file.write_all(&serialized.raw.data)
+            file.write_all(&vec![serialized.raw.data].try_to_vec().unwrap())
                 .unwrap_or_else(|e| panic!("Unable to save .dat file: {}", e));
         }
     };

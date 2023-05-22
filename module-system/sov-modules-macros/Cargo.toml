@@ -21,6 +21,7 @@ sovereign-db = { path = "../../full-node/db/sovereign-db", features = ["temp"] }
 
 [dependencies]
 anyhow = { workspace = true }
+jsonrpsee = { workspace = true, features = ["http-client", "server"]}
 sov-modules-api = { path = "../sov-modules-api", default-features = false }
 sovereign-core = { path = "../../core" }
 

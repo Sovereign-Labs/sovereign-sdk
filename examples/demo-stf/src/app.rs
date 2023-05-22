@@ -34,7 +34,13 @@ pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;
 
 use bank::query::BankRpcImpl;
 use election::query::ElectionRpcImpl;
+use value_setter::query::ValueSetterRpcImpl;
+
 use sov_modules_macros::expose_rpc;
+
+use bank::query::BankRpcServer;
+use election::query::ElectionRpcServer;
+use value_setter::query::ValueSetterRpcServer;
 
 #[cfg(feature = "native")]
 pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
@@ -47,7 +53,7 @@ pub const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
 pub const TOKEN_NAME: &str = "sov-test-token";
 
 #[cfg(feature = "native")]
-#[expose_rpc((Bank<DefaultContext>,Election<DefaultContext>))]
+#[expose_rpc((Bank<DefaultContext>,Election<DefaultContext>,ValueSetter<DefaultContext>))]
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
     type RuntimeConfig = Config;
     type Inner = DemoApp<DefaultContext, Vm>;

@@ -84,6 +84,12 @@ where
         // Commit `enter_apply_batch` changes.
         batch_workspace = batch_workspace.commit().to_revertable();
 
+        // TODO: REMOVE
+        println!(
+            "batch_data_and_hash: {:?}",
+            &batch_data_and_hash.data.clone()
+        );
+
         let batch = match Batch::deserialize(&mut batch_data_and_hash.data.as_ref()) {
             Ok(batch) => batch,
             Err(e) => {
