@@ -2,8 +2,8 @@ use borsh::BorshSerialize;
 use serde::de::DeserializeOwned;
 use sov_app_template::Batch;
 use sov_modules_api::{default_context::DefaultContext, Address, DispatchQuery};
+use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
-use sovereign_core::da::BlobTransactionTrait;
 
 use crate::runtime::Runtime;
 

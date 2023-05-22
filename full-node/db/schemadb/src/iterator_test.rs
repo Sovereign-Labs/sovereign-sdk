@@ -6,7 +6,7 @@ use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 
 use crate::{iterator::SchemaIterator, temppath::TempPath, Schema, DB};
-use sovereign_core::{
+use sov_rollup_interface::{
     db::{errors::CodecError, KeyDecoder, KeyEncoder, SeekKeyEncoder, ValueCodec},
     define_schema,
 };

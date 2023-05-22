@@ -13,7 +13,7 @@ anyhow = { workspace = true }
 sov-modules-api = { path = "../../sov-modules-api", default-features = false}
 sov-modules-macros = { path = "../../sov-modules-macros" }
 sov-state = { path = "../../sov-state", default-features = false }
-sovereign-core = { path = "../../../core" }
+sov-rollup-interface = { path = "../../../rollup-interface" }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }

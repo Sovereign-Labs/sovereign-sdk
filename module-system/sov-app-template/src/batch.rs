@@ -1,7 +1,7 @@
 use crate::tx_verifier::RawTx;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sovereign_core::traits::{BatchTrait, TransactionTrait};
+use sov_rollup_interface::traits::{BatchTrait, TransactionTrait};
 
 #[derive(Debug, PartialEq, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct Batch {

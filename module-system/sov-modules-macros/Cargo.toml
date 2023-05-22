@@ -22,7 +22,7 @@ sovereign-db = { path = "../../full-node/db/sovereign-db", features = ["temp"] }
 [dependencies]
 anyhow = { workspace = true }
 sov-modules-api = { path = "../sov-modules-api", default-features = false }
-sovereign-core = { path = "../../core" }
+sov-rollup-interface = { path = "../../rollup-interface" }
 
 
 syn = { version = "1.0", features = ["full"] }

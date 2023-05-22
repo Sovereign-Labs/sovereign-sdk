@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sovereign_core::{services::da::SlotData, Bytes};
+use sov_rollup_interface::{services::da::SlotData, Bytes};
 use tendermint::{crypto::default::Sha256, merkle};
 
 pub use nmt_rs::NamespaceId;

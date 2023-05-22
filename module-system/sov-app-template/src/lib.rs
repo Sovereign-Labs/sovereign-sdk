@@ -6,22 +6,22 @@ use std::marker::PhantomData;
 
 pub use batch::Batch;
 use borsh::BorshDeserialize;
-use sovereign_core::stf::BatchReceipt;
-use sovereign_core::stf::TransactionReceipt;
-use sovereign_core::zk::traits::Zkvm;
-use sovereign_core::Buf;
+use sov_rollup_interface::stf::BatchReceipt;
+use sov_rollup_interface::stf::TransactionReceipt;
+use sov_rollup_interface::zk::traits::Zkvm;
+use sov_rollup_interface::Buf;
 use tracing::error;
 pub use tx_hooks::TxHooks;
 pub use tx_hooks::VerifiedTx;
 pub use tx_verifier::{RawTx, TxVerifier};
 
 use sov_modules_api::{Context, DispatchCall, Genesis, Hasher, Spec};
-use sov_state::{Storage, WorkingSet};
-use sovereign_core::{
+use sov_rollup_interface::{
     jmt,
     stf::{OpaqueAddress, StateTransitionFunction},
     traits::BatchTrait,
 };
+use sov_state::{Storage, WorkingSet};
 use std::io::Read;
 
 pub struct AppTemplate<C: Context, V, RT, H, Vm> {
@@ -292,7 +292,7 @@ where
 
     fn apply_blob(
         &mut self,
-        blob: impl sovereign_core::da::BlobTransactionTrait,
+        blob: impl sov_rollup_interface::da::BlobTransactionTrait,
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
         let sequencer = blob.sender();
@@ -306,7 +306,7 @@ where
     ) -> (
         Self::StateRoot,
         Self::Witness,
-        Vec<sovereign_core::stf::ConsensusSetUpdate<OpaqueAddress>>,
+        Vec<sov_rollup_interface::stf::ConsensusSetUpdate<OpaqueAddress>>,
     ) {
         let (cache_log, witness) = self.working_set.take().unwrap().freeze();
         let root_hash = self

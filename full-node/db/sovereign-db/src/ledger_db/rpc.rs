@@ -1,5 +1,5 @@
 use serde::de::DeserializeOwned;
-use sovereign_core::{
+use sov_rollup_interface::{
     rpc::{
         BatchIdentifier, BatchResponse, EventIdentifier, ItemOrHash, LedgerRpcProvider, QueryMode,
         SlotIdentifier, SlotResponse, TxIdentifier, TxResponse,
@@ -28,7 +28,7 @@ use super::LedgerDB;
 impl LedgerRpcProvider for LedgerDB {
     fn get_slots<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
-        slot_ids: &[sovereign_core::rpc::SlotIdentifier],
+        slot_ids: &[sov_rollup_interface::rpc::SlotIdentifier],
         query_mode: QueryMode,
     ) -> Result<Vec<Option<SlotResponse<B, T>>>, anyhow::Error> {
         anyhow::ensure!(
@@ -58,7 +58,7 @@ impl LedgerRpcProvider for LedgerDB {
 
     fn get_batches<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
-        batch_ids: &[sovereign_core::rpc::BatchIdentifier],
+        batch_ids: &[sov_rollup_interface::rpc::BatchIdentifier],
         query_mode: QueryMode,
     ) -> Result<Vec<Option<BatchResponse<B, T>>>, anyhow::Error> {
         anyhow::ensure!(
@@ -88,7 +88,7 @@ impl LedgerRpcProvider for LedgerDB {
 
     fn get_transactions<T: DeserializeOwned>(
         &self,
-        tx_ids: &[sovereign_core::rpc::TxIdentifier],
+        tx_ids: &[sov_rollup_interface::rpc::TxIdentifier],
         _query_mode: QueryMode,
     ) -> Result<Vec<Option<TxResponse<T>>>, anyhow::Error> {
         anyhow::ensure!(
@@ -118,7 +118,7 @@ impl LedgerRpcProvider for LedgerDB {
 
     fn get_events(
         &self,
-        event_ids: &[sovereign_core::rpc::EventIdentifier],
+        event_ids: &[sov_rollup_interface::rpc::EventIdentifier],
     ) -> Result<Vec<Option<Event>>, anyhow::Error> {
         anyhow::ensure!(
             event_ids.len() <= MAX_EVENTS_PER_REQUEST as usize,
@@ -250,7 +250,7 @@ impl LedgerRpcProvider for LedgerDB {
             MAX_BATCHES_PER_REQUEST
         );
         let ids: Vec<_> = (start..=end)
-            .map(|n| sovereign_core::rpc::BatchIdentifier::Number(n))
+            .map(|n| sov_rollup_interface::rpc::BatchIdentifier::Number(n))
             .collect();
         self.get_batches(&ids, query_mode)
     }
@@ -268,7 +268,7 @@ impl LedgerRpcProvider for LedgerDB {
             MAX_TRANSACTIONS_PER_REQUEST
         );
         let ids: Vec<_> = (start..=end)
-            .map(|n| sovereign_core::rpc::TxIdentifier::Number(n))
+            .map(|n| sov_rollup_interface::rpc::TxIdentifier::Number(n))
             .collect();
         self.get_transactions(&ids, query_mode)
     }

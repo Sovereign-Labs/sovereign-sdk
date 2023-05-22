@@ -10,7 +10,7 @@ resolver = "2"
 # Maintained by sovereign labs
 jmt = { workspace = true }
 schemadb = { path = "../schemadb" }
-sovereign-core = { path = "../../../core" }
+sov-rollup-interface = { path = "../../../rollup-interface" }
 
 
 # External

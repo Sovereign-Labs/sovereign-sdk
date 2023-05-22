@@ -7,7 +7,7 @@ resolver = "2"
 [dependencies]
 anyhow = { workspace = true }
 sov-state = { path = "../sov-state", default-features = false }
-sovereign-core = { path = "../../core" }
+sov-rollup-interface = { path = "../../rollup-interface" }
 serde = { workspace = true }
 borsh = { workspace = true }
 thiserror = { workspace = true }
