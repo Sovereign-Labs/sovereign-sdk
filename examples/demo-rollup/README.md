@@ -1,17 +1,23 @@
 # Demo Rollup
 
-This is a _research-only_ demo runing the Sovereign SDK, "election" example on Celestia. None of its code is
+This is a demo running a simple Sovereign SDK rollup on Celestia. None of its code is
 suitable for production use. It contains known security flaws and numerous inefficiencies.
+
+## What is it?
+
+This demo shows how to integrate a state-transition function with a DA layer and a Zkvm to create a full
+zk-rolllup. By swapping out or modifying the imported state transition function, you can customize
+this example to run arbitrary logic.
+
+## Warning
+
+This is a prototype. It contains known vulnerabilities and should not be used in production under any
+circumstances.
 
 ## Celestia Integration
 
 The current prototype runs against Celestia-node version `v0.7.1`. This is the version used on the `arabica` testnet
 as of Mar 18, 2023.
-
-## Warning
-
-This is a research prototype. It contains known vulnerabilities and should not be used in production under any
-circumstances.
 
 ## Getting Started
 
@@ -31,12 +37,6 @@ Sync a Celestia light node running on the Arabica testnet
 1. Wait a few minutes for your Celestia node to sync. It needs to have synced to the rollup's configured `start_height `293681` before the demo can run properly.
 
 Once your Celestia node is up and running, simply `cargo +nightly run` to test out the prototype.
-
-## What is it?
-
-This demo rollapp runs a simple on-chain election. Voting opened at block `293681`, and all votes are recorded on chain. This prototype scans
-the Celestia chain for votes, and prints out the election results after each Celestia block. All relevant data is persisted in the node's database,
-including all rollup state and history, and the Celestia header chain.
 
 ## License
 

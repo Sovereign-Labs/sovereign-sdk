@@ -16,17 +16,17 @@
 Sovereign is a free and open-source toolkit for building zk-rollups **that is currently under development**. Sovereign consists of three
 logical components.
 
-1. The Sovereign SDK
-1. The Sovereign Module System
-1. The full node implementation
+1. Sovereign Core, which defines a minimal interface for zk-rollups
+1. The Sovereign Module System, an opinionated framework for building rollups with Sovereign Core
+1. The Sovereign Full Node, a client implementation capable of running any rollup which implements the interfaces defined by Sovereign Core
 
-### The Sovereign SDK: the Core Abstractions
+### Sovereign Core: the rollup interface
 
-At the heart of Sovereign is the [Sovereign SDK](./sdk/specs/overview.md), which defines the _interfaces_ that rollups
+At the heart of Sovereign is [Sovereign Core](./core/specs/overview.md), which defines the _interfaces_ that rollups
 must implement. In the Sovereign SDK, we define a zk-rollup as the combination of three components:
 
-1. A [State Transition Function](./sdk/specs/interfaces/stf.md) ("STF") which defines the "business logic" of the rollup
-1. A [Data Availability Layer](./sdk/specs/interfaces/da.md) ("DA layer") which determines the set of transactions that are fed
+1. A [State Transition Function](./core/specs/interfaces/stf.md) ("STF") which defines the "business logic" of the rollup
+1. A [Data Availability Layer](./core/specs/interfaces/da.md) ("DA layer") which determines the set of transactions that are fed
    to the state transition function
 1. A Zero Knowledge proving system (aka "Zero Knowledge Virtual Machine" or "ZKVM"), which takes the compiled rollup code and
    produces succinct proofs that the logic has been executed correctly.
@@ -40,14 +40,14 @@ to a specific DA layer off the shelf.
 Similarly, teams building DA layers shouldn't need to worry about what kinds of state transitions will be built using their chain.
 All they need to do is implement the DA layer interface, and they're automatically compatible with all state transition functions.
 
-The code for the Sovereign SDK lives in the [sdk](./sdk/) folder. For a technical description of the SDK, we recommend the overview
-[here](./sdk/specs/overview.md). If you want a less technical introduction, see this [blog post](https://mirror.xyz/sovlabs.eth/pZl5kAtNIRQiKAjuFvDOQCmFIamGnf0oul3as_DhqGA).
+The code for Sovereign Core lives in the [core](./core/) folder. For a technical description of the Core interfaces, we recommend the overview
+[here](./core/specs/overview.md). If you want a less technical introduction, see this [blog post](https://mirror.xyz/sovlabs.eth/pZl5kAtNIRQiKAjuFvDOQCmFIamGnf0oul3as_DhqGA).
 
 ### The Sovereign Module System: a Tool for Implementing State Transition Functions
 
-While the Sovereign SDK defines a powerful set of abstractions, it's unopinionated about how a State Transition Function should actually
-work. As far as the SDK is concerned, your state machine might have nothing to do with classic "blockchain" financial applications - so
-it has no built in notion of "state", accounts, tokens, and the like. This means that the SDK on its own can't offer a
+While Sovereign Core defines a powerful set of abstractions, it's unopinionated about how a State Transition Function should actually
+work. As far as the Core interfaces is concerned, your state machine might have nothing to do with classic "blockchain" financial applications - so
+it has no built in notion of "state", accounts, tokens, and the like. This means that the Core package on its own can't offer a
 "batteries included" development experience. But one of our goals at Sovereign is to make developing
 a rollup as easy as deploying a smart contract. So, we've built out an additional set of tools for defining your state transition function
 called the Sovereign Module System.
@@ -82,13 +82,29 @@ issue! All of the core developers can be reached via [Discord](https://discord.g
 
 The easiest way to build a rollup is to use the Sovereign Module System. You can find a tutorial [here] (TODO: Insert link!).
 
+We also provide two examples - [`demo-stf`](./examples/demo-stf/), which shows how to use the Sovereign Module System to implement a
+state transition, and [`demo-rollup`](./examples/demo-rollup/), which shows how to combine the demo STF with a DA layer and a ZKVM to
+get a complete rollup implementation.
+
 If you want even more control over your rollup's functionality, you can implement a completely custom State Transition Function
 without using the module system. You can find a tutorial [here] (TODO: Insert link!).
 
 ### Adding a new Data Availability Layer
 
 If you want to add support for a new data availability layer, the easiest way to get started is to use the
-[DA layer adapter template](https://github.com/Sovereign-Labs/da-adapter-template)
+[DA layer adapter template](https://github.com/Sovereign-Labs/da-adapter-template).
+
+## Repository Layout
+
+This repository has five folders.
+
+1. Adapters, which contains the logic integrating 3rd party codebases into the Sovereign SDK. Currently, we
+   maintain adapters for [`Risc0`](www.risczero.com) (a ZKVM) and [`Celestia`](www.celestia.org) a (DA layer).
+   The Avail project also maintains an adapter for their DA layer, which can be found here (TODO: insert link).
+2. Core, which contains code and specs for Sovereign Core
+3. Examples, which has example code to help you get started with Sovereign
+4. Full-node, which contains code related to the Sovereign Full Node
+5. Module System, which contains the Sovereign Module System
 
 ## Warning
 
