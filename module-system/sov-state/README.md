@@ -1,8 +1,8 @@
-#sov-state
+# sov-state
 
 This crate provides abstractions specifically designed for storing and retrieving data from a permanent storage, tailored to be used within the Sovereign `module-system`.
 
-### High level explanation:
+## High level explanation:
 At a high level, the crate offers two main abstractions that module developers can utilize to access data:
 
 1. `StateValue`: Is used to store a single value in the state. It provides methods to set a value and retrieve it later.
@@ -42,16 +42,16 @@ let maybe_value = state.value.get(working_set);
 
 ```
 
-### Low level explanation:
+## Low level explanation:
 It's important to note that this section focuses on explaining the underlying mechanisms and is not necessarily required for efficient usage of the `sov-state`.
 
-`Native` & `Zkp` execution:
-During `Native` execution, the data is stored in a `key-value` map, which is accessed through the `WorkingSet`. It's worth mentioning that the actual storage mechanism, such as `RocksDB`, is only accessible during this phase when the full node executes the transaction and updates the state.
+`Native` & `Zkp` execution: \
+During `Native` execution, the data is stored in a `key-value` store, which is accessed through the `WorkingSet`. It's worth mentioning that the actual storage mechanism, such as `RocksDB`, is only accessible during this phase when the full node executes the transaction and updates the state.
 
 
-In contrast, during the `Zkp` phase, when a cryptographic proof of correct execution is generated, the module system doesn't have direct access to the underlying database. Instead, it relies on a "witness" produced during the `Native` execution. The system performs cryptographic checks, typically using variations of Merkle Trees, to verify that the state was updated correctly. Despite the differences in access to the storage mechanism, both scenarios can be abstracted behind the same interface, ensuring that module developers don't need to write generic code that works in both environments.
+In contrast, during the `Zkp` phase, when a cryptographic proof of correct execution is generated, the module system doesn't have direct access to the underlying database. Instead, it relies on a "witness" produced during the `Native` execution. The system performs cryptographic checks, typically using variations of Merkle Trees, to verify that the state was updated correctly. Despite the differences in access to the storage mechanism, both scenarios can be abstracted behind the same interface.
 
-The `Storage` abstraction, defined as follows:
+The `Storage` abstraction is defined as follows:
 
 ```Rust
 pub trait Storage: Clone {
@@ -75,8 +75,6 @@ pub trait Storage: Clone {
 ```
 The `sov-state` crate offers two implementations of the `Storage` trait, namely `ZkStorage` and `ProverStorage`, which handle the storage and retrieval of data in the context of the `Zkp` and `Prover` execution modes, respectively. These implementations encapsulate the necessary logic and interactions with the storage system, allowing module developers to work with a consistent interface regardless of the execution mode.
 
-
-The `sov-state` crate provides `ZkStorage` and `ProverStorage` implementation.
 
 `WorkingSet`:
 
