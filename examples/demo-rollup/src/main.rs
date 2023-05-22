@@ -37,16 +37,12 @@ async fn start_rpc_server(module: RpcModule<()>, address: SocketAddr) {
     futures::future::pending::<()>().await;
 }
 
-pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
+pub fn get_genesis_config(sequencer_da_address: &[u8]) -> GenesisConfig<DefaultContext> {
     let sequencer_private_key = DefaultPrivateKey::generate();
     create_demo_genesis_config(
         100000000,
         sequencer_private_key.default_address(),
-        vec![
-            99, 101, 108, 101, 115, 116, 105, 97, 49, 113, 112, 48, 57, 121, 115, 121, 103, 99,
-            120, 54, 110, 112, 116, 101, 100, 53, 121, 99, 48, 97, 117, 54, 107, 57, 108, 110, 101,
-            114, 48, 53, 121, 118, 115, 57, 50, 48, 56,
-        ],
+        sequencer_da_address.to_vec(),
         &sequencer_private_key,
         &sequencer_private_key,
     )
@@ -57,6 +53,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let rollup_config: RollupConfig = from_toml_path("rollup_config.toml")?;
     let rpc_config = rollup_config.rpc_config;
     let address = SocketAddr::new(rpc_config.bind_host.parse()?, rpc_config.bind_port);
+    let sequencer_da_address = rollup_config.sequencer_da_address.as_bytes();
 
     // Initializing logging
     let subscriber = tracing_subscriber::fmt()
@@ -96,7 +93,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let last_slot_processed_before_shutdown = item_numbers.slot_number - 1;
     if last_slot_processed_before_shutdown == 0 {
         print!("No history detected. Initializing chain...");
-        demo.init_chain(get_genesis_config());
+        demo.init_chain(get_genesis_config(sequencer_da_address));
         println!("Done.");
     } else {
         println!("Chain is already initialized. Skipping initialization.");

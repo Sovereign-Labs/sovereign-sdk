@@ -395,6 +395,7 @@ pub(crate) fn rpc_outer_impls(
 
     // will be replaced in the below loop
     // hack for now
+    // TODO: handle context in a consistent way for module, runtime as well as state transition runner
     let mut last_context_type: Ident = Ident::new("Context", Span::call_site());
 
     for arg in types {
