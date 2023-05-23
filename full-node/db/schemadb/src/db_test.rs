@@ -3,7 +3,7 @@
 
 use byteorder::{LittleEndian, ReadBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
-use sovereign_core::{
+use sov_rollup_interface::{
     db::{errors::CodecError, ColumnFamilyName, KeyDecoder, KeyEncoder, Result, ValueCodec},
     define_schema,
 };

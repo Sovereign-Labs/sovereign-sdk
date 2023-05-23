@@ -24,7 +24,7 @@ tracing-subscriber = "0.3.16"
 
 jupiter = { path = "../../adapters/celestia" }
 demo-stf = { path = "../demo-stf", features = ["native"] }
-sovereign-core = { path = "../../core" }
+sov-rollup-interface = { path = "../../rollup-interface" }
 sovereign-db = { path = "../../full-node/db/sovereign-db" }
 risc0-adapter = { path = "../../adapters/risc0" }
 sov-app-template = { path = "../../module-system/sov-app-template" }

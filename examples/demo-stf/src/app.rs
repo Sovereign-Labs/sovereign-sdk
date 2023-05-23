@@ -17,14 +17,13 @@ use sov_modules_api::Context;
 use sov_modules_api::PublicKey;
 use sov_modules_api::{Hasher, Spec, StateTransitionRunner};
 #[cfg(feature = "native")]
+use sov_rollup_interface::stf::ProverConfig;
+use sov_rollup_interface::stf::ZkConfig;
+use sov_rollup_interface::zk::traits::Zkvm;
+#[cfg(feature = "native")]
 use sov_state::ProverStorage;
 use sov_state::Storage;
 use sov_state::ZkStorage;
-#[cfg(feature = "native")]
-use sovereign_core::stf::ProverConfig;
-use sovereign_core::stf::ZkConfig;
-use sovereign_core::zk::traits::Zkvm;
-#[cfg(feature = "native")]
 use std::path::Path;
 
 #[cfg(test)]
@@ -194,7 +193,7 @@ pub fn generate_address<C: Context>(key: &str) -> <C as Spec>::Address {
 #[cfg(feature = "native")]
 pub fn create_new_demo(
     path: impl AsRef<Path>,
-) -> DemoApp<DefaultContext, sovereign_core::mocks::MockZkvm> {
+) -> DemoApp<DefaultContext, sov_rollup_interface::mocks::MockZkvm> {
     let runtime = Runtime::new();
     let storage = ProverStorage::with_path(path).unwrap();
     let tx_hooks = DemoAppTxHooks::new();

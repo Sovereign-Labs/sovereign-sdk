@@ -5,8 +5,8 @@ pub mod test {
     use sov_modules_api::{
         default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
     };
+    use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
     use sov_state::ProverStorage;
-    use sovereign_core::{mocks::MockZkvm, stf::StateTransitionFunction};
 
     use crate::{
         app::{create_demo_config, create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},

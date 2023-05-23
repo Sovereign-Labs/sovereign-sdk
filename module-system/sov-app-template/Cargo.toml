@@ -12,6 +12,6 @@ borsh = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
 
-sovereign-core = { path = "../../core" }
+sov-rollup-interface = { path = "../../rollup-interface" }
 sov-state = { path = "../sov-state", default-features = false }
 sov-modules-api = { path = "../sov-modules-api", default-features = false }

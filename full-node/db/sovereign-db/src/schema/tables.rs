@@ -27,8 +27,8 @@ use jmt::{
     storage::{Node, NodeKey},
     Version,
 };
-use sovereign_core::db::errors::CodecError;
-use sovereign_core::{
+use sov_rollup_interface::db::errors::CodecError;
+use sov_rollup_interface::{
     db::{KeyDecoder, KeyEncoder, ValueCodec},
     stf::{Event, EventKey},
 };
@@ -50,7 +50,7 @@ pub const LEDGER_TABLES: &[&str] = &[
     EventByNumber::table_name(),
 ];
 
-/// Macro to define a table that implements [`sovereign_core::db::Schema`].
+/// Macro to define a table that implements [`sov_rollup_interface::db::Schema`].
 /// KeyCodec<Schema> and ValueCodec<Schema> must be implemented separately.
 ///
 /// ```ignore
@@ -77,7 +77,7 @@ macro_rules! define_table_without_codec {
         #[derive(Clone, Copy, Debug, Default)]
         pub(crate) struct $table_name;
 
-        impl ::sovereign_core::db::Schema for $table_name {
+        impl ::sov_rollup_interface::db::Schema for $table_name {
             const COLUMN_FAMILY_NAME: &'static str = $table_name::table_name();
             type Key = $key;
             type Value = $value;
@@ -98,9 +98,9 @@ macro_rules! define_table_without_codec {
     };
 }
 
-/// Macro to define a table that implements [`sovereign_core::db::Schema`].
+/// Macro to define a table that implements [`sov_rollup_interface::db::Schema`].
 /// Automatically generates KeyCodec<...> and ValueCodec<...> implementations
-/// using the Encode and Decode traits from sovereign_core
+/// using the Encode and Decode traits from sov_rollup_interface
 ///
 /// ```ignore
 /// define_table_with_default_codec!(
@@ -112,24 +112,24 @@ macro_rules! define_table_with_default_codec {
     ($(#[$docs:meta])+ ($table_name:ident) $key:ty => $value:ty) => {
         define_table_without_codec!($(#[$docs])+ ( $table_name ) $key => $value);
 
-        impl ::sovereign_core::db::KeyEncoder<$table_name> for $key {
-            fn encode_key(&self) -> ::std::result::Result<::sovereign_core::maybestd::vec::Vec<u8>, ::sovereign_core::db::errors::CodecError> {
+        impl ::sov_rollup_interface::db::KeyEncoder<$table_name> for $key {
+            fn encode_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_rollup_interface::db::errors::CodecError> {
                 <Self as ::borsh::BorshSerialize>::try_to_vec(self).map_err(|e| e.into())
             }
         }
 
-        impl ::sovereign_core::db::KeyDecoder<$table_name> for $key {
-            fn decode_key(data: &[u8]) -> ::std::result::Result<Self, ::sovereign_core::db::errors::CodecError> {
+        impl ::sov_rollup_interface::db::KeyDecoder<$table_name> for $key {
+            fn decode_key(data: &[u8]) -> ::std::result::Result<Self, ::sov_rollup_interface::db::errors::CodecError> {
                 <Self as ::borsh::BorshDeserialize>::deserialize_reader(&mut &data[..]).map_err(|e| e.into())
             }
         }
 
-        impl ::sovereign_core::db::ValueCodec<$table_name> for $value {
-            fn encode_value(&self) -> ::std::result::Result<::sovereign_core::maybestd::vec::Vec<u8>, ::sovereign_core::db::errors::CodecError> {
+        impl ::sov_rollup_interface::db::ValueCodec<$table_name> for $value {
+            fn encode_value(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_rollup_interface::db::errors::CodecError> {
                 <Self as ::borsh::BorshSerialize>::try_to_vec(self).map_err(|e| e.into())
             }
 
-            fn decode_value(data: &[u8]) -> ::std::result::Result<Self, ::sovereign_core::db::errors::CodecError> {
+            fn decode_value(data: &[u8]) -> ::std::result::Result<Self, ::sov_rollup_interface::db::errors::CodecError> {
                 <Self as ::borsh::BorshDeserialize>::deserialize_reader(&mut &data[..]).map_err(|e| e.into())
             }
         }
@@ -183,22 +183,22 @@ define_table_without_codec!(
 );
 
 impl KeyEncoder<JmtNodes> for NodeKey {
-    fn encode_key(&self) -> sovereign_core::db::Result<Vec<u8>> {
+    fn encode_key(&self) -> sov_rollup_interface::db::Result<Vec<u8>> {
         self.try_to_vec().map_err(CodecError::from)
     }
 }
 impl KeyDecoder<JmtNodes> for NodeKey {
-    fn decode_key(data: &[u8]) -> sovereign_core::db::Result<Self> {
+    fn decode_key(data: &[u8]) -> sov_rollup_interface::db::Result<Self> {
         Ok(Self::deserialize_reader(&mut &data[..])?)
     }
 }
 
 impl ValueCodec<JmtNodes> for Node {
-    fn encode_value(&self) -> sovereign_core::db::Result<Vec<u8>> {
+    fn encode_value(&self) -> sov_rollup_interface::db::Result<Vec<u8>> {
         self.try_to_vec().map_err(CodecError::from)
     }
 
-    fn decode_value(data: &[u8]) -> sovereign_core::db::Result<Self> {
+    fn decode_value(data: &[u8]) -> sov_rollup_interface::db::Result<Self> {
         Ok(Self::deserialize_reader(&mut &data[..])?)
     }
 }
@@ -209,7 +209,7 @@ define_table_without_codec!(
 );
 
 impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> KeyEncoder<JmtValues> for (T, Version) {
-    fn encode_key(&self) -> sovereign_core::db::Result<Vec<u8>> {
+    fn encode_key(&self) -> sov_rollup_interface::db::Result<Vec<u8>> {
         let mut out =
             Vec::with_capacity(self.0.as_ref().len() + std::mem::size_of::<Version>() + 8);
         self.0
@@ -224,7 +224,7 @@ impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> KeyEncoder<JmtValues> for (T
 }
 
 impl KeyDecoder<JmtValues> for (StateKey, Version) {
-    fn decode_key(data: &[u8]) -> sovereign_core::db::Result<Self> {
+    fn decode_key(data: &[u8]) -> sov_rollup_interface::db::Result<Self> {
         let mut cursor = maybestd::io::Cursor::new(data);
         let key = Vec::<u8>::deserialize_reader(&mut cursor)?;
         let version = cursor.read_u64::<BigEndian>()?;
@@ -233,11 +233,11 @@ impl KeyDecoder<JmtValues> for (StateKey, Version) {
 }
 
 impl ValueCodec<JmtValues> for JmtValue {
-    fn encode_value(&self) -> sovereign_core::db::Result<Vec<u8>> {
+    fn encode_value(&self) -> sov_rollup_interface::db::Result<Vec<u8>> {
         self.try_to_vec().map_err(CodecError::from)
     }
 
-    fn decode_value(data: &[u8]) -> sovereign_core::db::Result<Self> {
+    fn decode_value(data: &[u8]) -> sov_rollup_interface::db::Result<Self> {
         Ok(Self::deserialize_reader(&mut &data[..])?)
     }
 }

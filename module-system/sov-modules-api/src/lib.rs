@@ -21,13 +21,13 @@ pub use jmt::SimpleHasher as Hasher;
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
 
+pub use sov_rollup_interface::traits::AddressTrait;
 use sov_state::{Storage, Witness, WorkingSet};
-pub use sovereign_core::traits::AddressTrait;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use core::fmt::{self, Debug, Display};
-use sovereign_core::stf::{StateTransitionConfig, StateTransitionFunction};
-use sovereign_core::zk::traits::Zkvm;
+use sov_rollup_interface::stf::{StateTransitionConfig, StateTransitionFunction};
+use sov_rollup_interface::zk::traits::Zkvm;
 use thiserror::Error;
 
 impl AsRef<[u8]> for Address {

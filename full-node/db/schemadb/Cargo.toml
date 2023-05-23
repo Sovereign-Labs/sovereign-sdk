@@ -13,7 +13,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 # Dependencies maintained by sovereign labs
-sovereign-core = { path = "../../../core" }
+sov-rollup-interface = { path = "../../../rollup-interface" }
 
 # External dependencies 
 anyhow = { workspace = true }

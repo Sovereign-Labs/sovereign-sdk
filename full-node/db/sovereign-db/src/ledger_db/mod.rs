@@ -5,7 +5,7 @@ use std::{
 
 use schemadb::{Schema, DB};
 use serde::Serialize;
-use sovereign_core::{
+use sov_rollup_interface::{
     db::SeekKeyEncoder,
     services::da::SlotData,
     stf::{BatchReceipt, Event},
