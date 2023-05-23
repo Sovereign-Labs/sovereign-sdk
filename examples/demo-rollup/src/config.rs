@@ -3,10 +3,17 @@ use jupiter::da_service::DaServiceConfig;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RpcConfig {
+    pub bind_host: String,
+    pub bind_port: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RollupConfig {
     pub start_height: u64,
     pub da: DaServiceConfig,
     pub runner: RunnerConfig,
+    pub rpc_config: RpcConfig,
 }
 
 #[cfg(test)]
@@ -34,6 +41,9 @@ mod tests {
             max_celestia_response_body_size = 980
             [runner.storage]
             path = "/tmp"
+            [rpc_config]
+            bind_host = "127.0.0.1"
+            bind_port = 12345
         "#;
 
         let config_file = create_config_from(config);
@@ -50,6 +60,10 @@ mod tests {
                 storage: StorageConfig {
                     path: PathBuf::from("/tmp"),
                 },
+            },
+            rpc_config: RpcConfig {
+                bind_host: "127.0.0.1".to_string(),
+                bind_port: 12345,
             },
         };
         assert_eq!(config, expected);

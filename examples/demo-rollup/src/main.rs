@@ -14,14 +14,33 @@ use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner};
 use sovereign_db::ledger_db::{LedgerDB, SlotCommit};
+use std::net::SocketAddr;
 use tracing::Level;
+// RPC related imports
+use demo_stf::app::get_rpc_module;
+use jsonrpsee::RpcModule;
+use sov_modules_api::RpcRunner;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId([115, 111, 118, 45, 116, 101, 115, 116]);
+const SEQUENCER_DA_ADDRESS: [u8; 47] = [
+    99, 101, 108, 101, 115, 116, 105, 97, 49, 113, 112, 48, 57, 121, 115, 121, 103, 99, 120, 54,
+    110, 112, 116, 101, 100, 53, 121, 99, 48, 97, 117, 54, 107, 57, 108, 110, 101, 114, 48, 53,
+    121, 118, 115, 57, 50, 48, 56,
+];
 
 pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
     let ledger_db = LedgerDB::with_path(path).expect("Ledger DB failed to open");
     ledger_db
+}
+
+async fn start_rpc_server(module: RpcModule<()>, address: SocketAddr) {
+    let server = jsonrpsee::server::ServerBuilder::default()
+        .build([address].as_ref())
+        .await
+        .unwrap();
+    let _server_handle = server.start(module).unwrap();
+    futures::future::pending::<()>().await;
 }
 
 pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
@@ -29,11 +48,7 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
     create_demo_genesis_config(
         100000000,
         sequencer_private_key.default_address(),
-        vec![
-            99, 101, 108, 101, 115, 116, 105, 97, 49, 122, 102, 118, 114, 114, 102, 97, 113, 57,
-            117, 100, 54, 103, 57, 116, 52, 107, 122, 109, 115, 108, 112, 102, 50, 52, 121, 115,
-            97, 120, 113, 102, 110, 122, 101, 101, 53, 119, 57,
-        ],
+        SEQUENCER_DA_ADDRESS.to_vec(),
         &sequencer_private_key,
         &sequencer_private_key,
     )
@@ -42,6 +57,8 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let rollup_config: RollupConfig = from_toml_path("rollup_config.toml")?;
+    let rpc_config = rollup_config.rpc_config;
+    let address = SocketAddr::new(rpc_config.bind_host.parse()?, rpc_config.bind_port);
 
     // Initializing logging
     let subscriber = tracing_subscriber::fmt()
@@ -52,6 +69,16 @@ async fn main() -> Result<(), anyhow::Error> {
         .expect("Cannot fail to set subscriber");
 
     let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
+
+    // RPC
+    let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
+
+    let storj = demo_runner.get_storage();
+    let module = get_rpc_module(storj);
+
+    let _handle = tokio::spawn(async move {
+        start_rpc_server(module, address).await;
+    });
 
     // Initialize the Celestia service
     let da_service = CelestiaService::new(
@@ -64,8 +91,6 @@ async fn main() -> Result<(), anyhow::Error> {
         namespace: ROLLUP_NAMESPACE,
     });
 
-    // Create an instance of the demo app using the provided config
-    let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
     let demo = demo_runner.inner_mut();
 
     // Check if the rollup has previously processed any data. If not, run it's "genesis" initialization code
@@ -87,6 +112,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Start the main rollup loop
     let start_height = rollup_config.start_height + last_slot_processed_before_shutdown;
+
     for height in start_height.. {
         println!(
             "Requesting data for height {} and prev_state_root 0x{}",
@@ -108,11 +134,11 @@ async fn main() -> Result<(), anyhow::Error> {
             .is_ok());
         println!("Received {} blobs", blob_txs.len());
 
-        // Take the extracted data and apply the state transition function
         demo.begin_slot(Default::default());
         let mut data_to_commit = SlotCommit::new(filtered_block);
         for blob in blob_txs.clone() {
             let receipts = demo.apply_blob(blob, None);
+            println!("er: {:?}", receipts);
             data_to_commit.add_batch(receipts);
         }
         let (next_state_root, _witness, _) = demo.end_slot();

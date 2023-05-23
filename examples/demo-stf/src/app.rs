@@ -12,25 +12,34 @@ pub use sov_modules_api::default_context::DefaultContext;
 pub use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::Context;
 #[cfg(feature = "native")]
 use sov_modules_api::PublicKey;
+use sov_modules_api::{Context, RpcRunner};
 use sov_modules_api::{Hasher, Spec};
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::ProverConfig;
-use sov_rollup_interface::stf::{StateTransitionRunner, ZkConfig};
+use sov_rollup_interface::stf::StateTransitionRunner;
+use sov_rollup_interface::stf::ZkConfig;
 use sov_rollup_interface::zk::traits::Zkvm;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
 use sov_state::Storage;
 use sov_state::ZkStorage;
-#[cfg(feature = "native")]
 use std::path::Path;
 
 #[cfg(test)]
 pub(crate) type C = DefaultContext;
 pub struct DemoAppRunner<C: Context, Vm: Zkvm>(pub DemoApp<C, Vm>);
 pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;
+
+#[cfg(feature = "native")]
+use bank::query::{BankRpcImpl, BankRpcServer};
+#[cfg(feature = "native")]
+use election::query::{ElectionRpcImpl, ElectionRpcServer};
+#[cfg(feature = "native")]
+use value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
+
+use sov_modules_macros::expose_rpc;
 
 #[cfg(feature = "native")]
 pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
@@ -43,6 +52,7 @@ pub const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
 pub const TOKEN_NAME: &str = "sov-test-token";
 
 #[cfg(feature = "native")]
+#[expose_rpc((Bank<DefaultContext>,Election<DefaultContext>,ValueSetter<DefaultContext>))]
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
     type RuntimeConfig = Config;
     type Inner = DemoApp<DefaultContext, Vm>;
@@ -91,6 +101,14 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
 
     fn inner_mut(&mut self) -> &mut Self::Inner {
         &mut self.0
+    }
+}
+
+#[cfg(feature = "native")]
+impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
+    type Context = DefaultContext;
+    fn get_storage(&self) -> <Self::Context as Spec>::Storage {
+        self.inner().current_storage.clone()
     }
 }
 
