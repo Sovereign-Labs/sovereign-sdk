@@ -1,5 +1,5 @@
 # sov-state
-This crate provides abstractions specifically designed for storing and retrieving data from a permanent storage, tailored to be used within the Sovereign `module-system`.
+This crate provides abstractions specifically designed for storing and retrieving data from a permanent storage, tailored to be used within the `module-system`.
 
 ## High level explanation:
 At a high level, the crate offers two main abstractions that module developers can utilize to access data:
