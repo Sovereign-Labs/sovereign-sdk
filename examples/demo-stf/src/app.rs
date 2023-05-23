@@ -32,15 +32,14 @@ pub(crate) type C = DefaultContext;
 pub struct DemoAppRunner<C: Context, Vm: Zkvm>(pub DemoApp<C, Vm>);
 pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;
 
-use bank::query::BankRpcImpl;
-use election::query::ElectionRpcImpl;
-use value_setter::query::ValueSetterRpcImpl;
+#[cfg(feature = "native")]
+use bank::query::{BankRpcImpl,BankRpcServer};
+#[cfg(feature = "native")]
+use election::query::{ElectionRpcImpl,ElectionRpcServer};
+#[cfg(feature = "native")]
+use value_setter::query::{ValueSetterRpcImpl,ValueSetterRpcServer};
 
 use sov_modules_macros::expose_rpc;
-
-use bank::query::BankRpcServer;
-use election::query::ElectionRpcServer;
-use value_setter::query::ValueSetterRpcServer;
 
 #[cfg(feature = "native")]
 pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
