@@ -14,7 +14,6 @@ pub struct RollupConfig {
     pub da: DaServiceConfig,
     pub runner: RunnerConfig,
     pub rpc_config: RpcConfig,
-    pub sequencer_da_address: String,
 }
 
 #[cfg(test)]
@@ -36,7 +35,6 @@ mod tests {
     fn test_correct_config() {
         let config = r#"
             start_height = 31337
-            sequencer_da_address = "celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208"
             [da]
             celestia_rpc_auth_token = "SECRET_RPC_TOKEN"
             celestia_rpc_address = "http://localhost:11111/"
@@ -67,7 +65,6 @@ mod tests {
                 bind_host: "127.0.0.1".to_string(),
                 bind_port: 12345,
             },
-            sequencer_da_address: "celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208".to_string(),
         };
         assert_eq!(config, expected);
     }

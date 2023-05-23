@@ -1,7 +1,6 @@
 # We define the rollup's genesis to occur at Celestia block number `start_height`. The rollup will ignore
 # any Celestia blocks before this height
 start_height = 671431
-sequencer_da_address = "celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208"
 
 [da]
 # The JWT used to authenticate with the celestia light client. Instructions for generating this token can be found in the README
