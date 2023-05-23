@@ -65,16 +65,14 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ExampleModule<C> {
     }
 
     #[cfg(feature = "native")]
+    /// This function is on the path to deprecation. We recommend that you leave its body unimplemented
     fn query(
         &self,
-        msg: Self::QueryMessage,
-        working_set: &mut WorkingSet<C::Storage>,
+        _msg: Self::QueryMessage,
+        _working_set: &mut WorkingSet<C::Storage>,
     ) -> sov_modules_api::QueryResponse {
-        match msg {
-            query::QueryMessage::GetValue => {
-                let response = serde_json::to_vec(&self.query_value(working_set)).unwrap();
-                sov_modules_api::QueryResponse { response }
-            }
-        }
+        unimplemented!(
+            "The query method is on the path to deprecation. Use the RPC macros instead!"
+        )
     }
 }
