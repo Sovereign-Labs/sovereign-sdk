@@ -12,15 +12,13 @@ The `sov-modules-api` crate provides essential traits for the `Sovereign` module
 
 1. The `Spec` trait: It defines all the types that modules are generic over. This separation allows the module logic to be independent of concerns such as the specific storage system or concrete signature schemes used for signing rollup transactions. 
 
-1. The `Context` trait implements the `Spec`  and introduces additional methods accessible within modules. Currently, it includes the `sender()` method, which returns the address of the transaction sender. This trait will be further extended with other useful methods, such as `batch_hash()`, and more.
-
-This crate defines also the default implementation for the `Context` trait.
+1. The `Context` trait implements the `Spec`  and introduces additional methods accessible within modules. Currently, it includes the `sender()` method, which returns the address of the transaction sender. This trait will be further extended with other useful methods, such as `batch_hash()`, and more. This crate defines also the default implementation for the `Context` trait.
 
 
 1. The `Genesis` trait: Defines how the Rollup is initialized during deployment phase.
 
 1. The `DispatchCall` trait: Defines how messages are forwarded to the appropriate module and how the call message is executed. The implementation of this trait can be generated automatically using a macro.
 
-1. The `DispatchQuery` trait: Defines the procedure for forwarding queries to the relevant module.  Similarly to the DispatchCall trait, The implementation of this trait can be generated automatically using a macro.
+1. The `DispatchQuery` trait: Defines how queries are forwarded to the appropriate module. Similarly to the DispatchCall trait, The implementation of this trait can be generated automatically using a macro.
 
 
