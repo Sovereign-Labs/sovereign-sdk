@@ -1,9 +1,9 @@
 pub mod hooks;
 
-mod call;
-mod genesis;
+pub mod call;
+pub mod genesis;
 #[cfg(feature = "native")]
-mod query;
+pub mod query;
 #[cfg(test)]
 mod tests;
 
