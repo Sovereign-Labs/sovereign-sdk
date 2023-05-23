@@ -126,9 +126,9 @@ impl Signature for DefaultSignature {
 }
 
 fn map_error(_e: ed25519_dalek::SignatureError) -> std::io::Error {
-    // if cfg!(feature = "native") {
-    //     std::io::Error::new(std::io::ErrorKind::Other, e)
-    // } else {
-    std::io::Error::new(std::io::ErrorKind::Other, "Signature error")
-    // }
+    if cfg!(feature = "native") {
+        std::io::Error::new(std::io::ErrorKind::Other, e)
+    } else {
+        std::io::Error::new(std::io::ErrorKind::Other, "Signature error")
+    }
 }
