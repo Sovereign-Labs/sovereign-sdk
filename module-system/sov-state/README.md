@@ -76,7 +76,7 @@ The `sov-state` crate offers two implementations of the `Storage` trait, namely 
 
 
 ### `WorkingSet`:
-Performing state updates and generating witnesses is a costly process. Thus, it is logical to incorporate caching layers to alleviate these issues. For more information about our cache, refer to the `first-read-last-write-cache` crate. Furthermore, caches simplify the process of implementing state reverts. In the event that a specific transaction needs to be reverted, we can simply discard all the writes made to the relevant cache.
+Performing state updates and generating witnesses is a costly process. Thus, it is logical to incorporate caching layers to alleviate these issues. The WorkingSet writes data to the in-memory map and reads from the backing store only if the data is absent from the map. For more information about our cache, refer to the `first-read-last-write-cache` crate. Furthermore, caches simplify the process of implementing state reverts. In the event that a specific transaction needs to be reverted, we can simply discard all the writes made to the relevant cache.
 
 
 
