@@ -17,3 +17,10 @@ The `sov-modules-api` crate provides essential traits for the `Sovereign` module
 This crate defines also the default implementation for the `Context` trait.
 
 
+1. The `Genesis` trait: Defines how the Rollup is initialized during deployment phase.
+
+1. The `DispatchCall` trait: Defines how messages are forwarded to the appropriate module and how the call message is executed. The implementation of this trait can be generated automatically using a macro.
+
+1. The `DispatchQuery` trait: Defines the procedure for forwarding queries to the relevant module.  Similarly to the DispatchCall trait, The implementation of this trait can be generated automatically using a macro.
+
+
