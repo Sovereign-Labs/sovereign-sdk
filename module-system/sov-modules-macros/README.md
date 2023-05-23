@@ -12,7 +12,7 @@ The following derive macros are supported:
 1. The `DispatchQuery`: Derives the `sov-modules-api::DispatchQuery` implementation for the underlying type.
 1. The `MessageCodec`: Adds message serialization/deserialization functionality to the underlying type.
 
-The definitions of the above traits can be found here [sov-modules-api](../sov-modules-api/README.md)
+The definitions of the traits mentioned above can be found in the [sov-modules-api](../sov-modules-api/README.md) crate. 
 
 Example of usage:
 
