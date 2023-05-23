@@ -1,7 +1,7 @@
 use core::panic;
 
 use crate::{
-    app::{create_demo_config, create_new_demo, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
+    app::{create_demo_config, create_new_demo, EXAMPLE_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
     data_generation::{
         simulate_da_with_bad_serialization, simulate_da_with_bad_sig, simulate_da_with_revert_msg,
         QueryGenerator,
