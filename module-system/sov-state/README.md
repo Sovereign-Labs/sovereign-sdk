@@ -72,11 +72,9 @@ pub trait Storage: Clone {
     ) -> Result<[u8; 32], anyhow::Error>;
 }
 ```
-The `sov-state` crate offers two implementations of the `Storage` trait, namely `ZkStorage` and `ProverStorage`, which handle the storage and retrieval of data in the context of the `Zkp` and `Prover` execution modes, respectively. These implementations encapsulate the necessary logic and interactions with the storage system, allowing module developers to work with a consistent interface regardless of the execution mode.
+
+The `sov-state` crate provides two implementations of the Storage trait: `ZkStorage` and `ProverStorage`. These implementations handle the storage and retrieval of data within the context of the `Zkp` and `Native` execution modes, respectively. (To improve performance when `ZKP` generation is not a concern, an additional implementation can be added that excludes the generation of the witness). These implementations encapsulate the required logic and interactions with the storage system, allowing module developers to work with a consistent interface regardless of the execution mode.
 
 
 ### `WorkingSet`:
 Performing state updates and generating witnesses is a costly process. Thus, it is logical to incorporate caching layers to alleviate these issues. The WorkingSet writes data to the in-memory map and reads from the backing store only if the data is absent from the map. For more information about our cache, refer to the `first-read-last-write-cache` crate. Furthermore, caches simplify the process of implementing state reverts. In the event that a specific transaction needs to be reverted, we can simply discard all the writes made to the relevant cache.
-
-
-
