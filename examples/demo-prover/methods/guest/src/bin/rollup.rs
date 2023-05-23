@@ -7,15 +7,13 @@ use demo_stf::ArrayWitness;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::{CelestiaSpec, CelestiaVerifier};
 use jupiter::{BlobWithSender, CelestiaHeader};
+use risc0_adapter::guest::Risc0Guest;
 use risc0_zkvm::guest::env;
-
-use sovereign_core::da::{DaSpec, DaVerifier};
-use sovereign_core::stf::{StateTransitionFunction, StateTransitionRunner, ZkConfig};
-use sovereign_core::zk::traits::ZkvmGuest;
+use sov_rollup_interface::da::{DaSpec, DaVerifier};
+use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner, ZkConfig};
+use sov_rollup_interface::zk::traits::ZkvmGuest;
 
 risc0_zkvm::guest::entry!(main);
-use risc0_adapter::guest::Risc0Guest;
-
 // steps:
 //  0. Read tx list and proofs
 //  1. Call verify_relevant_tx_list()
@@ -32,11 +30,10 @@ pub fn main() {
         namespace: NamespaceId([115, 111, 118, 45, 116, 101, 115, 116]),
     });
     // Step 1: read tx list
-    // TODO: Unify serde::serialize with encode/decode
-    let header: CelestiaHeader = env::read();
-    env::write(&"header read");
+    let header: CelestiaHeader = guest.read_from_host();
+    env::write(&"header read\n");
     let txs: Vec<BlobWithSender> = guest.read_from_host();
-    env::write(&"txs read");
+    env::write(&"txs read\n");
     let inclusion_proof: <CelestiaSpec as DaSpec>::InclusionMultiProof = guest.read_from_host();
     let completeness_proof: <CelestiaSpec as DaSpec>::CompletenessProof = guest.read_from_host();
 
@@ -62,14 +59,18 @@ fn state_transition(guest: &Risc0Guest, batches: Vec<BlobWithSender>) {
     let demo = demo_runner.inner_mut();
 
     let witness: ArrayWitness = guest.read_from_host();
+    env::write(&"Witness read\n");
 
     demo.begin_slot(witness);
+    env::write(&"Slot has begun\n");
     for batch in batches {
         demo.apply_blob(batch, None);
         env::write(&"Blob applied\n");
     }
     let (state_root, _, _) = demo.end_slot();
+    env::write(&"Slot has ended\n");
     env::commit(&state_root);
+    env::write(&"new state root committed\n");
 }
 
 #[test]

@@ -11,8 +11,8 @@ dependencies = [
  "hex",
  "sov-modules-api",
  "sov-modules-macros",
+ "sov-rollup-interface",
  "sov-state",
- "sovereign-core",
  "thiserror",
 ]
 
@@ -66,8 +66,8 @@ dependencies = [
  "hex",
  "sov-modules-api",
  "sov-modules-macros",
+ "sov-rollup-interface",
  "sov-state",
- "sovereign-core",
  "thiserror",
 ]
 
@@ -381,8 +381,8 @@ dependencies = [
  "sov-app-template",
  "sov-modules-api",
  "sov-modules-macros",
+ "sov-rollup-interface",
  "sov-state",
- "sovereign-core",
  "value-setter",
 ]
 
@@ -523,8 +523,8 @@ dependencies = [
  "hex",
  "sov-modules-api",
  "sov-modules-macros",
+ "sov-rollup-interface",
  "sov-state",
- "sovereign-core",
  "thiserror",
 ]
 
@@ -1036,7 +1036,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
- "sovereign-core",
+ "sov-rollup-interface",
  "tendermint",
  "tendermint-proto",
  "tracing",
@@ -1560,7 +1560,7 @@ dependencies = [
  "bincode",
  "risc0-zkvm",
  "serde",
- "sovereign-core",
+ "sov-rollup-interface",
 ]
 
 [[package]]
@@ -1678,7 +1678,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.6",
- "sovereign-core",
+ "sov-rollup-interface",
  "tempfile",
  "zip",
 ]
@@ -1760,8 +1760,8 @@ dependencies = [
  "hex",
  "sov-modules-api",
  "sov-modules-macros",
+ "sov-rollup-interface",
  "sov-state",
- "sovereign-core",
  "thiserror",
 ]
 
@@ -1912,8 +1912,8 @@ dependencies = [
  "borsh",
  "serde",
  "sov-modules-api",
+ "sov-rollup-interface",
  "sov-state",
- "sovereign-core",
  "tracing",
 ]
 
@@ -1929,8 +1929,8 @@ dependencies = [
  "jmt",
  "serde",
  "sha2 0.10.6",
+ "sov-rollup-interface",
  "sov-state",
- "sovereign-core",
  "thiserror",
 ]
 
@@ -1943,8 +1943,21 @@ dependencies = [
  "proc-macro2",
  "quote",
  "sov-modules-api",
- "sovereign-core",
+ "sov-rollup-interface",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "sov-rollup-interface"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "bytes",
+ "jmt",
+ "serde",
+ "sha2 0.10.6",
+ "thiserror",
 ]
 
 [[package]]
@@ -1955,19 +1968,6 @@ dependencies = [
  "borsh",
  "first-read-last-write-cache",
  "hex",
- "jmt",
- "serde",
- "sha2 0.10.6",
- "thiserror",
-]
-
-[[package]]
-name = "sovereign-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "bytes",
  "jmt",
  "serde",
  "sha2 0.10.6",
@@ -2287,8 +2287,8 @@ dependencies = [
  "borsh",
  "sov-modules-api",
  "sov-modules-macros",
+ "sov-rollup-interface",
  "sov-state",
- "sovereign-core",
  "thiserror",
 ]
 

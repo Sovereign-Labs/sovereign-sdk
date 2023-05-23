@@ -11,7 +11,7 @@ risc0-zkvm = { version = "0.14", default-features = false, features = ["std"] }
 borsh = { version = "0.10.3", features = ["bytes"] }
 jupiter = { path = "../../../../adapters/celestia", default-features = false }
 demo-stf = { path = "../../../demo-stf", default-features = false }
-sovereign-core = { path = "../../../../core" }
+sov-rollup-interface = { path = "../../../../rollup-interface" }
 risc0-adapter = { path = "../../../../adapters/risc0", default-features = false }
 
 

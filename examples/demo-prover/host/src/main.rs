@@ -5,16 +5,12 @@ use demo_stf::config::Config as RunnerConfig;
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
 use jupiter::verifier::RollupParams;
-
-use risc0_adapter::host::Risc0Host;
-use risc0_zkvm::serde::to_vec;
-use sovereign_core::services::da::DaService;
-use sovereign_core::stf::{StateTransitionFunction, StateTransitionRunner};
-use sovereign_core::zk::traits::ZkvmHost;
-
-use serde::Deserialize;
-
 use methods::{ROLLUP_ELF, ROLLUP_ID};
+use risc0_adapter::host::Risc0Host;
+use serde::Deserialize;
+use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner};
+use sov_rollup_interface::zk::traits::ZkvmHost;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RollupConfig {
@@ -27,15 +23,12 @@ pub struct RollupConfig {
 async fn main() -> Result<(), anyhow::Error> {
     let rollup_config: RollupConfig = from_toml_path("rollup_config.toml")?;
 
-    let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
     let da_service = CelestiaService::new(
         rollup_config.da.clone(),
         RollupParams {
             namespace: NamespaceId([115, 111, 118, 45, 116, 101, 115, 116]),
         },
     );
-
-    let demo = demo_runner.inner_mut();
 
     let sequencer_private_key = DefaultPrivateKey::generate();
     let genesis_config = create_demo_genesis_config(
@@ -49,6 +42,9 @@ async fn main() -> Result<(), anyhow::Error> {
         &sequencer_private_key,
         &sequencer_private_key,
     );
+
+    let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
+    let demo = demo_runner.inner_mut();
     demo.init_chain(genesis_config);
 
     demo.begin_slot(Default::default());
@@ -63,15 +59,10 @@ async fn main() -> Result<(), anyhow::Error> {
             hex::encode(&prev_state_root)
         );
         let filtered_block = da_service.get_finalized_at(height).await?;
-        let serialized_header = to_vec(&filtered_block.header).unwrap();
+        host.write_to_guest(&filtered_block.header);
         let (blob_txs, inclusion_proof, completeness_proof) =
             da_service.extract_relevant_txs_with_proof(filtered_block);
 
-        // // let mut prover =
-        //     Prover::new(ROLLUP_ELF).expect("Prover should be constructed from valid ELF binary");
-
-        // prover.add_input_u32_slice(&serialized_header);
-        host.write_to_guest(&serialized_header);
         host.write_to_guest(&blob_txs);
         host.write_to_guest(&inclusion_proof);
         host.write_to_guest(&completeness_proof);
@@ -83,14 +74,15 @@ async fn main() -> Result<(), anyhow::Error> {
         }
 
         let (next_state_root, witness, _) = demo.end_slot();
-        host.write_to_guest(witness);
-        // prover.add_input_u8_slice(host.hints.borrow().as_slice());
+        host.write_to_guest(&witness);
 
+        println!("Starting proving");
         let receipt = host.run().expect("Prover should run successfully");
+        println!("Start verifying");
         receipt.verify(&ROLLUP_ID).expect("Receipt should be valid");
 
         prev_state_root = next_state_root.0;
-        println!("Completed proving block {}", height);
+        println!("Completed proving and verifying block {height}");
     }
 
     Ok(())

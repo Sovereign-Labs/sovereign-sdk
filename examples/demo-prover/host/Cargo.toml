@@ -18,7 +18,7 @@ tracing-subscriber = "0.3.16"
 
 jupiter = { path = "../../../adapters/celestia", features = ["native"] }
 demo-stf = { path = "../../demo-stf" }
-sovereign-core = { path = "../../../core" }
+sov-rollup-interface = { path = "../../../rollup-interface" }
 risc0-adapter = { path = "../../../adapters/risc0" }
 
 methods = { path = "../methods" }
