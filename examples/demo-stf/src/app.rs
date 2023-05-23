@@ -12,13 +12,14 @@ pub use sov_modules_api::default_context::DefaultContext;
 pub use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::Context;
+use sov_modules_api::{Context, RpcRunner};
 #[cfg(feature = "native")]
 use sov_modules_api::PublicKey;
-use sov_modules_api::{Hasher, Spec, StateTransitionRunner};
+use sov_modules_api::{Hasher, Spec};
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::ProverConfig;
 use sov_rollup_interface::stf::ZkConfig;
+use sov_rollup_interface::stf::StateTransitionRunner;
 use sov_rollup_interface::zk::traits::Zkvm;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
@@ -56,7 +57,6 @@ pub const TOKEN_NAME: &str = "sov-test-token";
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
     type RuntimeConfig = Config;
     type Inner = DemoApp<DefaultContext, Vm>;
-    type Context = DefaultContext;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let runtime = Runtime::new();
@@ -76,15 +76,11 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
         &mut self.0
     }
 
-    fn get_storage(&self) -> <Self::Context as Spec>::Storage {
-        self.inner().current_storage.clone()
-    }
 }
 
 impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultContext, Vm> {
     type RuntimeConfig = [u8; 32];
     type Inner = DemoApp<ZkDefaultContext, Vm>;
-    type Context = ZkDefaultContext;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let runtime = Runtime::new();
@@ -109,10 +105,16 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
         &mut self.0
     }
 
+}
+
+#[cfg(feature = "native")]
+impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
+    type Context = DefaultContext;
     fn get_storage(&self) -> <Self::Context as Spec>::Storage {
         self.inner().current_storage.clone()
     }
 }
+
 
 #[cfg(feature = "native")]
 ///

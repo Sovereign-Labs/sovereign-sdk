@@ -170,3 +170,24 @@ impl ConsensusSetUpdate<OpaqueAddress> {
         }
     }
 }
+
+pub trait StateTransitionRunner<T: StateTransitionConfig, Vm: Zkvm> {
+    /// The parameters of the state transition function which are set at runtime. For example,
+    /// the runtime config might contain path to a data directory.
+    type RuntimeConfig;
+    type Inner: StateTransitionFunction<Vm>;
+
+    // TODO: decide if `new` also requires <Self as StateTransitionFunction>::ChainParams as an argument
+    /// Create a state transition runner
+    fn new(runtime_config: Self::RuntimeConfig) -> Self;
+
+    /// Return a reference to the inner STF implementation
+    fn inner(&self) -> &Self::Inner;
+
+    /// Return a mutable reference to the inner STF implementation
+    fn inner_mut(&mut self) -> &mut Self::Inner;
+
+    // /// Report if the state transition function has been initialized.
+    // /// If not, node implementations should respond by running `init_chain`
+    // fn has_been_initialized(&self) -> bool;
+}

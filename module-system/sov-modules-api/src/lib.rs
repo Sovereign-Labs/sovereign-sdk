@@ -26,8 +26,6 @@ use sov_state::{Storage, Witness, WorkingSet};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use core::fmt::{self, Debug, Display};
-use sov_rollup_interface::stf::{StateTransitionConfig, StateTransitionFunction};
-use sov_rollup_interface::zk::traits::Zkvm;
 use thiserror::Error;
 
 impl AsRef<[u8]> for Address {
@@ -223,26 +221,9 @@ pub trait ModuleInfo {
     fn address(&self) -> &<Self::Context as Spec>::Address;
 }
 
-pub trait StateTransitionRunner<T: StateTransitionConfig, Vm: Zkvm> {
-    /// The parameters of the state transition function which are set at runtime. For example,
-    /// the runtime config might contain path to a data directory.
-    type RuntimeConfig;
-    type Inner: StateTransitionFunction<Vm>;
+/// A StateTransitionRunner needs to implement this if
+/// the RPC service is needed
+pub trait RpcRunner {
     type Context: Context;
-    // TODO: decide if `new` also requires <Self as StateTransitionFunction>::ChainParams as an argument
-    /// Create a state transition runner
-    fn new(runtime_config: Self::RuntimeConfig) -> Self;
-
-    /// Return a reference to the inner STF implementation
-    fn inner(&self) -> &Self::Inner;
-
-    /// Return a mutable reference to the inner STF implementation
-    fn inner_mut(&mut self) -> &mut Self::Inner;
-
-    /// Return a mutable reference to the inner STF implementation
     fn get_storage(&self) -> <Self::Context as Spec>::Storage;
-
-    // /// Report if the state transition function has been initialized.
-    // /// If not, node implementations should respond by running `init_chain`
-    // fn has_been_initialized(&self) -> bool;
 }
