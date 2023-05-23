@@ -25,8 +25,8 @@ use std::{collections::HashMap, path::Path, sync::Mutex};
 use tracing::info;
 
 pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
-pub use sovereign_core::db::Schema;
-use sovereign_core::db::{ColumnFamilyName, KeyCodec, ValueCodec};
+pub use sov_rollup_interface::db::Schema;
+use sov_rollup_interface::db::{ColumnFamilyName, KeyCodec, ValueCodec};
 
 pub mod iterator;
 mod metrics;

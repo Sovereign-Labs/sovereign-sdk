@@ -5,7 +5,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespacedHash;
 use prost::{bytes::Buf, Message};
 use serde::{Deserialize, Serialize};
-use sovereign_core::traits::{
+use sov_rollup_interface::traits::{
     AddressTrait as Address, BlockHeaderTrait as BlockHeader, CanonicalHash,
 };
 pub use tendermint::block::Header as TendermintHeader;

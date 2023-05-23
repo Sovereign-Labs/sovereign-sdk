@@ -9,7 +9,7 @@ use prost::{
     DecodeError,
 };
 use serde::{de::Error, Deserialize, Serialize};
-use sovereign_core::{
+use sov_rollup_interface::{
     crypto::hash::{sha2, Sha2Hash},
     Bytes,
 };
@@ -80,7 +80,7 @@ impl<'de> Deserialize<'de> for Share {
     where
         D: serde::Deserializer<'de>,
     {
-        let mut share = <sovereign_core::Bytes as Deserialize>::deserialize(deserializer)?;
+        let mut share = <sov_rollup_interface::Bytes as Deserialize>::deserialize(deserializer)?;
         if share.len() == B64_SHARE_SIZE {
             let mut decoded = BytesMut::with_capacity(SHARE_SIZE);
             unsafe { decoded.set_len(SHARE_SIZE) }

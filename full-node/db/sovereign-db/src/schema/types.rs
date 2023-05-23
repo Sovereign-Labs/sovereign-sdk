@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use sovereign_core::{
+use sov_rollup_interface::{
     rpc::{BatchResponse, TxIdentifier, TxResponse},
     stf::{Event, EventKey, TransactionReceipt},
 };

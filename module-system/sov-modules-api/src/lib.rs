@@ -21,8 +21,8 @@ pub use jmt::SimpleHasher as Hasher;
 pub use prefix::Prefix;
 pub use response::{CallResponse, QueryResponse};
 
+pub use sov_rollup_interface::traits::AddressTrait;
 use sov_state::{Storage, Witness, WorkingSet};
-pub use sovereign_core::traits::AddressTrait;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use core::fmt::{self, Debug, Display};
@@ -106,8 +106,17 @@ pub trait PublicKey {
     fn to_address<A: AddressTrait>(&self) -> A;
 }
 
-/// Spec contains types common for all modules.
+/// The `Spec` trait configures certain key primitives to be used by a by a particular instance of a rollup.
+/// `Spec` is almost always implemented on a Context object; since all Modules are generic
+/// over a Context, rollup developers can easily optimize their code for different environments
+/// by simply swapping out the Context (and by extension, the Spec).
+///
+/// For example, a rollup running in a STARK-based zkvm like Risc0 might pick Sha256 or Poseidon as its preferred hasher,
+/// while a rollup running in an elliptic-curve based SNARK such as `Placeholder` from the =nil; foundation might
+/// prefer a Pedersen hash. By using a generic Context and Spec, a rollup developer can trivially customize their
+/// code for either (or both!) of these environments without touching their module implementations.
 pub trait Spec {
+    /// The Address type used on the rollup. Typically calculated as the hash of a public key.
     #[cfg(feature = "native")]
     type Address: AddressTrait
         + BorshSerialize
@@ -115,15 +124,20 @@ pub trait Spec {
         + Into<AddressBech32>
         + From<AddressBech32>;
 
+    /// The Address type used on the rollup. Typically calculated as the hash of a public key.
     #[cfg(not(feature = "native"))]
     type Address: AddressTrait + BorshSerialize + BorshDeserialize;
 
+    /// Authenticated state storage used by the rollup. Typically some variant of a merkle-patricia trie.
     type Storage: Storage + Clone;
 
+    /// The public key used for digital signatures
     type PublicKey: borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug + PublicKey;
 
+    /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
     type Hasher: Hasher;
 
+    /// The digital signature scheme used by the rollup
     type Signature: borsh::BorshDeserialize
         + borsh::BorshSerialize
         + Eq
@@ -131,10 +145,17 @@ pub trait Spec {
         + Debug
         + Signature<PublicKey = Self::PublicKey>;
 
+    /// A structure containing the non-deterministic inputs from the prover to the zk-circuit
     type Witness: Witness;
 }
 
-/// Context contains functionality common for all modules.
+/// A context contains information which is passed to modules during
+/// transaction execution. Currently, context includes the sender of the transaction
+/// as recovered from its signature.
+///
+/// Context objects also implement the [`Spec`] trait, which specifies the types to be used in this
+/// instance of the state transition function. By making modules generic over a `Context`, developers
+/// can easily update their cryptography to conform to the needs of different zk-proof systems.
 pub trait Context: Spec + Clone + Debug + PartialEq {
     /// Sender of the transaction.
     fn sender(&self) -> &Self::Address;

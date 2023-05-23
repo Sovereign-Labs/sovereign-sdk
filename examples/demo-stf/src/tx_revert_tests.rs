@@ -13,8 +13,8 @@ use sov_app_template::{Batch, SlashingReason};
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
 };
+use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
 use sov_state::ProverStorage;
-use sovereign_core::{mocks::MockZkvm, stf::StateTransitionFunction};
 
 const SEQUENCER_BALANCE_DELTA: u64 = 1;
 const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + SEQUENCER_BALANCE_DELTA;

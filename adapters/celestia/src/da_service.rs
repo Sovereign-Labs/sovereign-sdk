@@ -5,7 +5,7 @@ use jsonrpsee::{
     http_client::{HeaderMap, HttpClient},
 };
 use nmt_rs::NamespaceId;
-use sovereign_core::services::da::DaService;
+use sov_rollup_interface::services::da::DaService;
 use tracing::{debug, info, span, Level};
 
 // 0x736f762d74657374 = b"sov-test"
@@ -209,7 +209,7 @@ impl DaService for CelestiaService {
     fn extract_relevant_txs(
         &self,
         block: Self::FilteredBlock,
-    ) -> Vec<<Self::Spec as sovereign_core::da::DaSpec>::BlobTransaction> {
+    ) -> Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction> {
         let mut output = Vec::new();
         for blob in block.rollup_data.blobs() {
             let commitment =
@@ -235,9 +235,9 @@ impl DaService for CelestiaService {
         &self,
         block: Self::FilteredBlock,
     ) -> (
-        Vec<<Self::Spec as sovereign_core::da::DaSpec>::BlobTransaction>,
-        <Self::Spec as sovereign_core::da::DaSpec>::InclusionMultiProof,
-        <Self::Spec as sovereign_core::da::DaSpec>::CompletenessProof,
+        Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction>,
+        <Self::Spec as sov_rollup_interface::da::DaSpec>::InclusionMultiProof,
+        <Self::Spec as sov_rollup_interface::da::DaSpec>::CompletenessProof,
     ) {
         let relevant_txs = self.extract_relevant_txs(block.clone());
         let etx_proofs = CorrectnessProof::for_block(&block, &relevant_txs);

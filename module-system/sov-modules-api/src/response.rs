@@ -1,4 +1,4 @@
-use sovereign_core::stf::Event;
+use sov_rollup_interface::stf::Event;
 
 /// Response type for the `Module::call` method.
 #[derive(Default)]

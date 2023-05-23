@@ -1,7 +1,7 @@
 use anyhow::Result;
 use std::marker::PhantomData;
 
-use sovereign_core::db::{KeyDecoder, Schema, SeekKeyEncoder, ValueCodec};
+use sov_rollup_interface::db::{KeyDecoder, Schema, SeekKeyEncoder, ValueCodec};
 
 use crate::metrics::{SCHEMADB_ITER_BYTES, SCHEMADB_ITER_LATENCY_SECONDS};
 
