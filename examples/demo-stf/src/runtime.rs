@@ -11,7 +11,7 @@ use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 ///
 /// In order to define the runtime we need to specify all the modules supported by our rollup (see the `Runtime` struct bellow)
 ///
-/// The `Runtime` together with associated interfaces (`Genesis`, `DispatchCall`, `DispatchQuery`, `MessageCodec`)
+/// The `Runtime` together with associated interfaces (`Genesis`, `DispatchCall`, `MessageCodec`)
 /// and derive macros defines:
 /// - how the rollup modules are wired up together.
 /// - how the state of the rollup is initialized.
@@ -29,10 +29,6 @@ use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 ///     In general, the point of a call is to change the module state, but if the call throws an error,
 ///     no state is updated (the transaction is reverted).
 ///
-/// 3. Queries:
-///    The `Module` interface defines a `query` method, which allows querying the state of the module.
-///     Queries are read only i.e they don't change the state of the rollup.
-///     
 /// `#[derive(MessageCodec)` adds deserialization capabilities to the `Runtime` (implements `decode_call` method).
 /// `Runtime::decode_call` accepts serialized call message and returns a type that implements the `DispatchCall` trait.
 ///  The `DispatchCall` implementation (derived by a macro) forwards the message to the appropriate module and executes its `call` method.

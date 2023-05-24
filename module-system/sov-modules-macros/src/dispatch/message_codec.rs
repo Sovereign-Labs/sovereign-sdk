@@ -34,7 +34,7 @@ impl<'a> StructDef<'a> {
         let where_clause = self.where_clause;
 
         // Adds decoding functionality to the underlying type and
-        // hides auto generated types behind impl DispatchQuery & impl DispatchCall.
+        // hides auto generated types behind impl DispatchCall.
         quote::quote! {
             impl #impl_generics #original_ident #ty_generics #where_clause {
                 #(#fns)*

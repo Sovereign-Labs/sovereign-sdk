@@ -6,9 +6,9 @@ The Sovereign Software Development Kit (SDK) includes a [Module System](../../mo
 which serves as a catalog of concrete and opinionated implementations for the rollup interface.
 These modules are the fundamental building blocks of a rollup and include:
 
-* **Protocol-level logic**: This includes elements such as account management, state management logic,
+- **Protocol-level logic**: This includes elements such as account management, state management logic,
   APIs for other modules, and macros for generating RPC. It provides the blueprint for your rollup.
-* **Application-level logic**: This is akin to smart contracts on Ethereum or pallets on Polkadot.
+- **Application-level logic**: This is akin to smart contracts on Ethereum or pallets on Polkadot.
   These modules often use state, modules-API, and macros modules to simplify their development and operation.
 
 ## Creating a Non-Fungible Token (NFT) Module
@@ -79,8 +79,8 @@ pub struct NonFungibleToken<C: Context> {
 This module includes:
 
 1. **Address**: Every module must have an address, like a smart contract address in Ethereum. This ensures that:
-    - The module address is unique.
-    - The private key that generates this address is unknown.
+   - The module address is unique.
+   - The private key that generates this address is unknown.
 2. **State** attributes: In this case, the state attributes are the admin's address and a map of token IDs to owner
    addresses.
    For simplicity, the token ID is an u64.
@@ -120,36 +120,37 @@ Before we start implementing the `Module` trait, there are several preparatory s
    [borsh](https://github.com/near/borsh-rs),
    [sov-state](../../module-system/sov-state/README.md)
 2. Define a 'native' feature flag to separate logic that isn't needed in zero-knowledge mode.
-3. Define `Call` and `Query` messages.
+3. Define `Call` messages.
 4. Define `Config`.
 
 ## Preparation
 
-1. Define `native` feature in `Cargo.toml`:
-   ```toml
-   [dependencies]
-   anyhow = "1.0.62"
-   borsh = { version = "0.10.3", features = ["bytes"] }
-   serde = { version = "1", features = ["derive"] }
-   serde_json = "1"
+1.  Define `native` feature in `Cargo.toml`:
 
-    sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign.git", branch = "main", default-features = false }
-    sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign.git", branch = "main" }
-    sov-state = { git = "https://github.com/Sovereign-Labs/sovereign.git", branch = "main", default-features = false }
+    ```toml
+    [dependencies]
+    anyhow = "1.0.62"
+    borsh = { version = "0.10.3", features = ["bytes"] }
+    serde = { version = "1", features = ["derive"] }
+    serde_json = "1"
 
-    [features]
-    default = ["native"]
-    serde = ["dep:serde", "dep:serde_json"]
-    native = ["serde", "sov-state/native", "sov-modules-api/native"]
+     sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign.git", branch = "main", default-features = false }
+     sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign.git", branch = "main" }
+     sov-state = { git = "https://github.com/Sovereign-Labs/sovereign.git", branch = "main", default-features = false }
+
+     [features]
+     default = ["native"]
+     serde = ["dep:serde", "dep:serde_json"]
+     native = ["serde", "sov-state/native", "sov-modules-api/native"]
     ```
 
-   This step is necessary to optimize the module for execution in ZK mode, where none of the RPC-related logic is
-   needed.
-   Zero Knowledge mode uses a different serialization format, so serde is not needed.
-   The `sov-state` module maintains same logic, so its `native` flag only enabled in that case.
+    This step is necessary to optimize the module for execution in ZK mode, where none of the RPC-related logic is
+    needed.
+    Zero Knowledge mode uses a different serialization format, so serde is not needed.
+    The `sov-state` module maintains same logic, so its `native` flag only enabled in that case.
 
-2. Define `Call` and `Query` messages: `Call` messages are used to change the state of the module, while `Query`
-   messages are used to read the state of the module.
+2.  Define `Call` messages, which are used to change the state of the module.
+
     ```rust
     use sov_modules_api::Context;
 
@@ -171,23 +172,15 @@ Before we start implementing the `Module` trait, there are several preparatory s
         }
     }
 
+    ```
 
-    /// This enumeration responsible for querying the nft module.
-    #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
-    pub enum QueryMessage {
-        GetOwner { token_id: u64 },
+3.  Define Config. In this case, config will contain admin and initial tokens:
+    ```rust
+    pub struct NonFungibleTokenConfig<C: Context> {
+        pub admin: C::Address,
+        pub owners: Vec<(u64, C::Address)>,
     }
     ```
-       The Query message is only used in native mode, as it doesn't change the state and therefore isn't used in the state
-       transition function.
-
-3. Define Config. In this case, config will contain admin and initial tokens:
-   ```rust
-   pub struct NonFungibleTokenConfig<C: Context> {
-       pub admin: C::Address,
-       pub owners: Vec<(u64, C::Address)>,
-   }
-   ```
 
 # Stub implementation of the Module trait
 
@@ -200,9 +193,6 @@ impl<C: Context> Module for NonFungibleToken<C> {
     type Config = NonFungibleTokenConfig<C>;
 
     type CallMessage = call::CallMessage<C>;
-
-    #[cfg(feature = "native")]
-    type QueryMessage = query::QueryMessage;
 
     fn genesis(
         &self,
@@ -219,15 +209,6 @@ impl<C: Context> Module for NonFungibleToken<C> {
         _working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse, Error> {
         Ok(CallResponse::default())
-    }
-
-    #[cfg(feature = "native")]
-    fn query(
-        &self,
-        _msg: Self::QueryMessage,
-        _working_set: &mut WorkingSet<C::Storage>,
-    ) -> QueryResponse {
-        QueryResponse::default()
     }
 }
 ```
@@ -359,40 +340,20 @@ impl<C: Context> Module for NonFungibleToken<C> {
 }
 ```
 
-## Query Messages
+## Enabling Queries
 
-The same approach follows for the query:
+We also want other modules to be able to query the owner of a token, so we add a public method for that. This method is only available to modules,
+but is not currently exposed via RPC.
 
 ```rust
 impl<C: Context> NonFungibleToken<C> {
-    pub(crate) fn get_owner(
+    pub fn get_owner(
         &self,
         token_id: u64,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> OwnerResponse<C> {
         OwnerResponse {
             owner: self.owners.get(&token_id, working_set),
-        }
-    }
-}
-```
-
-And then plug it in trait implementation:
-
-```rust
-impl<C: Context> Module for NonFungibleToken<C> {
-    // ...
-    #[cfg(feature = "native")]
-    fn query(
-        &self,
-        msg: Self::QueryMessage,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> QueryResponse {
-        match msg {
-            query::QueryMessage::GetOwner { token_id } => {
-                let response = serde_json::to_vec(&self.get_owner(token_id, working_set)).unwrap();
-                QueryResponse { response }
-            }
         }
     }
 }
@@ -414,7 +375,7 @@ Here is boilerplate for NFT module integration tests
 
 ```rust
 use demo_nft_module::call::CallMessage;
-use demo_nft_module::query::{OwnerResponse, QueryMessage};
+use demo_nft_module::query::OwnerResponse;
 use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
 use serde::de::DeserializeOwned;
 use sov_modules_api::default_context::DefaultContext;
@@ -428,16 +389,6 @@ pub fn generate_address(key: &str) -> <C as Spec>::Address {
     let hash = <C as Spec>::Hasher::hash(key.as_bytes());
     Address::from(hash)
 }
-
-pub fn query_and_deserialize<R: DeserializeOwned>(
-    nft: &NonFungibleToken<C>,
-    query: QueryMessage,
-    working_set: &mut WorkingSet<Storage>,
-) -> R {
-    let response = nft.query(query, working_set);
-    serde_json::from_slice(&response.response).expect("Failed to deserialize response json")
-}
-
 #[test]
 #[ignore = "Not implemented yet"]
 fn genesis_and_mint() {}
@@ -488,7 +439,7 @@ fn transfer() {
 Now this module can be added to rollup's Runtime:
 
 ```rust
-#[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
+#[derive(Genesis, DispatchCall, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
     #[allow(unused)]

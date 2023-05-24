@@ -14,12 +14,12 @@ mod response;
 #[cfg(test)]
 mod tests;
 pub use crate::bech32::AddressBech32;
-pub use dispatch::{DispatchCall, DispatchQuery, Genesis};
+pub use dispatch::{DispatchCall, Genesis};
 pub use error::Error;
 pub use jmt::SimpleHasher as Hasher;
 
 pub use prefix::Prefix;
-pub use response::{CallResponse, QueryResponse};
+pub use response::CallResponse;
 
 pub use sov_rollup_interface::traits::AddressTrait;
 use sov_state::{Storage, Witness, WorkingSet};
