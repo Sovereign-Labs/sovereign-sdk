@@ -51,10 +51,10 @@ pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
 
 pub type DemoApp<C, Vm> = AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>, Vm>;
 
-pub const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
+pub const TEST_SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 pub const LOCKED_AMOUNT: u64 = 200;
-pub const SEQ_PUB_KEY_STR: &str = "seq_pub_key";
-pub const TOKEN_NAME: &str = "sov-test-token";
+pub const TEST_SEQ_PUB_KEY_STR: &str = "seq_pub_key";
+pub const TEST_TOKEN_NAME: &str = "sov-test-token";
 
 #[cfg(feature = "native")]
 #[expose_rpc((Bank<DefaultContext>,Election<DefaultContext>,ValueSetter<DefaultContext>))]
@@ -128,8 +128,8 @@ pub fn create_demo_config(
 ) -> GenesisConfig<DefaultContext> {
     create_demo_genesis_config::<DefaultContext>(
         initial_sequencer_balance,
-        generate_address::<DefaultContext>(SEQ_PUB_KEY_STR),
-        SEQUENCER_DA_ADDRESS.to_vec(),
+        generate_address::<DefaultContext>(TEST_SEQ_PUB_KEY_STR),
+        TEST_SEQUENCER_DA_ADDRESS.to_vec(),
         value_setter_admin_private_key,
         election_admin_private_key,
     )
@@ -148,7 +148,7 @@ pub fn create_demo_genesis_config<C: Context>(
     use value_setter::ValueSetterConfig;
 
     let token_config: bank::TokenConfig<C> = bank::TokenConfig {
-        token_name: TOKEN_NAME.to_owned(),
+        token_name: TEST_TOKEN_NAME.to_owned(),
         address_and_balances: vec![(sequencer_address.clone(), initial_sequencer_balance)],
     };
 
