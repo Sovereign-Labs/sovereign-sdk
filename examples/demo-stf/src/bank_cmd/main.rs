@@ -169,7 +169,7 @@ mod test {
     use bank::query::QueryMessage;
     use demo_stf::{
         app::{create_demo_config, create_new_demo, DemoApp, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
-        helpers::{query_and_deserialize, TestBlob},
+        helpers::{new_test_blob, query_and_deserialize},
     };
     use sov_app_template::{Batch, RawTx, SequencerOutcome};
     use sov_modules_api::Address;
@@ -277,7 +277,7 @@ mod test {
 
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             demo,
-            TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS),
+            new_test_blob(Batch { txs }, &SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner;

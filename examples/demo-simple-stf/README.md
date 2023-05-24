@@ -1,0 +1,166 @@
+# Rollup from scratch.
+Many rollups have concepts like `Account` or `Token` and access the state in a similar manner. This is where the `module-system` becomes useful. It offers a standardized approach to writing business rollup logic. However, there are cases where your rollup requirements may be so unique, that the `module-system` could become a hindrance. In this tutorial, we will bypass the `module-system` and directly create a simple rollup by implementing a `StateTransitionFunction` "from scratch".
+
+In our rollup, we will verify whether the sender of a data blob possesses the preimage for a specific hash digest. It's important to note that our rollup is designed to be "stateless," meaning that implementing state access is not covered in this tutorial. However, if you're interested, you can refer to the `module-system/sov-state` for an example of how it can be done.
+
+## Implementing state transition function.
+The `StateTransitionFunction` trait serves as the core component of our rollup, where our business logic will reside. To begin, we will create a structure called `CheckHashPreimageStf` and implement the `StateTransitionFunction` trait for it. You can find the complete code in the `lib.rs` file, we will go over the most important parts of the code here:
+
+
+```rust
+pub struct CheckHashPreimageStf {}
+```
+
+The `ApplyBlobResult` represents the outcome of the state transition, and its specific usage will be explained later. Here is the code for it:
+
+```rust
+
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
+pub enum ApplyBlobResult {
+    Failure,
+    Success,
+}
+```
+
+Now let's discuss the implementation. Firstly, we define some types that are relevant to our rollup:
+
+```rust
+    // Since our rollup is stateless, we don't need to consider the StateRoot.
+    type StateRoot = ();
+
+    // This represents the initial configuration of the rollup, but it is not supported in this tutorial.
+    type InitialState = ();
+
+    // We could incorporate the concept of a transaction into the rollup, but we leave it as an exercise for the reader.
+    type TxReceiptContents = ();
+
+    // This is the type that will be returned as a result of `apply_blob`.
+    type BatchReceiptContents = ApplyBlobResult;
+
+   // This data is produced during actual batch execution or validated with proof during verification. However, in this tutorial, we won't use it.
+    type Witness = ();
+
+    // This represents a proof of misbehavior by the sequencer, but we won't utilize it in this tutorial.
+    type MisbehaviorProof = ();
+```
+
+Now that we have defined the necessary types, we need to implement the following functions:
+
+```rust
+    // Perform one-time initialization for the genesis block.
+    fn init_chain(&mut self, _params: Self::InitialState) {
+        // Do nothing
+    }
+
+    // Called at the beginning of each DA-layer block - whether or not that block contains any
+    // data relevant to the rollup.
+    fn begin_slot(&mut self, _witness: Self::Witness) {
+        // Do nothing
+    }
+```
+
+These functions handle the initialization and preparation stages of our rollup, but as we are not modifying the rollup state, their implementation is simply left empty.
+
+Next we need no writhe the core logic in `apply_blob`:
+
+```rust
+    // The core logic of our rollup.
+    fn apply_blob(
+        &mut self,
+        blob: impl BlobTransactionTrait,
+        _misbehavior_hint: Option<Self::MisbehaviorProof>,
+    ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
+        let blob_data = blob.data();
+        let mut reader = blob_data.reader();
+
+        // Read the data from the blob as a byte vec.
+        let mut data = Vec::new();
+
+        // Panicking within the `StateTransitionFunction` is generally not recommended.
+        // But here if we encounter an error while reading the bytes, it suggests a serious issue with the DA layer or our setup.
+        reader
+            .read_to_end(&mut data)
+            .unwrap_or_else(|e| panic!("Unable to read blob data {}", e));
+
+        // Check if the sender submitted the preimage of the hash.
+        let hash = sha2::Sha256::hash(&data);
+        let desired_hash = [
+            102, 104, 122, 173, 248, 98, 189, 119, 108, 143, 193, 139, 142, 159, 142, 32, 8, 151,
+            20, 133, 110, 226, 51, 179, 144, 42, 89, 29, 13, 95, 41, 37,
+        ];
+
+        let result = if hash == desired_hash {
+            ApplyBlobResult::Success
+        } else {
+            ApplyBlobResult::Failure
+        };
+
+        // Return the `BatchReceipt`
+        BatchReceipt {
+            batch_hash: hash,
+            tx_receipts: vec![],
+            inner: result,
+        }
+
+        // In the current implementation, every blob contains the data we pass to the hash function.
+        // As an exercise for the reader, you can introduce the concept of transactions.
+        // In this scenario, the blob would contain multiple transactions (containing data) that we can loop over to check hash equality.
+        // The first transaction that finds the correct hash would break the loop and return early.
+    }
+```
+The above function reads the data from the blob, computes the hash, compares it with the desired hash, and returns a `BatchReceipt` indicating whether the preimage was successfully submitted or not.
+
+The last method is `end_slot`, like before the implementation is trivial:
+
+```rust
+   fn end_slot(
+        &mut self,
+    ) -> (
+        Self::StateRoot,
+        Self::Witness,
+        Vec<ConsensusSetUpdate<OpaqueAddress>>,
+    ) {
+        ((), (), vec![])
+    }
+```
+
+## Testing.
+The `sov_rollup_interface::mocks` crate provides two utilities that are useful for testing:
+
+1. The `MockZkvm` is an implementation of the `Zkvm` trait that can be used in tests.
+1. The `TestBlob` is an implementation of the `BlobTransactionTrait` trait that can be used in tests. It accepts an `Address` as a generic parameter. For testing purposes, we implement our own Address type as follows:
+
+```rust
+#[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
+pub struct DaAddress {
+    pub addr: [u8; 32],
+}
+
+impl AddressTrait for DaAddress {}
+
+```
+You can find more details in the `stf_test.rs` file.
+
+
+The following test checks the rollup logic. In the test, we call `init_chain, begin_slot, and end_slot` for completeness, even though these methods do nothing.
+
+
+```rust
+#[test]
+fn test_stf() {
+    let address = DaAddress { addr: [1; 32] };
+    let preimage = vec![0; 32];
+
+    let test_blob = TestBlob::<DaAddress>::new(preimage, address);
+    let stf = &mut CheckHashPreimageStf {};
+
+    StateTransitionFunction::<MockZkvm>::init_chain(stf, ());
+    StateTransitionFunction::<MockZkvm>::begin_slot(stf, ());
+
+    let receipt = StateTransitionFunction::<MockZkvm>::apply_blob(stf, test_blob, None);
+    assert_eq!(receipt.inner, ApplyBlobResult::Success);
+
+    StateTransitionFunction::<MockZkvm>::end_slot(stf);
+}
+```
+
