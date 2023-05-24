@@ -59,9 +59,9 @@ For testing, we can submit a transaction to the bank module to create a new toke
 ### Create bank transaction
 1. `cd ../../` (sovereign root)
 2. `cargo build --release --bin bank-cmd`
-3. `./target/release/bank-cmd create-private-key .` - this is the rollup private key that's used to sign rollup transactions. its important to make the distinction between this key and the sequencer private key
-4. `ls -lahtr | grep sov1` - you should see a new json file created containing the keypair
-5. ```./target/release/bank-cmd serialize-call sov1pc06camefctl48ta76rnppdux8r4v5x54yrxred3hhxyqctsv2hshtewjw.json examples/demo-stf/src/bank_cmd/test_data/create_token.json 0 ```
+3. `./target/release/bank-cmd create-private-key .` - this is the rollup private key that's used to sign rollup transactions. It's important to make the distinction between this key and the sequencer private key.
+4. `ls -lahtr | grep sov1` - you should see a new json file created containing the keypair. We will refer to this in later commands as `<rollup_private_key.json>`
+5. ```./target/release/bank-cmd serialize-call <rollup_private_key.json> examples/demo-stf/src/bank_cmd/test_data/create_token.json 0 ```
 6. Get the token address from the above the command. eg: `sov1jzvd95rjx7xpcdun2h8kyqee2z5r988h3wy4gsdn6ukc5ae04dvsrad3jj`
 7. The binary serialized transaction is created at : `examples/demo-stf/src/bank_cmd/test_data/create_token.dat`
 
@@ -74,7 +74,9 @@ $ celestia-appd tx blob PayForBlobs 736f762d74657374 01000000b000000004ee8ca2c34
 
 ```
 
+* `xxd` is used to convert the serialized file into hex to post as an argument to `celestia-appd`
 * `736f762d74657374` is the namespace `ROLLUP_NAMESPACE` in `examples/demo-rollup/src/main.rs`
+* `01000000b000000004ee8ca2....` is the serialized binary blob in hex
 * `sequencer_keypair` is the keypair created earlier and should also match the value of `SEQUENCER_DA_ADDRESS` in `examples/demo-rollup/src/main.rs`
 * `celestia-appd` asks for confirmation - accept with y/Y
 
