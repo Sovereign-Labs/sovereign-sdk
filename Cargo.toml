@@ -5,6 +5,7 @@ members = [
     "adapters/risc0",
     "adapters/celestia",
     "examples/demo-stf",
+    "examples/demo-simple-stf",
     "examples/demo-rollup",
     "examples/demo-nft-module",
     "full-node/db/schemadb",
