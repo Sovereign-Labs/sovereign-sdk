@@ -1,7 +1,7 @@
 # Rollup from scratch.
 Many rollups have concepts like `Account` or `Token` and access the state in a similar manner. This is where the [sov-modules-api](../../module-system/sov-modules-api/README.md) becomes useful. It offers a standardized approach to writing business rollup logic. However, there are cases where your rollup requirements may be so unique, that the `module-system` could become a hindrance. In this tutorial, we will bypass the `module-system` and directly create a simple rollup by implementing a `StateTransitionFunction` "from scratch".
 
-In our rollup, we will verify whether the sender of a data blob possesses the preimage for a specific hash digest. It's important to note that our rollup is designed to be "stateless," meaning that implementing state access is not covered in this tutorial. However, if you're interested, you can refer to the `module-system/sov-state` for an example of how it can be done.
+In our rollup, we will verify whether the sender of a data blob possesses the preimage for a specific hash digest. It's important to note that our rollup is designed to be "stateless," meaning that implementing state access is not covered in this tutorial. However, if you're interested, you can refer to the [sov-state](../../module-system/sov-state/README.md) for an example of how it can be done.
 
 ## Implementing state transition function.
 The `StateTransitionFunction` trait serves as the core component of our rollup, where our business logic will reside. To begin, we will create a structure called `CheckHashPreimageStf` and implement the `StateTransitionFunction` trait for it. You can find the complete code in the `lib.rs` file, we will go over the most important parts of the code here:
