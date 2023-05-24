@@ -45,9 +45,6 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
 
     type CallMessage = call::CallMessage<C>;
 
-    #[cfg(feature = "native")]
-    type QueryMessage = query::QueryMessage<C>;
-
     fn genesis(
         &self,
         config: &Self::Config,
@@ -82,33 +79,6 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
             }
 
             call::CallMessage::Burn { coins } => Ok(self.burn(coins, context, working_set)?),
-        }
-    }
-
-    #[cfg(feature = "native")]
-    fn query(
-        &self,
-        msg: Self::QueryMessage,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> sov_modules_api::QueryResponse {
-        match msg {
-            query::QueryMessage::GetBalance {
-                user_address,
-                token_address,
-            } => {
-                let response =
-                    serde_json::to_vec(&self.balance_of(user_address, token_address, working_set))
-                        .unwrap();
-
-                sov_modules_api::QueryResponse { response }
-            }
-
-            query::QueryMessage::GetTotalSupply { token_address } => {
-                let response =
-                    serde_json::to_vec(&self.supply_of(token_address, working_set)).unwrap();
-
-                sov_modules_api::QueryResponse { response }
-            }
         }
     }
 }

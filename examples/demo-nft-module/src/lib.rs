@@ -3,7 +3,7 @@ pub mod genesis;
 #[cfg(feature = "native")]
 pub mod query;
 
-use sov_modules_api::{CallResponse, Context, Error, Module, QueryResponse};
+use sov_modules_api::{CallResponse, Context, Error, Module};
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
@@ -31,9 +31,6 @@ impl<C: Context> Module for NonFungibleToken<C> {
 
     type CallMessage = call::CallMessage<C>;
 
-    #[cfg(feature = "native")]
-    type QueryMessage = query::QueryMessage;
-
     fn genesis(
         &self,
         config: &Self::Config,
@@ -54,19 +51,5 @@ impl<C: Context> Module for NonFungibleToken<C> {
             call::CallMessage::Burn { id } => self.burn(id, context, working_set),
         };
         Ok(call_result?)
-    }
-
-    #[cfg(feature = "native")]
-    fn query(
-        &self,
-        msg: Self::QueryMessage,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> QueryResponse {
-        match msg {
-            query::QueryMessage::GetOwner { token_id } => {
-                let response = serde_json::to_vec(&self.get_owner(token_id, working_set)).unwrap();
-                QueryResponse { response }
-            }
-        }
     }
 }

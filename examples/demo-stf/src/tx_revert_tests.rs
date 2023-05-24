@@ -4,9 +4,8 @@ use crate::{
     app::{create_demo_config, create_new_demo, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
     data_generation::{
         simulate_da_with_bad_serialization, simulate_da_with_bad_sig, simulate_da_with_revert_msg,
-        QueryGenerator,
     },
-    helpers::{new_test_blob, query_and_deserialize},
+    helpers::new_test_blob,
     runtime::Runtime,
 };
 use sov_app_template::{Batch, SlashingReason};
@@ -14,7 +13,7 @@ use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
 };
 use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
-use sov_state::ProverStorage;
+use sov_state::{ProverStorage, WorkingSet};
 
 const SEQUENCER_BALANCE_DELTA: u64 = 1;
 const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + SEQUENCER_BALANCE_DELTA;
@@ -57,21 +56,14 @@ fn test_tx_revert() {
     {
         let runtime = &mut Runtime::<DefaultContext>::new();
         let storage = ProverStorage::with_path(&path).unwrap();
+        let mut working_set = WorkingSet::new(storage);
 
         // We sent 4 vote messages but one of them is invalid and should be reverted.
-        let resp = query_and_deserialize::<election::query::GetNbOfVotesResponse>(
-            runtime,
-            QueryGenerator::generate_query_election_nb_of_votes_message(),
-            storage.clone(),
-        );
+        let resp = runtime.election.number_of_votes(&mut working_set);
 
         assert_eq!(resp, election::query::GetNbOfVotesResponse::Result(3));
 
-        let resp = query_and_deserialize::<election::query::GetResultResponse>(
-            runtime,
-            QueryGenerator::generate_query_election_message(),
-            storage.clone(),
-        );
+        let resp = runtime.election.results(&mut working_set);
 
         assert_eq!(
             resp,
@@ -81,12 +73,9 @@ fn test_tx_revert() {
             }))
         );
 
-        let resp = query_and_deserialize::<sequencer::query::SequencerAndBalanceResponse>(
-            runtime,
-            QueryGenerator::generate_query_check_balance(),
-            storage,
-        );
-
+        let resp = runtime
+            .sequencer
+            .sequencer_address_and_balance(&mut working_set);
         // Sequencer is rewarded
         assert_eq!(resp.data.unwrap().balance, SEQUENCER_BALANCE);
     }
@@ -123,23 +112,18 @@ fn test_tx_bad_sig() {
     {
         let runtime = &mut Runtime::<DefaultContext>::new();
         let storage = ProverStorage::with_path(&path).unwrap();
+        let mut working_set = WorkingSet::new(storage);
 
-        let resp = query_and_deserialize::<election::query::GetResultResponse>(
-            runtime,
-            QueryGenerator::generate_query_election_message(),
-            storage.clone(),
-        );
+        let resp = runtime.election.results(&mut working_set);
 
         assert_eq!(
             resp,
             election::query::GetResultResponse::Err("Election is not frozen".to_owned())
         );
 
-        let resp = query_and_deserialize::<sequencer::query::SequencerAndBalanceResponse>(
-            runtime,
-            QueryGenerator::generate_query_check_balance(),
-            storage,
-        );
+        let resp = runtime
+            .sequencer
+            .sequencer_address_and_balance(&mut working_set);
 
         // Sequencer is slashed
         assert_eq!(resp.data.unwrap().balance, SEQUENCER_BALANCE_DELTA);
@@ -233,23 +217,18 @@ fn test_tx_bad_serialization() {
     {
         let runtime = &mut Runtime::<DefaultContext>::new();
         let storage = ProverStorage::with_path(&path).unwrap();
+        let mut working_set = WorkingSet::new(storage);
 
-        let resp = query_and_deserialize::<election::query::GetResultResponse>(
-            runtime,
-            QueryGenerator::generate_query_election_message(),
-            storage.clone(),
-        );
+        let resp = runtime.election.results(&mut working_set);
 
         assert_eq!(
             resp,
             election::query::GetResultResponse::Err("Election is not frozen".to_owned())
         );
 
-        let resp = query_and_deserialize::<sequencer::query::SequencerAndBalanceResponse>(
-            runtime,
-            QueryGenerator::generate_query_check_balance(),
-            storage,
-        );
+        let resp = runtime
+            .sequencer
+            .sequencer_address_and_balance(&mut working_set);
 
         // Sequencer is slashed
         assert_eq!(resp.data.unwrap().balance, SEQUENCER_BALANCE_DELTA);

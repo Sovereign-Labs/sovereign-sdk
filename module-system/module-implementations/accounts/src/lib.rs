@@ -41,9 +41,6 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
 
     type CallMessage = call::CallMessage<C>;
 
-    #[cfg(feature = "native")]
-    type QueryMessage = query::QueryMessage<C>;
-
     fn genesis(
         &self,
         config: &Self::Config,
@@ -61,20 +58,6 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
         match msg {
             call::CallMessage::UpdatePublicKey(new_pub_key, sig) => {
                 Ok(self.update_public_key(new_pub_key, sig, context, working_set)?)
-            }
-        }
-    }
-
-    #[cfg(feature = "native")]
-    fn query(
-        &self,
-        msg: Self::QueryMessage,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> sov_modules_api::QueryResponse {
-        match msg {
-            query::QueryMessage::GetAccount(pub_key) => {
-                let response = serde_json::to_vec(&self.get_account(pub_key, working_set)).unwrap();
-                sov_modules_api::QueryResponse { response }
             }
         }
     }

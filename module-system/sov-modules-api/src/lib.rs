@@ -177,9 +177,6 @@ pub trait Module {
     /// Module defined argument to the call method.
     type CallMessage: Debug + BorshSerialize + BorshDeserialize = NonInstantiable;
 
-    /// Module defined argument to the query method.
-    type QueryMessage: Debug + BorshSerialize + BorshDeserialize = NonInstantiable;
-
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(
         &self,
@@ -197,15 +194,6 @@ pub trait Module {
         _context: &Self::Context,
         _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> Result<CallResponse, Error> {
-        unreachable!()
-    }
-
-    /// Query allows querying the module's state.
-    fn query(
-        &self,
-        _message: Self::QueryMessage,
-        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> QueryResponse {
         unreachable!()
     }
 }

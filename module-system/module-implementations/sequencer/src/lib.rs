@@ -43,9 +43,6 @@ pub struct Sequencer<C: sov_modules_api::Context> {
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Sequencer<C> {
     type Context = C;
 
-    #[cfg(feature = "native")]
-    type QueryMessage = query::QueryMessage;
-
     type Config = SequencerConfig<C>;
 
     fn genesis(
@@ -54,21 +51,5 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Sequencer<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(), Error> {
         Ok(self.init_module(config, working_set)?)
-    }
-
-    #[cfg(feature = "native")]
-    fn query(
-        &self,
-        msg: Self::QueryMessage,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> sov_modules_api::QueryResponse {
-        match msg {
-            query::QueryMessage::GetSequencerAddressAndBalance => {
-                let response =
-                    serde_json::to_vec(&self.sequencer_address_and_balance(working_set)).unwrap();
-
-                sov_modules_api::QueryResponse { response }
-            }
-        }
     }
 }

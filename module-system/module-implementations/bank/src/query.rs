@@ -2,18 +2,6 @@ use crate::{Amount, Bank};
 use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
 
-/// This enumeration represents the available query messages for querying the bank module.
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
-pub enum QueryMessage<C: sov_modules_api::Context> {
-    /// Gets the balance of a specified token for a specified user.
-    GetBalance {
-        user_address: C::Address,
-        token_address: C::Address,
-    },
-    /// Gets the total supply of a specified token.
-    GetTotalSupply { token_address: C::Address },
-}
-
 #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct BalanceResponse {
     pub amount: Option<Amount>,
@@ -27,7 +15,7 @@ pub struct TotalSupplyResponse {
 #[rpc_gen(client, server, namespace = "bank")]
 impl<C: sov_modules_api::Context> Bank<C> {
     #[rpc_method(name = "balanceOf")]
-    pub(crate) fn balance_of(
+    pub fn balance_of(
         &self,
         user_address: C::Address,
         token_address: C::Address,
@@ -39,7 +27,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
     }
 
     #[rpc_method(name = "supplyOf")]
-    pub(crate) fn supply_of(
+    pub fn supply_of(
         &self,
         token_address: C::Address,
         working_set: &mut WorkingSet<C::Storage>,

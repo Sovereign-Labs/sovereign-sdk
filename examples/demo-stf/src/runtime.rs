@@ -1,5 +1,5 @@
 use sov_modules_api::{Context, Module};
-use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
+use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 
 /// The Rollup entrypoint.
 ///
@@ -40,23 +40,18 @@ use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 /// Similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
 /// instead of going through the DA layer.
 
-#[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
+#[derive(Genesis, DispatchCall, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
-    #[allow(unused)]
-    sequencer: sequencer::Sequencer<C>,
+    pub sequencer: sequencer::Sequencer<C>,
 
-    #[allow(unused)]
-    bank: bank::Bank<C>,
+    pub bank: bank::Bank<C>,
 
-    #[allow(unused)]
-    election: election::Election<C>,
+    pub election: election::Election<C>,
 
-    #[allow(unused)]
-    value_setter: value_setter::ValueSetter<C>,
+    pub value_setter: value_setter::ValueSetter<C>,
 
-    #[allow(unused)]
-    accounts: accounts::Accounts<C>,
+    pub accounts: accounts::Accounts<C>,
 }
 
 // TODO add macro to generate the following code:
