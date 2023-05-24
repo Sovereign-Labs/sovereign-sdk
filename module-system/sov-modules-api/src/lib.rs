@@ -221,9 +221,9 @@ pub trait ModuleInfo {
     fn address(&self) -> &<Self::Context as Spec>::Address;
 }
 
-/// this is the struct that users need to instantiate
-/// with a storage object to convert into an RPC
-#[derive(Clone)]
-pub struct RpcStorage<C: Context> {
-    pub storage: C::Storage,
+/// A StateTransitionRunner needs to implement this if
+/// the RPC service is needed
+pub trait RpcRunner {
+    type Context: Context;
+    fn get_storage(&self) -> <Self::Context as Spec>::Storage;
 }

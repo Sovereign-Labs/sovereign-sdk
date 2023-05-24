@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use proc_macro2::Ident;
+use proc_macro2::{Ident, Span};
 use quote::{format_ident, quote};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
@@ -371,16 +371,32 @@ pub(crate) fn rpc_outer_impls(
 
     let mut output_tokens = proc_macro2::TokenStream::new();
 
+    let mut merge_operations = proc_macro2::TokenStream::new();
+
     let types = match args {
         syn::Type::Tuple(tuple) => tuple.elems,
         _ => panic!("Expected a tuple of types"),
     };
 
+    let rpc_storage_struct = quote! {
+        #[derive(Clone)]
+        pub struct RpcStorage<C: Context> {
+            pub storage: C::Storage
+        }
+    };
+
     let original_impl = quote! {
         #(#attrs)*
         #input
+        #rpc_storage_struct
     };
+
     output_tokens.extend(original_impl);
+
+    // will be replaced in the below loop
+    // hack for now
+    // TODO: handle context in a consistent way for module, runtime as well as state transition runner
+    let mut last_context_type: Ident = Ident::new("Context", Span::call_site());
 
     for arg in types {
         let mut trait_type_path = match arg {
@@ -411,6 +427,20 @@ pub(crate) fn rpc_outer_impls(
             }
             _ => panic!("Expected angle bracketed arguments"),
         };
+        last_context_type = context_type.clone();
+
+        let mut rpc_server_ident = last_segment.ident.clone();
+        rpc_server_ident = syn::Ident::new(
+            &format!("{}RpcServer", rpc_server_ident),
+            rpc_server_ident.span(),
+        );
+
+        let merge_operation = quote! {
+        module
+            .merge(#rpc_server_ident::into_rpc(r.clone()))
+            .unwrap();
+        };
+        merge_operations.extend(merge_operation);
 
         last_segment.ident = syn::Ident::new(
             &format!("{}RpcImpl", last_segment.ident),
@@ -418,7 +448,8 @@ pub(crate) fn rpc_outer_impls(
         );
 
         let output = quote! {
-            impl #trait_type_path for ::sov_modules_api::RpcStorage<#context_type>
+
+            impl #trait_type_path for RpcStorage<#context_type>
             {
                 fn get_working_set(&self) -> ::sov_state::WorkingSet<<#context_type
                     as ::sov_modules_api::Spec>::Storage> {
@@ -429,6 +460,21 @@ pub(crate) fn rpc_outer_impls(
 
         output_tokens.extend(output);
     }
+
+    let create_rpc_tokens = quote! {
+             pub fn get_rpc_module(storj: <#last_context_type as ::sov_modules_api::Spec>::Storage) -> jsonrpsee::RpcModule<()> {
+                let mut module = jsonrpsee::RpcModule::new(());
+                let r = RpcStorage {
+                    storage: storj.clone(),
+                };
+
+                #merge_operations
+                module
+
+            }
+    };
+
+    output_tokens.extend(create_rpc_tokens);
 
     Ok(output_tokens.into())
 }

@@ -38,6 +38,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         }
     }
 
+    #[rpc_method(name = "supplyOf")]
     pub(crate) fn supply_of(
         &self,
         token_address: C::Address,

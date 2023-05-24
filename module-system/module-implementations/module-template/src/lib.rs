@@ -1,5 +1,5 @@
 pub mod call;
-mod genesis;
+pub mod genesis;
 
 #[cfg(test)]
 mod tests;

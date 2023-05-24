@@ -1,4 +1,4 @@
-mod genesis;
+pub mod genesis;
 pub mod hooks;
 pub mod query;
 #[cfg(test)]
