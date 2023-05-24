@@ -4,6 +4,7 @@ use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
 use demo_stf::config::from_toml_path;
 use demo_stf::config::Config as RunnerConfig;
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
+use jupiter::types::NamespaceId;
 use jupiter::verifier::RollupParams;
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::Risc0Host;

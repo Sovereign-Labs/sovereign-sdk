@@ -12,9 +12,11 @@ pub use sov_modules_api::default_context::DefaultContext;
 pub use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_modules_api::Context;
 #[cfg(feature = "native")]
 use sov_modules_api::PublicKey;
-use sov_modules_api::{Context, RpcRunner};
+#[cfg(feature = "native")]
+use sov_modules_api::RpcRunner;
 use sov_modules_api::{Hasher, Spec};
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::ProverConfig;
@@ -25,6 +27,8 @@ use sov_rollup_interface::zk::traits::Zkvm;
 use sov_state::ProverStorage;
 use sov_state::Storage;
 use sov_state::ZkStorage;
+
+#[cfg(feature = "native")]
 use std::path::Path;
 
 #[cfg(test)]
@@ -39,6 +43,7 @@ use election::query::{ElectionRpcImpl, ElectionRpcServer};
 #[cfg(feature = "native")]
 use value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
+#[cfg(feature = "native")]
 use sov_modules_macros::expose_rpc;
 
 #[cfg(feature = "native")]

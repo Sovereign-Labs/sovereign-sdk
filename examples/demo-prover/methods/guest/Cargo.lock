@@ -433,7 +433,6 @@ dependencies = [
  "bank",
  "borsh",
  "election",
- "jsonrpsee",
  "sequencer",
  "serde",
  "sha2 0.10.6",
