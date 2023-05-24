@@ -6,7 +6,6 @@ members = [
     "adapters/celestia",
     "examples/demo-stf",
     "examples/demo-prover/host",
-    "examples/demo-prover/methods",
     "examples/demo-rollup",
     "full-node/db/schemadb",
     "full-node/db/sovereign-db",
