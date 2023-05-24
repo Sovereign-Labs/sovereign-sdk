@@ -31,12 +31,12 @@ pub struct Bank<C: sov_modules_api::Context> {
 
 At first glance, this definition might seem a little bit intimidating because of the generic `C`. Don't worry, we'll explain that
 generic in detail later. For now, just notice that a module is a struct with an address and some `#[state]` fields specifying
-what kind of data this module has access to. Under the hood, the ModuleInfo derive macro will do some magic to ensure that
+what kind of data this module has access to. Under the hood, the `ModuleInfo` derive macro will do some magic to ensure that
 any `#[state]` fields get mapped onto unique storage keys so that only this particular module can read or write its state values.
 
 At this stage, it's also very important to note that the state values are external to the module. This struct definition defines the
 _shape_ of the values that will be stored, but the values themselves don't live inside the module struct. In other words, a module doesn't
-secretly have a reference to some underlying database or anything like that. Instead a module defines the logic used to access state values,
+secretly have a reference to some underlying database. Instead a module defines the _logic_ used to access state values,
 and the values themselves live in a special struct called a `WorkingSet`.
 
 This has several consequences. First, it means that modules are always cheap to clone. Second it means that calling `my_module.clone()`
