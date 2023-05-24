@@ -85,11 +85,6 @@ impl<VM: Zkvm> StateTransitionFunction<VM> for CheckHashPreimageStf {
             tx_receipts: vec![],
             inner: result,
         }
-
-        // In the current implementation, every blob contains the data we pass to the hash function.
-        // As an exercise for the reader, you can introduce the concept of transactions.
-        // In this scenario, the blob would contain multiple transactions (containing data) that we can loop over to check hash equality.
-        // The first transaction that finds the correct hash would break the loop and return early.
     }
 
     fn end_slot(
