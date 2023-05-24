@@ -9,7 +9,7 @@ There are 5 steps that need to be completed to enable RPC on the full node
 ### Modules
 * We need to annotate the `impl` block for our module. In this case its `ModuleStruct`
 ```
-impl<C: Context> ModuleStruct<C> {
+impl<C: Context> MyModule<C> {
     pub fn first_method(&self, working_set: &mut WorkingSet<C::Storage>) -> u32 {
         42
     }
@@ -40,7 +40,7 @@ impl<C: Context> MyModule<C> {
 ```
 use bank::query::{MyModuleRpcImpl, MyModuleRpcServer};
 
-#[expose_rpc((MyModuleStruct<DefaultContext>,))]
+#[expose_rpc((MyModule<DefaultContext>,))]
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
 ...
 }
