@@ -102,11 +102,6 @@ Next we need to write the core logic in `apply_blob`:
             tx_receipts: vec![],
             inner: result,
         }
-
-        // In the current implementation, every blob contains the data we pass to the hash function.
-        // As an exercise for the reader, you can introduce the concept of transactions.
-        // In this scenario, the blob would contain multiple transactions (containing data) that we can loop over to check hash equality.
-        // The first transaction that finds the correct hash would break the loop and return early.
     }
 ```
 The above function reads the data from the blob, computes the `hash`, compares it with the `desired_hash`, and returns a `BatchReceipt` indicating whether the preimage was successfully submitted or not.
@@ -124,6 +119,11 @@ The last method is `end_slot`, like before the implementation is trivial:
         ((), (), vec![])
     }
 ```
+### Exercise:
+In the current implementation, every blob contains the data we pass to the hash function. 
+As an exercise, you can introduce the concept of transactions.  In this scenario, 
+the blob would contain multiple transactions (containing data) that we can loop over to check hash equality.
+The first transaction that finds the correct hash would break the loop and return early.
 
 ## Testing.
 The `sov_rollup_interface::mocks` crate provides two utilities that are useful for testing:
