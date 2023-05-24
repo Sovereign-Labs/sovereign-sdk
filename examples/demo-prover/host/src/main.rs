@@ -79,7 +79,7 @@ async fn main() -> Result<(), anyhow::Error> {
         println!("Starting proving");
         let receipt = host.run().expect("Prover should run successfully");
         println!("Start verifying");
-        receipt.verify(&ROLLUP_ID).expect("Receipt should be valid");
+        receipt.verify(ROLLUP_ID).expect("Receipt should be valid");
 
         prev_state_root = next_state_root.0;
         println!("Completed proving and verifying block {height}");
