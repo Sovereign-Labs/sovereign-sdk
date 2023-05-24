@@ -8,7 +8,7 @@ anyhow = { workspace = true }
 borsh = { workspace = true }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
-risc0-zkvm = { worspace = true }
+risc0-zkvm = { version = "0.15" }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

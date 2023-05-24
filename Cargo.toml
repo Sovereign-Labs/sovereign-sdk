@@ -7,6 +7,7 @@ members = [
     "examples/const-rollup-config",
     "examples/demo-stf",
     "examples/demo-rollup",
+    "examples/demo-prover/host",
     "full-node/db/schemadb",
     "full-node/db/sovereign-db",
     "module-system/sov-app-template",
@@ -22,9 +23,6 @@ members = [
     "module-system/module-implementations/examples/value-setter",
     "module-system/module-implementations/examples/election",
     "module-system/module-implementations/integration-tests",
-]
-exclude = [
-    "examples/demo-prover",
 ]
 
 [workspace.package]
@@ -65,3 +63,12 @@ derive_more = "0.99.11"
 clap = { version = "4.2.7", features = ["derive"] }
 toml = "0.7.3"
 jsonrpsee = "0.16.2"
+
+
+# Always optimize for Risc0
+[profile.risc0-dev]
+inherits = "dev"
+opt-level = 3
+
+[profile.risc0-dev.build-override]
+opt-level = 3
