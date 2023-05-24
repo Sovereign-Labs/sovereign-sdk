@@ -144,18 +144,18 @@ let native_rollup_instance = my_state_transition::<DefaultContext>::new(config);
 let witness = Default::default()
 native_rollup_instance.begin_slot(witness);
 for batch in batches.cloned() {
-	native_rollup_instance.apply_batch();
+	native_rollup_instance.apply_batch(batch);
 }
 let (_new_state_root, populated_witness) = native_rollup_instance.end_batch();
 
 // Then, re-execute the state transitions in the zkvm using the witness
 let proof = MyZkvm::prove(|| {
 	let zk_rollup_instance = my_state_transition::<ZkDefaultContext>::new(config);
-	native_rollup_instance.begin_slot(populated_witness);
+	zk_rollup_instance.begin_slot(populated_witness);
 	for batch in batches {
-		native_rollup_instance.apply();
+		zk_rollup_instance.apply(batch);
 	}
-	let (new_state_root, _) = native_rollup_instance.end_batch();
+	let (new_state_root, _) = zk_rollup_instance.end_batch();
 	MyZkvm::commit(new_state_root)
 })
 ```

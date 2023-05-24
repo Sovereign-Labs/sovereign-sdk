@@ -1,7 +1,7 @@
 # Demo State Transition Function
 
 This package shows how you can combine modules to build a custom state transition function. We provide several module implementations
-for you, and if you want additional functionality you can find a tutorial on writing custom moduleshere (TODO: Insert link!).
+for you, and if you want additional functionality you can find a tutorial on writing custom modules here (TODO: Insert link!).
 
 For purposes of this tutorial, the exact choices of modules don't matter at all - the steps to combine modules are identical
 no matter which ones you pick.
@@ -15,7 +15,7 @@ a related trait called `State Transition Runner` ("STR") which tells a full node
 Strictly speaking, it's sufficient for a rollup to only implement the first interface. If you've done that, it's possible to integrate
 with ZKVMs and DA Layers - but you'll have to customize your full node implementation a bit to deal with your particular rollup's
 configuration. By implementing the STR trait, we make it much easier for the full-node implementation to understand how to interact
-with the rollup generically - so we can keep our modifications as minimal as possible. In this demo, we'll implement both traits.
+with the rollup generically - so we can keep our modifications to the node as minimal as possible. In this demo, we'll implement both traits.
 
 ## Implementing State Transition _Function_
 
@@ -30,7 +30,9 @@ translates between the two layers of abstraction.
 The reason the `AppTemplate` is called a "template" is that it's generic. It allows you, the developer, to pass in
 several parameters which specify its exact behavior. In order, these four generics are
 
-1. `Context`: a per-transaction struct containing the message's sender. This also provides handles to cryptographic operations
+1. `Context`: a per-transaction struct containing the message's sender. This also provides specs for storage access, so we use different `Context`
+   implementations for Native and zk execution. In Zk, we read values non-deterministically from hints and check them against a merkle tree, while in
+   native mode we just read values straight from disk.
 2. `TxVerifier`: verifies the signatures on transaction and deserializes them into messages
 3. `Runtime`: a collection of modules which make up the rollup's public interface
 4. `TxHooks`: a set of functions which are invoked at various points in the transaction lifecycle
@@ -41,7 +43,7 @@ So, a typical app definition looks like this:
 
 ```rust
 pub type MyNativeStf = AppTemplate<DefaultContext, MyTxVerifier<DefaultContext>, MyRuntime<DefaultContext>, MyTxHooks<DefaultContext>>;
-pub type MyZkStf = AppTemplate<ZkDefaultContext, MyTxVerifier<DefaultContext>, MyRuntime<DefaultContext>, MyTxHooks<DefaultContext>>;
+pub type MyZkStf = AppTemplate<ZkDefaultContext, MyTxVerifier<ZkDefaultContext>, MyRuntime<ZkDefaultContext>, MyTxHooks<ZkDefaultContext>>;
 ```
 
 Note that `DefaultContext` and `ZkDefaultContext` are exported by the `sov_modules_api` crate.
@@ -87,7 +89,7 @@ impl<C: Context> TxVerifier for DemoAppTxVerifier<C> {
 }
 ```
 
-### Implementing TxHooks
+#### Implementing TxHooks
 
 Once a transaction has passed stateless verification, it will get fed into the execution pipeline. In this pipeline there are four places
 where you can inject custom "hooks" using you `TxHooks` implementation.
@@ -116,7 +118,7 @@ pub struct DemoAppTxHooks<C: Context> {
 
 You can view the full implementation in `tx_hooks_impl.rs`
 
-### Runtime: Pick Your Modules
+### Implementing Runtime: Pick Your Modules
 
 The final piece of the puzzle is your app's runtime. A runtime is just a list of modules - really, that's it! To add a new
 module to your app, just add an additional field to the runtime.
@@ -143,7 +145,75 @@ We recommend borsh, since it's both fast and safe for hashing.
 
 That's it - with those three structs implemented, you can them into your AppTemplate and get a complete State Transition Function!
 
-## Implementing State Transition Runner
+## Make Full Node Itegrations Simpler with the State Transition Runner trait:
 
-Now that we have an app, we just need to tell a full node how to run it. In other words, we need to think about boring full-node things
-like RPC configuration and data directories.
+Now that we have an app, we want to be able to run it. For any custom state transition, your full node implementation is going to need a little
+customization. At the very least, you'll have to modify our `demo-rollup` example code
+to import your custom STF! But, when you're building an STF it's useful to stick as closely as possible to some standard interfaces.
+That way, you can minimize the changeset for your custom node implementation, which reduces the risk of bugs.
+
+To help you integrate with full node implementations, we provide standard traits for intitializing an app (`StateTransitionRunner`) and
+starting an RPC server (`RpcRunner`). In this section, we'll briefly show how to implement both traits. Again, neither trait is stricly
+required - just by implementing STF, you get the capability to integrate with DA layers and Zkvms. But, implementing these traits
+makes you more compatible with full node implementations out of the box
+
+### Implementing State Transition Runner
+
+The State Transition Runner trait contains logic related to intitialization. It has just three methods:
+
+1. `new` - which allows us to instantiate a state transition function using a `RuntimeConfig` specific to the particular execution mode.
+   For example, when you're running a prover you likely want to configure a standard RocksDB instance - but in zk mode, you have to
+   set up your STF to read from a merkle tree instead. Using STR, we can easily swap out this configuration.
+2. `inner` - which returns an immutable reference to the inner state transition function
+3. `inner mut` - which returns a mutable reference to the inner STF
+
+As you can see in the demo codebase, we implement StateTransitionRunner two different times for the DemoAppRunner struct - once for `Prover` mode
+and once for `Zk` mode.
+
+The `Prover` implementation is gated behind the `native` feature flag. This flag is what we use in the SDK to mark code which can only be run
+outside of the zk-circuit. Since this implementation will always run on a physical machine, we can annotate it with the
+`expose_rpc` macro telling it to enable RPC queries against the Bank, Election, and ValueSetter modules.
+We'll cover this macro in more detail in the next section.
+
+```rust
+pub struct DemoAppRunner<C: Context, Vm: Zkvm>(pub DemoApp<C, Vm>);
+
+#[cfg(feature = "native")]
+#[expose_rpc((Bank<DefaultContext>,Election<DefaultContext>,ValueSetter<DefaultContext>))]
+impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
+    type RuntimeConfig = Config;
+    type Inner = DemoApp<DefaultContext, Vm>;
+
+    fn new(runtime_config: Self::RuntimeConfig) -> Self {
+        let storage = ProverStorage::with_config(runtime_config.storage)
+            .expect("Failed to open prover storage");
+        let app = AppTemplate::new(storage, Runtime::new(), DemoAppTxVerifier::new(), DemoAppTxHooks::new());
+        Self(app)
+    }
+	// ...
+}
+
+impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultContext, Vm> {
+    type RuntimeConfig = [u8; 32];
+    type Inner = DemoApp<ZkDefaultContext, Vm>;
+
+    fn new(runtime_config: Self::RuntimeConfig) -> Self {
+        let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
+        let app = AppTemplate::new(storage, Runtime::new(), DemoAppTxVerifier::new(), DemoAppTxHooks::new());
+        Self(app)
+    }
+	// ...
+}
+```
+
+### Exposing RPC
+
+```rust
+#[cfg(feature = "native")]
+impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
+    type Context = DefaultContext;
+    fn get_storage(&self) -> <Self::Context as Spec>::Storage {
+        self.inner().current_storage.clone()
+    }
+}
+```
