@@ -10,7 +10,6 @@ fix-checks:
 	cargo fix --allow-dirty
 
 
-lint: export RUSTFLAGS := -D warnings
 lint:
 	cargo check
 	cargo clippy --all

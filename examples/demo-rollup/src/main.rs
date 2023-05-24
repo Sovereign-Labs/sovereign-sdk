@@ -30,8 +30,7 @@ const SEQUENCER_DA_ADDRESS: [u8; 47] = [
 ];
 
 pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
-    let ledger_db = LedgerDB::with_path(path).expect("Ledger DB failed to open");
-    ledger_db
+    LedgerDB::with_path(path).expect("Ledger DB failed to open")
 }
 
 async fn start_rpc_server(module: RpcModule<()>, address: SocketAddr) {
@@ -117,7 +116,7 @@ async fn main() -> Result<(), anyhow::Error> {
         println!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
-            hex::encode(&prev_state_root)
+            hex::encode(prev_state_root)
         );
 
         // Fetch the relevant subset of the next Celestia block
