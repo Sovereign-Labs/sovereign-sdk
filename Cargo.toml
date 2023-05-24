@@ -4,6 +4,7 @@ members = [
     "rollup-interface",
     "adapters/risc0",
     "adapters/celestia",
+    "examples/const-rollup-config",
     "examples/demo-stf",
     "examples/demo-rollup",
     "full-node/db/schemadb",
