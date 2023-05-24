@@ -171,6 +171,22 @@ impl ConsensusSetUpdate<OpaqueAddress> {
     }
 }
 
+/// A StateTransitionRunner (STR) is responsible for running the state transition function. For any particular function,
+/// you might have a few different STRs, each with different runtime configs. For example, you might have a STR which takes
+/// a path to a data directory as a runtime config, and another which takes a pre-built in-memory database.
+///
+/// Using a separate trait for initialization makes it easy to store extra data in the STR, which
+/// would not fit neatly in the state transition logic itself (such as a handle to the database).
+/// This way, you can easily support ancillary functions like RPC, p2p networking etc in your full node implementation
+///
+///
+/// The StateTransitionRunner is generic over a StateTransitionConfig, and a Zkvm. The ZKvm is simply forwarded to the inner STF.
+/// StateTransitionConfig is a special marker trait which has only 3 possible instantiations:  ProverConfig, NativeConfig, and ZkConfig.
+/// This Config makes it easy to implement different instantiations of STR on the same struct, which are appropriate for different
+/// modes of execution.
+///
+/// For example: might have `impl StateTransitionRunner<ProverConfig, Vm> for MyRunner` which takes a path to a data directory as a runtime config,
+/// and a `impl StateTransitionRunner<ZkConfig, Vm> for MyRunner` which instead uses a state root as its runtime config.
 pub trait StateTransitionRunner<T: StateTransitionConfig, Vm: Zkvm> {
     /// The parameters of the state transition function which are set at runtime. For example,
     /// the runtime config might contain path to a data directory.

@@ -7,14 +7,17 @@ It contains known security flaws and numerous inefficiencies.
 
 ## What is it?
 
-This demo shows how to integrate RiscZero prover into rollup workflow. 
+This demo shows how to integrate RiscZero prover into rollup workflow.
 This code reads blocks from Celestia, executes them and proves it inside RiscZero ZK VM.
+
+This package implements the same logic as [`demo-rollup`](../demo-rollup/), but it splits the logic between
+the "host" and "guest" (prover and zk-circuit) to create actual zk-proofs. This separation makes it slightly
+harder to follow at first glance, so we recommend diving into the `demo-rollup` before attempting to use this package.
 
 ## Getting Started
 
 1. Make sure Celestia light node is running as described in [Demo Rollup README](../demo-rollup/README.md)
 2. Execute `cargo run`
-
 
 ## Development
 
