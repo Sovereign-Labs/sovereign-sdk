@@ -9,9 +9,7 @@ pub mod test {
     use sov_state::ProverStorage;
 
     use crate::{
-        app::{
-            create_demo_config, create_new_demo, C, EXAMPLE_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT,
-        },
+        app::{create_demo_config, create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
         data_generation::{simulate_da, QueryGenerator},
         helpers::{new_test_blob, query_and_deserialize},
         runtime::Runtime,
