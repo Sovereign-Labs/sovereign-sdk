@@ -1,6 +1,6 @@
 start_height = 671431
 [da]
-celestia_rpc_auth_token = "SUPER_SECRET_TOKEN"
+celestia_rpc_auth_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJBbGxvdyI6WyJwdWJsaWMiLCJyZWFkIiwid3JpdGUiLCJhZG1pbiJdfQ.rr8JrAV2D-7bYMqCwxia7xjpdDbVvVJomMKRA1h-_Ac"
 celestia_rpc_address = "http://localhost:11111/"
 # 100 MB
 max_celestia_response_body_size = 104_857_600

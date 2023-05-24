@@ -1004,17 +1004,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "impl-trait-for-tuples"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11d7a9f6330b71fea57921c9b61c47ee6e84f72d394754eff6163ae67e7395eb"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "indenter"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1233,6 +1222,12 @@ name = "libc"
 version = "0.2.142"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a987beff54b60ffa6d51982e1aa1146bc42f19bd26be28b0586f252fccf5317"
+
+[[package]]
+name = "libm"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f7012b1bbb0719e1097c47611d3898568c546d597c2e74d66f6087edd5233ff4"
 
 [[package]]
 name = "linux-raw-sys"
@@ -1795,9 +1790,9 @@ dependencies = [
 
 [[package]]
 name = "risc0-circuit-rv32im"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03c3f7ee29a8b98dcf087dd6415b87b9c1244a65339eceefa55a0c0307bdab96"
+checksum = "fc797026b750f6028610481fd2a12f81d69c56f51ce97fa3bcce45a2d4d0cf39"
 dependencies = [
  "anyhow",
  "log",
@@ -1809,44 +1804,19 @@ dependencies = [
 
 [[package]]
 name = "risc0-core"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7efca5bf936a826d12db95178027a6a2e956541de0c9eaa55840b0477ae3d1c1"
+checksum = "b7984b7ba0e72a5f6ed4b9fe05b891b3ad76c3d009ea4bf961c6e59ca3659ae8"
 dependencies = [
  "bytemuck",
  "rand_core 0.6.4",
 ]
 
 [[package]]
-name = "risc0-zeroio"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ced65dc4609d9aec0f8f80a78eb083001ecbfd09396405fe11c91346b8f973b9"
-dependencies = [
- "bytemuck",
- "impl-trait-for-tuples",
- "log",
- "risc0-zeroio-derive",
- "risc0-zkvm-platform",
- "tracing",
-]
-
-[[package]]
-name = "risc0-zeroio-derive"
-version = "0.14.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9b2ca1f7afed9205fc01391067210d4cd2e37f7e9296feefaa165a6adc35afd"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
 name = "risc0-zkp"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "673c3238ee623624b411fb4e4b9d8161f5bfe23c9cf93f2e22175090872ca59c"
+checksum = "ca0389320103fe0523fcfebd65b54235f142c067b7af7e6e78c27aedc39a65e5"
 dependencies = [
  "anyhow",
  "blake2",
@@ -1857,7 +1827,6 @@ dependencies = [
  "paste",
  "rand_core 0.6.4",
  "risc0-core",
- "risc0-zeroio",
  "risc0-zkvm-platform",
  "serde",
  "sha2 0.10.6",
@@ -1866,21 +1835,21 @@ dependencies = [
 
 [[package]]
 name = "risc0-zkvm"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7128f9945bc96d0d251729f2dee5ceeef301bd638bb67befd328a5d892b14d91"
+checksum = "d7e806a1714a54e4508375fb8f81261e8e2d4d4820bcc17e569e7ecb60d3f521"
 dependencies = [
  "anyhow",
  "bytemuck",
  "cfg-if",
  "getrandom",
  "hex",
+ "libm",
  "log",
  "num-derive",
  "num-traits",
  "risc0-circuit-rv32im",
  "risc0-core",
- "risc0-zeroio",
  "risc0-zkp",
  "risc0-zkvm-platform",
  "serde",
@@ -1889,9 +1858,9 @@ dependencies = [
 
 [[package]]
 name = "risc0-zkvm-platform"
-version = "0.14.0"
+version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e07e6ed86c9f10a2d201aeed0545b933638fa82a5dbf6d141b0b9fe08ad0dd8b"
+checksum = "0562dc2395bca346550b272c5de782d14ca1e69f9b8f9baf1c86795d96a9169d"
 
 [[package]]
 name = "rollup-guest"
