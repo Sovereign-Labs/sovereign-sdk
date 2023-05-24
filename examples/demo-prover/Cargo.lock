@@ -510,6 +510,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "520fbf3c07483f94e3e3ca9d0cfd913d7718ef2483d2cfd91c0d9e91474ab913"
 
 [[package]]
+name = "const-rollup-config"
+version = "0.1.0"
+
+[[package]]
 name = "constant_time_eq"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -656,6 +660,7 @@ dependencies = [
  "borsh",
  "clap",
  "election",
+ "jsonrpsee",
  "schemadb",
  "sequencer",
  "serde",
@@ -813,6 +818,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "hex",
+ "jsonrpsee",
  "serde",
  "serde_json",
  "sov-modules-api",
@@ -3049,6 +3055,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "jsonrpsee",
  "proc-macro2",
  "quote",
  "sov-modules-api",
@@ -3121,6 +3128,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "const-rollup-config",
  "demo-stf",
  "hex",
  "jsonrpsee",
@@ -3587,6 +3595,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "jsonrpsee",
  "serde",
  "serde_json",
  "sov-modules-api",

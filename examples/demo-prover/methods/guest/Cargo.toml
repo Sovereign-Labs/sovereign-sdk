@@ -13,7 +13,7 @@ jupiter = { path = "../../../../adapters/celestia", default-features = false }
 demo-stf = { path = "../../../demo-stf", default-features = false }
 sov-rollup-interface = { path = "../../../../rollup-interface" }
 risc0-adapter = { path = "../../../../adapters/risc0", default-features = false }
-
+const-rollup-config = { path = "../../../const-rollup-config" }
 
 [build-dependencies]
 directories = "5.0"

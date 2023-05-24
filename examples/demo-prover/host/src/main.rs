@@ -1,9 +1,9 @@
+use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::create_demo_genesis_config;
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
 use demo_stf::config::from_toml_path;
 use demo_stf::config::Config as RunnerConfig;
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
-use jupiter::types::NamespaceId;
 use jupiter::verifier::RollupParams;
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::Risc0Host;
@@ -19,6 +19,9 @@ pub struct RollupConfig {
     pub runner: RunnerConfig,
 }
 
+// The rollup stores its data in the namespace b"sov-test" on Celestia
+const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let rollup_config: RollupConfig = from_toml_path("rollup_config.toml")?;
@@ -26,7 +29,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let da_service = CelestiaService::new(
         rollup_config.da.clone(),
         RollupParams {
-            namespace: NamespaceId([115, 111, 118, 45, 116, 101, 115, 116]),
+            namespace: ROLLUP_NAMESPACE,
         },
     );
 
@@ -34,11 +37,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let genesis_config = create_demo_genesis_config(
         100000000,
         sequencer_private_key.default_address(),
-        vec![
-            99, 101, 108, 101, 115, 116, 105, 97, 49, 122, 102, 118, 114, 114, 102, 97, 113, 57,
-            117, 100, 54, 103, 57, 116, 52, 107, 122, 109, 115, 108, 112, 102, 50, 52, 121, 115,
-            97, 120, 113, 102, 110, 122, 101, 101, 53, 119, 57,
-        ],
+        SEQUENCER_DA_ADDRESS.to_vec(),
         &sequencer_private_key,
         &sequencer_private_key,
     );

@@ -20,5 +20,6 @@ jupiter = { path = "../../../adapters/celestia", features = ["native"] }
 demo-stf = { path = "../../demo-stf" }
 sov-rollup-interface = { path = "../../../rollup-interface" }
 risc0-adapter = { path = "../../../adapters/risc0" }
+const-rollup-config = { path = "../../const-rollup-config" }
 
 methods = { path = "../methods" }

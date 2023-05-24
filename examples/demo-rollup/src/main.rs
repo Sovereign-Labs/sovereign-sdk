@@ -1,6 +1,7 @@
 mod config;
 
 use crate::config::RollupConfig;
+use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{create_demo_genesis_config, DefaultContext};
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
 use demo_stf::config::from_toml_path;
@@ -16,18 +17,14 @@ use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner};
 use sovereign_db::ledger_db::{LedgerDB, SlotCommit};
 use std::net::SocketAddr;
 use tracing::Level;
+
 // RPC related imports
 use demo_stf::app::get_rpc_module;
 use jsonrpsee::RpcModule;
 use sov_modules_api::RpcRunner;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
-const ROLLUP_NAMESPACE: NamespaceId = NamespaceId([115, 111, 118, 45, 116, 101, 115, 116]);
-const SEQUENCER_DA_ADDRESS: [u8; 47] = [
-    99, 101, 108, 101, 115, 116, 105, 97, 49, 113, 112, 48, 57, 121, 115, 121, 103, 99, 120, 54,
-    110, 112, 116, 101, 100, 53, 121, 99, 48, 97, 117, 54, 107, 57, 108, 110, 101, 114, 48, 53,
-    121, 118, 115, 57, 50, 48, 56,
-];
+const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
 pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
     let ledger_db = LedgerDB::with_path(path).expect("Ledger DB failed to open");

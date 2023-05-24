@@ -2,6 +2,7 @@
 
 #![no_main]
 
+use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 use demo_stf::app::ZkAppRunner;
 use demo_stf::ArrayWitness;
 use jupiter::types::NamespaceId;
@@ -12,6 +13,9 @@ use risc0_zkvm::guest::env;
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner, ZkConfig};
 use sov_rollup_interface::zk::traits::ZkvmGuest;
+
+// The rollup stores its data in the namespace b"sov-test" on Celestia
+const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
 risc0_zkvm::guest::entry!(main);
 // steps:
@@ -27,7 +31,7 @@ pub fn main() {
     let guest = Risc0Guest;
 
     let verifier = CelestiaVerifier::new(jupiter::verifier::RollupParams {
-        namespace: NamespaceId([115, 111, 118, 45, 116, 101, 115, 116]),
+        namespace: ROLLUP_NAMESPACE,
     });
     // Step 1: read tx list
     let header: CelestiaHeader = guest.read_from_host();
