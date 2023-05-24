@@ -5,7 +5,7 @@ In our rollup, we will verify whether the sender of a data blob possesses the pr
 
 ## Implementing state transition function.
 The [State Transition Function
-interface](../../rollup-interface/specs/interfaces/stf.md). trait serves as the core component of our rollup, where our business logic will reside. To begin, we will create a structure called `CheckHashPreimageStf` and implement the `StateTransitionFunction` trait for it. You can find the complete code in the `lib.rs` file, we will go over the most important parts of the code here:
+interface](../../rollup-interface/specs/interfaces/stf.md) serves as the core component of our rollup, where our business logic will reside. To begin, we will create a structure called `CheckHashPreimageStf` and implement the `StateTransitionFunction` trait for it. You can find the complete code in the `lib.rs` file, we will go over the most important parts of the code here:
 
 
 ```rust
