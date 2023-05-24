@@ -24,6 +24,7 @@ use jsonrpsee::RpcModule;
 use sov_modules_api::RpcRunner;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
+// You can change this constant to point your rollup at a different namespace
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
 pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
@@ -40,6 +41,16 @@ async fn start_rpc_server(module: RpcModule<()>, address: SocketAddr) {
     futures::future::pending::<()>().await;
 }
 
+/// Configure our rollup with a centralized sequencer using the SEQUENCER_DA_ADDRESS
+/// address constant. Since the centralize sequencer's address is consensus critical,
+/// it has to be hardcoded as a constant, rather than read from the config at runtime.
+///
+/// If you want to customize the rollup to accept transactions from your own celestia
+/// address, simply change the value of the SEQUENCER_DA_ADDRESS to your own address.
+/// For example:
+/// ```rust,no_run
+/// const SEQUENCER_DA_ADDRESS: [u8;47] = *b"celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208"
+/// ```
 pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
     let sequencer_private_key = DefaultPrivateKey::generate();
     create_demo_genesis_config(
@@ -65,11 +76,13 @@ async fn main() -> Result<(), anyhow::Error> {
         .map_err(|_err| eprintln!("Unable to set global default subscriber"))
         .expect("Cannot fail to set subscriber");
 
+    // Initialize the ledger database, which stores blocks, transactions, events, etc.
     let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
 
-    // RPC
+    // Our state transition function implements the StateTransitionRunner interface, so we use that to intitialize the STF
     let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
 
+    // Our state transition also implements the RpcRunner interface, so we use that to initialize the RPC server.
     let storj = demo_runner.get_storage();
     let module = get_rpc_module(storj);
 
@@ -77,13 +90,15 @@ async fn main() -> Result<(), anyhow::Error> {
         start_rpc_server(module, address).await;
     });
 
-    // Initialize the Celestia service
+    // Initialize the Celestia service using the DaService interface
     let da_service = CelestiaService::new(
         rollup_config.da.clone(),
         RollupParams {
             namespace: ROLLUP_NAMESPACE,
         },
     );
+    // For demonstration,  we also intitalize the DaVerifier interface using the DaVerifier interface
+    // Running the verifier is only *necessary* during proof generation not normal execution
     let da_verifier = CelestiaVerifier::new(RollupParams {
         namespace: ROLLUP_NAMESPACE,
     });
@@ -140,7 +155,7 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         let (next_state_root, _witness, _) = demo.end_slot();
 
-        // Store the resulting receipts in the database
+        // Store the resulting receipts in the ledger database
         ledger_db.commit_slot(data_to_commit)?;
         prev_state_root = next_state_root.0;
     }

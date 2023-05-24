@@ -12,10 +12,10 @@ package instead.
 By swapping out or modifying the imported state transition function, you can customize
 this example full-node to run arbitrary logic.
 
-## How to Customize This Repo
+## How to Customize This Example
 
 Any time you change out the state transition function, ZKVM, or DA layer of your rollup, you'll
-need to tweak the full-node code. At the very least, you'll need to modify the dependencies. In most cases,
+need to tweak this full-node code. At the very least, you'll need to modify the dependencies. In most cases,
 your full node will also need to be aware of the STF's initialization logic, and how it exposes RPC.
 
 Given that constraint, we won't try to give you specific instructions for supporting every imaginable
