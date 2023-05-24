@@ -47,7 +47,7 @@ pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
     pub batch_hash: [u8; 32],
     /// The receipt of each transaction in the batch
     pub tx_receipts: Vec<TransactionReceipt<TxReceiptContents>>,
-    /// Any additional structered data to be saved in the database and served over RPC
+    /// Any additional structured data to be saved in the database and served over RPC
     pub inner: BatchReceiptContents,
 }
 
@@ -122,7 +122,7 @@ pub enum ConsensusRole {
 }
 
 /// A key-value pair representing a change to the rollup state
-#[derive(Debug, PartialEq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct Event {
     pub key: EventKey,
     pub value: EventValue,
@@ -139,6 +139,7 @@ impl Event {
 
 #[derive(
     Debug,
+    Clone,
     PartialEq,
     Eq,
     PartialOrd,
@@ -146,13 +147,12 @@ impl Event {
     Hash,
     BorshSerialize,
     BorshDeserialize,
-    Clone,
     Serialize,
     Deserialize,
 )]
 pub struct EventKey(Vec<u8>);
 
-#[derive(Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct EventValue(Vec<u8>);
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]

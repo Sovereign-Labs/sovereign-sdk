@@ -59,7 +59,8 @@ pub struct Runtime<C: Context> {
     accounts: accounts::Accounts<C>,
 }
 
-// TODO add macro to generate the following code.
+// TODO add macro to generate the following code:
+//      https://github.com/Sovereign-Labs/sovereign/issues/309
 impl<C: Context> Runtime<C> {
     pub(crate) fn new() -> Self {
         use sov_modules_api::ModuleInfo;
