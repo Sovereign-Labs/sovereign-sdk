@@ -208,6 +208,17 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
 
 ### Exposing RPC
 
+If any of your modules expose rpc methods via the `rpc_gen` macro, there are two things that you should do in your STF package to
+enable the full-node to expose them
+
+1. Annotate the state transition runner with the specific modules you want to expose with `expose_rpc`
+2. Implement the `RpcRunner` trait. provide an implementation for the `get_storage` function
+
+You can see an example of how to use the `expose_rpc` macro on the `native` `StateTransitionRunner` implementation. That macro
+takes a tuple of modules (with the appropriate generics) as arguments, and generates RPC servers for each one. In order to
+make those generated RPC servers work, though, we need to provide them with access to the database. This is where the RpcRunner
+trait comes in.
+
 ```rust
 #[cfg(feature = "native")]
 impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
@@ -217,3 +228,13 @@ impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
     }
 }
 ```
+
+## Wrapping Up
+
+Whew, that was a lot of information. To recap, implementing your own state transition function is as simple as plugging  
+a Runtime, a Transaction Verifier, and some Transaction Hooks into the pre-built app template. Once you've done that,
+you can integrate with any DA layer and Zkvm to create a Sovereign Rollup.
+
+Everything else in this tutorial is about making it easy to _run_ your Sovereign Rollup. To be as compatible as
+possible, state transitions usually want to implement the StateTransitionRunner and RpcRunner traits. For more
+detail about integrating your STF into a full-node, check out the [`demo-rollup` example](../demo-rollup/).
