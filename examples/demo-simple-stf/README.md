@@ -62,8 +62,7 @@ Now that we have defined the necessary types, we need to implement the following
 
 These functions handle the initialization and preparation stages of our rollup, but as we are not modifying the rollup state, their implementation is simply left empty.
 
-Next we need no writhe the core logic in `apply_blob`:
-
+Next we need to write the core logic in `apply_blob`:
 ```rust
     // The core logic of our rollup.
     fn apply_blob(
@@ -109,7 +108,7 @@ Next we need no writhe the core logic in `apply_blob`:
         // The first transaction that finds the correct hash would break the loop and return early.
     }
 ```
-The above function reads the data from the blob, computes the hash, compares it with the desired hash, and returns a `BatchReceipt` indicating whether the preimage was successfully submitted or not.
+The above function reads the data from the blob, computes the `hash`, compares it with the `desired_hash`, and returns a `BatchReceipt` indicating whether the preimage was successfully submitted or not.
 
 The last method is `end_slot`, like before the implementation is trivial:
 
