@@ -1,7 +1,8 @@
 # Demo Rollup
 
-This is a demo running a simple Sovereign SDK rollup on Celestia. None of its code is
-suitable for production use. It contains known security flaws and numerous inefficiencies.
+This is a demo running a simple Sovereign SDK rollup on [Celestia](https://celestia.org/). 
+None of its code is suitable for production use. 
+It contains known security flaws and numerous inefficiencies.
 
 ## What is it?
 
@@ -34,14 +35,14 @@ Sync a Celestia light node running on the Arabica testnet
 1. Start the node with rpc enabled. Our default config uses port 11111: `celestia light start --core.ip https://limani.celestia-devops.dev --p2p.network arabica --gateway --rpc.port 11111`. If you want to use a different port, you can adjust the rollup's configuration in rollup_config.toml.
 1. Obtain a JWT for RPC access: `celestia light auth admin --p2p.network arabica`
 1. Copy the JWT and and store it in the `celestia_rpc_auth_token` field of the rollup's config file (`rollup_config.toml`). Be careful to paste the entire JWT - it may wrap across several lines in your terminal.
-1. Wait a few minutes for your Celestia node to sync. It needs to have synced to the rollup's configured `start_height `293681` before the demo can run properly.
+1. Wait a few minutes for your Celestia node to sync. It needs to have synced to the rollup's configured `start_height `671431` before the demo can run properly.
 
 Once your Celestia node is up and running, simply `cargo +nightly run` to test out the prototype.
 
-## License
+# License
 
 Licensed under the [Apache License, Version
-2.0](./LICENSE).
+2.0](../../LICENSE).
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in this repository by you, as defined in the Apache-2.0 license, shall be
