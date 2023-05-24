@@ -1,26 +1,30 @@
-# Getting Started
+# Demo Prover
 
-## Setting up your IDE
+This is a demo running a simple Sovereign SDK rollup **prover** on [Celestia](https://celestia.org/)
+with [RiscZero](https://www.risczero.com/) prover.
+None of its code is suitable for production use.
+It contains known security flaws and numerous inefficiencies.
 
-To get Rust Analyzer (or other language plugins) to work with Risc0, you'll need to set up the risc0 stdlib binaries in your sysroot.
+## What is it?
 
-0. `cd methods/guest`. All future instructions assume that you're at the root of the guest crate.
-1. Use `download_std.rs` to fetch the modified std lib code. One easy way to run this code is to rename it to `build.rs` and then
-   `cargo build`. The downloaded code will be stored in a directory called "riscv-guest-shim", which should be placed in the
-   `methods/guest` directory.
-2. Build `.rlib` binaries from the modified stdlib. To build the standard library, use the command below (replacing the path).
-   To minimize extraneous code, you may want to comment out the dependencies section of `Cargo.toml` and the body of
-   `rollup.rs` before continuing.
+This demo shows how to integrate RiscZero prover into rollup workflow. 
+This code reads blocks from Celestia, executes them and proves it inside RiscZero ZK VM.
 
-```
-__CARGO_TESTS_ONLY_SRC_ROOT="/path/to/riscv-guest-shim/rust-std" cargo run -Zbuild-std=core,alloc,proc_macro,panic_abort,std -Zbuild-std-features=compiler-builtins-mem --test --release
-```
+## Getting Started
 
-The output of this build will be stored in `target/riscv32im-risc0-zkvm-elf/release/deps`.
+1. Make sure Celestia light node is running as described in [Demo Rollup README](../demo-rollup/README.md)
+2. Execute `cargo run`
 
-Identify the `SYSROOT` from your default rust compiler using the command `rustc --print sysyroot`. Make a new directory
-`lib/rustlib/riscv32im-risc0-zkvm-elf/lib` under your sysroot, and copy all of the stdlib `*.rlib` files into it. Now, your
-toolchain will recognize `riscv32im-risc0-zkvm-elf` as an installed target.
 
-If you encounter any problems, try re-running above `cargo run -Zbuildstd ...` command without the `--test` flag, copy any additional
-`.rlib`s into the `sysroot/lib/rustlib/riscv32im-risc0-zkvm-elf/lib` directory.
+## Development
+
+[IDE integration](./ide_setup.md) described in separate document.
+
+# License
+
+Licensed under the [Apache License, Version
+2.0](../../LICENSE).
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this repository by you, as defined in the Apache-2.0 license, shall be
+licensed as above, without any additional terms or conditions.

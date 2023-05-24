@@ -1,10 +1,3 @@
 [build]
 target = "./riscv32im-risc0-zkvm-elf.json"
 rustflags=["-Cpasses=loweratomic"]
-
-#[env]
-# __CARGO_TESTS_ONLY_SRC_ROOT = { value = "/Users/prestonevans/Developer/sovereign/v1/demo/demo-prover/methods/guest/riscv-guest-shim/rust-std", force = true }
-
-#[unstable]
-#build-std-features = ["compiler-builtins-mem"]
-#build-std = ["alloc", "core", "proc_macro", "panic_abort", "std"]
