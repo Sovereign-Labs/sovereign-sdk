@@ -92,7 +92,7 @@ fn create_state_map_and_storage(
 
 #[test]
 fn test_state_map_with_remove() {
-    let path = schemadb::temppath::TempPath::new();
+    let path = sov_schema_db::temppath::TempPath::new();
     for (before_remove, after_remove) in create_storage_operations() {
         let key = 1;
         let value = 11;
@@ -108,7 +108,7 @@ fn test_state_map_with_remove() {
 
 #[test]
 fn test_state_map_with_delete() {
-    let path = schemadb::temppath::TempPath::new();
+    let path = sov_schema_db::temppath::TempPath::new();
     for (before_delete, after_delete) in create_storage_operations() {
         let key = 1;
         let value = 11;
@@ -138,7 +138,7 @@ fn create_state_value_and_storage(
 
 #[test]
 fn test_state_value_with_remove() {
-    let path = schemadb::temppath::TempPath::new();
+    let path = sov_schema_db::temppath::TempPath::new();
     for (before_remove, after_remove) in create_storage_operations() {
         let value = 11;
         let (state_value, mut working_set) = create_state_value_and_storage(value, &path);
@@ -153,7 +153,7 @@ fn test_state_value_with_remove() {
 
 #[test]
 fn test_state_value_with_delete() {
-    let path = schemadb::temppath::TempPath::new();
+    let path = sov_schema_db::temppath::TempPath::new();
     for (before_delete, after_delete) in create_storage_operations() {
         let value = 11;
         let (state_value, mut working_set) = create_state_value_and_storage(value, &path);
@@ -168,7 +168,7 @@ fn test_state_value_with_delete() {
 
 #[test]
 fn test_witness_roundtrip() {
-    let path: schemadb::temppath::TempPath = schemadb::temppath::TempPath::new();
+    let path: sov_schema_db::temppath::TempPath = sov_schema_db::temppath::TempPath::new();
     let state_value = StateValue::new(Prefix::new(vec![0]));
 
     // Native execution

@@ -32,7 +32,7 @@ sov-state = { path = "../../module-system/sov-state", default-features = false }
 sov-modules-api = { path = "../../module-system/sov-modules-api", default-features = false }
 sov-modules-macros = { path = "../../module-system/sov-modules-macros" }
 # Only enable the db on "native" feature
-schemadb = { path = "../../full-node/db/schemadb", features = ["temppath"], optional = true }
+sov-schema-db = { path = "../../full-node/db/sov-schema-db", features = ["temppath"], optional = true }
 sovereign-db = { path = "../../full-node/db/sovereign-db", optional = true }
 
 [dev-dependencies]
@@ -44,7 +44,7 @@ default = ["native"]
 native = [
 	"sov-state/temp",
 	"dep:sovereign-db",
-	"dep:schemadb",
+	"dep:sov-schema-db",
 	"sov-bank/native",
 	"sov-accounts/native",
 	"sov-election/native",

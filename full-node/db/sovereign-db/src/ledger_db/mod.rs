@@ -3,13 +3,13 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use schemadb::{Schema, DB};
 use serde::Serialize;
 use sov_rollup_interface::{
     db::SeekKeyEncoder,
     services::da::SlotData,
     stf::{BatchReceipt, Event},
 };
+use sov_schema_db::{Schema, DB};
 
 use crate::{
     rocks_db_config::gen_rocksdb_options,
@@ -103,7 +103,7 @@ impl LedgerDB {
     /// A rocksdb instance which stores its data in a tempdir
     #[cfg(any(test, feature = "temp"))]
     pub fn temporary() -> Self {
-        let path = schemadb::temppath::TempPath::new();
+        let path = sov_schema_db::temppath::TempPath::new();
         Self::with_path(path).unwrap()
     }
 

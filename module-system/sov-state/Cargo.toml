@@ -18,7 +18,7 @@ sha2 = { workspace = true}
 
 [dev-dependencies]
 sovereign-db = { path = "../../full-node/db/sovereign-db", features = ["temp"] }
-schemadb = { path = "../../full-node/db/schemadb", features = ["temppath"] }
+sov-schema-db = { path = "../../full-node/db/sov-schema-db", features = ["temppath"] }
 
 [features]
 default = ["native"]

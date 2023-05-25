@@ -204,7 +204,7 @@ mod test {
 
     impl TestDemo {
         fn new() -> Self {
-            let path = schemadb::temppath::TempPath::new();
+            let path = sov_schema_db::temppath::TempPath::new();
             let value_setter_admin_private_key = DefaultPrivateKey::generate();
             let election_admin_private_key = DefaultPrivateKey::generate();
 

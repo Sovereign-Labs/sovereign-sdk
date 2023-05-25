@@ -181,7 +181,7 @@ mod test {
 
     #[test]
     fn test_jmt_storage() {
-        let path = schemadb::temppath::TempPath::new();
+        let path = sov_schema_db::temppath::TempPath::new();
         let tests = create_tests();
         {
             for test in tests.clone() {

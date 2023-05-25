@@ -9,7 +9,7 @@ members = [
     "examples/demo-simple-stf",
     "examples/demo-rollup",
     "examples/demo-nft-module",
-    "full-node/db/schemadb",
+    "full-node/db/sov-schema-db",
     "full-node/db/sovereign-db",
     "module-system/sov-app-template",
     "module-system/sov-modules-macros",
