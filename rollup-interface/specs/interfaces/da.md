@@ -114,15 +114,6 @@ Must include a `prev_hash` field. Must provide a function to compute its canonic
 | ----------- | ---------- | ----------------------------------- |
 | `prev_hash` | `SlotHash` | the hash of the previous (L1) block |
 
-### Type: `Address`
-
-An address on the DA layer. May be any type, but must provide access to a (canonical) byte string
-uniquely representing this address.
-
-| Name    | Type    | Description                  |
-| ------- | ------- | ---------------------------- |
-| `inner` | `bytes` | The raw bytes of the address |
-
 ### Type: `SlotHash`
 
 The hash of a DA layer block. May be any type, but must provide access to a (canonical) byte string
@@ -157,7 +148,7 @@ the DA layer's consensus translates into rollup state.
 
 | Name                 | Type                        | Description                                                                |
 | -------------------- | --------------------------- | -------------------------------------------------------------------------- |
-| `header`             | `Blockheader`               | The header of the DA layer block including the relevant transactions       |
+| `block_header`       | `Blockheader`               | The header of the DA layer block including the relevant transactions       |
 | `txs`                | `iterable<BlobTransaction>` | A list of L1 transactions ("data blobs"), with their senders               |
 | `inclusion_proof`    | `InclusionMultiproof`       | A witness showing that each transaction was included in the DA layer block |
 | `completeness_proof` | `CompletenessProof`         | A witness showing that the returned list of transactions is complete       |
@@ -264,6 +255,35 @@ in-circuit. For this reason, implementers are encouraged to prioritize readabili
 | Name    | Type            | Description                                       |
 | ------- | --------------- | ------------------------------------------------- |
 | `block` | `FilteredBlock` | The relevant subset of data from a DA layer block |
+
+### Method:`send_transaction`
+
+- **Usage:**
+
+  - Post the provided blob of bytes onto the data availability layer
+
+- **Arguments:**
+
+| Name   | Type   | Description                      |
+| ------ | ------ | -------------------------------- |
+| `blob` | bytes` | The data to post on the DA layer |
+
+- **Response:**
+
+| Name  | Type    | Description      |
+| ----- | ------- | ---------------- |
+| `Ok`  | `_`     | No response      |
+| `Err` | `Error` | An error message |
+
+### Type: `RuntimeConfig`
+
+A struct containing whatever runtime configuration is necessary to initialize this DaService. For example, this
+struct could contain the IP address and port of the remote RPC node that this DaService should connect to.
+
+### Type: `FilteredBlock`
+
+The relevant subset of data from the DA layer block. This type must contain all data which will be processed by the rollup
+and enough auxiliary data to allow its block hash to be recomputed by the DaVerifier.
 
 **Code**
 
