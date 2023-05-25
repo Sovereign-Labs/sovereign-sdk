@@ -1,5 +1,5 @@
 [package]
-name = "sovereign-db"
+name = "sov-db"
 version = "0.1.0"
 edition = "2021"
 resolver = "2"
@@ -9,7 +9,7 @@ resolver = "2"
 [dependencies]
 # Maintained by sovereign labs
 jmt = { workspace = true }
-schemadb = { path = "../schemadb" }
+sov-schema-db = { path = "../sov-schema-db" }
 sov-rollup-interface = { path = "../../../rollup-interface" }
 
 
@@ -23,8 +23,8 @@ rocksdb = { workspace = true }
 bincode = "1.3.3"
 
 [dev-dependencies]
-schemadb = { path = "../schemadb", features = ["temppath"] }
+sov-schema-db = { path = "../sov-schema-db", features = ["temppath"] }
 
 [features]
 default = []
-temp = ["schemadb/temppath"]
+temp = ["sov-schema-db/temppath"]

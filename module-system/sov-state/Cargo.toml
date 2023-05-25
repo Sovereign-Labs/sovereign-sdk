@@ -10,17 +10,17 @@ anyhow = { workspace = true }
 borsh = { workspace = true}
 serde = { workspace = true }
 thiserror = { workspace = true }
-sovereign-db = { path = "../../full-node/db/sovereign-db", optional = true}
+sov-db = { path = "../../full-node/db/sov-db", optional = true}
 first-read-last-write-cache = { path = "../utils/first-read-last-write-cache" }
 jmt = { workspace = true }
 hex = { workspace = true}
 sha2 = { workspace = true}
 
 [dev-dependencies]
-sovereign-db = { path = "../../full-node/db/sovereign-db", features = ["temp"] }
-schemadb = { path = "../../full-node/db/schemadb", features = ["temppath"] }
+sov-db = { path = "../../full-node/db/sov-db", features = ["temp"] }
+sov-schema-db = { path = "../../full-node/db/sov-schema-db", features = ["temppath"] }
 
 [features]
 default = ["native"]
-temp = ["sovereign-db/temp"]
-native = ["sovereign-db"]
+temp = ["sov-db/temp"]
+native = ["sov-db"]

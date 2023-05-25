@@ -1,4 +1,4 @@
-# sov-app-template
+# sov-default-stf
 
 ### `AppTemplate`
 

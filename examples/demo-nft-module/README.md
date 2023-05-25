@@ -454,7 +454,7 @@ pub struct Runtime<C: Context> {
 ```
 
 And then this runtime can be used in the State Transition Function runner to execute transactions.
-Here's an example of how to do it with `AppTemplate` from `sov-app-template`:
+Here's an example of how to do it with `AppTemplate` from `sov-default-stf`:
 
 ```rust
     fn new(runtime_config: Self::RuntimeConfig) -> Self {

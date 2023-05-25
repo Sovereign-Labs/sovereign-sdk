@@ -1,5 +1,5 @@
 [package]
-name = "schemadb"
+name = "sov-schema-db"
 version = "0.1.0"
 
 # Workspace inherited keys

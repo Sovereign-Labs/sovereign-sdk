@@ -118,7 +118,7 @@ pub mod fuzzing {
     macro_rules! test_no_panic_decoding {
         ($schema_type:ty) => {
             use proptest::prelude::*;
-            use schemadb::schema::fuzzing::{arb_small_vec_u8, assert_no_panic_decoding};
+            use sov_schema_db::schema::fuzzing::{arb_small_vec_u8, assert_no_panic_decoding};
 
             proptest! {
                 #[test]

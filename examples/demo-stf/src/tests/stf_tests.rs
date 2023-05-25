@@ -7,7 +7,7 @@ pub mod test {
             create_demo_config, create_new_demo, data_generation::simulate_da, new_test_blob, C,
         },
     };
-    use sov_app_template::{Batch, SequencerOutcome};
+    use sov_default_stf::{Batch, SequencerOutcome};
     use sov_modules_api::{
         default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
     };
@@ -16,7 +16,7 @@ pub mod test {
 
     #[test]
     fn test_demo_values_in_db() {
-        let path = schemadb::temppath::TempPath::new();
+        let path = sov_schema_db::temppath::TempPath::new();
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();
 
@@ -69,7 +69,7 @@ pub mod test {
 
     #[test]
     fn test_demo_values_in_cache() {
-        let path = schemadb::temppath::TempPath::new();
+        let path = sov_schema_db::temppath::TempPath::new();
         let mut demo = create_new_demo(&path);
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
@@ -118,7 +118,7 @@ pub mod test {
 
     #[test]
     fn test_demo_values_not_in_db() {
-        let path = schemadb::temppath::TempPath::new();
+        let path = sov_schema_db::temppath::TempPath::new();
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();
@@ -169,7 +169,7 @@ pub mod test {
 
     #[test]
     fn test_sequencer_insufficient_funds() {
-        let path = schemadb::temppath::TempPath::new();
+        let path = sov_schema_db::temppath::TempPath::new();
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();

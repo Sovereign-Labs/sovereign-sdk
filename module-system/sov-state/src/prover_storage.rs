@@ -9,7 +9,7 @@ use crate::{
     MerkleProofSpec, Storage,
 };
 use jmt::{storage::TreeWriter, JellyfishMerkleTree, KeyHash, PhantomHasher, SimpleHasher};
-use sovereign_db::state_db::StateDB;
+use sov_db::state_db::StateDB;
 
 pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,
@@ -181,7 +181,7 @@ mod test {
 
     #[test]
     fn test_jmt_storage() {
-        let path = schemadb::temppath::TempPath::new();
+        let path = sov_schema_db::temppath::TempPath::new();
         let tests = create_tests();
         {
             for test in tests.clone() {

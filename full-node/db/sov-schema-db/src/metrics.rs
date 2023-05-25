@@ -85,9 +85,9 @@ pub static SCHEMADB_BATCH_COMMIT_BYTES: Lazy<HistogramVec> = Lazy::new(|| {
 pub static SCHEMADB_PUT_BYTES: Lazy<HistogramVec> = Lazy::new(|| {
     register_histogram_vec!(
         // metric name
-        "schemadb_put_bytes",
+        "sov_schema_db_put_bytes",
         // metric description
-        "Schemadb put call puts data size in bytes",
+        "sov_schema_db put call puts data size in bytes",
         // metric labels (dimensions)
         &["cf_name"]
     )
@@ -101,9 +101,9 @@ pub static SCHEMADB_DELETES: Lazy<IntCounterVec> = Lazy::new(|| {
 pub static SCHEMADB_BATCH_PUT_LATENCY_SECONDS: Lazy<HistogramVec> = Lazy::new(|| {
     register_histogram_vec!(
         // metric name
-        "schemadb_batch_put_latency_seconds",
+        "sov_schema_db_batch_put_latency_seconds",
         // metric description
-        "schemadb schema batch put latency in seconds",
+        "sov_schema_db schema batch put latency in seconds",
         // metric labels (dimensions)
         &["db_name"],
         exponential_buckets(/*start=*/ 1e-3, /*factor=*/ 2.0, /*count=*/ 20).unwrap(),

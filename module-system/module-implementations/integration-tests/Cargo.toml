@@ -14,4 +14,4 @@ sov-modules-api = { path = "../../sov-modules-api"}
 sov-modules-macros = { path = "../../sov-modules-macros" }
 sov-state = { path = "../../sov-state", features = ["temp"] }
 sov-rollup-interface = { path = "../../../rollup-interface" }
-schemadb = { path = "../../../full-node/db/schemadb", features = ["temppath"] }
+sov-schema-db = { path = "../../../full-node/db/sov-schema-db", features = ["temppath"] }

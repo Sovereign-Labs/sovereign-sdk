@@ -1,6 +1,6 @@
 use crate::tx_verifier_impl::Transaction;
 use anyhow::Result;
-use sov_app_template::{TxHooks, VerifiedTx};
+use sov_default_stf::{TxHooks, VerifiedTx};
 use sov_modules_api::{Context, Spec};
 use sov_state::WorkingSet;
 
