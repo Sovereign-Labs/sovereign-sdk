@@ -10,10 +10,10 @@ use sov_modules_api::Spec;
 pub use sov_state::config::Config as StorageConfig;
 use value_setter::ValueSetterConfig;
 
-pub const TEST_SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
+pub const DEMO_SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 pub const LOCKED_AMOUNT: u64 = 200;
-pub const TEST_SEQ_PUB_KEY_STR: &str = "seq_pub_key";
-pub const TEST_TOKEN_NAME: &str = "sov-test-token";
+pub const DEMO_SEQ_PUB_KEY_STR: &str = "seq_pub_key";
+pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
 
 pub fn create_demo_genesis_config<C: Context>(
     initial_sequencer_balance: u64,
@@ -23,7 +23,7 @@ pub fn create_demo_genesis_config<C: Context>(
     election_admin_private_key: &DefaultPrivateKey,
 ) -> GenesisConfig<C> {
     let token_config: bank::TokenConfig<C> = bank::TokenConfig {
-        token_name: TEST_TOKEN_NAME.to_owned(),
+        token_name: DEMO_TOKEN_NAME.to_owned(),
         address_and_balances: vec![(sequencer_address.clone(), initial_sequencer_balance)],
     };
 

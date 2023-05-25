@@ -1,7 +1,7 @@
 #[cfg(test)]
 pub mod test {
     use crate::{
-        genesis_config::{LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
+        genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
         runtime::Runtime,
         tests::{
             create_demo_config, create_new_demo, data_generation::simulate_da, new_test_blob, C,
@@ -35,7 +35,7 @@ pub mod test {
 
             let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
                 &mut demo,
-                new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
+                new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
                 None,
             )
             .inner;
@@ -88,7 +88,7 @@ pub mod test {
 
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
+            new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner;
@@ -138,7 +138,7 @@ pub mod test {
 
             let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
                 &mut demo,
-                new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
+                new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
                 None,
             )
             .inner;
@@ -189,7 +189,7 @@ pub mod test {
 
         let apply_blob_result = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
+            new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner;

@@ -1,7 +1,7 @@
 use core::panic;
 
 use crate::{
-    genesis_config::{LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
+    genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
     runtime::Runtime,
     tests::data_generation::simulate_da_with_bad_serialization,
 };
@@ -43,7 +43,7 @@ fn test_tx_revert() {
 
         match StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
+            new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner
@@ -104,7 +104,7 @@ fn test_tx_bad_sig() {
 
         let txs = simulate_da_with_bad_sig(election_admin_private_key);
 
-        match StateTransitionFunction::<MockZkvm>::apply_blob(&mut demo, new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS), None).inner {
+        match StateTransitionFunction::<MockZkvm>::apply_blob(&mut demo, new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS), None).inner {
                 sov_app_template::SequencerOutcome::Slashed(SlashingReason::StatelessVerificationFailed) => {}
                 _ => panic!("Unexpected outcome: Stateless verification should have failed due to invalid signature")
             }
@@ -205,7 +205,7 @@ fn test_tx_bad_serialization() {
 
         let outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
+            new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner;

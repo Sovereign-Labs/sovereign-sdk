@@ -166,8 +166,8 @@ mod test {
     use super::*;
     use demo_stf::app::{DemoApp, DemoAppRunner};
     use demo_stf::genesis_config::{
-        create_demo_genesis_config, generate_address, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS,
-        TEST_SEQ_PUB_KEY_STR,
+        create_demo_genesis_config, generate_address, DEMO_SEQUENCER_DA_ADDRESS,
+        DEMO_SEQ_PUB_KEY_STR, LOCKED_AMOUNT,
     };
     use demo_stf::runner_config::Config;
     use demo_stf::runtime::GenesisConfig;
@@ -284,7 +284,7 @@ mod test {
 
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             demo,
-            new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
+            new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner;
@@ -331,8 +331,8 @@ mod test {
     ) -> GenesisConfig<DefaultContext> {
         create_demo_genesis_config::<DefaultContext>(
             initial_sequencer_balance,
-            generate_address::<DefaultContext>(TEST_SEQ_PUB_KEY_STR),
-            TEST_SEQUENCER_DA_ADDRESS.to_vec(),
+            generate_address::<DefaultContext>(DEMO_SEQ_PUB_KEY_STR),
+            DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
             value_setter_admin_private_key,
             election_admin_private_key,
         )

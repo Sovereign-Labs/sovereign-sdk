@@ -9,8 +9,8 @@ use std::path::Path;
 use crate::{
     app::DemoApp,
     genesis_config::{
-        create_demo_genesis_config, generate_address, TEST_SEQUENCER_DA_ADDRESS,
-        TEST_SEQ_PUB_KEY_STR,
+        create_demo_genesis_config, generate_address, DEMO_SEQUENCER_DA_ADDRESS,
+        DEMO_SEQ_PUB_KEY_STR,
     },
     runtime::{GenesisConfig, Runtime},
     tx_hooks_impl::DemoAppTxHooks,
@@ -47,8 +47,8 @@ pub fn create_demo_config(
 ) -> GenesisConfig<DefaultContext> {
     create_demo_genesis_config::<DefaultContext>(
         initial_sequencer_balance,
-        generate_address::<DefaultContext>(TEST_SEQ_PUB_KEY_STR),
-        TEST_SEQUENCER_DA_ADDRESS.to_vec(),
+        generate_address::<DefaultContext>(DEMO_SEQ_PUB_KEY_STR),
+        DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
         value_setter_admin_private_key,
         election_admin_private_key,
     )
