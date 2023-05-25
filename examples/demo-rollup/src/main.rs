@@ -17,7 +17,7 @@ use sovereign_db::ledger_db::{LedgerDB, SlotCommit};
 use std::net::SocketAddr;
 use tracing::Level;
 // RPC related imports
-use demo_stf::app::get_rpc_module;
+use demo_stf::app::get_rpc_methods;
 use jsonrpsee::RpcModule;
 use sov_modules_api::RpcRunner;
 
@@ -34,12 +34,12 @@ pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
     ledger_db
 }
 
-async fn start_rpc_server(module: RpcModule<()>, address: SocketAddr) {
+async fn start_rpc_server(methods: RpcModule<()>, address: SocketAddr) {
     let server = jsonrpsee::server::ServerBuilder::default()
         .build([address].as_ref())
         .await
         .unwrap();
-    let _server_handle = server.start(module).unwrap();
+    let _server_handle = server.start(methods).unwrap();
     futures::future::pending::<()>().await;
 }
 
@@ -74,10 +74,10 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
 
     let storj = demo_runner.get_storage();
-    let module = get_rpc_module(storj);
+    let methods = get_rpc_methods(storj);
 
     let _handle = tokio::spawn(async move {
-        start_rpc_server(module, address).await;
+        start_rpc_server(methods, address).await;
     });
 
     // Initialize the Celestia service

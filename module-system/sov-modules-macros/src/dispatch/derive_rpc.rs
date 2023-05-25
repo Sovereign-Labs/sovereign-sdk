@@ -462,7 +462,7 @@ pub(crate) fn rpc_outer_impls(
     }
 
     let create_rpc_tokens = quote! {
-             pub fn get_rpc_module(storj: <#last_context_type as ::sov_modules_api::Spec>::Storage) -> jsonrpsee::RpcModule<()> {
+             pub fn get_rpc_methods(storj: <#last_context_type as ::sov_modules_api::Spec>::Storage) -> jsonrpsee::RpcModule<()> {
                 let mut module = jsonrpsee::RpcModule::new(());
                 let r = RpcStorage {
                     storage: storj.clone(),
