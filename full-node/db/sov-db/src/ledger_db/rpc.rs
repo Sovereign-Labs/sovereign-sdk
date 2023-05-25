@@ -26,6 +26,7 @@ const MAX_EVENTS_PER_REQUEST: u64 = 500;
 
 use super::LedgerDB;
 
+
 impl LedgerRpcProvider for LedgerDB {
     fn get_slots<B: DeserializeOwned, T: DeserializeOwned>(
         &self,
