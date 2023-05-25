@@ -164,13 +164,11 @@ impl SerializedTx {
 #[cfg(test)]
 mod test {
     use super::*;
-    use demo_stf::config::{create_demo_config, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS};
-    use demo_stf::{
-        app::{create_new_demo, DemoApp},
-        helpers::new_test_blob,
-    };
+    use demo_stf::app::{DemoApp, DemoAppRunner};
+    use demo_stf::config::{create_demo_config, Config, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS};
     use sov_app_template::{Batch, RawTx, SequencerOutcome};
     use sov_modules_api::Address;
+    use sov_rollup_interface::stf::StateTransitionRunner;
 
     use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
     use sov_state::WorkingSet;
@@ -205,15 +203,20 @@ mod test {
             let value_setter_admin_private_key = DefaultPrivateKey::generate();
             let election_admin_private_key = DefaultPrivateKey::generate();
 
-            let config = create_demo_config(
+            let genesis_config = create_demo_config(
                 LOCKED_AMOUNT + 1,
                 &value_setter_admin_private_key,
                 &election_admin_private_key,
             );
 
+            let path = path.as_ref().to_path_buf();
+            let runner_config = Config {
+                storage: sov_state::config::Config { path },
+            };
+
             Self {
-                config,
-                demo: create_new_demo(&path),
+                config: genesis_config,
+                demo: DemoAppRunner::<DefaultContext, MockZkvm>::new(runner_config).0,
             }
         }
     }
@@ -306,5 +309,13 @@ mod test {
 
     fn create_token_address(token_deployer_address: &Address) -> Address {
         bank::create_token_address::<C>("sov-test-token", token_deployer_address.as_ref(), 11)
+    }
+
+    pub type TestBlob = sov_rollup_interface::mocks::TestBlob<Address>;
+
+    pub fn new_test_blob(batch: Batch, address: &[u8]) -> TestBlob {
+        let address = Address::try_from(address).unwrap();
+        let data = batch.try_to_vec().unwrap();
+        TestBlob::new(data, address)
     }
 }

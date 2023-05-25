@@ -1,11 +1,9 @@
 pub mod app;
 #[cfg(feature = "native")]
 pub mod config;
-#[cfg(feature = "native")]
-pub mod helpers;
 pub mod runtime;
 #[cfg(test)]
-mod tests;
+pub mod tests;
 pub mod tx_hooks_impl;
 pub mod tx_verifier_impl;
 

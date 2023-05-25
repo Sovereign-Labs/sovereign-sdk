@@ -24,11 +24,6 @@ use sov_state::ProverStorage;
 use sov_state::Storage;
 use sov_state::ZkStorage;
 
-#[cfg(feature = "native")]
-use std::path::Path;
-
-#[cfg(test)]
-pub(crate) type C = DefaultContext;
 pub struct DemoAppRunner<C: Context, Vm: Zkvm>(pub DemoApp<C, Vm>);
 pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;
 
@@ -106,15 +101,4 @@ impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
     fn get_storage(&self) -> <Self::Context as Spec>::Storage {
         self.inner().current_storage.clone()
     }
-}
-
-#[cfg(feature = "native")]
-pub fn create_new_demo(
-    path: impl AsRef<Path>,
-) -> DemoApp<DefaultContext, sov_rollup_interface::mocks::MockZkvm> {
-    let runtime = Runtime::new();
-    let storage = ProverStorage::with_path(path).unwrap();
-    let tx_hooks = DemoAppTxHooks::new();
-    let tx_verifier = DemoAppTxVerifier::new();
-    AppTemplate::new(storage, runtime, tx_verifier, tx_hooks)
 }
