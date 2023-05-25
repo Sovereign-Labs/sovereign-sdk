@@ -17,7 +17,7 @@ pub struct Coins<C: sov_modules_api::Context> {
     pub token_address: C::Address,
 }
 
-/// This struct represents a token in the bank module.
+/// This struct represents a token in the sov-bank module.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub(crate) struct Token<C: sov_modules_api::Context> {
     /// Name of the token.

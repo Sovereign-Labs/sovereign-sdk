@@ -4,7 +4,7 @@ use anyhow::{bail, Result};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
-/// This enumeration represents the available call messages for interacting with the bank module.
+/// This enumeration represents the available call messages for interacting with the sov-bank module.
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),

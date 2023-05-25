@@ -24,7 +24,7 @@ impl<C: Context> VerifiedTx for AppVerifiedTx<C> {
 
 pub struct DemoAppTxHooks<C: Context> {
     accounts_hooks: sov_accounts::hooks::Hooks<C>,
-    sequencer_hooks: sequencer::hooks::Hooks<C>,
+    sequencer_hooks: sov_sequencer_registry::hooks::Hooks<C>,
 }
 
 impl<C: Context> DemoAppTxHooks<C> {
@@ -32,7 +32,7 @@ impl<C: Context> DemoAppTxHooks<C> {
     pub fn new() -> Self {
         Self {
             accounts_hooks: sov_accounts::hooks::Hooks::<C>::new(),
-            sequencer_hooks: sequencer::hooks::Hooks::<C>::new(),
+            sequencer_hooks: sov_sequencer_registry::hooks::Hooks::<C>::new(),
         }
     }
 }

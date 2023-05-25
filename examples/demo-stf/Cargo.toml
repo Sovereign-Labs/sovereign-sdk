@@ -23,7 +23,7 @@ jsonrpsee = { workspace = true, features = ["http-client", "server"], optional =
 
 sov-rollup-interface = { path = "../../rollup-interface" }
 election = { path = "../../module-system/module-implementations/examples/election", default-features = false }
-sequencer = { path = "../../module-system/module-implementations/sequencer", default-features = false }
+sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry", default-features = false }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", default-features = false }
 sov-app-template = { path = "../../module-system/sov-app-template" } # no features available
 value-setter = { path = "../../module-system/module-implementations/examples/value-setter", default-features = false }
@@ -48,7 +48,7 @@ native = [
 	"sov-bank/native",
 	"sov-accounts/native",
 	"election/native",
-	"sequencer/native",
+	"sov-sequencer-registry/native",
 	"value-setter/native",
 	"sov-modules-api/native",
 	"sov-rollup-interface/mocks",

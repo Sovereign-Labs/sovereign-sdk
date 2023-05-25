@@ -19,7 +19,7 @@ members = [
     "module-system/module-implementations/sov-accounts",
     "module-system/module-implementations/sov-bank",
     "module-system/module-implementations/prover-incentives",
-    "module-system/module-implementations/sequencer",
+    "module-system/module-implementations/sov-sequencer-registry",
     "module-system/module-implementations/module-template",
     "module-system/module-implementations/examples/value-setter",
     "module-system/module-implementations/examples/election",

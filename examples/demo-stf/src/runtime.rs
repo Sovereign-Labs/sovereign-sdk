@@ -39,7 +39,7 @@ use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 #[derive(Genesis, DispatchCall, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
-    pub sequencer: sequencer::Sequencer<C>,
+    pub sequencer: sov_sequencer_registry::Sequencer<C>,
 
     pub bank: sov_bank::Bank<C>,
 
@@ -56,7 +56,7 @@ impl<C: Context> Runtime<C> {
     pub(crate) fn new() -> Self {
         use sov_modules_api::ModuleInfo;
         Self {
-            sequencer: sequencer::Sequencer::new(),
+            sequencer: sov_sequencer_registry::Sequencer::new(),
             bank: sov_bank::Bank::new(),
             election: election::Election::new(),
             value_setter: value_setter::ValueSetter::new(),

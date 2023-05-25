@@ -112,7 +112,7 @@ on two modules which need access to the hooks - `sov-accounts` and `Sequencer`, 
 ```rust
 pub struct DemoAppTxHooks<C: Context> {
     accounts_hooks: accounts::hooks::Hooks<C>,
-    sequencer_hooks: sequencer::hooks::Hooks<C>,
+    sequencer_hooks: sov_sequencer_registry::hooks::Hooks<C>,
 }
 ```
 
@@ -128,7 +128,7 @@ module to your app, just add an additional field to the runtime.
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct MyRuntime<C: Context> {
     #[allow(unused)]
-    sequencer: sequencer::Sequencer<C>,
+    sequencer: sov_sequencer_registry::Sequencer<C>,
 
     #[allow(unused)]
     bank: sov_bank::Bank<C>,

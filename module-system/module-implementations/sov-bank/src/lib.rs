@@ -18,22 +18,22 @@ pub struct TokenConfig<C: sov_modules_api::Context> {
     pub address_and_balances: Vec<(C::Address, u64)>,
 }
 
-/// Initial configuration for Bank module.
+/// Initial configuration for sov-bank module.
 pub struct BankConfig<C: sov_modules_api::Context> {
     pub tokens: Vec<TokenConfig<C>>,
 }
 
-/// The Bank module manages user balances. It provides functionality for:
+/// The sov-bank module manages user balances. It provides functionality for:
 /// - Token creation.
 /// - Token transfers.
 /// - Token burn.
 #[derive(ModuleInfo, Clone)]
 pub struct Bank<C: sov_modules_api::Context> {
-    /// The address of the bank module.
+    /// The address of the sov-bank module.
     #[address]
     pub(crate) address: C::Address,
 
-    /// A mapping of addresses to tokens in the bank.
+    /// A mapping of addresses to tokens in the sov-bank.
     #[state]
     pub(crate) tokens: sov_state::StateMap<C::Address, Token<C>>,
 }

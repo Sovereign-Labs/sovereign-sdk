@@ -443,7 +443,7 @@ Now this module can be added to rollup's Runtime:
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
     #[allow(unused)]
-    sequencer: sequencer::Sequencer<C>,
+    sequencer: sov_sequencer_registry::Sequencer<C>,
 
     #[allow(unused)]
     bank: sov_bank::Bank<C>,
