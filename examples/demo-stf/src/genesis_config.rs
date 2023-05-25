@@ -8,7 +8,7 @@ use sov_modules_api::Hasher;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
 pub use sov_state::config::Config as StorageConfig;
-use value_setter::ValueSetterConfig;
+use sov_value_setter::ValueSetterConfig;
 
 pub const DEMO_SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 pub const LOCKED_AMOUNT: u64 = 200;

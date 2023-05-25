@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use super::ValueSetter;
 
-/// This enumeration represents the available call messages for interacting with the `ValueSetter` module.
+/// This enumeration represents the available call messages for interacting with the `sov-value-setter` module.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage {
     SetValue(u32),

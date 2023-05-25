@@ -45,7 +45,7 @@ pub struct Runtime<C: Context> {
 
     pub election: sov_election::Election<C>,
 
-    pub value_setter: value_setter::ValueSetter<C>,
+    pub value_setter: sov_value_setter::ValueSetter<C>,
 
     pub accounts: sov_accounts::Accounts<C>,
 }
@@ -59,7 +59,7 @@ impl<C: Context> Runtime<C> {
             sequencer: sov_sequencer_registry::Sequencer::new(),
             bank: sov_bank::Bank::new(),
             election: sov_election::Election::new(),
-            value_setter: value_setter::ValueSetter::new(),
+            value_setter: sov_value_setter::ValueSetter::new(),
             accounts: sov_accounts::Accounts::new(),
         }
     }

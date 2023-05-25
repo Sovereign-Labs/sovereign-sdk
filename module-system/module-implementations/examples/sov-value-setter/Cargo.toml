@@ -1,5 +1,5 @@
 [package]
-name = "value-setter"
+name = "sov-value-setter"
 version = "0.1.0"
 edition = "2021"
 resolver = "2"

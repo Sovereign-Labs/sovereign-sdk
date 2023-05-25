@@ -32,7 +32,7 @@ use sov_bank::query::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
 use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
 #[cfg(feature = "native")]
-use value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
+use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
 #[cfg(feature = "native")]
 use sov_modules_macros::expose_rpc;
