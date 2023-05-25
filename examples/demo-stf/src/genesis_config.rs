@@ -59,7 +59,7 @@ pub fn create_demo_genesis_config<C: Context>(
         bank_config,
         election_config,
         value_setter_config,
-        accounts::AccountConfig { pub_keys: vec![] },
+        sov_accounts::AccountConfig { pub_keys: vec![] },
     )
 }
 

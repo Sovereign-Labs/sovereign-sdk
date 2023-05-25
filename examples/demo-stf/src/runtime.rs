@@ -47,7 +47,7 @@ pub struct Runtime<C: Context> {
 
     pub value_setter: value_setter::ValueSetter<C>,
 
-    pub accounts: accounts::Accounts<C>,
+    pub accounts: sov_accounts::Accounts<C>,
 }
 
 // TODO add macro to generate the following code:
@@ -60,7 +60,7 @@ impl<C: Context> Runtime<C> {
             bank: bank::Bank::new(),
             election: election::Election::new(),
             value_setter: value_setter::ValueSetter::new(),
-            accounts: accounts::Accounts::new(),
+            accounts: sov_accounts::Accounts::new(),
         }
     }
 }
