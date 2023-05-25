@@ -83,9 +83,6 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> sov_modules_api::Module for ProverIn
 
     type CallMessage = call::CallMessage;
 
-    #[cfg(feature = "native")]
-    type QueryMessage = query::QueryMessage<C>;
-
     fn genesis(
         &self,
         config: &Self::Config,
@@ -111,20 +108,5 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> sov_modules_api::Module for ProverIn
             }
         }
         .map_err(|e| e.into())
-    }
-
-    #[cfg(feature = "native")]
-    fn query(
-        &self,
-        msg: Self::QueryMessage,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> sov_modules_api::QueryResponse {
-        match msg {
-            query::QueryMessage::GetBondAmount(address) => {
-                let response =
-                    serde_json::to_vec(&self.get_bond_amount(address, working_set)).unwrap();
-                sov_modules_api::QueryResponse { response }
-            }
-        }
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
     call, hooks,
-    query::{self, QueryMessage, Response},
+    query::{self, Response},
     AccountConfig, Accounts,
 };
 use sov_modules_api::{
@@ -29,15 +29,7 @@ fn test_config_account() {
         .init_module(&account_config, native_working_set)
         .unwrap();
 
-    let query_response: query::Response = serde_json::from_slice(
-        &accounts
-            .query(
-                QueryMessage::GetAccount(init_pub_key.clone()),
-                native_working_set,
-            )
-            .response,
-    )
-    .unwrap();
+    let query_response = accounts.get_account(init_pub_key, native_working_set);
 
     assert_eq!(
         query_response,
@@ -66,12 +58,7 @@ fn test_update_account() {
             .get_or_create_default_account(sender.clone(), native_working_set)
             .unwrap();
 
-        let query_response: query::Response = serde_json::from_slice(
-            &accounts
-                .query(QueryMessage::GetAccount(sender.clone()), native_working_set)
-                .response,
-        )
-        .unwrap();
+        let query_response = accounts.get_account(sender.clone(), native_working_set);
 
         assert_eq!(
             query_response,
@@ -96,22 +83,12 @@ fn test_update_account() {
             .unwrap();
 
         // Account corresponding to the old public key does not exist
-        let query_response: query::Response = serde_json::from_slice(
-            &accounts
-                .query(QueryMessage::GetAccount(sender), native_working_set)
-                .response,
-        )
-        .unwrap();
+        let query_response = accounts.get_account(sender, native_working_set);
 
         assert_eq!(query_response, query::Response::AccountEmpty);
 
         // New account with the new public key and an old address is created.
-        let query_response: query::Response = serde_json::from_slice(
-            &accounts
-                .query(QueryMessage::GetAccount(new_pub_key), native_working_set)
-                .response,
-        )
-        .unwrap();
+        let query_response = accounts.get_account(new_pub_key, native_working_set);
 
         assert_eq!(
             query_response,

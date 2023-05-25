@@ -4,7 +4,11 @@ use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
-use crate::zk::traits::{Matches, Zkvm};
+use crate::{
+    da::BlobTransactionTrait,
+    traits::AddressTrait,
+    zk::traits::{Matches, Zkvm},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct MockCodeCommitment(pub [u8; 32]);
@@ -83,4 +87,37 @@ fn test_mock_proof_roundtrip() {
 
     let decoded = MockProof::decode(&encoded).unwrap();
     assert_eq!(proof, decoded);
+}
+
+#[derive(
+    Debug,
+    Clone,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub struct TestBlob<Address> {
+    address: Address,
+    data: Vec<u8>,
+}
+
+impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
+    type Data = std::io::Cursor<Vec<u8>>;
+
+    type Address = Address;
+
+    fn sender(&self) -> Self::Address {
+        self.address.clone()
+    }
+
+    fn data(&self) -> Self::Data {
+        std::io::Cursor::new(self.data.clone())
+    }
+}
+
+impl<Address: AddressTrait> TestBlob<Address> {
+    pub fn new(data: Vec<u8>, address: Address) -> Self {
+        Self { address, data }
+    }
 }

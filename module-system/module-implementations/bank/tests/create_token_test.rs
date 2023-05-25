@@ -1,5 +1,4 @@
 use bank::call::CallMessage;
-use bank::query::{BalanceResponse, QueryMessage};
 use bank::{create_token_address, Bank};
 use sov_modules_api::{Context, Module, ModuleInfo};
 use sov_state::{ProverStorage, WorkingSet};
@@ -35,22 +34,13 @@ fn initial_and_deployed_token() {
 
     assert!(create_token_response.events.is_empty());
 
-    let query = QueryMessage::GetBalance {
-        user_address: sender_address,
-        token_address: token_address.clone(),
-    };
+    let sender_balance =
+        bank.get_balance_of(sender_address, token_address.clone(), &mut working_set);
+    assert!(sender_balance.is_none());
 
-    let sender_balance = query_and_deserialize::<BalanceResponse>(&bank, query, &mut working_set);
-    assert!(sender_balance.amount.is_none());
+    let minter_balance = bank.get_balance_of(minter_address, token_address, &mut working_set);
 
-    let query = QueryMessage::GetBalance {
-        user_address: minter_address,
-        token_address,
-    };
-
-    let minter_balance = query_and_deserialize::<BalanceResponse>(&bank, query, &mut working_set);
-
-    assert_eq!(Some(initial_balance), minter_balance.amount);
+    assert_eq!(Some(initial_balance), minter_balance);
 }
 
 #[test]

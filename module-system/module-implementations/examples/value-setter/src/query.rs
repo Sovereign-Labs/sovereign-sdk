@@ -2,11 +2,6 @@ use super::ValueSetter;
 use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
 
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
-pub enum QueryMessage {
-    GetValue,
-}
-
 #[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq)]
 pub struct Response {
     pub value: Option<u32>,

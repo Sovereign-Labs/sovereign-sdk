@@ -19,7 +19,7 @@ serde_json = { workspace = true, optional = true }
 sha2 = { workspace = true }
 clap = { workspace = true, optional = true }
 toml = { workspace = true, optional = true }
-jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+jsonrpsee = { workspace = true, features = ["http-client", "server"], optional = true }
 
 sov-rollup-interface = { path = "../../rollup-interface" }
 election = { path = "../../module-system/module-implementations/examples/election", default-features = false }
@@ -41,6 +41,19 @@ tempfile = "3.5.0"
 
 [features]
 default = ["native"]
-native = ["sov-state/temp", "dep:sovereign-db", "dep:schemadb", "bank/native", "accounts/native", "election/native", 
-	"sequencer/native", "value-setter/native", "sov-modules-api/native","sov-rollup-interface/mocks", "clap", "serde_json", "toml"]
+native = [
+	"sov-state/temp",
+	"dep:sovereign-db",
+	"dep:schemadb",
+	"bank/native",
+	"accounts/native",
+	"election/native",
+	"sequencer/native",
+	"value-setter/native",
+	"sov-modules-api/native",
+	"sov-rollup-interface/mocks",
+	"clap",
+	"serde_json",
+	"jsonrpsee",
+	"toml"]
 verifier = []

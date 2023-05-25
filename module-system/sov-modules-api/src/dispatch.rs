@@ -1,4 +1,4 @@
-use crate::{CallResponse, Context, Error, QueryResponse, Spec};
+use crate::{CallResponse, Context, Error, Spec};
 use sov_state::WorkingSet;
 
 /// Methods from this trait should be called only once during the rollup deployment.
@@ -34,20 +34,4 @@ pub trait DispatchCall {
 
     /// Returns an address of the dispatched module.
     fn module_address(&self, message: &Self::Decodable) -> &<Self::Context as Spec>::Address;
-}
-
-/// A trait that needs to be implemented for any query message.
-pub trait DispatchQuery {
-    type Context: Context;
-    type Decodable;
-
-    /// Decodes serialized query message
-    fn decode_query(serialized_message: &[u8]) -> Result<Self::Decodable, std::io::Error>;
-
-    /// Dispatches a query message to the appropriate module.
-    fn dispatch_query(
-        &self,
-        message: Self::Decodable,
-        working_set: &mut WorkingSet<<<Self as DispatchQuery>::Context as Spec>::Storage>,
-    ) -> QueryResponse;
 }

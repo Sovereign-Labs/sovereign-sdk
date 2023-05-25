@@ -1,11 +1,6 @@
 use crate::ElectionConfig;
 
-use super::{
-    call::CallMessage,
-    query::{GetResultResponse, QueryMessage},
-    types::Candidate,
-    Election,
-};
+use super::{call::CallMessage, query::GetResultResponse, types::Candidate, Election};
 use sov_modules_api::Address;
 
 use sov_modules_api::{
@@ -102,9 +97,7 @@ fn test_module<C: Context>(admin: C::Address, working_set: &mut WorkingSet<C::St
 
     // Get result
     {
-        let query = QueryMessage::GetResult;
-        let query = election.query(query, working_set);
-        let query_response: GetResultResponse = serde_json::from_slice(&query.response).unwrap();
+        let query_response: GetResultResponse = election.results(working_set);
 
         assert_eq!(
             query_response,

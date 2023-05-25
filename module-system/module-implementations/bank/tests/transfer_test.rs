@@ -2,11 +2,13 @@ mod helpers;
 
 use bank::call::CallMessage;
 use bank::genesis::{DEPLOYER, SALT};
-use bank::query::{BalanceResponse, QueryMessage, TotalSupplyResponse};
+use bank::query::TotalSupplyResponse;
 use bank::{create_token_address, Bank, BankConfig, Coins};
 use helpers::*;
 use sov_modules_api::{Address, Context, Module, ModuleInfo};
-use sov_state::{ProverStorage, WorkingSet};
+use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+
+pub type Storage = ProverStorage<DefaultStorageSpec>;
 
 #[test]
 fn transfer_initial_token() {
@@ -26,20 +28,11 @@ fn transfer_initial_token() {
     // Preparation
     let query_user_balance =
         |user_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
-            let query = QueryMessage::GetBalance {
-                user_address,
-                token_address: token_address.clone(),
-            };
-
-            let balance: BalanceResponse = query_and_deserialize(&bank, query, working_set);
-            balance.amount
+            bank.get_balance_of(user_address, token_address.clone(), working_set)
         };
 
     let query_total_supply = |working_set: &mut WorkingSet<Storage>| -> Option<u64> {
-        let query = QueryMessage::GetTotalSupply {
-            token_address: token_address.clone(),
-        };
-        let total_supply: TotalSupplyResponse = query_and_deserialize(&bank, query, working_set);
+        let total_supply: TotalSupplyResponse = bank.supply_of(token_address.clone(), working_set);
         total_supply.amount
     };
 
@@ -227,20 +220,11 @@ fn transfer_deployed_token() {
     // Preparation
     let query_user_balance =
         |user_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
-            let query = QueryMessage::GetBalance {
-                user_address,
-                token_address: token_address.clone(),
-            };
-
-            let balance: BalanceResponse = query_and_deserialize(&bank, query, working_set);
-            balance.amount
+            bank.get_balance_of(user_address, token_address.clone(), working_set)
         };
 
     let query_total_supply = |working_set: &mut WorkingSet<Storage>| -> Option<u64> {
-        let query = QueryMessage::GetTotalSupply {
-            token_address: token_address.clone(),
-        };
-        let total_supply: TotalSupplyResponse = query_and_deserialize(&bank, query, working_set);
+        let total_supply: TotalSupplyResponse = bank.supply_of(token_address.clone(), working_set);
         total_supply.amount
     };
 

@@ -6,12 +6,12 @@ pub mod test {
         default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
     };
     use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
-    use sov_state::ProverStorage;
+    use sov_state::{ProverStorage, WorkingSet};
 
     use crate::{
-        app::{create_demo_config, create_new_demo, C, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
-        data_generation::{simulate_da, QueryGenerator},
-        helpers::{query_and_deserialize, TestBlob},
+        app::{create_demo_config, create_new_demo, C, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
+        data_generation::simulate_da,
+        helpers::new_test_blob,
         runtime::Runtime,
     };
 
@@ -36,7 +36,7 @@ pub mod test {
 
             let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
                 &mut demo,
-                TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS),
+                new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
                 None,
             )
             .inner;
@@ -51,12 +51,9 @@ pub mod test {
         {
             let runtime = &mut Runtime::<DefaultContext>::new();
             let storage = ProverStorage::with_path(&path).unwrap();
+            let mut working_set = WorkingSet::new(storage);
 
-            let resp = query_and_deserialize::<election::query::GetResultResponse>(
-                runtime,
-                QueryGenerator::generate_query_election_message(),
-                storage.clone(),
-            );
+            let resp = runtime.election.results(&mut working_set);
 
             assert_eq!(
                 resp,
@@ -65,12 +62,7 @@ pub mod test {
                     count: 3
                 }))
             );
-
-            let resp = query_and_deserialize::<value_setter::query::Response>(
-                runtime,
-                QueryGenerator::generate_query_value_setter_message(),
-                storage,
-            );
+            let resp = runtime.value_setter.query_value(&mut working_set);
 
             assert_eq!(resp, value_setter::query::Response { value: Some(33) });
         }
@@ -97,7 +89,7 @@ pub mod test {
 
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS),
+            new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner;
@@ -108,11 +100,9 @@ pub mod test {
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
 
         let runtime = &mut Runtime::<DefaultContext>::new();
-        let resp = query_and_deserialize::<election::query::GetResultResponse>(
-            runtime,
-            QueryGenerator::generate_query_election_message(),
-            demo.current_storage.clone(),
-        );
+        let mut working_set = WorkingSet::new(demo.current_storage.clone());
+
+        let resp = runtime.election.results(&mut working_set);
 
         assert_eq!(
             resp,
@@ -122,11 +112,7 @@ pub mod test {
             }))
         );
 
-        let resp = query_and_deserialize::<value_setter::query::Response>(
-            runtime,
-            QueryGenerator::generate_query_value_setter_message(),
-            demo.current_storage.clone(),
-        );
+        let resp = runtime.value_setter.query_value(&mut working_set);
 
         assert_eq!(resp, value_setter::query::Response { value: Some(33) });
     }
@@ -153,7 +139,7 @@ pub mod test {
 
             let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
                 &mut demo,
-                TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS),
+                new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
                 None,
             )
             .inner;
@@ -167,22 +153,16 @@ pub mod test {
         {
             let runtime = &mut Runtime::<C>::new();
             let storage = ProverStorage::with_path(&path).unwrap();
-            let resp = query_and_deserialize::<election::query::GetResultResponse>(
-                runtime,
-                QueryGenerator::generate_query_election_message(),
-                storage.clone(),
-            );
+            let mut working_set = WorkingSet::new(storage);
+
+            let resp = runtime.election.results(&mut working_set);
 
             assert_eq!(
                 resp,
                 election::query::GetResultResponse::Err("Election is not frozen".to_owned())
             );
 
-            let resp = query_and_deserialize::<value_setter::query::Response>(
-                runtime,
-                QueryGenerator::generate_query_value_setter_message(),
-                storage,
-            );
+            let resp = runtime.value_setter.query_value(&mut working_set);
 
             assert_eq!(resp, value_setter::query::Response { value: None });
         }
@@ -210,7 +190,7 @@ pub mod test {
 
         let apply_blob_result = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS),
+            new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner;

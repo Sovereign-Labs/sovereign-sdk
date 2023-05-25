@@ -55,9 +55,6 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
 
     type CallMessage = call::CallMessage<C>;
 
-    #[cfg(feature = "native")]
-    type QueryMessage = query::QueryMessage;
-
     fn genesis(
         &self,
         config: &Self::Config,
@@ -88,25 +85,6 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
             Self::CallMessage::ClearElection => Ok(self.clear()?),
 
             Self::CallMessage::FreezeElection => Ok(self.freeze_election(context, working_set)?),
-        }
-    }
-
-    #[cfg(feature = "native")]
-    fn query(
-        &self,
-        msg: Self::QueryMessage,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> sov_modules_api::QueryResponse {
-        match msg {
-            Self::QueryMessage::GetResult => {
-                let response = serde_json::to_vec(&self.results(working_set)).unwrap();
-                sov_modules_api::QueryResponse { response }
-            }
-
-            query::QueryMessage::GenNbOfVotes => {
-                let response = serde_json::to_vec(&self.number_of_votes(working_set)).unwrap();
-                sov_modules_api::QueryResponse { response }
-            }
         }
     }
 }

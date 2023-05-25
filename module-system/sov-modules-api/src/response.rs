@@ -12,9 +12,3 @@ impl CallResponse {
         self.events.push(Event::new(key, value))
     }
 }
-
-/// Response type for the `Module::query` method. The response is returned by the relevant RPC call.
-#[derive(Default, Debug)]
-pub struct QueryResponse {
-    pub response: Vec<u8>,
-}

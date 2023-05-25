@@ -166,15 +166,17 @@ impl SerializedTx {
 mod test {
     use super::*;
 
-    use bank::query::QueryMessage;
     use demo_stf::{
-        app::{create_demo_config, create_new_demo, DemoApp, LOCKED_AMOUNT, SEQUENCER_DA_ADDRESS},
-        helpers::{query_and_deserialize, TestBlob},
+        app::{
+            create_demo_config, create_new_demo, DemoApp, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS,
+        },
+        helpers::new_test_blob,
     };
     use sov_app_template::{Batch, RawTx, SequencerOutcome};
     use sov_modules_api::Address;
 
     use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
+    use sov_state::WorkingSet;
 
     #[test]
     fn test_cmd() {
@@ -277,7 +279,7 @@ mod test {
 
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             demo,
-            TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS),
+            new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner;
@@ -295,18 +297,12 @@ mod test {
     ) -> Option<u64> {
         let token_address = create_token_address(token_deployer_address);
 
-        let query_message = QueryMessage::GetBalance {
-            user_address,
-            token_address,
-        };
+        let mut working_set = WorkingSet::new(demo.current_storage.clone());
 
-        let query = Runtime::<DefaultContext>::encode_bank_query(query_message);
-
-        let balance = query_and_deserialize::<bank::query::BalanceResponse>(
-            &mut demo.runtime,
-            query,
-            demo.current_storage.clone(),
-        );
+        let balance = demo
+            .runtime
+            .bank
+            .balance_of(user_address, token_address, &mut working_set);
 
         balance.amount
     }

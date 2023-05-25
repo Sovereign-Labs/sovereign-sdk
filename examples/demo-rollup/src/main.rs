@@ -1,6 +1,7 @@
 mod config;
 
 use crate::config::RollupConfig;
+use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{create_demo_genesis_config, DefaultContext};
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
 use demo_stf::config::from_toml_path;
@@ -16,18 +17,15 @@ use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner};
 use sovereign_db::ledger_db::{LedgerDB, SlotCommit};
 use std::net::SocketAddr;
 use tracing::Level;
+
 // RPC related imports
 use demo_stf::app::get_rpc_methods;
 use jsonrpsee::RpcModule;
 use sov_modules_api::RpcRunner;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
-const ROLLUP_NAMESPACE: NamespaceId = NamespaceId([115, 111, 118, 45, 116, 101, 115, 116]);
-const SEQUENCER_DA_ADDRESS: [u8; 47] = [
-    99, 101, 108, 101, 115, 116, 105, 97, 49, 113, 112, 48, 57, 121, 115, 121, 103, 99, 120, 54,
-    110, 112, 116, 101, 100, 53, 121, 99, 48, 97, 117, 54, 107, 57, 108, 110, 101, 114, 48, 53,
-    121, 118, 115, 57, 50, 48, 56,
-];
+// You can change this constant to point your rollup at a different namespace
+const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
 pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
     let ledger_db = LedgerDB::with_path(path).expect("Ledger DB failed to open");
@@ -43,6 +41,16 @@ async fn start_rpc_server(methods: RpcModule<()>, address: SocketAddr) {
     futures::future::pending::<()>().await;
 }
 
+/// Configure our rollup with a centralized sequencer using the SEQUENCER_DA_ADDRESS
+/// address constant. Since the centralize sequencer's address is consensus critical,
+/// it has to be hardcoded as a constant, rather than read from the config at runtime.
+///
+/// If you want to customize the rollup to accept transactions from your own celestia
+/// address, simply change the value of the SEQUENCER_DA_ADDRESS to your own address.
+/// For example:
+/// ```rust,no_run
+/// const SEQUENCER_DA_ADDRESS: [u8;47] = *b"celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208"
+/// ```
 pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
     let sequencer_private_key = DefaultPrivateKey::generate();
     create_demo_genesis_config(
@@ -68,11 +76,13 @@ async fn main() -> Result<(), anyhow::Error> {
         .map_err(|_err| eprintln!("Unable to set global default subscriber"))
         .expect("Cannot fail to set subscriber");
 
+    // Initialize the ledger database, which stores blocks, transactions, events, etc.
     let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
 
-    // RPC
+    // Our state transition function implements the StateTransitionRunner interface, so we use that to intitialize the STF
     let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
 
+    // Our state transition also implements the RpcRunner interface, so we use that to initialize the RPC server.
     let storj = demo_runner.get_storage();
     let methods = get_rpc_methods(storj);
 
@@ -80,13 +90,15 @@ async fn main() -> Result<(), anyhow::Error> {
         start_rpc_server(methods, address).await;
     });
 
-    // Initialize the Celestia service
+    // Initialize the Celestia service using the DaService interface
     let da_service = CelestiaService::new(
         rollup_config.da.clone(),
         RollupParams {
             namespace: ROLLUP_NAMESPACE,
         },
     );
+    // For demonstration,  we also intitalize the DaVerifier interface using the DaVerifier interface
+    // Running the verifier is only *necessary* during proof generation not normal execution
     let da_verifier = CelestiaVerifier::new(RollupParams {
         namespace: ROLLUP_NAMESPACE,
     });
@@ -117,7 +129,7 @@ async fn main() -> Result<(), anyhow::Error> {
         println!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
-            hex::encode(&prev_state_root)
+            hex::encode(prev_state_root)
         );
 
         // Fetch the relevant subset of the next Celestia block
@@ -143,7 +155,7 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         let (next_state_root, _witness, _) = demo.end_slot();
 
-        // Store the resulting receipts in the database
+        // Store the resulting receipts in the ledger database
         ledger_db.commit_slot(data_to_commit)?;
         prev_state_root = next_state_root.0;
     }

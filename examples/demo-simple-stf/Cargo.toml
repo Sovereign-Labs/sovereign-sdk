@@ -1,0 +1,17 @@
+[package]
+name = "demo-simple-stf"
+version = "0.1.0"
+edition = "2021"
+resolver = "2"
+
+[dependencies]
+anyhow = { workspace = true}
+serde = { workspace = true }
+serde_json = { workspace = true, optional = true }
+sha2 = { workspace = true }
+
+sov-rollup-interface = { path = "../../rollup-interface" }
+
+
+[dev-dependencies]
+sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
