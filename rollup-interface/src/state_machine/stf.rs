@@ -15,7 +15,7 @@ impl StateTransitionConfig for ProverConfig {}
 impl StateTransitionConfig for ZkConfig {}
 impl StateTransitionConfig for StandardConfig {}
 
-// TODO: What is the point of this mod?
+// https://rust-lang.github.io/api-guidelines/future-proofing.html
 mod sealed {
     use super::{ProverConfig, StandardConfig, ZkConfig};
 
