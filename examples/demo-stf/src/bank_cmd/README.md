@@ -1,6 +1,6 @@
 # bank-cmd
 
-This is a command line tool designed to facilitate the creation of messages specifically intended for the `bank` module.
+This is a command line tool designed to facilitate the creation of messages specifically intended for the `sov-bank` module.
 
 ### how to build it:
 1. Build the binary using the command: `cargo build --release`.\

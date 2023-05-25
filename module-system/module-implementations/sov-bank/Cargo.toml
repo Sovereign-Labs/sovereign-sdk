@@ -1,5 +1,5 @@
 [package]
-name = "module-template"
+name = "sov-bank"
 version = "0.1.0"
 edition = "2021"
 resolver = "2"
@@ -10,8 +10,7 @@ sov-state = { path = "../../sov-state", features = ["temp"] }
 
 [dependencies]
 anyhow = { workspace = true }
-sov-bank = { path = "../sov-bank", default-features = false }
-sov-modules-api = { path = "../../sov-modules-api", default-features = false }
+sov-modules-api = { path = "../../sov-modules-api", default-features = false}
 sov-modules-macros = { path = "../../sov-modules-macros" }
 sov-state = { path = "../../sov-state", default-features = false }
 sov-rollup-interface = { path = "../../../rollup-interface" }
@@ -19,8 +18,10 @@ serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
+hex = { workspace = true }
+jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-modules-api/native"]
+native = ["serde", "sov-state/native", "dep:jsonrpsee", "sov-modules-api/native"]

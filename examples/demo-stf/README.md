@@ -107,12 +107,12 @@ stages.
 Its common for modules which need access to these hooks to export a `Hooks` struct. If you're relying on an unfamiliar module, be sure to check
 its documentation to make sure that you know about any hooks that it may rely on. Your `TxHooks` implementation will usually
 just be a wrapper which invokes each of these modules hooks. In this demo, we only rely
-on two modules which need access to the hooks - `Accounts` and `Sequencer`, so our `TxHooks` implementation only has two fields.
+on two modules which need access to the hooks - `sov-accounts` and `sequencer-registry`, so our `TxHooks` implementation only has two fields.
 
 ```rust
 pub struct DemoAppTxHooks<C: Context> {
     accounts_hooks: accounts::hooks::Hooks<C>,
-    sequencer_hooks: sequencer::hooks::Hooks<C>,
+    sequencer_hooks: sov_sequencer_registry::hooks::Hooks<C>,
 }
 ```
 
@@ -128,13 +128,13 @@ module to your app, just add an additional field to the runtime.
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct MyRuntime<C: Context> {
     #[allow(unused)]
-    sequencer: sequencer::Sequencer<C>,
+    sequencer: sov_sequencer_registry::Sequencer<C>,
 
     #[allow(unused)]
-    bank: bank::Bank<C>,
+    bank: sov_bank::Bank<C>,
 
     #[allow(unused)]
-    accounts: accounts::Accounts<C>,
+    accounts: sov_accounts::Accounts<C>,
 }
 ```
 

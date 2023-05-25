@@ -1,6 +1,6 @@
 /// Creates config for a rollup with some default settings, the config is used in demos and tests.
 use crate::runtime::GenesisConfig;
-use election::ElectionConfig;
+use sov_election::ElectionConfig;
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Context;
@@ -8,7 +8,7 @@ use sov_modules_api::Hasher;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
 pub use sov_state::config::Config as StorageConfig;
-use value_setter::ValueSetterConfig;
+use sov_value_setter::ValueSetterConfig;
 
 pub const DEMO_SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 pub const LOCKED_AMOUNT: u64 = 200;
@@ -22,25 +22,25 @@ pub fn create_demo_genesis_config<C: Context>(
     value_setter_admin_private_key: &DefaultPrivateKey,
     election_admin_private_key: &DefaultPrivateKey,
 ) -> GenesisConfig<C> {
-    let token_config: bank::TokenConfig<C> = bank::TokenConfig {
+    let token_config: sov_bank::TokenConfig<C> = sov_bank::TokenConfig {
         token_name: DEMO_TOKEN_NAME.to_owned(),
         address_and_balances: vec![(sequencer_address.clone(), initial_sequencer_balance)],
     };
 
-    let bank_config = bank::BankConfig {
+    let bank_config = sov_bank::BankConfig {
         tokens: vec![token_config],
     };
 
-    let token_address = bank::create_token_address::<C>(
+    let token_address = sov_bank::create_token_address::<C>(
         &bank_config.tokens[0].token_name,
-        &bank::genesis::DEPLOYER,
-        bank::genesis::SALT,
+        &sov_bank::genesis::DEPLOYER,
+        sov_bank::genesis::SALT,
     );
 
-    let sequencer_config = sequencer::SequencerConfig {
+    let sequencer_config = sov_sequencer_registry::SequencerConfig {
         seq_rollup_address: sequencer_address,
         seq_da_address: sequencer_da_address,
-        coins_to_lock: bank::Coins {
+        coins_to_lock: sov_bank::Coins {
             amount: LOCKED_AMOUNT,
             token_address,
         },
@@ -59,7 +59,7 @@ pub fn create_demo_genesis_config<C: Context>(
         bank_config,
         election_config,
         value_setter_config,
-        accounts::AccountConfig { pub_keys: vec![] },
+        sov_accounts::AccountConfig { pub_keys: vec![] },
     )
 }
 

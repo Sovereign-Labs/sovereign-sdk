@@ -1,5 +1,5 @@
 [package]
-name = "module-template"
+name = "sov-sequencer-registry"
 version = "0.1.0"
 edition = "2021"
 resolver = "2"
@@ -19,8 +19,10 @@ serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
+hex = { workspace = true }
+
 
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-modules-api/native"]
+native = ["serde", "sov-modules-api/native",  "sov-state/native", "sov-bank/native" ]

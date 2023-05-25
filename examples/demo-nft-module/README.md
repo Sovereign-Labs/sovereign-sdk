@@ -72,7 +72,7 @@ pub struct NonFungibleToken<C: Context> {
 
     // If the module needs to refer to another module
     // #[module]
-    // pub(crate) bank: bank::Bank<C>,
+    // pub(crate) bank: sov_bank::Bank<C>,
 }
 ```
 
@@ -443,10 +443,10 @@ Now this module can be added to rollup's Runtime:
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
     #[allow(unused)]
-    sequencer: sequencer::Sequencer<C>,
+    sequencer: sov_sequencer_registry::Sequencer<C>,
 
     #[allow(unused)]
-    bank: bank::Bank<C>,
+    bank: sov_bank::Bank<C>,
 
     #[allow(unused)]
     nft: nft::NonFungibleToken<C>,

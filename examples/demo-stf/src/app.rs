@@ -28,11 +28,11 @@ pub struct DemoAppRunner<C: Context, Vm: Zkvm>(pub DemoApp<C, Vm>);
 pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;
 
 #[cfg(feature = "native")]
-use bank::query::{BankRpcImpl, BankRpcServer};
+use sov_bank::query::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
-use election::query::{ElectionRpcImpl, ElectionRpcServer};
+use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
 #[cfg(feature = "native")]
-use value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
+use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
 #[cfg(feature = "native")]
 use sov_modules_macros::expose_rpc;

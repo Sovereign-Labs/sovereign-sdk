@@ -94,7 +94,7 @@ The third interface that modules expose is an rpc implementation. To generate an
 with the `#[rpc_gen]` macro from `sov_modules_macros`.
 
 ```rust
-#[rpc_gen(client, server, namespace = "bank")]
+#[rpc_gen(client, server, namespace = "sov-bank")]
 impl<C: sov_modules_api::Context> Bank<C> {
     #[rpc_method(name = "balanceOf")]
     pub(crate) fn balance_of(
@@ -252,7 +252,7 @@ impl<C: Context> Bank<C> {
 ```rust
 use sov_modules_macros::rpc_gen;
 
-#[rpc_gen(client, server, namespace = "bank")]
+#[rpc_gen(client, server, namespace = "sov-bank")]
 impl<C: Context> Bank<C> {
     #[rpc_method(name = "balanceOf")]
     pub(crate) fn balance_of(
@@ -278,7 +278,7 @@ impl<C: Context> Bank<C> {
 * The ___RpcImpl and ___RpcServer traits do not need to be implemented - this is done automatically by the SDK, but they need to be imported to the file where the `expose_rpc` macro is called
 * Once all the modules that need be part of the RPC are annotated, we annotate our Runner struct that impls `StateTransitionRunner` with an `expose_rpc` attribute macro.
 ```rust
-use bank::query::{BankRpcImpl, BankRpcServer};
+use sov_bank::query::{BankRpcImpl, BankRpcServer};
 
 #[expose_rpc((Bank<DefaultContext>,))]
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {

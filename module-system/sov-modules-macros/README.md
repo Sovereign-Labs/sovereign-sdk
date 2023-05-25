@@ -21,7 +21,7 @@ Example of usage:
 #[derive(Genesis, DispatchCall, MessageCodec)]
 pub struct Runtime<C: Context> {
     accounts: accounts::Accounts<C>,
-    bank: bank::Bank<C>,
+    bank: sov_bank::Bank<C>,
     sequencer: sequencer::Sequencer<C>,
     ...
     some other modules
