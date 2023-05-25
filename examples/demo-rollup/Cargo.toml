@@ -1,8 +1,11 @@
 [package]
-name = "sov-demo"
+name = "sov-demo-rollup"
 version = "0.1.0"
 edition = "2021"
 resolver = "2"
+authors = ["Sovereign Labs <info@sovereign.xyz>"]
+homepage = "sovereign.xyz"
+publish = false
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

@@ -1,14 +1,15 @@
 [package]
-name = "starter"
+name = "sov-demo-prover-host"
 version = "0.1.0"
 edition = "2021"
+publish = false
 
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
-risc0-zkvm = { worspace = true }
+risc0-zkvm = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sha2 = { workspace = true }

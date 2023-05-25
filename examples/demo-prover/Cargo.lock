@@ -3,22 +3,6 @@
 version = 3
 
 [[package]]
-name = "accounts"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "hex",
- "serde",
- "serde_json",
- "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
- "sov-state",
- "thiserror",
-]
-
-[[package]]
 name = "adler"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -143,23 +127,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
-name = "bank"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "hex",
- "jsonrpsee",
- "serde",
- "serde_json",
- "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
- "sov-state",
- "thiserror",
-]
-
-[[package]]
 name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -235,12 +202,6 @@ checksum = "46502ad458c9a52b69d4d4d32775c788b7a1b85e8bc9d482d92250fc0e3f8efe"
 dependencies = [
  "digest 0.10.7",
 ]
-
-[[package]]
-name = "block"
-version = "0.1.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0d8c1fef690941d3e7788d328517591fecc684c084084702d6ff1641e993699a"
 
 [[package]]
 name = "block-buffer"
@@ -542,18 +503,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e496a50fda8aacccc86d7529e2c1e0892dbd0f898a6b5645b5561b89c3210efa"
 
 [[package]]
-name = "core-graphics-types"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3a68b68b3446082644c91ac778bf50cd4104bfb002b5a6a7c44cca5a2c70788b"
-dependencies = [
- "bitflags",
- "core-foundation",
- "foreign-types",
- "libc",
-]
-
-[[package]]
 name = "cpufeatures"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -654,26 +603,26 @@ dependencies = [
 name = "demo-stf"
 version = "0.1.0"
 dependencies = [
- "accounts",
  "anyhow",
- "bank",
  "borsh",
  "clap",
- "election",
  "jsonrpsee",
- "schemadb",
- "sequencer",
  "serde",
  "serde_json",
  "sha2 0.10.6",
- "sov-app-template",
+ "sov-accounts",
+ "sov-bank",
+ "sov-db",
+ "sov-default-stf",
+ "sov-election",
  "sov-modules-api",
  "sov-modules-macros",
  "sov-rollup-interface",
+ "sov-schema-db",
+ "sov-sequencer-registry",
  "sov-state",
- "sovereign-db",
+ "sov-value-setter",
  "toml 0.7.4",
- "value-setter",
 ]
 
 [[package]]
@@ -810,23 +759,6 @@ name = "either"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
-
-[[package]]
-name = "election"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "hex",
- "jsonrpsee",
- "serde",
- "serde_json",
- "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
- "sov-state",
- "thiserror",
-]
 
 [[package]]
 name = "elf"
@@ -1063,10 +995,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c85e1d9ab2eadba7e5040d4e09cbd6d072b76a557ad64e797c2cb9d4da21d7e4"
 dependencies = [
  "cfg-if",
- "js-sys",
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
- "wasm-bindgen",
 ]
 
 [[package]]
@@ -1521,6 +1451,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
+ "sha2 0.10.6",
  "sov-rollup-interface",
  "tendermint",
  "tendermint-proto",
@@ -1631,15 +1562,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "malloc_buf"
-version = "0.0.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62bb907fe88d54d8d9ce32a3cceab4218ed2f6b7d35617cafe9adf84e43919cb"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "matrixmultiply"
 version = "0.3.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1662,20 +1584,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d61c719bcfbcf5d62b3a09efa6088de8c54bc0bfcd3ea7ae39fcc186108b8de1"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "metal"
-version = "0.24.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "de11355d1f6781482d027a3b4d4de7825dcedb197bf573e0596d00008402d060"
-dependencies = [
- "bitflags",
- "block",
- "core-graphics-types",
- "foreign-types",
- "log",
- "objc",
 ]
 
 [[package]]
@@ -1840,25 +1748,6 @@ checksum = "0fac9e2da13b5eb447a6ce3d392f23a29d8694bff781bf03a16cd9ac8697593b"
 dependencies = [
  "hermit-abi 0.2.6",
  "libc",
-]
-
-[[package]]
-name = "objc"
-version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "915b1b472bc21c53464d6c8461c9d3af805ba1ef837e1cac254428f4a77177b1"
-dependencies = [
- "malloc_buf",
- "objc_exception",
-]
-
-[[package]]
-name = "objc_exception"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad970fb455818ad6cba4c122ad012fae53ae8b4795f86378bce65e4f6bab2ca4"
-dependencies = [
- "cc",
 ]
 
 [[package]]
@@ -2355,9 +2244,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
- "risc0-circuit-rv32im 0.14.0",
- "risc0-zkp 0.14.0",
- "risc0-zkvm 0.14.0",
+ "risc0-circuit-rv32im",
+ "risc0-zkp",
+ "risc0-zkvm",
  "serde",
  "sov-rollup-interface",
 ]
@@ -2371,8 +2260,8 @@ dependencies = [
  "cargo_metadata",
  "directories",
  "downloader",
- "risc0-zkvm 0.14.0",
- "risc0-zkvm-platform 0.14.0",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
  "serde",
  "serde_json",
  "sha2 0.10.6",
@@ -2407,27 +2296,8 @@ dependencies = [
  "risc0-circuit-rv32im-sys",
  "risc0-core",
  "risc0-sys",
- "risc0-zkp 0.14.0",
- "risc0-zkvm-platform 0.14.0",
- "tracing",
-]
-
-[[package]]
-name = "risc0-circuit-rv32im"
-version = "1.0.0-rc.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c46dfc902044335854285efa3957bc5d920685f5956e29c3e1d4dd7bb6f8c53"
-dependencies = [
- "anyhow",
- "cc",
- "glob",
- "log",
- "metal",
- "rand 0.8.5",
- "rayon",
- "risc0-zkp 1.0.0-rc.2",
- "risc0-zkvm-platform 1.0.0-rc.2",
- "sha2 0.10.6",
+ "risc0-zkp",
+ "risc0-zkvm-platform",
  "tracing",
 ]
 
@@ -2475,21 +2345,8 @@ dependencies = [
  "bytemuck",
  "impl-trait-for-tuples",
  "log",
- "risc0-zeroio-derive 0.14.0",
- "risc0-zkvm-platform 0.14.0",
- "tracing",
-]
-
-[[package]]
-name = "risc0-zeroio"
-version = "1.0.0-rc.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7c3309486f071c5f92539fa68aebb79fb52513fa9d2568e02c768e1473ccaf52"
-dependencies = [
- "bytemuck",
- "impl-trait-for-tuples",
- "log",
- "risc0-zeroio-derive 1.0.0-rc.2",
+ "risc0-zeroio-derive",
+ "risc0-zkvm-platform",
  "tracing",
 ]
 
@@ -2498,17 +2355,6 @@ name = "risc0-zeroio-derive"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f9b2ca1f7afed9205fc01391067210d4cd2e37f7e9296feefaa165a6adc35afd"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "risc0-zeroio-derive"
-version = "1.0.0-rc.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9a32348aaae33406a9af67005ec21c41e7830cf0033d238df1ce79c8a8cfa45c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2535,30 +2381,8 @@ dependencies = [
  "rayon",
  "risc0-core",
  "risc0-sys",
- "risc0-zeroio 0.14.0",
- "risc0-zkvm-platform 0.14.0",
- "serde",
- "sha2 0.10.6",
- "tracing",
-]
-
-[[package]]
-name = "risc0-zkp"
-version = "1.0.0-rc.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dac40b9d757fd9fa43dcb57bc7e19159c51c1d5f60be875bce00eb414ad87d1c"
-dependencies = [
- "anyhow",
- "bytemuck",
- "getrandom 0.2.9",
- "log",
- "metal",
- "ndarray",
- "paste",
- "rand 0.8.5",
- "rand_core 0.6.4",
- "rayon",
- "risc0-zeroio 1.0.0-rc.2",
+ "risc0-zeroio",
+ "risc0-zkvm-platform",
  "serde",
  "sha2 0.10.6",
  "tracing",
@@ -2583,41 +2407,14 @@ dependencies = [
  "num-traits",
  "rand 0.8.5",
  "rayon",
- "risc0-circuit-rv32im 0.14.0",
+ "risc0-circuit-rv32im",
  "risc0-core",
- "risc0-zeroio 0.14.0",
- "risc0-zkp 0.14.0",
- "risc0-zkvm-platform 0.14.0",
+ "risc0-zeroio",
+ "risc0-zkp",
+ "risc0-zkvm-platform",
  "rrs-lib",
  "serde",
  "sha2 0.10.6",
- "tracing",
-]
-
-[[package]]
-name = "risc0-zkvm"
-version = "1.0.0-rc.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62f9e35977f2f3d60a388835a4e20a8f324546e1a8c63c5e3fcf116e63f24c38"
-dependencies = [
- "anyhow",
- "bytemuck",
- "cfg-if",
- "elf",
- "getrandom 0.2.9",
- "lazy-regex",
- "log",
- "num-derive",
- "num-traits",
- "rand 0.8.5",
- "rayon",
- "risc0-circuit-rv32im 1.0.0-rc.2",
- "risc0-zeroio 1.0.0-rc.2",
- "risc0-zkp 1.0.0-rc.2",
- "risc0-zkvm-platform 1.0.0-rc.2",
- "serde",
- "sha2 0.10.6",
- "thiserror",
  "tracing",
 ]
 
@@ -2626,12 +2423,6 @@ name = "risc0-zkvm-platform"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e07e6ed86c9f10a2d201aeed0545b933638fa82a5dbf6d141b0b9fe08ad0dd8b"
-
-[[package]]
-name = "risc0-zkvm-platform"
-version = "1.0.0-rc.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "acaa971ead4bc99b1321ef1d477d60de76c78424811e3c7552d71e40124c41b0"
 
 [[package]]
 name = "rocksdb"
@@ -2731,21 +2522,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "schemadb"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "byteorder",
- "hex",
- "once_cell",
- "prometheus",
- "rand 0.8.5",
- "rocksdb",
- "sov-rollup-interface",
- "tracing",
-]
-
-[[package]]
 name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2791,23 +2567,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bebd363326d05ec3e2f532ab7660680f3b02130d780c299bca73469d521bc0ed"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "sequencer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bank",
- "borsh",
- "hex",
- "serde",
- "serde_json",
- "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
- "sov-state",
- "thiserror",
 ]
 
 [[package]]
@@ -3018,16 +2777,105 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-app-template"
+name = "sov-accounts"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "hex",
+ "serde",
+ "serde_json",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-state",
+ "thiserror",
+]
+
+[[package]]
+name = "sov-bank"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "hex",
+ "jsonrpsee",
+ "serde",
+ "serde_json",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-state",
+ "thiserror",
+]
+
+[[package]]
+name = "sov-db"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "borsh",
+ "byteorder",
+ "jmt",
+ "rocksdb",
+ "serde",
+ "sov-rollup-interface",
+ "sov-schema-db",
+]
+
+[[package]]
+name = "sov-default-stf"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "jmt",
  "serde",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
  "tracing",
+]
+
+[[package]]
+name = "sov-demo-prover-host"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "const-rollup-config",
+ "demo-stf",
+ "hex",
+ "jsonrpsee",
+ "jupiter",
+ "methods",
+ "risc0-adapter",
+ "risc0-zkvm",
+ "serde",
+ "serde_json",
+ "sha2 0.10.6",
+ "sov-rollup-interface",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "sov-election"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "hex",
+ "jsonrpsee",
+ "serde",
+ "serde_json",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-state",
+ "thiserror",
 ]
 
 [[package]]
@@ -3070,9 +2918,39 @@ dependencies = [
  "anyhow",
  "borsh",
  "bytes",
- "jmt",
  "serde",
- "sha2 0.10.6",
+ "thiserror",
+]
+
+[[package]]
+name = "sov-schema-db"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "byteorder",
+ "hex",
+ "once_cell",
+ "prometheus",
+ "rand 0.8.5",
+ "rocksdb",
+ "sov-rollup-interface",
+ "tracing",
+]
+
+[[package]]
+name = "sov-sequencer-registry"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "hex",
+ "serde",
+ "serde_json",
+ "sov-bank",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-state",
  "thiserror",
 ]
 
@@ -3087,23 +2965,24 @@ dependencies = [
  "jmt",
  "serde",
  "sha2 0.10.6",
- "sovereign-db",
+ "sov-db",
  "thiserror",
 ]
 
 [[package]]
-name = "sovereign-db"
+name = "sov-value-setter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bincode",
  "borsh",
- "byteorder",
- "jmt",
- "rocksdb",
- "schemadb",
+ "jsonrpsee",
  "serde",
+ "serde_json",
+ "sov-modules-api",
+ "sov-modules-macros",
  "sov-rollup-interface",
+ "sov-state",
+ "thiserror",
 ]
 
 [[package]]
@@ -3120,29 +2999,6 @@ checksum = "9d1e996ef02c474957d681f1b05213dfb0abab947b446a62d37770b23500184a"
 dependencies = [
  "base64ct",
  "der",
-]
-
-[[package]]
-name = "starter"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "const-rollup-config",
- "demo-stf",
- "hex",
- "jsonrpsee",
- "jupiter",
- "methods",
- "risc0-adapter",
- "risc0-zkvm 1.0.0-rc.2",
- "serde",
- "serde_json",
- "sha2 0.10.6",
- "sov-rollup-interface",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -3588,22 +3444,6 @@ name = "valuable"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830b7e5d4d90034032940e4ace0d9a9a057e7a45cd94e6c007832e39edb82f6d"
-
-[[package]]
-name = "value-setter"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "jsonrpsee",
- "serde",
- "serde_json",
- "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
- "sov-state",
- "thiserror",
-]
 
 [[package]]
 name = "vcpkg"

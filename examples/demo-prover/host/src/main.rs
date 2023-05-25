@@ -1,8 +1,9 @@
+use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::create_demo_genesis_config;
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
-use demo_stf::config::from_toml_path;
-use demo_stf::config::Config as RunnerConfig;
+use demo_stf::genesis_config::create_demo_genesis_config;
+use demo_stf::runner_config::from_toml_path;
+use demo_stf::runner_config::Config as RunnerConfig;
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
 use jupiter::verifier::RollupParams;
@@ -12,6 +13,7 @@ use serde::Deserialize;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner};
 use sov_rollup_interface::zk::traits::ZkvmHost;
+use std::env;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RollupConfig {
@@ -25,7 +27,11 @@ const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    let rollup_config: RollupConfig = from_toml_path("rollup_config.toml")?;
+    let rollup_config_path = env::args()
+        .nth(1)
+        .unwrap_or_else(|| "rollup_config.toml".to_string());
+    let rollup_config: RollupConfig =
+        from_toml_path(&rollup_config_path).context("Failed to read rollup configuration")?;
 
     let da_service = CelestiaService::new(
         rollup_config.da.clone(),
@@ -56,7 +62,7 @@ async fn main() -> Result<(), anyhow::Error> {
         println!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
-            hex::encode(&prev_state_root)
+            hex::encode(prev_state_root)
         );
         let filtered_block = da_service.get_finalized_at(height).await?;
         host.write_to_guest(&filtered_block.header);
@@ -66,7 +72,7 @@ async fn main() -> Result<(), anyhow::Error> {
         host.write_to_guest(&blob_txs);
         host.write_to_guest(&inclusion_proof);
         host.write_to_guest(&completeness_proof);
-        host.write_to_guest(&prev_state_root);
+        host.write_to_guest(prev_state_root);
 
         demo.begin_slot(Default::default());
         for blob in blob_txs.clone() {
