@@ -17,7 +17,6 @@ pub use tx_verifier::{RawTx, TxVerifier};
 
 use sov_modules_api::{Context, DispatchCall, Genesis, Hasher, Spec};
 use sov_rollup_interface::{
-    jmt,
     stf::{OpaqueAddress, StateTransitionFunction},
     traits::BatchTrait,
 };

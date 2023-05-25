@@ -5,5 +5,3 @@ mod node;
 pub use node::*;
 
 pub use borsh::maybestd;
-
-pub use jmt;

@@ -9,10 +9,7 @@ use prost::{
     DecodeError,
 };
 use serde::{de::Error, Deserialize, Serialize};
-use sov_rollup_interface::{
-    crypto::hash::{sha2, Sha2Hash},
-    Bytes,
-};
+use sov_rollup_interface::Bytes;
 use tracing::error;
 
 use crate::verifier::PFB_NAMESPACE;
@@ -161,8 +158,9 @@ impl Share {
         }
     }
 
-    pub fn hash(&self) -> Sha2Hash {
-        sha2(self.raw_inner_ref())
+    pub fn hash(&self) -> [u8; 32] {
+        use sha2::Digest;
+        sha2::Sha256::digest(self.raw_inner_ref()).into()
     }
 
     /// Returns the offset *into the data portion* of this share at which

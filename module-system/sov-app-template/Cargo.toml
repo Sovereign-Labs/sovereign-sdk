@@ -11,6 +11,7 @@ anyhow = { workspace = true }
 borsh = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
+jmt = { workspace = true }
 
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-state = { path = "../sov-state", default-features = false }
