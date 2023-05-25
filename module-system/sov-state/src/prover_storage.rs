@@ -9,7 +9,7 @@ use crate::{
     MerkleProofSpec, Storage,
 };
 use jmt::{storage::TreeWriter, JellyfishMerkleTree, KeyHash, PhantomHasher, SimpleHasher};
-use sovereign_db::state_db::StateDB;
+use sov_db::state_db::StateDB;
 
 pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,

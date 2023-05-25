@@ -1,5 +1,5 @@
 [package]
-name = "sovereign-db"
+name = "sov-db"
 version = "0.1.0"
 edition = "2021"
 resolver = "2"
