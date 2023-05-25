@@ -1,10 +1,10 @@
 mod helpers;
 
-use bank::call::CallMessage;
-use bank::genesis::{DEPLOYER, SALT};
-use bank::query::TotalSupplyResponse;
-use bank::{create_token_address, Bank, BankConfig, Coins};
 use helpers::*;
+use sov_bank::call::CallMessage;
+use sov_bank::genesis::{DEPLOYER, SALT};
+use sov_bank::query::TotalSupplyResponse;
+use sov_bank::{create_token_address, Bank, BankConfig, Coins};
 use sov_modules_api::{Address, Context, Module, ModuleInfo};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
@@ -113,7 +113,7 @@ fn transfer_initial_token() {
         let error = result.err().unwrap();
         assert!(error
             .to_string()
-            .contains("Value not found for prefix: \"bank/Bank/tokens/\" and: storage key"))
+            .contains("Value not found for prefix: \"sov_bank/Bank/tokens/\" and: storage key"))
     }
 
     // Sender does not exist
@@ -140,7 +140,7 @@ fn transfer_initial_token() {
         let error = result.err().unwrap();
 
         let expected_message_part = format!(
-            "Value not found for prefix: \"bank/Bank/tokens/{}\" and: storage key",
+            "Value not found for prefix: \"sov_bank/Bank/tokens/{}\" and: storage key",
             token_address
         );
         let actual_message = error.to_string();

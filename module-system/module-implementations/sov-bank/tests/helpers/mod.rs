@@ -1,4 +1,4 @@
-use bank::{BankConfig, TokenConfig};
+use sov_bank::{BankConfig, TokenConfig};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Hasher;
 use sov_modules_api::{Address, Spec};

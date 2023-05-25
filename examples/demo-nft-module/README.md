@@ -72,7 +72,7 @@ pub struct NonFungibleToken<C: Context> {
 
     // If the module needs to refer to another module
     // #[module]
-    // pub(crate) bank: bank::Bank<C>,
+    // pub(crate) bank: sov_bank::Bank<C>,
 }
 ```
 
@@ -446,7 +446,7 @@ pub struct Runtime<C: Context> {
     sequencer: sequencer::Sequencer<C>,
 
     #[allow(unused)]
-    bank: bank::Bank<C>,
+    bank: sov_bank::Bank<C>,
 
     #[allow(unused)]
     nft: nft::NonFungibleToken<C>,

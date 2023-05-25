@@ -14,8 +14,8 @@ const INITIAL_BALANCE: u64 = 201;
 const LOCKED_AMOUNT: u64 = 200;
 
 struct TestSequencer {
-    bank: bank::Bank<C>,
-    bank_config: bank::BankConfig<C>,
+    bank: sov_bank::Bank<C>,
+    bank_config: sov_bank::BankConfig<C>,
 
     sequencer: Sequencer<C>,
     sequencer_config: SequencerConfig<C>,
@@ -39,7 +39,7 @@ impl TestSequencer {
     fn query_balance_via_bank(
         &mut self,
         working_set: &mut WorkingSet<<C as Spec>::Storage>,
-    ) -> bank::query::BalanceResponse {
+    ) -> sov_bank::query::BalanceResponse {
         self.bank.balance_of(
             self.sequencer_config.seq_rollup_address.clone(),
             self.sequencer_config.coins_to_lock.token_address.clone(),
@@ -48,16 +48,16 @@ impl TestSequencer {
     }
 }
 
-fn create_bank_config() -> (bank::BankConfig<C>, <C as Spec>::Address) {
+fn create_bank_config() -> (sov_bank::BankConfig<C>, <C as Spec>::Address) {
     let seq_address = generate_address("seq_pub_key");
 
-    let token_config = bank::TokenConfig {
+    let token_config = sov_bank::TokenConfig {
         token_name: "InitialToken".to_owned(),
         address_and_balances: vec![(seq_address.clone(), INITIAL_BALANCE)],
     };
 
     (
-        bank::BankConfig {
+        sov_bank::BankConfig {
             tokens: vec![token_config],
         },
         seq_address,
@@ -71,7 +71,7 @@ fn create_sequencer_config(
     SequencerConfig {
         seq_rollup_address,
         seq_da_address: SEQUENCER_DA_ADDRESS.to_vec(),
-        coins_to_lock: bank::Coins {
+        coins_to_lock: sov_bank::Coins {
             amount: LOCKED_AMOUNT,
             token_address,
         },
@@ -79,13 +79,13 @@ fn create_sequencer_config(
 }
 
 fn create_test_sequencer() -> TestSequencer {
-    let bank = bank::Bank::<C>::new();
+    let bank = sov_bank::Bank::<C>::new();
     let (bank_config, seq_rollup_address) = create_bank_config();
 
-    let token_address = bank::create_token_address::<C>(
+    let token_address = sov_bank::create_token_address::<C>(
         &bank_config.tokens[0].token_name,
-        &bank::genesis::DEPLOYER,
-        bank::genesis::SALT,
+        &sov_bank::genesis::DEPLOYER,
+        sov_bank::genesis::SALT,
     );
 
     let sequencer = Sequencer::<C>::new();

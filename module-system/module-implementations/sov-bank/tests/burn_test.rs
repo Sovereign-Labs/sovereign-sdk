@@ -1,8 +1,8 @@
-use bank::call::CallMessage;
-use bank::genesis::{DEPLOYER, SALT};
-use bank::query::TotalSupplyResponse;
-use bank::{create_token_address, Bank, BankConfig, Coins};
 use helpers::{generate_address, C};
+use sov_bank::call::CallMessage;
+use sov_bank::genesis::{DEPLOYER, SALT};
+use sov_bank::query::TotalSupplyResponse;
+use sov_bank::{create_token_address, Bank, BankConfig, Coins};
 use sov_modules_api::{Address, Context, Module, ModuleInfo};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
@@ -82,7 +82,7 @@ fn burn_deployed_tokens() {
     let failed_to_burn = bank.call(burn_message, &sender_context, &mut working_set);
     assert!(failed_to_burn.is_err());
     let expected_error = format!(
-        "Value not found for prefix: \"bank/Bank/tokens/{}",
+        "Value not found for prefix: \"sov_bank/Bank/tokens/{}",
         token_address
     );
     let actual_msg = failed_to_burn.err().unwrap().to_string();
@@ -140,7 +140,7 @@ fn burn_deployed_tokens() {
         .err()
         .unwrap()
         .to_string()
-        .contains("Value not found for prefix: \"bank/Bank/tokens/\" and: storage key"));
+        .contains("Value not found for prefix: \"sov_bank/Bank/tokens/\" and: storage key"));
 }
 
 #[test]

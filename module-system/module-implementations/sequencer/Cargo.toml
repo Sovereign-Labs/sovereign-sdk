@@ -10,7 +10,7 @@ sov-state = { path = "../../sov-state", features = ["temp"] }
 
 [dependencies]
 anyhow = { workspace = true }
-bank = { path = "../bank", default-features = false }
+sov-bank = { path = "../sov-bank", default-features = false }
 sov-modules-api = { path = "../../sov-modules-api", default-features = false }
 sov-modules-macros = { path = "../../sov-modules-macros" }
 sov-state = { path = "../../sov-state", default-features = false }
@@ -25,4 +25,4 @@ hex = { workspace = true }
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-modules-api/native",  "sov-state/native", "bank/native" ]
+native = ["serde", "sov-modules-api/native",  "sov-state/native", "sov-bank/native" ]

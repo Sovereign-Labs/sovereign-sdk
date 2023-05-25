@@ -14,16 +14,16 @@ pub fn generate_address(key: &str) -> <C as Spec>::Address {
     Address::from(hash)
 }
 
-fn create_bank_config() -> (bank::BankConfig<C>, <C as Spec>::Address) {
+fn create_bank_config() -> (sov_bank::BankConfig<C>, <C as Spec>::Address) {
     let prover_address = generate_address("prover_pub_key");
 
-    let token_config = bank::TokenConfig {
+    let token_config = sov_bank::TokenConfig {
         token_name: "InitialToken".to_owned(),
         address_and_balances: vec![(prover_address.clone(), BOND_AMOUNT * 5)],
     };
 
     (
-        bank::BankConfig {
+        sov_bank::BankConfig {
             tokens: vec![token_config],
         },
         prover_address,
@@ -35,14 +35,14 @@ fn setup(
 ) -> (ProverIncentives<C, MockZkvm>, Address) {
     // Initialize bank
     let (bank_config, prover_address) = create_bank_config();
-    let bank = bank::Bank::<C>::new();
+    let bank = sov_bank::Bank::<C>::new();
     bank.genesis(&bank_config, working_set)
         .expect("bank genesis must succeed");
 
-    let token_address = bank::create_token_address::<C>(
+    let token_address = sov_bank::create_token_address::<C>(
         &bank_config.tokens[0].token_name,
-        &bank::genesis::DEPLOYER,
-        bank::genesis::SALT,
+        &sov_bank::genesis::DEPLOYER,
+        sov_bank::genesis::SALT,
     );
 
     // initialize prover incentives

@@ -29,7 +29,7 @@ pub struct ExampleModule<C: sov_modules_api::Context> {
 
     /// Reference to the Bank module.
     #[module]
-    pub(crate) _bank: bank::Bank<C>,
+    pub(crate) _bank: sov_bank::Bank<C>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for ExampleModule<C> {

@@ -131,7 +131,7 @@ pub struct MyRuntime<C: Context> {
     sequencer: sequencer::Sequencer<C>,
 
     #[allow(unused)]
-    bank: bank::Bank<C>,
+    bank: sov_bank::Bank<C>,
 
     #[allow(unused)]
     accounts: sov_accounts::Accounts<C>,

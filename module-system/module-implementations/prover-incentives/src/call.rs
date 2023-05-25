@@ -1,6 +1,6 @@
 use anyhow::Result;
-use bank::Coins;
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_bank::Coins;
 use sov_modules_api::CallResponse;
 use sov_rollup_interface::zk::traits::Zkvm;
 use sov_state::WorkingSet;

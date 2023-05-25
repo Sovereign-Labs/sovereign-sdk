@@ -22,25 +22,25 @@ pub fn create_demo_genesis_config<C: Context>(
     value_setter_admin_private_key: &DefaultPrivateKey,
     election_admin_private_key: &DefaultPrivateKey,
 ) -> GenesisConfig<C> {
-    let token_config: bank::TokenConfig<C> = bank::TokenConfig {
+    let token_config: sov_bank::TokenConfig<C> = sov_bank::TokenConfig {
         token_name: DEMO_TOKEN_NAME.to_owned(),
         address_and_balances: vec![(sequencer_address.clone(), initial_sequencer_balance)],
     };
 
-    let bank_config = bank::BankConfig {
+    let bank_config = sov_bank::BankConfig {
         tokens: vec![token_config],
     };
 
-    let token_address = bank::create_token_address::<C>(
+    let token_address = sov_bank::create_token_address::<C>(
         &bank_config.tokens[0].token_name,
-        &bank::genesis::DEPLOYER,
-        bank::genesis::SALT,
+        &sov_bank::genesis::DEPLOYER,
+        sov_bank::genesis::SALT,
     );
 
     let sequencer_config = sequencer::SequencerConfig {
         seq_rollup_address: sequencer_address,
         seq_da_address: sequencer_da_address,
-        coins_to_lock: bank::Coins {
+        coins_to_lock: sov_bank::Coins {
             amount: LOCKED_AMOUNT,
             token_address,
         },

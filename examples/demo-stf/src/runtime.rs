@@ -41,7 +41,7 @@ use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 pub struct Runtime<C: Context> {
     pub sequencer: sequencer::Sequencer<C>,
 
-    pub bank: bank::Bank<C>,
+    pub bank: sov_bank::Bank<C>,
 
     pub election: election::Election<C>,
 
@@ -57,7 +57,7 @@ impl<C: Context> Runtime<C> {
         use sov_modules_api::ModuleInfo;
         Self {
             sequencer: sequencer::Sequencer::new(),
-            bank: bank::Bank::new(),
+            bank: sov_bank::Bank::new(),
             election: election::Election::new(),
             value_setter: value_setter::ValueSetter::new(),
             accounts: sov_accounts::Accounts::new(),

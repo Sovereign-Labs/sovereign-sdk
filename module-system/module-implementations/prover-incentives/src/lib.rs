@@ -73,7 +73,7 @@ pub struct ProverIncentives<C: sov_modules_api::Context, Vm: Zkvm> {
 
     /// Reference to the Bank module.
     #[module]
-    pub(crate) bank: bank::Bank<C>,
+    pub(crate) bank: sov_bank::Bank<C>,
 }
 
 impl<C: sov_modules_api::Context, Vm: Zkvm> sov_modules_api::Module for ProverIncentives<C, Vm> {

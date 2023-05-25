@@ -10,7 +10,7 @@ sov-state = { path = "../../sov-state", features = ["temp"] }
 
 [dependencies]
 anyhow = { workspace = true }
-bank = { path = "../bank", default-features = false }
+sov-bank = { path = "../sov-bank", default-features = false }
 sov-modules-api = { path = "../../sov-modules-api", default-features = false }
 sov-modules-macros = { path = "../../sov-modules-macros" }
 sov-state = { path = "../../sov-state", default-features = false }
