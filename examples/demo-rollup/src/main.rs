@@ -28,8 +28,7 @@ use sov_modules_api::RpcRunner;
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
 pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
-    let ledger_db = LedgerDB::with_path(path).expect("Ledger DB failed to open");
-    ledger_db
+    LedgerDB::with_path(path).expect("Ledger DB failed to open")
 }
 
 async fn start_rpc_server(module: RpcModule<()>, address: SocketAddr) {
