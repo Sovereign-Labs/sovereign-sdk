@@ -5,6 +5,8 @@ use crate::tx_hooks_impl::DemoAppTxHooks;
 use crate::tx_verifier_impl::DemoAppTxVerifier;
 use sov_default_stf::AppTemplate;
 pub use sov_default_stf::Batch;
+use sov_default_stf::SequencerOutcome;
+use sov_default_stf::TxEffect;
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
 pub use sov_modules_api::default_context::ZkDefaultContext;
@@ -41,6 +43,11 @@ use sov_modules_macros::expose_rpc;
 pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
 
 pub type DemoApp<C, Vm> = AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>, Vm>;
+
+/// Batch receipt type used by the demo app. We export this type so that it's easily accessible to the full node.
+pub type DemoBatchReceipt = SequencerOutcome;
+/// Tx receipt type used by the demo app. We export this type so that it's easily accessible to the full node.
+pub type DemoTxReceipt = TxEffect;
 
 #[cfg(feature = "native")]
 #[expose_rpc((Bank<DefaultContext>,Election<DefaultContext>,ValueSetter<DefaultContext>))]

@@ -10,12 +10,16 @@ resolver = "2"
 borsh = { workspace = true, features = ["rc"]}
 serde = { workspace = true }
 bytes = { workspace = true }
+hex = { workspace = true, features = ["serde"] }
 
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 
 # Proptest should be a dev-dependency, but those can't be optional
 proptest =  { workspace = true, optional = true } 
+
+[dev-dependencies]
+serde_json = "1"
 
 [features]
 default = []

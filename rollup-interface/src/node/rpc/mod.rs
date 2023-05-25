@@ -44,6 +44,7 @@ pub enum EventGroupIdentifier {
 
 /// An identifier that specifies a single slot
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum SlotIdentifier {
     Hash([u8; 32]), // the hash of a da block
     Number(u64),    // the block number of a da block
@@ -58,9 +59,16 @@ pub enum QueryMode {
     Full,
 }
 
+impl Default for QueryMode {
+    fn default() -> Self {
+        Self::Compact
+    }
+}
+
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct SlotResponse<B, Tx> {
     pub number: u64,
+    #[serde(with = "rpc_hex")]
     pub hash: [u8; 32],
     pub batch_range: std::ops::Range<u64>,
     pub batches: Option<Vec<ItemOrHash<BatchResponse<B, Tx>>>>,
@@ -68,6 +76,7 @@ pub struct SlotResponse<B, Tx> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct BatchResponse<B, Tx> {
+    #[serde(with = "rpc_hex")]
     pub hash: [u8; 32],
     pub tx_range: std::ops::Range<u64>,
     pub txs: Option<Vec<ItemOrHash<TxResponse<Tx>>>>,
@@ -76,6 +85,7 @@ pub struct BatchResponse<B, Tx> {
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct TxResponse<Tx> {
+    #[serde(with = "rpc_hex")]
     pub hash: [u8; 32],
     pub event_range: std::ops::Range<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -164,4 +174,106 @@ pub trait LedgerRpcProvider {
         end: u64,
         query_mode: QueryMode,
     ) -> Result<Vec<Option<TxResponse<T>>>, anyhow::Error>;
+}
+
+mod rpc_hex {
+    use core::fmt;
+    use std::marker::PhantomData;
+
+    use hex::{FromHex, ToHex};
+    use serde::{
+        de::{Error, Visitor},
+        Deserializer, Serializer,
+    };
+
+    /// Serializes `data` as hex string using lowercase characters and prefixing with '0x'.
+    ///
+    /// Lowercase characters are used (e.g. `f9b4ca`). The resulting string's length
+    /// is always even, each byte in data is always encoded using two hex digits.
+    /// Thus, the resulting string contains exactly twice as many bytes as the input
+    /// data.
+    pub fn serialize<S, T>(data: T, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+        T: ToHex,
+    {
+        let formatted_string = format!("0x{}", data.encode_hex::<String>());
+        serializer.serialize_str(&formatted_string)
+    }
+
+    /// Deserializes a hex string into raw bytes.
+    ///
+    /// Both, upper and lower case characters are valid in the input string and can
+    /// even be mixed (e.g. `f9b4ca`, `F9B4CA` and `f9B4Ca` are all valid strings).
+    pub fn deserialize<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+    where
+        D: Deserializer<'de>,
+        T: FromHex,
+        <T as FromHex>::Error: fmt::Display,
+    {
+        struct HexStrVisitor<T>(PhantomData<T>);
+
+        impl<'de, T> Visitor<'de> for HexStrVisitor<T>
+        where
+            T: FromHex,
+            <T as FromHex>::Error: fmt::Display,
+        {
+            type Value = T;
+
+            fn expecting(&self, f: &mut fmt::Formatter) -> fmt::Result {
+                write!(f, "a hex encoded string")
+            }
+
+            fn visit_str<E>(self, data: &str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                let data = data.trim_start_matches("0x");
+                FromHex::from_hex(data).map_err(Error::custom)
+            }
+
+            fn visit_borrowed_str<E>(self, data: &'de str) -> Result<Self::Value, E>
+            where
+                E: Error,
+            {
+                let data = data.trim_start_matches("0x");
+                FromHex::from_hex(data).map_err(Error::custom)
+            }
+        }
+
+        deserializer.deserialize_str(HexStrVisitor(PhantomData))
+    }
+}
+
+#[cfg(test)]
+mod rpc_hex_tests {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Serialize, Deserialize, PartialEq, Debug)]
+    struct TestStruct {
+        #[serde(with = "super::rpc_hex")]
+        data: Vec<u8>,
+    }
+
+    #[test]
+    fn test_roundtrip() {
+        let test_data = TestStruct {
+            data: vec![0x01, 0x02, 0x03, 0x04],
+        };
+
+        let serialized = serde_json::to_string(&test_data).unwrap();
+        assert!(serialized.contains("0x01020304"));
+        let deserialized: TestStruct = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, test_data)
+    }
+
+    #[test]
+    fn test_accepts_hex_without_0x_prefix() {
+        let test_data = TestStruct {
+            data: vec![0x01, 0x02, 0x03, 0x04],
+        };
+
+        let deserialized: TestStruct = serde_json::from_str(r#"{"data": "01020304"}"#).unwrap();
+        assert_eq!(deserialized, test_data)
+    }
 }
