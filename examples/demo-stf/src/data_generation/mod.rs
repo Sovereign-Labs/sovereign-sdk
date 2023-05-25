@@ -76,27 +76,3 @@ trait MessageGenerator {
         serialized_messages
     }
 }
-
-pub(crate) struct QueryGenerator {}
-
-impl QueryGenerator {
-    pub(crate) fn generate_query_election_message() -> Vec<u8> {
-        let query_message = election::query::QueryMessage::GetResult;
-        Runtime::<DefaultContext>::encode_election_query(query_message)
-    }
-
-    pub(crate) fn generate_query_election_nb_of_votes_message() -> Vec<u8> {
-        let query_message = election::query::QueryMessage::GenNbOfVotes;
-        Runtime::<DefaultContext>::encode_election_query(query_message)
-    }
-
-    pub(crate) fn generate_query_value_setter_message() -> Vec<u8> {
-        let query_message = value_setter::query::QueryMessage::GetValue;
-        Runtime::<DefaultContext>::encode_value_setter_query(query_message)
-    }
-
-    pub(crate) fn generate_query_check_balance() -> Vec<u8> {
-        let query_message = sequencer::query::QueryMessage::GetSequencerAddressAndBalance;
-        Runtime::<DefaultContext>::encode_sequencer_query(query_message)
-    }
-}

@@ -1,4 +1,4 @@
-use super::common::{parse_generic_params, StructDef, StructFieldExtractor, CALL, QUERY};
+use super::common::{parse_generic_params, StructDef, StructFieldExtractor, CALL};
 use proc_macro2::TokenStream;
 use quote::format_ident;
 use syn::DeriveInput;
@@ -6,7 +6,6 @@ use syn::DeriveInput;
 impl<'a> StructDef<'a> {
     fn create_message_codec(&self) -> TokenStream {
         let call_enum = self.enum_ident(CALL);
-        let query_enum = self.enum_ident(QUERY);
         let ty_generics = &self.type_generics;
 
         let fns = self.fields.iter().map(|field| {
@@ -14,11 +13,9 @@ impl<'a> StructDef<'a> {
             let ty = &field.ty;
 
             let fn_call_name = format_ident!("encode_{}_call", &field.ident);
-            let fn_query_name = format_ident!("encode_{}_query", &field.ident);
 
 
             let call_doc = format!("Encodes {} call message.",field.ident);
-            let query_doc = format!("Encodes {} query message.",field.ident);
 
             // Creates functions like:
             //  encode_*module_name*_call(data: ..) -> Vec<u8>
@@ -29,12 +26,6 @@ impl<'a> StructDef<'a> {
                     let call = #call_enum::<C>::#variant(data);
                     ::borsh::BorshSerialize::try_to_vec(&call).unwrap()
                 }
-
-                #[doc = #query_doc]
-                pub fn #fn_query_name(data: <#ty as sov_modules_api::Module>::QueryMessage)-> std::vec::Vec<u8>{
-                    let query = #query_enum::<C>::#variant(data);
-                    ::borsh::BorshSerialize::try_to_vec(&query).unwrap()
-                }
             }
         });
 
@@ -43,7 +34,7 @@ impl<'a> StructDef<'a> {
         let where_clause = self.where_clause;
 
         // Adds decoding functionality to the underlying type and
-        // hides auto generated types behind impl DispatchQuery & impl DispatchCall.
+        // hides auto generated types behind impl DispatchCall.
         quote::quote! {
             impl #impl_generics #original_ident #ty_generics #where_clause {
                 #(#fns)*

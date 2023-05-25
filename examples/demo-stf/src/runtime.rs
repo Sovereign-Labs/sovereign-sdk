@@ -1,5 +1,5 @@
 use sov_modules_api::{Context, Module};
-use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
+use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 
 /// The Rollup entrypoint.
 ///
@@ -11,7 +11,7 @@ use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 ///
 /// In order to define the runtime we need to specify all the modules supported by our rollup (see the `Runtime` struct bellow)
 ///
-/// The `Runtime` together with associated interfaces (`Genesis`, `DispatchCall`, `DispatchQuery`, `MessageCodec`)
+/// The `Runtime` together with associated interfaces (`Genesis`, `DispatchCall`, `MessageCodec`)
 /// and derive macros defines:
 /// - how the rollup modules are wired up together.
 /// - how the state of the rollup is initialized.
@@ -29,10 +29,6 @@ use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 ///     In general, the point of a call is to change the module state, but if the call throws an error,
 ///     no state is updated (the transaction is reverted).
 ///
-/// 3. Queries:
-///    The `Module` interface defines a `query` method, which allows querying the state of the module.
-///     Queries are read only i.e they don't change the state of the rollup.
-///     
 /// `#[derive(MessageCodec)` adds deserialization capabilities to the `Runtime` (implements `decode_call` method).
 /// `Runtime::decode_call` accepts serialized call message and returns a type that implements the `DispatchCall` trait.
 ///  The `DispatchCall` implementation (derived by a macro) forwards the message to the appropriate module and executes its `call` method.
@@ -40,23 +36,18 @@ use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
 /// Similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
 /// instead of going through the DA layer.
 
-#[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
+#[derive(Genesis, DispatchCall, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
-    #[allow(unused)]
-    sequencer: sequencer::Sequencer<C>,
+    pub sequencer: sequencer::Sequencer<C>,
 
-    #[allow(unused)]
-    bank: bank::Bank<C>,
+    pub bank: bank::Bank<C>,
 
-    #[allow(unused)]
-    election: election::Election<C>,
+    pub election: election::Election<C>,
 
-    #[allow(unused)]
-    value_setter: value_setter::ValueSetter<C>,
+    pub value_setter: value_setter::ValueSetter<C>,
 
-    #[allow(unused)]
-    accounts: accounts::Accounts<C>,
+    pub accounts: accounts::Accounts<C>,
 }
 
 // TODO add macro to generate the following code:

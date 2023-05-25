@@ -1,24 +1,9 @@
-use serde::de::DeserializeOwned;
-
-use bank::query::QueryMessage;
-use bank::{Bank, BankConfig, TokenConfig};
+use bank::{BankConfig, TokenConfig};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Hasher;
-use sov_modules_api::{Address, Module, Spec};
-use sov_state::DefaultStorageSpec;
-use sov_state::{ProverStorage, WorkingSet};
+use sov_modules_api::{Address, Spec};
 
 pub type C = DefaultContext;
-pub type Storage = ProverStorage<DefaultStorageSpec>;
-
-pub fn query_and_deserialize<R: DeserializeOwned>(
-    bank: &Bank<C>,
-    query: QueryMessage<C>,
-    working_set: &mut WorkingSet<Storage>,
-) -> R {
-    let response = bank.query(query, working_set);
-    serde_json::from_slice(&response.response).expect("Failed to deserialize response json")
-}
 
 pub fn generate_address(key: &str) -> <C as Spec>::Address {
     let hash = <C as Spec>::Hasher::hash(key.as_bytes());

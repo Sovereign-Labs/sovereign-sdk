@@ -65,7 +65,6 @@ impl StructFieldExtractor {
 }
 
 pub(crate) const CALL: &str = "Call";
-pub(crate) const QUERY: &str = "Query";
 
 /// Represents "parsed" rust struct.
 pub(crate) struct StructDef<'a> {

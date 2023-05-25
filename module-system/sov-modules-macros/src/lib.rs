@@ -2,8 +2,7 @@
 mod dispatch;
 mod module_info;
 use dispatch::{
-    dispatch_call::DispatchCallMacro, dispatch_query::DispatchQueryMacro, genesis::GenesisMacro,
-    message_codec::MessageCodec,
+    dispatch_call::DispatchCallMacro, genesis::GenesisMacro, message_codec::MessageCodec,
 };
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
@@ -56,15 +55,6 @@ pub fn dispatch_call(input: TokenStream) -> TokenStream {
     let call_macro = DispatchCallMacro::new("Call");
 
     handle_macro_error(call_macro.derive_dispatch_call(input))
-}
-
-/// Derives the `sov-modules-api::DispatchQuery` implementation for the underlying type.
-#[proc_macro_derive(DispatchQuery, attributes(serialization))]
-pub fn dispatch_query(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input);
-    let query_macro = DispatchQueryMacro::new("Query");
-
-    handle_macro_error(query_macro.derive_dispatch_query(input))
 }
 
 /// Adds encoding functionality to the underlying type.

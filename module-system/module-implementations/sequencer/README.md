@@ -13,6 +13,3 @@ The `Sequencer` module does not expose any call messages, and rollup users canno
 1. `reward`: Unlocks the sequencer bond, possibly with an additional tip.
 
 If a sequencer misbehaves, the `reward` hook is never called, and the bond remains locked indefinitely.
-
-Queries:
-1. `QueryMessage::GetSequencerAddressAndBalance` query retrieves the sequencer's address and balance on the rollup.

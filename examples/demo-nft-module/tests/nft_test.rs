@@ -1,7 +1,6 @@
 use demo_nft_module::call::CallMessage;
-use demo_nft_module::query::{OwnerResponse, QueryMessage};
+use demo_nft_module::query::OwnerResponse;
 use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
-use serde::de::DeserializeOwned;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Context, Hasher, Module, ModuleInfo, Spec};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
@@ -12,15 +11,6 @@ pub type Storage = ProverStorage<DefaultStorageSpec>;
 pub fn generate_address(key: &str) -> <C as Spec>::Address {
     let hash = <C as Spec>::Hasher::hash(key.as_bytes());
     Address::from(hash)
-}
-
-pub fn query_and_deserialize<R: DeserializeOwned>(
-    nft: &NonFungibleToken<C>,
-    query: QueryMessage,
-    working_set: &mut WorkingSet<Storage>,
-) -> R {
-    let response = nft.query(query, working_set);
-    serde_json::from_slice(&response.response).expect("Failed to deserialize response json")
 }
 
 #[test]
@@ -40,18 +30,10 @@ fn genesis_and_mint() {
     let genesis_result = nft.genesis(&config, &mut working_set);
     assert!(genesis_result.is_ok());
 
-    let query1: OwnerResponse<C> = query_and_deserialize(
-        &nft,
-        QueryMessage::GetOwner { token_id: 0 },
-        &mut working_set,
-    );
+    let query1: OwnerResponse<C> = nft.get_owner(0, &mut working_set);
     assert_eq!(query1.owner, Some(owner1.clone()));
 
-    let query2: OwnerResponse<C> = query_and_deserialize(
-        &nft,
-        QueryMessage::GetOwner { token_id: 1 },
-        &mut working_set,
-    );
+    let query2: OwnerResponse<C> = nft.get_owner(1, &mut working_set);
     assert!(query2.owner.is_none());
 
     // Mint, anybody can mint
@@ -61,11 +43,7 @@ fn genesis_and_mint() {
         .call(mint_message.clone(), &owner2_context, &mut working_set)
         .expect("Minting failed");
     assert!(minted.events.is_empty());
-    let query3: OwnerResponse<C> = query_and_deserialize(
-        &nft,
-        QueryMessage::GetOwner { token_id: 1 },
-        &mut working_set,
-    );
+    let query3: OwnerResponse<C> = nft.get_owner(1, &mut working_set);
     assert_eq!(query3.owner, Some(owner2.clone()));
 
     // Try to mint again same token, should fail
@@ -106,8 +84,7 @@ fn transfer() {
 
     let query_token_owner =
         |token_id: u64, working_set: &mut WorkingSet<Storage>| -> Option<Address> {
-            let query: OwnerResponse<C> =
-                query_and_deserialize(&nft, QueryMessage::GetOwner { token_id }, working_set);
+            let query: OwnerResponse<C> = nft.get_owner(token_id, working_set);
             query.owner
         };
 
@@ -162,11 +139,7 @@ fn burn() {
         .expect("Burn failed");
     assert!(burned.events.is_empty());
 
-    let query: OwnerResponse<C> = query_and_deserialize(
-        &nft,
-        QueryMessage::GetOwner { token_id: 0 },
-        &mut working_set,
-    );
+    let query: OwnerResponse<C> = nft.get_owner(0, &mut working_set);
 
     assert!(query.owner.is_none());
 

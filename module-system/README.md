@@ -125,11 +125,6 @@ For an example of how to instantiate the generated trait as a server bound to a 
 
 Note that only one impl block per module may be annotated with `rpc_gen`, but that the block may contain as many `rpc_method` annotations as you want.
 
-### The `Query` Interface: Deprecated
-
-It's also worth noting that there's a fourth interface exposed by nodes - the `query` method of the `Module` trait. This interface is
-deprecated and is on the path to removal.
-
 ## Context and Spec: How to Make Your Module System Portable
 
 In addition to `Module`, there are two traits that are ubiquitous in the modules system - `Context` and `Spec`. To understand these

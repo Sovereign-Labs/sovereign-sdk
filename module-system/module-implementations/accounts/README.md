@@ -21,7 +21,7 @@ proper usage of these hooks, see the [`demo-stf`](../../../examples/demo-stf/) d
 
 1. Each processed message increases the account nonce. This serves to protect against double-spending attacks and ensures proper transaction ordering.
 
-1. It is possible to query the `Accounts` module with a `QueryMessage::GetAccount(..)` message and get the account corresponding to the given public key.
+1. It is possible to query the `Accounts` module using the `get_account` method and get the account corresponding to the given public key.
 
 ### The Accounts module makes the following guarantees:
 

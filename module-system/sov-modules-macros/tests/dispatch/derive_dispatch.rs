@@ -3,14 +3,14 @@ use modules::{first_test_module, second_test_module};
 use sov_modules_api::Address;
 use sov_modules_api::ModuleInfo;
 use sov_modules_api::{default_context::DefaultContext, Context, Genesis, Module};
-use sov_modules_macros::{DispatchCall, DispatchQuery, Genesis, MessageCodec};
+use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 use sov_state::ProverStorage;
 
-#[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
+#[derive(Genesis, DispatchCall, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 struct Runtime<C: Context> {
-    first: first_test_module::FirstTestStruct<C>,
-    second: second_test_module::SecondTestStruct<C>,
+    pub first: first_test_module::FirstTestStruct<C>,
+    pub second: second_test_module::SecondTestStruct<C>,
 }
 
 impl<C: Context> Runtime<C> {
@@ -23,12 +23,12 @@ impl<C: Context> Runtime<C> {
 }
 
 fn main() {
-    use sov_modules_api::{DispatchCall, DispatchQuery};
+    use sov_modules_api::DispatchCall;
     type RT = Runtime<DefaultContext>;
     let runtime = &mut RT::new();
 
     let storage = ProverStorage::temporary();
-    let working_set = &mut sov_state::WorkingSet::new(storage);
+    let mut working_set = &mut sov_state::WorkingSet::new(storage);
     let config = GenesisConfig::new((), ());
     runtime.genesis(&config, working_set).unwrap();
     let context = DefaultContext::new(Address::try_from([0; 32].as_ref()).unwrap());
@@ -46,10 +46,8 @@ fn main() {
     }
 
     {
-        let serialized_message = RT::encode_first_query(());
-        let module = RT::decode_query(&serialized_message).unwrap();
-        let response = runtime.dispatch_query(module, working_set);
-        assert_eq!(response.response, vec![value]);
+        let response = runtime.first.get_state_value(&mut working_set);
+        assert_eq!(response, value);
     }
 
     let value = 22;
@@ -66,9 +64,7 @@ fn main() {
     }
 
     {
-        let serialized_message = RT::encode_second_query(second_test_module::TestType {});
-        let module = RT::decode_query(&serialized_message).unwrap();
-        let response = runtime.dispatch_query(module, working_set);
-        assert_eq!(response.response, vec![value]);
+        let response = runtime.second.get_state_value(&mut working_set);
+        assert_eq!(response, value);
     }
 }

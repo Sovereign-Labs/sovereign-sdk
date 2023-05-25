@@ -124,7 +124,7 @@ The final piece of the puzzle is your app's runtime. A runtime is just a list of
 module to your app, just add an additional field to the runtime.
 
 ```rust
-#[derive(Genesis, DispatchCall, DispatchQuery, MessageCodec)]
+#[derive(Genesis, DispatchCall, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct MyRuntime<C: Context> {
     #[allow(unused)]

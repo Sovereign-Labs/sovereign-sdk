@@ -51,18 +51,15 @@ fn test_value_setter_helper<C: Context>(
         assert_eq!(event, &Event::new("set", "value_set: 99"));
     }
 
-    let query_msg = query::QueryMessage::GetValue;
-    let query = module.query(query_msg, working_set);
-
     // Test query
     {
-        let query_response: Result<query::Response, _> = serde_json::from_slice(&query.response);
+        let query_response = module.query_value(working_set);
 
         assert_eq!(
             query::Response {
                 value: Some(new_value)
             },
-            query_response.unwrap()
+            query_response
         )
     }
 }

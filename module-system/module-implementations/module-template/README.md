@@ -11,6 +11,6 @@ It demonstrates the following concepts:
 
 ### 2. Functionality:
 
-Anyone can update the value stored in the example module by sending a `CallMessage::SetValue(new_value)` message. Anyone can query the module state with `QueryMessage::GetValue` message.
+Anyone can update the value stored in the example module by sending a `CallMessage::SetValue(new_value)` message. Anyone can query the module state by invoking the public `get_value` function
 
 Please, check comments in the `genesis.rs, call.rs & query.rs` for implementation details.
