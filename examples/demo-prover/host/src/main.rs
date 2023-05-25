@@ -29,7 +29,7 @@ const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
         .nth(1)
-        .unwrap_or("rollup_config.toml".to_string());
+        .unwrap_or_else(|| "rollup_config.toml".to_string());
     let rollup_config: RollupConfig =
         from_toml_path(&rollup_config_path).context("Failed to read rollup configuration")?;
 
@@ -62,7 +62,7 @@ async fn main() -> Result<(), anyhow::Error> {
         println!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
-            hex::encode(&prev_state_root)
+            hex::encode(prev_state_root)
         );
         let filtered_block = da_service.get_finalized_at(height).await?;
         host.write_to_guest(&filtered_block.header);
@@ -72,7 +72,7 @@ async fn main() -> Result<(), anyhow::Error> {
         host.write_to_guest(&blob_txs);
         host.write_to_guest(&inclusion_proof);
         host.write_to_guest(&completeness_proof);
-        host.write_to_guest(&prev_state_root);
+        host.write_to_guest(prev_state_root);
 
         demo.begin_slot(Default::default());
         for blob in blob_txs.clone() {

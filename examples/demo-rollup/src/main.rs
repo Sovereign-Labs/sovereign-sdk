@@ -68,7 +68,7 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
 async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
         .nth(1)
-        .unwrap_or("rollup_config.toml".to_string());
+        .unwrap_or_else(|| "rollup_config.toml".to_string());
     let rollup_config: RollupConfig =
         from_toml_path(&rollup_config_path).context("Failed to read rollup configuration")?;
     let rpc_config = rollup_config.rpc_config;
