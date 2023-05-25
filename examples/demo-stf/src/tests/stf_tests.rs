@@ -1,19 +1,18 @@
 #[cfg(test)]
 pub mod test {
-
+    use crate::{
+        genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
+        runtime::Runtime,
+        tests::{
+            create_demo_config, create_new_demo, data_generation::simulate_da, new_test_blob, C,
+        },
+    };
     use sov_app_template::{Batch, SequencerOutcome};
     use sov_modules_api::{
         default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
     };
     use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
     use sov_state::{ProverStorage, WorkingSet};
-
-    use crate::{
-        app::{create_demo_config, create_new_demo, C, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
-        data_generation::simulate_da,
-        helpers::new_test_blob,
-        runtime::Runtime,
-    };
 
     #[test]
     fn test_demo_values_in_db() {
@@ -36,7 +35,7 @@ pub mod test {
 
             let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
                 &mut demo,
-                new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
+                new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
                 None,
             )
             .inner;
@@ -89,7 +88,7 @@ pub mod test {
 
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
+            new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner;
@@ -139,7 +138,7 @@ pub mod test {
 
             let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
                 &mut demo,
-                new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
+                new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
                 None,
             )
             .inner;
@@ -190,7 +189,7 @@ pub mod test {
 
         let apply_blob_result = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
+            new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner;

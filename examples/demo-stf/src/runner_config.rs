@@ -1,14 +1,10 @@
-#[cfg(feature = "native")]
 use serde::de::DeserializeOwned;
+pub use sov_modules_api::default_context::DefaultContext;
 pub use sov_state::config::Config as StorageConfig;
-#[cfg(feature = "native")]
 use std::fs::File;
-#[cfg(feature = "native")]
 use std::io::Read;
-#[cfg(feature = "native")]
 use std::path::Path;
 
-#[cfg(feature = "native")]
 pub fn from_toml_path<P: AsRef<Path>, R: DeserializeOwned>(path: P) -> anyhow::Result<R> {
     let mut contents = String::new();
     {

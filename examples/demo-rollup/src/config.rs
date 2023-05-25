@@ -1,4 +1,4 @@
-use demo_stf::config::Config as RunnerConfig;
+use demo_stf::runner_config::Config as RunnerConfig;
 use jupiter::da_service::DaServiceConfig;
 use serde::Deserialize;
 
@@ -20,7 +20,7 @@ pub struct RollupConfig {
 mod tests {
     use super::*;
 
-    use demo_stf::config::{from_toml_path, StorageConfig};
+    use demo_stf::runner_config::{from_toml_path, StorageConfig};
     use std::io::Write;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;

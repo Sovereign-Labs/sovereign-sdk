@@ -1,12 +1,9 @@
 use core::panic;
 
 use crate::{
-    app::{create_demo_config, create_new_demo, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
-    data_generation::{
-        simulate_da_with_bad_serialization, simulate_da_with_bad_sig, simulate_da_with_revert_msg,
-    },
-    helpers::new_test_blob,
+    genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
     runtime::Runtime,
+    tests::data_generation::simulate_da_with_bad_serialization,
 };
 use sov_app_template::{Batch, SlashingReason};
 use sov_modules_api::{
@@ -14,6 +11,12 @@ use sov_modules_api::{
 };
 use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
 use sov_state::{ProverStorage, WorkingSet};
+
+use super::{
+    create_demo_config, create_new_demo,
+    data_generation::{simulate_da_with_bad_sig, simulate_da_with_revert_msg},
+    new_test_blob,
+};
 
 const SEQUENCER_BALANCE_DELTA: u64 = 1;
 const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + SEQUENCER_BALANCE_DELTA;
@@ -40,7 +43,7 @@ fn test_tx_revert() {
 
         match StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
+            new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner
@@ -101,7 +104,7 @@ fn test_tx_bad_sig() {
 
         let txs = simulate_da_with_bad_sig(election_admin_private_key);
 
-        match StateTransitionFunction::<MockZkvm>::apply_blob(&mut demo, new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS), None).inner {
+        match StateTransitionFunction::<MockZkvm>::apply_blob(&mut demo, new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS), None).inner {
                 sov_app_template::SequencerOutcome::Slashed(SlashingReason::StatelessVerificationFailed) => {}
                 _ => panic!("Unexpected outcome: Stateless verification should have failed due to invalid signature")
             }
@@ -202,7 +205,7 @@ fn test_tx_bad_serialization() {
 
         let outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            new_test_blob(Batch { txs }, &TEST_SEQUENCER_DA_ADDRESS),
+            new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner;

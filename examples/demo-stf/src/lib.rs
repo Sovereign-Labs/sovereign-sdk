@@ -1,16 +1,12 @@
 pub mod app;
-pub mod config;
-#[cfg(test)]
-mod data_generation;
-
 #[cfg(feature = "native")]
-pub mod helpers;
+pub mod genesis_config;
+#[cfg(feature = "native")]
+pub mod runner_config;
 pub mod runtime;
 #[cfg(test)]
-mod tests;
+pub mod tests;
 pub mod tx_hooks_impl;
-#[cfg(test)]
-mod tx_revert_tests;
 pub mod tx_verifier_impl;
 
 #[cfg(feature = "native")]
