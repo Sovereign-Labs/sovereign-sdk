@@ -107,7 +107,7 @@ stages.
 Its common for modules which need access to these hooks to export a `Hooks` struct. If you're relying on an unfamiliar module, be sure to check
 its documentation to make sure that you know about any hooks that it may rely on. Your `TxHooks` implementation will usually
 just be a wrapper which invokes each of these modules hooks. In this demo, we only rely
-on two modules which need access to the hooks - `sov-accounts` and `Sequencer`, so our `TxHooks` implementation only has two fields.
+on two modules which need access to the hooks - `sov-accounts` and `sequencer-registry`, so our `TxHooks` implementation only has two fields.
 
 ```rust
 pub struct DemoAppTxHooks<C: Context> {
