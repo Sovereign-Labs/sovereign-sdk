@@ -1,6 +1,6 @@
 # Schema DB
 
-This package is a low-level wrapper transforming RocksDB from a byte-oriented key value store into a
+This package is a low-level wrapper transforming [RocksDB](https://rocksdb.org/) from a byte-oriented key value store into a
 type-oriented store. It's adapted from a simliar package in Aptos-Core.
 
 The most important concept exposed by Schema DB is a `Schema`, which maps a column-family name
