@@ -64,13 +64,13 @@ fn test_tx_revert() {
         // We sent 4 vote messages but one of them is invalid and should be reverted.
         let resp = runtime.election.number_of_votes(&mut working_set);
 
-        assert_eq!(resp, election::query::GetNbOfVotesResponse::Result(3));
+        assert_eq!(resp, sov_election::query::GetNbOfVotesResponse::Result(3));
 
         let resp = runtime.election.results(&mut working_set);
 
         assert_eq!(
             resp,
-            election::query::GetResultResponse::Result(Some(election::Candidate {
+            sov_election::query::GetResultResponse::Result(Some(sov_election::Candidate {
                 name: "candidate_2".to_owned(),
                 count: 3
             }))
@@ -121,7 +121,7 @@ fn test_tx_bad_sig() {
 
         assert_eq!(
             resp,
-            election::query::GetResultResponse::Err("Election is not frozen".to_owned())
+            sov_election::query::GetResultResponse::Err("Election is not frozen".to_owned())
         );
 
         let resp = runtime
@@ -226,7 +226,7 @@ fn test_tx_bad_serialization() {
 
         assert_eq!(
             resp,
-            election::query::GetResultResponse::Err("Election is not frozen".to_owned())
+            sov_election::query::GetResultResponse::Err("Election is not frozen".to_owned())
         );
 
         let resp = runtime

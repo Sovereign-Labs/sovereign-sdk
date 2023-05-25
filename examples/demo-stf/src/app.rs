@@ -28,9 +28,9 @@ pub struct DemoAppRunner<C: Context, Vm: Zkvm>(pub DemoApp<C, Vm>);
 pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;
 
 #[cfg(feature = "native")]
-use election::query::{ElectionRpcImpl, ElectionRpcServer};
-#[cfg(feature = "native")]
 use sov_bank::query::{BankRpcImpl, BankRpcServer};
+#[cfg(feature = "native")]
+use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
 #[cfg(feature = "native")]
 use value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 

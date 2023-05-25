@@ -22,7 +22,7 @@ toml = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"], optional = true }
 
 sov-rollup-interface = { path = "../../rollup-interface" }
-election = { path = "../../module-system/module-implementations/examples/election", default-features = false }
+sov-election = { path = "../../module-system/module-implementations/examples/sov-election", default-features = false }
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry", default-features = false }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", default-features = false }
 sov-app-template = { path = "../../module-system/sov-app-template" } # no features available
@@ -47,7 +47,7 @@ native = [
 	"dep:schemadb",
 	"sov-bank/native",
 	"sov-accounts/native",
-	"election/native",
+	"sov-election/native",
 	"sov-sequencer-registry/native",
 	"value-setter/native",
 	"sov-modules-api/native",

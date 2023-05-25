@@ -56,7 +56,7 @@ pub mod test {
 
             assert_eq!(
                 resp,
-                election::query::GetResultResponse::Result(Some(election::Candidate {
+                sov_election::query::GetResultResponse::Result(Some(sov_election::Candidate {
                     name: "candidate_2".to_owned(),
                     count: 3
                 }))
@@ -105,7 +105,7 @@ pub mod test {
 
         assert_eq!(
             resp,
-            election::query::GetResultResponse::Result(Some(election::Candidate {
+            sov_election::query::GetResultResponse::Result(Some(sov_election::Candidate {
                 name: "candidate_2".to_owned(),
                 count: 3
             }))
@@ -158,7 +158,7 @@ pub mod test {
 
             assert_eq!(
                 resp,
-                election::query::GetResultResponse::Err("Election is not frozen".to_owned())
+                sov_election::query::GetResultResponse::Err("Election is not frozen".to_owned())
             );
 
             let resp = runtime.value_setter.query_value(&mut working_set);

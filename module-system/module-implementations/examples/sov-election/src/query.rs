@@ -13,7 +13,7 @@ pub enum GetNbOfVotesResponse {
     Result(u64),
 }
 
-#[rpc_gen(client, server, namespace = "election")]
+#[rpc_gen(client, server, namespace = "sov-election")]
 impl<C: sov_modules_api::Context> Election<C> {
     #[rpc_method(name = "results")]
     pub fn results(&self, working_set: &mut WorkingSet<C::Storage>) -> GetResultResponse {

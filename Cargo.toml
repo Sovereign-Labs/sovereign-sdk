@@ -22,7 +22,7 @@ members = [
     "module-system/module-implementations/sov-sequencer-registry",
     "module-system/module-implementations/module-template",
     "module-system/module-implementations/examples/value-setter",
-    "module-system/module-implementations/examples/election",
+    "module-system/module-implementations/examples/sov-election",
     "module-system/module-implementations/integration-tests",
 ]
 exclude = [
