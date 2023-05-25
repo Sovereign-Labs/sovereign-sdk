@@ -1,6 +1,6 @@
 # Sovereign DB
 
-This package provides a high-level interface to a [Schema DB](../schemadb/README.md) designed specifically for use with the Sovereign SDK.
+This package provides a high-level interface to a [Schema DB](../sov-schema-db/README.md) designed specifically for use with the Sovereign SDK.
 It exposes two db types: `LedgerDB`, and `StateDB`.
 
 ## LedgerDB
