@@ -337,6 +337,3 @@ bind_port = 12345
     let address = SocketAddr::new(rpc_config.bind_host.parse()?, rpc_config.bind_port);
 ```
 * But as mentioned, the infra / networking aspect is separated from the macro that generates the boilerplate to expose the RPC in a way that it can be plugged into an RPC server
-=======
-
-
