@@ -18,7 +18,7 @@ members = [
     "module-system/utils/first-read-last-write-cache",
     "module-system/module-implementations/sov-accounts",
     "module-system/module-implementations/sov-bank",
-    "module-system/module-implementations/prover-incentives",
+    "module-system/module-implementations/sov-prover-incentives",
     "module-system/module-implementations/sov-sequencer-registry",
     "module-system/module-implementations/module-template",
     "module-system/module-implementations/examples/value-setter",
