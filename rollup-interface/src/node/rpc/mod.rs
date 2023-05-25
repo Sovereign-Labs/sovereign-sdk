@@ -1,12 +1,47 @@
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use crate::stf::Event;
+use crate::stf::{Event, EventKey};
+
+/// A struct containing enough information to uniquely specify single batch
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct SlotIdAndOffset {
+    pub slot_id: SlotIdentifier,
+    /// The offset into the slot at which this tx is located.
+    /// Index 0 is the first batch in the slot
+    pub offset: u64,
+}
+
+/// A struct containing enough information to uniquely specify single transaction
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct BatchIdAndOffset {
+    pub batch_id: BatchIdentifier,
+    /// The offset into the batch at which this tx is located.
+    /// Index 0 is the first transaction in the batch
+    pub offset: u64,
+}
+
+/// A struct containing enough information to uniquely specify single event
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct TxIdAndOffset {
+    pub tx_id: TxIdentifier,
+    /// The offset into the tx's events at which this event is located.
+    /// Index 0 is the first event from this tx
+    pub offset: u64,
+}
+
+/// A struct containing enough information to uniquely specify single event
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct TxIdAndKey {
+    pub batch_id: TxIdentifier,
+    pub key: EventKey,
+}
 
 /// An identifier that specifies a single batch
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum BatchIdentifier {
-    Hash([u8; 32]),
-    SlotIdAndIndex((SlotIdentifier, u64)),
+    Hash(#[serde(with = "rpc_hex")] [u8; 32]),
+    SlotIdAndOffset(SlotIdAndOffset),
     /// The monotonically increasing number of the batch, ordered by the DA layer For example, if the genesis slot
     /// contains 0 batches, slot 1 contains 2 txs, and slot 3 contains 3 txs,
     /// the last batch in block 3 would have number 5. The counter never resets.
@@ -15,9 +50,10 @@ pub enum BatchIdentifier {
 
 /// An identifier that specifies a single transaction
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum TxIdentifier {
-    Hash([u8; 32]),
-    BatchIdAndIndex((BatchIdentifier, u64)),
+    Hash(#[serde(with = "rpc_hex")] [u8; 32]),
+    BatchIdAndOffset(BatchIdAndOffset),
     /// The monotonically increasing number of the tx, ordered by the DA layer For example, if genesis
     /// contains 0 txs, batch 1 contains 8 txs, and batch 3 contains 7 txs,
     /// the last tx in batch 3 would have number 15. The counter never resets.
@@ -26,9 +62,10 @@ pub enum TxIdentifier {
 
 /// An identifier that specifies a single event
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum EventIdentifier {
-    TxIdAndIndex((TxIdentifier, u64)),
-    TxIdAndKey((TxIdentifier, Vec<u8>)),
+    TxIdAndOffset(TxIdAndOffset),
+    TxIdAndKey(TxIdAndKey),
     /// The monotonically increasing number of the event, ordered by the DA layer For example, if the first tx
     /// contains 7 events, tx 2 contains 11 events, and tx 3 contains 7 txs,
     /// the last event in tx 3 would have number 25. The counter never resets.
@@ -37,6 +74,7 @@ pub enum EventIdentifier {
 
 /// An identifier for a group of related events
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[serde(untagged)]
 pub enum EventGroupIdentifier {
     TxId(TxIdentifier),
     Key(Vec<u8>),
@@ -46,8 +84,8 @@ pub enum EventGroupIdentifier {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SlotIdentifier {
-    Hash([u8; 32]), // the hash of a da block
-    Number(u64),    // the block number of a da block
+    Hash(#[serde(with = "rpc_hex")] [u8; 32]), // the hash of a da block
+    Number(u64),                               // the block number of a da block
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -61,7 +99,7 @@ pub enum QueryMode {
 
 impl Default for QueryMode {
     fn default() -> Self {
-        Self::Compact
+        Self::Standard
     }
 }
 
@@ -71,6 +109,7 @@ pub struct SlotResponse<B, Tx> {
     #[serde(with = "rpc_hex")]
     pub hash: [u8; 32],
     pub batch_range: std::ops::Range<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub batches: Option<Vec<ItemOrHash<BatchResponse<B, Tx>>>>,
 }
 
@@ -79,6 +118,7 @@ pub struct BatchResponse<B, Tx> {
     #[serde(with = "rpc_hex")]
     pub hash: [u8; 32],
     pub tx_range: std::ops::Range<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub txs: Option<Vec<ItemOrHash<TxResponse<Tx>>>>,
     pub custom_receipt: B,
 }
@@ -90,14 +130,13 @@ pub struct TxResponse<Tx> {
     pub event_range: std::ops::Range<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub body: Option<Vec<u8>>,
-    #[serde(flatten)]
     pub custom_receipt: Tx,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum ItemOrHash<T> {
-    Hash([u8; 32]),
+    Hash(#[serde(with = "rpc_hex")] [u8; 32]),
     Full(T),
 }
 
