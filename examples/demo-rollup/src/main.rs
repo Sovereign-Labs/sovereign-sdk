@@ -89,13 +89,15 @@ async fn main() -> Result<(), anyhow::Error> {
     // Initialize the ledger database, which stores blocks, transactions, events, etc.
     let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
 
-    // Our state transition function implements the StateTransitionRunner interface, so we use that to intitialize the STF
+    // Our state transition function implements the StateTransitionRunner interface,
+    // so we use that to initialize the STF
     let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
 
-    // Our state transition also implements the RpcRunner interface, so we use that to initialize the RPC server.
-    let storj = demo_runner.get_storage();
+    // Our state transition also implements the RpcRunner interface,
+    // so we use that to initialize the RPC server.
+    let storage = demo_runner.get_storage();
     let is_storage_empty = storj.is_empty();
-    let mut methods = get_rpc_methods(storj);
+    let mut methods = get_rpc_methods(storage);
     let ledger_rpc_module =
         ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db.clone());
     methods
@@ -113,7 +115,7 @@ async fn main() -> Result<(), anyhow::Error> {
             namespace: ROLLUP_NAMESPACE,
         },
     );
-    // For demonstration,  we also intitalize the DaVerifier interface using the DaVerifier interface
+    // For demonstration,  we also initialize the DaVerifier interface using the DaVerifier interface
     // Running the verifier is only *necessary* during proof generation not normal execution
     let da_verifier = CelestiaVerifier::new(RollupParams {
         namespace: ROLLUP_NAMESPACE,
@@ -149,15 +151,16 @@ async fn main() -> Result<(), anyhow::Error> {
 
         // Fetch the relevant subset of the next Celestia block
         let filtered_block = da_service.get_finalized_at(height).await?;
-        let header = filtered_block.header().clone();
+        let header = filtered_block.header();
 
         // For the demo, we create and verify a proof that the data has been extracted from Celestia correctly.
         // In a production implementation, this logic would only run on the prover node - regular full nodes could
         // simply download the data from Celestia without extracting and checking a merkle proof here,
         let (blob_txs, inclusion_proof, completeness_proof) =
             da_service.extract_relevant_txs_with_proof(filtered_block.clone());
+
         assert!(da_verifier
-            .verify_relevant_tx_list(&header, &blob_txs, inclusion_proof, completeness_proof)
+            .verify_relevant_tx_list(header, &blob_txs, inclusion_proof, completeness_proof)
             .is_ok());
         info!("Received {} blobs", blob_txs.len());
 
@@ -165,7 +168,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let mut data_to_commit = SlotCommit::new(filtered_block);
         for blob in blob_txs.clone() {
             let receipts = demo.apply_blob(blob, None);
-            info!("er: {:?}", receipts);
+            info!("receipts: {:?}", receipts);
             data_to_commit.add_batch(receipts);
         }
         let (next_state_root, _witness) = demo.end_slot();

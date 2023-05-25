@@ -19,9 +19,10 @@ pub trait DaSpec {
     /// A proof that each tx in a set of blob transactions is included in a given block.
     type InclusionMultiProof: Serialize + DeserializeOwned;
 
-    /// A proof that a claimed set of transactions is complete. For example, this could be a range
-    /// proof demonstrating that the provided BlobTransactions represent the entire contents of Celestia namespace
-    /// in a given block
+    /// A proof that a claimed set of transactions is complete.
+    /// For example, this could be a range proof demonstrating that
+    /// the provided BlobTransactions represent the entire contents
+    /// of Celestia namespace in a given block
     type CompletenessProof: Serialize + DeserializeOwned;
 
     /// The parameters of the rollup which are baked into the state-transition function.
@@ -29,7 +30,7 @@ pub trait DaSpec {
     type ChainParams;
 }
 
-/// A DaLayer implements the logic required to create a zk proof that some data
+/// A DaVerifier implements the logic required to create a zk proof that some data
 /// has been processed.
 ///
 /// This trait implements the required functionality to *verify* claims of the form
@@ -40,6 +41,7 @@ pub trait DaVerifier {
     type Spec: DaSpec;
 
     /// The error type returned by the DA layer's verification function
+    /// TODO: Should we add `std::Error` bound so it can be `()?` ?
     type Error: Debug;
 
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self;
@@ -64,4 +66,6 @@ pub trait BlobTransactionTrait: Serialize + DeserializeOwned {
     fn data(&self) -> Self::Data;
 }
 
+/// TODO: This trait has nothing specific to BlockHash, it just set of bounds
+/// Should we rename it?
 pub trait BlockHashTrait: Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync {}
