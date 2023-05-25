@@ -165,7 +165,11 @@ impl SerializedTx {
 mod test {
     use super::*;
     use demo_stf::app::{DemoApp, DemoAppRunner};
-    use demo_stf::genesis_config::{create_demo_config, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS};
+    use demo_stf::genesis_config::{
+        create_demo_genesis_config, generate_address, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS,
+        TEST_SEQ_PUB_KEY_STR,
+    };
+    use demo_stf::runtime::GenesisConfig;
     use demo_stf::stf_config::Config;
     use sov_app_template::{Batch, RawTx, SequencerOutcome};
     use sov_modules_api::Address;
@@ -318,5 +322,19 @@ mod test {
         let address = Address::try_from(address).unwrap();
         let data = batch.try_to_vec().unwrap();
         TestBlob::new(data, address)
+    }
+
+    pub fn create_demo_config(
+        initial_sequencer_balance: u64,
+        value_setter_admin_private_key: &DefaultPrivateKey,
+        election_admin_private_key: &DefaultPrivateKey,
+    ) -> GenesisConfig<DefaultContext> {
+        create_demo_genesis_config::<DefaultContext>(
+            initial_sequencer_balance,
+            generate_address::<DefaultContext>(TEST_SEQ_PUB_KEY_STR),
+            TEST_SEQUENCER_DA_ADDRESS.to_vec(),
+            value_setter_admin_private_key,
+            election_admin_private_key,
+        )
     }
 }

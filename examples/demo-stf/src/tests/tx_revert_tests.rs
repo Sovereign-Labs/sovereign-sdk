@@ -1,7 +1,7 @@
 use core::panic;
 
 use crate::{
-    genesis_config::{create_demo_config, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
+    genesis_config::{LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
     runtime::Runtime,
     tests::data_generation::simulate_da_with_bad_serialization,
 };
@@ -13,7 +13,7 @@ use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
 use sov_state::{ProverStorage, WorkingSet};
 
 use super::{
-    create_new_demo,
+    create_demo_config, create_new_demo,
     data_generation::{simulate_da_with_bad_sig, simulate_da_with_revert_msg},
     new_test_blob,
 };

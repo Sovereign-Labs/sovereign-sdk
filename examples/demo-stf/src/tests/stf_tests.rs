@@ -1,9 +1,11 @@
 #[cfg(test)]
 pub mod test {
     use crate::{
-        genesis_config::{create_demo_config, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
+        genesis_config::{LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
         runtime::Runtime,
-        tests::{create_new_demo, data_generation::simulate_da, new_test_blob, C},
+        tests::{
+            create_demo_config, create_new_demo, data_generation::simulate_da, new_test_blob, C,
+        },
     };
     use sov_app_template::{Batch, SequencerOutcome};
     use sov_modules_api::{
