@@ -13,6 +13,7 @@ pub use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Context;
 #[cfg(feature = "native")]
 use sov_modules_api::RpcRunner;
+#[cfg(feature = "native")]
 use sov_modules_api::Spec;
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::ProverConfig;

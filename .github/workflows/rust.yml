@@ -32,11 +32,37 @@ jobs:
             exit 1
           fi
 
+  # TODO: Temporary before migration to RiscZero 0.15: https://github.com/Sovereign-Labs/sovereign/issues/338
+  #   After that demo-prover should be integrated into workspace
+  check-demo-prover:
+    runs-on: ubuntu-latest
+    name: check
+    env:
+      RUSTFLAGS: -D warnings
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+    steps:
+      - uses: actions/checkout@v3
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: "v0.4.0"
+      - name: Run cargo check
+        run: cd examples/demo-prover && cargo check
+      - name: Run cargo fmt check
+        run: |
+          cd examples/demo-prover;
+          if ! cargo fmt --check ; then
+            echo "Formatting errors detected, please run 'cargo fmt' to fix it";
+            exit 1
+          fi
+
   # Check that every combination of features is working properly.
   hack:
     runs-on: ubuntu-latest
     name: features
     env:
+      RUSTFLAGS: -D warnings
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:

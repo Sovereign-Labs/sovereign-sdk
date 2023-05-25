@@ -1894,27 +1894,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e07e6ed86c9f10a2d201aeed0545b933638fa82a5dbf6d141b0b9fe08ad0dd8b"
 
 [[package]]
-name = "rollup-guest"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "const-rollup-config",
- "demo-stf",
- "directories",
- "downloader",
- "jupiter",
- "risc0-adapter",
- "risc0-zkvm",
- "serde",
- "serde_json",
- "sha2 0.10.6",
- "sov-rollup-interface",
- "tempfile",
- "zip",
-]
-
-[[package]]
 name = "rustc-hash"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2236,6 +2215,27 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "tracing",
+]
+
+[[package]]
+name = "sov-demo-prover-guest"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "const-rollup-config",
+ "demo-stf",
+ "directories",
+ "downloader",
+ "jupiter",
+ "risc0-adapter",
+ "risc0-zkvm",
+ "serde",
+ "serde_json",
+ "sha2 0.10.6",
+ "sov-rollup-interface",
+ "tempfile",
+ "zip",
 ]
 
 [[package]]

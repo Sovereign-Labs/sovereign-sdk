@@ -1,6 +1,7 @@
 mod config;
 
 use crate::config::RollupConfig;
+use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::DefaultContext;
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
@@ -16,6 +17,7 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner};
+use std::env;
 use std::net::SocketAddr;
 use tracing::Level;
 
@@ -64,7 +66,11 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    let rollup_config: RollupConfig = from_toml_path("rollup_config.toml")?;
+    let rollup_config_path = env::args()
+        .nth(1)
+        .unwrap_or("rollup_config.toml".to_string());
+    let rollup_config: RollupConfig =
+        from_toml_path(&rollup_config_path).context("Failed to read rollup configuration")?;
     let rpc_config = rollup_config.rpc_config;
     let address = SocketAddr::new(rpc_config.bind_host.parse()?, rpc_config.bind_port);
 
@@ -138,7 +144,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
         // For the demo, we create and verify a proof that the data has been extracted from Celestia correctly.
         // In a production implementation, this logic would only run on the prover node - regular full nodes could
-        // simply download the data from Celestia without extracting and checking a merkle proof gere,
+        // simply download the data from Celestia without extracting and checking a merkle proof here,
         let (blob_txs, inclusion_proof, completeness_proof) =
             da_service.extract_relevant_txs_with_proof(filtered_block.clone());
         assert!(da_verifier
