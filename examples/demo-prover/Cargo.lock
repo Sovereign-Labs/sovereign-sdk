@@ -3,22 +3,6 @@
 version = 3
 
 [[package]]
-name = "accounts"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "hex",
- "serde",
- "serde_json",
- "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
- "sov-state",
- "thiserror",
-]
-
-[[package]]
 name = "adler"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -141,23 +125,6 @@ name = "autocfg"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
-
-[[package]]
-name = "bank"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "hex",
- "jsonrpsee",
- "serde",
- "serde_json",
- "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
- "sov-state",
- "thiserror",
-]
 
 [[package]]
 name = "base64"
@@ -636,26 +603,26 @@ dependencies = [
 name = "demo-stf"
 version = "0.1.0"
 dependencies = [
- "accounts",
  "anyhow",
- "bank",
  "borsh",
  "clap",
- "election",
  "jsonrpsee",
- "schemadb",
- "sequencer",
  "serde",
  "serde_json",
  "sha2 0.10.6",
- "sov-app-template",
+ "sov-accounts",
+ "sov-bank",
+ "sov-db",
+ "sov-default-stf",
+ "sov-election",
  "sov-modules-api",
  "sov-modules-macros",
  "sov-rollup-interface",
+ "sov-schema-db",
+ "sov-sequencer-registry",
  "sov-state",
- "sovereign-db",
+ "sov-value-setter",
  "toml 0.7.4",
- "value-setter",
 ]
 
 [[package]]
@@ -792,23 +759,6 @@ name = "either"
 version = "1.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7fcaabb2fef8c910e7f4c7ce9f67a1283a1715879a7c230ca9d6d1ae31f16d91"
-
-[[package]]
-name = "election"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "hex",
- "jsonrpsee",
- "serde",
- "serde_json",
- "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
- "sov-state",
- "thiserror",
-]
 
 [[package]]
 name = "elf"
@@ -1501,6 +1451,7 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_json",
+ "sha2 0.10.6",
  "sov-rollup-interface",
  "tendermint",
  "tendermint-proto",
@@ -2571,21 +2522,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "schemadb"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "byteorder",
- "hex",
- "once_cell",
- "prometheus",
- "rand 0.8.5",
- "rocksdb",
- "sov-rollup-interface",
- "tracing",
-]
-
-[[package]]
 name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2631,23 +2567,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bebd363326d05ec3e2f532ab7660680f3b02130d780c299bca73469d521bc0ed"
 dependencies = [
  "serde",
-]
-
-[[package]]
-name = "sequencer"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bank",
- "borsh",
- "hex",
- "serde",
- "serde_json",
- "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
- "sov-state",
- "thiserror",
 ]
 
 [[package]]
@@ -2858,11 +2777,60 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-app-template"
+name = "sov-accounts"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "hex",
+ "serde",
+ "serde_json",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-state",
+ "thiserror",
+]
+
+[[package]]
+name = "sov-bank"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "hex",
+ "jsonrpsee",
+ "serde",
+ "serde_json",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-state",
+ "thiserror",
+]
+
+[[package]]
+name = "sov-db"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "borsh",
+ "byteorder",
+ "jmt",
+ "rocksdb",
+ "serde",
+ "sov-rollup-interface",
+ "sov-schema-db",
+]
+
+[[package]]
+name = "sov-default-stf"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "jmt",
  "serde",
  "sov-modules-api",
  "sov-rollup-interface",
@@ -2891,6 +2859,23 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "sov-election"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "hex",
+ "jsonrpsee",
+ "serde",
+ "serde_json",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-state",
+ "thiserror",
 ]
 
 [[package]]
@@ -2933,9 +2918,39 @@ dependencies = [
  "anyhow",
  "borsh",
  "bytes",
- "jmt",
  "serde",
- "sha2 0.10.6",
+ "thiserror",
+]
+
+[[package]]
+name = "sov-schema-db"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "byteorder",
+ "hex",
+ "once_cell",
+ "prometheus",
+ "rand 0.8.5",
+ "rocksdb",
+ "sov-rollup-interface",
+ "tracing",
+]
+
+[[package]]
+name = "sov-sequencer-registry"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "hex",
+ "serde",
+ "serde_json",
+ "sov-bank",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-state",
  "thiserror",
 ]
 
@@ -2950,23 +2965,24 @@ dependencies = [
  "jmt",
  "serde",
  "sha2 0.10.6",
- "sovereign-db",
+ "sov-db",
  "thiserror",
 ]
 
 [[package]]
-name = "sovereign-db"
+name = "sov-value-setter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bincode",
  "borsh",
- "byteorder",
- "jmt",
- "rocksdb",
- "schemadb",
+ "jsonrpsee",
  "serde",
+ "serde_json",
+ "sov-modules-api",
+ "sov-modules-macros",
  "sov-rollup-interface",
+ "sov-state",
+ "thiserror",
 ]
 
 [[package]]
@@ -3428,22 +3444,6 @@ name = "valuable"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "830b7e5d4d90034032940e4ace0d9a9a057e7a45cd94e6c007832e39edb82f6d"
-
-[[package]]
-name = "value-setter"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "jsonrpsee",
- "serde",
- "serde_json",
- "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
- "sov-state",
- "thiserror",
-]
 
 [[package]]
 name = "vcpkg"
