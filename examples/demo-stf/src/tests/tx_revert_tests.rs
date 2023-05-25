@@ -1,7 +1,8 @@
 use core::panic;
 
 use crate::{
-    app::{create_demo_config, create_new_demo, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
+    app::create_new_demo,
+    config::{create_demo_config, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
     helpers::new_test_blob,
     runtime::Runtime,
     tests::data_generation::simulate_da_with_bad_serialization,

@@ -3,15 +3,14 @@ use borsh::BorshSerialize;
 use clap::Parser;
 use demo_stf::{runtime::Runtime, sign_tx, Transaction};
 use sov_app_template::RawTx;
-use std::fs;
-use std::fs::File;
-use std::io::Write;
-use std::path::{Path, PathBuf};
-
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, PublicKey,
     Spec,
 };
+use std::fs;
+use std::fs::File;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 
 type C = DefaultContext;
 type Address = <C as Spec>::Address;
@@ -165,11 +164,9 @@ impl SerializedTx {
 #[cfg(test)]
 mod test {
     use super::*;
-
+    use demo_stf::config::{LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS};
     use demo_stf::{
-        app::{
-            create_demo_config, create_new_demo, DemoApp, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS,
-        },
+        app::{create_new_demo, DemoApp},
         helpers::new_test_blob,
     };
     use sov_app_template::{Batch, RawTx, SequencerOutcome};

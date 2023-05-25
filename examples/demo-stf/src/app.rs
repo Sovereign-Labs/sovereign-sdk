@@ -1,7 +1,6 @@
 #[cfg(feature = "native")]
 use crate::config::Config;
-#[cfg(feature = "native")]
-use crate::runtime::GenesisConfig;
+
 use crate::runtime::Runtime;
 use crate::tx_hooks_impl::DemoAppTxHooks;
 use crate::tx_verifier_impl::DemoAppTxVerifier;
@@ -13,8 +12,6 @@ pub use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Context;
-#[cfg(feature = "native")]
-use sov_modules_api::PublicKey;
 #[cfg(feature = "native")]
 use sov_modules_api::RpcRunner;
 use sov_modules_api::{Hasher, Spec};
@@ -50,11 +47,6 @@ use sov_modules_macros::expose_rpc;
 pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
 
 pub type DemoApp<C, Vm> = AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>, Vm>;
-
-pub const TEST_SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
-pub const LOCKED_AMOUNT: u64 = 200;
-pub const TEST_SEQ_PUB_KEY_STR: &str = "seq_pub_key";
-pub const TEST_TOKEN_NAME: &str = "sov-test-token";
 
 #[cfg(feature = "native")]
 #[expose_rpc((Bank<DefaultContext>,Election<DefaultContext>,ValueSetter<DefaultContext>))]
@@ -115,77 +107,6 @@ impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
     fn get_storage(&self) -> <Self::Context as Spec>::Storage {
         self.inner().current_storage.clone()
     }
-}
-
-#[cfg(feature = "native")]
-///
-/// * `value_setter_admin_private_key` - Private key for the ValueSetter module admin.
-/// * `election_admin_private_key` - Private key for the Election module admin.
-pub fn create_demo_config(
-    initial_sequencer_balance: u64,
-    value_setter_admin_private_key: &DefaultPrivateKey,
-    election_admin_private_key: &DefaultPrivateKey,
-) -> GenesisConfig<DefaultContext> {
-    create_demo_genesis_config::<DefaultContext>(
-        initial_sequencer_balance,
-        generate_address::<DefaultContext>(TEST_SEQ_PUB_KEY_STR),
-        TEST_SEQUENCER_DA_ADDRESS.to_vec(),
-        value_setter_admin_private_key,
-        election_admin_private_key,
-    )
-}
-
-#[cfg(feature = "native")]
-/// Creates config for a rollup with some default settings, the config is used in demos and tests.
-pub fn create_demo_genesis_config<C: Context>(
-    initial_sequencer_balance: u64,
-    sequencer_address: C::Address,
-    sequencer_da_address: Vec<u8>,
-    value_setter_admin_private_key: &DefaultPrivateKey,
-    election_admin_private_key: &DefaultPrivateKey,
-) -> GenesisConfig<C> {
-    use election::ElectionConfig;
-    use value_setter::ValueSetterConfig;
-
-    let token_config: bank::TokenConfig<C> = bank::TokenConfig {
-        token_name: TEST_TOKEN_NAME.to_owned(),
-        address_and_balances: vec![(sequencer_address.clone(), initial_sequencer_balance)],
-    };
-
-    let bank_config = bank::BankConfig {
-        tokens: vec![token_config],
-    };
-
-    let token_address = bank::create_token_address::<C>(
-        &bank_config.tokens[0].token_name,
-        &bank::genesis::DEPLOYER,
-        bank::genesis::SALT,
-    );
-
-    let sequencer_config = sequencer::SequencerConfig {
-        seq_rollup_address: sequencer_address,
-        seq_da_address: sequencer_da_address,
-        coins_to_lock: bank::Coins {
-            amount: LOCKED_AMOUNT,
-            token_address,
-        },
-    };
-
-    let value_setter_config = ValueSetterConfig {
-        admin: value_setter_admin_private_key.pub_key().to_address(),
-    };
-
-    let election_config = ElectionConfig {
-        admin: election_admin_private_key.pub_key().to_address(),
-    };
-
-    GenesisConfig::new(
-        sequencer_config,
-        bank_config,
-        election_config,
-        value_setter_config,
-        accounts::AccountConfig { pub_keys: vec![] },
-    )
 }
 
 pub fn generate_address<C: Context>(key: &str) -> <C as Spec>::Address {

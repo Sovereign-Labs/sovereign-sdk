@@ -1,4 +1,5 @@
 pub mod app;
+#[cfg(feature = "native")]
 pub mod config;
 #[cfg(feature = "native")]
 pub mod helpers;

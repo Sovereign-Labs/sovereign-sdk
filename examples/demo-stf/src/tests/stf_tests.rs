@@ -9,7 +9,8 @@ pub mod test {
     use sov_state::{ProverStorage, WorkingSet};
 
     use crate::{
-        app::{create_demo_config, create_new_demo, C, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
+        app::{create_new_demo, C},
+        config::{create_demo_config, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
         helpers::new_test_blob,
         runtime::Runtime,
         tests::data_generation::simulate_da,
