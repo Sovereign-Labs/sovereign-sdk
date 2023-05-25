@@ -1,7 +1,7 @@
 use core::panic;
 
 use crate::{
-    config::{create_demo_config, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
+    genesis_config::{create_demo_config, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS},
     runtime::Runtime,
     tests::data_generation::simulate_da_with_bad_serialization,
 };

@@ -1,7 +1,9 @@
 pub mod app;
 #[cfg(feature = "native")]
-pub mod config;
+pub mod genesis_config;
 pub mod runtime;
+#[cfg(feature = "native")]
+pub mod stf_config;
 #[cfg(test)]
 pub mod tests;
 pub mod tx_hooks_impl;

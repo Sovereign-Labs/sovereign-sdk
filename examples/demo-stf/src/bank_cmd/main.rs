@@ -165,7 +165,8 @@ impl SerializedTx {
 mod test {
     use super::*;
     use demo_stf::app::{DemoApp, DemoAppRunner};
-    use demo_stf::config::{create_demo_config, Config, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS};
+    use demo_stf::genesis_config::{create_demo_config, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS};
+    use demo_stf::stf_config::Config;
     use sov_app_template::{Batch, RawTx, SequencerOutcome};
     use sov_modules_api::Address;
     use sov_rollup_interface::stf::StateTransitionRunner;
