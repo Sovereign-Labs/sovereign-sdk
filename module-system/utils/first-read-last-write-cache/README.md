@@ -7,7 +7,7 @@ Emulating a (Sparse) Merkle Tree inside a zero-knowledge computation (zkComp) is
 Rather than verifying/applying reads and writes immediately, we propose storing read/write values in a cache-like data structure for later batch verification. This structure (`CacheLog`) will store the first value read and the most-recent value written to each location. Assuming the correctness of the black-box VM implementation, these two pieces of information are sufficient for the verification of all state accesses and the construction of a (verified) post-state.
 
 
-### first-read-last-write-cache example:
+## first-read-last-write-cache example.
 This is an implementation of a cache that tracks the first read and the last write for a particular key. The cache ensures consistency between reads and writes.
 
 For example:
@@ -18,9 +18,10 @@ For example:
 |k      |Write(3)   |Read(3)    |Read(3)    |(_      , Write(3))        |
 |k      |Write(5)   |Read(3)    |...        |inconsistent               |
 
-## first-read-last-write-cache in action
+## first-read-last-write-cache in action.
 
-Example:
+Usage:
+
 ```rust
     let mut cache = CacheLog::default();
     let value = match cache.get_value(&key) {
