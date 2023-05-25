@@ -164,7 +164,7 @@ impl SerializedTx {
 #[cfg(test)]
 mod test {
     use super::*;
-    use demo_stf::config::{LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS};
+    use demo_stf::config::{create_demo_config, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS};
     use demo_stf::{
         app::{create_new_demo, DemoApp},
         helpers::new_test_blob,

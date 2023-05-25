@@ -2,8 +2,9 @@ mod config;
 
 use crate::config::RollupConfig;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::{create_demo_genesis_config, DefaultContext};
+use demo_stf::app::DefaultContext;
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
+use demo_stf::config::create_demo_genesis_config;
 use demo_stf::config::from_toml_path;
 use demo_stf::runtime::GenesisConfig;
 use jupiter::da_service::CelestiaService;

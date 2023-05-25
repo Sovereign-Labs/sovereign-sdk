@@ -1,21 +1,15 @@
-use crate::app::generate_address;
-#[cfg(feature = "native")]
 use crate::runtime::GenesisConfig;
 use election::ElectionConfig;
-#[cfg(feature = "native")]
 use serde::de::DeserializeOwned;
-#[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
-#[cfg(feature = "native")]
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Context;
+use sov_modules_api::Hasher;
 use sov_modules_api::PublicKey;
+use sov_modules_api::Spec;
 pub use sov_state::config::Config as StorageConfig;
-#[cfg(feature = "native")]
 use std::fs::File;
-#[cfg(feature = "native")]
 use std::io::Read;
-#[cfg(feature = "native")]
 use std::path::Path;
 use value_setter::ValueSetterConfig;
 
@@ -24,7 +18,6 @@ pub const LOCKED_AMOUNT: u64 = 200;
 pub const TEST_SEQ_PUB_KEY_STR: &str = "seq_pub_key";
 pub const TEST_TOKEN_NAME: &str = "sov-test-token";
 
-#[cfg(feature = "native")]
 pub fn from_toml_path<P: AsRef<Path>, R: DeserializeOwned>(path: P) -> anyhow::Result<R> {
     let mut contents = String::new();
     {
@@ -42,7 +35,6 @@ pub struct Config {
     pub storage: StorageConfig,
 }
 
-#[cfg(feature = "native")]
 ///
 /// * `value_setter_admin_private_key` - Private key for the ValueSetter module admin.
 /// * `election_admin_private_key` - Private key for the Election module admin.
@@ -60,7 +52,6 @@ pub fn create_demo_config(
     )
 }
 
-#[cfg(feature = "native")]
 /// Creates config for a rollup with some default settings, the config is used in demos and tests.
 pub fn create_demo_genesis_config<C: Context>(
     initial_sequencer_balance: u64,
@@ -176,4 +167,9 @@ mod tests {
             "No such file or directory (os error 2)"
         );
     }
+}
+
+pub fn generate_address<C: Context>(key: &str) -> <C as Spec>::Address {
+    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
+    <C as Spec>::Address::from(hash)
 }

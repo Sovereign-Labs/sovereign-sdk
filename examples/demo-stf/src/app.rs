@@ -1,6 +1,5 @@
 #[cfg(feature = "native")]
 use crate::config::Config;
-
 use crate::runtime::Runtime;
 use crate::tx_hooks_impl::DemoAppTxHooks;
 use crate::tx_verifier_impl::DemoAppTxVerifier;
@@ -14,7 +13,7 @@ pub use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Context;
 #[cfg(feature = "native")]
 use sov_modules_api::RpcRunner;
-use sov_modules_api::{Hasher, Spec};
+use sov_modules_api::Spec;
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::ProverConfig;
 use sov_rollup_interface::stf::StateTransitionRunner;
@@ -107,11 +106,6 @@ impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
     fn get_storage(&self) -> <Self::Context as Spec>::Storage {
         self.inner().current_storage.clone()
     }
-}
-
-pub fn generate_address<C: Context>(key: &str) -> <C as Spec>::Address {
-    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
-    <C as Spec>::Address::from(hash)
 }
 
 #[cfg(feature = "native")]
