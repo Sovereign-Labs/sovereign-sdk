@@ -2,7 +2,7 @@ use anyhow::Context;
 use borsh::BorshSerialize;
 use clap::Parser;
 use demo_stf::{runtime::Runtime, sign_tx, Transaction};
-use sov_app_template::RawTx;
+use sov_default_stf::RawTx;
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, PublicKey,
     Spec,
@@ -171,7 +171,7 @@ mod test {
     };
     use demo_stf::runner_config::Config;
     use demo_stf::runtime::GenesisConfig;
-    use sov_app_template::{Batch, RawTx, SequencerOutcome};
+    use sov_default_stf::{Batch, RawTx, SequencerOutcome};
     use sov_modules_api::Address;
     use sov_rollup_interface::stf::StateTransitionRunner;
 

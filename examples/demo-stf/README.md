@@ -52,7 +52,7 @@ In the remainder of this section, we'll walk you through implementing each of th
 
 ### Implementing a TxVerifier
 
-The `TxVerifier` interface is defined in `sov-app-template`, and has one associated type and one required method:
+The `TxVerifier` interface is defined in `sov-default-stf`, and has one associated type and one required method:
 
 ```rust
 /// TxVerifier encapsulates Transaction verification.

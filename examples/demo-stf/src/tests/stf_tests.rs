@@ -7,7 +7,7 @@ pub mod test {
             create_demo_config, create_new_demo, data_generation::simulate_da, new_test_blob, C,
         },
     };
-    use sov_app_template::{Batch, SequencerOutcome};
+    use sov_default_stf::{Batch, SequencerOutcome};
     use sov_modules_api::{
         default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
     };

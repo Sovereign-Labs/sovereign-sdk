@@ -3,8 +3,8 @@ use crate::runner_config::Config;
 use crate::runtime::Runtime;
 use crate::tx_hooks_impl::DemoAppTxHooks;
 use crate::tx_verifier_impl::DemoAppTxVerifier;
-use sov_app_template::AppTemplate;
-pub use sov_app_template::Batch;
+use sov_default_stf::AppTemplate;
+pub use sov_default_stf::Batch;
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
 pub use sov_modules_api::default_context::ZkDefaultContext;

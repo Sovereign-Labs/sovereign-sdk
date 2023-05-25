@@ -1,5 +1,5 @@
 use borsh::BorshSerialize;
-use sov_app_template::{AppTemplate, Batch};
+use sov_default_stf::{AppTemplate, Batch};
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, Address,
 };
