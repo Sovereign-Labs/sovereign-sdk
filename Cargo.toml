@@ -4,8 +4,11 @@ members = [
     "rollup-interface",
     "adapters/risc0",
     "adapters/celestia",
+    "examples/const-rollup-config",
     "examples/demo-stf",
+    "examples/demo-simple-stf",
     "examples/demo-rollup",
+    "examples/demo-nft-module",
     "full-node/db/schemadb",
     "full-node/db/sovereign-db",
     "module-system/sov-app-template",
@@ -21,6 +24,9 @@ members = [
     "module-system/module-implementations/examples/value-setter",
     "module-system/module-implementations/examples/election",
     "module-system/module-implementations/integration-tests",
+]
+exclude = [
+    "examples/demo-prover",
 ]
 
 [workspace.package]
@@ -39,7 +45,7 @@ jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "3ca60665bee7854
 
 # External dependencies
 anyhow = "1.0.68"
-borsh = { version = "0.10.2", features = ["rc"] }
+borsh = { version = "0.10.3", features = ["rc", "bytes"] }
 byteorder = "1.4.3"
 bytes = "1.2.1"
 hex = "0.4.3"
@@ -58,6 +64,6 @@ tiny-keccak = "2.0.2"
 tracing = "0.1.37"
 bech32 = "0.9.1"
 derive_more = "0.99.11"
-clap = {version = "4.2.7", features= ["derive"]}
+clap = { version = "4.2.7", features = ["derive"] }
 toml = "0.7.3"
 jsonrpsee = "0.16.2"

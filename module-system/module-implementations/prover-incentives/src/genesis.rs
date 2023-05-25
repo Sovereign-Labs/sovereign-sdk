@@ -11,7 +11,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
         anyhow::ensure!(
-            config.initial_provers.len() > 0,
+            !config.initial_provers.is_empty(),
             "At least one prover must be set at genesis!"
         );
 

@@ -33,23 +33,18 @@ impl TestSequencer {
         &self,
         working_set: &mut WorkingSet<<C as Spec>::Storage>,
     ) -> query::SequencerAndBalanceResponse {
-        let query = query::QueryMessage::GetSequencerAddressAndBalance;
-        let resp = self.sequencer.query(query, working_set);
-
-        serde_json::from_slice(&resp.response).unwrap()
+        self.sequencer.sequencer_address_and_balance(working_set)
     }
 
     fn query_balance_via_bank(
         &mut self,
         working_set: &mut WorkingSet<<C as Spec>::Storage>,
     ) -> bank::query::BalanceResponse {
-        let query = bank::query::QueryMessage::GetBalance {
-            user_address: self.sequencer_config.seq_rollup_address.clone(),
-            token_address: self.sequencer_config.coins_to_lock.token_address.clone(),
-        };
-
-        let resp = self.bank.query(query, working_set);
-        serde_json::from_slice(&resp.response).unwrap()
+        self.bank.balance_of(
+            self.sequencer_config.seq_rollup_address.clone(),
+            self.sequencer_config.coins_to_lock.token_address.clone(),
+            working_set,
+        )
     }
 }
 

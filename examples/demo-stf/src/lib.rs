@@ -20,6 +20,7 @@ use sov_modules_api::{
     Hasher, Spec,
 };
 
+pub use sov_state::ArrayWitness;
 pub use tx_verifier_impl::Transaction;
 
 #[cfg(feature = "native")]

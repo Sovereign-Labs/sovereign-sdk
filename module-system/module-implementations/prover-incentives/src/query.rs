@@ -1,14 +1,7 @@
 use super::ProverIncentives;
-use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sov_modules_api::Context;
 use sov_rollup_interface::zk::traits::Zkvm;
 use sov_state::WorkingSet;
-
-#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
-pub enum QueryMessage<C: Context> {
-    GetBondAmount(C::Address),
-}
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub struct Response {

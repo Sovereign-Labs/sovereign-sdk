@@ -76,8 +76,7 @@ impl BorshDeserialize for DefaultPublicKey {
         let mut buffer = [0; PUBLIC_KEY_LENGTH];
         reader.read_exact(&mut buffer)?;
 
-        let pub_key = DalekPublicKey::from_bytes(&buffer)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let pub_key = DalekPublicKey::from_bytes(&buffer).map_err(map_error)?;
 
         Ok(Self { pub_key })
     }
@@ -99,8 +98,7 @@ impl BorshDeserialize for DefaultSignature {
         let mut buffer = [0; SIGNATURE_LENGTH];
         reader.read_exact(&mut buffer)?;
 
-        let msg_sig = DalekSignature::from_bytes(&buffer)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        let msg_sig = DalekSignature::from_bytes(&buffer).map_err(map_error)?;
 
         Ok(Self { msg_sig })
     }
@@ -125,4 +123,13 @@ impl Signature for DefaultSignature {
             .verify_strict(&msg_hash, &self.msg_sig)
             .map_err(|e| SigVerificationError::BadSignature(e.to_string()))
     }
+}
+
+#[cfg(feature = "native")]
+fn map_error(e: ed25519_dalek::SignatureError) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::Other, e)
+}
+#[cfg(not(feature = "native"))]
+fn map_error(_e: ed25519_dalek::SignatureError) -> std::io::Error {
+    std::io::Error::new(std::io::ErrorKind::Other, "Signature error")
 }

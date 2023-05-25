@@ -2,13 +2,6 @@ use super::{types::Candidate, Election};
 use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
 
-/// Queries supported by the module.
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
-pub enum QueryMessage {
-    GetResult,
-    GenNbOfVotes,
-}
-
 #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum GetResultResponse {
     Result(Option<Candidate>),

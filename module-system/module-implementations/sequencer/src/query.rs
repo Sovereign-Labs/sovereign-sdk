@@ -7,12 +7,6 @@ use sov_modules_api::Context;
 #[cfg(feature = "native")]
 use sov_state::WorkingSet;
 
-/// This enumeration represents the available query messages for querying the sequencer module.
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
-pub enum QueryMessage {
-    GetSequencerAddressAndBalance,
-}
-
 #[cfg_attr(feature = "native", derive(serde::Deserialize, serde::Serialize))]
 #[derive(Debug, Eq, PartialEq)]
 pub struct Data {
@@ -28,7 +22,7 @@ pub struct SequencerAndBalanceResponse {
 
 #[cfg(feature = "native")]
 impl<C: Context> Sequencer<C> {
-    pub(crate) fn sequencer_address_and_balance(
+    pub fn sequencer_address_and_balance(
         &self,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> SequencerAndBalanceResponse {

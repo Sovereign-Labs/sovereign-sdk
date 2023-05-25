@@ -65,11 +65,11 @@ and a bunch of helpful utilities for working with stateful transactions. Finally
 blockchain functionality like `Accounts`, and fungible `Tokens`.
 
 For more information on the Module System, see its [README](./module-system/README.md). You can also find a tutorial on
-implementing and deploying a custom module here (TODO: insert link!)
+implementing and deploying a custom module [here](./examples/demo-nft-module/README.md)
 
 ### The Full Node
 
-The final component of this repository is The Full Node, which is a client implementation capable of running any 
+The final component of this repository is The Full Node, which is a client implementation capable of running any
 rollup which implements the Rollup Interface. The Full Node provides an easy way to deploy
 and run your rollup. With the default configuration, it can automatically store chain data in its database,
 serve RPC requests for chain data and application state, and interact with the DA layer to sync its state and send transactions.
@@ -81,14 +81,14 @@ issue! All of the core developers can be reached via [Discord](https://discord.g
 
 ### Building a Rollup
 
-The easiest way to build a rollup is to use the Module System. You can find a tutorial [here] (TODO: Insert link!).
+The easiest way to build a rollup is to use the Module System. You can find a tutorial [here](./examples/demo-nft-module/README.md).
 
 We also provide two examples - [`demo-stf`](./examples/demo-stf/), which shows how to use the Module System to implement a
 state transition, and [`demo-rollup`](./examples/demo-rollup/), which shows how to combine the demo STF with a DA layer and a ZKVM to
 get a complete rollup implementation.
 
 If you want even more control over your rollup's functionality, you can implement a completely custom State Transition Function
-without using the module system. You can find a tutorial [here] (TODO: Insert link!).
+without using the module system. You can find a tutorial [here](./examples/demo-simple-stf/).
 
 ### Adding a new Data Availability Layer
 
@@ -97,10 +97,10 @@ If you want to add support for a new data availability layer, the easiest way to
 
 ## Adapters
 
- Adapters contain the logic integrating 3rd party codebases into the Sovereign SDK. Over time, we expect Sovereign SDK 
- to have adapters for almost all Data Availability Layers and LLVM-compatible proof systems. Currently, we 
- maintain adapters for [`Risc0`](www.risczero.com) (a ZKVM) and [`Celestia`](www.celestia.org) a (DA layer). 
- The Avail project also maintains an adapter for their DA layer, which can be found [here](https://github.com/availproject/avail-sovereign-da-adapter).
+Adapters contain the logic integrating 3rd party codebases into the Sovereign SDK. Over time, we expect Sovereign SDK
+to have adapters for almost all Data Availability Layers and LLVM-compatible proof systems. Currently, we
+maintain adapters for [`Risc0`](www.risczero.com) (a ZKVM) and [`Celestia`](www.celestia.org) a (DA layer).
+The Avail project also maintains an adapter for their DA layer, which can be found [here](https://github.com/availproject/avail-sovereign-da-adapter).
 
 ## Warning
 
