@@ -1,6 +1,6 @@
-use crate::runtime::Runtime;
 #[cfg(feature = "native")]
-use crate::stf_config::Config;
+use crate::runner_config::Config;
+use crate::runtime::Runtime;
 use crate::tx_hooks_impl::DemoAppTxHooks;
 use crate::tx_verifier_impl::DemoAppTxVerifier;
 use sov_app_template::AppTemplate;

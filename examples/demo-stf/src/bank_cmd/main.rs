@@ -169,8 +169,8 @@ mod test {
         create_demo_genesis_config, generate_address, LOCKED_AMOUNT, TEST_SEQUENCER_DA_ADDRESS,
         TEST_SEQ_PUB_KEY_STR,
     };
+    use demo_stf::runner_config::Config;
     use demo_stf::runtime::GenesisConfig;
-    use demo_stf::stf_config::Config;
     use sov_app_template::{Batch, RawTx, SequencerOutcome};
     use sov_modules_api::Address;
     use sov_rollup_interface::stf::StateTransitionRunner;
