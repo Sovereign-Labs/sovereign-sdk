@@ -87,6 +87,7 @@ impl<'de> Deserialize<'de> for Share {
         }
         if share.len() != SHARE_SIZE {
             // let expected = Unexpected::Bytes(&share);
+            // ERROR HAPPENS HERE
             return Err(Error::invalid_length(share.len(), &"A share of length 512"));
         }
         if is_continuation_unchecked(share.as_ref()) {
@@ -587,5 +588,24 @@ impl<'a> std::iter::Iterator for NamespaceIterator<'a> {
         // loop {
 
         // }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use postcard::{from_bytes, to_allocvec, Result};
+
+    #[test]
+    fn test_share_start_serialization() {
+        let hex_blob = "736f762d7465737401000000b801000000b000000004ee8ca2c343fe0acd2b72249c48b56351ebfb4b7eef73ddae363880b61380cc23b3ebf15375aa110d7aa84206b1f22c1885b26e980d5e03244cc588e314b004a60b594d5751dc2a326c18923eaa74b48424c0f246733c6c028d7ee16899ad944400000001000b000000000000000e000000736f762d746573742d746f6b656e8813000000000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba75980000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+        let sample = hex::decode(hex_blob).unwrap();
+        println!("SAMPLE {}", sample.len());
+        let share = Share::Start(Bytes::from(sample));
+        let raw_share: Vec<u8> = to_allocvec(&share).unwrap();
+        println!("RAW {}", raw_share.len());
+        let decoded_share: Result<Share> = from_bytes(&raw_share);
+        assert!(decoded_share.is_ok());
+        // assert_eq!(share, decoded_share);
     }
 }

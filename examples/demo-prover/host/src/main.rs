@@ -68,7 +68,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let (prev_state_root, _) = demo.end_slot();
     let mut prev_state_root = prev_state_root.0;
 
-    for height in rollup_config.start_height..=rollup_config.start_height + 5 {
+    for height in rollup_config.start_height..=rollup_config.start_height + 30 {
         let mut host = Risc0Host::new(ROLLUP_ELF);
         info!(
             "Requesting data for height {} and prev_state_root 0x{}",
@@ -82,6 +82,7 @@ async fn main() -> Result<(), anyhow::Error> {
             da_service.extract_relevant_txs_with_proof(filtered_block);
 
         host.write_to_guest(&blob_txs);
+        info!("BLOB TXS: {:?}", blob_txs);
         host.write_to_guest(&inclusion_proof);
         host.write_to_guest(&completeness_proof);
         host.write_to_guest(prev_state_root);
@@ -116,4 +117,51 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use jupiter::shares::Blob;
+    use jupiter::shares::Share;
+    use jupiter::shares::Share::Start;
+    use jupiter::verifier::address::CelestiaAddress;
+    use jupiter::BlobWithSender;
+    use risc0_zkvm::serde::{from_slice, to_vec};
+    use sov_rollup_interface::Bytes;
+
+    #[test]
+    fn test_serialization() {
+        let sender = CelestiaAddress(vec![
+            99, 101, 108, 101, 115, 116, 105, 97, 49, 113, 112, 48, 57, 121, 115, 121, 103, 99,
+            120, 54, 110, 112, 116, 101, 100, 53, 121, 99, 48, 97, 117, 54, 107, 57, 108, 110, 101,
+            114, 48, 53, 121, 118, 115, 57, 50, 48, 56,
+        ]);
+
+        let raw_sender = to_vec(&sender).unwrap();
+        let decoded_sender: CelestiaAddress = match from_slice(&raw_sender) {
+            Ok(d) => d,
+            Err(e) => panic!("Failed to deserialize address: {:?}", e),
+        };
+
+        let hex_blob = "736f762d7465737401000000b801000000b000000004ee8ca2c343fe0acd2b72249c48b56351ebfb4b7eef73ddae363880b61380cc23b3ebf15375aa110d7aa84206b1f22c1885b26e980d5e03244cc588e314b004a60b594d5751dc2a326c18923eaa74b48424c0f246733c6c028d7ee16899ad944400000001000b000000000000000e000000736f762d746573742d746f6b656e8813000000000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba75980000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
+        let b = hex::decode(hex_blob).unwrap();
+        let share = Start(Bytes::from(b));
+        let raw_share = to_vec(&share).unwrap();
+        let decoded_share: Share = match from_slice(&raw_share) {
+            Ok(d) => d,
+            Err(e) => panic!("Failed to deserialize share: {:?}", e),
+        };
+
+        let blob = BlobWithSender {
+            blob: Blob(vec![share]),
+            sender,
+        };
+        let blob_txs = vec![blob];
+
+        let raw_bytes = to_vec(&blob_txs).unwrap();
+        let d: Vec<BlobWithSender> = match from_slice(&raw_bytes) {
+            Ok(d) => d,
+            Err(e) => panic!("Failed to deserialize blob with sender: {:?}", e),
+        };
+    }
 }
