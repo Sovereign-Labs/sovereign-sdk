@@ -65,7 +65,7 @@ and a bunch of helpful utilities for working with stateful transactions. Finally
 blockchain functionality like `Accounts`, and fungible `Tokens`.
 
 For more information on the Module System, see its [README](./module-system/README.md). You can also find a tutorial on
-implementing and deploying a custom module [here](./examples/demo-nft-module/README.md)
+implementing and deploying a custom module [here](./examples/demo-nft-module/README.md).
 
 ### The Full Node
 

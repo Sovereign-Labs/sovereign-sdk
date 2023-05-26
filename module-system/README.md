@@ -3,7 +3,7 @@
 This directory contains an opinionated framework for building rollups with the Sovereign SDK. It aims to provide a
 "batteries included" development experience. Using the module system still allows you to customize key components of your rollup
 like its hash function and signature scheme, but it also forces you to rely on some reasonable default values for things like
-serialization schemes (Borsh) address formats (bech32), etc.
+serialization schemes (Borsh), address formats (bech32), etc.
 
 By developing with the module system, you get access to a suite of pre-built modules supporting common functions like generating accounts,
 minting and transferring tokens, and incentivizing sequencers. You also get access to powerful tools for generating RPC implementations,
@@ -57,8 +57,7 @@ impl<C: Context> Bank<C> {
 ```
 
 This function transfers coins from one address to another _without a signature check_. If it was exposed to users, it would allow
-for the theft of funds. But it's very useful for modules to be able to initiate funds transfers without access to the private keys
-of their own the owning accounts. (Of course, modules should be careful to get the user's consent before transferring funds. By
+for the theft of funds. But it's very useful for modules to be able to initiate funds transfers without access to users' private keys. (Of course, modules should be careful to get the user's consent before transferring funds. By
 using the transfer_from interface, a module is declaring that it has gotten such consent.)
 
 This leads us to a very important point about the module system. All modules are _trusted_. Unlike smart contracts on Ethereum, modules
@@ -94,7 +93,7 @@ The third interface that modules expose is an rpc implementation. To generate an
 with the `#[rpc_gen]` macro from `sov_modules_macros`.
 
 ```rust
-#[rpc_gen(client, server, namespace = "sov-bank")]
+#[rpc_gen(client, server, namespace = "bank")]
 impl<C: sov_modules_api::Context> Bank<C> {
     #[rpc_method(name = "balanceOf")]
     pub(crate) fn balance_of(
@@ -102,7 +101,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         user_address: C::Address,
         token_address: C::Address,
         working_set: &mut WorkingSet<C::Storage>,
-    ) ->  
+    ) -> BalanceResponse {
         BalanceResponse {
             amount: self.get_balance_of(user_address, token_address, working_set),
         }
@@ -123,7 +122,9 @@ This will generate a public trait in the bank crate called `BankRpcImpl`, which 
 
 For an example of how to instantiate the generated trait as a server bound to a specific port, see the [demo-rollup](../examples/demo-rollup/) package.
 
-Note that only one impl block per module may be annotated with `rpc_gen`, but that the block may contain as many `rpc_method` annotations as you want.
+**Note that only one impl block per module may be annotated with `rpc_gen`**, but that the block may contain as many `rpc_method` annotations as you want.
+
+For an end-to-end walkthrough showing how to implement an RPC server using the module system, see [here](./RPC_WALKTHROUGH.md)
 
 ## Context and Spec: How to Make Your Module System Portable
 
@@ -156,7 +157,7 @@ let proof = MyZkvm::prove(|| {
 ```
 
 This distinction between native _execution_ and zero-knowledge _re-execution_ is deeply baked into the module system. We take the
-philosophy that your business logic should be identical whichever "mode" you're using, so we abstract the differences between
+philosophy that your business logic should be identical no matter which "mode" you're using, so we abstract the differences between
 the zk and native modes behind a few traits.
 
 ### Using traits to Customize Your Behavior for Different Modes
@@ -210,130 +211,8 @@ access the `Address` field from `Spec` - meaning that your bank logic doesn't ch
 Similarly, since each of the banks helper functions is automatically generic over a context, it's easy to define logic which
 can abstract away the distinctions between `zk` and `native` execution. For example, when a rollup is running in native mode
 its `Storage` type will almost certainly be [`ProverStorage`](./sov-state/src/prover_storage.rs), which holds its data in a
-merkle tree backed by RocksDB. But if you're running in zk mode the `Storage` type will instead be `ZkStorage`, which reads
+merkle tree backed by RocksDB. But if you're running in zk mode the `Storage` type will instead be [`ZkStorage`](./sov-state/src/zk_storage.rs), which reads
 its data from a set of "hints" provided by the prover. Because all of the rollups modules are generic, none of them need to worry
 about this distinction.
 
 For more information on `Context` and `Spec`, and to see some example implementations, check out the [`sov_modules_api`](./sov-modules-api/) docs.
-
-
-## Enabling RPC via SDK Macros
-
-There are 5 steps that need to be completed to enable RPC on the full node
-1. Annotate the modules that need to expose their data with `rpc_gen` and `rpc_method`
-2. Annotate the state transition runner with the specific modules to expose with `expose_rpc`
-3. Implement the `RpcRunner` trait. provide an implementation for the `get_storage` function
-4. Inside the full node implementation - Import and call `get_rpc_methods` to get combined rpc methods for the modules annotated and exposed in 1 and 2
-5. Inside the full node implementation - Use the modules returned from the above function and bind them to an RPC server
-
-### Modules
-* We need to annotate the `impl` block for our module. In this case its `Bank`
-```rust
-impl<C: Context> Bank<C> {
-    pub(crate) fn balance_of(
-        &self,
-        user_address: C::Address,
-        token_address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> BalanceResponse {
-    ...
-    }
-    
-    pub(crate) fn supply_of(
-        &self,
-        token_address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> TotalSupplyResponse {
-     ...
-    }
-}
-```
-* annotate with `rpc_gen` and `rpc_method`
-```rust
-use sov_modules_macros::rpc_gen;
-
-#[rpc_gen(client, server, namespace = "sov-bank")]
-impl<C: Context> Bank<C> {
-    #[rpc_method(name = "balanceOf")]
-    pub(crate) fn balance_of(
-        &self,
-        user_address: C::Address,
-        token_address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) ->  BalanceResponse {
-    ...
-    }
-    
-    #[rpc_method(name = "supplyOf")]
-    pub(crate) fn supply_of(
-        &self,
-        token_address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> TotalSupplyResponse {
-     ...
-    }
-}
-```
-* `rpc_gen` and `rpc_method` create <module_name>RpcImpl and <module_name>RpcServer traits.
-* The ___RpcImpl and ___RpcServer traits do not need to be implemented - this is done automatically by the SDK, but they need to be imported to the file where the `expose_rpc` macro is called
-* Once all the modules that need be part of the RPC are annotated, we annotate our Runner struct that impls `StateTransitionRunner` with an `expose_rpc` attribute macro.
-```rust
-use sov_bank::query::{BankRpcImpl, BankRpcServer};
-
-#[expose_rpc((Bank<DefaultContext>,))]
-impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
-...
-}
-```
-* `expose_rpc` takes a tuple as arguments. each element of the tuple is a module with a concrete Context.
-* next, we implement the `RpcRunner` trait. we do this in the `demo_stf/app.rs` file
-```rust
-use sov_modules_api::RpcRunner;
-impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
-    type Context = DefaultContext;
-    fn get_storage(&self) -> <Self::Context as Spec>::Storage {
-        self.inner().current_storage.clone()
-    }
-}
-```
-* `RpcRunner` primarily need to provide a storage which is used by the RPC server. It's a helper trait
-* To start the jsonrpsee server, we need the rpc modules, which are provided by the macro generated method `get_rpc_methods`
-```rust
-use demo_stf::app::get_rpc_methods;
-
-    let mut demo_runner = NativeAppRunner...;
-
-    let storj = demo_runner.get_storage();
-    let methods = get_rpc_methods(storj);
-```
-* This is the register + network interface binding step, and starting the actual RPC server
-```rust
-async fn start_rpc_server(methods: RpcModule<()>, address: SocketAddr) {
-    let server = jsonrpsee::server::ServerBuilder::default()
-        .build([address].as_ref())
-        .await
-        .unwrap();
-    let _server_handle = server.start(methods).unwrap();
-    futures::future::pending::<()>().await;
-}  
-
-    let _handle = tokio::spawn(async move {
-        start_rpc_server(methods, address).await;
-    }); 
-
-```
-* we're using `futures::future::pending::<()>().await` to block the spawned RPC server, but this can be implemented in multiple ways
-* Another note is that we're configuring address in the `rollup_config.toml`
-```toml
-[rpc_config]
-# the host and port to bind the rpc server for
-bind_host = "127.0.0.1"
-bind_port = 12345
-```
-* The above can be parsed using
-```rust
-    let rollup_config: RollupConfig = from_toml_path("rollup_config.toml")?;
-    let rpc_config = rollup_config.rpc_config;
-    let address = SocketAddr::new(rpc_config.bind_host.parse()?, rpc_config.bind_port);
-```
-* But as mentioned, the infra / networking aspect is separated from the macro that generates the boilerplate to expose the RPC in a way that it can be plugged into an RPC server
