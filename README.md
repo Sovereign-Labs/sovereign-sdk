@@ -69,8 +69,8 @@ implementing and deploying a custom module [here](./examples/demo-nft-module/REA
 
 ### The Full Node
 
-The final component of this repository is The Full Node, which is a client implementation capable of running any
-rollup which implements the Rollup Interface. The Full Node provides an easy way to deploy
+The final component of this repository is the Full Node, which is a client implementation capable of running any
+rollup that implements the Rollup Interface. The Full Node provides an easy way to deploy
 and run your rollup. With the default configuration, it can automatically store chain data in its database,
 serve RPC requests for chain data and application state, and interact with the DA layer to sync its state and send transactions.
 While the full node implementation should be compatible with custom state transition functions, it is currently only tested for
