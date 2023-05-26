@@ -623,6 +623,7 @@ dependencies = [
  "sov-state",
  "sov-value-setter",
  "toml 0.7.4",
+ "tracing",
 ]
 
 [[package]]

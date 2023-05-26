@@ -1,6 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::{Context, Hasher, Spec};
+use tracing::debug;
 
 /// RawTx represents a serialized rollup transaction received from the DA.
 #[derive(Debug, PartialEq, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
@@ -29,6 +30,7 @@ pub trait TxVerifier {
         &self,
         raw_txs: Vec<RawTx>,
     ) -> anyhow::Result<Vec<(Self::Transaction, RawTxHash)>> {
+        debug!("Verifying {} transactions", raw_txs.len());
         let mut txs = Vec::with_capacity(raw_txs.len());
         for raw_tx in raw_txs {
             let raw_tx_hash = raw_tx.hash::<C>();

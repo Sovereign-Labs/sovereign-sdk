@@ -414,6 +414,7 @@ dependencies = [
  "sov-sequencer-registry",
  "sov-state",
  "sov-value-setter",
+ "tracing",
 ]
 
 [[package]]
@@ -2201,6 +2202,7 @@ dependencies = [
  "directories",
  "downloader",
  "jupiter",
+ "log",
  "risc0-adapter",
  "risc0-zkvm",
  "serde",
@@ -2208,6 +2210,7 @@ dependencies = [
  "sha2 0.10.6",
  "sov-rollup-interface",
  "tempfile",
+ "tracing",
  "zip",
 ]
 

@@ -15,6 +15,8 @@ use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner};
 use sov_rollup_interface::zk::traits::ZkvmHost;
 use std::env;
 
+use tracing::{info, Level};
+
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RollupConfig {
     pub start_height: u64,
@@ -27,6 +29,14 @@ const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    // Initializing logging
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(Level::INFO)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber)
+        .map_err(|_err| eprintln!("Unable to set global default subscriber"))
+        .expect("Cannot fail to set subscriber");
+
     let rollup_config_path = env::args()
         .nth(1)
         .unwrap_or_else(|| "rollup_config.toml".to_string());
@@ -59,7 +69,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     for height in rollup_config.start_height..=rollup_config.start_height + 5 {
         let mut host = Risc0Host::new(ROLLUP_ELF);
-        println!(
+        info!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
             hex::encode(prev_state_root)
@@ -82,13 +92,13 @@ async fn main() -> Result<(), anyhow::Error> {
         let (next_state_root, witness) = demo.end_slot();
         host.write_to_guest(&witness);
 
-        println!("Starting proving");
+        info!("Starting proving...");
         let receipt = host.run().expect("Prover should run successfully");
-        println!("Start verifying");
+        info!("Start verifying..");
         receipt.verify(&ROLLUP_ID).expect("Receipt should be valid");
 
         prev_state_root = next_state_root.0;
-        println!("Completed proving and verifying block {height}");
+        info!("Completed proving and verifying block {height}");
     }
 
     Ok(())
