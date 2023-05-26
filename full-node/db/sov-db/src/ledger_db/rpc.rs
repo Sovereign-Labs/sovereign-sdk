@@ -1,8 +1,9 @@
 use serde::de::DeserializeOwned;
 use sov_rollup_interface::{
     rpc::{
-        BatchIdentifier, BatchResponse, EventIdentifier, ItemOrHash, LedgerRpcProvider, QueryMode,
-        SlotIdentifier, SlotResponse, TxIdentifier, TxResponse,
+        BatchIdAndOffset, BatchIdentifier, BatchResponse, EventIdentifier, ItemOrHash,
+        LedgerRpcProvider, QueryMode, SlotIdAndOffset, SlotIdentifier, SlotResponse, TxIdAndOffset,
+        TxIdentifier, TxResponse,
     },
     stf::Event,
 };
@@ -292,7 +293,16 @@ impl LedgerDB {
         match batch_id {
             BatchIdentifier::Hash(hash) => self.db.get::<BatchByHash>(hash),
             BatchIdentifier::Number(num) => Ok(Some(BatchNumber(*num))),
-            BatchIdentifier::SlotIdAndIndex(_) => todo!(),
+            BatchIdentifier::SlotIdAndOffset(SlotIdAndOffset { slot_id, offset }) => {
+                if let Some(slot_num) = self.resolve_slot_identifier(slot_id)? {
+                    Ok(self
+                        .db
+                        .get::<SlotByNumber>(&slot_num)?
+                        .map(|slot: StoredSlot| BatchNumber(slot.batches.start.0 + offset)))
+                } else {
+                    Ok(None)
+                }
+            }
         }
     }
 
@@ -303,7 +313,16 @@ impl LedgerDB {
         match tx_id {
             TxIdentifier::Hash(hash) => self.db.get::<TxByHash>(hash),
             TxIdentifier::Number(num) => Ok(Some(TxNumber(*num))),
-            TxIdentifier::BatchIdAndIndex(_) => todo!(),
+            TxIdentifier::BatchIdAndOffset(BatchIdAndOffset { batch_id, offset }) => {
+                if let Some(batch_num) = self.resolve_batch_identifier(batch_id)? {
+                    Ok(self
+                        .db
+                        .get::<BatchByNumber>(&batch_num)?
+                        .map(|batch: StoredBatch| TxNumber(batch.txs.start.0 + offset)))
+                } else {
+                    Ok(None)
+                }
+            }
         }
     }
 
@@ -312,7 +331,7 @@ impl LedgerDB {
         event_id: &EventIdentifier,
     ) -> Result<Option<EventNumber>, anyhow::Error> {
         match event_id {
-            EventIdentifier::TxIdAndIndex((tx_id, offset)) => {
+            EventIdentifier::TxIdAndOffset(TxIdAndOffset { tx_id, offset }) => {
                 if let Some(tx_num) = self.resolve_tx_identifier(tx_id)? {
                     Ok(self
                         .db

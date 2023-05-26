@@ -1,13 +1,15 @@
 mod config;
+mod ledger_rpc;
 
 use crate::config::RollupConfig;
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::DefaultContext;
+use demo_stf::app::{DefaultContext, DemoBatchReceipt, DemoTxReceipt};
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runner_config::from_toml_path;
 use demo_stf::runtime::GenesisConfig;
+use jsonrpsee::core::server::rpc_module::Methods;
 use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::CelestiaVerifier;
@@ -23,7 +25,6 @@ use tracing::Level;
 
 // RPC related imports
 use demo_stf::app::get_rpc_methods;
-use jsonrpsee::RpcModule;
 use sov_modules_api::RpcRunner;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
@@ -34,7 +35,7 @@ pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
     LedgerDB::with_path(path).expect("Ledger DB failed to open")
 }
 
-async fn start_rpc_server(methods: RpcModule<()>, address: SocketAddr) {
+async fn start_rpc_server(methods: impl Into<Methods>, address: SocketAddr) {
     let server = jsonrpsee::server::ServerBuilder::default()
         .build([address].as_ref())
         .await
@@ -90,7 +91,12 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Our state transition also implements the RpcRunner interface, so we use that to initialize the RPC server.
     let storj = demo_runner.get_storage();
-    let methods = get_rpc_methods(storj);
+    let mut methods = get_rpc_methods(storj);
+    let ledger_rpc_module =
+        ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db.clone());
+    methods
+        .merge(ledger_rpc_module)
+        .expect("Failed to merge rpc modules");
 
     let _handle = tokio::spawn(async move {
         start_rpc_server(methods, address).await;
@@ -110,7 +116,6 @@ async fn main() -> Result<(), anyhow::Error> {
     });
 
     let demo = demo_runner.inner_mut();
-
     // Check if the rollup has previously processed any data. If not, run it's "genesis" initialization code
     let item_numbers = ledger_db.get_next_items_numbers();
     let last_slot_processed_before_shutdown = item_numbers.slot_number - 1;
