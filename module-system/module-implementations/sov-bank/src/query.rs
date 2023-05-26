@@ -12,7 +12,7 @@ pub struct TotalSupplyResponse {
     pub amount: Option<Amount>,
 }
 
-#[rpc_gen(client, server, namespace = "sov-bank")]
+#[rpc_gen(client, server, namespace = "bank")]
 impl<C: sov_modules_api::Context> Bank<C> {
     #[rpc_method(name = "balanceOf")]
     pub fn balance_of(
