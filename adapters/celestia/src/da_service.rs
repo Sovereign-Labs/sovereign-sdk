@@ -147,11 +147,11 @@ impl DaService for CelestiaService {
                 .request::<serde_json::Value, _>("header.GetByHeight", vec![height])
                 .await?;
             debug!(header_result = ?header);
-            info!("Fetching shares...");
+            debug!("Fetching shares...");
             let (rollup_shares, tx_data) =
                 fetch_needed_shares_by_header(rollup_namespace, &client, &header).await?;
 
-            info!("Fetching EDS...");
+            debug!("Fetching EDS...");
             // Fetch entire extended data square
             let data_square = client
                 .request::<ExtendedDataSquare, _>(
@@ -164,7 +164,7 @@ impl DaService for CelestiaService {
 
             let unmarshalled_header: CelestiaHeaderResponse = serde_json::from_value(header)?;
             let dah: DataAvailabilityHeader = unmarshalled_header.dah.try_into()?;
-            info!("Parsing namespaces...");
+            debug!("Parsing namespaces...");
             // Parse out all of the rows containing etxs
             let etx_rows =
                 get_rows_containing_namespace(PFB_NAMESPACE, &dah, data_square.rows()?.into_iter())
@@ -177,7 +177,7 @@ impl DaService for CelestiaService {
             )
             .await?;
 
-            info!("Decoding pfb protofbufs...");
+            debug!("Decoding pfb protofbufs...");
             // Parse out the pfds and store them for later retrieval
             let pfds = parse_pfb_namespace(tx_data)?;
             let mut pfd_map = HashMap::new();
