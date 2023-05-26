@@ -3,7 +3,7 @@ pub mod hooks;
 pub mod query;
 #[cfg(test)]
 mod tests;
-use sov_modules_api::Error;
+use sov_modules_api::{CallResponse, Error, NonInstantiable, Spec};
 use sov_modules_macros::ModuleInfo;
 use sov_state::{StateValue, WorkingSet};
 
@@ -40,7 +40,7 @@ pub struct Sequencer<C: sov_modules_api::Context> {
     pub(crate) coins_to_lock: StateValue<sov_bank::Coins<C>>,
 }
 
-impl<C: sov_modules_api::Context> sov_modules_api::Module for Sequencer<C> {
+impl<C: sov_modules_api::Context> sov_modules_api::Genesis for Sequencer<C> {
     type Context = C;
 
     type Config = SequencerConfig<C>;
@@ -51,5 +51,21 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Sequencer<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(), Error> {
         Ok(self.init_module(config, working_set)?)
+    }
+}
+
+impl<C: sov_modules_api::Context> sov_modules_api::Module for Sequencer<C> {
+    // The sequencer module does not have any call messages.
+    type CallMessage = NonInstantiable;
+
+    /// Call allows interaction with the module and invokes state changes.
+    /// It takes a module defined type and a context as parameters.
+    fn call(
+        &self,
+        _message: Self::CallMessage,
+        _context: &Self::Context,
+        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> Result<CallResponse, Error> {
+        unreachable!()
     }
 }

@@ -8,7 +8,7 @@ pub const DEPLOYER: [u8; 32] = [0; 32];
 impl<C: sov_modules_api::Context> Bank<C> {
     pub(crate) fn init_module(
         &self,
-        config: &<Self as sov_modules_api::Module>::Config,
+        config: &<Self as sov_modules_api::Genesis>::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
         let parent_prefix = self.tokens.prefix();

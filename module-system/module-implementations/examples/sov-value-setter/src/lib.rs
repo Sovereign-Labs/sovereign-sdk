@@ -34,13 +34,9 @@ pub struct ValueSetter<C: sov_modules_api::Context> {
     pub admin: sov_state::StateValue<C::Address>,
 }
 
-impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
+impl<C: sov_modules_api::Context> sov_modules_api::Genesis for ValueSetter<C> {
     type Context = C;
-
     type Config = ValueSetterConfig<C>;
-
-    type CallMessage = call::CallMessage;
-
     fn genesis(
         &self,
         config: &Self::Config,
@@ -49,6 +45,10 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
         // The initialization logic
         Ok(self.init_module(config, working_set)?)
     }
+}
+
+impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
+    type CallMessage = call::CallMessage;
 
     fn call(
         &self,

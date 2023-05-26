@@ -3,7 +3,7 @@ pub mod genesis;
 #[cfg(feature = "native")]
 pub mod query;
 
-use sov_modules_api::{CallResponse, Context, Error, Module};
+use sov_modules_api::{CallResponse, Context, Error, Genesis, Module};
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
@@ -23,13 +23,10 @@ pub struct NonFungibleTokenConfig<C: Context> {
     pub admin: C::Address,
     pub owners: Vec<(u64, C::Address)>,
 }
-
-impl<C: Context> Module for NonFungibleToken<C> {
+impl<C: Context> Genesis for NonFungibleToken<C> {
     type Context = C;
 
     type Config = NonFungibleTokenConfig<C>;
-
-    type CallMessage = call::CallMessage<C>;
 
     fn genesis(
         &self,
@@ -38,6 +35,10 @@ impl<C: Context> Module for NonFungibleToken<C> {
     ) -> Result<(), Error> {
         Ok(self.init_module(config, working_set)?)
     }
+}
+
+impl<C: Context> Module for NonFungibleToken<C> {
+    type CallMessage = call::CallMessage<C>;
 
     fn call(
         &self,

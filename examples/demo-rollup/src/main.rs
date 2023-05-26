@@ -138,7 +138,18 @@ async fn main() -> Result<(), anyhow::Error> {
         );
 
         // Fetch the relevant subset of the next Celestia block
-        let filtered_block = da_service.get_finalized_at(height).await?;
+        let filtered_block = loop {
+            match da_service.get_finalized_at(height).await {
+                Ok(block) => break block,
+                Err(err) => {
+                    println!(
+                        "Error fetching block at height {}: {}. Retrying in 5 seconds.",
+                        height, err
+                    );
+                    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                }
+            }
+        };
         let header = filtered_block.header().clone();
 
         // For the demo, we create and verify a proof that the data has been extracted from Celestia correctly.

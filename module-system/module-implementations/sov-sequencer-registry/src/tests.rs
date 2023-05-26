@@ -1,6 +1,6 @@
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::Hasher;
-use sov_modules_api::{Address, Module, ModuleInfo, Spec};
+use sov_modules_api::{Address, ModuleInfo, Spec};
+use sov_modules_api::{Genesis, Hasher};
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::hooks::Hooks;

@@ -1,4 +1,4 @@
-use sov_modules_api::{CallResponse, Context, Error, Module};
+use sov_modules_api::{CallResponse, Context, Error, Genesis, Module};
 use sov_modules_macros::ModuleInfo;
 use sov_state::{StateValue, WorkingSet};
 
@@ -20,10 +20,9 @@ pub mod first_test_module {
         }
     }
 
-    impl<C: Context> Module for FirstTestStruct<C> {
+    impl<C: Context> Genesis for FirstTestStruct<C> {
         type Context = C;
         type Config = ();
-        type CallMessage = u8;
 
         fn genesis(
             &self,
@@ -33,6 +32,10 @@ pub mod first_test_module {
             self.state_in_first_struct.set(1, working_set);
             Ok(())
         }
+    }
+
+    impl<C: Context> Module for FirstTestStruct<C> {
+        type CallMessage = u8;
 
         fn call(
             &self,
@@ -64,10 +67,9 @@ pub mod second_test_module {
         }
     }
 
-    impl<Ctx: Context> Module for SecondTestStruct<Ctx> {
+    impl<Ctx: Context> Genesis for SecondTestStruct<Ctx> {
         type Context = Ctx;
         type Config = ();
-        type CallMessage = u8;
 
         fn genesis(
             &self,
@@ -77,6 +79,10 @@ pub mod second_test_module {
             self.state_in_second_struct.set(2, working_set);
             Ok(())
         }
+    }
+
+    impl<Ctx: Context> Module for SecondTestStruct<Ctx> {
+        type CallMessage = u8;
 
         fn call(
             &self,
