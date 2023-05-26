@@ -101,9 +101,10 @@ Once your Celestia node is up and running, simply `cargo +nightly run` to test o
 You can use either the rest API or celestia-appd. The following instructions assume celestia-appd.
 For testing, we can submit a transaction to the bank module to create a new token
 
-* Ensure demo-rollup is running in one window following the steps from the previous section, and that it's caught up
+- Ensure demo-rollup is running in one window following the steps from the previous section, and that it's caught up
 
 ### Install celestia-appd
+
 1. Install Go 1.20 - https://go.dev/doc/install
 2. Clone the repository: `git clone https://github.com/celestiaorg/celestia-app.git`.
 3. `cd celestia-node`
@@ -111,19 +112,22 @@ For testing, we can submit a transaction to the bank module to create a new toke
 5. `make install`
 
 ### Create local keypair
+
 1. `celestia-appd keys add sequencer_keypair` (this will be the sequencer da keypair)
 2. For the arabica testnet, you can get tokens from the arabica-faucet channel in the celestia discord https://discord.gg/celestiacommunity
 
 ### Create bank transaction
+
 1. `cd ../../` (sovereign root)
 2. `cargo build --release --bin bank-cmd`
 3. `./target/release/bank-cmd create-private-key .` - this is the rollup private key that's used to sign rollup transactions. It's important to make the distinction between this key and the sequencer private key.
 4. `ls -lahtr | grep sov1` - you should see a new json file created containing the keypair. We will refer to this in later commands as `<rollup_private_key.json>`
-5. ```./target/release/bank-cmd serialize-call <rollup_private_key.json> examples/demo-stf/src/bank_cmd/test_data/create_token.json 0 ```
+5. `./target/release/bank-cmd serialize-call <rollup_private_key.json> examples/demo-stf/src/bank_cmd/test_data/create_token.json 0 `
 6. Get the token address from the above the command. eg: `sov1jzvd95rjx7xpcdun2h8kyqee2z5r988h3wy4gsdn6ukc5ae04dvsrad3jj`
 7. The binary serialized transaction is created at : `examples/demo-stf/src/bank_cmd/test_data/create_token.dat`
 
 ### Submit blob to celestia
+
 ```
 $ xxd -p examples/demo-stf/src/bank_cmd/test_data/create_token.dat | tr -d '\n'
 01000000b0000000dd02eda4c1d40cdbb13686c58a127b82cb18d36191afd7eddd7e6eaeeee5bc82f139a4ef84f578e86f9f6c920fb32f505a1fa78d11ff4059263dd3037d44d8035b35bae2751216067eef40b8bad501bab50111e8f74dbb1d64c1a629dcf093c74400000001000b000000000000000e000000736f762d746573742d746f6b656ee803000000000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba75980000000000000000
@@ -132,19 +136,132 @@ $ celestia-appd tx blob PayForBlobs 736f762d74657374 01000000b000000004ee8ca2c34
 
 ```
 
-* `xxd` is used to convert the serialized file into hex to post as an argument to `celestia-appd`
-* `736f762d74657374` is the namespace `ROLLUP_NAMESPACE` in `examples/demo-rollup/src/main.rs`
-* `01000000b000000004ee8ca2....` is the serialized binary blob in hex
-* `sequencer_keypair` is the keypair created earlier and should also match the value of `SEQUENCER_DA_ADDRESS` in `examples/demo-rollup/src/main.rs`
-* `celestia-appd` asks for confirmation - accept with y/Y
+- `xxd` is used to convert the serialized file into hex to post as an argument to `celestia-appd`
+- `736f762d74657374` is the namespace `ROLLUP_NAMESPACE` in `examples/demo-rollup/src/main.rs`
+- `01000000b000000004ee8ca2....` is the serialized binary blob in hex
+- `sequencer_keypair` is the keypair created earlier and should also match the value of `SEQUENCER_DA_ADDRESS` in `examples/demo-rollup/src/main.rs`
+- `celestia-appd` asks for confirmation - accept with y/Y
 
 ### Verify the supply of the new token created
+
 ```
 $ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov1jzvd95rjx7xpcdun2h8kyqee2z5r988h3wy4gsdn6ukc5ae04dvsrad3jj"],"id":1}' http://127.0.0.1:12345
 {"jsonrpc":"2.0","result":{"amount":5000},"id":1}
 ```
-* params: should be the token address created in step 6
 
+- params: should be the token address created in step 6
+
+## Interacting with your Node via RPC
+
+By default, this implementation prints the state root and the number of blobs processed for each slot. To access any other data, you'll
+want to use our RPC server. You can configure its host and port in `rollup_config.toml`.
+
+### Key Concepts
+
+**Query Modes**
+
+Most queries for ledger information accept an optional `QueryMode` argument. There are three QueryModes:
+
+- `Standard`. In Standard mode, a response to a query for an outer struct will contain the full outer struct and hashes of inner structs. For example
+  a standard `ledger_getSlots` query would return all information relating to the requested slot, but only the hashes of the batches contained therein.
+  If no `QueryMode` is specified, a `Standard` response will be returned
+- `Compact`. In Compact mode, even the hashes of child structs are omitted.
+- `Full`. In Full mode, child structs are recursively expanded. So, for example, a query for a slot would return the slot's data, as well as data relating
+  to any `batches` that occurred in that slot, any transactions in those batches, and any events that were emitted by those transactions.
+
+**Identifiers**
+
+There are a several ways to uniquely identify items in the Ledger DB.
+
+- By _number_. Each family of structs (`slots`, `blocks`, `transactions`, and `events`) is numbered in order starting from `1`. So, for example, the
+  first transaction to appear on the DA layer will be numered `1` and might emit events `1`-`5`. Or, slot `17` might contain batches `41` - `44`.
+- By _hash_. (`slots`, `blocks`, and `transactions` only)
+- By _containing item_id and offset_.
+- (`Events` only) By _transaction_id and key_.
+
+To request an item from the ledger DB, you can provide any identifier - and even mix and match different identifiers. We recommend using item number
+wherever possible, though, since resolving other identifiers may require additional database lookups.
+
+Some examples will make this clearer. Suppose that slot number `5` contaisn batches `9`, `10`, and `11`, that batch `10` contains
+transactions `50`-`81`, and that transaction `52` emits event number `17`. If we want to fetch events number `17`, we can use any of the following queries:
+`{"jsonrpc":"2.0","method":"ledger_getEvents","params":[[17]], ... } ,`
+`{"jsonrpc":"2.0","method":"ledger_getEvents","params":[[{"transaction_id": 50, "offset": 0}]], ... } ,`
+`{"jsonrpc":"2.0","method":"ledger_getEvents","params":[[{"transaction_id": 50, "key": [1, 2, 4, 2, ...]}]], ... } ,`
+`{"jsonrpc":"2.0","method":"ledger_getEvents","params":[[{"transaction_id": { "batch_id": 10, "offset": 2}, "offset": 0}]], ... } ,`
+
+### **METHODS**
+
+### ledger_getHead
+
+This method returns the current head of the ledger. It has no arguments.
+
+**Example Query:**
+
+```shell
+$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}' http://127.0.0.1:12345
+
+{"jsonrpc":"2.0","result":{"number":22019,"hash":"0xe8daef0f58a558aea44632a420bb62318bff6c38bbc616ff849d0a4be0a69cd3","batch_range":{"start":2,"end":2}},"id":1}
+```
+
+This response indicates that the most recent slot processed was number `22019`, its hash, and that it contained no batches (since the `start` and `end`
+of the `batch_range` overlap). It also indicates that the next available batch to occur will be numbered `2`.
+
+### ledger_getSlots
+
+This method retrieves slot data. It takes two arguments, a list of `SlotIdentifier`s and an optional `QueryMode`. If no query mode is provided,
+this list of identifiers may be flattened: `"params":[[7]]` and `"params":[7]` are both acceptable, but `"params":[7, "Compact"]` is not.
+
+**Example Query:**
+
+```shell
+$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"ledger_getSlots","params":[[7], "Compact"],"id":1}' http://127.0.0.1:12345
+
+{"jsonrpc":"2.0","result":[{"number":6,"hash":"0x6a23ea92fbe3250e081b3e4c316fe52bda53d0113f9e7f8f495afa0e24b693ff","batch_range":{"start":1,"end":2}}],"id":1}
+```
+
+This response indicates that slot number `6` contained batch `1` and gives the
+
+### ledger_getBatches
+
+This method retrieves slot data. It takes two arguments, a list of `BatchIdentifier`s and an optional `QueryMode`. If no query mode is provided,
+this list of identifiers may be flattened: `"params":[[7]]` and `"params":[7]` are both acceptable, but `"params":[7, "Compact"]` is not.
+
+**Example Query:**
+
+```shell
+$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"ledger_getBatches","params":[["0xf784a42555ed652ed045cc8675f5bc11750f1c7fb0fbc8d6a04470a88c7e1b6c"]],"id":1}' http://127.0.0.1:12345
+
+{"jsonrpc":"2.0","result":[{"hash":"0xf784a42555ed652ed045cc8675f5bc11750f1c7fb0fbc8d6a04470a88c7e1b6c","tx_range":{"start":1,"end":2},"txs":["0x191d87a51e4e1dd13b4d89438c6717b756bd995d7108bef21a5ac0c9b6c77101"],"custom_receipt":"Rewarded"}],"id":1}%
+```
+
+### ledger_getTransactions
+
+This method retrieves transactions. It takes two arguments, a list of `TxIdentifiers`s and an optional `QueryMode`. If no query mode is provided,
+this list of identifiers may be flattened: `"params":[[7]]` and `"params":[7]` are both acceptable, but `"params":[7, "Compact"]` is not.
+
+**Example Query:**
+
+```shell
+$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{ "batch_id": 1, "offset": 0}]],"id":1}' http://127.0.0.1:12345
+
+{"jsonrpc":"2.0","result":[{"hash":"0x191d87a51e4e1dd13b4d89438c6717b756bd995d7108bef21a5ac0c9b6c77101","event_range":{"start":1,"end":1},"custom_receipt":"Successful"}],"id":1}
+```
+
+This response indicates that transaction `1` emitted no events but executed successfully.
+
+### ledger_getEvents
+
+This method retrieves the events based on the provided event identifiers.
+
+**Example Query:**
+
+```shell
+$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"ledger_getEvents","params":[1],"id":1}' http://127.0.0.1:12345
+
+{"jsonrpc":"2.0","result":[null],"id":1}
+```
+
+This response indicates that event `1` has not been emitted yet.
 
 ## License
 
