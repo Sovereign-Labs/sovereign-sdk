@@ -2,7 +2,6 @@ use borsh::BorshDeserialize;
 use sov_default_stf::{RawTx, TxVerifier};
 use sov_modules_api::{Context, Hasher, Signature};
 use std::{io::Cursor, marker::PhantomData};
-use tracing::info;
 
 /// Transaction represents a deserialized RawTx.
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]

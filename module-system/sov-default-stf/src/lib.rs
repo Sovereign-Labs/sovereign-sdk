@@ -10,7 +10,7 @@ use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::stf::TransactionReceipt;
 use sov_rollup_interface::zk::traits::Zkvm;
 use sov_rollup_interface::Buf;
-use tracing::{debug, error, info};
+use tracing::{debug, error};
 pub use tx_hooks::TxHooks;
 pub use tx_hooks::VerifiedTx;
 pub use tx_verifier::{RawTx, TxVerifier};
@@ -103,6 +103,7 @@ where
                 };
             }
         };
+        debug!("Deserialized batch with {} txs", batch.txs.len());
 
         // Run the stateless verification, since it is stateless we don't commit.
         let txs = match self

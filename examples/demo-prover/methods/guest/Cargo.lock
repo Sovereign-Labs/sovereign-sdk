@@ -402,6 +402,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "hex",
  "serde",
  "sha2 0.10.6",
  "sov-accounts",
@@ -2183,6 +2184,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "hex",
  "jmt",
  "serde",
  "sov-modules-api",
@@ -2297,6 +2299,7 @@ dependencies = [
  "serde",
  "sha2 0.10.6",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
