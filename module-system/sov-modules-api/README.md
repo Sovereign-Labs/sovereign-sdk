@@ -1,6 +1,6 @@
 # sov-modules-api
 
-The `sov-modules-api` crate provides essential traits for the `Sovereign` module system. Here are the key traits defined by the crate:
+The `sov-modules-api` crate provides essential traits for the `Sovereign` Module System. Here are the key traits defined by the crate:
 
 1. The `Module` trait: Defines how to initialize and change the state of a module. This is the main trait that module developers need to implement. The author of a module must specify:
 

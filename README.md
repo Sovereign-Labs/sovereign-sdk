@@ -52,12 +52,12 @@ it has no built-in notion of state, accounts, tokens, and the like. This means t
 a rollup as easy as deploying a smart contract. So, we've built out an additional set of tools for defining your state transition function
 called the Module System.
 
-At the heart of the module system is the package [`sov-modules-api`](./module-system/sov-modules-api/). This package defines
+At the heart of the Module System is the package [`sov-modules-api`](./module-system/sov-modules-api/). This package defines
 a group of core traits which express how functionality implemented in separate modules can be combined into a `Runtime`
 capable of processing transactions and serving RPC requests. It also defines macros for implementing most of these traits.
-For many applications, defining your state transition function using the module system should be as simple as picking
+For many applications, defining your state transition function using the Module System should be as simple as picking
 some modules off the shelf and defining a struct which glues them together.
-To deliver this experience, the module system relies on a set of common types and traits that are used in every module. The
+To deliver this experience, the Module System relies on a set of common types and traits that are used in every module. The
 `sov-modules-api` crate defines these traits (like `Context` and `MerkleTreeSpec`) and types like `Address`.
 
 On top of the module API, we provide a [state storage layer](./module-system/sov-state/) backed by a [Jellyfish Merkle Tree](https://github.com/penumbra-zone/jmt)
@@ -74,7 +74,7 @@ rollup which implements the Rollup Interface. The Full Node provides an easy way
 and run your rollup. With the default configuration, it can automatically store chain data in its database,
 serve RPC requests for chain data and application state, and interact with the DA layer to sync its state and send transactions.
 While the full node implementation should be compatible with custom state transition functions, it is currently only tested for
-rollups built with the module system. If you encounter any difficulties running the full node, please reach out or open an
+rollups built with the Module System. If you encounter any difficulties running the full node, please reach out or open an
 issue! All of the core developers can be reached via [Discord](https://discord.gg/kbykCcPrcA).
 
 ## Getting Started
@@ -88,7 +88,7 @@ state transition, and [`demo-rollup`](./examples/demo-rollup/), which shows how 
 get a complete rollup implementation.
 
 If you want even more control over your rollup's functionality, you can implement a completely custom State Transition Function
-without using the module system. You can find a tutorial [here](./examples/demo-simple-stf/).
+without using the Module System. You can find a tutorial [here](./examples/demo-simple-stf/).
 
 ### Adding a new Data Availability Layer
 

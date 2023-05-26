@@ -1,17 +1,17 @@
 # Module System
 
 This directory contains an opinionated framework for building rollups with the Sovereign SDK. It aims to provide a
-"batteries included" development experience. Using the module system still allows you to customize key components of your rollup
+"batteries included" development experience. Using the Module System still allows you to customize key components of your rollup
 like its hash function and signature scheme, but it also forces you to rely on some reasonable default values for things like
 serialization schemes (Borsh), address formats (bech32), etc.
 
-By developing with the module system, you get access to a suite of pre-built modules supporting common functions like generating accounts,
+By developing with the Module System, you get access to a suite of pre-built modules supporting common functions like generating accounts,
 minting and transferring tokens, and incentivizing sequencers. You also get access to powerful tools for generating RPC implementations,
 and a powerful templating system for implementing complex state transitions.
 
 ## Modules: The Basic Building Block
 
-The basic building block of the module system is a `module`. Modules are structs in Rust, and are _required_ to implement the `Module` trait.
+The basic building block of the Module System is a `module`. Modules are structs in Rust, and are _required_ to implement the `Module` trait.
 You can find a complete tutorial showing how to implement a custom module [here](../examples/demo-nft-module/README.md).
 Modules typically live in their own crates (you can find a template [here](./module-implementations/module-template/)) so that they're easily
 re-usable. A typical struct definition for a module looks something like this:
@@ -60,7 +60,7 @@ This function transfers coins from one address to another _without a signature c
 for the theft of funds. But it's very useful for modules to be able to initiate funds transfers without access to users' private keys. (Of course, modules should be careful to get the user's consent before transferring funds. By
 using the transfer_from interface, a module is declaring that it has gotten such consent.)
 
-This leads us to a very important point about the module system. All modules are _trusted_. Unlike smart contracts on Ethereum, modules
+This leads us to a very important point about the Module System. All modules are _trusted_. Unlike smart contracts on Ethereum, modules
 cannot be dynamically deployed by users - they're fixed up-front by the rollup developer. That doesn't mean that the Sovereign SDK doesn't
 support smart contracts - just that they live one layer higher up the stack. If you want to deploy smart contracts on your rollup, you'll need
 to incorporate a _module_ which implements a secure virtual machine that users can invoke to store and run smart contracts.
@@ -124,7 +124,7 @@ For an example of how to instantiate the generated trait as a server bound to a 
 
 **Note that only one impl block per module may be annotated with `rpc_gen`**, but that the block may contain as many `rpc_method` annotations as you want.
 
-For an end-to-end walkthrough showing how to implement an RPC server using the module system, see [here](./RPC_WALKTHROUGH.md)
+For an end-to-end walkthrough showing how to implement an RPC server using the Module System, see [here](./RPC_WALKTHROUGH.md)
 
 ## Context and Spec: How to Make Your Module System Portable
 
@@ -156,7 +156,7 @@ let proof = MyZkvm::prove(|| {
 })
 ```
 
-This distinction between native _execution_ and zero-knowledge _re-execution_ is deeply baked into the module system. We take the
+This distinction between native _execution_ and zero-knowledge _re-execution_ is deeply baked into the Module System. We take the
 philosophy that your business logic should be identical no matter which "mode" you're using, so we abstract the differences between
 the zk and native modes behind a few traits.
 
@@ -177,7 +177,7 @@ As you can see, a `Spec` for a rollup specifies the concrete types that will be 
 That way, you can define your business logic in terms of _abstract_ cryptography, and then instantiate it with cryptography which
 is efficient in your particular choice of zkvm.
 
-In addition to the `Spec` trait, the module system provides a simple `Context` trait which is defined like this:
+In addition to the `Spec` trait, the Module System provides a simple `Context` trait which is defined like this:
 
 ```rust
 pub trait Context: Spec + Clone + Debug + PartialEq {
@@ -189,7 +189,7 @@ pub trait Context: Spec + Clone + Debug + PartialEq {
 ```
 
 Modules are expected to be generic over the `Context` type. This trait gives them a convenient handle to access all of the cryptographic operations
-defined by a `Spec`, while also making it easy for the module system to pass in authenticated transaction-specific information which
+defined by a `Spec`, while also making it easy for the Module System to pass in authenticated transaction-specific information which
 would not otherwise be available to a module. Currently, a `Context` is only required to contain the `sender` (signer) of the transaction,
 but this trait might be extended in future.
 

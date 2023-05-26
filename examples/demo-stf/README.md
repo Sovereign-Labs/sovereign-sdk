@@ -19,11 +19,11 @@ with the rollup generically - so we can keep our modifications to the node as mi
 
 ## Implementing State Transition _Function_
 
-As you recall, the module system is primarily designed to help you implement the [State Transition Function
+As you recall, the Module System is primarily designed to help you implement the [State Transition Function
 interface](../../rollup-interface/specs/interfaces/stf.md).
 
 That interface is quite high-level - the only notion
-that it surfaces it that of a `blob` of rollup data. In the module system, we work at a much lower level - with
+that it surfaces it that of a `blob` of rollup data. In the Module System, we work at a much lower level - with
 transactions signed by particular private keys. To bridge the gap, there's a system called an `AppTemplate`, which
 translates between the two layers of abstraction.
 

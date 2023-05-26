@@ -1,6 +1,6 @@
 ## Enabling RPC via Module System Macros
 
-In the module system, we provide handy macros to make it easy to generate RPC server implementations. In this document,
+In the Module System, we provide handy macros to make it easy to generate RPC server implementations. In this document,
 we'll walk you through all of the steps that you need to take to enable RPC if you're implementing your rollup
 from scratch.
 
