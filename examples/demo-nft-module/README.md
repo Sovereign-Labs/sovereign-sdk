@@ -166,7 +166,8 @@ Before we start implementing the `Module` trait, there are several preparatory s
     `borsh` guarantees that all messages have a single "canonical" serialization, which makes it easy to reliably
     hash and compare serialized messages.
 
-3.  Define Config. In this case, config will contain admin and initial tokens:
+3.  Create a Config struct for the genesis configuration. In this case, the admin address and initial token distribution
+    are configurable
 
     ```rust
     // in lib.rs
