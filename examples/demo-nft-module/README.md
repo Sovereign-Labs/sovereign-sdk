@@ -121,7 +121,7 @@ Before we start implementing the `Module` trait, there are several preparatory s
    [sov-state](../../module-system/sov-state/README.md)
 2. Define a 'native' feature flag to separate logic that isn't needed in zero-knowledge mode.
 3. Define `Call` messages.
-4. Define `Config`.
+4. Implement the `Genesis` trait, which allows one-time initialization of the module
 
 ## Preparation
 
@@ -175,10 +175,29 @@ Before we start implementing the `Module` trait, there are several preparatory s
     ```
 
 3.  Define Config. In this case, config will contain admin and initial tokens:
+
     ```rust
     pub struct NonFungibleTokenConfig<C: Context> {
         pub admin: C::Address,
         pub owners: Vec<(u64, C::Address)>,
+    }
+    ```
+
+4.  Implement the `Genesis` trait using our Config:
+
+    ```rust
+    impl<C: Context> Genesis for NonFungibleToken<C> {
+        type Context = C;
+
+        type Config = NonFungibleTokenConfig<C>;
+
+        fn genesis(
+            &self,
+            config: &Self::Config,
+            working_set: &mut WorkingSet<C::Storage>,
+        ) -> Result<(), Error> {
+            todo!()
+        }
     }
     ```
 
@@ -188,27 +207,20 @@ Plug together all types and features
 
 ```rust
 impl<C: Context> Module for NonFungibleToken<C> {
-    type Context = C;
-
-    type Config = NonFungibleTokenConfig<C>;
-
     type CallMessage = call::CallMessage<C>;
-
-    fn genesis(
-        &self,
-        _config: &Self::Config,
-        _working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), Error> {
-        Ok(())
-    }
 
     fn call(
         &self,
-        _msg: Self::CallMessage,
-        _context: &Self::Context,
-        _working_set: &mut WorkingSet<C::Storage>,
+        msg: Self::CallMessage,
+        context: &Self::Context,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse, Error> {
-        Ok(CallResponse::default())
+        let call_result = match msg {
+            call::CallMessage::Mint { id } => self.mint(id, context, working_set),
+            call::CallMessage::Transfer { to, id } => self.transfer(id, to, context, working_set),
+            call::CallMessage::Burn { id } => self.burn(id, context, working_set),
+        };
+        Ok(call_result?)
     }
 }
 ```
@@ -226,7 +238,7 @@ Genesis is called only once, during the rollup deployment.
 impl<C: Context> NonFungibleToken<C> {
     pub(crate) fn init_module(
         &self,
-        config: &<Self as sov_modules_api::Module>::Config,
+        config: &<Self as sov_modules_api::Genesis>::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
         self.admin.set(config.admin.clone(), working_set);
@@ -244,7 +256,7 @@ impl<C: Context> NonFungibleToken<C> {
 And then adding this piece to trait implementation:
 
 ```rust
-impl<C: Context> Module for NonFungibleToken<C> {
+impl<C: Context> Genesis for NonFungibleToken<C> {
     // ...
     fn genesis(
         &self,
@@ -379,7 +391,7 @@ use demo_nft_module::query::OwnerResponse;
 use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
 use serde::de::DeserializeOwned;
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Hasher, Module, ModuleInfo, Spec};
+use sov_modules_api::{Address, Context, Hasher, Genesis, Module, ModuleInfo, Spec};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 pub type C = DefaultContext;

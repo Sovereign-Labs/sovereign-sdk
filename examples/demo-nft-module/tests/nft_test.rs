@@ -2,7 +2,7 @@ use demo_nft_module::call::CallMessage;
 use demo_nft_module::query::OwnerResponse;
 use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Hasher, Module, ModuleInfo, Spec};
+use sov_modules_api::{Address, Context, Genesis, Hasher, Module, ModuleInfo, Spec};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 pub type C = DefaultContext;

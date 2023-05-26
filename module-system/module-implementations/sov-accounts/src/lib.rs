@@ -34,12 +34,10 @@ pub struct Accounts<C: sov_modules_api::Context> {
     pub(crate) accounts: sov_state::StateMap<C::PublicKey, Account<C>>,
 }
 
-impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
+impl<C: sov_modules_api::Context> sov_modules_api::Genesis for Accounts<C> {
     type Context = C;
 
     type Config = AccountConfig<C>;
-
-    type CallMessage = call::CallMessage<C>;
 
     fn genesis(
         &self,
@@ -48,6 +46,10 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
     ) -> Result<(), Error> {
         Ok(self.init_module(config, working_set)?)
     }
+}
+
+impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
+    type CallMessage = call::CallMessage<C>;
 
     fn call(
         &self,

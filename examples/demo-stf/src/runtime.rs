@@ -1,4 +1,4 @@
-use sov_modules_api::{Context, Module};
+use sov_modules_api::Context;
 use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 
 /// The Rollup entrypoint.
