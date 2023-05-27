@@ -58,7 +58,7 @@ fn transfer_initial_token() {
         let transferred = bank
             .call(transfer_message, &sender_context, &mut working_set)
             .expect("Transfer call failed");
-        assert!(transferred.events.is_empty());
+        assert!(working_set.events().is_empty());
 
         let sender_balance_after = query_user_balance(sender_address.clone(), &mut working_set);
         let receiver_balance_after = query_user_balance(receiver_address.clone(), &mut working_set);
@@ -169,7 +169,7 @@ fn transfer_initial_token() {
         let transferred = bank
             .call(transfer_message, &sender_context, &mut working_set)
             .expect("Transfer call failed");
-        assert!(transferred.events.is_empty());
+        assert!(working_set.events().is_empty());
 
         let receiver_balance_after = query_user_balance(unknown_receiver, &mut working_set);
         assert_eq!(Some(1), receiver_balance_after)
@@ -191,7 +191,7 @@ fn transfer_initial_token() {
         let transferred = bank
             .call(transfer_message, &sender_context, &mut working_set)
             .expect("Transfer call failed");
-        assert!(transferred.events.is_empty());
+        assert!(working_set.events().is_empty());
 
         let sender_balance_after = query_user_balance(sender_address, &mut working_set);
         assert_eq!(sender_balance_before, sender_balance_after);
@@ -247,7 +247,7 @@ fn transfer_deployed_token() {
         .call(mint_message, &sender_context, &mut working_set)
         .expect("Failed to mint token");
     // No events at the moment. If there are, needs to be checked
-    assert!(minted.events.is_empty());
+    assert!(working_set.events().is_empty());
     let total_supply_before = query_total_supply(&mut working_set);
     assert!(total_supply_before.is_some());
 
@@ -269,7 +269,7 @@ fn transfer_deployed_token() {
     let transferred = bank
         .call(transfer_message, &sender_context, &mut working_set)
         .expect("Transfer call failed");
-    assert!(transferred.events.is_empty());
+    assert!(working_set.events().is_empty());
 
     let sender_balance_after = query_user_balance(sender_address, &mut working_set);
     let receiver_balance_after = query_user_balance(receiver_address, &mut working_set);

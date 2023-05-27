@@ -42,7 +42,7 @@ fn genesis_and_mint() {
     let minted = nft
         .call(mint_message.clone(), &owner2_context, &mut working_set)
         .expect("Minting failed");
-    assert!(minted.events.is_empty());
+    assert!(working_set.events().is_empty());
     let query3: OwnerResponse<C> = nft.get_owner(1, &mut working_set);
     assert_eq!(query3.owner, Some(owner2.clone()));
 
@@ -94,7 +94,7 @@ fn transfer() {
     let transfer = nft
         .call(transfer_message, &owner1_context, &mut working_set)
         .expect("Transfer failed");
-    assert!(transfer.events.is_empty());
+    assert!(working_set.events().is_empty());
     let token1_owner = query_token_owner(1, &mut working_set);
     assert_eq!(Some(owner2.clone()), token1_owner);
 
@@ -137,7 +137,7 @@ fn burn() {
     let burned = nft
         .call(burn_message.clone(), &owner1_context, &mut working_set)
         .expect("Burn failed");
-    assert!(burned.events.is_empty());
+    assert!(working_set.events().is_empty());
 
     let query: OwnerResponse<C> = nft.get_owner(0, &mut working_set);
 

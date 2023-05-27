@@ -27,7 +27,7 @@ impl<C: sov_modules_api::Context> ExampleModule<C> {
         let mut response = CallResponse::default();
 
         self.value.set(new_value, working_set);
-        response.add_event("set", &format!("value_set: {new_value:?}"));
+        working_set.add_event("set", &format!("value_set: {new_value:?}"));
 
         Ok(response)
     }

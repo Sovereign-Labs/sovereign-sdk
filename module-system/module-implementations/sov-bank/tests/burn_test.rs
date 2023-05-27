@@ -41,7 +41,7 @@ fn burn_deployed_tokens() {
         .call(mint_message, &minter_context, &mut working_set)
         .expect("Failed to mint token");
     // No events at the moment. If there are, needs to be checked
-    assert!(minted.events.is_empty());
+    assert!(working_set.events().is_empty());
 
     let query_total_supply = |working_set: &mut WorkingSet<Storage>| -> Option<u64> {
         let total_supply: TotalSupplyResponse = bank.supply_of(token_address.clone(), working_set);
@@ -69,7 +69,7 @@ fn burn_deployed_tokens() {
     let burned = bank
         .call(burn_message.clone(), &minter_context, &mut working_set)
         .expect("Failed to burn token");
-    assert!(burned.events.is_empty());
+    assert!(working_set.events().is_empty());
 
     let current_total_supply = query_total_supply(&mut working_set);
     assert_eq!(Some(initial_balance - burn_amount), current_total_supply);
@@ -104,7 +104,7 @@ fn burn_deployed_tokens() {
     let burned_zero = bank
         .call(burn_zero_message, &minter_context, &mut working_set)
         .expect("Failed to burn token");
-    assert!(burned_zero.events.is_empty());
+    assert!(working_set.events().is_empty());
     let minter_balance_after = query_user_balance(minter_address.clone(), &mut working_set);
     assert_eq!(minter_balance, minter_balance_after);
 
@@ -175,7 +175,7 @@ fn burn_initial_tokens() {
     let burned = bank
         .call(burn_message.clone(), &context, &mut working_set)
         .expect("Failed to burn token");
-    assert!(burned.events.is_empty());
+    assert!(working_set.events().is_empty());
 
     let balance_after = query_user_balance(sender_address, &mut working_set);
     assert_eq!(Some(initial_balance - burn_amount), balance_after);

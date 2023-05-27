@@ -1,8 +1,9 @@
 use borsh::BorshSerialize;
-use sov_default_stf::{AppTemplate, Batch};
+use sov_default_stf::{AppTemplate, Batch, SequencerOutcome, TxEffect};
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, Address,
 };
+use sov_rollup_interface::{mocks::MockZkvm, stf::BatchReceipt};
 use sov_state::ProverStorage;
 use std::path::Path;
 
@@ -52,4 +53,17 @@ pub fn create_demo_config(
         value_setter_admin_private_key,
         election_admin_private_key,
     )
+}
+
+pub fn events_count(apply_blob_outcome: &BatchReceipt<SequencerOutcome, TxEffect>) -> usize {
+    let events = apply_blob_outcome
+        .tx_receipts
+        .iter()
+        .flat_map(|receipts| receipts.events.iter());
+
+    for e in events.clone() {
+        println!("{:?}", e.try_to_string());
+    }
+
+    events.count()
 }

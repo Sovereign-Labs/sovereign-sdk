@@ -3,9 +3,9 @@ use core::panic;
 use crate::{
     genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
     runtime::Runtime,
-    tests::data_generation::simulate_da_with_bad_serialization,
+    tests::{data_generation::simulate_da_with_bad_serialization, events_count},
 };
-use sov_default_stf::{Batch, SlashingReason};
+use sov_default_stf::{Batch, SequencerOutcome, SlashingReason};
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
 };
@@ -41,16 +41,19 @@ fn test_tx_revert() {
 
         let txs = simulate_da_with_revert_msg(election_admin_private_key);
 
-        match StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
             new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
-        )
-        .inner
-        {
-            sov_default_stf::SequencerOutcome::Rewarded => {}
-            _ => panic!("Unexpected outcome: Batch exeuction should have succeeded"),
-        }
+        );
+
+        assert!(
+            matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded,),
+            "Unexpected outcome: Batch exeuction should have succeeded"
+        );
+
+        // TODO simulate_da_with_revert_msg gives only election messages
+        assert_eq!(events_count(&apply_blob_outcome), 8);
 
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
     }
@@ -104,10 +107,19 @@ fn test_tx_bad_sig() {
 
         let txs = simulate_da_with_bad_sig(election_admin_private_key);
 
-        match StateTransitionFunction::<MockZkvm>::apply_blob(&mut demo, new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS), None).inner {
-            sov_default_stf::SequencerOutcome::Slashed(SlashingReason::StatelessVerificationFailed) => {}
-                _ => panic!("Unexpected outcome: Stateless verification should have failed due to invalid signature")
-            }
+        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+            &mut demo,
+            new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
+            None,
+        );
+
+        assert!(
+            matches!(apply_blob_outcome.inner, SequencerOutcome::Slashed(SlashingReason::StatelessVerificationFailed),),
+            "Unexpected outcome: Stateless verification should have failed due to invalid signature"
+        );
+
+        // The whole batch was reverted
+        assert_eq!(events_count(&apply_blob_outcome), 0);
 
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
     }
@@ -133,55 +145,6 @@ fn test_tx_bad_sig() {
     }
 }
 
-// This test is outdated, since we no longer revert on stateful verification errors
-// TODO: re-enable this test with with a granular check for failure of a single transaction
-// #[test]
-// fn test_tx_bad_nonce() {
-//     let path = schemadb::temppath::TempPath::new();
-
-//     {
-//         let mut demo = create_new_demo(&path);
-
-//         demo.init_chain(create_config(SEQUENCER_BALANCE));
-//         demo.begin_slot();
-
-//         let txs = simulate_da_with_bad_nonce();
-
-//         let res = demo
-//             .apply_blob(TestBlob::new(Batch { txs }, &SEQUENCER_DA_ADDRESS), None)
-//             .unwrap_err();
-
-//         assert_eq!(res.to_string(), "Stateful verification error - the sequencer included an invalid transaction: Tx bad nonce, expected: 4, but found: 5");
-
-//         demo.end_slot();
-//     }
-
-//     {
-//         let runtime = &mut Runtime::<DefaultContext>::new();
-//         let storage = ProverStorage::with_path(&path).unwrap();
-
-//         let resp = query_and_deserialize::<election::query::GetResultResponse>(
-//             runtime,
-//             QueryGenerator::generate_query_election_message(),
-//             storage.clone(),
-//         );
-
-//         assert_eq!(
-//             resp,
-//             election::query::GetResultResponse::Err("Election is not frozen".to_owned())
-//         );
-
-//         let resp = query_and_deserialize::<sequencer::query::SequencerAndBalanceResponse>(
-//             runtime,
-//             QueryGenerator::generate_query_check_balance(),
-//             storage,
-//         );
-
-//         // Sequencer is rewarded
-//         assert_eq!(resp.data.unwrap().balance, SEQUENCER_BALANCE);
-//     }
-// }
-
 #[test]
 fn test_tx_bad_serialization() {
     let path = sov_schema_db::temppath::TempPath::new();
@@ -203,17 +166,18 @@ fn test_tx_bad_serialization() {
 
         let txs = simulate_da_with_bad_serialization(election_admin_private_key);
 
-        let outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
             new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
-        )
-        .inner;
+        );
+
         assert!(
-            matches!(outcome, sov_default_stf::SequencerOutcome::Slashed(SlashingReason::InvalidTransactionEncoding)),
+            matches!(apply_blob_outcome.inner, sov_default_stf::SequencerOutcome::Slashed(SlashingReason::InvalidTransactionEncoding)),
             "Unexpected outcome: Stateless verification should have failed due to invalid signature"
         );
 
+        assert_eq!(events_count(&apply_blob_outcome), 0);
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
     }
 

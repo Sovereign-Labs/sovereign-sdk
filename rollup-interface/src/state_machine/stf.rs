@@ -1,3 +1,5 @@
+use std::str::Utf8Error;
+
 use crate::{da::BlobTransactionTrait, maybestd::rc::Rc, zk::traits::Zkvm};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
@@ -134,6 +136,13 @@ impl Event {
             key: EventKey(key.as_bytes().to_vec()),
             value: EventValue(value.as_bytes().to_vec()),
         }
+    }
+
+    pub fn try_to_string(&self) -> Result<String, Utf8Error> {
+        let key = std::str::from_utf8(&self.key.0)?;
+        let value = std::str::from_utf8(&self.value.0)?;
+
+        Ok(format!("Event: key: {key}, value: {value}"))
     }
 }
 

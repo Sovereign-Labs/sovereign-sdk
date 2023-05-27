@@ -51,7 +51,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
         self.bonded_provers.set(prover, total_balance, working_set);
 
         // Emit the bonding event
-        response.add_event(
+        working_set.add_event(
             "bonded_prover",
             &format!("new_deposit: {bond_amount:?}. total_bond: {total_balance:?}"),
         );
@@ -97,7 +97,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
             self.bonded_provers.set(context.sender(), 0, working_set);
 
             // Emit the unbonding event
-            response.add_event(
+            working_set.add_event(
                 "unbonded_prover",
                 &format!("amount_withdrawn: {old_balance:?}"),
             );
@@ -147,12 +147,12 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
             self.bonded_provers
                 .set(context.sender(), old_balance, working_set);
 
-            response.add_event(
+            working_set.add_event(
                 "processed_valid_proof",
                 &format!("prover: {:?}", context.sender()),
             );
         } else {
-            response.add_event(
+            working_set.add_event(
                 "processed_invalid_proof",
                 &format!("slashed_prover: {:?}", context.sender()),
             );

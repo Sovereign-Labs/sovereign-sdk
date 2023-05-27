@@ -1,4 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_rollup_interface::stf::{Event, EventKey};
 use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
@@ -40,73 +41,117 @@ impl<S: Storage> Debug for RevertableDelta<S> {
 }
 
 /// A read-write set which can be committed as a unit
-pub enum WorkingSet<S: Storage> {
+enum WorkingSetBatchData<S: Storage> {
     Standard(Delta<S>),
     Revertable(RevertableDelta<S>),
 }
 
+pub struct WorkingSet<S: Storage> {
+    working_set_data: WorkingSetBatchData<S>,
+    events: Vec<Event>,
+}
+
 impl<S: Storage> WorkingSet<S> {
     pub fn new(inner: S) -> Self {
-        Self::Standard(Delta::new(inner))
+        Self {
+            working_set_data: WorkingSetBatchData::Standard(Delta::new(inner)),
+            events: Default::default(),
+        }
     }
 
     pub fn with_witness(inner: S, witness: S::Witness) -> Self {
-        Self::Standard(Delta::with_witness(inner, witness))
+        Self {
+            working_set_data: WorkingSetBatchData::Standard(Delta::with_witness(inner, witness)),
+            events: Default::default(),
+        }
     }
 
     pub fn to_revertable(self) -> Self {
-        match self {
-            WorkingSet::Standard(delta) => WorkingSet::Revertable(delta.get_revertable_wrapper()),
-            WorkingSet::Revertable(_) => self,
+        let s = match self.working_set_data {
+            WorkingSetBatchData::Standard(delta) => {
+                WorkingSetBatchData::Revertable(delta.get_revertable_wrapper())
+            }
+            WorkingSetBatchData::Revertable(_) => self.working_set_data,
+        };
+
+        Self {
+            working_set_data: s,
+            events: self.events,
         }
     }
 
     pub fn commit(self) -> Self {
-        match self {
-            s @ WorkingSet::Standard(_) => s,
-            WorkingSet::Revertable(revertable) => WorkingSet::Standard(revertable.commit()),
+        let s = match self.working_set_data {
+            s @ WorkingSetBatchData::Standard(_) => s,
+            WorkingSetBatchData::Revertable(revertable) => {
+                WorkingSetBatchData::Standard(revertable.commit())
+            }
+        };
+
+        Self {
+            working_set_data: s,
+            events: self.events,
         }
     }
 
     pub fn revert(self) -> Self {
-        match self {
-            s @ WorkingSet::Standard(_) => s,
-            WorkingSet::Revertable(revertable) => WorkingSet::Standard(revertable.revert()),
+        let s = match self.working_set_data {
+            s @ WorkingSetBatchData::Standard(_) => s,
+            WorkingSetBatchData::Revertable(revertable) => {
+                WorkingSetBatchData::Standard(revertable.revert())
+            }
+        };
+        Self {
+            working_set_data: s,
+            events: self.events,
         }
     }
 
     pub fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
-        match self {
-            WorkingSet::Standard(s) => s.get(key),
-            WorkingSet::Revertable(s) => s.get(key),
+        match &mut self.working_set_data {
+            WorkingSetBatchData::Standard(s) => s.get(key),
+            WorkingSetBatchData::Revertable(s) => s.get(key),
         }
     }
 
     pub fn set(&mut self, key: StorageKey, value: StorageValue) {
-        match self {
-            WorkingSet::Standard(s) => s.set(key, value),
-            WorkingSet::Revertable(s) => s.set(key, value),
+        match &mut self.working_set_data {
+            WorkingSetBatchData::Standard(s) => s.set(key, value),
+            WorkingSetBatchData::Revertable(s) => s.set(key, value),
         }
     }
 
     pub fn delete(&mut self, key: StorageKey) {
-        match self {
-            WorkingSet::Standard(s) => s.delete(key),
-            WorkingSet::Revertable(s) => s.delete(key),
+        match &mut self.working_set_data {
+            WorkingSetBatchData::Standard(s) => s.delete(key),
+            WorkingSetBatchData::Revertable(s) => s.delete(key),
         }
     }
 
+    pub fn add_event(&mut self, key: &str, value: &str) {
+        self.events.push(Event::new(key, value));
+    }
+
+    pub fn take_events(&mut self) -> Vec<Event> {
+        std::mem::take(&mut self.events)
+    }
+
+    pub fn events(&self) -> &[Event] {
+        &self.events
+    }
+
     pub fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
-        match self {
-            WorkingSet::Standard(delta) => delta.freeze(),
-            WorkingSet::Revertable(_) => todo!(),
+        match &mut self.working_set_data {
+            // todo
+            WorkingSetBatchData::Standard(delta) => delta.freeze(),
+            WorkingSetBatchData::Revertable(_) => todo!(),
         }
     }
 
     pub fn backing(&self) -> &S {
-        match self {
-            WorkingSet::Standard(delta) => &delta.inner,
-            WorkingSet::Revertable(revertable) => &revertable.inner.inner,
+        match &self.working_set_data {
+            WorkingSetBatchData::Standard(delta) => &delta.inner,
+            WorkingSetBatchData::Revertable(revertable) => &revertable.inner.inner,
         }
     }
 }

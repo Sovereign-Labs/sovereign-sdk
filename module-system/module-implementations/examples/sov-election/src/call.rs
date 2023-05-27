@@ -31,6 +31,7 @@ impl<C: sov_modules_api::Context> Election<C> {
 
         let candidates = candidate_names.into_iter().map(Candidate::new).collect();
         self.candidates.set(candidates, working_set);
+        working_set.add_event("Election: set_candidates", "Candidate was set");
 
         Ok(CallResponse::default())
     }
@@ -48,6 +49,11 @@ impl<C: sov_modules_api::Context> Election<C> {
 
         self.allowed_voters
             .set(&voter_address, Voter::fresh(), working_set);
+
+        working_set.add_event(
+            "Election: add_voter",
+            &format!("Voter was added: {voter_address}"),
+        );
 
         Ok(CallResponse::default())
     }
@@ -95,6 +101,11 @@ impl<C: sov_modules_api::Context> Election<C> {
                     .ok_or(anyhow!("Vote count overflow"))?;
 
                 self.candidates.set(candidates, working_set);
+
+                working_set.add_event(
+                    "Election: make_vote",
+                    &format!("Vote from: {} accepted", context.sender()),
+                );
                 Ok(CallResponse::default())
             }
         }
@@ -108,6 +119,7 @@ impl<C: sov_modules_api::Context> Election<C> {
     ) -> Result<CallResponse> {
         self.exit_if_not_admin(context, working_set)?;
         self.is_frozen.set(true, working_set);
+        working_set.add_event("Election: freeze_election", "Election was frozen");
         Ok(CallResponse::default())
     }
 

@@ -80,6 +80,9 @@ where
             };
         }
 
+        // TODO
+        let _ = batch_workspace.take_events();
+
         // Commit `enter_apply_batch` changes.
         batch_workspace = batch_workspace.commit().to_revertable();
 
@@ -128,25 +131,16 @@ where
             let verified_tx = match self.tx_hooks.pre_dispatch_tx_hook(tx, &mut batch_workspace) {
                 Ok(verified_tx) => verified_tx,
                 Err(e) => {
-                    // // Revert the batch.
-                    // batch_workspace = batch_workspace.revert();
-
-                    // // We reward sequencer funds inside `exit_apply_batch`.
-                    // self.tx_hooks
-                    //     .exit_apply_batch(0, &mut batch_workspace)
-                    //     .expect("Impossible happened: error in exit_apply_batch");
-
-                    // self.working_set = Some(batch_workspace);
-
                     // Don't revert any state changes made by the pre_dispatch_hook even if it rejects
                     error!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
                     batch_workspace = batch_workspace.revert();
                     let receipt = TransactionReceipt {
                         tx_hash: raw_tx_hash,
                         body_to_save: None,
-                        events: vec![],
+                        events: batch_workspace.take_events(),
                         receipt: TxEffect::Reverted,
                     };
+
                     tx_receipts.push(receipt);
                     continue;
                 }
@@ -160,23 +154,24 @@ where
                     self.tx_hooks
                         .post_dispatch_tx_hook(verified_tx, &mut batch_workspace);
 
-                    match tx_result {
-                        Ok(resp) => {
-                            let receipt = TransactionReceipt {
-                                tx_hash: raw_tx_hash,
-                                body_to_save: None,
-                                events: resp.events,
-                                receipt: TxEffect::Successful,
-                            };
-
-                            tx_receipts.push(receipt);
-                        }
+                    let tx_effect = match tx_result {
+                        Ok(_) => TxEffect::Successful,
                         Err(_e) => {
                             // The transaction causing invalid state transition is reverted but we don't slash and we continue
                             // processing remaining transactions.
                             batch_workspace = batch_workspace.revert();
+                            TxEffect::Reverted
                         }
-                    }
+                    };
+
+                    let receipt = TransactionReceipt {
+                        tx_hash: raw_tx_hash,
+                        body_to_save: None,
+                        events: batch_workspace.take_events(),
+                        receipt: tx_effect,
+                    };
+
+                    tx_receipts.push(receipt);
                 }
                 Err(e) => {
                     // If the serialization is invalid, the sequencer is malicious. Slash them (we don't run exit_apply_batch here)

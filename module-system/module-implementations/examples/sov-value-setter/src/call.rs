@@ -39,7 +39,7 @@ impl<C: sov_modules_api::Context> ValueSetter<C> {
 
         // This is how we set a new value:
         self.value.set(new_value, working_set);
-        response.add_event("set", &format!("value_set: {new_value:?}"));
+        working_set.add_event("set", &format!("value_set: {new_value:?}"));
 
         Ok(response)
     }
