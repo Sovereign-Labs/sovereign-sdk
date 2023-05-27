@@ -46,11 +46,9 @@ enum ReadWriteSet<S: Storage> {
     Revertable(RevertableDelta<S>),
 }
 
-///
+/// This structure holds the read-write set and the events gathered during the execution of a transaction.
 pub struct WorkingSet<S: Storage> {
-    //
     read_write_set: ReadWriteSet<S>,
-    //
     events: Vec<Event>,
 }
 
