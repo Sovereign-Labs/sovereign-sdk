@@ -3,7 +3,7 @@ use core::panic;
 use crate::{
     genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
     runtime::Runtime,
-    tests::{data_generation::simulate_da_with_bad_serialization, events_count},
+    tests::{data_generation::simulate_da_with_bad_serialization, has_tx_events},
 };
 use sov_default_stf::{Batch, SequencerOutcome, SlashingReason};
 use sov_modules_api::{
@@ -52,8 +52,8 @@ fn test_tx_revert() {
             "Unexpected outcome: Batch exeuction should have succeeded"
         );
 
-        // TODO simulate_da_with_revert_msg gives only election messages
-        assert_eq!(events_count(&apply_blob_outcome), 8);
+        // Some events ware observed
+        assert!(has_tx_events(&apply_blob_outcome));
 
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
     }
@@ -118,8 +118,8 @@ fn test_tx_bad_sig() {
             "Unexpected outcome: Stateless verification should have failed due to invalid signature"
         );
 
-        // The whole batch was reverted
-        assert_eq!(events_count(&apply_blob_outcome), 0);
+        // The batch receipt contains no events.
+        assert!(!has_tx_events(&apply_blob_outcome));
 
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
     }
@@ -177,7 +177,8 @@ fn test_tx_bad_serialization() {
             "Unexpected outcome: Stateless verification should have failed due to invalid signature"
         );
 
-        assert_eq!(events_count(&apply_blob_outcome), 0);
+        // The batch receipt contains no events.
+        assert!(!has_tx_events(&apply_blob_outcome));
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
     }
 

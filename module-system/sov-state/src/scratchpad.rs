@@ -1,5 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_rollup_interface::stf::{Event, EventKey};
+use sov_rollup_interface::stf::Event;
 use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
@@ -24,7 +24,7 @@ pub struct Delta<S: Storage> {
 ///
 /// All reads are recorded in the underlying delta, because even reverted transactions have to be proven to have
 /// executed against the correct state. (If the state was different, the transaction may not have reverted.)
-pub struct RevertableDelta<S: Storage> {
+struct RevertableDelta<S: Storage> {
     /// The inner (non-revertable) delta
     inner: Delta<S>,
     /// A cache containing the most recent values written. Reads are first checked
@@ -46,6 +46,7 @@ enum ReadWriteSet<S: Storage> {
     Revertable(RevertableDelta<S>),
 }
 
+///
 pub struct WorkingSet<S: Storage> {
     //
     read_write_set: ReadWriteSet<S>,

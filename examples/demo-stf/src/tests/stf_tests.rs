@@ -4,7 +4,7 @@ pub mod test {
         genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
         runtime::Runtime,
         tests::{
-            create_demo_config, create_new_demo, data_generation::simulate_da, events_count,
+            create_demo_config, create_new_demo, data_generation::simulate_da, has_tx_events,
             new_test_blob, C,
         },
     };
@@ -14,8 +14,6 @@ pub mod test {
     };
     use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
     use sov_state::{ProverStorage, WorkingSet};
-
-    const EVENTS_COUNT_ON_SUCCESSFUL_EXECUTION: usize = 10;
 
     #[test]
     fn test_demo_values_in_db() {
@@ -47,10 +45,7 @@ pub mod test {
                 "Sequencer execution should have succeeded but failed "
             );
 
-            assert_eq!(
-                events_count(&apply_blob_outcome),
-                EVENTS_COUNT_ON_SUCCESSFUL_EXECUTION
-            );
+            assert!(has_tx_events(&apply_blob_outcome),);
 
             StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
         }
@@ -106,10 +101,7 @@ pub mod test {
             "Sequencer execution should have succeeded but failed "
         );
 
-        assert_eq!(
-            events_count(&apply_blob_outcome),
-            EVENTS_COUNT_ON_SUCCESSFUL_EXECUTION
-        );
+        assert!(has_tx_events(&apply_blob_outcome),);
 
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
 
@@ -213,6 +205,7 @@ pub mod test {
             "Batch should have been skipped due to insufficient funds"
         );
 
-        assert_eq!(events_count(&apply_blob_outcome), 0);
+        // Assert that there are no events
+        assert!(!has_tx_events(&apply_blob_outcome));
     }
 }

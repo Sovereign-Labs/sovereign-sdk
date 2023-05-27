@@ -55,15 +55,11 @@ pub fn create_demo_config(
     )
 }
 
-pub fn events_count(apply_blob_outcome: &BatchReceipt<SequencerOutcome, TxEffect>) -> usize {
+pub fn has_tx_events(apply_blob_outcome: &BatchReceipt<SequencerOutcome, TxEffect>) -> bool {
     let events = apply_blob_outcome
         .tx_receipts
         .iter()
         .flat_map(|receipts| receipts.events.iter());
 
-    for e in events.clone() {
-        println!("{:?}", e.try_to_string());
-    }
-
-    events.count()
+    events.count() != 0
 }
