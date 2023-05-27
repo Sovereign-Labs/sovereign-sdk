@@ -37,8 +37,7 @@ fn burn_deployed_tokens() {
         initial_balance,
         minter_address: minter_address.clone(),
     };
-    let minted = bank
-        .call(mint_message, &minter_context, &mut working_set)
+    bank.call(mint_message, &minter_context, &mut working_set)
         .expect("Failed to mint token");
     // No events at the moment. If there are, needs to be checked
     assert!(working_set.events().is_empty());
@@ -66,8 +65,7 @@ fn burn_deployed_tokens() {
         },
     };
 
-    let burned = bank
-        .call(burn_message.clone(), &minter_context, &mut working_set)
+    bank.call(burn_message.clone(), &minter_context, &mut working_set)
         .expect("Failed to burn token");
     assert!(working_set.events().is_empty());
 
@@ -101,8 +99,7 @@ fn burn_deployed_tokens() {
         },
     };
 
-    let burned_zero = bank
-        .call(burn_zero_message, &minter_context, &mut working_set)
+    bank.call(burn_zero_message, &minter_context, &mut working_set)
         .expect("Failed to burn token");
     assert!(working_set.events().is_empty());
     let minter_balance_after = query_user_balance(minter_address.clone(), &mut working_set);
@@ -172,8 +169,7 @@ fn burn_initial_tokens() {
     };
 
     let context = C::new(sender_address.clone());
-    let burned = bank
-        .call(burn_message.clone(), &context, &mut working_set)
+    bank.call(burn_message, &context, &mut working_set)
         .expect("Failed to burn token");
     assert!(working_set.events().is_empty());
 

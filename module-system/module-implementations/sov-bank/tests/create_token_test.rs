@@ -28,8 +28,7 @@ fn initial_and_deployed_token() {
         minter_address: minter_address.clone(),
     };
 
-    let create_token_response = bank
-        .call(create_token_message, &sender_context, &mut working_set)
+    bank.call(create_token_message, &sender_context, &mut working_set)
         .expect("Failed to create token");
 
     assert!(working_set.events().is_empty());

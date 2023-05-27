@@ -55,8 +55,7 @@ fn transfer_initial_token() {
             },
         };
 
-        let transferred = bank
-            .call(transfer_message, &sender_context, &mut working_set)
+        bank.call(transfer_message, &sender_context, &mut working_set)
             .expect("Transfer call failed");
         assert!(working_set.events().is_empty());
 
@@ -166,8 +165,7 @@ fn transfer_initial_token() {
             },
         };
 
-        let transferred = bank
-            .call(transfer_message, &sender_context, &mut working_set)
+        bank.call(transfer_message, &sender_context, &mut working_set)
             .expect("Transfer call failed");
         assert!(working_set.events().is_empty());
 
@@ -188,8 +186,7 @@ fn transfer_initial_token() {
                 token_address: token_address.clone(),
             },
         };
-        let transferred = bank
-            .call(transfer_message, &sender_context, &mut working_set)
+        bank.call(transfer_message, &sender_context, &mut working_set)
             .expect("Transfer call failed");
         assert!(working_set.events().is_empty());
 
@@ -243,8 +240,7 @@ fn transfer_deployed_token() {
         initial_balance,
         minter_address: sender_address.clone(),
     };
-    let minted = bank
-        .call(mint_message, &sender_context, &mut working_set)
+    bank.call(mint_message, &sender_context, &mut working_set)
         .expect("Failed to mint token");
     // No events at the moment. If there are, needs to be checked
     assert!(working_set.events().is_empty());
@@ -266,8 +262,7 @@ fn transfer_deployed_token() {
         },
     };
 
-    let transferred = bank
-        .call(transfer_message, &sender_context, &mut working_set)
+    bank.call(transfer_message, &sender_context, &mut working_set)
         .expect("Transfer call failed");
     assert!(working_set.events().is_empty());
 

@@ -1,7 +1,6 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::{Context, ModuleInfo, Prefix};
 use sov_modules_macros::ModuleInfo;
-use sov_state::storage::{StorageKey, StorageValue};
 use sov_state::{ProverStorage, StateMap, StateValue, Storage, WorkingSet, ZkStorage};
 
 pub mod module_a {

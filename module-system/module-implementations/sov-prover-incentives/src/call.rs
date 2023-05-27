@@ -27,8 +27,6 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
         prover: &C::Address,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let mut response = CallResponse::default();
-
         // Transfer the bond amount from the sender to the module's address.
         // On failure, no state is changed
         let coins = Coins {
@@ -56,7 +54,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
             &format!("new_deposit: {bond_amount:?}. total_bond: {total_balance:?}"),
         );
 
-        Ok(response)
+        Ok(CallResponse::default())
     }
 
     /// Try to bond the requested amount of coins from context.sender()
@@ -75,8 +73,6 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
-        let mut response = CallResponse::default();
-
         // Get the prover's old balance.
         if let Some(old_balance) = self.bonded_provers.get(context.sender(), working_set) {
             // Transfer the bond amount from the sender to the module's address.
@@ -103,7 +99,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
             );
         }
 
-        Ok(response)
+        Ok(CallResponse::default())
     }
 
     /// Try to process a zk proof, if the prover is bonded.
@@ -113,8 +109,6 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
-        let mut response = CallResponse::default();
-
         // Get the prover's old balance.
         // Revert if they aren't bonded
         let old_balance = self
@@ -158,6 +152,6 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
             );
         }
 
-        Ok(response)
+        Ok(CallResponse::default())
     }
 }

@@ -1,5 +1,3 @@
-use core::panic;
-
 use crate::{
     genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
     runtime::Runtime,
