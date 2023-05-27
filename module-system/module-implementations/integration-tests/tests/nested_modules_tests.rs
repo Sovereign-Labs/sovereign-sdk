@@ -113,34 +113,34 @@ fn execute_module_logic<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
 fn test_state_update<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
     let module = <module_c::ModuleC<C> as ModuleInfo>::new();
 
-    let expected_value = StorageValue::new("some_value");
+    let expected_value = "some_value".to_owned();
 
     {
         let prefix = Prefix::new_storage("nested_modules_tests::module_a", "ModuleA", "state_1_a");
-        let key = StorageKey::new(&prefix.into(), &"some_key");
-        let value = working_set.get(key).unwrap();
+        let state_map = StateMap::<String, String>::new(prefix.into());
+        let value = state_map.get(&"some_key".to_owned(), working_set).unwrap();
 
         assert_eq!(expected_value, value);
     }
 
     {
         let prefix = Prefix::new_storage("nested_modules_tests::module_b", "ModuleB", "state_1_b");
-        let key = StorageKey::new(&prefix.into(), &"some_key");
-        let value = working_set.get(key).unwrap();
+        let state_map = StateMap::<String, String>::new(prefix.into());
+        let value = state_map.get(&"some_key".to_owned(), working_set).unwrap();
 
         assert_eq!(expected_value, value);
     }
 
     {
         let prefix = Prefix::new_storage("nested_modules_tests::module_a", "ModuleA", "state_1_a");
-        let key = StorageKey::new(&prefix.into(), &"key_from_b");
-        let value = working_set.get(key).unwrap();
+        let state_map = StateMap::<String, String>::new(prefix.into());
+        let value = state_map.get(&"some_key".to_owned(), working_set).unwrap();
 
         assert_eq!(expected_value, value);
     }
 
     {
         let value = module.mod_1_a.state_2_a.get(working_set).unwrap();
-        assert_eq!("some_value".to_owned(), value);
+        assert_eq!(expected_value, value);
     }
 }

@@ -41,90 +41,88 @@ impl<S: Storage> Debug for RevertableDelta<S> {
 }
 
 /// A read-write set which can be committed as a unit
-enum WorkingSetBatchData<S: Storage> {
+enum ReadWriteSet<S: Storage> {
     Standard(Delta<S>),
     Revertable(RevertableDelta<S>),
 }
 
 pub struct WorkingSet<S: Storage> {
-    working_set_data: WorkingSetBatchData<S>,
+    //
+    read_write_set: ReadWriteSet<S>,
+    //
     events: Vec<Event>,
 }
 
 impl<S: Storage> WorkingSet<S> {
     pub fn new(inner: S) -> Self {
         Self {
-            working_set_data: WorkingSetBatchData::Standard(Delta::new(inner)),
+            read_write_set: ReadWriteSet::Standard(Delta::new(inner)),
             events: Default::default(),
         }
     }
 
     pub fn with_witness(inner: S, witness: S::Witness) -> Self {
         Self {
-            working_set_data: WorkingSetBatchData::Standard(Delta::with_witness(inner, witness)),
+            read_write_set: ReadWriteSet::Standard(Delta::with_witness(inner, witness)),
             events: Default::default(),
         }
     }
 
     pub fn to_revertable(self) -> Self {
-        let s = match self.working_set_data {
-            WorkingSetBatchData::Standard(delta) => {
-                WorkingSetBatchData::Revertable(delta.get_revertable_wrapper())
+        let read_write_set = match self.read_write_set {
+            ReadWriteSet::Standard(delta) => {
+                ReadWriteSet::Revertable(delta.get_revertable_wrapper())
             }
-            WorkingSetBatchData::Revertable(_) => self.working_set_data,
+            ReadWriteSet::Revertable(_) => self.read_write_set,
         };
 
         Self {
-            working_set_data: s,
+            read_write_set,
             events: self.events,
         }
     }
 
     pub fn commit(self) -> Self {
-        let s = match self.working_set_data {
-            s @ WorkingSetBatchData::Standard(_) => s,
-            WorkingSetBatchData::Revertable(revertable) => {
-                WorkingSetBatchData::Standard(revertable.commit())
-            }
+        let read_write_set = match self.read_write_set {
+            s @ ReadWriteSet::Standard(_) => s,
+            ReadWriteSet::Revertable(revertable) => ReadWriteSet::Standard(revertable.commit()),
         };
 
         Self {
-            working_set_data: s,
+            read_write_set,
             events: self.events,
         }
     }
 
     pub fn revert(self) -> Self {
-        let s = match self.working_set_data {
-            s @ WorkingSetBatchData::Standard(_) => s,
-            WorkingSetBatchData::Revertable(revertable) => {
-                WorkingSetBatchData::Standard(revertable.revert())
-            }
+        let read_write_set = match self.read_write_set {
+            s @ ReadWriteSet::Standard(_) => s,
+            ReadWriteSet::Revertable(revertable) => ReadWriteSet::Standard(revertable.revert()),
         };
         Self {
-            working_set_data: s,
+            read_write_set,
             events: self.events,
         }
     }
 
-    pub fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
-        match &mut self.working_set_data {
-            WorkingSetBatchData::Standard(s) => s.get(key),
-            WorkingSetBatchData::Revertable(s) => s.get(key),
+    pub(crate) fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
+        match &mut self.read_write_set {
+            ReadWriteSet::Standard(s) => s.get(key),
+            ReadWriteSet::Revertable(s) => s.get(key),
         }
     }
 
-    pub fn set(&mut self, key: StorageKey, value: StorageValue) {
-        match &mut self.working_set_data {
-            WorkingSetBatchData::Standard(s) => s.set(key, value),
-            WorkingSetBatchData::Revertable(s) => s.set(key, value),
+    pub(crate) fn set(&mut self, key: StorageKey, value: StorageValue) {
+        match &mut self.read_write_set {
+            ReadWriteSet::Standard(s) => s.set(key, value),
+            ReadWriteSet::Revertable(s) => s.set(key, value),
         }
     }
 
-    pub fn delete(&mut self, key: StorageKey) {
-        match &mut self.working_set_data {
-            WorkingSetBatchData::Standard(s) => s.delete(key),
-            WorkingSetBatchData::Revertable(s) => s.delete(key),
+    pub(crate) fn delete(&mut self, key: StorageKey) {
+        match &mut self.read_write_set {
+            ReadWriteSet::Standard(s) => s.delete(key),
+            ReadWriteSet::Revertable(s) => s.delete(key),
         }
     }
 
@@ -141,17 +139,17 @@ impl<S: Storage> WorkingSet<S> {
     }
 
     pub fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
-        match &mut self.working_set_data {
+        match &mut self.read_write_set {
             // todo
-            WorkingSetBatchData::Standard(delta) => delta.freeze(),
-            WorkingSetBatchData::Revertable(_) => todo!(),
+            ReadWriteSet::Standard(delta) => delta.freeze(),
+            ReadWriteSet::Revertable(_) => todo!(),
         }
     }
 
     pub fn backing(&self) -> &S {
-        match &self.working_set_data {
-            WorkingSetBatchData::Standard(delta) => &delta.inner,
-            WorkingSetBatchData::Revertable(revertable) => &revertable.inner.inner,
+        match &self.read_write_set {
+            ReadWriteSet::Standard(delta) => &delta.inner,
+            ReadWriteSet::Revertable(revertable) => &revertable.inner.inner,
         }
     }
 }
