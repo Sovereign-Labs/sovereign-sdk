@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use sov_modules_api::{Address, CallResponse};
+use sov_modules_api::{CallResponse};
 use sov_state::{Prefix, WorkingSet};
 
 use crate::call::prefix_from_address_with_parent;
@@ -68,28 +68,28 @@ impl<C: sov_modules_api::Context> Token<C> {
 
     pub(crate) fn mint(
         &mut self,
-        from: &C::Address,
+        sender: &C::Address,
+        minter_address: &C::Address,
         amount: Amount,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let new_balance = self.check_balance(from, amount, working_set)?;
-        self.balances.set(from, new_balance, working_set);
-
+        self.is_authorized_minter(sender)?;
+        if self.frozen {
+            bail!("Attempt to mint frozen token")
+        }
+        let to_balance = self.balances.get(minter_address, working_set).unwrap_or_default() + amount;
+        self.balances.set(minter_address, to_balance, working_set);
         Ok(CallResponse::default())
     }
 
     fn is_authorized_minter(
         &self,
         sender: &C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<Amount> {
-
-        let balance = self.balances.get_or_err(from, working_set)?;
-        let new_balance = match balance.checked_sub(amount) {
-            Some(from_balance) => from_balance,
-            None => bail!("Insufficient funds for {}", from),
-        };
-        Ok(new_balance)
+    ) -> Result<()> {
+        if !self.authorized_minters.contains(sender) {
+            bail!("Sender {} is not authorized to mint",sender)
+        }
+        Ok(())
     }
 
     // Check that amount can be deducted from address

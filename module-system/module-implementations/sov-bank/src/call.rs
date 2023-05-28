@@ -42,6 +42,8 @@ pub enum CallMessage<C: sov_modules_api::Context> {
     Mint {
         /// The amount of tokens to mint.
         coins: Coins<C>,
+        /// Address to mint tokens to
+        minter_address: C::Address
     },
 }
 
@@ -103,11 +105,12 @@ impl<C: sov_modules_api::Context> Bank<C> {
     pub(crate) fn mint(
         &self,
         coins: Coins<C>,
+        minter_address: C::Address,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        let mint_response = token.mint(context.sender(), coins.amount, working_set)?;
+        let mint_response = token.mint(context.sender(), &minter_address, coins.amount, working_set)?;
         token.total_supply += coins.amount;
         self.tokens.set(&coins.token_address, token, working_set);
 
