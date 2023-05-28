@@ -23,9 +23,9 @@ As you recall, the Module System is primarily designed to help you implement the
 interface](../../rollup-interface/specs/interfaces/stf.md).
 
 That interface is quite high-level - the only notion
-that it surfaces it that of a `blob` of rollup data. In the Module System, we work at a much lower level - with
+that it surfaces is that of a `blob` of rollup data. In the Module System, we work at a much lower level - with
 transactions signed by particular private keys. To bridge the gap, there's a system called an `AppTemplate`, which
-translates between the two layers of abstraction.
+bridges between the two layers of abstraction.
 
 The reason the `AppTemplate` is called a "template" is that it's generic. It allows you, the developer, to pass in
 several parameters that specify its exact behavior. In order, these four generics are:

@@ -22,7 +22,7 @@ simplicity, each token represents only an ID and won't hold any metadata.
 ## Structure and dependencies
 
 The Sovereign SDK provides a [module-template](../../module-system/module-implementations/module-template/README.md),
-which is boilerplate that can be customised to easily build modules”.
+which is boilerplate that can be customised to easily build modules.
 
 ```
 
@@ -136,7 +136,7 @@ Before we start implementing the `Module` trait, there are several preparatory s
     Zero Knowledge mode uses a different serialization format, so serde is not needed.
     The `sov-state` module maintains the same logic, so its `native` flag is only enabled in that case.
 
-2.  Define `Call` messages, which are used to change the state of the module.
+2.  Define `Call` messages, which are used to change the state of the module:
 
     ```rust
     // in call.rs
@@ -166,8 +166,8 @@ Before we start implementing the `Module` trait, there are several preparatory s
     `borsh` guarantees that all messages have a single "canonical" serialization, which makes it easy to reliably
     hash and compare serialized messages.
 
-3.  Create a Config struct for the genesis configuration. In this case, the admin address and initial token distribution
-    are configurable
+3.  Create a `Config` struct for the genesis configuration. In this case, the admin address and initial token distribution
+    are configurable:
 
     ```rust
     // in lib.rs
@@ -482,4 +482,4 @@ Here's an example of how to do it with `AppTemplate` from `sov-default-stf`:
 ```
 
 The `AppTemplate` uses `runtime` to dispatch calls during execution of the `apply_batch` method.
-Detailed instructions on how to set up a rollup can be found in the [`demo-rollup` documentation](../demo-rollup/README.md)
+Detailed instructions on how to set up a rollup can be found in the [`demo-rollup` documentation](../demo-rollup/README.md).

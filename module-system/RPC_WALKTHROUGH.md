@@ -8,9 +8,9 @@ There are 5 steps that need to be completed to enable RPC on the full node:
 
 1. Annotate you modules with `rpc_gen` and `rpc_method`.
 2. Annotate your `native` [`StateTransitionRunner`](../rollup-interface/src/state_machine/stf.rs) with the `expose_rpc` macro.
-3. Implement the `RpcRunner` trait on your `StateTransitionRunner`
+3. Implement the `RpcRunner` trait on your `StateTransitionRunner`.
 4. Import and call `get_rpc_methods` in your full node implementation.
-5. Configure and start your RPC server in your full node implementation
+5. Configure and start your RPC server in your full node implementation.
 
 ### Step 1: Generate an RPC Server for your Module
 
@@ -75,7 +75,7 @@ Note that`expose_rpc` takes a tuple as argument, and each element of the tuple i
 
 Next, we implement the `RpcRunner` trait on our `StateTransitionRunner`. If `expose_rpc` dictates which module RPCs we want to
 enable, `RpcRunner` dictates what kind of state they have access to. In this example, we'll expose the current state of our
-rollup by giving the RpcRunner a handle to our working database. However, we could just as easily use a different storage instance.
+rollup by giving the `RpcRunner` a handle to our working database. However, we could just as easily use a different storage instance.
 For example, we might want to use a read-only database snapshot, which would prevent contention between transaction execution
 and RPC queries.
 
