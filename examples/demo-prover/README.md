@@ -23,7 +23,7 @@ harder to follow at first glance, so we recommend diving into the `demo-rollup` 
 
 [IDE integration](./ide_setup.md) described in separate document.
 
-# License
+## License
 
 Licensed under the [Apache License, Version
 2.0](../../LICENSE).
