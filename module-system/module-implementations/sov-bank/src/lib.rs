@@ -79,6 +79,8 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
             }
 
             call::CallMessage::Burn { coins } => Ok(self.burn(coins, context, working_set)?),
+
+            call::CallMessage::Mint { coins } => Ok(self.mint(coins, context, working_set)?),
         }
     }
 }

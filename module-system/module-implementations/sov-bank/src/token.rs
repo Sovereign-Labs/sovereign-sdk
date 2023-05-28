@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use sov_modules_api::CallResponse;
+use sov_modules_api::{Address, CallResponse};
 use sov_state::{Prefix, WorkingSet};
 
 use crate::call::prefix_from_address_with_parent;
@@ -26,6 +26,10 @@ pub(crate) struct Token<C: sov_modules_api::Context> {
     pub(crate) total_supply: u64,
     /// Mapping from user address to user balance.
     pub(crate) balances: sov_state::StateMap<C::Address, Amount>,
+    /// Flag indicating if the supply is frozen.
+    pub(crate) frozen: bool,
+    /// Flag indicating if the supply is frozen.
+    pub(crate) authorized_minters: Vec<C::Address>,
 }
 
 impl<C: sov_modules_api::Context> Token<C> {
@@ -62,6 +66,32 @@ impl<C: sov_modules_api::Context> Token<C> {
         Ok(CallResponse::default())
     }
 
+    pub(crate) fn mint(
+        &mut self,
+        from: &C::Address,
+        amount: Amount,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<CallResponse> {
+        let new_balance = self.check_balance(from, amount, working_set)?;
+        self.balances.set(from, new_balance, working_set);
+
+        Ok(CallResponse::default())
+    }
+
+    fn is_authorized_minter(
+        &self,
+        sender: &C::Address,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<Amount> {
+
+        let balance = self.balances.get_or_err(from, working_set)?;
+        let new_balance = match balance.checked_sub(amount) {
+            Some(from_balance) => from_balance,
+            None => bail!("Insufficient funds for {}", from),
+        };
+        Ok(new_balance)
+    }
+
     // Check that amount can be deducted from address
     // Returns new balance after subtraction.
     fn check_balance(
@@ -87,7 +117,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(C::Address, Self)> {
         let token_address = super::create_token_address::<C>(token_name, sender, salt);
-
+        let frozen = false;
         let token_prefix = prefix_from_address_with_parent::<C>(parent_prefix, &token_address);
         let balances = sov_state::StateMap::new(token_prefix);
 
@@ -107,6 +137,8 @@ impl<C: sov_modules_api::Context> Token<C> {
             name: token_name.to_owned(),
             total_supply,
             balances,
+            frozen,
+            authorized_minters: vec![C::Address::try_from(sender)?],
         };
 
         Ok((token_address, token))
