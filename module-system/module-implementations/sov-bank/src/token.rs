@@ -66,6 +66,19 @@ impl<C: sov_modules_api::Context> Token<C> {
         Ok(CallResponse::default())
     }
 
+    pub(crate) fn freeze(
+        &mut self,
+        sender: &C::Address,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<CallResponse> {
+        self.is_authorized_minter(sender)?;
+        if self.frozen {
+            bail!("Token is already frozen")
+        }
+        self.frozen = true;
+        Ok(CallResponse::default())
+    }
+
     pub(crate) fn mint(
         &mut self,
         sender: &C::Address,
@@ -87,7 +100,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         sender: &C::Address,
     ) -> Result<()> {
         if !self.authorized_minters.contains(sender) {
-            bail!("Sender {} is not authorized to mint",sender)
+            bail!("Sender {} is not an authorized minter",sender)
         }
         Ok(())
     }

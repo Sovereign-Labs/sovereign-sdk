@@ -45,6 +45,12 @@ pub enum CallMessage<C: sov_modules_api::Context> {
         /// Address to mint tokens to
         minter_address: C::Address
     },
+
+    /// Freeze a token so that the supply is frozen
+    Freeze {
+        /// Address of the token to be frozen
+        token_address: C::Address,
+    },
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
@@ -115,6 +121,19 @@ impl<C: sov_modules_api::Context> Bank<C> {
         self.tokens.set(&coins.token_address, token, working_set);
 
         Ok(mint_response)
+    }
+
+    pub(crate) fn freeze(
+        &self,
+        token_address: C::Address,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<CallResponse> {
+        let mut token = self.tokens.get_or_err(&token_address, working_set)?;
+        let freeze_response = token.freeze(context.sender(), working_set)?;
+        self.tokens.set(&token_address, token, working_set);
+
+        Ok(freeze_response)
     }
 }
 
