@@ -50,7 +50,7 @@ fn test_tx_revert() {
             "Unexpected outcome: Batch exeuction should have succeeded"
         );
 
-        // Some events ware observed
+        // Some events were observed
         assert!(has_tx_events(&apply_blob_outcome));
 
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
