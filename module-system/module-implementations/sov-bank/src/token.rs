@@ -144,13 +144,18 @@ impl<C: sov_modules_api::Context> Token<C> {
             Some(total_supply) => total_supply,
             None => bail!("Total supply overflow"),
         };
+        let mut auth_minter_list = authorized_minters.clone().unwrap_or_else(|| vec![]);
+        let sender_address = C::Address::try_from(sender)?;
+        if !auth_minter_list.contains(&sender_address) {
+            auth_minter_list.push(sender_address);
+        }
 
         let token = Token::<C> {
             name: token_name.to_owned(),
             total_supply,
             balances,
             frozen,
-            authorized_minters: authorized_minters.unwrap_or(vec![C::Address::try_from(sender)?]),
+            authorized_minters: auth_minter_list,
         };
 
         Ok((token_address, token))
