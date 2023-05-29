@@ -1,8 +1,8 @@
-# sov-default-stf
+# `sov-default-stf`
 
 ### `AppTemplate`
 
-This crate contains an implementation of a `StateTransitionFunction` called `AppTemplate`, specifically designed to work with the Sovereign `module-system`. The `AppTemplate` relies on a set of traits that, when combined, define the logic for transitioning the rollup state.
+This crate contains an implementation of a `StateTransitionFunction` called `AppTemplate` that is specifically designed to work with the Module System. The `AppTemplate` relies on a set of traits that, when combined, define the logic for transitioning the rollup state.
 
 ```rust
 pub struct AppTemplate<C: Context, V, RT, H, Vm> {

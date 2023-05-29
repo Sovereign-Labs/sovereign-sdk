@@ -7,7 +7,7 @@ pub struct Response {
     pub value: Option<u32>,
 }
 
-#[rpc_gen(client, server, namespace = "sov-value-setter")]
+#[rpc_gen(client, server, namespace = "valueSetter")]
 impl<C: sov_modules_api::Context> ValueSetter<C> {
     /// Queries the state of the module.
     #[rpc_method(name = "queryValue")]

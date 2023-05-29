@@ -86,7 +86,7 @@ pub enum SigVerificationError {
     BadSignature(String),
 }
 
-/// Signature used in the module system.
+/// Signature used in the Module System.
 pub trait Signature {
     type PublicKey;
 
@@ -101,7 +101,7 @@ pub trait Signature {
 #[derive(Debug, PartialEq)]
 pub enum NonInstantiable {}
 
-/// PublicKey used in the module system.
+/// PublicKey used in the Module System.
 pub trait PublicKey {
     fn to_address<A: AddressTrait>(&self) -> A;
 }
@@ -162,6 +162,23 @@ pub trait Context: Spec + Clone + Debug + PartialEq {
 
     /// Constructor for the Context.
     fn new(sender: Self::Address) -> Self;
+}
+
+impl<T> Genesis for T
+where
+    T: Module,
+{
+    type Context = <Self as Module>::Context;
+
+    type Config = <Self as Module>::Config;
+
+    fn genesis(
+        &self,
+        config: &Self::Config,
+        working_set: &mut WorkingSet<<<Self as Genesis>::Context as Spec>::Storage>,
+    ) -> Result<(), Error> {
+        <Self as Module>::genesis(self, config, working_set)
+    }
 }
 
 /// Every module has to implement this trait.

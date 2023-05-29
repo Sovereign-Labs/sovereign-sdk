@@ -19,21 +19,21 @@ with the rollup generically - so we can keep our modifications to the node as mi
 
 ## Implementing State Transition _Function_
 
-As you recall, the module system is primarily designed to help you implement the [State Transition Function
+As you recall, the Module System is primarily designed to help you implement the [State Transition Function
 interface](../../rollup-interface/specs/interfaces/stf.md).
 
 That interface is quite high-level - the only notion
-that it surfaces it that of a `blob` of rollup data. In the module system, we work at a much lower level - with
+that it surfaces is that of a `blob` of rollup data. In the Module System, we work at a much lower level - with
 transactions signed by particular private keys. To bridge the gap, there's a system called an `AppTemplate`, which
-translates between the two layers of abstraction.
+bridges between the two layers of abstraction.
 
 The reason the `AppTemplate` is called a "template" is that it's generic. It allows you, the developer, to pass in
-several parameters which specify its exact behavior. In order, these four generics are
+several parameters that specify its exact behavior. In order, these four generics are:
 
 1. `Context`: a per-transaction struct containing the message's sender. This also provides specs for storage access, so we use different `Context`
-   implementations for Native and zk execution. In Zk, we read values non-deterministically from hints and check them against a merkle tree, while in
+   implementations for Native and ZK execution. In ZK, we read values non-deterministically from hints and check them against a merkle tree, while in
    native mode we just read values straight from disk.
-2. `TxVerifier`: verifies the signatures on transaction and deserializes them into messages
+2. `TxVerifier`: a struct that verifies the signatures on transactions and deserializes them into messages
 3. `Runtime`: a collection of modules which make up the rollup's public interface
 4. `TxHooks`: a set of functions which are invoked at various points in the transaction lifecycle
 
@@ -48,7 +48,7 @@ pub type MyZkStf = AppTemplate<ZkDefaultContext, MyTxVerifier<ZkDefaultContext>,
 
 Note that `DefaultContext` and `ZkDefaultContext` are exported by the `sov_modules_api` crate.
 
-In the remainder of this section, we'll walk you through implementing each of the remaining generics
+In the remainder of this section, we'll walk you through implementing each of the remaining generics.
 
 ### Implementing a TxVerifier
 
@@ -62,12 +62,12 @@ pub trait TxVerifier {
     fn verify_tx_stateless(&self, raw_tx: RawTx) -> anyhow::Result<Self::Transaction>;
 ```
 
-The semantics of the TxVerifier are pretty straightforward - it takes a RawTx (a slice of bytes) as an argument, and does
+The semantics of the `TxVerifier` are pretty straightforward - it takes a `RawTx` (a slice of bytes) as an argument, and does
 some work to transform it into some output `Transaction` type _without looking at the current rollup state_. This output transaction
 type will eventually be fed to the `TxHooks` for _stateful_ verification.
 
-A typical workflow for a `TxVerifier` is to deserializing the message, and check its signature. As you can see by looking
-at the implementation in `tx_verifier_impl.rs`, this is exactly what we do.
+A typical workflow for a `TxVerifier` is to deserialize the message, and check its signature. As you can see by looking
+at the implementation in `tx_verifier_impl.rs`, this is exactly what we do:
 
 ```rust
 impl<C: Context> TxVerifier for DemoAppTxVerifier<C> {
@@ -92,19 +92,19 @@ impl<C: Context> TxVerifier for DemoAppTxVerifier<C> {
 #### Implementing TxHooks
 
 Once a transaction has passed stateless verification, it will get fed into the execution pipeline. In this pipeline there are four places
-where you can inject custom "hooks" using you `TxHooks` implementation.
+where you can inject custom "hooks" using your `TxHooks` implementation.
 
 1. At the beginning of the `apply_blob` function, before the blob is deserialized into a group of transactions. This is a good time to
-   apply per-batch validation logic like ensuring that the sequencer is properly bonded
+   apply per-batch validation logic like ensuring that the sequencer is properly bonded.
 2. Immediately before each transaction is dispatched to the runtime. This is a good time to apply stateful transaction verification, like checking
    the nonce.
 3. Immediately after each transaction is executed. This is a good place to perform any post-execution operations, like incrementing the nonce.
-4. At the end of the `apply_blob` function. This is a good place to reward sequencers,
+4. At the end of the `apply_blob` function. This is a good place to reward sequencers.
 
-To use the app template, you need to provide a TxHooks implementation which specifies what needs to happen at each of these four
+To use the `AppTemplate`, you need to provide a `TxHooks` implementation which specifies what needs to happen at each of these four
 stages.
 
-Its common for modules which need access to these hooks to export a `Hooks` struct. If you're relying on an unfamiliar module, be sure to check
+Its common for modules that need access to these hooks to export a `Hooks` struct. If you're relying on an unfamiliar module, be sure to check
 its documentation to make sure that you know about any hooks that it may rely on. Your `TxHooks` implementation will usually
 just be a wrapper which invokes each of these modules hooks. In this demo, we only rely
 on two modules which need access to the hooks - `sov-accounts` and `sequencer-registry`, so our `TxHooks` implementation only has two fields.
@@ -143,7 +143,8 @@ initialization code for each module which will get run at your rollup's genesis.
 allow your runtime to dispatch transactions and queries, and tell it which serialization scheme to use.
 We recommend borsh, since it's both fast and safe for hashing.
 
-That's it - with those three structs implemented, you can them into your AppTemplate and get a complete State Transition Function!
+That's it - with those three structs implemented, you can plug them into your `AppTemplate` and get a
+complete State Transition Function!
 
 ## Make Full Node Itegrations Simpler with the State Transition Runner trait:
 
@@ -153,21 +154,21 @@ to import your custom STF! But, when you're building an STF it's useful to stick
 That way, you can minimize the changeset for your custom node implementation, which reduces the risk of bugs.
 
 To help you integrate with full node implementations, we provide standard traits for intitializing an app (`StateTransitionRunner`) and
-starting an RPC server (`RpcRunner`). In this section, we'll briefly show how to implement both traits. Again, neither trait is stricly
-required - just by implementing STF, you get the capability to integrate with DA layers and Zkvms. But, implementing these traits
-makes you more compatible with full node implementations out of the box
+starting an RPC server (`RpcRunner`). In this section, we'll briefly show how to implement both traits. Again, neither trait is strictly
+required - just by implementing STF, you get the capability to integrate with DA layers and ZKVMs. But, implementing these traits
+makes you more compatible with full node implementations out of the box.
 
 ### Implementing State Transition Runner
 
-The State Transition Runner trait contains logic related to intitialization. It has just three methods:
+The State Transition Runner trait contains logic related to initialization. It has just three methods:
 
 1. `new` - which allows us to instantiate a state transition function using a `RuntimeConfig` specific to the particular execution mode.
-   For example, when you're running a prover you likely want to configure a standard RocksDB instance - but in zk mode, you have to
-   set up your STF to read from a merkle tree instead. Using STR, we can easily swap out this configuration.
+   For example, when you're running a prover you likely want to configure a standard RocksDB instance - but in ZK mode, you have to
+   set up your STF to read from a Merkle tree instead. Using STR, we can easily swap out this configuration.
 2. `inner` - which returns an immutable reference to the inner state transition function
 3. `inner mut` - which returns a mutable reference to the inner STF
 
-As you can see in the demo codebase, we implement StateTransitionRunner two different times for the DemoAppRunner struct - once for `Prover` mode
+As you can see in the demo codebase, we implement `StateTransitionRunner` two different times for the `DemoAppRunner` struct - once for `Prover` mode
 and once for `Zk` mode.
 
 The `Prover` implementation is gated behind the `native` feature flag. This flag is what we use in the SDK to mark code which can only be run
