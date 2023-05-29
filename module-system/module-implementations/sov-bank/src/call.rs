@@ -20,8 +20,10 @@ pub enum CallMessage<C: sov_modules_api::Context> {
         token_name: String,
         /// The initial balance of the new token.
         initial_balance: Amount,
-        /// The address of the account that minted new tokens.
+        /// The address of the account that the new tokens are minted to.
         minter_address: C::Address,
+        /// Authorized minter list.
+        authorized_minters: Vec<C::Address>,
     },
 
     /// Transfers a specified amount of tokens to the specified address.
@@ -37,6 +39,20 @@ pub enum CallMessage<C: sov_modules_api::Context> {
         /// The amount of tokens to burn.
         coins: Coins<C>,
     },
+
+    /// Mints a specified amount of tokens.
+    Mint {
+        /// The amount of tokens to mint.
+        coins: Coins<C>,
+        /// Address to mint tokens to
+        minter_address: C::Address,
+    },
+
+    /// Freeze a token so that the supply is frozen
+    Freeze {
+        /// Address of the token to be frozen
+        token_address: C::Address,
+    },
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
@@ -46,12 +62,14 @@ impl<C: sov_modules_api::Context> Bank<C> {
         salt: u64,
         initial_balance: Amount,
         minter_address: C::Address,
+        authorized_minters: Vec<C::Address>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let (token_address, token) = Token::<C>::create(
             &token_name,
             &[(minter_address, initial_balance)],
+            authorized_minters,
             context.sender().as_ref(),
             salt,
             self.tokens.prefix(),
@@ -87,11 +105,38 @@ impl<C: sov_modules_api::Context> Bank<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        let burn_response = token.burn(context.sender(), coins.amount, working_set)?;
+        token.burn(context.sender(), coins.amount, working_set)?;
         token.total_supply -= coins.amount;
         self.tokens.set(&coins.token_address, token, working_set);
 
-        Ok(burn_response)
+        Ok(CallResponse::default())
+    }
+
+    pub(crate) fn mint(
+        &self,
+        coins: Coins<C>,
+        minter_address: C::Address,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<CallResponse> {
+        let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
+        token.mint(context.sender(), &minter_address, coins.amount, working_set)?;
+        self.tokens.set(&coins.token_address, token, working_set);
+
+        Ok(CallResponse::default())
+    }
+
+    pub(crate) fn freeze(
+        &self,
+        token_address: C::Address,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<CallResponse> {
+        let mut token = self.tokens.get_or_err(&token_address, working_set)?;
+        token.freeze(context.sender())?;
+        self.tokens.set(&token_address, token, working_set);
+
+        Ok(CallResponse::default())
     }
 }
 
@@ -104,7 +149,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        token.transfer(from, to, coins.amount, working_set)
+        token.transfer(from, to, coins.amount, working_set)?;
+        Ok(CallResponse::default())
     }
 }
 

@@ -26,6 +26,7 @@ fn initial_and_deployed_token() {
         token_name,
         initial_balance,
         minter_address: minter_address.clone(),
+        authorized_minters: vec![minter_address.clone()],
     };
 
     bank.call(create_token_message, &sender_context, &mut working_set)
