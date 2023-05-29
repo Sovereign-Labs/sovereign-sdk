@@ -6,12 +6,10 @@ The state transition function is the "business logic" of a rollup.
 It is defined in a particular zkVM (since implementation details like hash and proof formats functions need to change). However,
 an implementation of an STF may be reused across multiple DA layers.
 
-The Sovereign SDK guarantees that all relevant transactions will be delivered to the STF for processing
+The Sovereign SDK guarantees that all relevant data blobs will be delivered to the STF for processing
 exactly once, in the order that they appear on the DA layer. The STF is responsible for implementing its own metering
-and billing (to prevent spam), and for maintaining a "consensus set" (a list of addresses who are allowed to post transactions).
+and billing (to prevent spam).
 
-To allow for fine grained metering, the SDK provides two separate
-units in which to charge transaction fees ("gas" and "diesel").
 The SDK also allows (and expects) the STF to process any proofs that are posted onto the DA layer to
 allow honest provers to be rewarded for their work, and to allow
 adaptive gas pricing depending on prover throughput.
@@ -109,8 +107,8 @@ into the array of transactions, pointing out one which had an invalid signature.
 
 ### Event
 
-| Name  | Type  | Description                                         |
-| ----- | ----- | --------------------------------------------------- |
+| Name  | Type  | Description                                        |
+| ----- | ----- | -------------------------------------------------- |
 | key   | bytes | The key used to index this event                   |
 | value | bytes | The value to be returned when the index is queried |
 
