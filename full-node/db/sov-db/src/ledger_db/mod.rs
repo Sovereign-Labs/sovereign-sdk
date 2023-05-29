@@ -196,7 +196,7 @@ impl LedgerDB {
     ) -> Result<(), anyhow::Error> {
         self.db.put::<EventByNumber>(event_number, event)?;
         self.db
-            .put::<EventByKey>(&(event.key.clone(), tx_number, *event_number), &())
+            .put::<EventByKey>(&(event.key().clone(), tx_number, *event_number), &())
     }
 
     /// Commits a slot to the database by inserting its events, transactions, and batches before

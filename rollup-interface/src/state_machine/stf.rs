@@ -126,8 +126,8 @@ pub enum ConsensusRole {
 /// A key-value pair representing a change to the rollup state
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct Event {
-    pub key: EventKey,
-    pub value: EventValue,
+    key: EventKey,
+    value: EventValue,
 }
 
 impl Event {
@@ -138,11 +138,12 @@ impl Event {
         }
     }
 
-    pub fn try_to_string(&self) -> Result<String, Utf8Error> {
-        let key = std::str::from_utf8(&self.key.0)?;
-        let value = std::str::from_utf8(&self.value.0)?;
+    pub fn key(&self) -> &EventKey {
+        &self.key
+    }
 
-        Ok(format!("Event: key: {key}, value: {value}"))
+    pub fn value(&self) -> &EventValue {
+        &self.value
     }
 }
 
