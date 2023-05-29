@@ -100,7 +100,8 @@ impl<S: Storage> WorkingSet<S> {
         };
         Self {
             read_write_set,
-            events: self.events,
+            // The `revert` removes all events associated with the transaction
+            events: Vec::default(),
         }
     }
 
@@ -139,7 +140,6 @@ impl<S: Storage> WorkingSet<S> {
 
     pub fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
         match &mut self.read_write_set {
-            // todo
             ReadWriteSet::Standard(delta) => delta.freeze(),
             ReadWriteSet::Revertable(_) => todo!(),
         }

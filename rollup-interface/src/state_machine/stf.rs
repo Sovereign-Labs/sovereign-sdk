@@ -1,5 +1,3 @@
-use std::str::Utf8Error;
-
 use crate::{da::BlobTransactionTrait, maybestd::rc::Rc, zk::traits::Zkvm};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};

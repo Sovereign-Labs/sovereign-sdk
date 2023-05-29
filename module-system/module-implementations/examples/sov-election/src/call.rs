@@ -68,6 +68,11 @@ impl<C: sov_modules_api::Context> Election<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
+        working_set.add_event(
+            "Election: make_vote",
+            &format!("Attempt to make a from: {}", context.sender()),
+        );
+
         let new_number_of_votes = self
             .number_of_votes
             .get(working_set)

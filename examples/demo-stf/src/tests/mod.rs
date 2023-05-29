@@ -61,5 +61,5 @@ pub fn has_tx_events(apply_blob_outcome: &BatchReceipt<SequencerOutcome, TxEffec
         .iter()
         .flat_map(|receipts| receipts.events.iter());
 
-    events.count() != 0
+    events.peekable().peek().is_some()
 }
