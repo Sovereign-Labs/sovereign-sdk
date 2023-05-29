@@ -36,7 +36,7 @@ adaptive gas pricing depending on prover throughput.
 - **Usage:**
 
   - Called exactly once for each slot (DA layer block), prior to processing any of the batches included in that slot.
-    This method is invoked whether or not the slot contains any data relevant to the rollup
+    This method is invoked whether or not the slot contains any data relevant to the rollup.
 
 - **Arguments**
 
@@ -49,7 +49,7 @@ adaptive gas pricing depending on prover throughput.
 - **Usage:**
 
   - This method is called once for each blob sent by the DA layer. It should attempt
-    to interperet each as a message for the rollup and apply any resulting state
+    to interpret each as a message for the rollup and apply any resulting state
     transitions.
     It accepts an optional "misbehavior proof" to allow short-circuiting
     in case the block is invalid. (An example misbehavior proof would be a merkle-proof to a transaction
@@ -100,7 +100,7 @@ None
 ### InitialState
 
 A rollup-defined type which is opaque to the rest of the SDK. Specifies the genesis
-state of a particular instance of the state transition function
+state of a particular instance of the state transition function.
 
 ### Misbehavior Proof
 
@@ -111,8 +111,8 @@ into the array of transactions, pointing out one which had an invalid signature.
 
 | Name  | Type  | Description                                         |
 | ----- | ----- | --------------------------------------------------- |
-| key   | bytes | The key, used to index this event                   |
-| value | bytes | The value, to be returned when the index is queried |
+| key   | bytes | The key used to index this event                   |
+| value | bytes | The value to be returned when the index is queried |
 
 ### BatchReceipt
 
@@ -133,7 +133,7 @@ into the array of transactions, pointing out one which had an invalid signature.
 
 ### Witness
 
-A custom type for each state transition functioncontaining the hints which are passed to the ZKVM.
+A custom type for each state transition function containing the hints that are passed to the ZKVM.
 
 ## Optional Methods
 
