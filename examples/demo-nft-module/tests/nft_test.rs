@@ -3,6 +3,7 @@ use demo_nft_module::query::OwnerResponse;
 use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Context, Hasher, Module, ModuleInfo, Spec};
+use sov_rollup_interface::stf::Event;
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 pub type C = DefaultContext;
@@ -42,7 +43,10 @@ fn genesis_and_mint() {
     nft.call(mint_message.clone(), &owner2_context, &mut working_set)
         .expect("Minting failed");
 
-    assert!(!working_set.events().is_empty());
+    assert_eq!(
+        working_set.events()[0],
+        Event::new("NFT mint", "A token with id 1 was minted")
+    );
     let query3: OwnerResponse<C> = nft.get_owner(1, &mut working_set);
     assert_eq!(query3.owner, Some(owner2));
 
@@ -93,7 +97,12 @@ fn transfer() {
     assert_eq!(Some(owner1), token1_owner);
     nft.call(transfer_message, &owner1_context, &mut working_set)
         .expect("Transfer failed");
-    assert!(!working_set.events().is_empty());
+
+    assert_eq!(
+        working_set.events()[0],
+        Event::new("NFT transfer", "A token with id 1 was transferred")
+    );
+
     let token1_owner = query_token_owner(1, &mut working_set);
     assert_eq!(Some(owner2), token1_owner);
 
@@ -137,6 +146,10 @@ fn burn() {
         .expect("Burn failed");
     assert!(!working_set.events().is_empty());
 
+    assert_eq!(
+        working_set.events()[0],
+        Event::new("NFT burn", "A token with id 0 was burned")
+    );
     let query: OwnerResponse<C> = nft.get_owner(0, &mut working_set);
 
     assert!(query.owner.is_none());
