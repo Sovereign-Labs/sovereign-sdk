@@ -18,252 +18,122 @@ adaptive gas pricing depending on prover throughput.
 
 ## Required Methods
 
+### Init Chain
+
+- **Usage:**
+
+  - Called exactly once at the rollup's genesis, prior to processing batches.
+    This method is used to perform one-time initialization, such as minting the rollup's native token.
+
+- **Arguments**
+
+| Name   | Type          | Description                             |
+| ------ | ------------- | --------------------------------------- |
+| params | INITIAL_STATE | The initial state to set for the rollup |
+
 ### Begin Slot
 
-* **Usage:**
-  * Called exactly once for each slot (DA layer block), prior to processing any of the batches included in that slot.
-  This method is invoked whether or not the slot contains any data relevant to the rollup
-  
-### Parse Batch
+- **Usage:**
 
-* **Usage:**
-  * Performs a deserialization of a batch into a `header` and a list of `transaction`s.
-  The deserialization should be zero-copy for efficiency. This method may perform
-  additional sanity checks, but is assumed to be computationally
-  inexpensive. Expensive checks (such as signatures) SHOULD wait for the
-  `begin_batch` or `deliver_tx` calls. This method SHOULD slash the
-block proposer if the batch cannot be deserialized
-or is otherwise invalid
-* **Arguments**
+  - Called exactly once for each slot (DA layer block), prior to processing any of the batches included in that slot.
+    This method is invoked whether or not the slot contains any data relevant to the rollup.
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | msg           | bytes  | The raw contents of a DA layer tx        |
- | sender        | bytes  | The sender of the DA layer TX, as bytes  |
+- **Arguments**
 
-* **Response**
+| Name    | Type    | Description                                                                                                                                                                                                                     |
+| ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| witness | WITNESS | The witness to be used to process this slot. In prover mode, the witness argument is an empty struct which is populated with "hints" for the ZKVM during execution. In ZK mode, the argument is the pre-populated set of hints. |
 
- | Name | Type                      | Description                                                                  |
- |------|---------------------------|------------------------------------------------------------------------------|
- | Ok   | BATCH                     | A deserialized batch                                                         |
- | Err  | optional CONSENSUS_UPDATE | An update to the set of sequencers, potentially slashing the batch's sponsor |
+### Apply Blob
 
-* Note: This response is a `Result` type - only one of Ok or Err will be populated
+- **Usage:**
 
-### Parse Proof
+  - This method is called once for each blob sent by the DA layer. It should attempt
+    to interpret each as a message for the rollup and apply any resulting state
+    transitions.
+    It accepts an optional "misbehavior proof" to allow short-circuiting
+    in case the block is invalid. (An example misbehavior proof would be a merkle-proof to a transaction
+    with an invalid signature).
 
-* **Usage:**
-  * Performs a deserialization of a batch into a `proof`.
-  The deserialization should be zero-copy for efficiency. This method may perform
-  additional sanity checks, but is assumed to be computationally
-  inexpensive. Expensive checks (such as signatures) SHOULD wait for the
-  `deliverproof` calls
-* **Arguments**
+- **Arguments**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | msg           | bytes  | The raw contents of a DA layer tx        |
- | sender        | bytes  | The sender of the DA layer TX, as bytes  |
+| Name        | Type                       | Description                                                                                                  |
+| ----------- | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| blob        | BLOB_TRANSACTION           | A struct containing the blob's data and the address of the sender                                            |
+| misbehavior | optional MISBEHAVIOR_PROOF | Gives the rollup a hint that misbehavior has occurred, allowing the state-transition to be "short-circuited" |
 
-* **Response**
+- **Response**
 
- | Name | Type                      | Description                                                                  |
- |------|---------------------------|------------------------------------------------------------------------------|
- | Ok   | PROOF                     | A deserialized proof                                                         |
- | Err  | optional CONSENSUS_UPDATE | An update to the set of sequencers, potentially slashing the proof's sponsor |
-
-* Note: This response is a `Result` type - only one of Ok or Err will be populated
-
-### Begin Batch
-
-* **Usage:**
-  * This method is called once at the beginning of each rollup batch.
-  It has two purposes: to allow the rollup to perform and needed initialization before
-  processing the block, and to process an optional "misbehavior proof" to allow short-circuiting
-  in case the block is invalid. (An example misbehavior proof would be a merkle-proof to a transaction
-  with an invalid signature). In case of misbehavior, this method should slash the block's sender.
-  TODO: decide whether to add events to the response
-
-* **Arguments**
-
- | Name        | Type                       | Description                             |
- |-------------|----------------------------|-----------------------------------------|
- | batch       | BATCH                      | The batch to be processed               |
- | sender      | bytes                      | The sender of the DA layer TX, as bytes |
- | misbehavior | optional MISBEHAVIOR_PROOF | TBD                                     |
-
-* **Response**
-
- | Name | Type                      | Description                                                                 |
- |------|---------------------------|-----------------------------------------------------------------------------|
- | Ok   | _                         | no response                                                                 |
- | Err  | optional CONSENSUS_UPDATE | An update to the set of sequencers, potentially slashing the batch's sender |
-
-* Note: This response is a `Result` type - only one of Ok or Err will be populated
-
-### Deliver TX
-
-* **Usage:**
-  * The core of the state transition function - called once for each rollup transaction. This method must not commit
-  any changes to the rollup's state. Changes may only be persisted by the `end_batch`, `end_slot`, and `deliver_proof`
-  method calls. This allows us to maintain the invariant that transactions contained in invalid batches are never committed,
-  even in the face of a malicious prover who fails to supply a misbehavior proof during `begin_block`.
-
-* **Arguments**
-
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | batch   | BATCH  | The batch to be processed |
- | sender   | bytes  | The sender of the DA layer TX, as bytes |
- | misbehavior | optional MISBEHAVIOR_PROOF |
-
-* **Response**
-
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | Ok       | DELIVER_TX_RESPONSE  | See |
- | Err       | optional CONSENSUS_UPDATE  | An update to the set of sequencers, potentially slashing the batch's sender |
-
-* Note: This response is a `Result` type - only one of Ok or Err will be populated
-
-### End Batch
-
-* **Usage:**
-  * Called at the end of each rollup batch, after all transactions in the batch have been delivered.
-  The rollup may use this call to persist any changes made during the course of the batch.
-  The Sovereign SDK guarantees that no transaction in the batch will be reverted after this call is made
-  unless the underlying DA layer experiences a reorg.
-
-* **Arguments**
-
-None
-
-* **Response**
-
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | response | END_BATCH_RESPONSE  | A list of updates to the rollups consensus set |
+| Name    | Type          | Description                                                                                                                                                |
+| ------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| receipt | BATCH_RECEIPT | A receipt indicating whether the blob was applied succesfully. Contains an array of `TX_RECEIPT`s, indicating the result of each transaction from the blob |
 
 ### End Slot
 
-* **Usage:**
-  * Called at the end of each slot, after all batches and proofs have been delivered.
-  The rollup may use this call to persist any changes made during the course
-  of the slot. The Sovereign SDK guarantees that no batch in the slot will be reverted after this call is made
-  unless the underlying DA layer experiences a reorg.
+- **Usage:**
 
-* **Arguments**
+  - Called at the end of each slot, after all batches and proofs have been delivered.
+    The rollup may use this call to persist any changes made during the course
+    of the slot. The Sovereign SDK guarantees that no batch in the slot will be reverted after this call is made
+    unless the underlying DA layer experiences a reorg.
+
+- **Arguments**
 
 None
 
-* **Response**
+- **Response**
 
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | state root       | STATE_COMMITMENT  | A commitment to the rollup's state after this batch has been applied |
-
-### Deliver Proof
-
-* **Usage:**
-  * Called between `begin_slot` and `end_slot` to process the completed proving of some prior transactions. May be
-  invoked zero or more times per slot. May not be invoked between a `begin_batch` call and its corresponding `end_batch`.
-  Rollups should use this call to compensate provers and adjust gas prices.
-
-* **Arguments**
-
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | sender | bytes  | The address which posted this proof on the L1 |
- | proof | PROOF | The deserialized proof |
-
-* **Response**
-
- | Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | Ok   | DELIVER_PROOF_RESPONSE  | A success response indicates how much gas/diesel was proved |
- | Err   | optional CONSENSUS_UPDATE  | An optional change to the consensus set to slash the sender |
-
-* Note: This response is a `Result` type - only one of Ok or Err will be populated
+| Name       | Type       | Description                                                                                                                                                 |
+| ---------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| state root | STATE_root | A commitment to the rollup's state after this batch has been applied                                                                                        |
+| witness    | WITNESS    | In prover mode, return the accumulated "hints" which the ZKVM will need to verify the state transition efficiently. In ZK mode, this return value is unused |
 
 ## Structs
 
-### Batch
+### Blob
 
-| Name          | Type   | Description                              |
-|---------------|--------|------------------------------------------|
-| header        | HEADER | A batch header as defined by the STF|
-| transactions  | repeated TRANSACTION | All of the transactions in this batch |
+| Name   | Type  | Description                                                                              |
+| ------ | ----- | ---------------------------------------------------------------------------------------- |
+| sender | bytes | The address of the entity which sent this blob of data to the DA layer, as a byte string |
+| data   | bytes | The content of this blob as an iterable collection of bytes                              |
 
-### Consensus Update
+### InitialState
 
-| Name          | Type   | Description                              |
-|---------------|--------|------------------------------------------|
-| address | bytes | A serialized address from the underlying DA layer |
-| power  | u64 | The latest staked balance of this address |
-
-### Transaction
-
-A transaction on the STF. Likely contains a signature and some additional data.
-Transactions are completely opaque to the Sovereign SDK
-
-### Header
-
-A batch header contains any information posted on-chain alongside the STF transactions.
-The header format MAY be completely opaque to the Sovereign SDK. The header
-MAY be zero-sized type - in which case it will be optimized away by the Rust compiler.
-Note that a batch header is *not* the same as a header of the *logical* chain maintained by the SDK
-or a header of the DA layer.
-
-### Proof
-
-A zero-knowledge proof of the validity of some state transition which extends the
-previous best chain. For more details, see the [zkVM spec](./zkvm.md)
+A rollup-defined type which is opaque to the rest of the SDK. Specifies the genesis
+state of a particular instance of the state transition function.
 
 ### Misbehavior Proof
 
 An STF-defined type pointing out some malfeasance by the sequencer. For example, this type could simply contain an index
 into the array of transactions, pointing out one which had an invalid signature.
 
-### End Batch Response
-
-| Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | sequencer_updates | repeated CONSENSUS_UPDATE  | A list of changes to the sequencer set|
- | prover_updates | repeated CONSENSUS_UPDATE  | A list of changes to the prover set|
-
-### Deliver Tx Response
-
-| Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | code | u32  | A response code. Following ABCI, 0 indicates success. |
- | data | bytes | Arbitrary data  |
- | gas_wanted | u64 | The amount of computational gas reserved for the transaction  |
- | gas_used | u64 | The amount of computational gas consumed by the transaction  |
- | diesel_wanted | u64 | The amount of computational diesel reserved for the transaction  |
- | diesel_used | u64 | The amount of computational gas consumed by the transaction  |
- | events | EVENT | A set of key-value pairs for indexing |
-
-* Note: Deliver Tx responses should be committed to in the proof (just like the receipts root is included in the Ethereum
-block header)
-
-* Note: we introduce two "gas" types to allow for multi-dimensional fee markets. We use the term "diesel" to indicate that
-the two kinds of gas are similar in many ways but are *not* interchangeable.
-
 ### Event
 
-| Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | key | bytes  | The key, used to index this event |
- | value | bytes  | The value, to be returned when the index is queried |
+| Name  | Type  | Description                                         |
+| ----- | ----- | --------------------------------------------------- |
+| key   | bytes | The key used to index this event                   |
+| value | bytes | The value to be returned when the index is queried |
 
-### Deliver Proof Response
+### BatchReceipt
 
-| Name          | Type   | Description                              |
- |---------------|--------|------------------------------------------|
- | gas_proved | u64  | The amount of gas consumed by transactions covered by this proof |
- | diesel_proved | u64  | The amount of gas consumed by transactions covered by this proof |
+| Name           | Type                        | Description                                                                  |
+| -------------- | --------------------------- | ---------------------------------------------------------------------------- |
+| batch_hash     | bytes                       | The canonical hash of this batch                                             |
+| tx_receipts    | repeated TransactionReceipt | A receipt for each transaction included in this batch                        |
+| custom_receipt | CUSTOM_BATCH_RECEIPT        | extra data to be stored as part of this batch's receipt, custom for each STF |
 
-TODO: consider adding pre and post state roots
+### TransactionReceipt
+
+| Name           | Type              | Description                                                                            |
+| -------------- | ----------------- | -------------------------------------------------------------------------------------- |
+| tx_hash        | bytes             | The canonical hash of this transaction                                                 |
+| body_to_save   | optional bytes    | The canonical representation of this transaction to be stored by full nodes if present |
+| events         | repeated Event    | The value, to be returned when the index is queried                                    |
+| custom_receipt | CUSTOM_TX_RECEIPT | extra data to be stored as part of this transaction's receipt, custom for each STF     |
+
+### Witness
+
+A custom type for each state transition function containing the hints that are passed to the ZKVM.
 
 ## Optional Methods
 

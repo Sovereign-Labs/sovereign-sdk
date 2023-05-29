@@ -130,7 +130,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
     // This will be removed shortly.
     demo.begin_slot(Default::default());
-    let (prev_state_root, _, _) = demo.end_slot();
+    let (prev_state_root, _) = demo.end_slot();
     let mut prev_state_root = prev_state_root.0;
 
     // Start the main rollup loop
@@ -164,7 +164,7 @@ async fn main() -> Result<(), anyhow::Error> {
             println!("er: {:?}", receipts);
             data_to_commit.add_batch(receipts);
         }
-        let (next_state_root, _witness, _) = demo.end_slot();
+        let (next_state_root, _witness) = demo.end_slot();
 
         // Store the resulting receipts in the ledger database
         ledger_db.commit_slot(data_to_commit)?;

@@ -54,7 +54,7 @@ async fn main() -> Result<(), anyhow::Error> {
     demo.init_chain(genesis_config);
 
     demo.begin_slot(Default::default());
-    let (prev_state_root, _, _) = demo.end_slot();
+    let (prev_state_root, _) = demo.end_slot();
     let mut prev_state_root = prev_state_root.0;
 
     for height in rollup_config.start_height..=rollup_config.start_height + 5 {
@@ -79,7 +79,7 @@ async fn main() -> Result<(), anyhow::Error> {
             demo.apply_blob(blob, None);
         }
 
-        let (next_state_root, witness, _) = demo.end_slot();
+        let (next_state_root, witness) = demo.end_slot();
         host.write_to_guest(&witness);
 
         println!("Starting proving");
