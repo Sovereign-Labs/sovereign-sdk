@@ -146,22 +146,6 @@ pub struct EventKey(Vec<u8>);
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct EventValue(Vec<u8>);
 
-// #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
-// pub struct ConsensusSetUpdate<Address> {
-//     pub address: Address,
-//     pub new_role: Option<ConsensusRole>,
-// }
-
-// impl ConsensusSetUpdate<OpaqueAddress> {
-//     pub fn slashing(sequencer: &[u8]) -> ConsensusSetUpdate<OpaqueAddress> {
-//         let faulty_sequencer = Rc::new(sequencer.to_vec());
-//         ConsensusSetUpdate {
-//             address: faulty_sequencer,
-//             new_role: None,
-//         }
-//     }
-// }
-
 /// A StateTransitionRunner (STR) is responsible for running the state transition function. For any particular function,
 /// you might have a few different STRs, each with different runtime configs. For example, you might have a STR which takes
 /// a path to a data directory as a runtime config, and another which takes a pre-built in-memory database.
