@@ -1,13 +1,9 @@
 use helpers::{generate_address, C};
 use sov_bank::call::CallMessage;
-use sov_bank::genesis::{DEPLOYER, SALT};
 use sov_bank::query::TotalSupplyResponse;
 use sov_bank::{create_token_address, Bank, BankConfig, Coins};
 use sov_modules_api::{Address, Context, Module, ModuleInfo};
-use sov_modules_api::Error::ModuleError;
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
-
-use crate::helpers::create_bank_config_with_token;
 
 mod helpers;
 
@@ -20,8 +16,6 @@ fn mint_token() {
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 
-    let sender_address = generate_address("just_sender");
-    let sender_context = C::new(sender_address.clone());
     let minter_address = generate_address("minter");
     let minter_context = C::new(minter_address.clone());
 
@@ -76,6 +70,14 @@ fn mint_token() {
 
     let total_supply = query_total_supply(&mut working_set);
     assert_eq!(Some(initial_balance + mint_amount), total_supply);
+
+    // check user balance after minting
+    let bal = query_user_balance(new_holder.clone(),&mut working_set);
+    assert_eq!(Some(10),bal);
+
+    // check original token creation balance
+    let bal = query_user_balance(minter_address.clone(),&mut working_set);
+    assert_eq!(Some(100),bal);
 
     // Mint with an un-authorized user
     let unauthorized_address = generate_address("unauthorized_address");
