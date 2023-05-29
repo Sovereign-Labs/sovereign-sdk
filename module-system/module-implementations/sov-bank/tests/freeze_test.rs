@@ -33,11 +33,11 @@ fn freeze_token() {
         minter_address: minter_address.clone(),
         authorized_minters: vec![minter_address.clone()],
     };
-    let minted = bank
+    let _minted = bank
         .call(mint_message, &minter_context, &mut working_set)
         .expect("Failed to mint token");
     // No events at the moment. If there are, needs to be checked
-    assert!(minted.events.is_empty());
+    assert!(working_set.events().is_empty());
 
     // -----
     // Freeze
@@ -45,10 +45,10 @@ fn freeze_token() {
         token_address: token_address.clone(),
     };
 
-    let freeze = bank
+    let _freeze = bank
         .call(freeze_message.clone(), &minter_context, &mut working_set)
         .expect("Failed to freeze token");
-    assert!(freeze.events.is_empty());
+    assert!(working_set.events().is_empty());
 
     // ----
     // Try to freeze an already frozen token
@@ -78,11 +78,11 @@ fn freeze_token() {
         minter_address: minter_address.clone(),
         authorized_minters: vec![minter_address.clone()],
     };
-    let minted = bank
+    let _minted = bank
         .call(mint_message, &minter_context, &mut working_set)
         .expect("Failed to mint token");
     // No events at the moment. If there are, needs to be checked
-    assert!(minted.events.is_empty());
+    assert!(working_set.events().is_empty());
 
     // Try to freeze with a non authorized minter
     let unauthorized_address = generate_address("unauthorized_address");
@@ -141,10 +141,10 @@ fn freeze_token() {
         minter_address: minter_address.clone(),
     };
 
-    let minted = bank
+    let _minted = bank
         .call(mint_message.clone(), &minter_context, &mut working_set)
         .expect("Failed to mint token");
-    assert!(minted.events.is_empty());
+    assert!(working_set.events().is_empty());
 
     let total_supply = query_total_supply(token_address_2.clone(), &mut working_set);
     assert_eq!(Some(initial_balance + mint_amount), total_supply);
