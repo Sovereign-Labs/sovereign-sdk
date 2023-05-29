@@ -55,11 +55,13 @@ fn freeze_token() {
         token_address: token_address.clone(),
     };
 
-    let freeze = bank
-        .call(freeze_message.clone(), &minter_context, &mut working_set);
+    let freeze = bank.call(freeze_message.clone(), &minter_context, &mut working_set);
     assert!(freeze.is_err());
 
-    assert_eq!("Token is already frozen".to_string(),freeze.err().unwrap().to_string());
+    assert_eq!(
+        "Token is already frozen".to_string(),
+        freeze.err().unwrap().to_string()
+    );
 
     // create a second token
     let token_name = "Token2".to_owned();
@@ -87,12 +89,17 @@ fn freeze_token() {
         token_address: token_address_2.clone(),
     };
 
-    let freeze = bank
-        .call(freeze_message.clone(), &unauthorized_context, &mut working_set);
+    let freeze = bank.call(
+        freeze_message.clone(),
+        &unauthorized_context,
+        &mut working_set,
+    );
     assert!(freeze.is_err());
-    let unauthorized_minter_msg = format!("Sender {} is not an authorized minter",
-                                          unauthorized_address);
-    assert_eq!(unauthorized_minter_msg,freeze.err().unwrap().to_string());
+    let unauthorized_minter_msg = format!(
+        "Sender {} is not an authorized minter",
+        unauthorized_address
+    );
+    assert_eq!(unauthorized_minter_msg, freeze.err().unwrap().to_string());
 
     // -----
     // Try to mint a frozen token
@@ -106,16 +113,20 @@ fn freeze_token() {
         minter_address: new_holder.clone(),
     };
 
-    let query_total_supply = |token_address:Address,working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+    let query_total_supply = |token_address: Address,
+                              working_set: &mut WorkingSet<Storage>|
+     -> Option<u64> {
         let total_supply: TotalSupplyResponse = bank.supply_of(token_address.clone(), working_set);
         total_supply.amount
     };
 
-    let minted = bank
-        .call(mint_message.clone(), &minter_context, &mut working_set);
+    let minted = bank.call(mint_message.clone(), &minter_context, &mut working_set);
     assert!(minted.is_err());
 
-    assert_eq!("Attempt to mint frozen token".to_string(),minted.err().unwrap().to_string() );
+    assert_eq!(
+        "Attempt to mint frozen token".to_string(),
+        minted.err().unwrap().to_string()
+    );
 
     // -----
     // Try to mint an unfrozen token, sanity check
@@ -133,15 +144,16 @@ fn freeze_token() {
         .expect("Failed to mint token");
     assert!(minted.events.is_empty());
 
-    let total_supply = query_total_supply(token_address_2.clone(),&mut working_set);
+    let total_supply = query_total_supply(token_address_2.clone(), &mut working_set);
     assert_eq!(Some(initial_balance + mint_amount), total_supply);
 
-    let query_user_balance =
-        |token_address:Address,user_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
-            bank.get_balance_of(user_address, token_address.clone(), working_set)
-        };
+    let query_user_balance = |token_address: Address,
+                              user_address: Address,
+                              working_set: &mut WorkingSet<Storage>|
+     -> Option<u64> {
+        bank.get_balance_of(user_address, token_address.clone(), working_set)
+    };
     let bal = query_user_balance(token_address_2.clone(), minter_address, &mut working_set);
 
     assert_eq!(Some(110), bal);
-
 }

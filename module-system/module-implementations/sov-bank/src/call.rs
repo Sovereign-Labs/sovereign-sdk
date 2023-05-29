@@ -43,7 +43,7 @@ pub enum CallMessage<C: sov_modules_api::Context> {
         /// The amount of tokens to mint.
         coins: Coins<C>,
         /// Address to mint tokens to
-        minter_address: C::Address
+        minter_address: C::Address,
     },
 
     /// Freeze a token so that the supply is frozen
@@ -116,7 +116,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        let mint_response = token.mint(context.sender(), &minter_address, coins.amount, working_set)?;
+        let mint_response =
+            token.mint(context.sender(), &minter_address, coins.amount, working_set)?;
         token.total_supply += coins.amount;
         self.tokens.set(&coins.token_address, token, working_set);
 

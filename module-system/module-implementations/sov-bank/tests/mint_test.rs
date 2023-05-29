@@ -72,18 +72,21 @@ fn mint_token() {
     assert_eq!(Some(initial_balance + mint_amount), total_supply);
 
     // check user balance after minting
-    let bal = query_user_balance(new_holder.clone(),&mut working_set);
-    assert_eq!(Some(10),bal);
+    let bal = query_user_balance(new_holder.clone(), &mut working_set);
+    assert_eq!(Some(10), bal);
 
     // check original token creation balance
-    let bal = query_user_balance(minter_address.clone(),&mut working_set);
-    assert_eq!(Some(100),bal);
+    let bal = query_user_balance(minter_address.clone(), &mut working_set);
+    assert_eq!(Some(100), bal);
 
     // Mint with an un-authorized user
     let unauthorized_address = generate_address("unauthorized_address");
     let unauthorized_context = C::new(unauthorized_address.clone());
-    let unauthorized_mint = bank
-        .call(mint_message.clone(), &unauthorized_context, &mut working_set);
+    let unauthorized_mint = bank.call(
+        mint_message.clone(),
+        &unauthorized_context,
+        &mut working_set,
+    );
 
     assert!(unauthorized_mint.is_err());
     let expected_error = format!(
@@ -92,5 +95,4 @@ fn mint_token() {
     );
     let actual_msg = unauthorized_mint.err().unwrap().to_string();
     assert!(actual_msg.contains(&expected_error));
-
 }

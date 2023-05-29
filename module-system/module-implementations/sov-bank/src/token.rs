@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use sov_modules_api::{CallResponse};
+use sov_modules_api::CallResponse;
 use sov_state::{Prefix, WorkingSet};
 
 use crate::call::prefix_from_address_with_parent;
@@ -66,10 +66,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         Ok(CallResponse::default())
     }
 
-    pub(crate) fn freeze(
-        &mut self,
-        sender: &C::Address,
-    ) -> Result<CallResponse> {
+    pub(crate) fn freeze(&mut self, sender: &C::Address) -> Result<CallResponse> {
         self.is_authorized_minter(sender)?;
         if self.frozen {
             bail!("Token is already frozen")
@@ -89,17 +86,18 @@ impl<C: sov_modules_api::Context> Token<C> {
         if self.frozen {
             bail!("Attempt to mint frozen token")
         }
-        let to_balance = self.balances.get(minter_address, working_set).unwrap_or_default() + amount;
+        let to_balance = self
+            .balances
+            .get(minter_address, working_set)
+            .unwrap_or_default()
+            + amount;
         self.balances.set(minter_address, to_balance, working_set);
         Ok(CallResponse::default())
     }
 
-    fn is_authorized_minter(
-        &self,
-        sender: &C::Address,
-    ) -> Result<()> {
+    fn is_authorized_minter(&self, sender: &C::Address) -> Result<()> {
         if !self.authorized_minters.contains(sender) {
-            bail!("Sender {} is not an authorized minter",sender)
+            bail!("Sender {} is not an authorized minter", sender)
         }
         Ok(())
     }
