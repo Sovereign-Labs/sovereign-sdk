@@ -277,13 +277,13 @@ in-circuit. For this reason, implementers are encouraged to prioritize readabili
 
 ### Type: `RuntimeConfig`
 
-A struct containing whatever runtime configuration is necessary to initialize this DaService. For example, this
-struct could contain the IP address and port of the remote RPC node that this DaService should connect to.
+A struct containing whatever runtime configuration is necessary to initialize this `DaService`. For example, this
+struct could contain the IP address and port of the remote RPC node that this `DaService` should connect to.
 
 ### Type: `FilteredBlock`
 
 The relevant subset of data from the DA layer block. This type must contain all data which will be processed by the rollup
-and enough auxiliary data to allow its block hash to be recomputed by the DaVerifier.
+and enough auxiliary data to allow its block hash to be recomputed by the `DaVerifier`.
 
 **Code**
 
