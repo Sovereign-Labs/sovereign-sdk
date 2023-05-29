@@ -2,7 +2,7 @@ use super::ValueSetter;
 use crate::{call, query, ValueSetterConfig};
 
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_api::{Address, Context, Genesis};
+use sov_modules_api::{Address, Context};
 use sov_modules_api::{Module, ModuleInfo};
 use sov_rollup_interface::stf::Event;
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};

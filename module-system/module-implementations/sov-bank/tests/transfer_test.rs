@@ -5,7 +5,7 @@ use sov_bank::call::CallMessage;
 use sov_bank::genesis::{DEPLOYER, SALT};
 use sov_bank::query::TotalSupplyResponse;
 use sov_bank::{create_token_address, Bank, BankConfig, Coins};
-use sov_modules_api::{Address, Context, Genesis, Module, ModuleInfo};
+use sov_modules_api::{Address, Context, Module, ModuleInfo};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 pub type Storage = ProverStorage<DefaultStorageSpec>;

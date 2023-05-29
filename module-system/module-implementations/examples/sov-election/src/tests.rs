@@ -1,7 +1,7 @@
 use crate::ElectionConfig;
 
 use super::{call::CallMessage, query::GetResultResponse, types::Candidate, Election};
-use sov_modules_api::{Address, Genesis};
+use sov_modules_api::Address;
 
 use sov_modules_api::{
     default_context::{DefaultContext, ZkDefaultContext},

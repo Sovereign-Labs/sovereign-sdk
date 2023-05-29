@@ -76,10 +76,13 @@ pub struct ProverIncentives<C: sov_modules_api::Context, Vm: Zkvm> {
     pub(crate) bank: sov_bank::Bank<C>,
 }
 
-impl<C: sov_modules_api::Context, Vm: Zkvm> sov_modules_api::Genesis for ProverIncentives<C, Vm> {
+impl<C: sov_modules_api::Context, Vm: Zkvm> sov_modules_api::Module for ProverIncentives<C, Vm> {
     type Context = C;
 
     type Config = ProverIncentivesConfig<C, Vm>;
+
+    type CallMessage = call::CallMessage;
+
     fn genesis(
         &self,
         config: &Self::Config,
@@ -88,10 +91,6 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> sov_modules_api::Genesis for ProverI
         // The initialization logic
         Ok(self.init_module(config, working_set)?)
     }
-}
-
-impl<C: sov_modules_api::Context, Vm: Zkvm> sov_modules_api::Module for ProverIncentives<C, Vm> {
-    type CallMessage = call::CallMessage;
 
     fn call(
         &self,

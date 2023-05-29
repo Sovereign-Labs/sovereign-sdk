@@ -32,9 +32,13 @@ pub struct ExampleModule<C: sov_modules_api::Context> {
     pub(crate) _bank: sov_bank::Bank<C>,
 }
 
-impl<C: sov_modules_api::Context> sov_modules_api::Genesis for ExampleModule<C> {
+impl<C: sov_modules_api::Context> sov_modules_api::Module for ExampleModule<C> {
     type Context = C;
+
     type Config = ExampleModuleConfig;
+
+    type CallMessage = call::CallMessage;
+
     fn genesis(
         &self,
         config: &Self::Config,
@@ -43,10 +47,6 @@ impl<C: sov_modules_api::Context> sov_modules_api::Genesis for ExampleModule<C> 
         // The initialization logic
         Ok(self.init_module(config, working_set)?)
     }
-}
-
-impl<C: sov_modules_api::Context> sov_modules_api::Module for ExampleModule<C> {
-    type CallMessage = call::CallMessage;
 
     fn call(
         &self,

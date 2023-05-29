@@ -48,10 +48,12 @@ pub struct Election<C: sov_modules_api::Context> {
     pub(crate) number_of_votes: sov_state::StateValue<u64>,
 }
 
-impl<C: sov_modules_api::Context> sov_modules_api::Genesis for Election<C> {
+impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
     type Context = C;
 
     type Config = ElectionConfig<C>;
+
+    type CallMessage = call::CallMessage<C>;
 
     fn genesis(
         &self,
@@ -60,10 +62,6 @@ impl<C: sov_modules_api::Context> sov_modules_api::Genesis for Election<C> {
     ) -> Result<(), Error> {
         Ok(self.init_module(config, working_set)?)
     }
-}
-
-impl<C: sov_modules_api::Context> sov_modules_api::Module for Election<C> {
-    type CallMessage = call::CallMessage<C>;
 
     fn call(
         &self,

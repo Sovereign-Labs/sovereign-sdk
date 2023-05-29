@@ -76,7 +76,7 @@ impl GenesisMacro {
                 let ty = &field.ty;
 
                 quote::quote! {
-                    #name: <#ty as sov_modules_api::Genesis>::Config,
+                    #name: <#ty as sov_modules_api::Module>::Config,
                 }
             })
             .collect();

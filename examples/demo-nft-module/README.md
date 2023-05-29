@@ -177,45 +177,33 @@ Before we start implementing the `Module` trait, there are several preparatory s
     }
     ```
 
-4.  Implement the `Genesis` trait using our Config:
-
-    ```rust
-    // in lib.rs
-    impl<C: Context> Genesis for NonFungibleToken<C> {
-        type Context = C;
-
-        type Config = NonFungibleTokenConfig<C>;
-
-        fn genesis(
-            &self,
-            config: &Self::Config,
-            working_set: &mut WorkingSet<C::Storage>,
-        ) -> Result<(), Error> {
-            todo!()
-        }
-    }
-    ```
-
 ## Stub implementation of the Module trait
 
 Plugging together all types and features, we get this `Module` trait implementation in `lib.rs`:
 
 ```rust
 impl<C: Context> Module for NonFungibleToken<C> {
+    type Context = C;
+
+    type Config = NonFungibleTokenConfig<C>;
+
     type CallMessage = call::CallMessage<C>;
+
+    fn genesis(
+        &self,
+        _config: &Self::Config,
+        _working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<(), Error> {
+        Ok(())
+    }
 
     fn call(
         &self,
-        msg: Self::CallMessage,
-        context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        _msg: Self::CallMessage,
+        _context: &Self::Context,
+        _working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse, Error> {
-        let call_result = match msg {
-            call::CallMessage::Mint { id } => self.mint(id, context, working_set),
-            call::CallMessage::Transfer { to, id } => self.transfer(id, to, context, working_set),
-            call::CallMessage::Burn { id } => self.burn(id, context, working_set),
-        };
-        Ok(call_result?)
+        Ok(CallResponse::default())
     }
 }
 ```
@@ -234,7 +222,7 @@ Since it modifies state, `genesis` also takes a working set as an argument.
 impl<C: Context> NonFungibleToken<C> {
     pub(crate) fn init_module(
         &self,
-        config: &<Self as sov_modules_api::Genesis>::Config,
+        config: &<Self as sov_modules_api::Module>::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
         self.admin.set(config.admin.clone(), working_set);
@@ -252,7 +240,7 @@ impl<C: Context> NonFungibleToken<C> {
 And then adding this piece to trait implementation:
 
 ```rust
-impl<C: Context> Genesis for NonFungibleToken<C> {
+impl<C: Context> Module for NonFungibleToken<C> {
     // ...
     fn genesis(
         &self,
@@ -387,7 +375,7 @@ use demo_nft_module::query::OwnerResponse;
 use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
 use serde::de::DeserializeOwned;
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Hasher, Genesis, Module, ModuleInfo, Spec};
+use sov_modules_api::{Address, Context, Hasher, Module, ModuleInfo, Spec};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 pub type C = DefaultContext;

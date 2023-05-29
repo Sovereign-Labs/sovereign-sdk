@@ -7,7 +7,7 @@ use crate::ProverIncentives;
 impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
     pub(crate) fn init_module(
         &self,
-        config: &<Self as sov_modules_api::Genesis>::Config,
+        config: &<Self as sov_modules_api::Module>::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
         anyhow::ensure!(
