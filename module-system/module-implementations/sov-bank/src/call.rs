@@ -20,8 +20,10 @@ pub enum CallMessage<C: sov_modules_api::Context> {
         token_name: String,
         /// The initial balance of the new token.
         initial_balance: Amount,
-        /// The address of the account that minted new tokens.
+        /// The address of the account that the new tokens are minted to.
         minter_address: C::Address,
+        /// Authorized minter list.
+        authorized_minters: Option<Vec<C::Address>>,
     },
 
     /// Transfers a specified amount of tokens to the specified address.
@@ -60,12 +62,14 @@ impl<C: sov_modules_api::Context> Bank<C> {
         salt: u64,
         initial_balance: Amount,
         minter_address: C::Address,
+        authorized_minters: Option<Vec<C::Address>>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let (token_address, token) = Token::<C>::create(
             &token_name,
             &[(minter_address, initial_balance)],
+            authorized_minters,
             context.sender().as_ref(),
             salt,
             self.tokens.prefix(),

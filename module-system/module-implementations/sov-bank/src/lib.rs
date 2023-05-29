@@ -65,11 +65,13 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
                 token_name,
                 initial_balance,
                 minter_address,
+                authorized_minters,
             } => Ok(self.create_token(
                 token_name,
                 salt,
                 initial_balance,
                 minter_address,
+                authorized_minters,
                 context,
                 working_set,
             )?),

@@ -31,6 +31,7 @@ fn freeze_token() {
         token_name,
         initial_balance,
         minter_address: minter_address.clone(),
+        authorized_minters: None,
     };
     let minted = bank
         .call(mint_message, &minter_context, &mut working_set)
@@ -75,6 +76,7 @@ fn freeze_token() {
         token_name,
         initial_balance,
         minter_address: minter_address.clone(),
+        authorized_minters: None,
     };
     let minted = bank
         .call(mint_message, &minter_context, &mut working_set)

@@ -121,6 +121,7 @@ impl<C: sov_modules_api::Context> Token<C> {
     pub(crate) fn create(
         token_name: &str,
         address_and_balances: &[(C::Address, u64)],
+        authorized_minters: Option<Vec<C::Address>>,
         sender: &[u8],
         salt: u64,
         parent_prefix: &Prefix,
@@ -148,7 +149,7 @@ impl<C: sov_modules_api::Context> Token<C> {
             total_supply,
             balances,
             frozen,
-            authorized_minters: vec![C::Address::try_from(sender)?],
+            authorized_minters: authorized_minters.unwrap_or(vec![C::Address::try_from(sender)?]),
         };
 
         Ok((token_address, token))

@@ -26,6 +26,7 @@ fn initial_and_deployed_token() {
         token_name,
         initial_balance,
         minter_address: minter_address.clone(),
+        authorized_minters: None,
     };
 
     let create_token_response = bank

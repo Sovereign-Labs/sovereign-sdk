@@ -242,6 +242,7 @@ fn transfer_deployed_token() {
         token_name,
         initial_balance,
         minter_address: sender_address.clone(),
+        authorized_minters: None,
     };
     let minted = bank
         .call(mint_message, &sender_context, &mut working_set)
