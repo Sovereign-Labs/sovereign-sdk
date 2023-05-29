@@ -92,6 +92,7 @@ impl<C: sov_modules_api::Context> Token<C> {
             .unwrap_or_default()
             + amount;
         self.balances.set(minter_address, to_balance, working_set);
+        self.total_supply += amount;
         Ok(CallResponse::default())
     }
 

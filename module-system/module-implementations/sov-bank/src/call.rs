@@ -122,7 +122,6 @@ impl<C: sov_modules_api::Context> Bank<C> {
         let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
         let mint_response =
             token.mint(context.sender(), &minter_address, coins.amount, working_set)?;
-        token.total_supply += coins.amount;
         self.tokens.set(&coins.token_address, token, working_set);
 
         Ok(mint_response)
