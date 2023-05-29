@@ -24,7 +24,7 @@ interface](../../rollup-interface/specs/interfaces/stf.md).
 
 That interface is quite high-level - the only notion
 that it surfaces is that of a `blob` of rollup data. In the Module System, we work at a much lower level - with
-transactions signed by particular private keys. To bridge the gap, there's a system called an `AppTemplate`, which
+transactions signed by particular private keys. To fill the gap, there's a system called an `AppTemplate`, which
 bridges between the two layers of abstraction.
 
 The reason the `AppTemplate` is called a "template" is that it's generic. It allows you, the developer, to pass in
@@ -210,15 +210,16 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
 ### Exposing RPC
 
 If any of your modules expose rpc methods via the `rpc_gen` macro, there are two things that you should do in your STF package to
-enable the full-node to expose them
+enable the full-node to expose them:
 
-1. Annotate the state transition runner with the specific modules you want to expose with `expose_rpc`
-2. Implement the `RpcRunner` trait. provide an implementation for the `get_storage` function
+1. Annotate the `StateTransitionRunner` with the specific modules you want to expose with `expose_rpc`.
+2. Implement the `RpcRunner` trait. Provide an implementation for the `get_storage` function.
 
-You can see an example of how to use the `expose_rpc` macro on the `native` `StateTransitionRunner` implementation. That macro
+In the example above, you can see an example of how to use the `expose_rpc` macro on the `native` `StateTransitionRunner`
+implementation. That macro
 takes a tuple of modules (with the appropriate generics) as arguments, and generates RPC servers for each one. In order to
 make those generated RPC servers work, though, we need to provide them with access to the database. This is where the RpcRunner
-trait comes in.
+trait comes in:
 
 ```rust
 #[cfg(feature = "native")]
@@ -234,7 +235,7 @@ impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
 
 Whew, that was a lot of information. To recap, implementing your own state transition function is as simple as plugging  
 a Runtime, a Transaction Verifier, and some Transaction Hooks into the pre-built app template. Once you've done that,
-you can integrate with any DA layer and Zkvm to create a Sovereign Rollup.
+you can integrate with any DA layer and ZKVM to create a Sovereign Rollup.
 
 Everything else in this tutorial is about making it easy to _run_ your Sovereign Rollup. To be as compatible as
 possible, state transitions usually want to implement the StateTransitionRunner and RpcRunner traits. For more

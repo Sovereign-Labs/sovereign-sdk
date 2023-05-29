@@ -4,7 +4,8 @@ The `sov-modules-api` crate provides essential traits for the Module System. Her
 
 1. The `Module` trait: Defines how to initialize and change the state of a module. This is the main trait that module developers need to implement. The author of a module must specify:
 
-   - Configuration upon rollup deployment: This includes the `genesis()` method and the `Config` type, which determine how the module is set up initially.
+   - Configuration upon rollup deployment: This includes the `genesis()` method and the `Config` type, which determine how the module is set up initially. Note that the intialization for logic for modules is identical to the `Genesis` trait (described below). We blanket implement `Genesis`
+     for all `Module`s, but keep it as a separate trait since some other structs need to implement it as well.
 
    - Interaction with user messages: The module must define the `call` method and the `CallMessage` type, which handle user messages. These messages typically result in changes to the module's state.
 
