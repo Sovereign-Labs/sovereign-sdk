@@ -20,6 +20,8 @@ sov-state = { path = "../../module-system/sov-state", default-features = false }
 
 [dev-dependencies]
 sov-state = { path = "../../module-system/sov-state", features = ["temp"] }
+sov-rollup-interface =  { path = "../../rollup-interface" }
+
 
 [features]
 default = ["native"]

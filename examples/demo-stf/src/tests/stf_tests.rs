@@ -4,7 +4,8 @@ pub mod test {
         genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
         runtime::Runtime,
         tests::{
-            create_demo_config, create_new_demo, data_generation::simulate_da, new_test_blob, C,
+            create_demo_config, create_new_demo, data_generation::simulate_da, has_tx_events,
+            new_test_blob, C,
         },
     };
     use sov_default_stf::{Batch, SequencerOutcome};
@@ -37,12 +38,15 @@ pub mod test {
                 &mut demo,
                 new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
                 None,
-            )
-            .inner;
+            );
+
             assert!(
-                matches!(apply_blob_outcome, SequencerOutcome::Rewarded,),
+                matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded,),
                 "Sequencer execution should have succeeded but failed "
             );
+
+            assert!(has_tx_events(&apply_blob_outcome),);
+
             StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
         }
 
@@ -90,12 +94,15 @@ pub mod test {
             &mut demo,
             new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
-        )
-        .inner;
+        );
+
         assert!(
-            matches!(apply_blob_outcome, SequencerOutcome::Rewarded,),
+            matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded,),
             "Sequencer execution should have succeeded but failed "
         );
+
+        assert!(has_tx_events(&apply_blob_outcome),);
+
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
 
         let runtime = &mut Runtime::<DefaultContext>::new();
@@ -187,15 +194,18 @@ pub mod test {
 
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
-        let apply_blob_result = StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
             new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
-        )
-        .inner;
+        );
+
         assert!(
-            matches!(apply_blob_result, SequencerOutcome::Ignored),
+            matches!(apply_blob_outcome.inner, SequencerOutcome::Ignored),
             "Batch should have been skipped due to insufficient funds"
         );
+
+        // Assert that there are no events
+        assert!(!has_tx_events(&apply_blob_outcome));
     }
 }

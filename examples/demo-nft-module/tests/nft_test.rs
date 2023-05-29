@@ -3,6 +3,7 @@ use demo_nft_module::query::OwnerResponse;
 use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Context, Hasher, Module, ModuleInfo, Spec};
+use sov_rollup_interface::stf::Event;
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 pub type C = DefaultContext;
@@ -20,7 +21,7 @@ fn genesis_and_mint() {
     let owner1 = generate_address("owner2");
     let owner2 = generate_address("owner2");
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
-        admin: admin.clone(),
+        admin,
         owners: vec![(0, owner1.clone())],
     };
     let mut working_set = WorkingSet::new(ProverStorage::temporary());
@@ -31,7 +32,7 @@ fn genesis_and_mint() {
     assert!(genesis_result.is_ok());
 
     let query1: OwnerResponse<C> = nft.get_owner(0, &mut working_set);
-    assert_eq!(query1.owner, Some(owner1.clone()));
+    assert_eq!(query1.owner, Some(owner1));
 
     let query2: OwnerResponse<C> = nft.get_owner(1, &mut working_set);
     assert!(query2.owner.is_none());
@@ -39,15 +40,18 @@ fn genesis_and_mint() {
     // Mint, anybody can mint
     let mint_message = CallMessage::Mint { id: 1 };
     let owner2_context = C::new(owner2.clone());
-    let minted = nft
-        .call(mint_message.clone(), &owner2_context, &mut working_set)
+    nft.call(mint_message.clone(), &owner2_context, &mut working_set)
         .expect("Minting failed");
-    assert!(minted.events.is_empty());
+
+    assert_eq!(
+        working_set.events()[0],
+        Event::new("NFT mint", "A token with id 1 was minted")
+    );
     let query3: OwnerResponse<C> = nft.get_owner(1, &mut working_set);
-    assert_eq!(query3.owner, Some(owner2.clone()));
+    assert_eq!(query3.owner, Some(owner2));
 
     // Try to mint again same token, should fail
-    let mint_attempt = nft.call(mint_message.clone(), &owner2_context, &mut working_set);
+    let mint_attempt = nft.call(mint_message, &owner2_context, &mut working_set);
 
     assert!(mint_attempt.is_err());
     let error_message = mint_attempt.err().unwrap().to_string();
@@ -90,13 +94,17 @@ fn transfer() {
 
     // Normal transfer
     let token1_owner = query_token_owner(1, &mut working_set);
-    assert_eq!(Some(owner1.clone()), token1_owner);
-    let transfer = nft
-        .call(transfer_message, &owner1_context, &mut working_set)
+    assert_eq!(Some(owner1), token1_owner);
+    nft.call(transfer_message, &owner1_context, &mut working_set)
         .expect("Transfer failed");
-    assert!(transfer.events.is_empty());
+
+    assert_eq!(
+        working_set.events()[0],
+        Event::new("NFT transfer", "A token with id 1 was transferred")
+    );
+
     let token1_owner = query_token_owner(1, &mut working_set);
-    assert_eq!(Some(owner2.clone()), token1_owner);
+    assert_eq!(Some(owner2), token1_owner);
 
     // Attempt to transfer non existing token
     let transfer_message = CallMessage::Transfer { id: 3, to: admin };
@@ -116,8 +124,8 @@ fn burn() {
     let owner1 = generate_address("owner2");
     let owner1_context = C::new(owner1.clone());
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
-        admin: admin.clone(),
-        owners: vec![(0, owner1.clone())],
+        admin,
+        owners: vec![(0, owner1)],
     };
 
     let mut working_set = WorkingSet::new(ProverStorage::temporary());
@@ -134,16 +142,19 @@ fn burn() {
     assert_eq!("Only token owner can burn token", error_message);
 
     // Normal burn
-    let burned = nft
-        .call(burn_message.clone(), &owner1_context, &mut working_set)
+    nft.call(burn_message.clone(), &owner1_context, &mut working_set)
         .expect("Burn failed");
-    assert!(burned.events.is_empty());
+    assert!(!working_set.events().is_empty());
 
+    assert_eq!(
+        working_set.events()[0],
+        Event::new("NFT burn", "A token with id 0 was burned")
+    );
     let query: OwnerResponse<C> = nft.get_owner(0, &mut working_set);
 
     assert!(query.owner.is_none());
 
-    let burn_attempt = nft.call(burn_message.clone(), &owner1_context, &mut working_set);
+    let burn_attempt = nft.call(burn_message, &owner1_context, &mut working_set);
     assert!(burn_attempt.is_err());
     let error_message = burn_attempt.err().unwrap().to_string();
     assert_eq!("Token with id 0 does not exist", error_message);

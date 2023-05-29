@@ -1,7 +1,7 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::{Context, ModuleInfo, Prefix};
 use sov_modules_macros::ModuleInfo;
-use sov_state::storage::{StorageKey, StorageValue};
+use sov_rollup_interface::stf::Event;
 use sov_state::{ProverStorage, StateMap, StateValue, Storage, WorkingSet, ZkStorage};
 
 pub mod module_a {
@@ -21,6 +21,7 @@ pub mod module_a {
 
     impl<C: Context> ModuleA<C> {
         pub fn update(&mut self, key: &str, value: &str, working_set: &mut WorkingSet<C::Storage>) {
+            working_set.add_event("module A", "update");
             self.state_1_a
                 .set(&key.to_owned(), value.to_owned(), working_set);
             self.state_2_a.set(value.to_owned(), working_set)
@@ -45,6 +46,7 @@ pub mod module_b {
 
     impl<C: Context> ModuleB<C> {
         pub fn update(&mut self, key: &str, value: &str, working_set: &mut WorkingSet<C::Storage>) {
+            working_set.add_event("module B", "update");
             self.state_1_b
                 .set(&key.to_owned(), value.to_owned(), working_set);
             self.mod_1_a.update("key_from_b", value, working_set);
@@ -74,6 +76,7 @@ mod module_c {
             value: &str,
             working_set: &mut WorkingSet<C::Storage>,
         ) {
+            working_set.add_event("module C", "execute");
             self.mod_1_a.update(key, value, working_set);
             self.mod_1_b.update(key, value, working_set);
             self.mod_1_a.update(key, value, working_set);
@@ -96,6 +99,17 @@ fn nested_module_call_test() {
         .validate_and_commit(log, &witness)
         .expect("State update is valid");
 
+    assert_eq!(
+        working_set.events(),
+        &vec![
+            Event::new("module C", "execute"),
+            Event::new("module A", "update"),
+            Event::new("module B", "update"),
+            Event::new("module A", "update"),
+            Event::new("module A", "update"),
+        ]
+    );
+
     // Test the `zk` execution.
     {
         let zk_storage = ZkStorage::new([0u8; 32]);
@@ -113,34 +127,34 @@ fn execute_module_logic<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
 fn test_state_update<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
     let module = <module_c::ModuleC<C> as ModuleInfo>::new();
 
-    let expected_value = StorageValue::new("some_value");
+    let expected_value = "some_value".to_owned();
 
     {
         let prefix = Prefix::new_storage("nested_modules_tests::module_a", "ModuleA", "state_1_a");
-        let key = StorageKey::new(&prefix.into(), &"some_key");
-        let value = working_set.get(key).unwrap();
+        let state_map = StateMap::<String, String>::new(prefix.into());
+        let value = state_map.get(&"some_key".to_owned(), working_set).unwrap();
 
         assert_eq!(expected_value, value);
     }
 
     {
         let prefix = Prefix::new_storage("nested_modules_tests::module_b", "ModuleB", "state_1_b");
-        let key = StorageKey::new(&prefix.into(), &"some_key");
-        let value = working_set.get(key).unwrap();
+        let state_map = StateMap::<String, String>::new(prefix.into());
+        let value = state_map.get(&"some_key".to_owned(), working_set).unwrap();
 
         assert_eq!(expected_value, value);
     }
 
     {
         let prefix = Prefix::new_storage("nested_modules_tests::module_a", "ModuleA", "state_1_a");
-        let key = StorageKey::new(&prefix.into(), &"key_from_b");
-        let value = working_set.get(key).unwrap();
+        let state_map = StateMap::<String, String>::new(prefix.into());
+        let value = state_map.get(&"some_key".to_owned(), working_set).unwrap();
 
         assert_eq!(expected_value, value);
     }
 
     {
         let value = module.mod_1_a.state_2_a.get(working_set).unwrap();
-        assert_eq!("some_value".to_owned(), value);
+        assert_eq!(expected_value, value);
     }
 }

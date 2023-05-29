@@ -124,8 +124,8 @@ pub enum ConsensusRole {
 /// A key-value pair representing a change to the rollup state
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct Event {
-    pub key: EventKey,
-    pub value: EventValue,
+    key: EventKey,
+    value: EventValue,
 }
 
 impl Event {
@@ -134,6 +134,14 @@ impl Event {
             key: EventKey(key.as_bytes().to_vec()),
             value: EventValue(value.as_bytes().to_vec()),
         }
+    }
+
+    pub fn key(&self) -> &EventKey {
+        &self.key
+    }
+
+    pub fn value(&self) -> &EventValue {
+        &self.value
     }
 }
 

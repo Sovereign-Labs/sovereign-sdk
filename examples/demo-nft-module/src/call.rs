@@ -37,6 +37,8 @@ impl<C: Context> NonFungibleToken<C> {
         }
 
         self.owners.set(&id, context.sender().clone(), working_set);
+
+        working_set.add_event("NFT mint", &format!("A token with id {id} was minted"));
         Ok(CallResponse::default())
     }
 
@@ -57,6 +59,10 @@ impl<C: Context> NonFungibleToken<C> {
             bail!("Only token owner can transfer token");
         }
         self.owners.set(&id, to, working_set);
+        working_set.add_event(
+            "NFT transfer",
+            &format!("A token with id {id} was transferred"),
+        );
         Ok(CallResponse::default())
     }
 
@@ -76,6 +82,8 @@ impl<C: Context> NonFungibleToken<C> {
             bail!("Only token owner can burn token");
         }
         self.owners.remove(&id, working_set);
+
+        working_set.add_event("NFT burn", &format!("A token with id {id} was burned"));
         Ok(CallResponse::default())
     }
 }
