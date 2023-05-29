@@ -218,6 +218,19 @@ Since it modifies state, `genesis` also takes a working set as an argument.
 `Genesis` is called only once, during the rollup deployment.
 
 ```rust
+
+// in lib.rs
+impl<C: Context> Module for NonFungibleToken<C> {
+    // ...
+    fn genesis(
+        &self,
+        config: &Self::Config,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<(), Error> {
+        Ok(self.init_module(config, working_set)?)
+    }
+}
+
 // in genesis.rs
 impl<C: Context> NonFungibleToken<C> {
     pub(crate) fn init_module(
@@ -235,21 +248,7 @@ impl<C: Context> NonFungibleToken<C> {
         Ok(())
     }
 }
-```
 
-And then adding this piece to trait implementation:
-
-```rust
-impl<C: Context> Module for NonFungibleToken<C> {
-    // ...
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), Error> {
-        Ok(self.init_module(config, working_set)?)
-    }
-}
 ```
 
 ### Call message
