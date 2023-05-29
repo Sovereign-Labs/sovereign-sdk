@@ -1,6 +1,6 @@
 # How to Create a New Module Using the Module System
 
-## Understanding the Module System
+### Understanding the Module System
 
 The Sovereign Software Development Kit (SDK) includes a [Module System](../../module-system/README.md),
 which serves as a catalog of concrete and opinionated implementations for the rollup interface.
@@ -11,19 +11,18 @@ These modules are the fundamental building blocks of a rollup and include:
 - **Application-level logic**: This is akin to smart contracts on Ethereum or pallets on Polkadot.
   These modules often use state, modules-API, and macros modules to simplify their development and operation.
 
-## Creating a Non-Fungible Token (NFT) Module
+### Creating a Non-Fungible Token (NFT) Module
 
 In this tutorial, we will focus on developing an application-level module. Users of this module will be able to mint
 unique tokens, transfer them to each other, or burn them. Users can also check the ownership of a particular token. For
 simplicity, each token represents only an ID and won't hold any metadata.
 
-# Getting Started
+## Getting Started
 
-## Structure and dependencies
+### Structure and dependencies
 
-The Sovereign SDK provides [module-template](../../module-system/module-implementations/module-template/README.md).
-It provides a boilerplate which can be customised.
-The purpose of each rust module is explained later.
+The Sovereign SDK provides a [module-template](../../module-system/module-implementations/module-template/README.md),
+which is boilerplate that can be customised to easily build modules.
 
 ```
 
@@ -46,12 +45,12 @@ sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign.git", bra
 sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign.git", branch = "main" }
 ```
 
-## Establishing the Root Module Structure
+### Establishing the Root Module Structure
 
-A module is a distinct crate that implements the `sov_modules_api::Module` trait
-and defines its own change logic based on input messages.
+A module is a distinct crate that implements the `sov_modules_api::Module` trait. Each module
+has private state, which it updates in response to input messages.
 
-## Module definition
+### Module definition
 
 NFT module is defined as the following:
 
@@ -81,26 +80,22 @@ This module includes:
 1. **Address**: Every module must have an address, like a smart contract address in Ethereum. This ensures that:
    - The module address is unique.
    - The private key that generates this address is unknown.
-2. **State** attributes: In this case, the state attributes are the admin's address and a map of token IDs to owner
+2. **State attributes**: In this case, the state attributes are the admin's address and a map of token IDs to owner
    addresses.
    For simplicity, the token ID is an u64.
 3. **Optional module reference**: This is used if the module needs to refer to another module.
 
-## State and Context
+### State and Context
 
-### State
+#### State
 
-`State` values are stored in a Merkle Tree and can be read and written from there.
-The module struct itself doesn't hold values but indicates what values it operates in a working set.
-The `WorkingSet` populates the data.
-The provided state implementation from the `sov-state` crate uses
-the [Jellyfish Merkle Tree](https://github.com/penumbra-zone/jmt) (JMT).
+`#[state]` values declared in a module are not physically stored in the module. Instead, the module definition
+simply declares the _types_ of the values that it will access. The values themselves live in a special struct
+called a `WorkingSet`, which abstracts away the implementation details of storage. In the default implementation, the actual state values live in a [Jellyfish Merkle Tree](https://github.com/penumbra-zone/jmt) (JMT).
+This separation between functionality (defined by the `Module`) and state (provided by the `WorkingSet`) explains
+why so many module methods take a `WorkingSet` as an argument.
 
-The state operates in full node and zero-knowledge modes.
-In full node mode, the entire Merkle tree is maintained and modified, while in zero-knowledge mode,
-the state only provides access to Merkle proofs for leaves that were modified in a batch.
-
-### Context
+#### Context
 
 The `Context` trait allows the runtime to pass verified data to modules during execution.
 Currently, the only required method in Context is sender(), which returns the address of the individual who initiated
@@ -111,21 +106,13 @@ Storage, digital Signatures, and Addresses. The Spec trait allows rollups to eas
 VMs. By being generic over a Spec, a rollup can ensure that any potentially SNARK-unfriendly cryptography can be easily
 swapped out.
 
-# Implementing `sov_modules_api::Module` trait
+## Implementing `sov_modules_api::Module` trait
+
+### Preparation
 
 Before we start implementing the `Module` trait, there are several preparatory steps to take:
 
-1. Add new dependencies:
-   [serde](https://serde.rs/),
-   [borsh](https://github.com/near/borsh-rs),
-   [sov-state](../../module-system/sov-state/README.md)
-2. Define a 'native' feature flag to separate logic that isn't needed in zero-knowledge mode.
-3. Define `Call` messages.
-4. Implement the `Genesis` trait, which allows one-time initialization of the module
-
-## Preparation
-
-1.  Define `native` feature in `Cargo.toml`:
+1.  Define `native` feature in `Cargo.toml` and add additional dependencies:
 
     ```toml
     [dependencies]
@@ -147,11 +134,12 @@ Before we start implementing the `Module` trait, there are several preparatory s
     This step is necessary to optimize the module for execution in ZK mode, where none of the RPC-related logic is
     needed.
     Zero Knowledge mode uses a different serialization format, so serde is not needed.
-    The `sov-state` module maintains same logic, so its `native` flag only enabled in that case.
+    The `sov-state` module maintains the same logic, so its `native` flag is only enabled in that case.
 
-2.  Define `Call` messages, which are used to change the state of the module.
+2.  Define `Call` messages, which are used to change the state of the module:
 
     ```rust
+    // in call.rs
     use sov_modules_api::Context;
 
     #[cfg_attr(feature = "native", derive(serde::Serialize), derive(serde::Deserialize))]
@@ -174,9 +162,15 @@ Before we start implementing the `Module` trait, there are several preparatory s
 
     ```
 
-3.  Define Config. In this case, config will contain admin and initial tokens:
+    As you can see, we derive the `borsh` serialization format for these messages. Unlike most serialization libraries,
+    `borsh` guarantees that all messages have a single "canonical" serialization, which makes it easy to reliably
+    hash and compare serialized messages.
+
+3.  Create a `Config` struct for the genesis configuration. In this case, the admin address and initial token distribution
+    are configurable:
 
     ```rust
+    // in lib.rs
     pub struct NonFungibleTokenConfig<C: Context> {
         pub admin: C::Address,
         pub owners: Vec<(u64, C::Address)>,
@@ -186,6 +180,7 @@ Before we start implementing the `Module` trait, there are several preparatory s
 4.  Implement the `Genesis` trait using our Config:
 
     ```rust
+    // in lib.rs
     impl<C: Context> Genesis for NonFungibleToken<C> {
         type Context = C;
 
@@ -201,9 +196,9 @@ Before we start implementing the `Module` trait, there are several preparatory s
     }
     ```
 
-# Stub implementation of the Module trait
+## Stub implementation of the Module trait
 
-Plug together all types and features
+Plugging together all types and features, we get this `Module` trait implementation in `lib.rs`:
 
 ```rust
 impl<C: Context> Module for NonFungibleToken<C> {
@@ -225,16 +220,17 @@ impl<C: Context> Module for NonFungibleToken<C> {
 }
 ```
 
-# Implementing state change logic
+## Implementing state change logic
 
-## Initialization
+### Initialization
 
-Initialization is performed by the genesis method,
+Initialization is performed by the `genesis` method,
 which takes a config argument specifying the initial state to configure.
-Since it modifies state, genesis also takes a working set as an argument.
-Genesis is called only once, during the rollup deployment.
+Since it modifies state, `genesis` also takes a working set as an argument.
+`Genesis` is called only once, during the rollup deployment.
 
 ```rust
+// in genesis.rs
 impl<C: Context> NonFungibleToken<C> {
     pub(crate) fn init_module(
         &self,
@@ -268,9 +264,9 @@ impl<C: Context> Genesis for NonFungibleToken<C> {
 }
 ```
 
-## Call message
+### Call message
 
-First, need to implement actual logic of handling different cases, let's add `mint`, `transfer` and `burn` methods:
+First, we need to implement actual logic of handling different cases. Let's add `mint`, `transfer` and `burn` methods:
 
 ```rust
 
@@ -330,7 +326,7 @@ impl<C: Context> NonFungibleToken<C> {
 }
 ```
 
-And then map it in the trait implementation:
+And then make them accessible to users via the `call` function:
 
 ```rust
 impl<C: Context> Module for NonFungibleToken<C> {
@@ -352,10 +348,10 @@ impl<C: Context> Module for NonFungibleToken<C> {
 }
 ```
 
-## Enabling Queries
+### Enabling Queries
 
-We also want other modules to be able to query the owner of a token, so we add a public method for that. This method is only available to modules,
-but is not currently exposed via RPC.
+We also want other modules to be able to query the owner of a token, so we add a public method for that.
+This method is only available to other modules: it is not currently exposed via RPC.
 
 ```rust
 impl<C: Context> NonFungibleToken<C> {
@@ -371,19 +367,19 @@ impl<C: Context> NonFungibleToken<C> {
 }
 ```
 
-# Testing
+## Testing
 
-To make sure that module is implemented correctly, integration tests are recommended, so all public APIs work as
-expected.
+Integration tests are recommended to ensure that the module is implemented correctly. This helps confirm
+that all public APIs function as intended.
 
-For testing temporary storage is needed, so `temp` feature for `sov-state` module is required:
+Temporary storage is needed for testing, so we enable the `temp` feature of `sov-state` as a `dev-dependency`
 
 ```toml
 [dev-dependencies]
 sov-state = { git = "https://github.com/Sovereign-Labs/sovereign.git", branch = "main", features = ["temp"] }
 ```
 
-Here is boilerplate for NFT module integration tests
+Here is some boilerplate for NFT module integration tests:
 
 ```rust
 use demo_nft_module::call::CallMessage;
@@ -446,9 +442,9 @@ fn transfer() {
 }
 ```
 
-# Plugging in the rollup
+## Plugging in the rollup
 
-Now this module can be added to rollup's Runtime:
+Now this module can be added to rollup's `Runtime`:
 
 ```rust
 #[derive(Genesis, DispatchCall, MessageCodec)]
@@ -465,7 +461,7 @@ pub struct Runtime<C: Context> {
 }
 ```
 
-And then this runtime can be used in the State Transition Function runner to execute transactions.
+And then this `Runtime` can be used in the State Transition Function runner to execute transactions.
 Here's an example of how to do it with `AppTemplate` from `sov-default-stf`:
 
 ```rust
@@ -485,5 +481,5 @@ Here's an example of how to do it with `AppTemplate` from `sov-default-stf`:
 }
 ```
 
-`AppTemplate` uses runtime to dispatch call during execution of `apply_batch` method.
-More details on how to setup rollup is available in [demo-rollup documentation](../demo-rollup/README.md)
+The `AppTemplate` uses `runtime` to dispatch calls during execution of the `apply_batch` method.
+Detailed instructions on how to set up a rollup can be found in the [`demo-rollup` documentation](../demo-rollup/README.md).

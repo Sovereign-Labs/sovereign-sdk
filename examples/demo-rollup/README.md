@@ -4,7 +4,7 @@ This is a demo full node running a simple Sovereign SDK rollup on [Celestia](htt
 
 ## What is it?
 
-This demo shows how to integrate a state-transition function with a DA layer and a Zkvm to create a full
+This demo shows how to integrate a State Transition Function with a DA layer and a ZKVM to create a full
 zk-rollup. The code in this repository corresponds to running a full-node of the rollup, which executes
 every transaction. If you want to see the logic for _proof generation_, check out the [demo-prover](../demo-prover/)
 package instead.
@@ -31,14 +31,14 @@ communicate with the DA layer's RPC endpoints.
 
 If you're using Celestia as your DA layer, you can follow the instructions at the end
 of this document to set up a local full node, or connect to
-a remote node. Whichever option you pick, simply place the connection
-information in the `rollup_config.toml` file and it will be
+a remote node. Whichever option you pick, simply place the URL and authentication token
+in the `rollup_config.toml` file and it will be
 automatically picked up by the node implementation.
 
 ### Step 2: Initialize the State Transition Function
 
-The next step is to initialize your state transition function. If it implements the StateTransitionRunner interface, you can use that
-for easy initialization.
+The next step is to initialize your state transition function. If it implements the [StateTransitionRunner](../../rollup-interface/src/state_machine/stf.rs)
+interface, you can use that for easy initialization.
 
 ```rust
 let mut stf_runner = NativeAppRunner::<Risc0Host>::new(rollup_config);
@@ -72,16 +72,12 @@ related to the chain's history - batches, transactions, receipts, etc.
 This is a prototype. It contains known vulnerabilities and should not be used in production under any
 circumstances.
 
-## Celestia Integration
-
-The current prototype runs against Celestia-node version `v0.7.1`. This is the version used on the `arabica` testnet
-as of Mar 18, 2023.
-
 ## Getting Started
 
 ### Set up Celestia
 
-Sync a Celestia light node running on the Arabica testnet
+The current prototype runs against Celestia-node version `v0.7.1`. This is the version used on the `arabica` testnet
+as of Mar 18, 2023. To get started, you'll need to sync a Celestia light node running on the Arabica testnet
 
 1. Clone the repository: `git clone https://github.com/celestiaorg/celestia-node.git`.
 1. `cd celestia-node`

@@ -1,4 +1,4 @@
-# The Bank module.
+# `sov-bank` module
 
 The `sov-bank` module is responsible for managing tokens on the rollup.
 

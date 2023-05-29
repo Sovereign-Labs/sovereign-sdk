@@ -1,4 +1,4 @@
-# This is a simple example of an `SOV-MODULE`.
+# An example of a `SOV-MODULE`
 
 It demonstrates the following concepts:
 
@@ -13,4 +13,4 @@ It demonstrates the following concepts:
 
 The `admin` (specified in the `ValueSetter` genesis) can update a single `u32` value by creating `CallMessage::SetValue(new_value)` message. Any other module can query the module state by invoking the `get_value` function.
 
-Please, check comments in the `genesis.rs, call.rs & query.rs` for implementation details.
+For implementation details, please check comments in the `genesis.rs, call.rs & query.rs`.

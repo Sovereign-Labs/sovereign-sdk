@@ -1,6 +1,6 @@
-# sov-modules-macros
+# `sov-modules-macros`
 
-This crate provides Rust macros specifically designed to be used with the Sovereign `module-system`. When developing a module, the developer's primary focus is on implementing the business logic, without having to worry about low-level details such as message serialization/deserialization or how messages are dispatched to the appropriate module.
+This crate provides Rust macros specifically designed to be used with the Module System. When developing a module, the developer's primary focus should be on implementing the business logic, without having to worry about low-level details such as message serialization/deserialization or how messages are dispatched to the appropriate module.
 
 To alleviate the burden of writing repetitive and mechanical code, this crate offers a collection of macros that generate the necessary boilerplate code.
 
@@ -13,7 +13,7 @@ The following derive macros are supported:
 
 The definitions of the traits mentioned above can be found in the [sov-modules-api](../sov-modules-api/README.md) crate.
 
-Example of usage:
+Example usage:
 
 ```rust
 

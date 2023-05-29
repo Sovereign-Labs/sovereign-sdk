@@ -86,7 +86,7 @@ pub enum SigVerificationError {
     BadSignature(String),
 }
 
-/// Signature used in the module system.
+/// Signature used in the Module System.
 pub trait Signature {
     type PublicKey;
 
@@ -101,7 +101,7 @@ pub trait Signature {
 #[derive(Debug, PartialEq)]
 pub enum NonInstantiable {}
 
-/// PublicKey used in the module system.
+/// PublicKey used in the Module System.
 pub trait PublicKey {
     fn to_address<A: AddressTrait>(&self) -> A;
 }

@@ -1,7 +1,7 @@
 # Schema DB
 
 This package is a low-level wrapper transforming [RocksDB](https://rocksdb.org/) from a byte-oriented key value store into a
-type-oriented store. It's adapted from a simliar package in Aptos-Core.
+type-oriented store. It's adapted from a similar package in Aptos-Core.
 
 The most important concept exposed by Schema DB is a `Schema`, which maps a column-family name
 codec's for the key and value.
@@ -20,7 +20,7 @@ pub trait Schema  {
 }
 ```
 
-Using this schema, we can write a generic functions for storing and fetching typed data and ensure that
+Using this schema, we can write generic functions for storing and fetching typed data, and ensure that
 it's always encoded/decoded in the way we expect.
 
 ```rust
@@ -33,7 +33,7 @@ impl SchemaDB {
 }
 ```
 
-To actually store and retrieve data, all we need to do is to implement a Schema
+To actually store and retrieve data, all we need to do is to implement a Schema:
 
 ```rust
 pub struct AccountBalanceSchema;
