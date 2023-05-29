@@ -69,7 +69,6 @@ impl<C: sov_modules_api::Context> Token<C> {
     pub(crate) fn freeze(
         &mut self,
         sender: &C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         self.is_authorized_minter(sender)?;
         if self.frozen {

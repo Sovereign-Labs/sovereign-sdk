@@ -130,7 +130,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let mut token = self.tokens.get_or_err(&token_address, working_set)?;
-        let freeze_response = token.freeze(context.sender(), working_set)?;
+        let freeze_response = token.freeze(context.sender())?;
         self.tokens.set(&token_address, token, working_set);
 
         Ok(freeze_response)

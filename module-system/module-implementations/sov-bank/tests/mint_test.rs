@@ -1,0 +1,94 @@
+use helpers::{generate_address, C};
+use sov_bank::call::CallMessage;
+use sov_bank::genesis::{DEPLOYER, SALT};
+use sov_bank::query::TotalSupplyResponse;
+use sov_bank::{create_token_address, Bank, BankConfig, Coins};
+use sov_modules_api::{Address, Context, Module, ModuleInfo};
+use sov_modules_api::Error::ModuleError;
+use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+
+use crate::helpers::create_bank_config_with_token;
+
+mod helpers;
+
+pub type Storage = ProverStorage<DefaultStorageSpec>;
+
+#[test]
+fn mint_token() {
+    let bank = Bank::<C>::new();
+    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    let empty_bank_config = BankConfig::<C> { tokens: vec![] };
+    bank.genesis(&empty_bank_config, &mut working_set).unwrap();
+
+    let sender_address = generate_address("just_sender");
+    let sender_context = C::new(sender_address.clone());
+    let minter_address = generate_address("minter");
+    let minter_context = C::new(minter_address.clone());
+
+    let salt = 0;
+    let token_name = "Token1".to_owned();
+    let initial_balance = 100;
+    let token_address = create_token_address::<C>(&token_name, minter_address.as_ref(), salt);
+
+    // ---
+    // Deploying token
+    let mint_message = CallMessage::CreateToken {
+        salt,
+        token_name,
+        initial_balance,
+        minter_address: minter_address.clone(),
+    };
+    let minted = bank
+        .call(mint_message, &minter_context, &mut working_set)
+        .expect("Failed to mint token");
+    // No events at the moment. If there are, needs to be checked
+    assert!(minted.events.is_empty());
+
+    let query_total_supply = |working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+        let total_supply: TotalSupplyResponse = bank.supply_of(token_address.clone(), working_set);
+        total_supply.amount
+    };
+
+    let query_user_balance =
+        |user_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+            bank.get_balance_of(user_address, token_address.clone(), working_set)
+        };
+
+    let previous_total_supply = query_total_supply(&mut working_set);
+    assert_eq!(Some(initial_balance), previous_total_supply);
+
+    // -----
+    // Mint Additional
+    let mint_amount = 10;
+    let new_holder = generate_address("new_holder");
+    let mint_message = CallMessage::Mint {
+        coins: Coins {
+            amount: mint_amount,
+            token_address: token_address.clone(),
+        },
+        minter_address: new_holder.clone(),
+    };
+
+    let minted = bank
+        .call(mint_message.clone(), &minter_context, &mut working_set)
+        .expect("Failed to mint token");
+    assert!(minted.events.is_empty());
+
+    let total_supply = query_total_supply(&mut working_set);
+    assert_eq!(Some(initial_balance + mint_amount), total_supply);
+
+    // Mint with an un-authorized user
+    let unauthorized_address = generate_address("unauthorized_address");
+    let unauthorized_context = C::new(unauthorized_address.clone());
+    let unauthorized_mint = bank
+        .call(mint_message.clone(), &unauthorized_context, &mut working_set);
+
+    assert!(unauthorized_mint.is_err());
+    let expected_error = format!(
+        "Sender {} is not an authorized minter",
+        unauthorized_address
+    );
+    let actual_msg = unauthorized_mint.err().unwrap().to_string();
+    assert!(actual_msg.contains(&expected_error));
+
+}
