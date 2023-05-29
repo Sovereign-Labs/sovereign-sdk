@@ -1,9 +1,6 @@
-use crate::{da::BlobTransactionTrait, maybestd::rc::Rc, zk::traits::Zkvm};
+use crate::{da::BlobTransactionTrait, zk::traits::Zkvm};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
-
-/// An address on the DA layer. Opaque to the StateTransitionFunction
-pub type OpaqueAddress = Rc<Vec<u8>>;
 
 /// The configuration of a full node of the rollup which creates zk proofs.
 pub struct ProverConfig;
@@ -104,21 +101,7 @@ pub trait StateTransitionFunction<Vm: Zkvm> {
     /// Called once at the *end* of each DA layer block (i.e. after all rollup blob have been processed)
     /// Commits state changes to the database
     ///
-    fn end_slot(
-        &mut self,
-    ) -> (
-        Self::StateRoot,
-        Self::Witness,
-        Vec<ConsensusSetUpdate<OpaqueAddress>>,
-    );
-}
-
-// TODO: derive if fine, new feature and make default "borsh"
-#[derive(Debug, Clone, Copy, BorshSerialize, BorshDeserialize)]
-pub enum ConsensusRole {
-    Prover,
-    Sequencer,
-    ProverAndSequencer,
+    fn end_slot(&mut self) -> (Self::StateRoot, Self::Witness);
 }
 
 /// A key-value pair representing a change to the rollup state
@@ -163,21 +146,21 @@ pub struct EventKey(Vec<u8>);
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct EventValue(Vec<u8>);
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
-pub struct ConsensusSetUpdate<Address> {
-    pub address: Address,
-    pub new_role: Option<ConsensusRole>,
-}
+// #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+// pub struct ConsensusSetUpdate<Address> {
+//     pub address: Address,
+//     pub new_role: Option<ConsensusRole>,
+// }
 
-impl ConsensusSetUpdate<OpaqueAddress> {
-    pub fn slashing(sequencer: &[u8]) -> ConsensusSetUpdate<OpaqueAddress> {
-        let faulty_sequencer = Rc::new(sequencer.to_vec());
-        ConsensusSetUpdate {
-            address: faulty_sequencer,
-            new_role: None,
-        }
-    }
-}
+// impl ConsensusSetUpdate<OpaqueAddress> {
+//     pub fn slashing(sequencer: &[u8]) -> ConsensusSetUpdate<OpaqueAddress> {
+//         let faulty_sequencer = Rc::new(sequencer.to_vec());
+//         ConsensusSetUpdate {
+//             address: faulty_sequencer,
+//             new_role: None,
+//         }
+//     }
+// }
 
 /// A StateTransitionRunner (STR) is responsible for running the state transition function. For any particular function,
 /// you might have a few different STRs, each with different runtime configs. For example, you might have a STR which takes

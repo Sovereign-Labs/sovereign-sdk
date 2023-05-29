@@ -71,7 +71,7 @@ fn state_transition(guest: &Risc0Guest, batches: Vec<BlobWithSender>) {
         demo.apply_blob(batch, None);
         env::write(&"Blob applied\n");
     }
-    let (state_root, _, _) = demo.end_slot();
+    let (state_root, _) = demo.end_slot();
     env::write(&"Slot has ended\n");
     env::commit(&state_root);
     env::write(&"new state root committed\n");
