@@ -164,6 +164,23 @@ pub trait Context: Spec + Clone + Debug + PartialEq {
     fn new(sender: Self::Address) -> Self;
 }
 
+impl<T> Genesis for T
+where
+    T: Module,
+{
+    type Context = <Self as Module>::Context;
+
+    type Config = <Self as Module>::Config;
+
+    fn genesis(
+        &self,
+        config: &Self::Config,
+        working_set: &mut WorkingSet<<<Self as Genesis>::Context as Spec>::Storage>,
+    ) -> Result<(), Error> {
+        <Self as Module>::genesis(self, config, working_set)
+    }
+}
+
 /// Every module has to implement this trait.
 /// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
 /// This allows developers to override only some of the methods in their implementation and safely ignore the others.
