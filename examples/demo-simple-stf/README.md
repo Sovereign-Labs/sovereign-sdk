@@ -135,7 +135,7 @@ As an exercise, you can introduce the concept of transactions. In this scenario,
 the blob would contain multiple transactions (containing data) that we can loop over to check hash equality.
 The first transaction that finds the correct hash would break the loop and return early.
 
-## Testing.
+## Testing
 
 The `sov_rollup_interface::mocks` crate provides two utilities that are useful for testing:
 
