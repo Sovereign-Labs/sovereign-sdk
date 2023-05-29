@@ -23,7 +23,7 @@ pub enum CallMessage<C: sov_modules_api::Context> {
         /// The address of the account that the new tokens are minted to.
         minter_address: C::Address,
         /// Authorized minter list.
-        authorized_minters: Option<Vec<C::Address>>,
+        authorized_minters: Vec<C::Address>,
     },
 
     /// Transfers a specified amount of tokens to the specified address.
@@ -62,7 +62,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         salt: u64,
         initial_balance: Amount,
         minter_address: C::Address,
-        authorized_minters: Option<Vec<C::Address>>,
+        authorized_minters: Vec<C::Address>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {

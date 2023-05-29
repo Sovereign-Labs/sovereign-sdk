@@ -36,7 +36,7 @@ fn burn_deployed_tokens() {
         token_name,
         initial_balance,
         minter_address: minter_address.clone(),
-        authorized_minters: None,
+        authorized_minters: vec![minter_address.clone()],
     };
     let minted = bank
         .call(mint_message, &minter_context, &mut working_set)
