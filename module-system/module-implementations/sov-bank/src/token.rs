@@ -1,4 +1,5 @@
 use anyhow::{bail, Result};
+use borsh::BorshSerialize;
 use sov_state::{Prefix, WorkingSet};
 use std::collections::HashSet;
 
@@ -149,12 +150,14 @@ impl<C: sov_modules_api::Context> Token<C> {
             None => bail!("Total supply overflow"),
         };
 
-        let mut indices = HashSet::new();
-        let mut auth_minter_list = Vec::new();
+        let mut seen = HashSet::with_capacity(authorized_minters.len());
+        let mut auth_minter_list = Vec::with_capacity(authorized_minters.len());
 
-        for (i, item) in authorized_minters.iter().enumerate() {
-            if indices.insert(item.as_ref()) {
-                auth_minter_list.push(authorized_minters[i].clone());
+        for item in authorized_minters {
+            let item_ref = item.try_to_vec()?;
+            if !seen.contains(&item_ref) {
+                seen.insert(item_ref);
+                auth_minter_list.push(item);
             }
         }
 
