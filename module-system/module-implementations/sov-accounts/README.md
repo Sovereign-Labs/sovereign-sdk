@@ -1,16 +1,16 @@
-# The sov-accounts module.
+# `sov-accounts` module
 
 The `sov-accounts` module is responsible for managing accounts on the rollup.
 
 Account is represented by an `Address` and a `Nonce`.
 
-## DANGER
+## Warning
 
 The accounts module exports hooks which must be wired into your state transition function! Be sure to invoke `Hooks::get_or_create_default_account`
 in the pre-dispatch transaction hook, and `Hooks::inc_nonce` in the post-dispatch transaction hook. For more details on the
 proper usage of these hooks, see the [`demo-stf`](../../../examples/demo-stf/) documentation.
 
-### The sov-accounts module offers the following functionality:
+### The `sov-accounts` module offers the following functionality:
 
 1. When a sender sends their first message, the `sov-accounts` module will create a new address by deriving it from the sender's public key.
    The module will then add a mapping between the public key and the address to its state. For all subsequent messages that include the sender's public key,
@@ -23,7 +23,7 @@ proper usage of these hooks, see the [`demo-stf`](../../../examples/demo-stf/) d
 
 1. It is possible to query the `sov-accounts` module using the `get_account` method and get the account corresponding to the given public key.
 
-### The sov-accounts module makes the following guarantees:
+### The `sov-accounts` module makes the following guarantees:
 
 1. At some point in time, the sender has provided proof that they possessed the private key corresponding to the public key associated with the address.
 

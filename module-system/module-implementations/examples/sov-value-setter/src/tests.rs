@@ -46,8 +46,8 @@ fn test_value_setter_helper<C: Context>(
 
     // Test events
     {
-        let call_response = module.call(call_msg, &context, working_set).unwrap();
-        let event = &call_response.events[0];
+        module.call(call_msg, &context, working_set).unwrap();
+        let event = &working_set.events()[0];
         assert_eq!(event, &Event::new("set", "value_set: 99"));
     }
 

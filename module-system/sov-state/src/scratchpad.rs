@@ -1,4 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_rollup_interface::stf::Event;
 use std::{collections::HashMap, fmt::Debug};
 
 use crate::{
@@ -23,7 +24,7 @@ pub struct Delta<S: Storage> {
 ///
 /// All reads are recorded in the underlying delta, because even reverted transactions have to be proven to have
 /// executed against the correct state. (If the state was different, the transaction may not have reverted.)
-pub struct RevertableDelta<S: Storage> {
+struct RevertableDelta<S: Storage> {
     /// The inner (non-revertable) delta
     inner: Delta<S>,
     /// A cache containing the most recent values written. Reads are first checked
@@ -40,73 +41,114 @@ impl<S: Storage> Debug for RevertableDelta<S> {
 }
 
 /// A read-write set which can be committed as a unit
-pub enum WorkingSet<S: Storage> {
+enum ReadWriteSet<S: Storage> {
     Standard(Delta<S>),
     Revertable(RevertableDelta<S>),
 }
 
+/// This structure holds the read-write set and the events gathered during the execution of a transaction.
+pub struct WorkingSet<S: Storage> {
+    read_write_set: ReadWriteSet<S>,
+    events: Vec<Event>,
+}
+
 impl<S: Storage> WorkingSet<S> {
     pub fn new(inner: S) -> Self {
-        Self::Standard(Delta::new(inner))
+        Self {
+            read_write_set: ReadWriteSet::Standard(Delta::new(inner)),
+            events: Default::default(),
+        }
     }
 
     pub fn with_witness(inner: S, witness: S::Witness) -> Self {
-        Self::Standard(Delta::with_witness(inner, witness))
+        Self {
+            read_write_set: ReadWriteSet::Standard(Delta::with_witness(inner, witness)),
+            events: Default::default(),
+        }
     }
 
     pub fn to_revertable(self) -> Self {
-        match self {
-            WorkingSet::Standard(delta) => WorkingSet::Revertable(delta.get_revertable_wrapper()),
-            WorkingSet::Revertable(_) => self,
+        let read_write_set = match self.read_write_set {
+            ReadWriteSet::Standard(delta) => {
+                ReadWriteSet::Revertable(delta.get_revertable_wrapper())
+            }
+            ReadWriteSet::Revertable(_) => self.read_write_set,
+        };
+
+        Self {
+            read_write_set,
+            events: self.events,
         }
     }
 
     pub fn commit(self) -> Self {
-        match self {
-            s @ WorkingSet::Standard(_) => s,
-            WorkingSet::Revertable(revertable) => WorkingSet::Standard(revertable.commit()),
+        let read_write_set = match self.read_write_set {
+            s @ ReadWriteSet::Standard(_) => s,
+            ReadWriteSet::Revertable(revertable) => ReadWriteSet::Standard(revertable.commit()),
+        };
+
+        Self {
+            read_write_set,
+            events: self.events,
         }
     }
 
     pub fn revert(self) -> Self {
-        match self {
-            s @ WorkingSet::Standard(_) => s,
-            WorkingSet::Revertable(revertable) => WorkingSet::Standard(revertable.revert()),
+        let read_write_set = match self.read_write_set {
+            s @ ReadWriteSet::Standard(_) => s,
+            ReadWriteSet::Revertable(revertable) => ReadWriteSet::Standard(revertable.revert()),
+        };
+        Self {
+            read_write_set,
+            // The `revert` removes all events associated with the transaction
+            events: Vec::default(),
         }
     }
 
-    pub fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
-        match self {
-            WorkingSet::Standard(s) => s.get(key),
-            WorkingSet::Revertable(s) => s.get(key),
+    pub(crate) fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
+        match &mut self.read_write_set {
+            ReadWriteSet::Standard(s) => s.get(key),
+            ReadWriteSet::Revertable(s) => s.get(key),
         }
     }
 
-    pub fn set(&mut self, key: StorageKey, value: StorageValue) {
-        match self {
-            WorkingSet::Standard(s) => s.set(key, value),
-            WorkingSet::Revertable(s) => s.set(key, value),
+    pub(crate) fn set(&mut self, key: StorageKey, value: StorageValue) {
+        match &mut self.read_write_set {
+            ReadWriteSet::Standard(s) => s.set(key, value),
+            ReadWriteSet::Revertable(s) => s.set(key, value),
         }
     }
 
-    pub fn delete(&mut self, key: StorageKey) {
-        match self {
-            WorkingSet::Standard(s) => s.delete(key),
-            WorkingSet::Revertable(s) => s.delete(key),
+    pub(crate) fn delete(&mut self, key: StorageKey) {
+        match &mut self.read_write_set {
+            ReadWriteSet::Standard(s) => s.delete(key),
+            ReadWriteSet::Revertable(s) => s.delete(key),
         }
+    }
+
+    pub fn add_event(&mut self, key: &str, value: &str) {
+        self.events.push(Event::new(key, value));
+    }
+
+    pub fn take_events(&mut self) -> Vec<Event> {
+        std::mem::take(&mut self.events)
+    }
+
+    pub fn events(&self) -> &[Event] {
+        &self.events
     }
 
     pub fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
-        match self {
-            WorkingSet::Standard(delta) => delta.freeze(),
-            WorkingSet::Revertable(_) => todo!(),
+        match &mut self.read_write_set {
+            ReadWriteSet::Standard(delta) => delta.freeze(),
+            ReadWriteSet::Revertable(_) => todo!(),
         }
     }
 
     pub fn backing(&self) -> &S {
-        match self {
-            WorkingSet::Standard(delta) => &delta.inner,
-            WorkingSet::Revertable(revertable) => &revertable.inner.inner,
+        match &self.read_write_set {
+            ReadWriteSet::Standard(delta) => &delta.inner,
+            ReadWriteSet::Revertable(revertable) => &revertable.inner.inner,
         }
     }
 }

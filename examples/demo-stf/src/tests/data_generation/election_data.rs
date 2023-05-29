@@ -156,7 +156,7 @@ impl MessageGenerator for InvalidElectionCallMessages {
 
         messages.extend(call_generator.create_voters_and_vote());
 
-        // Invalid message: This voter already voted.
+        // Additional invalid message: This voter already voted.
         {
             let voter = call_generator.voters[0].clone();
             let vote_message = sov_election::call::CallMessage::Vote(1);

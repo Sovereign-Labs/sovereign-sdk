@@ -29,11 +29,10 @@ fn initial_and_deployed_token() {
         authorized_minters: vec![minter_address.clone()],
     };
 
-    let create_token_response = bank
-        .call(create_token_message, &sender_context, &mut working_set)
+    bank.call(create_token_message, &sender_context, &mut working_set)
         .expect("Failed to create token");
 
-    assert!(create_token_response.events.is_empty());
+    assert!(working_set.events().is_empty());
 
     let sender_balance =
         bank.get_balance_of(sender_address, token_address.clone(), &mut working_set);

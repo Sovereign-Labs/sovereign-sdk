@@ -56,7 +56,7 @@ impl GenesisMacro {
                 let ident = &field.ident;
 
                 quote::quote! {
-                    self.#ident.genesis(&config.#ident, working_set)?;
+                    ::sov_modules_api::Genesis::genesis(&self.#ident, &config.#ident, working_set)?;
                 }
             })
             .collect()
