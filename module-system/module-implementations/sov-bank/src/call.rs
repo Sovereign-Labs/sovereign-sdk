@@ -105,11 +105,11 @@ impl<C: sov_modules_api::Context> Bank<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        let burn_response = token.burn(context.sender(), coins.amount, working_set)?;
+        token.burn(context.sender(), coins.amount, working_set)?;
         token.total_supply -= coins.amount;
         self.tokens.set(&coins.token_address, token, working_set);
 
-        Ok(burn_response)
+        Ok(CallResponse::default())
     }
 
     pub(crate) fn mint(
@@ -120,11 +120,10 @@ impl<C: sov_modules_api::Context> Bank<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        let mint_response =
-            token.mint(context.sender(), &minter_address, coins.amount, working_set)?;
+        token.mint(context.sender(), &minter_address, coins.amount, working_set)?;
         self.tokens.set(&coins.token_address, token, working_set);
 
-        Ok(mint_response)
+        Ok(CallResponse::default())
     }
 
     pub(crate) fn freeze(
@@ -134,10 +133,10 @@ impl<C: sov_modules_api::Context> Bank<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let mut token = self.tokens.get_or_err(&token_address, working_set)?;
-        let freeze_response = token.freeze(context.sender())?;
+        token.freeze(context.sender())?;
         self.tokens.set(&token_address, token, working_set);
 
-        Ok(freeze_response)
+        Ok(CallResponse::default())
     }
 }
 
@@ -150,7 +149,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        token.transfer(from, to, coins.amount, working_set)
+        token.transfer(from, to, coins.amount, working_set)?;
+        Ok(CallResponse::default())
     }
 }
 

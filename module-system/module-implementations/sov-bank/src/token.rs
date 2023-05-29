@@ -1,5 +1,4 @@
 use anyhow::{bail, Result};
-use sov_modules_api::CallResponse;
 use sov_state::{Prefix, WorkingSet};
 use std::collections::HashSet;
 
@@ -43,9 +42,9 @@ impl<C: sov_modules_api::Context> Token<C> {
         to: &C::Address,
         amount: Amount,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse> {
+    ) -> Result<()> {
         if from == to {
-            return Ok(CallResponse::default());
+            return Ok(());
         }
         let from_balance = self.check_balance(from, amount, working_set)?;
 
@@ -55,7 +54,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         self.balances.set(from, from_balance, working_set);
         self.balances.set(to, to_balance, working_set);
 
-        Ok(CallResponse::default())
+        Ok(())
     }
 
     pub(crate) fn burn(
@@ -63,23 +62,23 @@ impl<C: sov_modules_api::Context> Token<C> {
         from: &C::Address,
         amount: Amount,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse> {
+    ) -> Result<()> {
         let new_balance = self.check_balance(from, amount, working_set)?;
         self.balances.set(from, new_balance, working_set);
 
-        Ok(CallResponse::default())
+        Ok(())
     }
 
     /// Freezing a token requires emptying the authorized_minter vector
     /// authorized_minter: Vec<Address> is used to determine if the token is frozen or not
     /// If the vector is empty when the function is called, this means the token is already frozen
-    pub(crate) fn freeze(&mut self, sender: &C::Address) -> Result<CallResponse> {
+    pub(crate) fn freeze(&mut self, sender: &C::Address) -> Result<()> {
         if self.authorized_minters.is_empty() {
             bail!("Token is already frozen")
         }
         self.is_authorized_minter(sender)?;
         self.authorized_minters = vec![];
-        Ok(CallResponse::default())
+        Ok(())
     }
 
     pub(crate) fn mint(
@@ -88,7 +87,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         minter_address: &C::Address,
         amount: Amount,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse> {
+    ) -> Result<()> {
         if self.authorized_minters.is_empty() {
             bail!("Attempt to mint frozen token")
         }
@@ -100,7 +99,7 @@ impl<C: sov_modules_api::Context> Token<C> {
             + amount;
         self.balances.set(minter_address, to_balance, working_set);
         self.total_supply += amount;
-        Ok(CallResponse::default())
+        Ok(())
     }
 
     fn is_authorized_minter(&self, sender: &C::Address) -> Result<()> {
