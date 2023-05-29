@@ -2,7 +2,7 @@
 
 Many rollups have concepts like `Account` or `Token` and access the state in a similar manner. This is where the [sov-modules-api](../../module-system/sov-modules-api/README.md) becomes useful. It offers a standardized approach to writing rollup business logic. However, there are cases where your rollup requirements may be so unique that the `module-system` could become a hindrance. In this tutorial, we will bypass the `module-system` and directly create a simple rollup by implementing a `StateTransitionFunction` "from scratch".
 
-In our rollup, we will verify whether the sender of a data blob possesses the preimage for a specific hash digest. It's important to note that our rollup is designed to be "stateless," meaning that implementing state access is not covered in this tutorial. However, if you're interested, you can refer to the [sov-state](../../module-system/sov-state/README.md) for an example of how it can be done.
+In this tutorial, we’ll build an STF which checks if the input data (called a preimage) results in a specific output (called a digest) when fed through a hash function. It's important to note that our rollup is designed to be "stateless," meaning that implementing state access is not covered in this tutorial. However, if you're interested, you can refer to the [sov-state](../../module-system/sov-state/README.md) for an example of how it can be done.
 
 ## Implementing the State Transition Function
 
