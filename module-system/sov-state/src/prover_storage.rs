@@ -137,6 +137,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         Ok(new_root.0)
     }
 
+    // Based on assumption `validate_and_commit` increments version.
     fn is_empty(&self) -> bool {
         self.db.get_next_version() <= 1
     }
