@@ -55,13 +55,14 @@ Once a transaction has passed stateless verification, it will get fed into the e
 where you can inject custom "hooks".
 
 There are two kind of hooks:
-`ApplyBlobTxHooks`: 
-1. Invoked immediately before each transaction is processed. This is a good time to apply stateful transaction verification, like checking the nonce.
-2. Invoked immediately after each transaction is executed. This is a good place to perform any post-execution operations, like incrementing the nonce.
 
-`ApplyBlobSequencerHooks`: 
-1. At the beginning of the `apply_blob` function, before the blob is deserialized into a group of transactions. This is a good time to ensure that the sequencer is properly bonded.
-2. At the end of the `apply_blob` function. This is a good place to reward sequencers.
+`ApplyBlobTxHooks` with the following methods:
+1. `pre_dispatch_tx_hook`: Invoked immediately before each transaction is processed. This is a good time to apply stateful transaction verification, like checking the nonce.
+2. `post_dispatch_tx_hook`: Invoked immediately after each transaction is executed. This is a good place to perform any post-execution operations, like incrementing the nonce.
+
+`ApplyBlobSequencerHooks` with the following methods: 
+1. `lock_sequencer_bond `Invoked at the beginning of the `apply_blob` function, before the blob is deserialized into a group of transactions. This is a good time to ensure that the sequencer is properly bonded.
+2. `reward_sequencer` invoked at the end of the `apply_blob` function. This is a good place to reward sequencers.
 
 To use the `AppTemplate`, the runtime needs to provide implementation of these hooks which specifies what needs to happen at each of these four stages.
 
@@ -71,7 +72,7 @@ The `sov-accounts` module implements `ApplyBlobTxHooks` because it needs to chec
 The `sequencer-registry` implements `ApplyBlobSequencerHooks` since it is responsible for managing the sequencer bond.
 
 The implementation for `MyRuntime` is straightforward because we can leverage the existing hooks provided by `sov-accounts` and `sequencer-registry` and reuse them in our implementation.
-:
+
 ```Rust
 impl<C: Context> ApplyBlobTxHooks for Runtime<C> {
     type Context = C;
