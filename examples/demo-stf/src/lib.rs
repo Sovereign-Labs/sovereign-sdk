@@ -7,7 +7,6 @@ pub mod runtime;
 #[cfg(test)]
 pub mod tests;
 pub mod tx_hooks_impl;
-pub mod tx_verifier_impl;
 
 #[cfg(feature = "native")]
 use sov_modules_api::{

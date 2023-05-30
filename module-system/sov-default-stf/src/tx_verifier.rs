@@ -1,7 +1,9 @@
+use std::io::Cursor;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use sov_modules_api::Signature;
 use sov_modules_api::{hooks::Transaction, Context, Hasher, Spec};
-
 /// RawTx represents a serialized rollup transaction received from the DA.
 #[derive(Debug, PartialEq, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct RawTx {
@@ -16,26 +18,31 @@ impl RawTx {
 
 type RawTxHash = [u8; 32];
 
-/// TxVerifier encapsulates Transaction verification.
-pub trait TxVerifier {
-    type Context: Context;
-    /// Runs stateless checks against a single RawTx.
-    fn verify_tx_stateless(&self, raw_tx: RawTx) -> anyhow::Result<Transaction<Self::Context>>;
+pub fn verify_txs_stateless<C: Context>(
+    raw_txs: Vec<RawTx>,
+) -> anyhow::Result<Vec<(Transaction<C>, RawTxHash)>> {
+    let mut txs = Vec::with_capacity(raw_txs.len());
+    for raw_tx in raw_txs {
+        let raw_tx_hash = raw_tx.hash::<C>();
+        let tx = verify_tx_stateless(raw_tx)?;
 
-    /// Runs stateless checks against RawTxs.
-    /// Returns verified transaction and hash of the RawTx.
-    fn verify_txs_stateless(
-        &self,
-        raw_txs: Vec<RawTx>,
-    ) -> anyhow::Result<Vec<(Transaction<Self::Context>, RawTxHash)>> {
-        let mut txs = Vec::with_capacity(raw_txs.len());
-        for raw_tx in raw_txs {
-            let raw_tx_hash = raw_tx.hash::<Self::Context>();
-            let tx = self.verify_tx_stateless(raw_tx)?;
-
-            txs.push((tx, raw_tx_hash));
-        }
-
-        Ok(txs)
+        txs.push((tx, raw_tx_hash));
     }
+
+    Ok(txs)
+}
+
+fn verify_tx_stateless<C: Context>(raw_tx: RawTx) -> anyhow::Result<Transaction<C>> {
+    let mut data = Cursor::new(&raw_tx.data);
+    let tx = Transaction::<C>::deserialize_reader(&mut data)?;
+
+    // We check signature against runtime_msg and nonce.
+    let mut hasher = C::Hasher::new();
+    hasher.update(tx.runtime_msg());
+    hasher.update(&tx.nonce().to_le_bytes());
+
+    let msg_hash = hasher.finalize();
+    tx.signature().verify(tx.pub_key(), msg_hash)?;
+
+    Ok(tx)
 }

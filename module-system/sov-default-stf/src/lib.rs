@@ -13,34 +13,32 @@ use sov_rollup_interface::stf::TransactionReceipt;
 use sov_rollup_interface::zk::traits::Zkvm;
 use sov_rollup_interface::Buf;
 use tracing::error;
-pub use tx_verifier::{RawTx, TxVerifier};
+use tx_verifier::verify_txs_stateless;
+pub use tx_verifier::RawTx;
 
 use sov_modules_api::{Context, DispatchCall, Genesis, Hasher, Spec};
 use sov_rollup_interface::{stf::StateTransitionFunction, traits::BatchTrait};
 use sov_state::{Storage, WorkingSet};
 use std::io::Read;
 
-pub struct AppTemplate<C: Context, V, RT, Vm> {
+pub struct AppTemplate<C: Context, RT, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
-    tx_verifier: V,
     working_set: Option<WorkingSet<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
 }
 
-impl<C: Context, V, RT, Vm> AppTemplate<C, V, RT, Vm>
+impl<C: Context, RT, Vm> AppTemplate<C, RT, Vm>
 where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
         + ApplyBlobTxHooks<Context = C>
         + ApplyBlobSequencerHooks<Context = C>,
-    V: TxVerifier<Context = C>,
 {
-    pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V) -> Self {
+    pub fn new(storage: C::Storage, runtime: RT) -> Self {
         Self {
             runtime,
             current_storage: storage,
-            tx_verifier,
             working_set: None,
             phantom_vm: PhantomData,
         }
@@ -101,10 +99,7 @@ where
         };
 
         // Run the stateless verification, since it is stateless we don't commit.
-        let txs = match self
-            .tx_verifier
-            .verify_txs_stateless(batch.take_transactions())
-        {
+        let txs = match verify_txs_stateless(batch.take_transactions()) {
             Ok(txs) => txs,
             Err(e) => {
                 // Revert on error
@@ -248,13 +243,12 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-impl<C: Context, V, RT, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, V, RT, Vm>
+impl<C: Context, RT, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, RT, Vm>
 where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
         + ApplyBlobTxHooks<Context = C>
         + ApplyBlobSequencerHooks<Context = C>,
-    V: TxVerifier<Context = C>,
 {
     type StateRoot = jmt::RootHash;
 

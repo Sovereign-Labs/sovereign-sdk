@@ -14,7 +14,6 @@ use crate::{
         DEMO_SEQ_PUB_KEY_STR,
     },
     runtime::{GenesisConfig, Runtime},
-    tx_verifier_impl::DemoAppTxVerifier,
 };
 
 mod data_generation;
@@ -35,8 +34,7 @@ pub fn create_new_demo(
 ) -> DemoApp<DefaultContext, sov_rollup_interface::mocks::MockZkvm> {
     let runtime = Runtime::new();
     let storage = ProverStorage::with_path(path).unwrap();
-    let tx_verifier = DemoAppTxVerifier::new();
-    AppTemplate::new(storage, runtime, tx_verifier)
+    AppTemplate::new(storage, runtime)
 }
 
 pub fn create_demo_config(
