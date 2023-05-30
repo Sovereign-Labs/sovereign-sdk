@@ -66,6 +66,5 @@ pub trait BlobTransactionTrait: Serialize + DeserializeOwned {
     fn data(&self) -> Self::Data;
 }
 
-/// TODO: This trait has nothing specific to BlockHash, it just set of bounds
-/// Should we rename it?
+/// Trait with collection of trait bounds for a block hash.
 pub trait BlockHashTrait: Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync {}

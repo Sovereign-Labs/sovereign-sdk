@@ -88,7 +88,13 @@ pub trait StateTransitionFunction<Vm: Zkvm> {
     /// Apply a blob/batch of transactions to the rollup, slashing the sequencer who proposed the blob on failure.
     /// The concrete blob type is defined by the DA layer implementation, which is why we use a generic here instead
     /// of an associated type.
-    /// TODO: Misbehaviour_hint : what it is ?
+    /// Misbehavior hint allows prover optimizations - the sequencer can be slashed
+    /// for including a transaction which fails stateless checks (i.e. has an invalid signature) -
+    /// and in that case we ignore his entire batch.
+    /// This method lets you give a hint to the prover telling
+    /// it where that invalid signature is so that it can skip signature checks on other transactions.
+    /// (If the misbehavior hint is wrong, then the host is malicious so we can
+    /// just panic - which means that no proof will be created).
     fn apply_blob(
         &mut self,
         blob: impl BlobTransactionTrait,
