@@ -47,7 +47,8 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
         tx: Transaction<Self::Context>,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<Self::VerifiedTx> {
-        let addr = self.check_nonce_for_address(tx.nonce, tx.pub_key.clone(), working_set)?;
+        let addr: <C as Spec>::Address =
+            self.check_nonce_for_address(tx.nonce, tx.pub_key.clone(), working_set)?;
 
         Ok(AppVerifiedTx {
             pub_key: tx.pub_key,

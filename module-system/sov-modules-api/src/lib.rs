@@ -2,6 +2,7 @@
 
 pub mod default_context;
 pub mod default_signature;
+pub mod hooks;
 mod serde_address;
 
 mod bech32;
