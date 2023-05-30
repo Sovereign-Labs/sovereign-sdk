@@ -23,6 +23,8 @@ sha2 = { workspace = true }
 clap = { workspace = true, optional = true }
 toml = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"], optional = true }
+hex = { workspace = true }
+tracing = { workspace = true }
 
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-election = { path = "../../module-system/module-implementations/examples/sov-election", default-features = false }

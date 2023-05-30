@@ -606,6 +606,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
+ "hex",
  "jsonrpsee",
  "serde",
  "serde_json",
@@ -623,6 +624,7 @@ dependencies = [
  "sov-state",
  "sov-value-setter",
  "toml 0.7.4",
+ "tracing",
 ]
 
 [[package]]
@@ -2830,6 +2832,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "hex",
  "jmt",
  "serde",
  "sov-modules-api",
@@ -2967,6 +2970,7 @@ dependencies = [
  "sha2 0.10.6",
  "sov-db",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]

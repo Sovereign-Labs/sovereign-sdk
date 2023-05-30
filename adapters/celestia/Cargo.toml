@@ -31,6 +31,7 @@ nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "dd375884
 
 [dev-dependencies]
 postcard = { version = "1", features = ["use-std"] }
+proptest = { version = "1.2" }
 
 [build-dependencies]
 prost-build = { version = "0.11" }

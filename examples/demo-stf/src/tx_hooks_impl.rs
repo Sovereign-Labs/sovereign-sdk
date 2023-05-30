@@ -79,7 +79,7 @@ impl<C: Context> TxHooks for DemoAppTxHooks<C> {
                     anyhow::bail!("Invalid next sequencer.")
                 }
             }
-            Err(_) => anyhow::bail!("Sequencer {:?} not registered. ", sequencer),
+            Err(_) => anyhow::bail!("Sequencer 0x={} not registered. ", hex::encode(sequencer)),
         }
 
         self.sequencer_hooks.lock(working_set)
