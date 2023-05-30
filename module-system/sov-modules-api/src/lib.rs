@@ -1,33 +1,31 @@
 #![feature(associated_type_defaults)]
 
+mod bech32;
 pub mod default_context;
 pub mod default_signature;
-pub mod hooks;
-mod serde_address;
-
-mod bech32;
 mod dispatch;
 mod encode;
 mod error;
+pub mod hooks;
 mod prefix;
 mod response;
-
+mod serde_address;
 #[cfg(test)]
 mod tests;
+pub mod transaction;
 pub use crate::bech32::AddressBech32;
+use borsh::{BorshDeserialize, BorshSerialize};
+use core::fmt::{self, Debug, Display};
 pub use dispatch::{DispatchCall, Genesis};
 pub use error::Error;
 pub use jmt::SimpleHasher as Hasher;
-
 pub use prefix::Prefix;
 pub use response::CallResponse;
-
 pub use sov_rollup_interface::traits::AddressTrait;
 use sov_state::{Storage, Witness, WorkingSet};
-
-use borsh::{BorshDeserialize, BorshSerialize};
-use core::fmt::{self, Debug, Display};
 use thiserror::Error;
+#[cfg(feature = "native")]
+pub use transaction::sign_tx;
 
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {

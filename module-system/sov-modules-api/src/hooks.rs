@@ -1,41 +1,5 @@
-use crate::{Context, Spec};
+use crate::{transaction::Transaction, Context, Spec};
 use sov_state::WorkingSet;
-
-// A Transaction object that is compatible with the module-system/sov-default-stf;
-#[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub struct Transaction<C: Context> {
-    signature: C::Signature,
-    pub_key: C::PublicKey,
-    runtime_msg: Vec<u8>,
-    nonce: u64,
-}
-
-impl<C: Context> Transaction<C> {
-    pub fn new(msg: Vec<u8>, pub_key: C::PublicKey, signature: C::Signature, nonce: u64) -> Self {
-        Self {
-            signature,
-            runtime_msg: msg,
-            pub_key,
-            nonce,
-        }
-    }
-
-    pub fn signature(&self) -> &C::Signature {
-        &self.signature
-    }
-
-    pub fn pub_key(&self) -> &C::PublicKey {
-        &self.pub_key
-    }
-
-    pub fn runtime_msg(&self) -> &[u8] {
-        &self.runtime_msg
-    }
-
-    pub fn nonce(&self) -> u64 {
-        self.nonce
-    }
-}
 
 /// Hooks that execute within the `StateTransitionFunction::apply_blob` function for each processed transaction.
 pub trait ApplyBlobTxHooks {

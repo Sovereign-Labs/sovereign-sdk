@@ -3,7 +3,7 @@ use borsh::BorshSerialize;
 use sov_default_stf::RawTx;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::hooks::Transaction;
+use sov_modules_api::transaction::Transaction;
 use sov_modules_api::PublicKey;
 use std::rc::Rc;
 

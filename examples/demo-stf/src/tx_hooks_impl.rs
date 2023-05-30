@@ -1,6 +1,7 @@
 use crate::runtime::Runtime;
 use sov_modules_api::{
-    hooks::{ApplyBlobSequencerHooks, ApplyBlobTxHooks, Transaction},
+    hooks::{ApplyBlobSequencerHooks, ApplyBlobTxHooks},
+    transaction::Transaction,
     Context, Spec,
 };
 use sov_state::WorkingSet;
@@ -10,7 +11,7 @@ impl<C: Context> ApplyBlobTxHooks for Runtime<C> {
 
     fn pre_dispatch_tx_hook(
         &self,
-        tx: sov_modules_api::hooks::Transaction<Self::Context>,
+        tx: Transaction<Self::Context>,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<<Self::Context as Spec>::Address> {
         self.accounts.pre_dispatch_tx_hook(tx, working_set)

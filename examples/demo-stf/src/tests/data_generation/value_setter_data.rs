@@ -1,8 +1,6 @@
-use crate::sign_tx;
-
 use super::*;
 use sov_modules_api::{
-    default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
+    default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, sign_tx,
 };
 
 pub struct ValueSetterMessages {

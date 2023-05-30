@@ -1,6 +1,6 @@
 use crate::Accounts;
 use sov_modules_api::hooks::ApplyBlobTxHooks;
-use sov_modules_api::hooks::Transaction;
+use sov_modules_api::transaction::Transaction;
 use sov_modules_api::Context;
 
 use sov_modules_api::Spec;

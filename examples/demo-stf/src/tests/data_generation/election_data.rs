@@ -1,7 +1,5 @@
-use crate::sign_tx;
-
 use super::*;
-use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::{default_context::DefaultContext, sign_tx};
 use std::rc::Rc;
 
 struct CallGenerator {

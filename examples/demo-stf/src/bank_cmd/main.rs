@@ -1,9 +1,10 @@
 use anyhow::Context;
 use borsh::BorshSerialize;
 use clap::Parser;
-use demo_stf::{runtime::Runtime, sign_tx};
+use demo_stf::runtime::Runtime;
 use sov_default_stf::RawTx;
-use sov_modules_api::hooks::Transaction;
+use sov_modules_api::sign_tx;
+use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, PublicKey,
     Spec,

@@ -1,9 +1,8 @@
-use std::io::Cursor;
-
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::Signature;
-use sov_modules_api::{hooks::Transaction, Context, Hasher, Spec};
+use sov_modules_api::{transaction::Transaction, Context, Hasher, Spec};
+use std::io::Cursor;
 /// RawTx represents a serialized rollup transaction received from the DA.
 #[derive(Debug, PartialEq, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct RawTx {
