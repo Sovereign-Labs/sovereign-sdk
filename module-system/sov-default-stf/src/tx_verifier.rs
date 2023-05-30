@@ -1,8 +1,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sov_modules_api::{Context, Hasher, Spec};
+use sov_modules_api::{transaction::Transaction, Context, Hasher, Spec};
+use std::io::Cursor;
 use tracing::debug;
-
 /// RawTx represents a serialized rollup transaction received from the DA.
 #[derive(Debug, PartialEq, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct RawTx {
@@ -17,28 +17,17 @@ impl RawTx {
 
 type RawTxHash = [u8; 32];
 
-/// TxVerifier encapsulates Transaction verification.
-pub trait TxVerifier {
-    type Transaction;
-
-    /// Runs stateless checks against a single RawTx.
-    fn verify_tx_stateless(&self, raw_tx: RawTx) -> anyhow::Result<Self::Transaction>;
-
-    /// Runs stateless checks against RawTxs.
-    /// Returns verified transaction and hash of the RawTx.
-    fn verify_txs_stateless<C: Context>(
-        &self,
-        raw_txs: Vec<RawTx>,
-    ) -> anyhow::Result<Vec<(Self::Transaction, RawTxHash)>> {
-        debug!("Verifying {} transactions", raw_txs.len());
-        let mut txs = Vec::with_capacity(raw_txs.len());
-        for raw_tx in raw_txs {
-            let raw_tx_hash = raw_tx.hash::<C>();
-            let tx = self.verify_tx_stateless(raw_tx)?;
-
-            txs.push((tx, raw_tx_hash));
-        }
-
-        Ok(txs)
+pub fn verify_txs_stateless<C: Context>(
+    raw_txs: Vec<RawTx>,
+) -> anyhow::Result<Vec<(Transaction<C>, RawTxHash)>> {
+    let mut txs = Vec::with_capacity(raw_txs.len());
+    debug!("Verifying {} transactions", raw_txs.len());
+    for raw_tx in raw_txs {
+        let raw_tx_hash = raw_tx.hash::<C>();
+        let mut data = Cursor::new(&raw_tx.data);
+        let tx = Transaction::<C>::deserialize_reader(&mut data)?;
+        tx.verify()?;
+        txs.push((tx, raw_tx_hash));
     }
+    Ok(txs)
 }

@@ -41,7 +41,7 @@ pub mod test {
             );
 
             assert!(
-                matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded,),
+                matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded(0),),
                 "Sequencer execution should have succeeded but failed "
             );
 
@@ -97,7 +97,7 @@ pub mod test {
         );
 
         assert!(
-            matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded,),
+            matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded(0),),
             "Sequencer execution should have succeeded but failed "
         );
 
@@ -150,7 +150,7 @@ pub mod test {
             )
             .inner;
             assert!(
-                matches!(apply_blob_outcome, SequencerOutcome::Rewarded,),
+                matches!(apply_blob_outcome, SequencerOutcome::Rewarded(0),),
                 "Sequencer execution should have succeeded but failed "
             );
         }

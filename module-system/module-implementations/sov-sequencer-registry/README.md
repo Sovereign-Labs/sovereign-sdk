@@ -6,10 +6,4 @@ The `sov-sequencer-registry` module is responsible for sequencer registration, s
 
 Hooks:
 
-The `sov-sequencer-registry` module does not expose any call messages, and rollup users cannot directly modify the state of the sequencer. Instead, the module provides hooks that can be inserted at various points in the logic of the rollup's state transition function. The module supports the following hooks:
-
-1. `lock`: Locks the sequencer bond.
-1. `next_sequencer`: Returns the next sequencer address. Since currently only a centralized sequencer is supported, this hook always returns the same value, which is the registered sequencer's address.
-1. `reward`: Unlocks the sequencer bond, possibly with an additional tip.
-
-If a sequencer misbehaves, the `reward` hook is never called, and the bond remains locked indefinitely.
+The `sov-sequencer-registry` module does not expose any call messages, and rollup users cannot directly modify the state of the sequencer. Instead, the module implements `ApplyBlobHooks` trait. 

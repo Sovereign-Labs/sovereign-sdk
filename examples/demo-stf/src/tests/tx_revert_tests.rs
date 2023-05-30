@@ -46,7 +46,7 @@ fn test_tx_revert() {
         );
 
         assert!(
-            matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded,),
+            matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded(0),),
             "Unexpected outcome: Batch exeuction should have succeeded"
         );
 

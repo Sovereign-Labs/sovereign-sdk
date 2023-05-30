@@ -1,46 +1,45 @@
 mod batch;
-mod tx_hooks;
+
 mod tx_verifier;
 
 use std::marker::PhantomData;
 
 pub use batch::Batch;
 use borsh::BorshDeserialize;
+use sov_modules_api::hooks::ApplyBlobHooks;
+use sov_modules_api::hooks::TxHooks;
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::stf::TransactionReceipt;
 use sov_rollup_interface::zk::traits::Zkvm;
 use sov_rollup_interface::Buf;
-use tracing::{debug, error};
-pub use tx_hooks::TxHooks;
-pub use tx_hooks::VerifiedTx;
-pub use tx_verifier::{RawTx, TxVerifier};
+use tracing::debug;
+use tracing::error;
+use tx_verifier::verify_txs_stateless;
+pub use tx_verifier::RawTx;
 
 use sov_modules_api::{Context, DispatchCall, Genesis, Hasher, Spec};
 use sov_rollup_interface::{stf::StateTransitionFunction, traits::BatchTrait};
 use sov_state::{Storage, WorkingSet};
 use std::io::Read;
 
-pub struct AppTemplate<C: Context, V, RT, H, Vm> {
+pub struct AppTemplate<C: Context, RT, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
-    tx_verifier: V,
-    tx_hooks: H,
     working_set: Option<WorkingSet<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
 }
 
-impl<C: Context, V, RT, H, Vm> AppTemplate<C, V, RT, H, Vm>
+impl<C: Context, RT, Vm> AppTemplate<C, RT, Vm>
 where
-    RT: DispatchCall<Context = C> + Genesis<Context = C>,
-    V: TxVerifier,
-    H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
+    RT: DispatchCall<Context = C>
+        + Genesis<Context = C>
+        + TxHooks<Context = C>
+        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
 {
-    pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
+    pub fn new(storage: C::Storage, runtime: RT) -> Self {
         Self {
             runtime,
             current_storage: storage,
-            tx_verifier,
-            tx_hooks,
             working_set: None,
             phantom_vm: PhantomData,
         }
@@ -64,9 +63,9 @@ where
 
         let batch_data_and_hash = BatchDataAndHash::new::<C>(batch);
 
-        if let Err(e) = self
-            .tx_hooks
-            .enter_apply_blob(sequencer, &mut batch_workspace)
+        if let Err(e) =
+            self.runtime
+                .begin_blob_hook(sequencer, &batch_data_and_hash.data, &mut batch_workspace)
         {
             error!(
                 "Error: The transaction was rejected by the 'enter_apply_blob' hook. Skipping batch without slashing the sequencer: {}",
@@ -106,10 +105,7 @@ where
         debug!("Deserialized batch with {} txs", batch.txs.len());
 
         // Run the stateless verification, since it is stateless we don't commit.
-        let txs = match self
-            .tx_verifier
-            .verify_txs_stateless::<C>(batch.take_transactions())
-        {
+        let txs = match verify_txs_stateless(batch.take_transactions()) {
             Ok(txs) => txs,
             Err(e) => {
                 // Revert on error
@@ -131,7 +127,10 @@ where
             batch_workspace = batch_workspace.to_revertable();
 
             // Run the stateful verification, possibly modifies the state.
-            let verified_tx = match self.tx_hooks.pre_dispatch_tx_hook(tx, &mut batch_workspace) {
+            let sender_address = match self
+                .runtime
+                .pre_dispatch_tx_hook(tx.clone(), &mut batch_workspace)
+            {
                 Ok(verified_tx) => verified_tx,
                 Err(e) => {
                     // Don't revert any state changes made by the pre_dispatch_hook even if it rejects
@@ -149,13 +148,14 @@ where
                 }
             };
 
-            match RT::decode_call(verified_tx.runtime_message()) {
+            match RT::decode_call(tx.runtime_msg()) {
                 Ok(msg) => {
-                    let ctx = C::new(verified_tx.sender().clone());
+                    let ctx = C::new(sender_address.clone());
                     let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
-                    self.tx_hooks
-                        .post_dispatch_tx_hook(verified_tx, &mut batch_workspace);
+                    self.runtime
+                        .post_dispatch_tx_hook(&tx, &mut batch_workspace)
+                        .expect("Impossible happened: error in post_dispatch_tx_hook");
 
                     let tx_effect = match tx_result {
                         Ok(_) => TxEffect::Successful,
@@ -196,15 +196,17 @@ where
         }
 
         // TODO: calculate the amount based of gas and fees
-        self.tx_hooks
-            .exit_apply_blob(0, &mut batch_workspace)
+
+        let batch_receipt_contents = SequencerOutcome::Rewarded(0);
+        self.runtime
+            .end_blob_hook(batch_receipt_contents, &mut batch_workspace)
             .expect("Impossible happened: error in exit_apply_batch");
 
         self.working_set = Some(batch_workspace);
         BatchReceipt {
             batch_hash: batch_data_and_hash.hash,
             tx_receipts,
-            inner: SequencerOutcome::Rewarded,
+            inner: batch_receipt_contents,
         }
     }
 }
@@ -237,7 +239,7 @@ pub enum TxEffect {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SequencerOutcome {
-    Rewarded,
+    Rewarded(u64),
     Slashed(SlashingReason),
     Ignored,
 }
@@ -249,11 +251,12 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-impl<C: Context, V, RT, H, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, V, RT, H, Vm>
+impl<C: Context, RT, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, RT, Vm>
 where
-    RT: DispatchCall<Context = C> + Genesis<Context = C>,
-    V: TxVerifier,
-    H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
+    RT: DispatchCall<Context = C>
+        + Genesis<Context = C>
+        + TxHooks<Context = C>
+        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
 {
     type StateRoot = jmt::RootHash;
 

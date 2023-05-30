@@ -2,7 +2,7 @@ mod modules;
 
 use modules::{first_test_module, second_test_module};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Context, Module, ModuleInfo};
+use sov_modules_api::{Context, ModuleInfo};
 use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 use sov_state::ProverStorage;
 
