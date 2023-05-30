@@ -131,7 +131,7 @@ fn test_sequencer() {
     {
         test_sequencer
             .sequencer
-            .end_blob_hook(0, (), working_set)
+            .end_blob_hook(0, working_set)
             .unwrap();
         let resp = test_sequencer.query_balance_via_bank(working_set);
         assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());

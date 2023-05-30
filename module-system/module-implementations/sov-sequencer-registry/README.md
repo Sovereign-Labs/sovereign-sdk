@@ -6,4 +6,4 @@ The `sov-sequencer-registry` module is responsible for sequencer registration, s
 
 Hooks:
 
-The `sov-sequencer-registry` module does not expose any call messages, and rollup users cannot directly modify the state of the sequencer. Instead, the module implements `ApplyBlobSequencerHooks` trait. 
+The `sov-sequencer-registry` module does not expose any call messages, and rollup users cannot directly modify the state of the sequencer. Instead, the module implements `ApplyBlobHooks` trait. 

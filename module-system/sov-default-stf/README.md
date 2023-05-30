@@ -17,7 +17,7 @@ where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
         + ApplyBlobTxHooks<Context = C>
-        + ApplyBlobSequencerHooks<Context = C>,
+        + ApplyBlobHooks<Context = C>,
 {
 
     pub fn new(storage: C::Storage, runtime: RT) -> Self {
@@ -29,7 +29,7 @@ where
 
 1. The `DispatchCall` trait is responsible for decoding serialized messages and forwarding them to the appropriate module.
 1. The `Genesis` trait handles the initialization process of the rollup. It sets up the initial state upon the rollup deployment.
-1. The `ApplyBlobTxHooks & ApplyBlobSequencerHooks` traits that allows for the injection of custom logic into the transaction processing pipeline. It provides a mechanism to execute additional actions or perform specific operations during the transaction processing phase.
+1. The `ApplyBlobTxHooks & ApplyBlobHooks` traits that allows for the injection of custom logic into the transaction processing pipeline. It provides a mechanism to execute additional actions or perform specific operations during the transaction processing phase.
 
 ### `Runtime`
 

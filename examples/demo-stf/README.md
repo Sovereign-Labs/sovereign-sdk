@@ -34,7 +34,7 @@ several parameters that specify its exact behavior. In order, these four generic
    implementations for Native and ZK execution. In ZK, we read values non-deterministically from hints and check them against a merkle tree, while in
    native mode we just read values straight from disk.
 2. `Runtime`: a collection of modules which make up the rollup's public interface
-3. `ApplyBlobTxHooks & ApplyBlobSequencerHooks` derived from the `Runtime`: a set of functions which are invoked at various points in the transaction lifecycle.
+3. `ApplyBlobTxHooks & ApplyBlobHooks` derived from the `Runtime`: a set of functions which are invoked at various points in the transaction lifecycle.
 
 To implement your state transition function, you simply need to specify values for each of these fields.
 
@@ -49,7 +49,7 @@ Note that `DefaultContext` and `ZkDefaultContext` are exported by the `sov_modul
 
 In the remainder of this section, we'll walk you through implementing each of the remaining generics.
 
-#### Implementing ApplyBlobTxHooks & ApplyBlobSequencerHooks
+#### Implementing ApplyBlobTxHooks & ApplyBlobHooks
 
 Once a transaction has passed stateless verification, it will get fed into the execution pipeline. In this pipeline there are four places
 where you can inject custom "hooks".
@@ -60,16 +60,16 @@ There are two kind of hooks:
 1. `pre_dispatch_tx_hook`: Invoked immediately before each transaction is processed. This is a good time to apply stateful transaction verification, like checking the nonce.
 2. `post_dispatch_tx_hook`: Invoked immediately after each transaction is executed. This is a good place to perform any post-execution operations, like incrementing the nonce.
 
-`ApplyBlobSequencerHooks` with the following methods: 
-1. `lock_sequencer_bond `Invoked at the beginning of the `apply_blob` function, before the blob is deserialized into a group of transactions. This is a good time to ensure that the sequencer is properly bonded.
-2. `reward_sequencer` invoked at the end of the `apply_blob` function. This is a good place to reward sequencers.
+`ApplyBlobHooks` with the following methods: 
+1. `begin_blob_hook `Invoked at the beginning of the `apply_blob` function, before the blob is deserialized into a group of transactions. This is a good time to ensure that the sequencer is properly bonded.
+2. `end_blob_hook` invoked at the end of the `apply_blob` function. This is a good place to reward sequencers.
 
 To use the `AppTemplate`, the runtime needs to provide implementation of these hooks which specifies what needs to happen at each of these four stages.
 
 In this demo, we only rely on two modules which need access to the hooks - `sov-accounts` and `sequencer-registry`. 
 
 The `sov-accounts` module implements `ApplyBlobTxHooks` because it needs to check and increment the sender nonce for every transaction.
-The `sequencer-registry` implements `ApplyBlobSequencerHooks` since it is responsible for managing the sequencer bond.
+The `sequencer-registry` implements `ApplyBlobHooks` since it is responsible for managing the sequencer bond.
 
 The implementation for `MyRuntime` is straightforward because we can leverage the existing hooks provided by `sov-accounts` and `sequencer-registry` and reuse them in our implementation.
 
@@ -96,7 +96,7 @@ impl<C: Context> ApplyBlobTxHooks for Runtime<C> {
 ```
 
 ```Rust
-impl<C: Context> ApplyBlobSequencerHooks for Runtime<C> {
+impl<C: Context> ApplyBlobHooks for Runtime<C> {
     type Context = C;
 
     fn lock_sequencer_bond(
