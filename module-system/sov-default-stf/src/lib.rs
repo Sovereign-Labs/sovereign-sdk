@@ -6,6 +6,7 @@ use std::marker::PhantomData;
 
 pub use batch::Batch;
 use borsh::BorshDeserialize;
+use sov_modules_api::hooks::ApplyBlobSequencerHooks;
 use sov_modules_api::hooks::ApplyBlobTxHooks;
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::stf::TransactionReceipt;
@@ -29,7 +30,10 @@ pub struct AppTemplate<C: Context, V, RT, Vm> {
 
 impl<C: Context, V, RT, Vm> AppTemplate<C, V, RT, Vm>
 where
-    RT: DispatchCall<Context = C> + Genesis<Context = C> + ApplyBlobTxHooks<Context = C>,
+    RT: DispatchCall<Context = C>
+        + Genesis<Context = C>
+        + ApplyBlobTxHooks<Context = C>
+        + ApplyBlobSequencerHooks<Context = C>,
     V: TxVerifier<Context = C>,
 {
     pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V) -> Self {
@@ -58,7 +62,7 @@ where
 
         if let Err(e) = self
             .runtime
-            .enter_apply_blob(sequencer, &mut batch_workspace)
+            .lock_sequencer_bond(sequencer, &mut batch_workspace)
         {
             error!(
                 "Error: The transaction was rejected by the 'enter_apply_blob' hook. Skipping batch without slashing the sequencer: {}",
@@ -192,7 +196,7 @@ where
 
         // TODO: calculate the amount based of gas and fees
         self.runtime
-            .exit_apply_blob(0, &mut batch_workspace)
+            .reward_sequencer(0, &mut batch_workspace)
             .expect("Impossible happened: error in exit_apply_batch");
 
         self.working_set = Some(batch_workspace);
@@ -246,7 +250,10 @@ pub enum SlashingReason {
 
 impl<C: Context, V, RT, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, V, RT, Vm>
 where
-    RT: DispatchCall<Context = C> + Genesis<Context = C> + ApplyBlobTxHooks<Context = C>,
+    RT: DispatchCall<Context = C>
+        + Genesis<Context = C>
+        + ApplyBlobTxHooks<Context = C>
+        + ApplyBlobSequencerHooks<Context = C>,
     V: TxVerifier<Context = C>,
 {
     type StateRoot = jmt::RootHash;

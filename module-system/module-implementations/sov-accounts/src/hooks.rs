@@ -41,20 +41,4 @@ impl<C: Context> ApplyBlobTxHooks for Accounts<C> {
         self.accounts.set(tx.pub_key(), account, working_set);
         Ok(())
     }
-
-    fn enter_apply_blob(
-        &self,
-        sequencer: &[u8],
-        working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn exit_apply_blob(
-        &self,
-        amount: u64,
-        working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
 }

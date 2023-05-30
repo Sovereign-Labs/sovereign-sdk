@@ -55,16 +55,19 @@ pub trait ApplyBlobTxHooks {
         tx: &Transaction<Self::Context>,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()>;
+}
 
+pub trait ApplyBlobSequencerHooks {
+    type Context: Context;
     /// runs at the beginning of apply_blob.
-    fn enter_apply_blob(
+    fn lock_sequencer_bond(
         &self,
         sequencer: &[u8],
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()>;
 
     /// runs at the end of apply_batch.
-    fn exit_apply_blob(
+    fn reward_sequencer(
         &self,
         amount: u64,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,

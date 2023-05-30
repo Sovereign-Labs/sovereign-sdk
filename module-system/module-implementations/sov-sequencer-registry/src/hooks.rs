@@ -1,31 +1,11 @@
 use crate::Sequencer;
-
-use sov_modules_api::{
-    hooks::{ApplyBlobTxHooks, Transaction},
-    Context, Spec,
-};
+use sov_modules_api::{hooks::ApplyBlobSequencerHooks, Context};
 use sov_state::WorkingSet;
 
-impl<C: Context> ApplyBlobTxHooks for Sequencer<C> {
+impl<C: Context> ApplyBlobSequencerHooks for Sequencer<C> {
     type Context = C;
 
-    fn pre_dispatch_tx_hook(
-        &self,
-        _tx: Transaction<C>,
-        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<<Self::Context as Spec>::Address> {
-        todo!()
-    }
-
-    fn post_dispatch_tx_hook(
-        &self,
-        _tx: &Transaction<Self::Context>,
-        _working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn enter_apply_blob(
+    fn lock_sequencer_bond(
         &self,
         sequencer_da: &[u8],
         working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
@@ -51,7 +31,7 @@ impl<C: Context> ApplyBlobTxHooks for Sequencer<C> {
         Ok(())
     }
 
-    fn exit_apply_blob(
+    fn reward_sequencer(
         &self,
         _amount: u64,
         working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
