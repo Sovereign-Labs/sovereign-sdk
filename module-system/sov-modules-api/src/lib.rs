@@ -24,8 +24,6 @@ pub use response::CallResponse;
 pub use sov_rollup_interface::traits::AddressTrait;
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
-#[cfg(feature = "native")]
-pub use transaction::sign_tx;
 
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {

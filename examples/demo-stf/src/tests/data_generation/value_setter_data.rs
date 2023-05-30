@@ -1,6 +1,6 @@
 use super::*;
 use sov_modules_api::{
-    default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, sign_tx,
+    default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
 };
 
 pub struct ValueSetterMessages {
@@ -47,7 +47,7 @@ impl MessageGenerator for ValueSetterMessages {
         _is_last: bool,
     ) -> Transaction<DefaultContext> {
         let message = Runtime::<DefaultContext>::encode_value_setter_call(message);
-        let sig = sign_tx(sender, &message, nonce);
+        let sig = Transaction::<DefaultContext>::sign(sender, &message, nonce);
         Transaction::<DefaultContext>::new(message, sender.pub_key(), sig, nonce)
     }
 }

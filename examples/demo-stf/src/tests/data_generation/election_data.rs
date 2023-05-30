@@ -1,5 +1,5 @@
 use super::*;
-use sov_modules_api::{default_context::DefaultContext, sign_tx};
+use sov_modules_api::default_context::DefaultContext;
 use std::rc::Rc;
 
 struct CallGenerator {
@@ -127,7 +127,7 @@ impl MessageGenerator for ElectionCallMessages {
         _is_last: bool,
     ) -> Transaction<DefaultContext> {
         let message = Runtime::<DefaultContext>::encode_election_call(message);
-        let sig = sign_tx(sender, &message, nonce);
+        let sig = Transaction::<DefaultContext>::sign(sender, &message, nonce);
         Transaction::<DefaultContext>::new(message, sender.pub_key(), sig, nonce)
     }
 }
@@ -173,7 +173,7 @@ impl MessageGenerator for InvalidElectionCallMessages {
         _is_last: bool,
     ) -> Transaction<DefaultContext> {
         let message = Runtime::<DefaultContext>::encode_election_call(message);
-        let sig = sign_tx(sender, &message, nonce);
+        let sig = Transaction::<DefaultContext>::sign(sender, &message, nonce);
         Transaction::<DefaultContext>::new(message, sender.pub_key(), sig, nonce)
     }
 }
@@ -208,9 +208,9 @@ impl MessageGenerator for BadSigElectionCallMessages {
         let message = Runtime::<DefaultContext>::encode_election_call(message);
         let sig = if is_last {
             let bad_msg = vec![0; 32];
-            sign_tx(sender, &bad_msg, nonce + 1)
+            Transaction::<DefaultContext>::sign(sender, &bad_msg, nonce + 1)
         } else {
-            sign_tx(sender, &message, nonce)
+            Transaction::<DefaultContext>::sign(sender, &message, nonce)
         };
 
         Transaction::<DefaultContext>::new(message, sender.pub_key(), sig, nonce)
@@ -247,7 +247,7 @@ impl MessageGenerator for BadNonceElectionCallMessages {
         let nonce = if flag { nonce + 1 } else { nonce };
 
         let message = Runtime::<DefaultContext>::encode_election_call(message);
-        let sig = sign_tx(sender, &message, nonce);
+        let sig = Transaction::<DefaultContext>::sign(sender, &message, nonce);
         Transaction::<DefaultContext>::new(message, sender.pub_key(), sig, nonce)
     }
 }
@@ -285,7 +285,7 @@ impl MessageGenerator for BadSerializationElectionCallMessages {
             Runtime::<DefaultContext>::encode_election_call(message)
         };
 
-        let sig = sign_tx(sender, &call_data, nonce);
+        let sig = Transaction::<DefaultContext>::sign(sender, &call_data, nonce);
         Transaction::<DefaultContext>::new(call_data, sender.pub_key(), sig, nonce)
     }
 }

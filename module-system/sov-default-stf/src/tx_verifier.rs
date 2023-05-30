@@ -1,6 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sov_modules_api::Signature;
 use sov_modules_api::{transaction::Transaction, Context, Hasher, Spec};
 use std::io::Cursor;
 use tracing::debug;
@@ -25,25 +24,10 @@ pub fn verify_txs_stateless<C: Context>(
     debug!("Verifying {} transactions", raw_txs.len());
     for raw_tx in raw_txs {
         let raw_tx_hash = raw_tx.hash::<C>();
-        let tx = verify_tx_stateless(raw_tx)?;
-
+        let mut data = Cursor::new(&raw_tx.data);
+        let tx = Transaction::<C>::deserialize_reader(&mut data)?;
+        tx.verify()?;
         txs.push((tx, raw_tx_hash));
     }
-
     Ok(txs)
-}
-
-fn verify_tx_stateless<C: Context>(raw_tx: RawTx) -> anyhow::Result<Transaction<C>> {
-    let mut data = Cursor::new(&raw_tx.data);
-    let tx = Transaction::<C>::deserialize_reader(&mut data)?;
-
-    // We check signature against runtime_msg and nonce.
-    let mut hasher = C::Hasher::new();
-    hasher.update(tx.runtime_msg());
-    hasher.update(&tx.nonce().to_le_bytes());
-
-    let msg_hash = hasher.finalize();
-    tx.signature().verify(tx.pub_key(), msg_hash)?;
-
-    Ok(tx)
 }
