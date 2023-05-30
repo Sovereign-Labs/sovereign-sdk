@@ -111,6 +111,10 @@ pub trait Storage: Clone {
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error>;
+
+    /// Indicates if storage is empty or not.
+    /// Useful during initialization
+    fn is_empty(&self) -> bool;
 }
 
 // Used only in tests.

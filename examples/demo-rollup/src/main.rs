@@ -27,6 +27,7 @@ use tracing::{debug, info};
 // RPC related imports
 use demo_stf::app::get_rpc_methods;
 use sov_modules_api::RpcRunner;
+use sov_state::Storage;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 // You can change this constant to point your rollup at a different namespace
@@ -93,6 +94,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Our state transition also implements the RpcRunner interface, so we use that to initialize the RPC server.
     let storj = demo_runner.get_storage();
+    let is_storage_empty = storj.is_empty();
     let mut methods = get_rpc_methods(storj);
     let ledger_rpc_module =
         ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db.clone());
@@ -118,10 +120,8 @@ async fn main() -> Result<(), anyhow::Error> {
     });
 
     let demo = demo_runner.inner_mut();
-    // Check if the rollup has previously processed any data. If not, run it's "genesis" initialization code
-    let item_numbers = ledger_db.get_next_items_numbers();
-    let last_slot_processed_before_shutdown = item_numbers.slot_number - 1;
-    if last_slot_processed_before_shutdown == 0 {
+    // Check if the rollup has previously been initialized
+    if is_storage_empty {
         info!("No history detected. Initializing chain...");
         demo.init_chain(get_genesis_config());
         info!("Chain initialization is done.");
@@ -136,6 +136,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut prev_state_root = prev_state_root.0;
 
     // Start the main rollup loop
+    let item_numbers = ledger_db.get_next_items_numbers();
+    let last_slot_processed_before_shutdown = item_numbers.slot_number - 1;
     let start_height = rollup_config.start_height + last_slot_processed_before_shutdown;
 
     for height in start_height.. {

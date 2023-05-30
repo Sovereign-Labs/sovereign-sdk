@@ -136,6 +136,10 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         self.db.inc_next_version();
         Ok(new_root.0)
     }
+
+    fn is_empty(&self) -> bool {
+        self.db.get_next_version() <= 1
+    }
 }
 
 pub fn delete_storage(path: impl AsRef<Path>) {
@@ -209,6 +213,36 @@ mod test {
                     storage.get(test.key, &Default::default()).unwrap()
                 );
             }
+        }
+    }
+
+    #[test]
+    fn test_restart_lifecycle() {
+        let path = sov_schema_db::temppath::TempPath::new();
+        {
+            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
+            assert!(prover_storage.is_empty());
+        }
+
+        let key = StorageKey::from("some_key");
+        let value = StorageValue::from("some_value");
+        // First restart
+        {
+            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
+            assert!(prover_storage.is_empty());
+            let mut storage = WorkingSet::new(prover_storage.clone());
+            storage.set(key.clone(), value.clone());
+            let (cache, witness) = storage.freeze();
+            prover_storage
+                .validate_and_commit(cache, &witness)
+                .expect("storage is valid");
+        }
+
+        // Correctly restart from disk
+        {
+            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
+            assert!(!prover_storage.is_empty());
+            assert_eq!(value, prover_storage.get(key, &Default::default()).unwrap());
         }
     }
 }

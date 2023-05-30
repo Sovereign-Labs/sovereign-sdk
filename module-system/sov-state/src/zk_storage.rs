@@ -91,4 +91,9 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
 
         Ok(new_root.0)
     }
+
+    // ZK Storage is never empty
+    fn is_empty(&self) -> bool {
+        false
+    }
 }

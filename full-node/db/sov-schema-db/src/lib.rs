@@ -20,7 +20,7 @@ use metrics::{
     SCHEMADB_BATCH_PUT_LATENCY_SECONDS, SCHEMADB_DELETES, SCHEMADB_GET_BYTES,
     SCHEMADB_GET_LATENCY_SECONDS, SCHEMADB_PUT_BYTES,
 };
-use rocksdb::{ColumnFamilyDescriptor, ReadOptions};
+use rocksdb::{ColumnFamilyDescriptor, IteratorMode, ReadOptions};
 use std::{collections::HashMap, path::Path, sync::Mutex};
 use tracing::info;
 
@@ -305,6 +305,10 @@ impl DB {
         rocksdb::checkpoint::Checkpoint::new(&self.inner)?.create_checkpoint(path)?;
         Ok(())
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.iterator(IteratorMode::Start).next().is_none()
+    }
 }
 
 /// For now we always use synchronous writes. This makes sure that once the operation returns
@@ -388,7 +392,7 @@ pub mod temppath {
         }
     }
 
-    impl std::convert::AsRef<Path> for TempPath {
+    impl AsRef<Path> for TempPath {
         fn as_ref(&self) -> &Path {
             self.path()
         }
