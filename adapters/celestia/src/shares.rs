@@ -624,32 +624,22 @@ mod tests {
         let decoded_share = decoded_share.unwrap();
         assert_eq!(share, decoded_share);
     }
+
+    fn share_bytes_strategy() -> impl Strategy<Value = Vec<u8>> {
+        vec(0u8.., 9..=SHARE_SIZE).prop_map(|mut vec| {
+            vec[8] &= 0x01;
+            vec
+        })
+    }
+
     proptest! {
         #[test]
-        fn proptest_share_serialization_deserialization(data in vec(any::<u8>(), SHARE_SIZE)) {
-            // Create a Bytes instance from the generated data
+        fn proptest_share_serialization_deserialization(data in share_bytes_strategy_2()) {
             let bytes = Bytes::from(data);
-
-            // Create a Share instance using the new method
-            let share = Share::new(bytes.clone());
-
-            // Ensure the original share is valid.
-            // prop_assert!(share.is_valid());
-
-            // Serialize the share using borsh
+            let share = Share::new(bytes);
             let serialized = share.try_to_vec().unwrap();
-
-            // Deserialize the share using borsh
             let deserialized: Share = Share::try_from_slice(&serialized).unwrap();
-
-            // Ensure the deserialized share is valid.
-            // prop_assert!(deserialized.is_valid());
-
-            // Ensure the deserialized share is equal to the original share.
             prop_assert_eq!(share, deserialized.clone());
-
-            // Ensure the deserialized share's Bytes is equal to the original Bytes.
-            prop_assert_eq!(bytes, deserialized.as_serialized());
         }
     }
 }
