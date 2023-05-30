@@ -33,11 +33,10 @@ several parameters that specify its exact behavior. In order, these four generic
 1. `Context`: a per-transaction struct containing the message's sender. This also provides specs for storage access, so we use different `Context`
    implementations for Native and ZK execution. In ZK, we read values non-deterministically from hints and check them against a merkle tree, while in
    native mode we just read values straight from disk.
-2. `TxVerifier`: a struct that verifies the signatures on transactions and deserializes them into messages
-3. `Runtime`: a collection of modules which make up the rollup's public interface
-4. `TxHooks`: a set of functions which are invoked at various points in the transaction lifecycle
+2. `Runtime`: a collection of modules which make up the rollup's public interface
+3. `ApplyBlobTxHooks & ApplyBlobSequencerHooks` derived from the `Runtime`: a set of functions which are invoked at various points in the transaction lifecycle.
 
-To implement your state transition function, you simply need to specify values for each of these four fields.
+To implement your state transition function, you simply need to specify values for each of these fields.
 
 So, a typical app definition looks like this:
 
@@ -50,73 +49,73 @@ Note that `DefaultContext` and `ZkDefaultContext` are exported by the `sov_modul
 
 In the remainder of this section, we'll walk you through implementing each of the remaining generics.
 
-### Implementing a TxVerifier
+#### Implementing ApplyBlobTxHooks & ApplyBlobSequencerHooks
 
-The `TxVerifier` interface is defined in `sov-default-stf`, and has one associated type and one required method:
+Once a transaction has passed stateless verification, it will get fed into the execution pipeline. In this pipeline there are four places
+where you can inject custom "hooks".
 
-```rust
-/// TxVerifier encapsulates Transaction verification.
-pub trait TxVerifier {
-    type Transaction;
-    /// Runs stateless checks against a single RawTx.
-    fn verify_tx_stateless(&self, raw_tx: RawTx) -> anyhow::Result<Self::Transaction>;
-```
+There are two kind of hooks:
+`ApplyBlobTxHooks`: 
+1. Invoked immediately before each transaction is processed. This is a good time to apply stateful transaction verification, like checking the nonce.
+2. Invoked immediately after each transaction is executed. This is a good place to perform any post-execution operations, like incrementing the nonce.
 
-The semantics of the `TxVerifier` are pretty straightforward - it takes a `RawTx` (a slice of bytes) as an argument, and does
-some work to transform it into some output `Transaction` type _without looking at the current rollup state_. This output transaction
-type will eventually be fed to the `TxHooks` for _stateful_ verification.
+`ApplyBlobSequencerHooks`: 
+1. At the beginning of the `apply_blob` function, before the blob is deserialized into a group of transactions. This is a good time to ensure that the sequencer is properly bonded.
+2. At the end of the `apply_blob` function. This is a good place to reward sequencers.
 
-A typical workflow for a `TxVerifier` is to deserialize the message, and check its signature. As you can see by looking
-at the implementation in `tx_verifier_impl.rs`, this is exactly what we do:
+To use the `AppTemplate`, the runtime needs to provide implementation of these hooks which specifies what needs to happen at each of these four stages.
 
-```rust
-impl<C: Context> TxVerifier for DemoAppTxVerifier<C> {
-	// ...
-    fn verify_tx_stateless(&self, raw_tx: RawTx) -> anyhow::Result<Self::Transaction> {
-        let mut data = Cursor::new(&raw_tx.data);
-        let tx = Transaction::<C>::deserialize_reader(&mut data)?;
+In this demo, we only rely on two modules which need access to the hooks - `sov-accounts` and `sequencer-registry`. 
 
-        // We check signature against runtime_msg and nonce.
-        let mut hasher = C::Hasher::new();
-        hasher.update(&tx.runtime_msg);
-        hasher.update(&tx.nonce.to_le_bytes());
+The `sov-accounts` module implements `ApplyBlobTxHooks` because it needs to check and increment the sender nonce for every transaction.
+The `sequencer-registry` implements `ApplyBlobSequencerHooks` since it is responsible for managing the sequencer bond.
 
-        let msg_hash = hasher.finalize();
+The implementation for `MyRuntime` is straightforward because we can leverage the existing hooks provided by `sov-accounts` and `sequencer-registry` and reuse them in our implementation.
+:
+```Rust
+impl<C: Context> ApplyBlobTxHooks for Runtime<C> {
+    type Context = C;
 
-        tx.signature.verify(&tx.pub_key, msg_hash)?;
-        Ok(tx)
+    fn pre_dispatch_tx_hook(
+        &self,
+        tx: Transaction<Self::Context>,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> anyhow::Result<<Self::Context as Spec>::Address> {
+        self.accounts.pre_dispatch_tx_hook(tx, working_set)
+    }
+
+    fn post_dispatch_tx_hook(
+        &self,
+        tx: &Transaction<Self::Context>,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> anyhow::Result<()> {
+        self.accounts.post_dispatch_tx_hook(tx, working_set)
     }
 }
 ```
 
-#### Implementing TxHooks
+```Rust
+impl<C: Context> ApplyBlobSequencerHooks for Runtime<C> {
+    type Context = C;
 
-Once a transaction has passed stateless verification, it will get fed into the execution pipeline. In this pipeline there are four places
-where you can inject custom "hooks" using your `TxHooks` implementation.
+    fn lock_sequencer_bond(
+        &self,
+        sequencer: &[u8],
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> anyhow::Result<()> {
+        self.sequencer.lock_sequencer_bond(sequencer, working_set)
+    }
 
-1. At the beginning of the `apply_blob` function, before the blob is deserialized into a group of transactions. This is a good time to
-   apply per-batch validation logic like ensuring that the sequencer is properly bonded.
-2. Immediately before each transaction is dispatched to the runtime. This is a good time to apply stateful transaction verification, like checking
-   the nonce.
-3. Immediately after each transaction is executed. This is a good place to perform any post-execution operations, like incrementing the nonce.
-4. At the end of the `apply_blob` function. This is a good place to reward sequencers.
-
-To use the `AppTemplate`, you need to provide a `TxHooks` implementation which specifies what needs to happen at each of these four
-stages.
-
-Its common for modules that need access to these hooks to export a `Hooks` struct. If you're relying on an unfamiliar module, be sure to check
-its documentation to make sure that you know about any hooks that it may rely on. Your `TxHooks` implementation will usually
-just be a wrapper which invokes each of these modules hooks. In this demo, we only rely
-on two modules which need access to the hooks - `sov-accounts` and `sequencer-registry`, so our `TxHooks` implementation only has two fields.
-
-```rust
-pub struct DemoAppTxHooks<C: Context> {
-    accounts_hooks: accounts::hooks::Hooks<C>,
-    sequencer_hooks: sov_sequencer_registry::hooks::Hooks<C>,
+    fn reward_sequencer(
+        &self,
+        amount: u64,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> anyhow::Result<()> {
+        self.sequencer.reward_sequencer(amount, working_set)
+    }
 }
 ```
 
-You can view the full implementation in `tx_hooks_impl.rs`
 
 ### Implementing Runtime: Pick Your Modules
 
