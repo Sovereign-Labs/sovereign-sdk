@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use sov_modules_api::Signature;
 use sov_modules_api::{transaction::Transaction, Context, Hasher, Spec};
 use std::io::Cursor;
+use tracing::debug;
 /// RawTx represents a serialized rollup transaction received from the DA.
 #[derive(Debug, PartialEq, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct RawTx {
@@ -21,6 +22,7 @@ pub fn verify_txs_stateless<C: Context>(
     raw_txs: Vec<RawTx>,
 ) -> anyhow::Result<Vec<(Transaction<C>, RawTxHash)>> {
     let mut txs = Vec::with_capacity(raw_txs.len());
+    debug!("Verifying {} transactions", raw_txs.len());
     for raw_tx in raw_txs {
         let raw_tx_hash = raw_tx.hash::<C>();
         let tx = verify_tx_stateless(raw_tx)?;

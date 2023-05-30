@@ -8,6 +8,7 @@ use demo_stf::ArrayWitness;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::{CelestiaSpec, CelestiaVerifier};
 use jupiter::{BlobWithSender, CelestiaHeader};
+use log::info;
 use risc0_adapter::guest::Risc0Guest;
 use risc0_zkvm::guest::env;
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
@@ -28,6 +29,8 @@ risc0_zkvm::guest::entry!(main);
 //  6. Output (Da hash, start_root, end_root, event_root)
 pub fn main() {
     env::write(&"Start guest\n");
+    // TODO: Remove this
+    info!("Should not be printed from guest");
     let guest = Risc0Guest;
 
     let verifier = CelestiaVerifier::new(jupiter::verifier::RollupParams {

@@ -22,6 +22,7 @@ use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner};
 use std::env;
 use std::net::SocketAddr;
 use tracing::Level;
+use tracing::{debug, info};
 
 // RPC related imports
 use demo_stf::app::get_rpc_methods;
@@ -70,6 +71,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
         .nth(1)
         .unwrap_or_else(|| "rollup_config.toml".to_string());
+    debug!("Starting demo rollup with config {}", rollup_config_path);
     let rollup_config: RollupConfig =
         from_toml_path(&rollup_config_path).context("Failed to read rollup configuration")?;
     let rpc_config = rollup_config.rpc_config;
@@ -77,7 +79,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Initializing logging
     let subscriber = tracing_subscriber::fmt()
-        .with_max_level(Level::WARN)
+        .with_max_level(Level::INFO)
         .finish();
     tracing::subscriber::set_global_default(subscriber)
         .map_err(|_err| eprintln!("Unable to set global default subscriber"))
@@ -120,11 +122,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let item_numbers = ledger_db.get_next_items_numbers();
     let last_slot_processed_before_shutdown = item_numbers.slot_number - 1;
     if last_slot_processed_before_shutdown == 0 {
-        print!("No history detected. Initializing chain...");
+        info!("No history detected. Initializing chain...");
         demo.init_chain(get_genesis_config());
-        println!("Done.");
+        info!("Chain initialization is done.");
     } else {
-        println!("Chain is already initialized. Skipping initialization.");
+        debug!("Chain is already initialized. Skipping initialization.");
     }
 
     // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
@@ -137,7 +139,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let start_height = rollup_config.start_height + last_slot_processed_before_shutdown;
 
     for height in start_height.. {
-        println!(
+        info!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
             hex::encode(prev_state_root)
@@ -155,13 +157,13 @@ async fn main() -> Result<(), anyhow::Error> {
         assert!(da_verifier
             .verify_relevant_tx_list(&header, &blob_txs, inclusion_proof, completeness_proof)
             .is_ok());
-        println!("Received {} blobs", blob_txs.len());
+        info!("Received {} blobs", blob_txs.len());
 
         demo.begin_slot(Default::default());
         let mut data_to_commit = SlotCommit::new(filtered_block);
         for blob in blob_txs.clone() {
             let receipts = demo.apply_blob(blob, None);
-            println!("er: {:?}", receipts);
+            info!("er: {:?}", receipts);
             data_to_commit.add_batch(receipts);
         }
         let (next_state_root, _witness) = demo.end_slot();

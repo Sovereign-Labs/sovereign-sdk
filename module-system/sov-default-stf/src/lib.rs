@@ -12,6 +12,7 @@ use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::stf::TransactionReceipt;
 use sov_rollup_interface::zk::traits::Zkvm;
 use sov_rollup_interface::Buf;
+use tracing::debug;
 use tracing::error;
 use tx_verifier::verify_txs_stateless;
 pub use tx_verifier::RawTx;
@@ -50,6 +51,10 @@ where
         sequencer: &[u8],
         batch: impl Buf,
     ) -> BatchReceipt<SequencerOutcome, TxEffect> {
+        debug!(
+            "Applying batch from sequencer: 0x{}",
+            hex::encode(sequencer)
+        );
         let mut batch_workspace = self
             .working_set
             .take()
@@ -97,6 +102,7 @@ where
                 };
             }
         };
+        debug!("Deserialized batch with {} txs", batch.txs.len());
 
         // Run the stateless verification, since it is stateless we don't commit.
         let txs = match verify_txs_stateless(batch.take_transactions()) {
@@ -174,7 +180,7 @@ where
                     // If the serialization is invalid, the sequencer is malicious. Slash them (we don't run exit_apply_batch here)
                     let batch_workspace = batch_workspace.revert();
                     self.working_set = Some(batch_workspace);
-                    error!("Tx decoding error: {}", e);
+                    error!("Tx 0x{} decoding error: {}", hex::encode(raw_tx_hash), e);
                     return BatchReceipt {
                         batch_hash: batch_data_and_hash.hash,
                         tx_receipts: Vec::new(),

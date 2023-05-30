@@ -7,15 +7,16 @@ resolver = "2"
 [dependencies]
 
 anyhow = { workspace = true }
-borsh = { workspace = true}
+borsh = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 sov-rollup-interface = { path = "../../rollup-interface" }
-sov-db = { path = "../../full-node/db/sov-db", optional = true}
+sov-db = { path = "../../full-node/db/sov-db", optional = true }
 first-read-last-write-cache = { path = "../utils/first-read-last-write-cache" }
 jmt = { workspace = true }
-hex = { workspace = true}
-sha2 = { workspace = true}
+hex = { workspace = true }
+sha2 = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
 sov-db = { path = "../../full-node/db/sov-db", features = ["temp"] }

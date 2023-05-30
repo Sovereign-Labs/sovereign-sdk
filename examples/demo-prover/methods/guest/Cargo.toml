@@ -15,6 +15,10 @@ sov-rollup-interface = { path = "../../../../rollup-interface" }
 risc0-adapter = { path = "../../../../adapters/risc0", default-features = false }
 const-rollup-config = { path = "../../../const-rollup-config" }
 
+# TODO: Just for test
+tracing = "0.1.37"
+log = "0.4.17"
+
 [build-dependencies]
 directories = "5.0"
 downloader = "0.2"
