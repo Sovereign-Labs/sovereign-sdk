@@ -16,10 +16,7 @@ pub use tx_hooks::VerifiedTx;
 pub use tx_verifier::{RawTx, TxVerifier};
 
 use sov_modules_api::{Context, DispatchCall, Genesis, Hasher, Spec};
-use sov_rollup_interface::{
-    stf::{OpaqueAddress, StateTransitionFunction},
-    traits::BatchTrait,
-};
+use sov_rollup_interface::{stf::StateTransitionFunction, traits::BatchTrait};
 use sov_state::{Storage, WorkingSet};
 use std::io::Read;
 
@@ -296,18 +293,12 @@ where
         self.apply_batch(sequencer, blob.data())
     }
 
-    fn end_slot(
-        &mut self,
-    ) -> (
-        Self::StateRoot,
-        Self::Witness,
-        Vec<sov_rollup_interface::stf::ConsensusSetUpdate<OpaqueAddress>>,
-    ) {
+    fn end_slot(&mut self) -> (Self::StateRoot, Self::Witness) {
         let (cache_log, witness) = self.working_set.take().unwrap().freeze();
         let root_hash = self
             .current_storage
             .validate_and_commit(cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
-        (jmt::RootHash(root_hash), witness, vec![])
+        (jmt::RootHash(root_hash), witness)
     }
 }

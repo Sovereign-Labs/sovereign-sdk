@@ -239,6 +239,7 @@ fn transfer_deployed_token() {
         token_name,
         initial_balance,
         minter_address: sender_address.clone(),
+        authorized_minters: vec![sender_address.clone()],
     };
     bank.call(mint_message, &sender_context, &mut working_set)
         .expect("Failed to mint token");

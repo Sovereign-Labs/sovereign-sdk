@@ -1,13 +1,14 @@
 # How to Create a Rollup from Scratch
+
 Many rollups have concepts like `Account` or `Token` and access the state in a similar manner. This is where the [sov-modules-api](../../module-system/sov-modules-api/README.md) becomes useful. It offers a standardized approach to writing rollup business logic. However, there are cases where your rollup requirements may be so unique that the `module-system` could become a hindrance. In this tutorial, we will bypass the `module-system` and directly create a simple rollup by implementing a `StateTransitionFunction` "from scratch".
 
-In our rollup, we will verify whether the sender of a data blob possesses the preimage for a specific hash digest. It's important to note that our rollup is designed to be "stateless," meaning that implementing state access is not covered in this tutorial. However, if you're interested, you can refer to the [sov-state](../../module-system/sov-state/README.md) for an example of how it can be done.
+In this tutorial, we’ll build an STF which checks if the input data (called a preimage) results in a specific output (called a digest) when fed through a hash function. It's important to note that our rollup is designed to be "stateless," meaning that implementing state access is not covered in this tutorial. However, if you're interested, you can refer to the [sov-state](../../module-system/sov-state/README.md) for an example of how it can be done.
 
 ## Implementing the State Transition Function
-The [State Transition Function
-interface](../../rollup-interface/specs/interfaces/stf.md) serves as the core component of our rollup, where the business logic will reside. 
-Implementations of this trait can be integrated with any ZKVM and DA Layer resulting in a fully functional rollup. To begin, we will create a structure called `CheckHashPreimageStf`, and implement the `StateTransitionFunction` trait for it. You can find the complete code in the `lib.rs` file, but we will go over the most important parts here:
 
+The [State Transition Function
+interface](../../rollup-interface/specs/interfaces/stf.md) serves as the core component of our rollup, where the business logic will reside.
+Implementations of this trait can be integrated with any ZKVM and DA Layer resulting in a fully functional rollup. To begin, we will create a structure called `CheckHashPreimageStf`, and implement the `StateTransitionFunction` trait for it. You can find the complete code in the `lib.rs` file, but we will go over the most important parts here:
 
 ```rust
 pub struct CheckHashPreimageStf {}
@@ -27,20 +28,21 @@ pub enum ApplyBlobResult {
 Now let's discuss the implementation. First, we define some types that are relevant to our rollup:
 
 ```rust
+impl StateTransitionFunction for CheckHashPreimageStf {
     // Since our rollup is stateless, we don't need to consider the StateRoot.
     type StateRoot = ();
 
     // This represents the initial configuration of the rollup, but it is not supported in this tutorial.
     type InitialState = ();
 
-    // We could incorporate the concept of a transaction into the rollup, but we leave it as an 
+    // We could incorporate the concept of a transaction into the rollup, but we leave it as an
     // exercise for the reader.
     type TxReceiptContents = ();
 
     // This is the type that will be returned as a result of `apply_blob`.
     type BatchReceiptContents = ApplyBlobResult;
 
-   // This data is produced during actual batch execution or validated with proof during verification. 
+   // This data is produced during actual batch execution or validated with proof during verification.
    // However, in this tutorial, we won't use it.
     type Witness = ();
 
@@ -51,6 +53,7 @@ Now let's discuss the implementation. First, we define some types that are relev
 Now that we have defined the necessary types, we need to implement the following functions:
 
 ```rust
+
     // Perform one-time initialization for the genesis block.
     fn init_chain(&mut self, _params: Self::InitialState) {
         // Do nothing
@@ -66,6 +69,7 @@ Now that we have defined the necessary types, we need to implement the following
 These functions handle the initialization and preparation stages of our rollup, but as we are not modifying the rollup state, their implementation is simply left empty.
 
 Next we need to write the core logic in `apply_blob`:
+
 ```rust
     // The core logic of our rollup.
     fn apply_blob(
@@ -80,7 +84,7 @@ Next we need to write the core logic in `apply_blob`:
         let mut data = Vec::new();
 
         // Panicking within the `StateTransitionFunction` is generally not recommended.
-        // But here if we encounter an error while reading the bytes, it suggests a serious 
+        // But here if we encounter an error while reading the bytes, it suggests a serious
         // issue with the DA layer or our setup.
         reader
             .read_to_end(&mut data)
@@ -107,6 +111,7 @@ Next we need to write the core logic in `apply_blob`:
         }
     }
 ```
+
 The above function reads the data from the blob, computes the `hash`, compares it with the `desired_hash`, and returns a `BatchReceipt` indicating whether the preimage was successfully submitted or not.
 
 The last method is `end_slot`, like before the implementation is trivial:
@@ -122,13 +127,16 @@ The last method is `end_slot`, like before the implementation is trivial:
         ((), (), vec![])
     }
 ```
+
 ### Exercise
-In the current implementation, every blob contains the data we pass to the hash function. 
-As an exercise, you can introduce the concept of transactions.  In this scenario, 
+
+In the current implementation, every blob contains the data we pass to the hash function.
+As an exercise, you can introduce the concept of transactions. In this scenario,
 the blob would contain multiple transactions (containing data) that we can loop over to check hash equality.
 The first transaction that finds the correct hash would break the loop and return early.
 
-## Testing.
+## Testing
+
 The `sov_rollup_interface::mocks` crate provides two utilities that are useful for testing:
 
 1. The `MockZkvm` is an implementation of the `Zkvm` trait that can be used in tests.
@@ -143,11 +151,10 @@ pub struct DaAddress {
 impl AddressTrait for DaAddress {}
 
 ```
+
 You can find more details in the `stf_test.rs` file.
 
-
 The following test checks the rollup logic. In the test, we call `init_chain, begin_slot, and end_slot` for completeness, even though these methods do nothing.
-
 
 ```rust
 #[test]
@@ -167,4 +174,3 @@ fn test_stf() {
     StateTransitionFunction::<MockZkvm>::end_slot(stf);
 }
 ```
-

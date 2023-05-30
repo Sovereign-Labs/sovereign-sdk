@@ -1,7 +1,7 @@
 use sha2::Digest;
 use sov_rollup_interface::{
     da::BlobTransactionTrait,
-    stf::{BatchReceipt, ConsensusSetUpdate, OpaqueAddress, StateTransitionFunction},
+    stf::{BatchReceipt, StateTransitionFunction},
     zk::traits::Zkvm,
     Buf,
 };
@@ -87,13 +87,7 @@ impl<VM: Zkvm> StateTransitionFunction<VM> for CheckHashPreimageStf {
         }
     }
 
-    fn end_slot(
-        &mut self,
-    ) -> (
-        Self::StateRoot,
-        Self::Witness,
-        Vec<ConsensusSetUpdate<OpaqueAddress>>,
-    ) {
-        ((), (), vec![])
+    fn end_slot(&mut self) -> (Self::StateRoot, Self::Witness) {
+        ((), ())
     }
 }

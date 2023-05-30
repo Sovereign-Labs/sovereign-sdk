@@ -65,11 +65,13 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
                 token_name,
                 initial_balance,
                 minter_address,
+                authorized_minters,
             } => Ok(self.create_token(
                 token_name,
                 salt,
                 initial_balance,
                 minter_address,
+                authorized_minters,
                 context,
                 working_set,
             )?),
@@ -79,6 +81,15 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
             }
 
             call::CallMessage::Burn { coins } => Ok(self.burn(coins, context, working_set)?),
+
+            call::CallMessage::Mint {
+                coins,
+                minter_address,
+            } => Ok(self.mint(coins, minter_address, context, working_set)?),
+
+            call::CallMessage::Freeze { token_address } => {
+                Ok(self.freeze(token_address, context, working_set)?)
+            }
         }
     }
 }

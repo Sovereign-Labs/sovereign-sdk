@@ -16,6 +16,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
             let (token_address, token) = Token::<C>::create(
                 &token_config.token_name,
                 &token_config.address_and_balances,
+                vec![C::Address::try_from(&DEPLOYER)?],
                 &DEPLOYER,
                 SALT,
                 parent_prefix,
