@@ -1,8 +1,7 @@
+use crate::{Context, Spec};
 use sov_state::WorkingSet;
 
-use crate::{Context, Spec};
-
-/// Transaction represents a deserialized RawTx.
+// A Transaction object that is compatible with the module-system/sov-default-stf;
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Transaction<C: Context> {
     signature: C::Signature,
@@ -12,7 +11,6 @@ pub struct Transaction<C: Context> {
 }
 
 impl<C: Context> Transaction<C> {
-    #[allow(dead_code)]
     pub fn new(msg: Vec<u8>, pub_key: C::PublicKey, signature: C::Signature, nonce: u64) -> Self {
         Self {
             signature,
@@ -39,17 +37,18 @@ impl<C: Context> Transaction<C> {
     }
 }
 
+/// Hooks that execute within the `StateTransitionFunction::apply_blob` function for each processed transaction.
 pub trait ApplyBlobTxHooks {
     type Context: Context;
 
-    /// runs just before a transaction is dispatched to an appropriate module.
+    /// Runs just before a transaction is dispatched to an appropriate module.
     fn pre_dispatch_tx_hook(
         &self,
         tx: Transaction<Self::Context>,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<<Self::Context as Spec>::Address>;
 
-    /// runs after the tx is dispatched to an appropriate module.
+    /// Runs after the tx is dispatched to an appropriate module.
     fn post_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
@@ -57,16 +56,19 @@ pub trait ApplyBlobTxHooks {
     ) -> anyhow::Result<()>;
 }
 
+// Hooks related to the Sequencer functionality.
+// In essence, the sequencer locks a bond at the beginning of the
+// `StateTransitionFunction::apply_blob`, and is rewarded once a blob of transactions is processed.
 pub trait ApplyBlobSequencerHooks {
     type Context: Context;
-    /// runs at the beginning of apply_blob.
+    /// Runs at the beginning of apply_blob, locks the sequencer bond.
     fn lock_sequencer_bond(
         &self,
         sequencer: &[u8],
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()>;
 
-    /// runs at the end of apply_batch.
+    /// Executes at the end of apply_blob and rewards the sequencer. This method is not invoked if the sequencer has been slashed.
     fn reward_sequencer(
         &self,
         amount: u64,
