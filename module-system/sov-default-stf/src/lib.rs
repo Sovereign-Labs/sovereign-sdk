@@ -76,10 +76,7 @@ where
             return BatchReceipt {
                 batch_hash: batch_data_and_hash.hash,
                 tx_receipts: Vec::new(),
-                inner: SequencerOutcome {
-                    status: SequencerStatus::Ignored,
-                    reward: 0,
-                },
+                inner: SequencerOutcome::Ignored,
             };
         }
 
@@ -101,10 +98,7 @@ where
                 return BatchReceipt {
                     batch_hash: batch_data_and_hash.hash,
                     tx_receipts: Vec::new(),
-                    inner: SequencerOutcome {
-                        status: SequencerStatus::Slashed(SlashingReason::InvalidBatchEncoding),
-                        reward: 0,
-                    },
+                    inner: SequencerOutcome::Slashed(SlashingReason::InvalidBatchEncoding),
                 };
             }
         };
@@ -121,12 +115,7 @@ where
                 return BatchReceipt {
                     batch_hash: batch_data_and_hash.hash,
                     tx_receipts: Vec::new(),
-                    inner: SequencerOutcome {
-                        status: SequencerStatus::Slashed(
-                            SlashingReason::StatelessVerificationFailed,
-                        ),
-                        reward: 0,
-                    },
+                    inner: SequencerOutcome::Slashed(SlashingReason::StatelessVerificationFailed),
                 };
             }
         };
@@ -195,12 +184,9 @@ where
                     return BatchReceipt {
                         batch_hash: batch_data_and_hash.hash,
                         tx_receipts: Vec::new(),
-                        inner: SequencerOutcome {
-                            status: SequencerStatus::Slashed(
-                                SlashingReason::InvalidTransactionEncoding,
-                            ),
-                            reward: 0,
-                        },
+                        inner: SequencerOutcome::Slashed(
+                            SlashingReason::InvalidTransactionEncoding,
+                        ),
                     };
                 }
             }
@@ -211,10 +197,7 @@ where
 
         // TODO: calculate the amount based of gas and fees
 
-        let batch_receipt_contents = SequencerOutcome {
-            status: SequencerStatus::Rewarded,
-            reward: 0,
-        };
+        let batch_receipt_contents = SequencerOutcome::Rewarded(0);
         self.runtime
             .end_blob_hook(batch_receipt_contents, &mut batch_workspace)
             .expect("Impossible happened: error in exit_apply_batch");
@@ -255,16 +238,10 @@ pub enum TxEffect {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum SequencerStatus {
-    Rewarded,
+pub enum SequencerOutcome {
+    Rewarded(u64),
     Slashed(SlashingReason),
     Ignored,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct SequencerOutcome {
-    pub status: SequencerStatus,
-    pub reward: u64,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

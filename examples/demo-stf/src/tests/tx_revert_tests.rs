@@ -3,7 +3,7 @@ use crate::{
     runtime::Runtime,
     tests::{data_generation::simulate_da_with_bad_serialization, has_tx_events},
 };
-use sov_default_stf::{Batch, SequencerStatus, SlashingReason};
+use sov_default_stf::{Batch, SequencerOutcome, SlashingReason};
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
 };
@@ -46,7 +46,7 @@ fn test_tx_revert() {
         );
 
         assert!(
-            matches!(apply_blob_outcome.inner.status, SequencerStatus::Rewarded,),
+            matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded(0),),
             "Unexpected outcome: Batch exeuction should have succeeded"
         );
 
@@ -112,7 +112,7 @@ fn test_tx_bad_sig() {
         );
 
         assert!(
-            matches!(apply_blob_outcome.inner.status, SequencerStatus::Slashed(SlashingReason::StatelessVerificationFailed),),
+            matches!(apply_blob_outcome.inner, SequencerOutcome::Slashed(SlashingReason::StatelessVerificationFailed),),
             "Unexpected outcome: Stateless verification should have failed due to invalid signature"
         );
 
@@ -171,7 +171,7 @@ fn test_tx_bad_serialization() {
         );
 
         assert!(
-            matches!(apply_blob_outcome.inner.status, sov_default_stf::SequencerStatus::Slashed(SlashingReason::InvalidTransactionEncoding)),
+            matches!(apply_blob_outcome.inner, sov_default_stf::SequencerOutcome::Slashed(SlashingReason::InvalidTransactionEncoding)),
             "Unexpected outcome: Stateless verification should have failed due to invalid signature"
         );
 

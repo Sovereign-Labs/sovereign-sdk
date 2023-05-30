@@ -8,7 +8,7 @@ pub mod test {
             new_test_blob, C,
         },
     };
-    use sov_default_stf::{Batch, SequencerStatus};
+    use sov_default_stf::{Batch, SequencerOutcome};
     use sov_modules_api::{
         default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
     };
@@ -41,7 +41,7 @@ pub mod test {
             );
 
             assert!(
-                matches!(apply_blob_outcome.inner.status, SequencerStatus::Rewarded,),
+                matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded(0),),
                 "Sequencer execution should have succeeded but failed "
             );
 
@@ -97,7 +97,7 @@ pub mod test {
         );
 
         assert!(
-            matches!(apply_blob_outcome.inner.status, SequencerStatus::Rewarded,),
+            matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded(0),),
             "Sequencer execution should have succeeded but failed "
         );
 
@@ -150,7 +150,7 @@ pub mod test {
             )
             .inner;
             assert!(
-                matches!(apply_blob_outcome.status, SequencerStatus::Rewarded,),
+                matches!(apply_blob_outcome, SequencerOutcome::Rewarded(0),),
                 "Sequencer execution should have succeeded but failed "
             );
         }
@@ -201,7 +201,7 @@ pub mod test {
         );
 
         assert!(
-            matches!(apply_blob_outcome.inner.status, SequencerStatus::Ignored),
+            matches!(apply_blob_outcome.inner, SequencerOutcome::Ignored),
             "Batch should have been skipped due to insufficient funds"
         );
 
