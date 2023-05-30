@@ -634,7 +634,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn proptest_share_serialization_deserialization(data in share_bytes_strategy_2()) {
+        fn proptest_share_serialization_deserialization(data in share_bytes_strategy()) {
             let bytes = Bytes::from(data);
             let share = Share::new(bytes);
             let serialized = share.try_to_vec().unwrap();
