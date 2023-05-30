@@ -1,7 +1,6 @@
 #[cfg(feature = "native")]
 use crate::runner_config::Config;
 use crate::runtime::Runtime;
-use crate::tx_hooks_impl::DemoAppTxHooks;
 use crate::tx_verifier_impl::DemoAppTxVerifier;
 use sov_default_stf::AppTemplate;
 pub use sov_default_stf::Batch;
@@ -43,7 +42,7 @@ use sov_modules_macros::expose_rpc;
 #[cfg(feature = "native")]
 pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
 
-pub type DemoApp<C, Vm> = AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, DemoAppTxHooks<C>, Vm>;
+pub type DemoApp<C, Vm> = AppTemplate<C, DemoAppTxVerifier<C>, Runtime<C>, Vm>;
 
 /// Batch receipt type used by the demo app. We export this type so that it's easily accessible to the full node.
 pub type DemoBatchReceipt = SequencerOutcome;
@@ -61,8 +60,7 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
         let storage = ProverStorage::with_config(runtime_config.storage)
             .expect("Failed to open prover storage");
         let tx_verifier = DemoAppTxVerifier::new();
-        let tx_hooks = DemoAppTxHooks::new();
-        let app = AppTemplate::new(storage, runtime, tx_verifier, tx_hooks);
+        let app = AppTemplate::new(storage, runtime, tx_verifier);
         Self(app)
     }
 
@@ -83,14 +81,12 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
         let runtime = Runtime::new();
         let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
         let tx_verifier = DemoAppTxVerifier::new();
-        let tx_hooks = DemoAppTxHooks::new();
         let app: AppTemplate<
             ZkDefaultContext,
             DemoAppTxVerifier<ZkDefaultContext>,
             Runtime<ZkDefaultContext>,
-            DemoAppTxHooks<ZkDefaultContext>,
             Vm,
-        > = AppTemplate::new(storage, runtime, tx_verifier, tx_hooks);
+        > = AppTemplate::new(storage, runtime, tx_verifier);
         Self(app)
     }
 

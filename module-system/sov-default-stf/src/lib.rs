@@ -21,27 +21,25 @@ use sov_rollup_interface::{stf::StateTransitionFunction, traits::BatchTrait};
 use sov_state::{Storage, WorkingSet};
 use std::io::Read;
 
-pub struct AppTemplate<C: Context, V, RT, H, Vm> {
+pub struct AppTemplate<C: Context, V, RT, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
     tx_verifier: V,
-    tx_hooks: H,
+
     working_set: Option<WorkingSet<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
 }
 
-impl<C: Context, V, RT, H, Vm> AppTemplate<C, V, RT, H, Vm>
+impl<C: Context, V, RT, Vm> AppTemplate<C, V, RT, Vm>
 where
-    RT: DispatchCall<Context = C> + Genesis<Context = C>,
+    RT: DispatchCall<Context = C> + Genesis<Context = C> + ApplyBatchHooks<Context = C>,
     V: TxVerifier<Context = C>,
-    H: ApplyBatchHooks<Context = C>,
 {
-    pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
+    pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V) -> Self {
         Self {
             runtime,
             current_storage: storage,
             tx_verifier,
-            tx_hooks,
             working_set: None,
             phantom_vm: PhantomData,
         }
@@ -62,7 +60,7 @@ where
         let batch_data_and_hash = BatchDataAndHash::new::<C>(batch);
 
         if let Err(e) = self
-            .tx_hooks
+            .runtime
             .enter_apply_blob(sequencer, &mut batch_workspace)
         {
             error!(
@@ -128,7 +126,7 @@ where
 
             // Run the stateful verification, possibly modifies the state.
             let sender_address = match self
-                .tx_hooks
+                .runtime
                 .pre_dispatch_tx_hook(tx.clone(), &mut batch_workspace)
             {
                 Ok(verified_tx) => verified_tx,
@@ -153,7 +151,7 @@ where
                     let ctx = C::new(sender_address.clone());
                     let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
-                    self.tx_hooks
+                    self.runtime
                         .post_dispatch_tx_hook(tx.pub_key.clone(), &mut batch_workspace);
 
                     let tx_effect = match tx_result {
@@ -195,7 +193,7 @@ where
         }
 
         // TODO: calculate the amount based of gas and fees
-        self.tx_hooks
+        self.runtime
             .exit_apply_blob(0, &mut batch_workspace)
             .expect("Impossible happened: error in exit_apply_batch");
 
@@ -248,11 +246,10 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-impl<C: Context, V, RT, H, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, V, RT, H, Vm>
+impl<C: Context, V, RT, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, V, RT, Vm>
 where
-    RT: DispatchCall<Context = C> + Genesis<Context = C>,
+    RT: DispatchCall<Context = C> + Genesis<Context = C> + ApplyBatchHooks<Context = C>,
     V: TxVerifier<Context = C>,
-    H: ApplyBatchHooks<Context = C>,
 {
     type StateRoot = jmt::RootHash;
 

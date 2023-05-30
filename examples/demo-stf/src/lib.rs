@@ -17,7 +17,6 @@ use sov_modules_api::{
 };
 
 pub use sov_state::ArrayWitness;
-pub use tx_verifier_impl::Transaction;
 
 #[cfg(feature = "native")]
 pub fn sign_tx(priv_key: &DefaultPrivateKey, message: &[u8], nonce: u64) -> DefaultSignature {

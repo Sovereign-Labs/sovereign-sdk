@@ -1,10 +1,7 @@
 use borsh::BorshDeserialize;
 use sov_default_stf::{RawTx, TxVerifier};
-use sov_modules_api::{Context, Hasher, Signature, hooks::Transaction};
+use sov_modules_api::{hooks::Transaction, Context, Hasher, Signature};
 use std::{io::Cursor, marker::PhantomData};
-
-
-
 
 pub struct DemoAppTxVerifier<C: Context> {
     _phantom: PhantomData<C>,
@@ -22,7 +19,7 @@ impl<C: Context> DemoAppTxVerifier<C> {
 impl<C: Context> TxVerifier for DemoAppTxVerifier<C> {
     type Context = C;
 
-    fn verify_tx_stateless(&self, raw_tx: RawTx) -> anyhow::Result<Transaction<Self::Context>>;{
+    fn verify_tx_stateless(&self, raw_tx: RawTx) -> anyhow::Result<Transaction<Self::Context>> {
         let mut data = Cursor::new(&raw_tx.data);
         let tx = Transaction::<Self::Context>::deserialize_reader(&mut data)?;
 

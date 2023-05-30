@@ -70,7 +70,6 @@ impl<C: Context> ApplyBatchHooks for Sequencer<C> {
         pub_key: <Self::Context as Spec>::PublicKey,
         working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
     ) {
-        todo!()
     }
 
     fn enter_apply_blob(
