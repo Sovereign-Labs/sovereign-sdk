@@ -28,13 +28,13 @@ transactions signed by particular private keys. To fill the gap, there's a syste
 bridges between the two layers of abstraction.
 
 The reason the `AppTemplate` is called a "template" is that it's generic. It allows you, the developer, to pass in
-several parameters that specify its exact behavior. In order, these four generics are:
+several parameters that specify its exact behavior. In order, these generics are:
 
 1. `Context`: a per-transaction struct containing the message's sender. This also provides specs for storage access, so we use different `Context`
    implementations for Native and ZK execution. In ZK, we read values non-deterministically from hints and check them against a merkle tree, while in
    native mode we just read values straight from disk.
 2. `Runtime`: a collection of modules which make up the rollup's public interface
-3. `TxHooks & ApplyBlobHooks` derived from the `Runtime`: a set of functions which are invoked at various points in the transaction lifecycle.
+
 
 To implement your state transition function, you simply need to specify values for each of these fields.
 
@@ -49,18 +49,41 @@ Note that `DefaultContext` and `ZkDefaultContext` are exported by the `sov_modul
 
 In the remainder of this section, we'll walk you through implementing each of the remaining generics.
 
-#### Implementing TxHooks & ApplyBlobHooks
+## Implementing Runtime: Pick Your Modules
 
-Once a transaction has passed stateless verification, it will get fed into the execution pipeline. In this pipeline there are four places
-where you can inject custom "hooks".
+The final piece of the puzzle is your app's runtime. A runtime is just a list of modules - really, that's it! To add a new
+module to your app, just add an additional field to the runtime.
+
+```rust
+#[derive(Genesis, DispatchCall, MessageCodec)]
+#[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
+pub struct MyRuntime<C: Context> {
+    #[allow(unused)]
+    sequencer: sov_sequencer_registry::Sequencer<C>,
+
+    #[allow(unused)]
+    bank: sov_bank::Bank<C>,
+
+    #[allow(unused)]
+    accounts: sov_accounts::Accounts<C>,
+}
+```
+
+As you can see in the above snippet, we derive four macros on the runtime. The `Genesis` macro generates
+initialization code for each module which will get run at your rollup's genesis. The other three macros
+allow your runtime to dispatch transactions and queries, and tell it which serialization scheme to use.
+We recommend borsh, since it's both fast and safe for hashing.
+
+### Implementing Hooks for the Runtime: 
+The next step is to implement `Hooks` for `MyRuntime`. Hooks are abstractions that allows for the injection of custom logic into the transaction processing pipeline.
 
 There are two kind of hooks:
 
-`TxHooks` with the following methods:
+`TxHooks`, which has the following methods:
 1. `pre_dispatch_tx_hook`: Invoked immediately before each transaction is processed. This is a good time to apply stateful transaction verification, like checking the nonce.
 2. `post_dispatch_tx_hook`: Invoked immediately after each transaction is executed. This is a good place to perform any post-execution operations, like incrementing the nonce.
 
-`ApplyBlobHooks` with the following methods: 
+`ApplyBlobHooks`, which has the following methods: 
 1. `begin_blob_hook `Invoked at the beginning of the `apply_blob` function, before the blob is deserialized into a group of transactions. This is a good time to ensure that the sequencer is properly bonded.
 2. `end_blob_hook` invoked at the end of the `apply_blob` function. This is a good place to reward sequencers.
 
@@ -116,32 +139,6 @@ impl<C: Context> ApplyBlobHooks for Runtime<C> {
     }
 }
 ```
-
-
-### Implementing Runtime: Pick Your Modules
-
-The final piece of the puzzle is your app's runtime. A runtime is just a list of modules - really, that's it! To add a new
-module to your app, just add an additional field to the runtime.
-
-```rust
-#[derive(Genesis, DispatchCall, MessageCodec)]
-#[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub struct MyRuntime<C: Context> {
-    #[allow(unused)]
-    sequencer: sov_sequencer_registry::Sequencer<C>,
-
-    #[allow(unused)]
-    bank: sov_bank::Bank<C>,
-
-    #[allow(unused)]
-    accounts: sov_accounts::Accounts<C>,
-}
-```
-
-As you can see in the above snippet, we derive four macros on the runtime. The `Genesis` macro generates
-initialization code for each module which will get run at your rollup's genesis. The other three macros
-allow your runtime to dispatch transactions and queries, and tell it which serialization scheme to use.
-We recommend borsh, since it's both fast and safe for hashing.
 
 That's it - with those three structs implemented, you can plug them into your `AppTemplate` and get a
 complete State Transition Function!
