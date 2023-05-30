@@ -13,6 +13,7 @@ mod serde_address;
 #[cfg(test)]
 mod tests;
 pub mod transaction;
+
 pub use crate::bech32::AddressBech32;
 use borsh::{BorshDeserialize, BorshSerialize};
 use core::fmt::{self, Debug, Display};

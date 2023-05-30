@@ -6,6 +6,9 @@ pub trait TxHooks {
     type Context: Context;
 
     /// Runs just before a transaction is dispatched to an appropriate module.
+    /// TODO: Why does it return address?
+    /// Does it implies that it should do signature verification.
+    /// Can other code rely on that assumption?
     fn pre_dispatch_tx_hook(
         &self,
         tx: Transaction<Self::Context>,
