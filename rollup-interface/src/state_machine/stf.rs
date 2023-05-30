@@ -28,7 +28,6 @@ mod sealed {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransactionReceipt<R> {
     /// The canonical hash of this transaction
-    /// TODO: Shouldn't this be generic? What if hash does not fit in 32 bytes?
     pub tx_hash: [u8; 32],
     /// The canonically serialized body of the transaction, if it should be persisted
     /// in the database
