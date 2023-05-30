@@ -10,7 +10,7 @@ use crate::Signature;
 #[cfg(feature = "native")]
 use crate::Spec;
 
-/// A Transaction object that is compatible with the module-system/sov-default-stf;
+/// A Transaction object that is compatible with the module-system/sov-default-stf.
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Transaction<C: Context> {
     signature: C::Signature,

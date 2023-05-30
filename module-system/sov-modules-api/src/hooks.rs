@@ -20,9 +20,9 @@ pub trait ApplyBlobTxHooks {
     ) -> anyhow::Result<()>;
 }
 
-// Hooks related to the Sequencer functionality.
-// In essence, the sequencer locks a bond at the beginning of the
-// `StateTransitionFunction::apply_blob`, and is rewarded once a blob of transactions is processed.
+/// Hooks related to the Sequencer functionality.
+/// In essence, the sequencer locks a bond at the beginning of the `StateTransitionFunction::apply_blob`,
+/// and is rewarded once a blob of transactions is processed.
 pub trait ApplyBlobSequencerHooks {
     type Context: Context;
     /// Runs at the beginning of apply_blob, locks the sequencer bond.
