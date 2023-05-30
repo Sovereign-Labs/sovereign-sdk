@@ -164,6 +164,10 @@ pub trait Context: Spec + Clone + Debug + PartialEq {
     fn new(sender: Self::Address) -> Self;
 }
 
+pub trait DefaultConfig<C: Context> {
+    fn new() -> Self;
+}
+
 impl<T> Genesis for T
 where
     T: Module,

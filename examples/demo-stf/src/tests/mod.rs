@@ -2,6 +2,7 @@ use borsh::BorshSerialize;
 use sov_default_stf::{AppTemplate, Batch, SequencerOutcome, TxEffect};
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, Address,
+    DefaultConfig,
 };
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_state::ProverStorage;

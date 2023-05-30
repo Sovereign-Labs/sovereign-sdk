@@ -6,6 +6,7 @@ use crate::{
 use sov_default_stf::{Batch, SequencerOutcome, SlashingReason};
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
+    DefaultConfig,
 };
 use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
 use sov_state::{ProverStorage, WorkingSet};

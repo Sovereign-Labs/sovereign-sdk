@@ -2,7 +2,8 @@
 mod dispatch;
 mod module_info;
 use dispatch::{
-    dispatch_call::DispatchCallMacro, genesis::GenesisMacro, message_codec::MessageCodec,
+    default_config::DefaultConfigMacro, dispatch_call::DispatchCallMacro, genesis::GenesisMacro,
+    message_codec::MessageCodec,
 };
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
@@ -46,6 +47,15 @@ pub fn genesis(input: TokenStream) -> TokenStream {
     let genesis_macro = GenesisMacro::new("Genesis");
 
     handle_macro_error(genesis_macro.derive_genesis(input))
+}
+
+/// Derives the `sov-modules-api::Runtime` implementation for the underlying type.
+#[proc_macro_derive(DefaultConfig)]
+pub fn default_config(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+    let default_config_macro = DefaultConfigMacro::new("DefaultConfig");
+
+    handle_macro_error(default_config_macro.derive_default_config(input))
 }
 
 /// Derives the `sov-modules-api::DispatchCall` implementation for the underlying type.
