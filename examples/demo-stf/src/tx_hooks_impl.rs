@@ -1,6 +1,7 @@
 use crate::runtime::Runtime;
+use sov_default_stf::SequencerOutcome;
 use sov_modules_api::{
-    hooks::{ApplyBlobSequencerHooks, ApplyBlobTxHooks},
+    hooks::{ApplyBlobHooks, ApplyBlobTxHooks},
     transaction::Transaction,
     Context, Spec,
 };
@@ -26,22 +27,25 @@ impl<C: Context> ApplyBlobTxHooks for Runtime<C> {
     }
 }
 
-impl<C: Context> ApplyBlobSequencerHooks for Runtime<C> {
+impl<C: Context> ApplyBlobHooks for Runtime<C> {
     type Context = C;
+    type BlobResult = SequencerOutcome;
 
-    fn lock_sequencer_bond(
+    fn begin_blob_hook(
         &self,
         sequencer: &[u8],
+        raw_blob: &[u8],
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
-        self.sequencer.lock_sequencer_bond(sequencer, working_set)
+        self.sequencer
+            .begin_blob_hook(sequencer, raw_blob, working_set)
     }
 
-    fn reward_sequencer(
+    fn end_blob_hook(
         &self,
-        amount: u64,
+        result: Self::BlobResult,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
-        self.sequencer.reward_sequencer(amount, working_set)
+        self.sequencer.end_blob_hook(result.reward, working_set)
     }
 }

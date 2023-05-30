@@ -1,13 +1,15 @@
 use crate::Sequencer;
-use sov_modules_api::{hooks::ApplyBlobSequencerHooks, Context};
+use sov_modules_api::{hooks::ApplyBlobHooks, Context};
 use sov_state::WorkingSet;
 
-impl<C: Context> ApplyBlobSequencerHooks for Sequencer<C> {
+impl<C: Context> ApplyBlobHooks for Sequencer<C> {
     type Context = C;
+    type BlobResult = u64;
 
-    fn lock_sequencer_bond(
+    fn begin_blob_hook(
         &self,
         sequencer_da: &[u8],
+        _raw_blob: &[u8],
         working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
     ) -> anyhow::Result<()> {
         let next_sequencer_da = self.seq_da_address.get_or_err(working_set);
@@ -31,9 +33,9 @@ impl<C: Context> ApplyBlobSequencerHooks for Sequencer<C> {
         Ok(())
     }
 
-    fn reward_sequencer(
+    fn end_blob_hook(
         &self,
-        _amount: u64,
+        _result: Self::BlobResult,
         working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
     ) -> anyhow::Result<()> {
         let sequencer = &self.seq_rollup_address.get_or_err(working_set)?;

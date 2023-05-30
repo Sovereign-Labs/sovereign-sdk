@@ -1,5 +1,5 @@
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::hooks::ApplyBlobSequencerHooks;
+use sov_modules_api::hooks::ApplyBlobHooks;
 use sov_modules_api::Hasher;
 use sov_modules_api::{Address, Module, ModuleInfo, Spec};
 use sov_state::{ProverStorage, WorkingSet};
@@ -117,7 +117,7 @@ fn test_sequencer() {
     {
         test_sequencer
             .sequencer
-            .lock_sequencer_bond(&SEQUENCER_DA_ADDRESS, working_set)
+            .begin_blob_hook(&SEQUENCER_DA_ADDRESS, &[], working_set)
             .unwrap();
 
         let resp = test_sequencer.query_balance_via_bank(working_set);
@@ -131,7 +131,7 @@ fn test_sequencer() {
     {
         test_sequencer
             .sequencer
-            .reward_sequencer(0, working_set)
+            .end_blob_hook(0, (), working_set)
             .unwrap();
         let resp = test_sequencer.query_balance_via_bank(working_set);
         assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());

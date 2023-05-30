@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 
 pub use batch::Batch;
 use borsh::BorshDeserialize;
-use sov_modules_api::hooks::ApplyBlobSequencerHooks;
+use sov_modules_api::hooks::ApplyBlobHooks;
 use sov_modules_api::hooks::ApplyBlobTxHooks;
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::stf::TransactionReceipt;
@@ -34,7 +34,7 @@ where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
         + ApplyBlobTxHooks<Context = C>
-        + ApplyBlobSequencerHooks<Context = C>,
+        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
 {
     pub fn new(storage: C::Storage, runtime: RT) -> Self {
         Self {
@@ -63,9 +63,9 @@ where
 
         let batch_data_and_hash = BatchDataAndHash::new::<C>(batch);
 
-        if let Err(e) = self
-            .runtime
-            .lock_sequencer_bond(sequencer, &mut batch_workspace)
+        if let Err(e) =
+            self.runtime
+                .begin_blob_hook(sequencer, &batch_data_and_hash.data, &mut batch_workspace)
         {
             error!(
                 "Error: The transaction was rejected by the 'enter_apply_blob' hook. Skipping batch without slashing the sequencer: {}",
@@ -76,7 +76,10 @@ where
             return BatchReceipt {
                 batch_hash: batch_data_and_hash.hash,
                 tx_receipts: Vec::new(),
-                inner: SequencerOutcome::Ignored,
+                inner: SequencerOutcome {
+                    status: SequencerStatus::Ignored,
+                    reward: 0,
+                },
             };
         }
 
@@ -98,7 +101,10 @@ where
                 return BatchReceipt {
                     batch_hash: batch_data_and_hash.hash,
                     tx_receipts: Vec::new(),
-                    inner: SequencerOutcome::Slashed(SlashingReason::InvalidBatchEncoding),
+                    inner: SequencerOutcome {
+                        status: SequencerStatus::Slashed(SlashingReason::InvalidBatchEncoding),
+                        reward: 0,
+                    },
                 };
             }
         };
@@ -115,7 +121,12 @@ where
                 return BatchReceipt {
                     batch_hash: batch_data_and_hash.hash,
                     tx_receipts: Vec::new(),
-                    inner: SequencerOutcome::Slashed(SlashingReason::StatelessVerificationFailed),
+                    inner: SequencerOutcome {
+                        status: SequencerStatus::Slashed(
+                            SlashingReason::StatelessVerificationFailed,
+                        ),
+                        reward: 0,
+                    },
                 };
             }
         };
@@ -184,9 +195,12 @@ where
                     return BatchReceipt {
                         batch_hash: batch_data_and_hash.hash,
                         tx_receipts: Vec::new(),
-                        inner: SequencerOutcome::Slashed(
-                            SlashingReason::InvalidTransactionEncoding,
-                        ),
+                        inner: SequencerOutcome {
+                            status: SequencerStatus::Slashed(
+                                SlashingReason::InvalidTransactionEncoding,
+                            ),
+                            reward: 0,
+                        },
                     };
                 }
             }
@@ -196,15 +210,20 @@ where
         }
 
         // TODO: calculate the amount based of gas and fees
+
+        let batch_receipt_contents = SequencerOutcome {
+            status: SequencerStatus::Rewarded,
+            reward: 0,
+        };
         self.runtime
-            .reward_sequencer(0, &mut batch_workspace)
+            .end_blob_hook(batch_receipt_contents, &mut batch_workspace)
             .expect("Impossible happened: error in exit_apply_batch");
 
         self.working_set = Some(batch_workspace);
         BatchReceipt {
             batch_hash: batch_data_and_hash.hash,
             tx_receipts,
-            inner: SequencerOutcome::Rewarded,
+            inner: batch_receipt_contents,
         }
     }
 }
@@ -236,10 +255,16 @@ pub enum TxEffect {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum SequencerOutcome {
+pub enum SequencerStatus {
     Rewarded,
     Slashed(SlashingReason),
     Ignored,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SequencerOutcome {
+    pub status: SequencerStatus,
+    pub reward: u64,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -254,7 +279,7 @@ where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
         + ApplyBlobTxHooks<Context = C>
-        + ApplyBlobSequencerHooks<Context = C>,
+        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
 {
     type StateRoot = jmt::RootHash;
 
