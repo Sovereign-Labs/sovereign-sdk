@@ -3,10 +3,10 @@ use crate::{
     runtime::Runtime,
     tests::{data_generation::simulate_da_with_bad_serialization, has_tx_events},
 };
-use sov_default_stf::{Batch, SequencerOutcome, SlashingReason};
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
 };
+use sov_modules_stf_template::{Batch, SequencerOutcome, SlashingReason};
 use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -171,7 +171,7 @@ fn test_tx_bad_serialization() {
         );
 
         assert!(
-            matches!(apply_blob_outcome.inner, sov_default_stf::SequencerOutcome::Slashed(SlashingReason::InvalidTransactionEncoding)),
+            matches!(apply_blob_outcome.inner, sov_modules_stf_template::SequencerOutcome::Slashed(SlashingReason::InvalidTransactionEncoding)),
             "Unexpected outcome: Stateless verification should have failed due to invalid signature"
         );
 

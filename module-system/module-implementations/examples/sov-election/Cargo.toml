@@ -1,8 +1,16 @@
 [package]
 name = "sov-election"
-version = "0.1.0"
-edition = "2021"
+description = "A Sovereign SDK module for incentivizing provers"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
 resolver = "2"
+publish = false
 
 [dev-dependencies]
 sov-modules-api = { path = "../../../sov-modules-api" }

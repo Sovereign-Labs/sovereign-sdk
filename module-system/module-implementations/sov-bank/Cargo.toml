@@ -1,7 +1,14 @@
 [package]
 name = "sov-bank"
-version = "0.1.0"
-edition = "2021"
+description = "A Sovereign SDK managing fungible tokens"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
 resolver = "2"
 
 [dev-dependencies]
