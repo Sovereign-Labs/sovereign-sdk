@@ -8,7 +8,7 @@ use prost::{
     encoding::decode_varint,
     DecodeError,
 };
-use serde::{de::Error, Deserialize, Serialize};
+use serde::{de::Error, Deserialize, Serialize, Serializer};
 use sov_rollup_interface::Bytes;
 use tracing::error;
 
@@ -57,7 +57,7 @@ pub enum NamespaceGroup {
     Sparse(Vec<Share>),
 }
 
-#[derive(Debug, Clone, PartialEq, serde::Serialize, BorshDeserialize, BorshSerialize)]
+#[derive(Debug, Clone, PartialEq, BorshDeserialize, BorshSerialize)]
 pub enum Share {
     Continuation(Bytes),
     Start(Bytes),
@@ -72,12 +72,25 @@ impl AsRef<[u8]> for Share {
     }
 }
 
+impl Serialize for Share {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let inner_bytes = match self {
+            Share::Continuation(b) => b,
+            Share::Start(b) => b,
+        };
+        serializer.serialize_bytes(inner_bytes.as_ref())
+    }
+}
+
 impl<'de> Deserialize<'de> for Share {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
     {
-        let mut share = <sov_rollup_interface::Bytes as Deserialize>::deserialize(deserializer)?;
+        let mut share = <Bytes as Deserialize>::deserialize(deserializer)?;
         if share.len() == B64_SHARE_SIZE {
             let mut decoded = BytesMut::with_capacity(SHARE_SIZE);
             unsafe { decoded.set_len(SHARE_SIZE) }
@@ -87,7 +100,6 @@ impl<'de> Deserialize<'de> for Share {
         }
         if share.len() != SHARE_SIZE {
             // let expected = Unexpected::Bytes(&share);
-            // ERROR HAPPENS HERE
             return Err(Error::invalid_length(share.len(), &"A share of length 512"));
         }
         if is_continuation_unchecked(share.as_ref()) {
@@ -595,17 +607,49 @@ impl<'a> std::iter::Iterator for NamespaceIterator<'a> {
 mod tests {
     use super::*;
     use postcard::{from_bytes, to_allocvec, Result};
+    use proptest::collection::vec;
+    use proptest::prelude::*;
 
     #[test]
     fn test_share_start_serialization() {
         let hex_blob = "736f762d7465737401000000b801000000b000000004ee8ca2c343fe0acd2b72249c48b56351ebfb4b7eef73ddae363880b61380cc23b3ebf15375aa110d7aa84206b1f22c1885b26e980d5e03244cc588e314b004a60b594d5751dc2a326c18923eaa74b48424c0f246733c6c028d7ee16899ad944400000001000b000000000000000e000000736f762d746573742d746f6b656e8813000000000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba75980000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000";
         let sample = hex::decode(hex_blob).unwrap();
-        println!("SAMPLE {}", sample.len());
+        // let share = Share::new(Bytes::from(sample.clone()));
         let share = Share::Start(Bytes::from(sample));
+
         let raw_share: Vec<u8> = to_allocvec(&share).unwrap();
-        println!("RAW {}", raw_share.len());
+
         let decoded_share: Result<Share> = from_bytes(&raw_share);
         assert!(decoded_share.is_ok());
-        // assert_eq!(share, decoded_share);
+        let decoded_share = decoded_share.unwrap();
+        assert_eq!(share, decoded_share);
+    }
+    proptest! {
+        #[test]
+        fn proptest_share_serialization_deserialization(data in vec(any::<u8>(), SHARE_SIZE)) {
+            // Create a Bytes instance from the generated data
+            let bytes = Bytes::from(data);
+
+            // Create a Share instance using the new method
+            let share = Share::new(bytes.clone());
+
+            // Ensure the original share is valid.
+            // prop_assert!(share.is_valid());
+
+            // Serialize the share using borsh
+            let serialized = share.try_to_vec().unwrap();
+
+            // Deserialize the share using borsh
+            let deserialized: Share = Share::try_from_slice(&serialized).unwrap();
+
+            // Ensure the deserialized share is valid.
+            // prop_assert!(deserialized.is_valid());
+
+            // Ensure the deserialized share is equal to the original share.
+            prop_assert_eq!(share, deserialized.clone());
+
+            // Ensure the deserialized share's Bytes is equal to the original Bytes.
+            prop_assert_eq!(bytes, deserialized.as_serialized());
+        }
     }
 }
