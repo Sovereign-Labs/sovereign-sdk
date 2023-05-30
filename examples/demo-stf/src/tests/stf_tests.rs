@@ -8,7 +8,7 @@ pub mod test {
             new_test_blob, C,
         },
     };
-    use sov_default_stf::{Batch, SequencerOutcome, SequencerStatus};
+    use sov_default_stf::{Batch, SequencerStatus};
     use sov_modules_api::{
         default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
     };

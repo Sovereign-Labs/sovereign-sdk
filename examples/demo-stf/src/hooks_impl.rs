@@ -1,13 +1,13 @@
 use crate::runtime::Runtime;
 use sov_default_stf::SequencerOutcome;
 use sov_modules_api::{
-    hooks::{ApplyBlobHooks, ApplyBlobTxHooks},
+    hooks::{ApplyBlobHooks, TxHooks},
     transaction::Transaction,
     Context, Spec,
 };
 use sov_state::WorkingSet;
 
-impl<C: Context> ApplyBlobTxHooks for Runtime<C> {
+impl<C: Context> TxHooks for Runtime<C> {
     type Context = C;
 
     fn pre_dispatch_tx_hook(

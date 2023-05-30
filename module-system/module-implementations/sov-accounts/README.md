@@ -6,7 +6,7 @@ Account is represented by an `Address` and a `Nonce`.
 
 ## Warning
 
-The accounts module implements `ApplyBlobTxHooks` which must be wired into your state transition function! Be sure that your `Runtime` implementation for `ApplyBlobTxHooks` delegates to the `sov-accounts.` 
+The accounts module implements `TxHooks` which must be wired into your state transition function! Be sure that your `Runtime` implementation for `TxHooks` delegates to the `sov-accounts.` 
 
 ### The `sov-accounts` module offers the following functionality:
 

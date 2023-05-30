@@ -7,7 +7,7 @@ use std::marker::PhantomData;
 pub use batch::Batch;
 use borsh::BorshDeserialize;
 use sov_modules_api::hooks::ApplyBlobHooks;
-use sov_modules_api::hooks::ApplyBlobTxHooks;
+use sov_modules_api::hooks::TxHooks;
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::stf::TransactionReceipt;
 use sov_rollup_interface::zk::traits::Zkvm;
@@ -33,7 +33,7 @@ impl<C: Context, RT, Vm> AppTemplate<C, RT, Vm>
 where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
-        + ApplyBlobTxHooks<Context = C>
+        + TxHooks<Context = C>
         + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
 {
     pub fn new(storage: C::Storage, runtime: RT) -> Self {
@@ -278,7 +278,7 @@ impl<C: Context, RT, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, RT
 where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
-        + ApplyBlobTxHooks<Context = C>
+        + TxHooks<Context = C>
         + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
 {
     type StateRoot = jmt::RootHash;

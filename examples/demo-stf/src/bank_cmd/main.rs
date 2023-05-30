@@ -172,7 +172,7 @@ mod test {
     };
     use demo_stf::runner_config::Config;
     use demo_stf::runtime::GenesisConfig;
-    use sov_default_stf::{Batch, RawTx, SequencerOutcome, SequencerStatus};
+    use sov_default_stf::{Batch, RawTx, SequencerStatus};
     use sov_modules_api::Address;
     use sov_rollup_interface::stf::StateTransitionRunner;
 

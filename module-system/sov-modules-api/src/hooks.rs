@@ -2,7 +2,7 @@ use crate::{transaction::Transaction, Context, Spec};
 use sov_state::WorkingSet;
 
 /// Hooks that execute within the `StateTransitionFunction::apply_blob` function for each processed transaction.
-pub trait ApplyBlobTxHooks {
+pub trait TxHooks {
     type Context: Context;
 
     /// Runs just before a transaction is dispatched to an appropriate module.

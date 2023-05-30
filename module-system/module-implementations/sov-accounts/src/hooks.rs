@@ -1,12 +1,12 @@
 use crate::Accounts;
-use sov_modules_api::hooks::ApplyBlobTxHooks;
+use sov_modules_api::hooks::TxHooks;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::Context;
 
 use sov_modules_api::Spec;
 use sov_state::WorkingSet;
 
-impl<C: Context> ApplyBlobTxHooks for Accounts<C> {
+impl<C: Context> TxHooks for Accounts<C> {
     type Context = C;
 
     fn pre_dispatch_tx_hook(

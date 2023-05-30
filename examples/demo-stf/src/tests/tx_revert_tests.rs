@@ -3,7 +3,7 @@ use crate::{
     runtime::Runtime,
     tests::{data_generation::simulate_da_with_bad_serialization, has_tx_events},
 };
-use sov_default_stf::{Batch, SequencerOutcome, SequencerStatus, SlashingReason};
+use sov_default_stf::{Batch, SequencerStatus, SlashingReason};
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
 };
