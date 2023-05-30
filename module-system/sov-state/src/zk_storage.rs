@@ -93,6 +93,6 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     }
 
     fn is_empty(&self) -> bool {
-        unimplemented!("Needs simplification in JellyfishMerkleTree")
+        unimplemented!("Needs simplification in JellyfishMerkleTree: https://github.com/Sovereign-Labs/sovereign-sdk/issues/362")
     }
 }
