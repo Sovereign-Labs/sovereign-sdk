@@ -101,10 +101,16 @@ impl<C: Context> ApplyBatchHooks for Sequencer<C> {
 
     fn exit_apply_blob(
         &self,
-        amount: u64,
+        _amount: u64,
         working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
     ) -> anyhow::Result<()> {
-        // self.sequencer_hooks.reward(amount, working_set)
-        todo!()
+        let sequencer = &self.seq_rollup_address.get_or_err(working_set)?;
+        let locker = &self.address;
+        let coins = self.coins_to_lock.get_or_err(working_set)?;
+
+        self.bank
+            .transfer_from(locker, sequencer, coins, working_set)?;
+
+        Ok(())
     }
 }
