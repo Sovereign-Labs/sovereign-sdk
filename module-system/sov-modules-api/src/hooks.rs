@@ -5,10 +5,22 @@ use crate::{Context, Spec};
 /// Transaction represents a deserialized RawTx.
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Transaction<C: Context> {
-    pub(crate) signature: C::Signature,
+    pub signature: C::Signature,
     pub pub_key: C::PublicKey,
-    pub(crate) runtime_msg: Vec<u8>,
+    pub runtime_msg: Vec<u8>,
     pub nonce: u64,
+}
+
+impl<C: Context> Transaction<C> {
+    #[allow(dead_code)]
+    pub fn new(msg: Vec<u8>, pub_key: C::PublicKey, signature: C::Signature, nonce: u64) -> Self {
+        Self {
+            signature,
+            runtime_msg: msg,
+            pub_key,
+            nonce,
+        }
+    }
 }
 
 pub trait ApplyBatchHooks {

@@ -6,6 +6,7 @@ use std::marker::PhantomData;
 
 pub use batch::Batch;
 use borsh::BorshDeserialize;
+use sov_modules_api::hooks::ApplyBatchHooks;
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::stf::TransactionReceipt;
 use sov_rollup_interface::zk::traits::Zkvm;
@@ -32,8 +33,8 @@ pub struct AppTemplate<C: Context, V, RT, H, Vm> {
 impl<C: Context, V, RT, H, Vm> AppTemplate<C, V, RT, H, Vm>
 where
     RT: DispatchCall<Context = C> + Genesis<Context = C>,
-    V: TxVerifier,
-    H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
+    V: TxVerifier<Context = C>,
+    H: ApplyBatchHooks<Context = C>,
 {
     pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
         Self {
@@ -103,7 +104,7 @@ where
         // Run the stateless verification, since it is stateless we don't commit.
         let txs = match self
             .tx_verifier
-            .verify_txs_stateless::<C>(batch.take_transactions())
+            .verify_txs_stateless(batch.take_transactions())
         {
             Ok(txs) => txs,
             Err(e) => {
@@ -126,7 +127,10 @@ where
             batch_workspace = batch_workspace.to_revertable();
 
             // Run the stateful verification, possibly modifies the state.
-            let verified_tx = match self.tx_hooks.pre_dispatch_tx_hook(tx, &mut batch_workspace) {
+            let sender_address = match self
+                .tx_hooks
+                .pre_dispatch_tx_hook(tx.clone(), &mut batch_workspace)
+            {
                 Ok(verified_tx) => verified_tx,
                 Err(e) => {
                     // Don't revert any state changes made by the pre_dispatch_hook even if it rejects
@@ -144,13 +148,13 @@ where
                 }
             };
 
-            match RT::decode_call(verified_tx.runtime_message()) {
+            match RT::decode_call(&tx.runtime_msg) {
                 Ok(msg) => {
-                    let ctx = C::new(verified_tx.sender().clone());
+                    let ctx = C::new(sender_address.clone());
                     let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
                     self.tx_hooks
-                        .post_dispatch_tx_hook(verified_tx, &mut batch_workspace);
+                        .post_dispatch_tx_hook(tx.pub_key.clone(), &mut batch_workspace);
 
                     let tx_effect = match tx_result {
                         Ok(_) => TxEffect::Successful,
@@ -247,8 +251,8 @@ pub enum SlashingReason {
 impl<C: Context, V, RT, H, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, V, RT, H, Vm>
 where
     RT: DispatchCall<Context = C> + Genesis<Context = C>,
-    V: TxVerifier,
-    H: TxHooks<Context = C, Transaction = <V as TxVerifier>::Transaction>,
+    V: TxVerifier<Context = C>,
+    H: ApplyBatchHooks<Context = C>,
 {
     type StateRoot = jmt::RootHash;
 
