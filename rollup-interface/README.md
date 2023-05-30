@@ -20,8 +20,6 @@ To learn how the Sovereign SDK works, see the ![Sovereign SDK Overview](./specs/
 The Sovereign SDK is a research prototype. It has not been audited and should not be used in production under any
 circumstances.
 
-* Currently acceptable hashes for Spec should fit into 32 bytes.
-
 ## License
 
 Licensed under the [Apache License, Version 2.0](../LICENSE).
