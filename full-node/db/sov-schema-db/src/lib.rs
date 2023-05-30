@@ -388,7 +388,7 @@ pub mod temppath {
         }
     }
 
-    impl std::convert::AsRef<Path> for TempPath {
+    impl AsRef<Path> for TempPath {
         fn as_ref(&self) -> &Path {
             self.path()
         }
