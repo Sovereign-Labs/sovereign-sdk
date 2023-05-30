@@ -1,27 +1,28 @@
 use crate::Sequencer;
 
 use sov_modules_api::{
-    hooks::{ApplyBatchHooks, Transaction},
+    hooks::{ApplyBlobTxHooks, Transaction},
     Context, Spec,
 };
 use sov_state::WorkingSet;
 
-impl<C: Context> ApplyBatchHooks for Sequencer<C> {
+impl<C: Context> ApplyBlobTxHooks for Sequencer<C> {
     type Context = C;
 
     fn pre_dispatch_tx_hook(
         &self,
-        tx: Transaction<C>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        _tx: Transaction<C>,
+        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<<Self::Context as Spec>::Address> {
         todo!()
     }
 
     fn post_dispatch_tx_hook(
         &self,
-        pub_key: <Self::Context as Spec>::PublicKey,
-        working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
-    ) {
+        _tx: &Transaction<Self::Context>,
+        _working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+    ) -> anyhow::Result<()> {
+        Ok(())
     }
 
     fn enter_apply_blob(

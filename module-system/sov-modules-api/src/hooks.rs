@@ -5,10 +5,10 @@ use crate::{Context, Spec};
 /// Transaction represents a deserialized RawTx.
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Transaction<C: Context> {
-    pub signature: C::Signature,
-    pub pub_key: C::PublicKey,
-    pub runtime_msg: Vec<u8>,
-    pub nonce: u64,
+    signature: C::Signature,
+    pub_key: C::PublicKey,
+    runtime_msg: Vec<u8>,
+    nonce: u64,
 }
 
 impl<C: Context> Transaction<C> {
@@ -21,9 +21,25 @@ impl<C: Context> Transaction<C> {
             nonce,
         }
     }
+
+    pub fn signature(&self) -> &C::Signature {
+        &self.signature
+    }
+
+    pub fn pub_key(&self) -> &C::PublicKey {
+        &self.pub_key
+    }
+
+    pub fn runtime_msg(&self) -> &[u8] {
+        &self.runtime_msg
+    }
+
+    pub fn nonce(&self) -> u64 {
+        self.nonce
+    }
 }
 
-pub trait ApplyBatchHooks {
+pub trait ApplyBlobTxHooks {
     type Context: Context;
 
     /// runs just before a transaction is dispatched to an appropriate module.
@@ -36,9 +52,9 @@ pub trait ApplyBatchHooks {
     /// runs after the tx is dispatched to an appropriate module.
     fn post_dispatch_tx_hook(
         &self,
-        pub_key: <Self::Context as Spec>::PublicKey,
+        tx: &Transaction<Self::Context>,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    );
+    ) -> anyhow::Result<()>;
 
     /// runs at the beginning of apply_blob.
     fn enter_apply_blob(

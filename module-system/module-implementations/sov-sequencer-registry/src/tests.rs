@@ -1,5 +1,5 @@
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::hooks::ApplyBatchHooks;
+use sov_modules_api::hooks::ApplyBlobTxHooks;
 use sov_modules_api::Hasher;
 use sov_modules_api::{Address, Module, ModuleInfo, Spec};
 use sov_state::{ProverStorage, WorkingSet};

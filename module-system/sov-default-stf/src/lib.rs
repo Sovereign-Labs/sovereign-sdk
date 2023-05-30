@@ -1,19 +1,17 @@
 mod batch;
-mod tx_hooks;
+
 mod tx_verifier;
 
 use std::marker::PhantomData;
 
 pub use batch::Batch;
 use borsh::BorshDeserialize;
-use sov_modules_api::hooks::ApplyBatchHooks;
+use sov_modules_api::hooks::ApplyBlobTxHooks;
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::stf::TransactionReceipt;
 use sov_rollup_interface::zk::traits::Zkvm;
 use sov_rollup_interface::Buf;
 use tracing::error;
-pub use tx_hooks::TxHooks;
-pub use tx_hooks::VerifiedTx;
 pub use tx_verifier::{RawTx, TxVerifier};
 
 use sov_modules_api::{Context, DispatchCall, Genesis, Hasher, Spec};
@@ -25,14 +23,13 @@ pub struct AppTemplate<C: Context, V, RT, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
     tx_verifier: V,
-
     working_set: Option<WorkingSet<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
 }
 
 impl<C: Context, V, RT, Vm> AppTemplate<C, V, RT, Vm>
 where
-    RT: DispatchCall<Context = C> + Genesis<Context = C> + ApplyBatchHooks<Context = C>,
+    RT: DispatchCall<Context = C> + Genesis<Context = C> + ApplyBlobTxHooks<Context = C>,
     V: TxVerifier<Context = C>,
 {
     pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V) -> Self {
@@ -146,13 +143,14 @@ where
                 }
             };
 
-            match RT::decode_call(&tx.runtime_msg) {
+            match RT::decode_call(tx.runtime_msg()) {
                 Ok(msg) => {
                     let ctx = C::new(sender_address.clone());
                     let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
                     self.runtime
-                        .post_dispatch_tx_hook(tx.pub_key.clone(), &mut batch_workspace);
+                        .post_dispatch_tx_hook(&tx, &mut batch_workspace)
+                        .expect("Impossible happened: error in post_dispatch_tx_hook");
 
                     let tx_effect = match tx_result {
                         Ok(_) => TxEffect::Successful,
@@ -248,7 +246,7 @@ pub enum SlashingReason {
 
 impl<C: Context, V, RT, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, V, RT, Vm>
 where
-    RT: DispatchCall<Context = C> + Genesis<Context = C> + ApplyBatchHooks<Context = C>,
+    RT: DispatchCall<Context = C> + Genesis<Context = C> + ApplyBlobTxHooks<Context = C>,
     V: TxVerifier<Context = C>,
 {
     type StateRoot = jmt::RootHash;

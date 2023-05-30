@@ -25,12 +25,12 @@ impl<C: Context> TxVerifier for DemoAppTxVerifier<C> {
 
         // We check signature against runtime_msg and nonce.
         let mut hasher = C::Hasher::new();
-        hasher.update(&tx.runtime_msg);
-        hasher.update(&tx.nonce.to_le_bytes());
+        hasher.update(tx.runtime_msg());
+        hasher.update(&tx.nonce().to_le_bytes());
 
         let msg_hash = hasher.finalize();
 
-        tx.signature.verify(&tx.pub_key, msg_hash)?;
+        tx.signature().verify(&tx.pub_key(), msg_hash)?;
 
         Ok(tx)
     }
