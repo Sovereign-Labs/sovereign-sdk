@@ -42,8 +42,8 @@ To implement your state transition function, you simply need to specify values f
 So, a typical app definition looks like this:
 
 ```rust
-pub type MyNativeStf = AppTemplate<DefaultContext, MyTxVerifier<DefaultContext>, MyRuntime<DefaultContext>, MyTxHooks<DefaultContext>>;
-pub type MyZkStf = AppTemplate<ZkDefaultContext, MyTxVerifier<ZkDefaultContext>, MyRuntime<ZkDefaultContext>, MyTxHooks<ZkDefaultContext>>;
+pub type MyNativeStf = AppTemplate<DefaultContext, MyRuntime<DefaultContext>>;
+pub type MyZkStf = AppTemplate<ZkDefaultContext, MyRuntime<ZkDefaultContext>>;
 ```
 
 Note that `DefaultContext` and `ZkDefaultContext` are exported by the `sov_modules_api` crate.
@@ -188,7 +188,7 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let storage = ProverStorage::with_config(runtime_config.storage)
             .expect("Failed to open prover storage");
-        let app = AppTemplate::new(storage, Runtime::new(), DemoAppTxVerifier::new(), DemoAppTxHooks::new());
+        let app = AppTemplate::new(storage, Runtime::new());
         Self(app)
     }
 	// ...
@@ -200,7 +200,7 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
-        let app = AppTemplate::new(storage, Runtime::new(), DemoAppTxVerifier::new(), DemoAppTxHooks::new());
+        let app = AppTemplate::new(storage, Runtime::new());
         Self(app)
     }
 	// ...

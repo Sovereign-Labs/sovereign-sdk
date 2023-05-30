@@ -463,15 +463,11 @@ Here's an example of how to do it with `AppTemplate` from `sov-default-stf`:
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
     let runtime = Runtime::new();
     let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
-    let tx_verifier = DemoAppTxVerifier::new();
-    let tx_hooks = DemoAppTxHooks::new();
     let app: AppTemplate<
         ZkDefaultContext,
-        DemoAppTxVerifier<ZkDefaultContext>,
         Runtime<ZkDefaultContext>,
-        DemoAppTxHooks<ZkDefaultContext>,
         Vm,
-    > = AppTemplate::new(storage, runtime, tx_verifier, tx_hooks);
+    > = AppTemplate::new(storage, runtime);
     Self(app)
 }
 ```

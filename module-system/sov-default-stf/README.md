@@ -5,23 +5,22 @@
 This crate contains an implementation of a `StateTransitionFunction` called `AppTemplate` that is specifically designed to work with the Module System. The `AppTemplate` relies on a set of traits that, when combined, define the logic for transitioning the rollup state.
 
 ```rust
-pub struct AppTemplate<C: Context, V, RT, H, Vm> {
+pub struct AppTemplate<C: Context, RT, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
-    tx_verifier: V,
-    tx_hooks: H,
     working_set: Option<WorkingSet<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
 }
 
-impl<C: Context, V, RT, H, Vm> AppTemplate<C, V, RT, H, Vm>
+impl<C: Context, RT, Vm> AppTemplate<C, RT, Vm>
 where
-    RT: DispatchCall<Context = C> + Genesis<Context = C>,
-    V: TxVerifier,
-    H: TxHooks<Context = C,..>,
+    RT: DispatchCall<Context = C>
+        + Genesis<Context = C>
+        + ApplyBlobTxHooks<Context = C>
+        + ApplyBlobSequencerHooks<Context = C>,
 {
 
-    pub fn new(storage: C::Storage, runtime: RT, tx_verifier: V, tx_hooks: H) -> Self {
+    pub fn new(storage: C::Storage, runtime: RT) -> Self {
         ...
     }
   ...
