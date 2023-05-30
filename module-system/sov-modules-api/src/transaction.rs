@@ -10,7 +10,7 @@ use crate::Signature;
 #[cfg(feature = "native")]
 use crate::Spec;
 
-// A Transaction object that is compatible with the module-system/sov-default-stf;
+/// A Transaction object that is compatible with the module-system/sov-default-stf;
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Transaction<C: Context> {
     signature: C::Signature,
@@ -45,6 +45,7 @@ impl<C: Context> Transaction<C> {
         self.nonce
     }
 
+    /// Check whether the transaction has been signed correctly.
     pub fn verify(&self) -> anyhow::Result<()> {
         // We check signature against runtime_msg and nonce.
         let mut hasher = C::Hasher::new();
@@ -59,6 +60,7 @@ impl<C: Context> Transaction<C> {
 
 #[cfg(feature = "native")]
 impl Transaction<DefaultContext> {
+    /// Sign the transaction.
     pub fn sign(priv_key: &DefaultPrivateKey, message: &[u8], nonce: u64) -> DefaultSignature {
         let mut hasher = <DefaultContext as Spec>::Hasher::new();
         hasher.update(message);
