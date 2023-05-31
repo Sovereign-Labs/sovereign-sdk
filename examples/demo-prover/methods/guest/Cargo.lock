@@ -2268,6 +2268,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "bytes",
+ "hex",
  "serde",
  "thiserror",
 ]
@@ -2298,6 +2299,7 @@ dependencies = [
  "jmt",
  "serde",
  "sha2 0.10.6",
+ "sov-rollup-interface",
  "thiserror",
  "tracing",
 ]

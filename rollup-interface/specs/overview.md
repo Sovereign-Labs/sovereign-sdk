@@ -17,11 +17,11 @@ Conceptually, adding a block to a Sovereign SDK chain happens in three steps. Fi
 the L1 chain. As soon as the blob is finalized on L1, it is logically final. Immediately after the L1 block is finalized,
 full nodes of the rollup scan through it and process all relevant data blobs in the order that they appear,
 generating a new rollup state root. At this point, the block is subjectively finalized from the perspective of all full nodes.
-Last but not least, prover nodes (full nodes running inside of a zkVM) perform roughly the same process as full nodes -
+Last but not least, prover nodes (full nodes running inside a ZKVM) perform roughly the same process as full nodes -
 scanning through the DA block and processing all of the batches in order - producing proofs and posting them on chain.
 (Proofs need to be posted on chain if the rollup wants to incentivize provers - otherwise, it's impossible to tell
 which prover was first to process a given batch).
-Once a proof for a given batch has been posted onchain, the batch is subjectively final to all nodes including light clients.
+Once a proof for a given batch has been posted on chain, the batch is subjectively final to all nodes including light clients.
 
 ![Diagram showing batches and proofs posted on an L1](./assets/SovSDK.png)
 

@@ -45,3 +45,6 @@ coverage-html: ## Coverage in HTML format
 
 dry-run-publish: 
 	cat packages_to_publish.txt | xargs -I _ cargo publish --allow-dirty --dry-run -p _
+
+docs:  ## Generates documentation locally
+	cargo doc --open

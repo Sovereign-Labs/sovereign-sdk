@@ -1,6 +1,4 @@
-<div align="center">
-  <h1> Sovereign SDK </h1>
-</div>
+![](./assets/banner.jpg)
 
 <div align="center">
   <a href="https://github.com/Sovereign-Labs/sovereign/blob/main/LICENSE">
@@ -8,6 +6,9 @@
   </a>
   <a href="https://codecov.io/gh/Sovereign-Labs/sovereign" > 
       <img alt="Coverage" src="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk/branch/main/graph/badge.svg"/> 
+  </a>
+   <a href="https://discord.gg/kbykCcPrcA" > 
+      <img alt="Discord" src="https://img.shields.io/discord/1050059327626555462?label=discord"/> 
   </a>
 </div>
 
