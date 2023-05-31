@@ -9,13 +9,11 @@ impl<C: sov_modules_api::Context> Sequencer<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
         self.seq_rollup_address
-            .set(config.seq_rollup_address.clone(), working_set);
+            .set(&config.seq_rollup_address, working_set);
 
-        self.seq_da_address
-            .set(config.seq_da_address.clone(), working_set);
+        self.seq_da_address.set(&config.seq_da_address, working_set);
 
-        self.coins_to_lock
-            .set(config.coins_to_lock.clone(), working_set);
+        self.coins_to_lock.set(&config.coins_to_lock, working_set);
 
         Ok(())
     }

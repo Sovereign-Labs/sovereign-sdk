@@ -15,15 +15,15 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
             "At least one prover must be set at genesis!"
         );
 
-        self.minimum_bond.set(config.minimum_bond, working_set);
+        self.minimum_bond.set(&config.minimum_bond, working_set);
         self.commitment_of_allowed_verifier_method.set(
-            crate::StoredCodeCommitment {
+            &crate::StoredCodeCommitment {
                 commitment: config.commitment_of_allowed_verifier_method.clone(),
             },
             working_set,
         );
         self.bonding_token_address
-            .set(config.bonding_token_address.clone(), working_set);
+            .set(&config.bonding_token_address, working_set);
 
         for (prover, bond) in config.initial_provers.iter() {
             self.bond_prover_helper(*bond, prover, working_set)?;

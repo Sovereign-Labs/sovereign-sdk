@@ -84,7 +84,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
             );
         }
 
-        self.tokens.set(&token_address, token, working_set);
+        self.tokens.set(&token_address, &token, working_set);
         Ok(CallResponse::default())
     }
 
@@ -107,7 +107,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
         token.burn(context.sender(), coins.amount, working_set)?;
         token.total_supply -= coins.amount;
-        self.tokens.set(&coins.token_address, token, working_set);
+        self.tokens.set(&coins.token_address, &token, working_set);
 
         Ok(CallResponse::default())
     }
@@ -121,7 +121,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
     ) -> Result<CallResponse> {
         let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
         token.mint(context.sender(), &minter_address, coins.amount, working_set)?;
-        self.tokens.set(&coins.token_address, token, working_set);
+        self.tokens.set(&coins.token_address, &token, working_set);
 
         Ok(CallResponse::default())
     }
@@ -134,7 +134,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
     ) -> Result<CallResponse> {
         let mut token = self.tokens.get_or_err(&token_address, working_set)?;
         token.freeze(context.sender())?;
-        self.tokens.set(&token_address, token, working_set);
+        self.tokens.set(&token_address, &token, working_set);
 
         Ok(CallResponse::default())
     }

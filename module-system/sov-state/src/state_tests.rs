@@ -86,7 +86,7 @@ fn create_state_map_and_storage(
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
     let state_map = StateMap::new(Prefix::new(vec![0]));
-    state_map.set(&key, value, &mut working_set);
+    state_map.set(&key, &value, &mut working_set);
     (state_map, working_set)
 }
 
@@ -132,7 +132,7 @@ fn create_state_value_and_storage(
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
     let state_value = StateValue::new(Prefix::new(vec![0]));
-    state_value.set(value, &mut working_set);
+    state_value.set(&value, &mut working_set);
     (state_value, working_set)
 }
 
@@ -175,9 +175,9 @@ fn test_witness_roundtrip() {
     let witness: ArrayWitness = {
         let storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
         let mut working_set = WorkingSet::new(storage.clone());
-        state_value.set(11, &mut working_set);
+        state_value.set(&11, &mut working_set);
         let _ = state_value.get(&mut working_set);
-        state_value.set(22, &mut working_set);
+        state_value.set(&22, &mut working_set);
         let (cache_log, witness) = working_set.freeze();
 
         let _ = storage
@@ -189,9 +189,9 @@ fn test_witness_roundtrip() {
     {
         let storage = ZkStorage::<DefaultStorageSpec>::new(EMPTY_ROOT);
         let mut working_set = WorkingSet::with_witness(storage.clone(), witness);
-        state_value.set(11, &mut working_set);
+        state_value.set(&11, &mut working_set);
         let _ = state_value.get(&mut working_set);
-        state_value.set(22, &mut working_set);
+        state_value.set(&22, &mut working_set);
         let (cache_log, witness) = working_set.freeze();
 
         let _ = storage

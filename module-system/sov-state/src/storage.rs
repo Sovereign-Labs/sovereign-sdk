@@ -65,7 +65,7 @@ pub struct StorageValue {
 }
 
 impl StorageValue {
-    pub fn new<V: BorshSerialize>(value: V) -> Self {
+    pub fn new<V: BorshSerialize>(value: &V) -> Self {
         let encoded_value = value.try_to_vec().unwrap();
         Self {
             value: Arc::new(encoded_value),

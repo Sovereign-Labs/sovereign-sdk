@@ -23,8 +23,8 @@ pub mod module_a {
         pub fn update(&mut self, key: &str, value: &str, working_set: &mut WorkingSet<C::Storage>) {
             working_set.add_event("module A", "update");
             self.state_1_a
-                .set(&key.to_owned(), value.to_owned(), working_set);
-            self.state_2_a.set(value.to_owned(), working_set)
+                .set(&key.to_owned(), &value.to_owned(), working_set);
+            self.state_2_a.set(&value.to_owned(), working_set)
         }
     }
 }
@@ -48,7 +48,7 @@ pub mod module_b {
         pub fn update(&mut self, key: &str, value: &str, working_set: &mut WorkingSet<C::Storage>) {
             working_set.add_event("module B", "update");
             self.state_1_b
-                .set(&key.to_owned(), value.to_owned(), working_set);
+                .set(&key.to_owned(), &value.to_owned(), working_set);
             self.mod_1_a.update("key_from_b", value, working_set);
         }
     }

@@ -36,7 +36,7 @@ impl<C: Context> NonFungibleToken<C> {
             bail!("Token with id {} already exists", id);
         }
 
-        self.owners.set(&id, context.sender().clone(), working_set);
+        self.owners.set(&id, context.sender(), working_set);
 
         working_set.add_event("NFT mint", &format!("A token with id {id} was minted"));
         Ok(CallResponse::default())
@@ -58,7 +58,7 @@ impl<C: Context> NonFungibleToken<C> {
         if &token_owner != context.sender() {
             bail!("Only token owner can transfer token");
         }
-        self.owners.set(&id, to, working_set);
+        self.owners.set(&id, &to, working_set);
         working_set.add_event(
             "NFT transfer",
             &format!("A token with id {id} was transferred"),

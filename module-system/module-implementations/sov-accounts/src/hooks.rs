@@ -38,7 +38,7 @@ impl<C: Context> TxHooks for Accounts<C> {
     ) -> anyhow::Result<()> {
         let mut account = self.accounts.get_or_err(tx.pub_key(), working_set)?;
         account.nonce += 1;
-        self.accounts.set(tx.pub_key(), account, working_set);
+        self.accounts.set(tx.pub_key(), &account, working_set);
         Ok(())
     }
 }
