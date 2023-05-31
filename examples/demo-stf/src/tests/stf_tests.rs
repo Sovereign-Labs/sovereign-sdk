@@ -8,10 +8,10 @@ pub mod test {
             new_test_blob, C,
         },
     };
-    use sov_default_stf::{Batch, SequencerOutcome};
     use sov_modules_api::{
         default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
     };
+    use sov_modules_stf_template::{Batch, SequencerOutcome};
     use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
     use sov_state::{ProverStorage, WorkingSet};
 

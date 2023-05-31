@@ -1,10 +1,6 @@
 #[cfg(feature = "native")]
 use crate::runner_config::Config;
 use crate::runtime::Runtime;
-use sov_default_stf::AppTemplate;
-pub use sov_default_stf::Batch;
-use sov_default_stf::SequencerOutcome;
-use sov_default_stf::TxEffect;
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
 pub use sov_modules_api::default_context::ZkDefaultContext;
@@ -15,6 +11,10 @@ use sov_modules_api::Context;
 use sov_modules_api::RpcRunner;
 #[cfg(feature = "native")]
 use sov_modules_api::Spec;
+use sov_modules_stf_template::AppTemplate;
+pub use sov_modules_stf_template::Batch;
+use sov_modules_stf_template::SequencerOutcome;
+use sov_modules_stf_template::TxEffect;
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::ProverConfig;
 use sov_rollup_interface::stf::StateTransitionRunner;
