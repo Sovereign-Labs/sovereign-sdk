@@ -185,7 +185,7 @@ fn mint_token() {
     assert!(working_set.events().is_empty());
     assert_eq!(Some(120), supply);
 
-    // Overflow test
+    // Overflow test - account balance
     let overflow_mint_message = CallMessage::Mint {
         coins: Coins {
             amount: u64::MAX,
@@ -200,5 +200,36 @@ fn mint_token() {
         &mut working_set,
     );
     assert!(minted.is_err());
-    assert_eq!("Overflow", minted.err().unwrap().to_string());
+    assert_eq!(
+        "Account Balance overflow in the mint method of bank module",
+        minted.err().unwrap().to_string()
+    );
+    // assert that the supply is unchanged after the overflow mint
+    let supply = query_total_supply(token_address.clone(), &mut working_set);
+    assert_eq!(Some(120), supply);
+
+    // Overflow test 2 - total supply
+    let new_holder = generate_address("new_holder_3");
+    let overflow_mint_message = CallMessage::Mint {
+        coins: Coins {
+            amount: u64::MAX - 1,
+            token_address: token_address.clone(),
+        },
+        minter_address: new_holder.clone(),
+    };
+
+    let minted = bank.call(
+        overflow_mint_message.clone(),
+        &authorized_minter_1_context,
+        &mut working_set,
+    );
+    assert!(minted.is_err());
+    assert_eq!(
+        "Total Supply overflow in the mint method of bank module",
+        minted.err().unwrap().to_string()
+    );
+
+    // assert that the supply is unchanged after the overflow mint
+    let supply = query_total_supply(token_address.clone(), &mut working_set);
+    assert_eq!(Some(120), supply);
 }
