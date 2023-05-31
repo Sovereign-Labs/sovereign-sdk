@@ -81,7 +81,7 @@ pub trait StateTransitionFunction<Vm: Zkvm> {
     /// Called at the beginning of each **DA-layer block** - whether or not that block contains any
     /// data relevant to the rollup.
     /// If slot is started in Full Node mode, default witness should be provided.
-    /// if slot is started in Zero Knowledge mode, witness from execution should be provided
+    /// If slot is started in Zero Knowledge mode, witness from execution should be provided.
     fn begin_slot(&mut self, witness: Self::Witness);
 
     /// Apply a blob/batch of transactions to the rollup, slashing the sequencer who proposed the blob on failure.
