@@ -31,8 +31,8 @@ impl DefaultConfigMacro {
 
         // Implements the Default Config trait
         Ok(quote::quote! {
-        impl #impl_generics sov_modules_api::DefaultConfig #type_generics for #ident #type_generics #where_clause {
-            fn new() -> Self {
+        impl #impl_generics Default for #ident #type_generics #where_clause {
+            fn default() -> Self {
                 use sov_modules_api::ModuleInfo;
 
                 Self {

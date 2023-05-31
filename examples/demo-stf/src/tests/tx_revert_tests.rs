@@ -6,7 +6,6 @@ use crate::{
 use sov_default_stf::{Batch, SequencerOutcome, SlashingReason};
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
-    DefaultConfig,
 };
 use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
 use sov_state::{ProverStorage, WorkingSet};
@@ -59,7 +58,7 @@ fn test_tx_revert() {
 
     // Checks
     {
-        let runtime = &mut Runtime::<DefaultContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::default();
         let storage = ProverStorage::with_path(&path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
@@ -124,7 +123,7 @@ fn test_tx_bad_sig() {
     }
 
     {
-        let runtime = &mut Runtime::<DefaultContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::default();
         let storage = ProverStorage::with_path(&path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
@@ -182,7 +181,7 @@ fn test_tx_bad_serialization() {
     }
 
     {
-        let runtime = &mut Runtime::<DefaultContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::default();
         let storage = ProverStorage::with_path(&path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 

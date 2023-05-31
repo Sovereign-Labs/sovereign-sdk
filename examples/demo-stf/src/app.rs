@@ -13,7 +13,6 @@ pub use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Context;
-use sov_modules_api::DefaultConfig;
 #[cfg(feature = "native")]
 use sov_modules_api::RpcRunner;
 #[cfg(feature = "native")]
@@ -58,7 +57,7 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
     type Inner = DemoApp<DefaultContext, Vm>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
-        let runtime = Runtime::new();
+        let runtime = Runtime::default();
         let storage = ProverStorage::with_config(runtime_config.storage)
             .expect("Failed to open prover storage");
         let tx_verifier = DemoAppTxVerifier::new();
@@ -81,7 +80,7 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
     type Inner = DemoApp<ZkDefaultContext, Vm>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
-        let runtime = Runtime::new();
+        let runtime = Runtime::default();
         let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
         let tx_verifier = DemoAppTxVerifier::new();
         let tx_hooks = DemoAppTxHooks::new();

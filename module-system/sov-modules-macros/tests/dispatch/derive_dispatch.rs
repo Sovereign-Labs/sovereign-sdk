@@ -6,20 +6,11 @@ use sov_modules_api::{default_context::DefaultContext, Context, Genesis, Module}
 use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 use sov_state::ProverStorage;
 
-#[derive(Genesis, DispatchCall, MessageCodec)]
+#[derive(Genesis, DispatchCall, MessageCodec, Default)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 struct Runtime<C: Context> {
     pub first: first_test_module::FirstTestStruct<C>,
     pub second: second_test_module::SecondTestStruct<C>,
-}
-
-impl<C: Context> Runtime<C> {
-    fn new() -> Self {
-        Self {
-            first: first_test_module::FirstTestStruct::<C>::new(),
-            second: second_test_module::SecondTestStruct::<C>::new(),
-        }
-    }
 }
 
 fn main() {

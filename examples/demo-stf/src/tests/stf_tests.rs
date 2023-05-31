@@ -11,7 +11,6 @@ pub mod test {
     use sov_default_stf::{Batch, SequencerOutcome};
     use sov_modules_api::{
         default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
-        DefaultConfig,
     };
     use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
     use sov_state::{ProverStorage, WorkingSet};
@@ -53,7 +52,7 @@ pub mod test {
 
         // Generate a new storage instance after dumping data to the db.
         {
-            let runtime = &mut Runtime::<DefaultContext>::new();
+            let runtime = &mut Runtime::<DefaultContext>::default();
             let storage = ProverStorage::with_path(&path).unwrap();
             let mut working_set = WorkingSet::new(storage);
 
@@ -106,7 +105,7 @@ pub mod test {
 
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
 
-        let runtime = &mut Runtime::<DefaultContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::default();
         let mut working_set = WorkingSet::new(demo.current_storage.clone());
 
         let resp = runtime.election.results(&mut working_set);
@@ -158,7 +157,7 @@ pub mod test {
 
         // Generate a new storage instance, value are missing because we didn't call `end_slot()`;
         {
-            let runtime = &mut Runtime::<C>::new();
+            let runtime = &mut Runtime::<C>::default();
             let storage = ProverStorage::with_path(&path).unwrap();
             let mut working_set = WorkingSet::new(storage);
 

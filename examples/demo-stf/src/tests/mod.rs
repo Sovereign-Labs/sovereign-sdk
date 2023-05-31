@@ -2,7 +2,6 @@ use borsh::BorshSerialize;
 use sov_default_stf::{AppTemplate, Batch, SequencerOutcome, TxEffect};
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, Address,
-    DefaultConfig,
 };
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_state::ProverStorage;
@@ -35,7 +34,7 @@ pub fn new_test_blob(batch: Batch, address: &[u8]) -> TestBlob {
 pub fn create_new_demo(
     path: impl AsRef<Path>,
 ) -> DemoApp<DefaultContext, sov_rollup_interface::mocks::MockZkvm> {
-    let runtime = Runtime::new();
+    let runtime = Runtime::default();
     let storage = ProverStorage::with_path(path).unwrap();
     let tx_hooks = DemoAppTxHooks::new();
     let tx_verifier = DemoAppTxVerifier::new();

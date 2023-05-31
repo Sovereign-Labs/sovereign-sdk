@@ -7,7 +7,7 @@ use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 use sov_state::ProverStorage;
 
 // Debugging hint: To expand the macro in tests run: `cargo expand --test tests`
-#[derive(Genesis, DispatchCall, MessageCodec)]
+#[derive(Genesis, DispatchCall, MessageCodec, Default)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 struct Runtime<C>
 where
@@ -15,15 +15,6 @@ where
 {
     pub first: first_test_module::FirstTestStruct<C>,
     pub second: second_test_module::SecondTestStruct<C>,
-}
-
-impl<C: Context> Runtime<C> {
-    fn new() -> Self {
-        Self {
-            first: first_test_module::FirstTestStruct::<C>::new(),
-            second: second_test_module::SecondTestStruct::<C>::new(),
-        }
-    }
 }
 
 fn main() {
