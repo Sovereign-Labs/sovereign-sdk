@@ -42,3 +42,6 @@ coverage: ## Coverage in lcov format
 
 coverage-html: ## Coverage in HTML format
 	cargo llvm-cov --locked --all-features --html
+
+docs:  ## Generates documentation locally
+	cargo doc --open
