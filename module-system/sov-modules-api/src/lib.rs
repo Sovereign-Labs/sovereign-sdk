@@ -21,9 +21,9 @@ pub use error::Error;
 pub use jmt::SimpleHasher as Hasher;
 pub use prefix::Prefix;
 pub use response::CallResponse;
+use serde::{Deserialize, Serialize};
 pub use sov_rollup_interface::traits::AddressTrait;
 use sov_state::{Storage, Witness, WorkingSet};
-use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 impl AsRef<[u8]> for Address {

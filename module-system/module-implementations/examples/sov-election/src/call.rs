@@ -9,9 +9,9 @@ use sov_state::WorkingSet;
 
 /// Call actions supported byte the module.
 #[cfg_attr(
-feature = "native",
-derive(serde::Serialize),
-derive(serde::Deserialize)
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: Context> {

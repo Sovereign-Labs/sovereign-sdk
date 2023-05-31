@@ -1,13 +1,13 @@
 use quote::{format_ident, quote};
-use syn::{Data, DeriveInput, Fields, GenericArgument, GenericParam, parse_quote, Path, PathArguments, PathSegment, Type, TypePath};
-use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
+use syn::{
+    Data, DeriveInput, Fields, Path, PathArguments,
+    PathSegment, Type,
+};
 
 pub(crate) fn build_cmd_parser(
     input: DeriveInput,
     context_type: Type,
 ) -> Result<proc_macro::TokenStream, syn::Error> {
-
     let DeriveInput {
         attrs,
         vis,
@@ -36,15 +36,15 @@ pub(crate) fn build_cmd_parser(
             let field_name_pascal_case = field_name_string.to_uppercase();
             let encode_function_name = format_ident!("encode_{}_call", field_name_string);
 
-            /// TODO:
-            /// For the initial version, before complicating the macro,
-            /// we're assuming that each module type in Runtime only has
-            /// one generic. we're removing that and appending the concrete
-            /// that's passed in from the macro.
-            /// We need to fix this so that:
-            /// 1. Determine which generic has the Context bound
-            /// 2. Identify only that generic from the module type and replace it
-            /// 3. Retain other generics
+            // TODO:
+            // For the initial version, before complicating the macro,
+            // we're assuming that each module type in Runtime only has
+            // one generic. we're removing that and appending the concrete
+            // that's passed in from the macro.
+            // We need to fix this so that:
+            // 1. Determine which generic has the Context bound
+            // 2. Identify only that generic from the module type and replace it
+            // 3. Retain other generics
 
             // Extract the type name
             let type_path = match &field.ty {
@@ -62,11 +62,11 @@ pub(crate) fn build_cmd_parser(
             };
 
             Ok(quote! {
-                #field_name_pascal_case => {
-                    #ident::#encode_function_name(
-                        serde_json::from_str::<<#type_path<#context_type> as sov_modules_api::Module<#context_type>>::CallMessage>(&call_data).unwrap()
+                #field_name_pascal_case => Ok({
+                    #ident::<#context_type>::#encode_function_name(
+                        serde_json::from_str::<<#type_path<#context_type> as sov_modules_api::Module>::CallMessage>(&call_data)?
                     )
-                }
+                }),
             })
         })
         .collect::<Result<Vec<_>, _>>()?;
@@ -78,9 +78,10 @@ pub(crate) fn build_cmd_parser(
         .map(|field| {
             let field_name = field.ident.unwrap();
             let field_type = field.ty;
+            let field_vis = field.vis;
 
             quote! {
-                #field_name: #field_type
+                #field_vis #field_name: #field_type
             }
         })
         .collect();
@@ -91,17 +92,13 @@ pub(crate) fn build_cmd_parser(
             #(#original_struct_fields),*
         }
 
-        pub fn cmd_parser(module_name: &str, call_data: &str) {
-            let serialized_data = match module_name {
+        pub fn cmd_parser(module_name: &str, call_data: &str) -> anyhow::Result<Vec<u8>> {
+            match module_name {
                 #(#match_arms)*
                 _ => panic!("unknown module name"),
-            };
+            }
         }
     };
 
     Ok(cmd_parser_tokens.into())
 }
-
-
-
-

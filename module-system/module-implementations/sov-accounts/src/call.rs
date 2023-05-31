@@ -6,6 +6,11 @@ use sov_state::WorkingSet;
 
 pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 
+#[cfg_attr(
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
+)]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: sov_modules_api::Context> {
     // Updates a PublicKey for the corresponding Account.
