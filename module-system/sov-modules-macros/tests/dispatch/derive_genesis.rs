@@ -3,7 +3,7 @@ mod modules;
 use modules::{first_test_module, second_test_module};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Context, Module, ModuleInfo};
-use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
+use sov_modules_macros::{Default, DispatchCall, Genesis, MessageCodec};
 use sov_state::ProverStorage;
 
 // Debugging hint: To expand the macro in tests run: `cargo expand --test tests`
@@ -23,7 +23,7 @@ fn main() {
     type C = DefaultContext;
     let storage = ProverStorage::temporary();
     let mut working_set = &mut sov_state::WorkingSet::new(storage);
-    let runtime = &mut Runtime::<C>::new();
+    let runtime = &mut Runtime::<C>::default();
     let config = GenesisConfig::new((), ());
     runtime.genesis(&config, working_set).unwrap();
 

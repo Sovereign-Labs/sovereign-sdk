@@ -3,7 +3,7 @@ use modules::{first_test_module, second_test_module};
 use sov_modules_api::Address;
 use sov_modules_api::ModuleInfo;
 use sov_modules_api::{default_context::DefaultContext, Context, Genesis, Module};
-use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
+use sov_modules_macros::{Default, DispatchCall, Genesis, MessageCodec};
 use sov_state::ProverStorage;
 
 #[derive(Genesis, DispatchCall, MessageCodec, Default)]
@@ -16,7 +16,7 @@ struct Runtime<C: Context> {
 fn main() {
     use sov_modules_api::DispatchCall;
     type RT = Runtime<DefaultContext>;
-    let runtime = &mut RT::new();
+    let runtime = &mut RT::default();
 
     let storage = ProverStorage::temporary();
     let mut working_set = &mut sov_state::WorkingSet::new(storage);
