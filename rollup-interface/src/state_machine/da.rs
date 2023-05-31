@@ -30,7 +30,7 @@ pub trait DaSpec {
     type ChainParams;
 }
 
-/// A DaVerifier implements the logic required to create a zk proof that some data
+/// A `DaVerifier` implements the logic required to create a zk proof that some data
 /// has been processed.
 ///
 /// This trait implements the required functionality to *verify* claims of the form
