@@ -8,7 +8,12 @@ use sov_modules_api::{CallResponse, Context};
 use sov_state::WorkingSet;
 
 /// Call actions supported byte the module.
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+#[cfg_attr(
+feature = "native",
+derive(serde::Serialize),
+derive(serde::Deserialize)
+)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: Context> {
     SetCandidates { names: Vec<String> },
     AddVoter(C::Address),

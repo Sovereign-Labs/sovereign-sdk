@@ -5,7 +5,7 @@ use dispatch::{
     dispatch_call::DispatchCallMacro, genesis::GenesisMacro, message_codec::MessageCodec,
 };
 use proc_macro::TokenStream;
-use syn::parse_macro_input;
+use syn::{parse_macro_input, Type};
 
 /// Derives the `sov-modules-api::ModuleInfo` implementation for the underlying type.
 ///
@@ -152,5 +152,14 @@ pub fn expose_rpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as syn::ItemImpl);
     handle_macro_error(
         dispatch::derive_rpc::rpc_outer_impls(attr.into(), input).map(|ok| ok.into()),
+    )
+}
+
+#[proc_macro_attribute]
+pub fn cmd(attr: TokenStream, input: TokenStream) -> TokenStream {
+    let context_type = parse_macro_input!(attr);
+    let input = parse_macro_input!(input);
+    handle_macro_error(
+        dispatch::cmd::build_cmd_parser(input, context_type).map(|ok| ok.into()),
     )
 }
