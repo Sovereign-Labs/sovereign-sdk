@@ -30,7 +30,7 @@ pub mod first_test_module {
             _config: &Self::Config,
             working_set: &mut WorkingSet<C::Storage>,
         ) -> Result<(), Error> {
-            self.state_in_first_struct.set(1, working_set);
+            self.state_in_first_struct.set(&1, working_set);
             Ok(())
         }
 
@@ -40,7 +40,7 @@ pub mod first_test_module {
             _context: &Self::Context,
             working_set: &mut WorkingSet<C::Storage>,
         ) -> Result<CallResponse, Error> {
-            self.state_in_first_struct.set(msg, working_set);
+            self.state_in_first_struct.set(&msg, working_set);
             Ok(CallResponse::default())
         }
     }
@@ -74,7 +74,7 @@ pub mod second_test_module {
             _config: &Self::Config,
             working_set: &mut WorkingSet<Ctx::Storage>,
         ) -> Result<(), Error> {
-            self.state_in_second_struct.set(2, working_set);
+            self.state_in_second_struct.set(&2, working_set);
             Ok(())
         }
 
@@ -84,7 +84,7 @@ pub mod second_test_module {
             _context: &Self::Context,
             working_set: &mut WorkingSet<Ctx::Storage>,
         ) -> Result<CallResponse, Error> {
-            self.state_in_second_struct.set(msg, working_set);
+            self.state_in_second_struct.set(&msg, working_set);
             Ok(CallResponse::default())
         }
     }

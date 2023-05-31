@@ -33,10 +33,10 @@ impl<C: sov_modules_api::Context> Accounts<C> {
             nonce: 0,
         };
 
-        self.accounts
-            .set(&pub_key, new_account.clone(), working_set);
+        self.accounts.set(&pub_key, &new_account, working_set);
 
-        self.public_keys.set(&default_address, pub_key, working_set);
+        self.public_keys
+            .set(&default_address, &pub_key, working_set);
         Ok(new_account)
     }
 

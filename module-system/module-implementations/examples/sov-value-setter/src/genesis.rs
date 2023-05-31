@@ -9,7 +9,7 @@ impl<C: sov_modules_api::Context> ValueSetter<C> {
         admin_config: &<Self as sov_modules_api::Module>::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
-        self.admin.set(admin_config.admin.clone(), working_set);
+        self.admin.set(&admin_config.admin, working_set);
         Ok(())
     }
 }

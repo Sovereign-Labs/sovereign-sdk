@@ -28,7 +28,7 @@ impl<K: BorshSerialize, V: BorshSerialize + BorshDeserialize> StateMap<K, V> {
     }
 
     /// Inserts a key-value pair into the map.
-    pub fn set<S: Storage>(&self, key: &K, value: V, working_set: &mut WorkingSet<S>) {
+    pub fn set<S: Storage>(&self, key: &K, value: &V, working_set: &mut WorkingSet<S>) {
         working_set.set_value(self.prefix(), key, value)
     }
 

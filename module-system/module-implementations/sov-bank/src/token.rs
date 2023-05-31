@@ -51,8 +51,8 @@ impl<C: sov_modules_api::Context> Token<C> {
         // We can't overflow here because the sum must be smaller or eq to `total_supply` which is u64.
         let to_balance = self.balances.get(to, working_set).unwrap_or_default() + amount;
 
-        self.balances.set(from, from_balance, working_set);
-        self.balances.set(to, to_balance, working_set);
+        self.balances.set(from, &from_balance, working_set);
+        self.balances.set(to, &to_balance, working_set);
 
         Ok(())
     }
@@ -64,7 +64,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
         let new_balance = self.check_balance(from, amount, working_set)?;
-        self.balances.set(from, new_balance, working_set);
+        self.balances.set(from, &new_balance, working_set);
 
         Ok(())
     }
@@ -101,7 +101,7 @@ impl<C: sov_modules_api::Context> Token<C> {
                 "Account Balance overflow in the mint method of bank module",
             ))?;
 
-        self.balances.set(minter_address, to_balance, working_set);
+        self.balances.set(minter_address, &to_balance, working_set);
         self.total_supply = self
             .total_supply
             .checked_add(amount)
@@ -149,7 +149,7 @@ impl<C: sov_modules_api::Context> Token<C> {
 
         let mut total_supply: Option<u64> = Some(0);
         for (address, balance) in address_and_balances.iter() {
-            balances.set(address, *balance, working_set);
+            balances.set(address, balance, working_set);
             total_supply = total_supply.and_then(|ts| ts.checked_add(*balance));
         }
 

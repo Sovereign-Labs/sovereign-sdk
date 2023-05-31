@@ -251,7 +251,7 @@ impl<S: Storage> WorkingSet<S> {
         &mut self,
         prefix: &Prefix,
         storage_key: &K,
-        value: V,
+        value: &V,
     ) {
         let storage_key = StorageKey::new(prefix, storage_key);
         let storage_value = StorageValue::new(value);

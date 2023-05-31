@@ -24,7 +24,7 @@ impl<C: sov_modules_api::Context> ExampleModule<C> {
         _context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
-        self.value.set(new_value, working_set);
+        self.value.set(&new_value, working_set);
         working_set.add_event("set", &format!("value_set: {new_value:?}"));
 
         Ok(CallResponse::default())
