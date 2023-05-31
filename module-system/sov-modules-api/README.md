@@ -25,7 +25,7 @@ crate:
    extended with other useful methods, such as `batch_hash()`, and more. This crate defines also the default
    implementation for the `Context` trait.
 
-1. The `Genesis` trait: Defines how the Rollup is initialized during deployment phase.
+1. The `Genesis` trait: Defines how the rollup is initialized during deployment phase.
 
 1. The `DispatchCall` trait: Defines how messages are forwarded to the appropriate module and how the call message is
    executed. The implementation of this trait can be generated automatically using a macro.
