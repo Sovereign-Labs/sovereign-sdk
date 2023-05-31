@@ -91,7 +91,7 @@ pub trait StateTransitionFunction<Vm: Zkvm> {
     /// for including a transaction which fails stateless checks (i.e. has an invalid signature) -
     /// and in that case we ignore his entire batch.
     /// This method lets you give a hint to the prover telling
-    /// it where that invalid signature is so that it can skip signature checks on other transactions.
+    /// it where that invalid signature is, so that it can skip signature checks on other transactions.
     /// (If the misbehavior hint is wrong, then the host is malicious so we can
     /// just panic - which means that no proof will be created).
     fn apply_blob(
