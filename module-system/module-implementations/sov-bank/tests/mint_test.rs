@@ -184,4 +184,21 @@ fn mint_token() {
     let supply = query_total_supply(token_address.clone(), &mut working_set);
     assert!(working_set.events().is_empty());
     assert_eq!(Some(120), supply);
+
+    // Overflow test
+    let overflow_mint_message = CallMessage::Mint {
+        coins: Coins {
+            amount: u64::MAX,
+            token_address: token_address.clone(),
+        },
+        minter_address: new_holder.clone(),
+    };
+
+    let minted = bank.call(
+        overflow_mint_message.clone(),
+        &authorized_minter_1_context,
+        &mut working_set,
+    );
+    assert!(minted.is_err());
+    assert_eq!("Overflow", minted.err().unwrap().to_string());
 }

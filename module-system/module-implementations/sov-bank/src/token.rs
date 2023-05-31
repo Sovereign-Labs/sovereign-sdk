@@ -100,7 +100,8 @@ impl<C: sov_modules_api::Context> Token<C> {
             .ok_or(anyhow::Error::msg("Overflow"))?;
 
         self.balances.set(minter_address, to_balance, working_set);
-        self.total_supply = self.total_supply
+        self.total_supply = self
+            .total_supply
             .checked_add(amount)
             .ok_or(anyhow::Error::msg("Overflow"))?;
         Ok(())
