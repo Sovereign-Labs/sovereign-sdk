@@ -1,5 +1,6 @@
 mod config;
 mod ledger_rpc;
+mod test_rpc;
 
 use crate::config::RollupConfig;
 use anyhow::Context;
