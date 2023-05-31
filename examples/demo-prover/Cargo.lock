@@ -2858,7 +2858,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.6",
+ "sov-modules-api",
  "sov-rollup-interface",
+ "sov-state",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -2921,6 +2923,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "bytes",
+ "hex",
  "serde",
  "thiserror",
 ]
@@ -2969,6 +2972,7 @@ dependencies = [
  "serde",
  "sha2 0.10.6",
  "sov-db",
+ "sov-rollup-interface",
  "thiserror",
  "tracing",
 ]
