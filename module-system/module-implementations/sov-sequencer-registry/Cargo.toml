@@ -13,16 +13,16 @@ readme = "README.md"
 resolver = "2"
 
 [dev-dependencies]
-sov-modules-api = { path = "../../sov-modules-api"}
-sov-state = { path = "../../sov-state", features = ["temp"] }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-state = { path = "../../sov-state", version = "0.1", features = ["temp"] }
 
 [dependencies]
 anyhow = { workspace = true }
-sov-bank = { path = "../sov-bank", default-features = false }
-sov-modules-api = { path = "../../sov-modules-api", default-features = false }
-sov-modules-macros = { path = "../../sov-modules-macros" }
-sov-state = { path = "../../sov-state", default-features = false }
-sov-rollup-interface = { path = "../../../rollup-interface" }
+sov-bank = { path = "../sov-bank", version = "0.1", default-features = false }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false }
+sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
+sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
