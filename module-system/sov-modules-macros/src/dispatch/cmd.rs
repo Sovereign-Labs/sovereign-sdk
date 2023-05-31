@@ -33,7 +33,6 @@ pub(crate) fn build_cmd_parser(
         .map(|field| {
             let field_name = field.ident.clone().unwrap();
             let field_name_string = field_name.to_string();
-            let field_name_pascal_case = field_name_string.to_uppercase();
             let encode_function_name = format_ident!("encode_{}_call", field_name_string);
 
             // TODO:
@@ -60,9 +59,11 @@ pub(crate) fn build_cmd_parser(
                 },
                 _ => return Err(syn::Error::new_spanned(field, "expected a type path")),
             };
+            let type_name_string = type_path.segments.last().unwrap().ident.to_string();
+            // let type_name_pascal_case = type_name_string.to_uppercase();
 
             Ok(quote! {
-                #field_name_pascal_case => Ok({
+                #type_name_string => Ok({
                     #ident::<#context_type>::#encode_function_name(
                         serde_json::from_str::<<#type_path<#context_type> as sov_modules_api::Module>::CallMessage>(&call_data)?
                     )
@@ -102,3 +103,4 @@ pub(crate) fn build_cmd_parser(
 
     Ok(cmd_parser_tokens.into())
 }
+
