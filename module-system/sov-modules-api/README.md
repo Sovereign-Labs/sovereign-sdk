@@ -18,7 +18,7 @@ crate:
 
 1. The `Spec` trait: It defines all the types that modules are generic over. This separation allows the module logic to
    be independent of concerns such as the specific storage system or concrete signature schemes used for signing rollup
-   transactions. Currently acceptable hashes for Spec should fit into 32 bytes.
+   transactions. Currently acceptable hashes for `Spec` should fit into 32 bytes.
 
 1. The `Context` trait implements the `Spec` and introduces additional methods accessible within modules. Currently, it
    includes the `sender()` method, which returns the address of the transaction sender. This trait will be further
