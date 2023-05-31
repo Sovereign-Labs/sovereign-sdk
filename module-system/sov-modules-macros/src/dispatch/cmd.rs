@@ -1,8 +1,5 @@
 use quote::{format_ident, quote};
-use syn::{
-    Data, DeriveInput, Fields, Path, PathArguments,
-    PathSegment, Type,
-};
+use syn::{Data, DeriveInput, Fields, Path, PathArguments, PathSegment, Type};
 
 pub(crate) fn build_cmd_parser(
     input: DeriveInput,
@@ -103,4 +100,3 @@ pub(crate) fn build_cmd_parser(
 
     Ok(cmd_parser_tokens.into())
 }
-

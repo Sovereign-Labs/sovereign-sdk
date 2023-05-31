@@ -5,7 +5,7 @@ use dispatch::{
     dispatch_call::DispatchCallMacro, genesis::GenesisMacro, message_codec::MessageCodec,
 };
 use proc_macro::TokenStream;
-use syn::{parse_macro_input};
+use syn::parse_macro_input;
 
 /// Derives the `sov-modules-api::ModuleInfo` implementation for the underlying type.
 ///
