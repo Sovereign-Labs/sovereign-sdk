@@ -19,6 +19,7 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner};
+use sov_state::Storage;
 use std::env;
 use std::net::SocketAddr;
 use tracing::Level;
@@ -27,7 +28,6 @@ use tracing::{debug, info};
 // RPC related imports
 use demo_stf::app::get_rpc_methods;
 use sov_modules_api::RpcRunner;
-use sov_state::Storage;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 // You can change this constant to point your rollup at a different namespace
@@ -96,7 +96,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // Our state transition also implements the RpcRunner interface,
     // so we use that to initialize the RPC server.
     let storage = demo_runner.get_storage();
-    let is_storage_empty = storj.is_empty();
+    let is_storage_empty = storage.is_empty();
     let mut methods = get_rpc_methods(storage);
     let ledger_rpc_module =
         ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db.clone());
