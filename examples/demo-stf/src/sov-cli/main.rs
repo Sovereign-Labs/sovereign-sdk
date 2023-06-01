@@ -1,6 +1,6 @@
 use anyhow::Context;
 use borsh::BorshSerialize;
-use clap::{Parser};
+use clap::Parser;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_stf_template::RawTx;
 use std::fs;
@@ -127,8 +127,7 @@ impl SerializedTx {
         let sender_address = sender_priv_key.pub_key().to_address();
         let message = Self::serialize_call_message(module_name, call_data_path)?;
 
-        let sig = Transaction::<C>::sign(&sender_priv_key, &message, nonce);
-        let tx = Transaction::<C>::new(message, sender_priv_key.pub_key(), sig, nonce);
+        let tx = Transaction::<C>::new_signed_tx(&sender_priv_key, message, nonce);
 
         Ok(SerializedTx {
             raw: RawTx {
