@@ -10,7 +10,6 @@ use std::path::{Path, PathBuf};
 
 use demo_stf::runtime::cmd_parser;
 
-use sov_modules_api::default_signature::DefaultPublicKey;
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
     AddressBech32, PublicKey, Spec,
@@ -28,9 +27,6 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    CreatePrivateKey {
-        priv_key_path: String,
-    },
     SerializeCall {
         sender_priv_key_path: String,
         module_name: String,
@@ -48,13 +44,16 @@ struct UtilArgs {
 
 #[derive(Subcommand)]
 enum UtilCommands {
-    DeriveAddress {
+    DeriveTokenAddress {
         token_name: String,
         sender_address: String,
         salt: u64,
     },
-    PublicKey {
+    ShowPublicKey {
         private_key_path: String,
+    },
+    CreatePrivateKey {
+        priv_key_path: String,
     },
 }
 
@@ -85,7 +84,11 @@ impl PrivKeyAndAddress {
         let data = serde_json::to_string(&priv_key)?;
         fs::create_dir_all(priv_key_path)?;
         let path = Path::new(priv_key_path).join(format!("{}.json", priv_key.address));
-        fs::write(path, data)?;
+        fs::write(&path, data)?;
+        println!(
+            "private key written to path: {}",
+            path.into_os_string().into_string().unwrap()
+        );
         Ok(())
     }
 }
@@ -147,10 +150,6 @@ pub fn main() {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::CreatePrivateKey { priv_key_path } => {
-            PrivKeyAndAddress::generate_and_save_to_file(priv_key_path.as_ref())
-                .unwrap_or_else(|e| panic!("Create private key error: {}", e));
-        }
         Commands::SerializeCall {
             sender_priv_key_path,
             module_name,
@@ -171,7 +170,7 @@ pub fn main() {
                 .unwrap_or_else(|e| panic!("Unable to save .dat file: {}", e));
         }
         Commands::Util(util_args) => match util_args.command {
-            UtilCommands::DeriveAddress {
+            UtilCommands::DeriveTokenAddress {
                 token_name,
                 sender_address,
                 salt,
@@ -185,11 +184,16 @@ pub fn main() {
                 println!("{}", token_address);
             }
 
-            UtilCommands::PublicKey { private_key_path } => {
+            UtilCommands::ShowPublicKey { private_key_path } => {
                 let sender_priv_key = SerializedTx::deserialize_priv_key(private_key_path)
                     .expect("Failed to get private key from file");
                 let sender_address: Address = sender_priv_key.pub_key().to_address();
                 println!("{}", sender_address);
+            }
+
+            UtilCommands::CreatePrivateKey { priv_key_path } => {
+                PrivKeyAndAddress::generate_and_save_to_file(priv_key_path.as_ref())
+                    .unwrap_or_else(|e| panic!("Create private key error: {}", e));
             }
         },
     }
