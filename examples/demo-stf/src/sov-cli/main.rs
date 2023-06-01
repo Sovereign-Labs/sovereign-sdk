@@ -1,6 +1,6 @@
 use anyhow::Context;
 use borsh::BorshSerialize;
-use clap::{Args, Parser, Subcommand};
+use clap::{Parser};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_stf_template::RawTx;
 use std::fs;
@@ -18,41 +18,64 @@ use sov_modules_api::{
 type C = DefaultContext;
 type Address = <C as Spec>::Address;
 
+/// Main entry point for CLI
 #[derive(Parser)]
-#[command(author, version, about, long_about = None)]
+#[clap(version = "1.0", author = "Sovereign")]
 struct Cli {
-    #[command(subcommand)]
+    #[clap(subcommand)]
+    /// Commands to perform operations
     command: Commands,
 }
 
-#[derive(Subcommand)]
+/// Main commands
+#[derive(Parser)]
 enum Commands {
+    /// Serialize a call to a module.
+    /// This creates a dat file containing the serialized transaction
     SerializeCall {
+        /// Path to the json file containing the private key of the sender
         sender_priv_key_path: String,
+        /// Name of the module to generate the call.
+        /// Modules defined in your Runtime are supported.
+        /// (eg: Bank, Accounts)
         module_name: String,
+        /// Path to the json file containing the parameters for a module call
         call_data_path: String,
+        /// Nonce for the transaction
         nonce: u64,
     },
+    /// Utility commands
     Util(UtilArgs),
 }
 
-#[derive(Args)]
+/// Arguments for utility commands
+#[derive(Parser)]
 struct UtilArgs {
-    #[command(subcommand)]
+    #[clap(subcommand)]
+    /// Commands under utilities
     command: UtilCommands,
 }
 
-#[derive(Subcommand)]
+/// List of utility commands
+#[derive(Parser)]
 enum UtilCommands {
+    /// Compute the address of a derived token. This follows a deterministic algorithm
     DeriveTokenAddress {
+        /// Name of the token
         token_name: String,
+        /// Address of the sender (can be obtained using the show-public-key subcommand)
         sender_address: String,
+        /// A unique random number
         salt: u64,
     },
+    /// Display the public key associated with a private key
     ShowPublicKey {
+        /// Path to the json file containing the private key
         private_key_path: String,
     },
+    /// Create a new private key
     CreatePrivateKey {
+        /// Folder to store the new private key json file. The filename is auto-generated
         priv_key_path: String,
     },
 }
