@@ -5,7 +5,7 @@ use crate::{
 };
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
-    AddressBech32, Context, Module, ModuleInfo, PublicKey, Spec,
+    AddressBech32, Context, Module, PublicKey, Spec,
 };
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -22,7 +22,7 @@ fn test_config_account() {
         pub_keys: vec![init_pub_key.clone()],
     };
 
-    let accounts = &mut Accounts::<C>::new();
+    let accounts = &mut Accounts::<C>::default();
     let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
 
     accounts
@@ -43,7 +43,7 @@ fn test_config_account() {
 #[test]
 fn test_update_account() {
     let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
-    let accounts = &mut Accounts::<C>::new();
+    let accounts = &mut Accounts::<C>::default();
     let hooks = hooks::Hooks::<C>::new();
 
     let priv_key = DefaultPrivateKey::generate();
@@ -103,7 +103,7 @@ fn test_update_account() {
 #[test]
 fn test_update_account_fails() {
     let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
-    let accounts = &mut Accounts::<C>::new();
+    let accounts = &mut Accounts::<C>::default();
     let hooks = hooks::Hooks::<C>::new();
 
     let sender_1 = DefaultPrivateKey::generate().pub_key();
@@ -133,7 +133,7 @@ fn test_update_account_fails() {
 #[test]
 fn test_get_acc_after_pub_key_update() {
     let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
-    let accounts = &mut Accounts::<C>::new();
+    let accounts = &mut Accounts::<C>::default();
     let hooks = hooks::Hooks::<C>::new();
 
     let sender_1 = DefaultPrivateKey::generate().pub_key();

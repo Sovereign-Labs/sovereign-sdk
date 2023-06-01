@@ -3,10 +3,10 @@ use modules::{first_test_module, second_test_module};
 use sov_modules_api::Address;
 use sov_modules_api::ModuleInfo;
 use sov_modules_api::{default_context::DefaultContext, Context, Genesis, Module};
-use sov_modules_macros::{Default, DispatchCall, Genesis, MessageCodec};
+use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
 use sov_state::ProverStorage;
 
-#[derive(Genesis, DispatchCall, MessageCodec, Default)]
+#[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 struct Runtime<C: Context> {
     pub first: first_test_module::FirstTestStruct<C>,

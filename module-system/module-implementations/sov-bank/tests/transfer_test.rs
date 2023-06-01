@@ -5,7 +5,7 @@ use sov_bank::call::CallMessage;
 use sov_bank::genesis::{DEPLOYER, SALT};
 use sov_bank::query::TotalSupplyResponse;
 use sov_bank::{create_token_address, Bank, BankConfig, Coins};
-use sov_modules_api::{Address, Context, Module, ModuleInfo};
+use sov_modules_api::{Address, Context, Module};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 pub type Storage = ProverStorage<DefaultStorageSpec>;
@@ -16,7 +16,7 @@ fn transfer_initial_token() {
     let transfer_amount = 10;
     let bank_config = create_bank_config_with_token(3, initial_balance);
     let mut working_set = WorkingSet::new(ProverStorage::temporary());
-    let bank = Bank::new();
+    let bank = Bank::default();
     bank.genesis(&bank_config, &mut working_set).unwrap();
 
     let token_address =
@@ -199,7 +199,7 @@ fn transfer_initial_token() {
 
 #[test]
 fn transfer_deployed_token() {
-    let bank = Bank::<C>::new();
+    let bank = Bank::<C>::default();
     let mut working_set = WorkingSet::new(ProverStorage::temporary());
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();

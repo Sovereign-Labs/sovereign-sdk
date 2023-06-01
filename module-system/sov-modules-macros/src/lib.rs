@@ -2,7 +2,7 @@
 mod dispatch;
 mod module_info;
 use dispatch::{
-    default::DefaultMacro, dispatch_call::DispatchCallMacro, genesis::GenesisMacro,
+    default_runtime::DefaultRuntimeMacro, dispatch_call::DispatchCallMacro, genesis::GenesisMacro,
     message_codec::MessageCodec,
 };
 use proc_macro::TokenStream;
@@ -40,6 +40,18 @@ pub fn module_info(input: TokenStream) -> TokenStream {
     handle_macro_error(module_info::derive_module_info(input))
 }
 
+/// Derives the `sov-modules-api::Default` implementation for the underlying type.
+/// We decided to implement a custom macro DefaultRuntime that would implement a custom Default
+/// trait for the Runtime because the stdlib implementation of the default trait imposes the generic
+/// arguments to have the Default trait, which is not needed in our case.
+#[proc_macro_derive(DefaultRuntime)]
+pub fn default_runtime(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+    let default_config_macro = DefaultRuntimeMacro::new("DefaultRuntime");
+
+    handle_macro_error(default_config_macro.derive_default_runtime(input))
+}
+
 /// Derives the `sov-modules-api::Genesis` implementation for the underlying type.
 #[proc_macro_derive(Genesis)]
 pub fn genesis(input: TokenStream) -> TokenStream {
@@ -47,15 +59,6 @@ pub fn genesis(input: TokenStream) -> TokenStream {
     let genesis_macro = GenesisMacro::new("Genesis");
 
     handle_macro_error(genesis_macro.derive_genesis(input))
-}
-
-/// Derives the `sov-modules-api::Runtime` implementation for the underlying type.
-#[proc_macro_derive(Default)]
-pub fn default_config(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input);
-    let default_config_macro = DefaultMacro::new("DefaultConfig");
-
-    handle_macro_error(default_config_macro.derive_default(input))
 }
 
 /// Derives the `sov-modules-api::DispatchCall` implementation for the underlying type.

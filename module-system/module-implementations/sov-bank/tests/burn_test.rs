@@ -3,7 +3,7 @@ use sov_bank::call::CallMessage;
 use sov_bank::genesis::{DEPLOYER, SALT};
 use sov_bank::query::TotalSupplyResponse;
 use sov_bank::{create_token_address, Bank, BankConfig, Coins};
-use sov_modules_api::{Address, Context, Module, ModuleInfo};
+use sov_modules_api::{Address, Context, Module};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 use crate::helpers::create_bank_config_with_token;
@@ -14,7 +14,7 @@ pub type Storage = ProverStorage<DefaultStorageSpec>;
 
 #[test]
 fn burn_deployed_tokens() {
-    let bank = Bank::<C>::new();
+    let bank = Bank::<C>::default();
     let mut working_set = WorkingSet::new(ProverStorage::temporary());
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
@@ -146,7 +146,7 @@ fn burn_initial_tokens() {
     let initial_balance = 100;
     let bank_config = create_bank_config_with_token(1, initial_balance);
     let mut working_set = WorkingSet::new(ProverStorage::temporary());
-    let bank = Bank::new();
+    let bank = Bank::default();
     bank.genesis(&bank_config, &mut working_set).unwrap();
 
     let token_address =

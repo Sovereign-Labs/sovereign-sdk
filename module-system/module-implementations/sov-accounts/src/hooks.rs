@@ -1,7 +1,6 @@
 use crate::{Account, Accounts};
 use anyhow::Result;
 use sov_modules_api::Context;
-use sov_modules_api::ModuleInfo;
 use sov_state::WorkingSet;
 
 pub struct Hooks<C: sov_modules_api::Context> {
@@ -11,7 +10,7 @@ pub struct Hooks<C: sov_modules_api::Context> {
 impl<C: Context> Hooks<C> {
     pub fn new() -> Self {
         Self {
-            inner: Accounts::new(),
+            inner: Accounts::default(),
         }
     }
 

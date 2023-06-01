@@ -26,7 +26,7 @@ mod test_module {
 
 fn main() {
     type C = DefaultContext;
-    let test_struct = <test_module::TestStruct<C> as ModuleInfo>::new();
+    let test_struct = <test_module::TestStruct<C> as std::default::Default>::default();
 
     let prefix1 = test_struct.test_state1.prefix();
 

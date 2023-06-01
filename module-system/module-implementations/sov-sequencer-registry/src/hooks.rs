@@ -1,6 +1,5 @@
 use crate::Sequencer;
 use anyhow::Result;
-use sov_modules_api::ModuleInfo;
 use sov_state::WorkingSet;
 
 /// Sequencer hooks description:
@@ -13,7 +12,7 @@ pub struct Hooks<C: sov_modules_api::Context> {
 impl<C: sov_modules_api::Context> Hooks<C> {
     pub fn new() -> Self {
         Self {
-            inner: Sequencer::new(),
+            inner: Sequencer::default(),
         }
     }
 

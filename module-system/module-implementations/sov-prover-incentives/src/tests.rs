@@ -1,4 +1,4 @@
-use sov_modules_api::{default_context::DefaultContext, Address, Hasher, Module, ModuleInfo, Spec};
+use sov_modules_api::{default_context::DefaultContext, Address, Hasher, Module, Spec};
 use sov_rollup_interface::mocks::{MockCodeCommitment, MockProof, MockZkvm};
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -35,7 +35,7 @@ fn setup(
 ) -> (ProverIncentives<C, MockZkvm>, Address) {
     // Initialize bank
     let (bank_config, prover_address) = create_bank_config();
-    let bank = sov_bank::Bank::<C>::new();
+    let bank = sov_bank::Bank::<C>::default();
     bank.genesis(&bank_config, working_set)
         .expect("bank genesis must succeed");
 
@@ -46,7 +46,7 @@ fn setup(
     );
 
     // initialize prover incentives
-    let module = ProverIncentives::<C, MockZkvm>::new();
+    let module = ProverIncentives::<C, MockZkvm>::default();
     let config = crate::ProverIncentivesConfig {
         bonding_token_address: token_address,
         minimum_bond: BOND_AMOUNT,

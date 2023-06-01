@@ -2,18 +2,18 @@ use syn::DeriveInput;
 
 use super::common::{StructFieldExtractor, StructNamedField};
 
-pub(crate) struct DefaultMacro {
+pub(crate) struct DefaultRuntimeMacro {
     field_extractor: StructFieldExtractor,
 }
 
-impl DefaultMacro {
+impl DefaultRuntimeMacro {
     pub(crate) fn new(name: &'static str) -> Self {
         Self {
             field_extractor: StructFieldExtractor::new(name),
         }
     }
 
-    pub(crate) fn derive_default(
+    pub(crate) fn derive_default_runtime(
         &self,
         input: DeriveInput,
     ) -> Result<proc_macro::TokenStream, syn::Error> {
@@ -27,9 +27,9 @@ impl DefaultMacro {
         let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
-        let runtime_fn_body = Self::make_default_fn_body(&fields);
+        let runtime_fn_body = Self::make_default_runtime_fn_body(&fields);
 
-        // Implements the Default Config trait
+        // Implements the Default Runtime Config trait
         Ok(quote::quote! {
         impl #impl_generics Default for #ident #type_generics #where_clause {
             fn default() -> Self {
@@ -44,7 +44,7 @@ impl DefaultMacro {
         .into())
     }
 
-    pub(crate) fn make_default_fn_body(
+    pub(crate) fn make_default_runtime_fn_body(
         fields: &Vec<StructNamedField>,
     ) -> Vec<proc_macro2::TokenStream> {
         fields
@@ -54,7 +54,7 @@ impl DefaultMacro {
                 let ty = &field.ty;
 
                 quote::quote! {
-                    #name: <#ty>::new(),
+                    #name: <#ty>::default(),
                 }
             })
             .collect()

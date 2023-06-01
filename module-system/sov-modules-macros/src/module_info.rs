@@ -289,7 +289,7 @@ fn make_init_module(field: &StructNamedField) -> Result<proc_macro2::TokenStream
     let ty = &field.ty;
 
     Ok(quote::quote! {
-        let #field_ident = <#ty as sov_modules_api::ModuleInfo>::default();
+        let #field_ident = <#ty as std::default::Default>::default();
     })
 }
 

@@ -218,14 +218,6 @@ pub trait Module {
 pub trait ModuleInfo: Default {
     type Context: Context;
 
-    fn new() -> Self {
-        <Self as Default>::default()
-    }
-
-    fn default() -> Self {
-        <Self as Default>::default()
-    }
-
     /// Returns address of the module.
     fn address(&self) -> &<Self::Context as Spec>::Address;
 }

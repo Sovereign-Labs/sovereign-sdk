@@ -1,5 +1,5 @@
 use sov_modules_api::Context;
-use sov_modules_macros::{Default, DispatchCall, Genesis, MessageCodec};
+use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
 
 /// The Rollup entrypoint.
 ///
@@ -36,7 +36,7 @@ use sov_modules_macros::{Default, DispatchCall, Genesis, MessageCodec};
 /// Similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
 /// instead of going through the DA layer.
 
-#[derive(Genesis, DispatchCall, MessageCodec, Default)]
+#[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
     pub sequencer: sov_sequencer_registry::Sequencer<C>,

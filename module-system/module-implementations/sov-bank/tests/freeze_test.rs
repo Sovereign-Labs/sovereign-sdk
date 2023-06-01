@@ -2,7 +2,7 @@ use helpers::{generate_address, C};
 use sov_bank::call::CallMessage;
 use sov_bank::query::TotalSupplyResponse;
 use sov_bank::{create_token_address, Bank, BankConfig, Coins};
-use sov_modules_api::{Address, Context, Module, ModuleInfo};
+use sov_modules_api::{Address, Context, Module};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 mod helpers;
@@ -11,7 +11,7 @@ pub type Storage = ProverStorage<DefaultStorageSpec>;
 
 #[test]
 fn freeze_token() {
-    let bank = Bank::<C>::new();
+    let bank = Bank::<C>::default();
     let mut working_set = WorkingSet::new(ProverStorage::temporary());
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
