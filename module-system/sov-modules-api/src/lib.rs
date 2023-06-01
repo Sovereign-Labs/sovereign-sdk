@@ -215,11 +215,16 @@ pub trait Module {
 }
 
 /// Every module has to implement this trait.
-pub trait ModuleInfo {
+pub trait ModuleInfo: Default {
     type Context: Context;
 
-    /// Module constructor.
-    fn new() -> Self;
+    fn new() -> Self {
+        <Self as Default>::default()
+    }
+
+    fn default() -> Self {
+        <Self as Default>::default()
+    }
 
     /// Returns address of the module.
     fn address(&self) -> &<Self::Context as Spec>::Address;
