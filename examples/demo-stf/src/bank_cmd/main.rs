@@ -2,12 +2,12 @@ use anyhow::Context;
 use borsh::BorshSerialize;
 use clap::Parser;
 use demo_stf::runtime::Runtime;
-use sov_default_stf::RawTx;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, PublicKey,
     Spec,
 };
+use sov_modules_stf_template::RawTx;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
@@ -172,8 +172,8 @@ mod test {
     };
     use demo_stf::runner_config::Config;
     use demo_stf::runtime::GenesisConfig;
-    use sov_default_stf::{Batch, RawTx, SequencerOutcome};
     use sov_modules_api::Address;
+    use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome};
     use sov_rollup_interface::stf::StateTransitionRunner;
 
     use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};

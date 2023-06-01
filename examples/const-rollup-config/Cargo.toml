@@ -1,7 +1,7 @@
 [package]
 name = "const-rollup-config"
-version = "0.1.0"
-edition = "2021"
-authors = ["Sovereign Labs <info@sovereign.xyz>"]
+version = { workspace = true } 
+edition = { workspace = true } 
+authors = { workspace = true } 
 homepage = "sovereign.xyz"
 publish = false

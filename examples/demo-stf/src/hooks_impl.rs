@@ -1,10 +1,10 @@
 use crate::runtime::Runtime;
-use sov_default_stf::SequencerOutcome;
 use sov_modules_api::{
     hooks::{ApplyBlobHooks, TxHooks},
     transaction::Transaction,
     Context, Spec,
 };
+use sov_modules_stf_template::SequencerOutcome;
 use sov_state::WorkingSet;
 
 impl<C: Context> TxHooks for Runtime<C> {

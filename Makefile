@@ -43,5 +43,8 @@ coverage: ## Coverage in lcov format
 coverage-html: ## Coverage in HTML format
 	cargo llvm-cov --locked --all-features --html
 
+dry-run-publish: 
+	cat packages_to_publish.txt | xargs -I _ cargo publish --allow-dirty --dry-run -p _
+
 docs:  ## Generates documentation locally
 	cargo doc --open

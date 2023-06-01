@@ -1,7 +1,14 @@
 [package]
 name = "sov-state"
-version = "0.1.0"
-edition = "2021"
+description = "Defines traits and types for state storage in the Sovereign SDK module system"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
 resolver = "2"
 
 [dependencies]
@@ -10,17 +17,17 @@ anyhow = { workspace = true }
 borsh = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
-sov-rollup-interface = { path = "../../rollup-interface" }
-sov-db = { path = "../../full-node/db/sov-db", optional = true }
-first-read-last-write-cache = { path = "../utils/first-read-last-write-cache" }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
+sov-db = { path = "../../full-node/db/sov-db", version = "0.1", optional = true }
+sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-cache", version = "0.1" }
 jmt = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
-sov-db = { path = "../../full-node/db/sov-db", features = ["temp"] }
-sov-schema-db = { path = "../../full-node/db/sov-schema-db", features = ["temppath"] }
+sov-db = { path = "../../full-node/db/sov-db", version = "0.1", features = ["temp"] }
+sov-schema-db = { path = "../../full-node/db/sov-schema-db", version = "0.1", features = ["temppath"] }
 
 [features]
 default = ["native"]

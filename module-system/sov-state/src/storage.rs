@@ -3,9 +3,9 @@ use std::{fmt::Display, sync::Arc};
 use crate::witness::Witness;
 use crate::{internal_cache::OrderedReadsAndWrites, utils::AlignedVec, Prefix};
 use borsh::{BorshDeserialize, BorshSerialize};
-use first_read_last_write_cache::{CacheKey, CacheValue};
 use hex;
 use serde::{Deserialize, Serialize};
+use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
 // `Key` type for the `Storage`
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -65,7 +65,7 @@ pub struct StorageValue {
 }
 
 impl StorageValue {
-    pub fn new<V: BorshSerialize>(value: V) -> Self {
+    pub fn new<V: BorshSerialize>(value: &V) -> Self {
         let encoded_value = value.try_to_vec().unwrap();
         Self {
             value: Arc::new(encoded_value),

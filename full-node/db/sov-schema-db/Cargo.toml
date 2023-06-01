@@ -1,19 +1,20 @@
 [package]
 name = "sov-schema-db"
-version = "0.1.0"
+description = "A low level interface transforming RocksDB into a type-oriented data store"
+version = { workspace = true } 
+license = "Apache-2.0" # This license is inherited from Aptos 
 
 # Workspace inherited keys
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
-license = { workspace = true }
-publish = { workspace = true }
 repository = { workspace = true }
 rust-version = { workspace = true }
+readme = "README.md"
 
 [dependencies]
 # Dependencies maintained by sovereign labs
-sov-rollup-interface = { path = "../../../rollup-interface" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 
 # External dependencies 
 anyhow = { workspace = true }
@@ -31,6 +32,7 @@ hex = { workspace = true, optional = true }
 byteorder = { workspace = true }
 rand = { workspace = true }
 hex = { workspace = true }
+
 [features]
 default = []
 temppath = ["dep:byteorder", "dep:rand", "dep:hex"]

@@ -2,7 +2,7 @@ use crate::{
     storage::{StorageKey, StorageValue},
     Storage,
 };
-use first_read_last_write_cache::{
+use sov_first_read_last_write_cache::{
     cache::{self, CacheLog, ValueExists},
     CacheKey, CacheValue,
 };
@@ -87,21 +87,24 @@ impl StorageInternalCache {
         self.tx_cache.get_value(&cache_key)
     }
 
-    pub fn merge_left(&mut self, rhs: Self) -> Result<(), first_read_last_write_cache::MergeError> {
+    pub fn merge_left(
+        &mut self,
+        rhs: Self,
+    ) -> Result<(), sov_first_read_last_write_cache::MergeError> {
         self.tx_cache.merge_left(rhs.tx_cache)
     }
 
     pub fn merge_reads_left(
         &mut self,
         rhs: Self,
-    ) -> Result<(), first_read_last_write_cache::MergeError> {
+    ) -> Result<(), sov_first_read_last_write_cache::MergeError> {
         self.tx_cache.merge_reads_left(rhs.tx_cache)
     }
 
     pub fn merge_writes_left(
         &mut self,
         rhs: Self,
-    ) -> Result<(), first_read_last_write_cache::MergeError> {
+    ) -> Result<(), sov_first_read_last_write_cache::MergeError> {
         self.tx_cache.merge_writes_left(rhs.tx_cache)
     }
 

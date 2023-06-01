@@ -16,11 +16,11 @@ pub mod config;
 mod state_tests;
 
 pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
-pub use first_read_last_write_cache::cache::CacheLog;
 pub use map::StateMap;
 #[cfg(feature = "native")]
 pub use prover_storage::{delete_storage, ProverStorage};
 pub use scratchpad::*;
+pub use sov_first_read_last_write_cache::cache::CacheLog;
 use std::{fmt::Display, str};
 pub use storage::Storage;
 use utils::AlignedVec;

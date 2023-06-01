@@ -38,7 +38,7 @@ Module developers can interact with the `WorkingSet`, `StateValue`, and `StateMa
 The above API is used in the following way:
 
 ```Rust
-state.value.set(some_value, working_set);
+state.value.set(&some_value, working_set);
 let maybe_value = state.value.get(working_set);
 
 ```
@@ -80,4 +80,4 @@ The `sov-state` crate provides two implementations of the Storage trait: `ZkStor
 
 ### `WorkingSet`:
 
-Performing state updates and generating witnesses is a costly process. Thus, it is logical to incorporate caching layers to alleviate these issues. The `WorkingSet` writes data to the in-memory map and reads from the backing store only if the data is absent from the map. For more information about our cache, refer to the [`first-read-last-write-cache`](../utils/first-read-last-write-cache) crate. Furthermore, caches simplify the process of implementing state reverts. In the event that a specific transaction needs to be reverted, we can simply discard all the writes made to the relevant cache.
+Performing state updates and generating witnesses is a costly process. Thus, it is logical to incorporate caching layers to alleviate these issues. The `WorkingSet` writes data to the in-memory map and reads from the backing store only if the data is absent from the map. For more information about our cache, refer to the [`sov-first-read-last-write-cache`](../utils/sov-first-read-last-write-cache) crate. Furthermore, caches simplify the process of implementing state reverts. In the event that a specific transaction needs to be reverted, we can simply discard all the writes made to the relevant cache.

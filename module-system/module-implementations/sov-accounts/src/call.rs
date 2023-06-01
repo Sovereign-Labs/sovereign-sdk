@@ -41,9 +41,9 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         signature.verify(&new_pub_key, UPDATE_ACCOUNT_MSG)?;
 
         // Update the public key (account data remains the same).
-        self.accounts.set(&new_pub_key, account, working_set);
+        self.accounts.set(&new_pub_key, &account, working_set);
         self.public_keys
-            .set(context.sender(), new_pub_key, working_set);
+            .set(context.sender(), &new_pub_key, working_set);
         Ok(CallResponse::default())
     }
 

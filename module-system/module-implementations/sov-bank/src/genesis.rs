@@ -27,7 +27,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
                 bail!("Token address already exists");
             }
 
-            self.tokens.set(&token_address, token, working_set);
+            self.tokens.set(&token_address, &token, working_set);
         }
         Ok(())
     }

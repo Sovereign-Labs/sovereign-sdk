@@ -7,7 +7,7 @@ use crate::{
     storage::{StorageKey, StorageValue},
     Prefix, Storage,
 };
-use first_read_last_write_cache::{CacheKey, CacheValue};
+use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
 /// A working set accumulates reads and writes on top of the underlying DB,
 /// automating witness creation.
@@ -251,7 +251,7 @@ impl<S: Storage> WorkingSet<S> {
         &mut self,
         prefix: &Prefix,
         storage_key: &K,
-        value: V,
+        value: &V,
     ) {
         let storage_key = StorageKey::new(prefix, storage_key);
         let storage_value = StorageValue::new(value);

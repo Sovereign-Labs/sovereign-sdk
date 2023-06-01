@@ -1,13 +1,20 @@
 [package]
 name = "sov-modules-api"
-version = "0.1.0"
-edition = "2021"
+description = "Defines the interface of the Sovereign SDK module system"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
 resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
-sov-state = { path = "../sov-state", default-features = false }
-sov-rollup-interface = { path = "../../rollup-interface" }
+sov-state = { path = "../sov-state", version = "0.1", default-features = false }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
 serde = { workspace = true }
 borsh = { workspace = true }
 thiserror = { workspace = true }
