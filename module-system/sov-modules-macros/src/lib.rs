@@ -1,6 +1,7 @@
 #![feature(log_syntax)]
 mod dispatch;
 mod module_info;
+use crate::dispatch::cmd::CmdMacro;
 use dispatch::{
     dispatch_call::DispatchCallMacro, genesis::GenesisMacro, message_codec::MessageCodec,
 };
@@ -159,5 +160,15 @@ pub fn expose_rpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn cmd(attr: TokenStream, input: TokenStream) -> TokenStream {
     let context_type = parse_macro_input!(attr);
     let input = parse_macro_input!(input);
-    handle_macro_error(dispatch::cmd::build_cmd_parser(input, context_type).map(|ok| ok.into()))
+
+    // let input = parse_macro_input!(input);
+    let cmd_macro = CmdMacro::new("Cmd");
+
+    handle_macro_error(
+        cmd_macro
+            .derive_cmd(input, context_type)
+            .map(|ok| ok.into()),
+    )
+
+    // handle_macro_error(dispatch::cmd::build_cmd_parser(input, context_type).map(|ok| ok.into()))
 }
