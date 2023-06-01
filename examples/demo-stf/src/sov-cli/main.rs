@@ -1,7 +1,7 @@
 use anyhow::Context;
 use borsh::BorshSerialize;
 use clap::{Args, Parser, Subcommand};
-use sov_default_stf::RawTx;
+use sov_modules_stf_template::RawTx;
 use sov_modules_api::transaction::Transaction;
 use std::fs;
 use std::fs::File;
