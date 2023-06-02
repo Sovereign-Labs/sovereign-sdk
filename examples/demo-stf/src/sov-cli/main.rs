@@ -303,7 +303,7 @@ mod test {
     fn make_test_path<P: AsRef<Path>>(path: P) -> PathBuf {
         let mut sender_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         sender_path.push("src");
-        sender_path.push("bank_cmd");
+        sender_path.push("sov-cli");
         sender_path.push("test_data");
 
         sender_path.push(path);
