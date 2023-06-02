@@ -220,3 +220,184 @@ pub fn main() {
         },
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use demo_stf::app::{DemoApp, DemoAppRunner};
+    use demo_stf::genesis_config::{
+        create_demo_genesis_config, generate_address, DEMO_SEQUENCER_DA_ADDRESS,
+        DEMO_SEQ_PUB_KEY_STR, LOCKED_AMOUNT,
+    };
+    use demo_stf::runner_config::Config;
+    use demo_stf::runtime::GenesisConfig;
+    use sov_modules_api::Address;
+    use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome};
+    use sov_rollup_interface::stf::StateTransitionRunner;
+
+    use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
+    use sov_state::WorkingSet;
+
+    #[test]
+    fn test_sov_cli() {
+        let mut test_demo = TestDemo::new();
+        let test_data = read_test_data();
+
+        execute_txs(&mut test_demo.demo, test_demo.config, test_data.data);
+
+        // get minter balance
+        let balance = get_balance(
+            &mut test_demo.demo,
+            &test_data.token_deployer_address,
+            test_data.minter_address,
+        );
+
+        // The minted amount was 1000 and we transferred 200 and burned 300.
+        assert_eq!(balance, Some(500))
+    }
+
+    // Test helpers
+    struct TestDemo {
+        config: demo_stf::runtime::GenesisConfig<C>,
+        demo: DemoApp<C, MockZkvm>,
+    }
+
+    impl TestDemo {
+        fn new() -> Self {
+            let path = sov_schema_db::temppath::TempPath::new();
+            let value_setter_admin_private_key = DefaultPrivateKey::generate();
+            let election_admin_private_key = DefaultPrivateKey::generate();
+
+            let genesis_config = create_demo_config(
+                LOCKED_AMOUNT + 1,
+                &value_setter_admin_private_key,
+                &election_admin_private_key,
+            );
+
+            let path = path.as_ref().to_path_buf();
+            let runner_config = Config {
+                storage: sov_state::config::Config { path },
+            };
+
+            Self {
+                config: genesis_config,
+                demo: DemoAppRunner::<DefaultContext, MockZkvm>::new(runner_config).0,
+            }
+        }
+    }
+
+    struct TestData {
+        token_deployer_address: Address,
+        minter_address: Address,
+        data: Vec<RawTx>,
+    }
+
+    fn make_test_path<P: AsRef<Path>>(path: P) -> PathBuf {
+        let mut sender_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        sender_path.push("src");
+        sender_path.push("bank_cmd");
+        sender_path.push("test_data");
+
+        sender_path.push(path);
+
+        sender_path
+    }
+
+    fn read_test_data() -> TestData {
+        let create_token = SerializedTx::new(
+            make_test_path("token_deployer_private_key.json"),
+            "Bank",
+            make_test_path("create_token.json"),
+            0,
+        )
+        .unwrap();
+
+        let transfer = SerializedTx::new(
+            make_test_path("minter_private_key.json"),
+            "Bank",
+            make_test_path("transfer.json"),
+            0,
+        )
+        .unwrap();
+
+        let burn = SerializedTx::new(
+            make_test_path("minter_private_key.json"),
+            "Bank",
+            make_test_path("burn.json"),
+            1,
+        )
+        .unwrap();
+
+        let data = vec![create_token.raw, transfer.raw, burn.raw];
+
+        TestData {
+            token_deployer_address: create_token.sender,
+            minter_address: transfer.sender,
+            data,
+        }
+    }
+
+    fn execute_txs(
+        demo: &mut DemoApp<C, MockZkvm>,
+        config: demo_stf::runtime::GenesisConfig<C>,
+        txs: Vec<RawTx>,
+    ) {
+        StateTransitionFunction::<MockZkvm>::init_chain(demo, config);
+        StateTransitionFunction::<MockZkvm>::begin_slot(demo, Default::default());
+
+        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+            demo,
+            new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
+            None,
+        )
+        .inner;
+        assert!(
+            matches!(apply_blob_outcome, SequencerOutcome::Rewarded(0),),
+            "Sequencer execution should have succeeded but failed "
+        );
+        StateTransitionFunction::<MockZkvm>::end_slot(demo);
+    }
+
+    fn get_balance(
+        demo: &mut DemoApp<DefaultContext, MockZkvm>,
+        token_deployer_address: &Address,
+        user_address: Address,
+    ) -> Option<u64> {
+        let token_address = create_token_address(token_deployer_address);
+
+        let mut working_set = WorkingSet::new(demo.current_storage.clone());
+
+        let balance = demo
+            .runtime
+            .bank
+            .balance_of(user_address, token_address, &mut working_set);
+
+        balance.amount
+    }
+
+    fn create_token_address(token_deployer_address: &Address) -> Address {
+        sov_bank::create_token_address::<C>("sov-test-token", token_deployer_address.as_ref(), 11)
+    }
+
+    pub type TestBlob = sov_rollup_interface::mocks::TestBlob<Address>;
+
+    pub fn new_test_blob(batch: Batch, address: &[u8]) -> TestBlob {
+        let address = Address::try_from(address).unwrap();
+        let data = batch.try_to_vec().unwrap();
+        TestBlob::new(data, address)
+    }
+
+    pub fn create_demo_config(
+        initial_sequencer_balance: u64,
+        value_setter_admin_private_key: &DefaultPrivateKey,
+        election_admin_private_key: &DefaultPrivateKey,
+    ) -> GenesisConfig<DefaultContext> {
+        create_demo_genesis_config::<DefaultContext>(
+            initial_sequencer_balance,
+            generate_address::<DefaultContext>(DEMO_SEQ_PUB_KEY_STR),
+            DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
+            value_setter_admin_private_key,
+            election_admin_private_key,
+        )
+    }
+}
