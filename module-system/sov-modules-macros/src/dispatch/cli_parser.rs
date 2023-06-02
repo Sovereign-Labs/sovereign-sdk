@@ -2,18 +2,18 @@ use super::common::StructFieldExtractor;
 use quote::{format_ident, quote};
 use syn::{DeriveInput, Path, PathArguments, Type};
 
-pub(crate) struct CmdMacro {
+pub(crate) struct CliParserMacro {
     field_extractor: StructFieldExtractor,
 }
 
-impl CmdMacro {
+impl CliParserMacro {
     pub(crate) fn new(name: &'static str) -> Self {
         Self {
             field_extractor: StructFieldExtractor::new(name),
         }
     }
 
-    pub(crate) fn derive_cmd(
+    pub(crate) fn derive_cli(
         &self,
         input: DeriveInput,
         context_type: Type,
