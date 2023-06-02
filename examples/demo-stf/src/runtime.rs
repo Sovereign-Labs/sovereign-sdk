@@ -1,9 +1,9 @@
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Context;
-use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 #[cfg(feature = "native")]
 use sov_modules_macros::cli_parser;
+use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 
 /// The Rollup entrypoint.
 ///
