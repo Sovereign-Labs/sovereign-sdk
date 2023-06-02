@@ -139,7 +139,7 @@ impl RpcImplBlock {
 
                 quote! {
                     #signature {
-                        <#type_name <#(#generics_params)*,> as std::default::Default>::default().#method_name(#(#pre_working_set_args,)* &mut Self::get_working_set(self), #(#post_working_set_args),* )
+                        <#type_name <#(#generics_params)*,> as ::std::default::Default>::default().#method_name(#(#pre_working_set_args,)* &mut Self::get_working_set(self), #(#post_working_set_args),* )
                     }
                 }
             } else {
