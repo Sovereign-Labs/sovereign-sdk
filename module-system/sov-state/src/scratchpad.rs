@@ -57,8 +57,8 @@ impl<S: Storage> CommitedWorkinSet<S> {
         }
     }
 
-    pub fn to_revertable(self) -> RevertableWorkingSet<S> {
-        RevertableWorkingSet {
+    pub fn to_revertable(self) -> WorkingSet<S> {
+        WorkingSet {
             delta: self.delta.get_revertable_wrapper(),
             events: Default::default(),
         }
@@ -70,12 +70,12 @@ impl<S: Storage> CommitedWorkinSet<S> {
 }
 
 // TODO rename it to WorkingSet
-pub struct RevertableWorkingSet<S: Storage> {
+pub struct WorkingSet<S: Storage> {
     delta: RevertableDelta<S>,
     events: Vec<Event>,
 }
 
-impl<S: Storage> RevertableWorkingSet<S> {
+impl<S: Storage> WorkingSet<S> {
     pub fn commit(self) -> CommitedWorkinSet<S> {
         CommitedWorkinSet {
             delta: self.delta.commit(),
@@ -118,7 +118,7 @@ impl<S: Storage> RevertableWorkingSet<S> {
     }
 }
 
-impl<S: Storage> RevertableWorkingSet<S> {
+impl<S: Storage> WorkingSet<S> {
     pub(crate) fn set_value<K: BorshSerialize, V: BorshSerialize>(
         &mut self,
         prefix: &Prefix,
@@ -166,6 +166,7 @@ impl<S: Storage> RevertableWorkingSet<S> {
     }
 }
 
+/*
 /// A read-write set which can be committed as a unit
 enum ReadWriteSet<S: Storage> {
     Standard(Delta<S>),
@@ -278,7 +279,7 @@ impl<S: Storage> WorkingSet<S> {
         }
     }
 }
-
+*/
 impl<S: Storage> RevertableDelta<S> {
     fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
         let key = key.as_cache_key();
@@ -371,7 +372,7 @@ impl<S: Storage> Delta<S> {
         (cache.into(), witness)
     }
 }
-
+/*
 impl<S: Storage> WorkingSet<S> {
     pub(crate) fn set_value<K: BorshSerialize, V: BorshSerialize>(
         &mut self,
@@ -419,3 +420,4 @@ impl<S: Storage> WorkingSet<S> {
         )
     }
 }
+*/

@@ -12,6 +12,7 @@ use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::stf::TransactionReceipt;
 use sov_rollup_interface::zk::traits::Zkvm;
 use sov_rollup_interface::Buf;
+use sov_state::CommitedWorkinSet;
 use tracing::debug;
 use tracing::error;
 use tx_verifier::verify_txs_stateless;
@@ -25,7 +26,7 @@ use std::io::Read;
 pub struct AppTemplate<C: Context, RT, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
-    working_set: Option<WorkingSet<C::Storage>>,
+    working_set: Option<CommitedWorkinSet<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
 }
 
@@ -44,8 +45,6 @@ where
             phantom_vm: PhantomData,
         }
     }
-
-    fn foo() {}
 
     // TODO: implement a state machine instead of manually deciding when to commit and when to revert
     pub fn apply_batch(
@@ -112,7 +111,7 @@ where
             Err(e) => {
                 // Revert on error
                 let batch_workspace = batch_workspace.revert();
-                self.working_set = Some(batch_workspace.revert());
+                self.working_set = Some(batch_workspace);
                 error!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}\n", e);
                 return BatchReceipt {
                     batch_hash: batch_data_and_hash.hash,
@@ -126,8 +125,6 @@ where
 
         // Process transactions in a loop, commit changes after every step of the loop.
         for (tx, raw_tx_hash) in txs {
-            batch_workspace = batch_workspace.to_revertable();
-
             // Run the stateful verification, possibly modifies the state.
             let sender_address = match self
                 .runtime
@@ -137,7 +134,7 @@ where
                 Err(e) => {
                     // Don't revert any state changes made by the pre_dispatch_hook even if it rejects
                     error!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
-                    batch_workspace = batch_workspace.revert();
+                    batch_workspace = batch_workspace.revert().to_revertable();
                     let receipt = TransactionReceipt {
                         tx_hash: raw_tx_hash,
                         body_to_save: None,
@@ -164,7 +161,7 @@ where
                         Err(_e) => {
                             // The transaction causing invalid state transition is reverted but we don't slash and we continue
                             // processing remaining transactions.
-                            batch_workspace = batch_workspace.revert();
+                            batch_workspace = batch_workspace.revert().to_revertable();
                             TxEffect::Reverted
                         }
                     };
@@ -194,7 +191,7 @@ where
             }
 
             // commit each step of the loop
-            batch_workspace = batch_workspace.commit();
+            batch_workspace = batch_workspace.commit().to_revertable();
         }
 
         // TODO: calculate the amount based of gas and fees
@@ -204,7 +201,7 @@ where
             .end_blob_hook(batch_receipt_contents, &mut batch_workspace)
             .expect("Impossible happened: error in exit_apply_batch");
 
-        self.working_set = Some(batch_workspace);
+        self.working_set = Some(batch_workspace.commit());
         BatchReceipt {
             batch_hash: batch_data_and_hash.hash,
             tx_receipts,
@@ -273,20 +270,20 @@ where
     type MisbehaviorProof = ();
 
     fn init_chain(&mut self, params: Self::InitialState) {
-        let working_set = &mut WorkingSet::new(self.current_storage.clone());
+        let mut working_set = CommitedWorkinSet::new(self.current_storage.clone()).to_revertable();
 
         self.runtime
-            .genesis(&params, working_set)
+            .genesis(&params, &mut working_set)
             .expect("module initialization must succeed");
 
-        let (log, witness) = working_set.freeze();
+        let (log, witness) = working_set.commit().freeze();
         self.current_storage
             .validate_and_commit(log, &witness)
             .expect("Storage update must succeed");
     }
 
     fn begin_slot(&mut self, witness: Self::Witness) {
-        self.working_set = Some(WorkingSet::with_witness(
+        self.working_set = Some(CommitedWorkinSet::with_witness(
             self.current_storage.clone(),
             witness,
         ));
