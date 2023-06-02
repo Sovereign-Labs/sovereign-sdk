@@ -1,4 +1,8 @@
+#[cfg(feature = "native")]
+pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Context;
+#[cfg(feature = "native")]
+use sov_modules_macros::cli_parser;
 use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 
 /// The Rollup entrypoint.
@@ -36,6 +40,7 @@ use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 /// Similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
 /// instead of going through the DA layer.
 
+#[cfg_attr(feature = "native", cli_parser(DefaultContext))]
 #[derive(Genesis, DispatchCall, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
