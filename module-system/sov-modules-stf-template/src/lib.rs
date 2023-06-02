@@ -45,6 +45,8 @@ where
         }
     }
 
+    fn foo() {}
+
     // TODO: implement a state machine instead of manually deciding when to commit and when to revert
     pub fn apply_batch(
         &mut self,

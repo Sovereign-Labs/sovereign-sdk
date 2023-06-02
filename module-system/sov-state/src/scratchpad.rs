@@ -40,6 +40,132 @@ impl<S: Storage> Debug for RevertableDelta<S> {
     }
 }
 
+pub struct CommitedWorkinSet<S: Storage> {
+    delta: Delta<S>,
+}
+
+impl<S: Storage> CommitedWorkinSet<S> {
+    pub fn new(inner: S) -> Self {
+        Self {
+            delta: Delta::new(inner),
+        }
+    }
+
+    pub fn with_witness(inner: S, witness: S::Witness) -> Self {
+        Self {
+            delta: Delta::with_witness(inner, witness),
+        }
+    }
+
+    pub fn to_revertable(self) -> RevertableWorkingSet<S> {
+        RevertableWorkingSet {
+            delta: self.delta.get_revertable_wrapper(),
+            events: Default::default(),
+        }
+    }
+
+    pub fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
+        self.delta.freeze()
+    }
+}
+
+// TODO rename it to WorkingSet
+pub struct RevertableWorkingSet<S: Storage> {
+    delta: RevertableDelta<S>,
+    events: Vec<Event>,
+}
+
+impl<S: Storage> RevertableWorkingSet<S> {
+    pub fn commit(self) -> CommitedWorkinSet<S> {
+        CommitedWorkinSet {
+            delta: self.delta.commit(),
+        }
+    }
+
+    pub fn revert(self) -> CommitedWorkinSet<S> {
+        CommitedWorkinSet {
+            delta: self.delta.revert(),
+        }
+    }
+
+    pub(crate) fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
+        self.delta.get(key)
+    }
+
+    pub(crate) fn set(&mut self, key: StorageKey, value: StorageValue) {
+        self.delta.set(key, value)
+    }
+
+    pub(crate) fn delete(&mut self, key: StorageKey) {
+        self.delta.delete(key)
+    }
+
+    pub fn add_event(&mut self, key: &str, value: &str) {
+        self.events.push(Event::new(key, value));
+    }
+
+    pub fn take_events(&mut self) -> Vec<Event> {
+        std::mem::take(&mut self.events)
+    }
+
+    pub fn events(&self) -> &[Event] {
+        &self.events
+    }
+
+    //TODO do we need this function, probably not
+    pub fn backing(&self) -> &S {
+        &self.delta.inner.inner
+    }
+}
+
+impl<S: Storage> RevertableWorkingSet<S> {
+    pub(crate) fn set_value<K: BorshSerialize, V: BorshSerialize>(
+        &mut self,
+        prefix: &Prefix,
+        storage_key: &K,
+        value: &V,
+    ) {
+        let storage_key = StorageKey::new(prefix, storage_key);
+        let storage_value = StorageValue::new(value);
+        self.set(storage_key, storage_value);
+    }
+
+    pub(crate) fn get_value<K: BorshSerialize, V: BorshDeserialize>(
+        &mut self,
+        prefix: &Prefix,
+        storage_key: &K,
+    ) -> Option<V> {
+        let storage_key = StorageKey::new(prefix, storage_key);
+        self.get_decoded(storage_key)
+    }
+
+    pub(crate) fn remove_value<K: BorshSerialize, V: BorshDeserialize>(
+        &mut self,
+        prefix: &Prefix,
+        storage_key: &K,
+    ) -> Option<V> {
+        let storage_key = StorageKey::new(prefix, storage_key);
+        let storage_value = self.get_decoded(storage_key.clone())?;
+        self.delete(storage_key);
+        Some(storage_value)
+    }
+
+    pub(crate) fn delete_value<K: BorshSerialize>(&mut self, prefix: &Prefix, storage_key: &K) {
+        let storage_key = StorageKey::new(prefix, storage_key);
+        self.delete(storage_key);
+    }
+
+    fn get_decoded<V: BorshDeserialize>(&mut self, storage_key: StorageKey) -> Option<V> {
+        let storage_value = self.get(storage_key)?;
+
+        // It is ok to panic here. Deserialization problem means that something is terribly wrong.
+        Some(
+            V::deserialize_reader(&mut storage_value.value())
+                .unwrap_or_else(|e| panic!("Unable to deserialize storage value {e:?}")),
+        )
+    }
+}
+
 /// A read-write set which can be committed as a unit
 enum ReadWriteSet<S: Storage> {
     Standard(Delta<S>),
