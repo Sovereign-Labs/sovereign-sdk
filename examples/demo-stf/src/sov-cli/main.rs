@@ -43,6 +43,9 @@ enum Commands {
         call_data_path: String,
         /// Nonce for the transaction
         nonce: u64,
+        /// Output file format. borsh and hex are supported
+        #[clap(long, default_value = "hex")]
+        format: String,
     },
     /// Utility commands
     Util(UtilArgs),
@@ -177,6 +180,7 @@ pub fn main() {
             module_name,
             call_data_path,
             nonce,
+            format,
         } => {
             let serialized =
                 SerializedTx::new(&sender_priv_key_path, &module_name, &call_data_path, nonce)
@@ -188,7 +192,11 @@ pub fn main() {
             let mut file = File::create(bin_path)
                 .unwrap_or_else(|e| panic!("Unable to crate .dat file: {}", e));
 
-            file.write_all(&vec![serialized.raw.data].try_to_vec().unwrap())
+            let mut raw_contents = vec![serialized.raw.data].try_to_vec().unwrap();
+            if format == "hex" {
+                raw_contents = hex::encode(raw_contents).as_bytes().to_vec();
+            }
+            file.write_all(&raw_contents)
                 .unwrap_or_else(|e| panic!("Unable to save .dat file: {}", e));
         }
         Commands::Util(util_args) => match util_args.command {
