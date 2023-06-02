@@ -57,6 +57,19 @@ impl<S: Storage> CommitedWorkinSet<S> {
         }
     }
 
+    /*
+    pub(crate) fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
+        self.delta.get(key)
+    }
+
+    pub(crate) fn set(&mut self, key: StorageKey, value: StorageValue) {
+        self.delta.set(key, value)
+    }
+
+    pub(crate) fn delete(&mut self, key: StorageKey) {
+        self.delta.delete(key)
+    }*/
+
     pub fn to_revertable(self) -> WorkingSet<S> {
         WorkingSet {
             delta: self.delta.get_revertable_wrapper(),
@@ -76,6 +89,15 @@ pub struct WorkingSet<S: Storage> {
 }
 
 impl<S: Storage> WorkingSet<S> {
+    pub fn new(inner: S) -> Self {
+        CommitedWorkinSet::new(inner).to_revertable()
+    }
+
+    // Todo remove it
+    pub fn with_witness(inner: S, witness: S::Witness) -> Self {
+        CommitedWorkinSet::with_witness(inner, witness).to_revertable()
+    }
+
     pub fn commit(self) -> CommitedWorkinSet<S> {
         CommitedWorkinSet {
             delta: self.delta.commit(),

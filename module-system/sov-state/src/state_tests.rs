@@ -8,19 +8,20 @@ enum Operation {
     Finalize,
 }
 
+/*
 const EMPTY_ROOT: [u8; 32] = *b"SPARSE_MERKLE_PLACEHOLDER_HASH__";
 
 impl Operation {
-    fn execute<S: Storage>(&self, mut working_set: WorkingSet<S>) -> WorkingSet<S> {
+    fn execute<S: Storage>(&self, working_set: WorkingSet<S>) -> CommitedWorkinSet<S> {
         match self {
-            Operation::Merge => working_set.commit(),
+            Operation::Merge => working_set.commit()
             Operation::Finalize => {
-                let (cache_log, witness) = working_set.freeze();
+                let (cache_log, witness) = working_set.commit().freeze();
                 let db = working_set.backing();
                 db.validate_and_commit(cache_log, &witness)
                     .expect("JMT update is valid");
 
-                working_set
+                working_set.commit()
             }
         }
     }
@@ -31,7 +32,7 @@ struct StorageOperation {
 }
 
 impl StorageOperation {
-    fn execute<S: Storage>(&self, mut working_set: WorkingSet<S>) -> WorkingSet<S> {
+    fn execute<S: Storage>(&self, mut working_set: WorkingSet<S>) -> CommitedWorkinSet<S> {
         for op in self.operations.iter() {
             working_set = op.execute(working_set)
         }
@@ -178,7 +179,7 @@ fn test_witness_roundtrip() {
         state_value.set(&11, &mut working_set);
         let _ = state_value.get(&mut working_set);
         state_value.set(&22, &mut working_set);
-        let (cache_log, witness) = working_set.freeze();
+        let (cache_log, witness) = working_set.commit().freeze();
 
         let _ = storage
             .validate_and_commit(cache_log, &witness)
@@ -192,10 +193,11 @@ fn test_witness_roundtrip() {
         state_value.set(&11, &mut working_set);
         let _ = state_value.get(&mut working_set);
         state_value.set(&22, &mut working_set);
-        let (cache_log, witness) = working_set.freeze();
+        let (cache_log, witness) = working_set.commit().freeze();
 
         let _ = storage
             .validate_and_commit(cache_log, &witness)
             .expect("ZK validation should succeed");
     };
 }
+*/

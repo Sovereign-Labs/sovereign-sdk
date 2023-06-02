@@ -153,7 +153,7 @@ pub fn delete_storage(path: impl AsRef<Path>) {
 mod test {
     use jmt::Version;
 
-    use crate::{DefaultStorageSpec, WorkingSet};
+    use crate::{CommitedWorkinSet, DefaultStorageSpec, WorkingSet};
 
     use super::*;
 
@@ -191,7 +191,7 @@ mod test {
         {
             for test in tests.clone() {
                 let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
-                let mut storage = WorkingSet::new(prover_storage.clone());
+                let mut storage = CommitedWorkinSet::new(prover_storage.clone());
                 assert_eq!(prover_storage.db.get_next_version(), test.version);
 
                 storage.set(test.key.clone(), test.value.clone());
@@ -231,7 +231,7 @@ mod test {
         {
             let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
             assert!(prover_storage.is_empty());
-            let mut storage = WorkingSet::new(prover_storage.clone());
+            let mut storage = CommitedWorkinSet::new(prover_storage.clone());
             storage.set(key.clone(), value.clone());
             let (cache, witness) = storage.freeze();
             prover_storage

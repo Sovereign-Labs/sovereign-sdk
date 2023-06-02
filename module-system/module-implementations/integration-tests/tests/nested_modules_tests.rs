@@ -87,18 +87,13 @@ mod module_c {
 #[test]
 fn nested_module_call_test() {
     let native_storage = ProverStorage::temporary();
-    let working_set = &mut WorkingSet::new(native_storage.clone());
+    let mut working_set = WorkingSet::new(native_storage.clone());
 
     // Test the `native` execution.
     {
-        execute_module_logic::<DefaultContext>(working_set);
-        test_state_update::<DefaultContext>(working_set);
+        execute_module_logic::<DefaultContext>(&mut working_set);
+        test_state_update::<DefaultContext>(&mut working_set);
     }
-    let (log, witness) = working_set.freeze();
-    native_storage
-        .validate_and_commit(log, &witness)
-        .expect("State update is valid");
-
     assert_eq!(
         working_set.events(),
         &vec![
@@ -109,6 +104,11 @@ fn nested_module_call_test() {
             Event::new("module A", "update"),
         ]
     );
+
+    let (log, witness) = working_set.commit().freeze();
+    native_storage
+        .validate_and_commit(log, &witness)
+        .expect("State update is valid");
 
     // Test the `zk` execution.
     {
