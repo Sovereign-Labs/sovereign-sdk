@@ -103,7 +103,7 @@ For testing, we can submit a transaction to the bank module to create a new toke
 
 1. Install Go 1.20 - https://go.dev/doc/install
 2. Clone the repository: `git clone https://github.com/celestiaorg/celestia-app.git`.
-3. `cd celestia-node`
+3. `cd celestia-app`
 4. Check out tag v0.13.0 - `git checkout tags/v0.13.0`
 5. `make install`
 
