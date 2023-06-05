@@ -191,11 +191,11 @@ mod test {
         {
             for test in tests.clone() {
                 let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
-                let mut storage = CommitedWorkinSet::new(prover_storage.clone());
+                let mut storage = WorkingSet::new(prover_storage.clone());
                 assert_eq!(prover_storage.db.get_next_version(), test.version);
 
                 storage.set(test.key.clone(), test.value.clone());
-                let (cache, witness) = storage.freeze();
+                let (cache, witness) = storage.commit().freeze();
                 prover_storage
                     .validate_and_commit(cache, &witness)
                     .expect("storage is valid");
@@ -231,9 +231,9 @@ mod test {
         {
             let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
             assert!(prover_storage.is_empty());
-            let mut storage = CommitedWorkinSet::new(prover_storage.clone());
+            let mut storage = WorkingSet::new(prover_storage.clone());
             storage.set(key.clone(), value.clone());
-            let (cache, witness) = storage.freeze();
+            let (cache, witness) = storage.commit().freeze();
             prover_storage
                 .validate_and_commit(cache, &witness)
                 .expect("storage is valid");
