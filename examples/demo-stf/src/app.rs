@@ -29,7 +29,7 @@ use std::cell::RefCell;
 
 pub struct DemoAppRunner<C: Context, Vm: Zkvm> {
     pub stf: DemoApp<C, Vm>,
-    batch_builder: RefCell<FiFoStrictBatchBuilder<Runtime<C>, C>>,
+    pub batch_builder: RefCell<FiFoStrictBatchBuilder<Runtime<C>, C>>,
 }
 
 pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;

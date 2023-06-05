@@ -289,7 +289,7 @@ mod test {
 
             Self {
                 config: genesis_config,
-                demo: DemoAppRunner::<DefaultContext, MockZkvm>::new(runner_config).0,
+                demo: DemoAppRunner::<DefaultContext, MockZkvm>::new(runner_config).stf,
             }
         }
     }
