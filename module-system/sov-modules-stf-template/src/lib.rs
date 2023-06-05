@@ -131,7 +131,7 @@ where
                 .runtime
                 .pre_dispatch_tx_hook(tx.clone(), &mut batch_workspace)
             {
-                Ok(verified_tx) => verified_tx,
+                Ok(sender_address) => sender_address,
                 Err(e) => {
                     // Don't revert any state changes made by the pre_dispatch_hook even if it rejects
                     error!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
