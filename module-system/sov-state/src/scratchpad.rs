@@ -40,8 +40,8 @@ impl<S: Storage> Debug for RevertableDelta<S> {
     }
 }
 
-/// This structure stores the read-write set, which will be persisted in the database at the
-/// at the end of the DA slot.
+/// This structure is responsible for storing the `read-write` set
+/// and is obtained from the `WorkingSet` by using either the `commit` or `revert` method.
 pub struct CommittedWorkingSet<S: Storage> {
     delta: Delta<S>,
 }
@@ -72,7 +72,9 @@ impl<S: Storage> CommittedWorkingSet<S> {
 }
 
 /// This structure contains the read-write set and the events collected during the execution of a transaction.
-/// The data it contains can be reverted to the most recent committed state.
+/// There are two ways to convert it into a CommittedWorkingSet:
+/// 1. By using the commit method, where all the changes are added to the underlying CommittedWorkingSet.
+/// 2. By using the revert method, where the most recent changes are reverted and the previously committed `CommittedWorkingSet` is returned.
 pub struct WorkingSet<S: Storage> {
     delta: RevertableDelta<S>,
     events: Vec<Event>,
