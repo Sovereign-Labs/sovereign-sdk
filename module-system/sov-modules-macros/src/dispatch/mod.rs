@@ -1,3 +1,4 @@
+pub mod cli_parser;
 pub(crate) mod common;
 pub mod derive_rpc;
 pub mod dispatch_call;

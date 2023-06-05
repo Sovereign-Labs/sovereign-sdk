@@ -21,6 +21,7 @@ pub use error::Error;
 pub use jmt::SimpleHasher as Hasher;
 pub use prefix::Prefix;
 pub use response::CallResponse;
+use serde::{Deserialize, Serialize};
 pub use sov_rollup_interface::traits::AddressTrait;
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
@@ -95,7 +96,7 @@ pub trait Signature {
 }
 
 /// A type that can't be instantiated.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum NonInstantiable {}
 
 /// PublicKey used in the Module System.
