@@ -64,12 +64,7 @@ where
         let mut mempool = self.mempool.borrow_mut();
 
         while let Some(raw_tx) = mempool.pop_front() {
-            // Check batch size
-            let tx_size = raw_tx.len();
-            if (current_batch_size + tx_size) > self.batch_size_bytes {
-                mempool.push_front(raw_tx);
-                break;
-            }
+            let tx_len = raw_tx.len();
 
             // Deserialize
             let mut data = Cursor::new(&raw_tx);
@@ -107,9 +102,7 @@ where
 
                 //
                 match self.runtime.dispatch_call(msg, &mut working_set, &ctx) {
-                    Ok(_) => {
-                        txs.push(raw_tx);
-                    }
+                    Ok(_) => (),
                     Err(err) => {
                         let err = anyhow::Error::new(err)
                             .context("Transaction dispatch returned an error");
@@ -119,13 +112,23 @@ where
                 }
             }
 
+            // In order to fill batch as big as possible,
+            // we only check if valid tx can fit in the batch.
+            if current_batch_size + tx_len <= self.batch_size_bytes {
+                txs.push(raw_tx);
+            } else {
+                mempool.push_front(raw_tx);
+                break;
+            }
+
             // Update size of current batch
-            current_batch_size += tx_size;
+            current_batch_size += tx_len;
         }
 
         if txs.is_empty() {
             bail!("No valid transactions are available");
         }
+
         Ok(txs)
     }
 }
@@ -181,7 +184,7 @@ mod tests {
     fn generate_random_bytes() -> Vec<u8> {
         let mut rng = rand::thread_rng();
 
-        let length = rng.gen_range(1..=128);
+        let length = rng.gen_range(1..=512);
 
         (0..length).map(|_| rng.gen()).collect()
     }
@@ -289,10 +292,6 @@ mod tests {
         #[test]
         fn builds_batch_skipping_invalid_txs() {
             let (storage, value_setter_admin) = setup_runtime_and_storage();
-            let working_set = WorkingSet::new(storage.clone());
-            let mut batch_builder = build_test_batch_builder(256);
-            batch_builder.reset_working_set(working_set);
-
             let txs = [
                 // Should be included: 113 bytes
                 generate_valid_tx(&value_setter_admin, 1),
@@ -307,6 +306,12 @@ mod tests {
                 // Should be skipped, more than batch size
                 generate_valid_tx(&value_setter_admin, 3),
             ];
+
+            let batch_size = txs[0].len() + txs[4].len() + 1;
+
+            let working_set = WorkingSet::new(storage.clone());
+            let mut batch_builder = build_test_batch_builder(batch_size);
+            batch_builder.reset_working_set(working_set);
 
             for tx in &txs {
                 batch_builder.accept_tx(tx.clone()).unwrap();
