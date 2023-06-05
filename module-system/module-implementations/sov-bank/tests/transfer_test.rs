@@ -15,7 +15,8 @@ fn transfer_initial_token() {
     let initial_balance = 100;
     let transfer_amount = 10;
     let bank_config = create_bank_config_with_token(3, initial_balance);
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let bank = Bank::new();
     bank.genesis(&bank_config, &mut working_set).unwrap();
 
@@ -200,7 +201,8 @@ fn transfer_initial_token() {
 #[test]
 fn transfer_deployed_token() {
     let bank = Bank::<C>::new();
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 

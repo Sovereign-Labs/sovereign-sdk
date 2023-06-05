@@ -36,4 +36,3 @@ tempfile = { workspace = true }
 
 [features]
 default = []
-temp = ["tempfile"]

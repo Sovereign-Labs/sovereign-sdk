@@ -30,5 +30,4 @@ tempfile = { workspace = true }
 
 [features]
 default = ["native"]
-temp = ["sov-db/temp"]
 native = ["sov-db"]

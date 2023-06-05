@@ -44,13 +44,6 @@ impl StateDB {
         })
     }
 
-    /// A rocksdb instance which stores its data in a tempdir
-    #[cfg(any(test, feature = "temp"))]
-    pub fn temporary() -> Self {
-        let path = tempfile::tempdir().unwrap().into_path();
-        Self::with_path(path).unwrap()
-    }
-
     pub fn put_preimage(&self, key_hash: KeyHash, key: &Vec<u8>) -> Result<(), anyhow::Error> {
         self.db.put::<KeyHashToKey>(&key_hash.0, key)
     }

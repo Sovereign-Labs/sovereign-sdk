@@ -10,7 +10,8 @@ use helpers::*;
 #[test]
 fn initial_and_deployed_token() {
     let bank_config = create_bank_config_with_token(1, 100);
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let bank = Bank::new();
     bank.genesis(&bank_config, &mut working_set).unwrap();
 
@@ -47,7 +48,8 @@ fn initial_and_deployed_token() {
 /// Currently integer overflow happens on bank genesis
 fn overflow_max_supply() {
     let bank = Bank::<C>::new();
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
 
     let bank_config = create_bank_config_with_token(2, u64::MAX - 2);
 

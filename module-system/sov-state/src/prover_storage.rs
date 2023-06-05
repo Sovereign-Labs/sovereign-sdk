@@ -26,12 +26,6 @@ impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
 }
 
 impl<S: MerkleProofSpec> ProverStorage<S> {
-    #[cfg(any(test, feature = "temp"))]
-    pub fn temporary() -> Self {
-        let db = StateDB::temporary();
-        Self::with_db(db).unwrap()
-    }
-
     pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
         let db = StateDB::with_path(&path)?;
         Self::with_db(db)
