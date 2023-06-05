@@ -22,13 +22,7 @@ once_cell = { workspace = true }
 prometheus = { workspace = true }
 rocksdb = { workspace = true }
 tracing = { workspace = true }
-tempfile = { workspace = true, optional = true }
 
 [dev-dependencies]
 byteorder = { workspace = true }
 tempfile = { workspace = true }
-
-
-[features]
-default = []
-temppath = ["tempfile"]

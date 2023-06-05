@@ -369,12 +369,12 @@ fn test_report_size() {
 #[test]
 fn test_checkpoint() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let checkpoint = tempfile::tempdir().unwrap();
-    let c = checkpoint.path().join("location");
+    let checkpoint_parent = tempfile::tempdir().unwrap();
+    let checkpoint = checkpoint_parent.path().join("checkpoint");
     {
         let db = open_db(&tmpdir);
         db.put::<TestSchema1>(&TestField(0), &TestField(0)).unwrap();
-        db.create_checkpoint(&c).unwrap();
+        db.create_checkpoint(&checkpoint).unwrap();
     }
     {
         let db = open_db(&tmpdir);
@@ -383,7 +383,7 @@ fn test_checkpoint() {
             Some(TestField(0)),
         );
 
-        let cp = open_db(&c);
+        let cp = open_db(&checkpoint);
         assert_eq!(
             cp.get::<TestSchema1>(&TestField(0)).unwrap(),
             Some(TestField(0)),
