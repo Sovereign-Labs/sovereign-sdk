@@ -12,7 +12,8 @@ pub type Storage = ProverStorage<DefaultStorageSpec>;
 #[test]
 fn freeze_token() {
     let bank = Bank::<C>::new();
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 

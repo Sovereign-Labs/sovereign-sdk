@@ -102,7 +102,8 @@ fn create_test_sequencer() -> TestSequencer {
 #[test]
 fn test_sequencer() {
     let mut test_sequencer = create_test_sequencer();
-    let working_set = &mut WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.geneses(working_set);
 
     {
