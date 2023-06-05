@@ -2,9 +2,17 @@ name: Rust
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
+    paths:
+      - '**.rs'
+      - '**.toml'
+      - '**.json'
   pull_request:
-    branches: ["main"]
+    branches: [ "main" ]
+    paths:
+      - '**.rs'
+      - '**.toml'
+      - '**.json'
 
 env:
   CARGO_TERM_COLOR: always
