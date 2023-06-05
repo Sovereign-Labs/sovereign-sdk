@@ -132,9 +132,9 @@ where
             {
                 Ok(verified_tx) => verified_tx,
                 Err(e) => {
-                    // Don't revert any state changes made by the pre_dispatch_hook even if it rejects
+                    // Don't revert any state changes made by the pre_dispatch_hook even if the Tx is rejected.
+                    // For example nonce for the relevant account is incremented.
                     error!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
-                    batch_workspace = batch_workspace.revert().to_revertable();
                     let receipt = TransactionReceipt {
                         tx_hash: raw_tx_hash,
                         body_to_save: None,
