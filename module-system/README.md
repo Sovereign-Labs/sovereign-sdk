@@ -29,8 +29,9 @@ pub struct Bank<C: sov_modules_api::Context> {
 }
 ```
 
-At first glance, this definition might seem a little bit intimidating because of the generic `C`. Don't worry, we'll explain that
-generic in detail later. For now, just notice that a module is a struct with an address and some `#[state]` fields specifying
+At first glance, this definition might seem a little bit intimidating because of the generic `C`.
+Don't worry, we'll explain that generic in detail later.
+For now, just notice that a module is a struct with an address and some `#[state]` fields specifying
 what kind of data this module has access to. Under the hood, the `ModuleInfo` derive macro will do some magic to ensure that
 any `#[state]` fields get mapped onto unique storage keys so that only this particular module can read or write its state values.
 
@@ -191,7 +192,7 @@ pub trait Context: Spec + Clone + Debug + PartialEq {
 Modules are expected to be generic over the `Context` type. This trait gives them a convenient handle to access all of the cryptographic operations
 defined by a `Spec`, while also making it easy for the Module System to pass in authenticated transaction-specific information which
 would not otherwise be available to a module. Currently, a `Context` is only required to contain the `sender` (signer) of the transaction,
-but this trait might be extended in future.
+but this trait might be extended in the future.
 
 Putting it all together, recall that the Bank struct is defined like this.
 
