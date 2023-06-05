@@ -7,6 +7,7 @@ use sov_state::WorkingSet;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::io::Cursor;
+use tracing::warn;
 
 /// BatchBuilder that creates batches of transactions in the order they were submitted
 /// Only transactions that were successfully dispatched are included.
@@ -14,23 +15,23 @@ pub struct FiFoStrictBatchBuilder<R, C: Context> {
     mempool: RefCell<VecDeque<Vec<u8>>>,
     mempool_max_txs_count: usize,
     runtime: R,
-    batch_size_bytes: usize,
+    max_batch_size_bytes: usize,
     working_set: Option<RefCell<WorkingSet<<C as Spec>::Storage>>>,
 }
 
 impl<R, C: Context> FiFoStrictBatchBuilder<R, C> {
-    pub fn new(batch_size_bytes: usize, mempool_max_txs_count: usize, runtime: R) -> Self {
+    pub fn new(max_batch_size_bytes: usize, mempool_max_txs_count: usize, runtime: R) -> Self {
         Self {
             mempool: RefCell::new(VecDeque::new()),
             mempool_max_txs_count,
-            batch_size_bytes,
+            max_batch_size_bytes,
             runtime,
             working_set: None,
         }
     }
 
     #[cfg(feature = "native")]
-    pub fn reset_working_set(&mut self, working_set: WorkingSet<<C as Spec>::Storage>) {
+    pub fn set_working_set(&mut self, working_set: WorkingSet<<C as Spec>::Storage>) {
         self.working_set = Some(RefCell::new(working_set));
     }
 }
@@ -114,7 +115,7 @@ where
 
             // In order to fill batch as big as possible,
             // we only check if valid tx can fit in the batch.
-            if current_batch_size + tx_len <= self.batch_size_bytes {
+            if current_batch_size + tx_len <= self.max_batch_size_bytes {
                 txs.push(raw_tx);
             } else {
                 mempool.push_front(raw_tx);
@@ -127,6 +128,10 @@ where
 
         if txs.is_empty() {
             bail!("No valid transactions are available");
+        }
+
+        for (tx, err) in dismissed {
+            warn!("Transaction 0x{} was dismissed: {:?}", hex::encode(tx), err);
         }
 
         Ok(txs)
@@ -269,7 +274,7 @@ mod tests {
             let (storage, _) = setup_runtime_and_storage();
             let working_set = WorkingSet::new(storage);
             let mut batch_builder = build_test_batch_builder(1024);
-            batch_builder.reset_working_set(working_set);
+            batch_builder.set_working_set(working_set);
             let build_result = batch_builder.get_next_blob();
             assert!(build_result.is_err());
             assert_eq!(
@@ -311,7 +316,7 @@ mod tests {
 
             let working_set = WorkingSet::new(storage.clone());
             let mut batch_builder = build_test_batch_builder(batch_size);
-            batch_builder.reset_working_set(working_set);
+            batch_builder.set_working_set(working_set);
 
             for tx in &txs {
                 batch_builder.accept_tx(tx.clone()).unwrap();

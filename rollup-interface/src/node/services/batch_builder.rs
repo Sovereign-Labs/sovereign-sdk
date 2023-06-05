@@ -5,7 +5,6 @@ pub trait BatchBuilder {
     fn accept_tx(&self, tx: Vec<u8>) -> anyhow::Result<()>;
 
     /// Builds a new batch out of transactions in mempool.
-    /// Working set is consumed, to emphasize that it is not is not going to be used after this call.
-    /// TODO: Do we want to return next_root_hash for the batch?
+    /// Logic of which transactions and how many of them is included in batch is up to implementation.
     fn get_next_blob(&self) -> anyhow::Result<Vec<Vec<u8>>>;
 }
