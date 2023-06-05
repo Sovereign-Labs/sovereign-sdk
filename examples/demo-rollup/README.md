@@ -115,17 +115,17 @@ For testing, we can submit a transaction to the bank module to create a new toke
 ### Create bank transaction
 
 1. `cd ../../` (sovereign root)
-2. `cargo build --release --bin bank-cmd`
-3. `./target/release/bank-cmd create-private-key .` - this is the rollup private key that's used to sign rollup transactions. It's important to make the distinction between this key and the sequencer private key.
-4. `ls -lahtr | grep sov1` - you should see a new json file created containing the keypair. We will refer to this in later commands as `<rollup_private_key.json>`
-5. `./target/release/bank-cmd serialize-call <rollup_private_key.json> examples/demo-stf/src/bank_cmd/test_data/create_token.json 0 `
-6. Get the token address from the above the command. eg: `sov1jzvd95rjx7xpcdun2h8kyqee2z5r988h3wy4gsdn6ukc5ae04dvsrad3jj`
-7. The binary serialized transaction is created at : `examples/demo-stf/src/bank_cmd/test_data/create_token.dat`
+2. `cargo build --release --bin sov-cli`
+3. `./target/release/sov-cli util create-private-key .` This is the rollup private key that's used to sign rollup transactions. It's important to make the distinction between this key and the sequencer private key.
+4. `ls -lahtr | grep sov1` - you should see a new json file created containing the keypair. We will refer to this in later commands as `<rollup_keypair.json>`
+5. `./target/release/sov-cli serialize-call <rollup_keypair.json> Bank examples/demo-stf/src/sov-cli/test_data/create_token.json 0`
+6. Get the token address from the above the command (on Step 4) eg: `sov1jzvd95rjx7xpcdun2h8kyqee2z5r988h3wy4gsdn6ukc5ae04dvsrad3jj`
+7. The binary serialized transaction is created at : `examples/demo-stf/src/sov-cli/test_data/create_token.dat`
 
 ### Submit blob to celestia
 
 ```
-$ xxd -p examples/demo-stf/src/bank_cmd/test_data/create_token.dat | tr -d '\n'
+$ xxd -p examples/demo-stf/src/sov-cli/test_data/create_token.dat | tr -d '\n'
 01000000b0000000dd02eda4c1d40cdbb13686c58a127b82cb18d36191afd7eddd7e6eaeeee5bc82f139a4ef84f578e86f9f6c920fb32f505a1fa78d11ff4059263dd3037d44d8035b35bae2751216067eef40b8bad501bab50111e8f74dbb1d64c1a629dcf093c74400000001000b000000000000000e000000736f762d746573742d746f6b656ee803000000000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba75980000000000000000
 
 $ celestia-appd tx blob PayForBlobs 736f762d74657374 01000000b000000004ee8ca2c343fe0acd2b72249c48b56351ebfb4b7eef73ddae363880b61380cc23b3ebf15375aa110d7aa84206b1f22c1885b26e980d5e03244cc588e314b004a60b594d5751dc2a326c18923eaa74b48424c0f246733c6c028d7ee16899ad944400000001000b000000000000000e000000736f762d746573742d746f6b656e8813000000000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba75980000000000000000 --from sequencer_keypair --node tcp://limani.celestia-devops.dev:26657 --chain-id=arabica-6 --fees=300utia
