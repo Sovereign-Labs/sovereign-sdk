@@ -8,22 +8,22 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::io::Cursor;
 
-const MAX_TX_POOL_SIZE: usize = 100;
-
 /// BatchBuilder that creates batch of transaction in the order they were submitted
 /// Only transaction that were successfully dispatched are included.
 pub struct FiFoStrictBatchBuilder<R, C: Context> {
     mempool: RefCell<VecDeque<Vec<u8>>>,
+    mempool_max_txs_count: usize,
     runtime: R,
     batch_size_bytes: usize,
     working_set: Option<RefCell<WorkingSet<<C as Spec>::Storage>>>,
 }
 
 impl<R, C: Context> FiFoStrictBatchBuilder<R, C> {
-    pub fn new(batch_size: usize, runtime: R) -> Self {
+    pub fn new(batch_size_bytes: usize, mempool_max_txs_count: usize, runtime: R) -> Self {
         Self {
             mempool: RefCell::new(VecDeque::new()),
-            batch_size_bytes: batch_size,
+            mempool_max_txs_count,
+            batch_size_bytes,
             runtime,
             working_set: None,
         }
@@ -41,8 +41,7 @@ where
 {
     /// Transaction can only be declined only mempool is full
     fn accept_tx(&self, tx: Vec<u8>) -> anyhow::Result<()> {
-        // TODO: Hold 100 txs of any size, implement size based logic later
-        if self.mempool.borrow().len() > MAX_TX_POOL_SIZE {
+        if self.mempool.borrow().len() > self.mempool_max_txs_count {
             bail!("Mempool is full")
         }
         let mut mempool = self.mempool.borrow_mut();
@@ -146,6 +145,7 @@ mod tests {
     use sov_value_setter::call::CallMessage;
     use sov_value_setter::ValueSetterConfig;
 
+    const MAX_TX_POOL_SIZE: usize = 20;
     type C = DefaultContext;
 
     #[derive(Genesis, DispatchCall, MessageCodec)]
@@ -197,7 +197,7 @@ mod tests {
         batch_size_bytes: usize,
     ) -> FiFoStrictBatchBuilder<TestRuntime<C>, C> {
         let runtime = TestRuntime::<C>::new();
-        FiFoStrictBatchBuilder::new(batch_size_bytes, runtime)
+        FiFoStrictBatchBuilder::new(batch_size_bytes, MAX_TX_POOL_SIZE, runtime)
     }
 
     // Returns storage after genesis and admin private key of value setter
@@ -321,6 +321,7 @@ mod tests {
             assert!(blob.contains(&txs[0]));
             assert!(blob.contains(&txs[4]));
             assert!(!blob.contains(&txs[5]));
+            assert_eq!(1, batch_builder.mempool.borrow().len());
         }
     }
 }
