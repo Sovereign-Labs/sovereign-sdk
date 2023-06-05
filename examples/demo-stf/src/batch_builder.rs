@@ -8,8 +8,8 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::io::Cursor;
 
-/// BatchBuilder that creates batch of transaction in the order they were submitted
-/// Only transaction that were successfully dispatched are included.
+/// BatchBuilder that creates batches of transactions in the order they were submitted
+/// Only transactions that were successfully dispatched are included.
 pub struct FiFoStrictBatchBuilder<R, C: Context> {
     mempool: RefCell<VecDeque<Vec<u8>>>,
     mempool_max_txs_count: usize,
