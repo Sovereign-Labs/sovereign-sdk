@@ -57,7 +57,8 @@ pub type DemoBatchReceipt = SequencerOutcome;
 pub type DemoTxReceipt = TxEffect;
 
 #[cfg(feature = "native")]
-#[expose_rpc((Bank<DefaultContext>,Election<DefaultContext>,ValueSetter<DefaultContext>))]
+#[expose_rpc((Bank<DefaultContext>, Election<DefaultContext>, ValueSetter<DefaultContext>))]
+#[cfg(feature = "native")]
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
     type RuntimeConfig = Config;
     type Inner = DemoApp<DefaultContext, Vm>;

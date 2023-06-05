@@ -190,7 +190,7 @@ mod test {
                 assert_eq!(prover_storage.db.get_next_version(), test.version);
 
                 storage.set(test.key.clone(), test.value.clone());
-                let (cache, witness) = storage.freeze();
+                let (cache, witness) = storage.commit().freeze();
                 prover_storage
                     .validate_and_commit(cache, &witness)
                     .expect("storage is valid");
@@ -229,7 +229,7 @@ mod test {
             assert!(prover_storage.is_empty());
             let mut storage = WorkingSet::new(prover_storage.clone());
             storage.set(key.clone(), value.clone());
-            let (cache, witness) = storage.freeze();
+            let (cache, witness) = storage.commit().freeze();
             prover_storage
                 .validate_and_commit(cache, &witness)
                 .expect("storage is valid");

@@ -21,7 +21,7 @@ fn test_value_setter() {
         test_value_setter_helper(context, &config, &mut working_set);
     }
 
-    let (_, witness) = working_set.freeze();
+    let (_, witness) = working_set.commit().freeze();
 
     // Test Zk-Context
     {
@@ -71,7 +71,7 @@ fn test_err_on_sender_is_not_admin() {
 
     let tmpdir = tempfile::tempdir().unwrap();
     let backing_store = ProverStorage::with_path(tmpdir.path()).unwrap();
-    let native_working_set = &mut WorkingSet::new(backing_store);
+    let mut native_working_set = WorkingSet::new(backing_store);
 
     let sender_not_admin = Address::from([2; 32]);
     // Test Native-Context
@@ -80,9 +80,9 @@ fn test_err_on_sender_is_not_admin() {
             admin: sender_not_admin.clone(),
         };
         let context = DefaultContext::new(sender.clone());
-        test_err_on_sender_is_not_admin_helper(context, &config, native_working_set);
+        test_err_on_sender_is_not_admin_helper(context, &config, &mut native_working_set);
     }
-    let (_, witness) = native_working_set.freeze();
+    let (_, witness) = native_working_set.commit().freeze();
 
     // Test Zk-Context
     {
