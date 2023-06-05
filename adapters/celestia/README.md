@@ -15,7 +15,7 @@ circumstances.
 
 ## How it Works
 
-All of Jupiter boils down to two trait implementations: [`DaVerifier`](https://github.com/Sovereign-Labs/sovereign/blob/8388dc2176940bc6a909076e5ed43feb5a87bf7a/sdk/src/state_machine/da.rs#L36) and [`DaService`](https://github.com/Sovereign-Labs/sovereign/blob/8388dc2176940bc6a909076e5ed43feb5a87bf7a/sdk/src/node/services/da.rs#L13).
+All of Jupiter boils down to two trait implementations: [`DaVerifier`](https://github.com/Sovereign-Labs/sovereign-sdk/blob/8388dc2176940bc6a909076e5ed43feb5a87bf7a/sdk/src/state_machine/da.rs#L36) and [`DaService`](https://github.com/Sovereign-Labs/sovereign-sdk/blob/8388dc2176940bc6a909076e5ed43feb5a87bf7a/sdk/src/node/services/da.rs#L13).
 
 ### The DaVerifier Trait
 

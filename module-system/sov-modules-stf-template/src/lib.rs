@@ -81,7 +81,7 @@ where
         }
 
         // TODO: don't ignore these events.
-        // https://github.com/Sovereign-Labs/sovereign/issues/350
+        //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/350
         let _ = batch_workspace.take_events();
 
         // Commit `enter_apply_batch` changes.
