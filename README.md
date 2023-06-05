@@ -4,7 +4,7 @@
   <a href="https://github.com/Sovereign-Labs/sovereign/blob/main/LICENSE">
     <img alt="License: Apache-2.0" src="https://img.shields.io/github/license/Sovereign-Labs/sovereign-sdk.svg" />
   </a>
-  <a href="https://codecov.io/gh/Sovereign-Labs/sovereign" > 
+  <a href="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk" > 
       <img alt="Coverage" src="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk/branch/main/graph/badge.svg"/> 
   </a>
    <a href="https://discord.gg/kbykCcPrcA" > 
