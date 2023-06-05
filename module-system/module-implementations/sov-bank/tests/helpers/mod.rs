@@ -10,6 +10,7 @@ pub fn generate_address(key: &str) -> <C as Spec>::Address {
     Address::from(hash)
 }
 
+#[allow(dead_code)]
 pub fn create_bank_config_with_token(
     addresses_count: usize,
     initial_balance: u64,

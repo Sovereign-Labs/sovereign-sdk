@@ -186,7 +186,8 @@ mod test {
 
     #[test]
     fn test_jmt_storage() {
-        let path = sov_schema_db::temppath::TempPath::new();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
         let tests = create_tests();
         {
             for test in tests.clone() {
@@ -219,7 +220,8 @@ mod test {
 
     #[test]
     fn test_restart_lifecycle() {
-        let path = sov_schema_db::temppath::TempPath::new();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
         {
             let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
             assert!(prover_storage.is_empty());

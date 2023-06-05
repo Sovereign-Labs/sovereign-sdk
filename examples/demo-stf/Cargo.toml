@@ -42,7 +42,7 @@ sov-db = { path = "../../full-node/db/sov-db", optional = true }
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
-tempfile = "3.5.0"
+tempfile = "3.5"
 
 [features]
 default = ["native"]

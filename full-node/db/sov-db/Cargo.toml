@@ -7,7 +7,7 @@ authors = { workspace = true }
 homepage = { workspace = true }
 repository = { workspace = true }
 rust-version = { workspace = true }
-version = { workspace = true } 
+version = { workspace = true }
 readme = "README.md"
 resolver = "2"
 
@@ -20,12 +20,14 @@ sov-schema-db = { path = "../sov-schema-db", version = "0.1" }
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 
 
+
 # External
 anyhow = { workspace = true }
 byteorder = { workspace = true }
 borsh = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 rocksdb = { workspace = true }
+tempfile = { workspace = true, optional = true }
 
 bincode = "1.3.3"
 
@@ -34,4 +36,4 @@ sov-schema-db = { path = "../sov-schema-db", version = "0.1", features = ["tempp
 
 [features]
 default = []
-temp = ["sov-schema-db/temppath"]
+temp = ["tempfile"]

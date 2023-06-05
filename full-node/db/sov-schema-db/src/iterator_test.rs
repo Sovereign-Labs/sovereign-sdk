@@ -5,11 +5,13 @@ use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 
-use crate::{iterator::SchemaIterator, temppath::TempPath, Schema, DB};
+use crate::{iterator::SchemaIterator, Schema, DB};
 use sov_rollup_interface::{
     db::{errors::CodecError, KeyDecoder, KeyEncoder, SeekKeyEncoder, ValueCodec},
     define_schema,
 };
+
+use tempfile::TempDir;
 
 define_schema!(TestSchema, TestKey, TestValue, "TestCF");
 
@@ -95,13 +97,13 @@ fn collect_values(iter: SchemaIterator<TestSchema>) -> Vec<u32> {
 }
 
 struct TestDB {
-    _tmpdir: TempPath,
+    _tmpdir: TempDir,
     db: DB,
 }
 
 impl TestDB {
     fn new() -> Self {
-        let tmpdir = TempPath::new();
+        let tmpdir = tempfile::tempdir().unwrap();
         let column_families = vec![DEFAULT_COLUMN_FAMILY_NAME, TestSchema::COLUMN_FAMILY_NAME];
         let mut db_opts = rocksdb::Options::default();
         db_opts.create_if_missing(true);

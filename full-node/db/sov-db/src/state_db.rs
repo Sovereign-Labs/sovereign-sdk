@@ -47,7 +47,7 @@ impl StateDB {
     /// A rocksdb instance which stores its data in a tempdir
     #[cfg(any(test, feature = "temp"))]
     pub fn temporary() -> Self {
-        let path = sov_schema_db::temppath::TempPath::new();
+        let path = tempfile::tempdir().unwrap().into_path();
         Self::with_path(path).unwrap()
     }
 

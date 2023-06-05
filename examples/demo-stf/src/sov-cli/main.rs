@@ -248,7 +248,9 @@ mod test {
 
     #[test]
     fn test_sov_cli() {
-        let mut test_demo = TestDemo::new();
+        // Tempdir is created here, so it will be deleted only after test is finished.
+        let tempdir = tempfile::tempdir().unwrap();
+        let mut test_demo = TestDemo::with_path(tempdir.path().to_path_buf());
         let test_data = read_test_data();
 
         execute_txs(&mut test_demo.demo, test_demo.config, test_data.data);
@@ -266,13 +268,12 @@ mod test {
 
     // Test helpers
     struct TestDemo {
-        config: demo_stf::runtime::GenesisConfig<C>,
+        config: GenesisConfig<C>,
         demo: DemoApp<C, MockZkvm>,
     }
 
     impl TestDemo {
-        fn new() -> Self {
-            let path = sov_schema_db::temppath::TempPath::new();
+        fn with_path(path: PathBuf) -> Self {
             let value_setter_admin_private_key = DefaultPrivateKey::generate();
             let election_admin_private_key = DefaultPrivateKey::generate();
 
@@ -282,7 +283,6 @@ mod test {
                 &election_admin_private_key,
             );
 
-            let path = path.as_ref().to_path_buf();
             let runner_config = Config {
                 storage: sov_state::config::Config { path },
             };

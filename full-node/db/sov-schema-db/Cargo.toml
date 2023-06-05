@@ -22,17 +22,20 @@ once_cell = { workspace = true }
 prometheus = { workspace = true }
 rocksdb = { workspace = true }
 tracing = { workspace = true }
+tempfile = { workspace = true, optional = true }
 
 # Temppath external dependencies
-byteorder = { workspace = true, optional = true }
-rand = { workspace = true, optional = true }
-hex = { workspace = true, optional = true }
+#byteorder = { workspace = true, optional = true }
+#rand = { workspace = true, optional = true }
+#hex = { workspace = true, optional = true }
 
 [dev-dependencies]
 byteorder = { workspace = true }
-rand = { workspace = true }
-hex = { workspace = true }
+#rand = { workspace = true }
+#hex = { workspace = true }
+tempfile = { workspace = true }
+
 
 [features]
 default = []
-temppath = ["dep:byteorder", "dep:rand", "dep:hex"]
+temppath = ["tempfile"]

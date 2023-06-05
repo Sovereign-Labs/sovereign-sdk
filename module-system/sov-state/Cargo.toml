@@ -28,6 +28,7 @@ tracing = { workspace = true }
 [dev-dependencies]
 sov-db = { path = "../../full-node/db/sov-db", version = "0.1", features = ["temp"] }
 sov-schema-db = { path = "../../full-node/db/sov-schema-db", version = "0.1", features = ["temppath"] }
+tempfile = { workspace = true }
 
 [features]
 default = ["native"]
