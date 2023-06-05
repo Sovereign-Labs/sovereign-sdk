@@ -11,10 +11,6 @@ version = { workspace = true }
 readme = "README.md"
 resolver = "2"
 
-[dev-dependencies]
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1"}
-#sov-state = { path = "../../sov-state", version = "0.1", features = ["temp"] }
-
 [dependencies]
 anyhow = { workspace = true }
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false}
@@ -27,6 +23,10 @@ thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
+
+[dev-dependencies]
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1"}
+tempfile = { workspace = true }
 
 [features]
 default = ["native"]

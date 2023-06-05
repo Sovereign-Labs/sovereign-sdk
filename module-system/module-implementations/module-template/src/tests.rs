@@ -9,7 +9,8 @@ use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 
 #[test]
 fn test_value_setter() {
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let admin = Address::from([1; 32]);
     // Test Native-Context
     {

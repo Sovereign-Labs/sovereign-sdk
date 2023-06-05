@@ -9,7 +9,8 @@ use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 
 #[test]
 fn test_value_setter() {
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let admin = Address::from([1; 32]);
     // Test Native-Context
     {
@@ -68,7 +69,8 @@ fn test_value_setter_helper<C: Context>(
 fn test_err_on_sender_is_not_admin() {
     let sender = Address::from([1; 32]);
 
-    let backing_store = ProverStorage::temporary();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let backing_store = ProverStorage::with_path(tmpdir.path()).unwrap();
     let native_working_set = &mut WorkingSet::new(backing_store);
 
     let sender_not_admin = Address::from([2; 32]);

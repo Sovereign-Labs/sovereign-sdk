@@ -14,7 +14,8 @@ use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 fn test_election() {
     let admin = Address::from([1; 32]);
 
-    let native_storage = ProverStorage::temporary();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let native_storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut native_working_set = WorkingSet::new(native_storage);
 
     test_module::<DefaultContext>(admin.clone(), &mut native_working_set);

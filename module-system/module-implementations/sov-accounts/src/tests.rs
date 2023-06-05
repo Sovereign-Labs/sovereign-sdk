@@ -22,7 +22,8 @@ fn test_config_account() {
     };
 
     let accounts = &mut Accounts::<C>::new();
-    let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let native_working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
 
     accounts
         .init_module(&account_config, native_working_set)
@@ -41,7 +42,8 @@ fn test_config_account() {
 
 #[test]
 fn test_update_account() {
-    let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let native_working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let accounts = &mut Accounts::<C>::new();
 
     let priv_key = DefaultPrivateKey::generate();
@@ -100,7 +102,8 @@ fn test_update_account() {
 
 #[test]
 fn test_update_account_fails() {
-    let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let native_working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let accounts = &mut Accounts::<C>::new();
 
     let sender_1 = DefaultPrivateKey::generate().pub_key();
@@ -130,7 +133,8 @@ fn test_update_account_fails() {
 
 #[test]
 fn test_get_acc_after_pub_key_update() {
-    let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let native_working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let accounts = &mut Accounts::<C>::new();
 
     let sender_1 = DefaultPrivateKey::generate().pub_key();
