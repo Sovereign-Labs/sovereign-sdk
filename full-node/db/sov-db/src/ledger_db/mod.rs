@@ -100,13 +100,6 @@ impl LedgerDB {
         })
     }
 
-    /// A rocksdb instance which stores its data in a tempdir
-    #[cfg(any(test, feature = "temp"))]
-    pub fn temporary() -> Self {
-        let path = tempfile::NamedTempFile::new().unwrap();
-        Self::with_path(path).unwrap()
-    }
-
     pub fn get_next_items_numbers(&self) -> ItemNumbers {
         self.next_item_numbers.lock().unwrap().clone()
     }

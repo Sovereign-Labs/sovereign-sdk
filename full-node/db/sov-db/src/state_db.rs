@@ -169,7 +169,8 @@ mod state_db_tests {
 
     #[test]
     fn test_simple() {
-        let db = StateDB::temporary();
+        let tmpdir = tempfile::tempdir().unwrap();
+        let db = StateDB::with_path(tmpdir.path()).unwrap();
         let key_hash = KeyHash([1u8; 32]);
         let key = vec![2u8; 100];
         let value = [8u8; 150];

@@ -24,15 +24,8 @@ rocksdb = { workspace = true }
 tracing = { workspace = true }
 tempfile = { workspace = true, optional = true }
 
-# Temppath external dependencies
-#byteorder = { workspace = true, optional = true }
-#rand = { workspace = true, optional = true }
-#hex = { workspace = true, optional = true }
-
 [dev-dependencies]
 byteorder = { workspace = true }
-#rand = { workspace = true }
-#hex = { workspace = true }
 tempfile = { workspace = true }
 
 
