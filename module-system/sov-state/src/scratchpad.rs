@@ -40,6 +40,8 @@ impl<S: Storage> Debug for RevertableDelta<S> {
     }
 }
 
+/// This structure stores the read-write set, which will be persisted in the database at the
+/// at the end of the DA slot.
 pub struct CommitedWorkinSet<S: Storage> {
     delta: Delta<S>,
 }
@@ -69,7 +71,8 @@ impl<S: Storage> CommitedWorkinSet<S> {
     }
 }
 
-// TODO rename it to WorkingSet
+/// This structure contains the read-write set and the events collected during the execution of a transaction.
+/// The data it contains can be reverted to the most recent committed state.
 pub struct WorkingSet<S: Storage> {
     delta: RevertableDelta<S>,
     events: Vec<Event>,
@@ -80,7 +83,6 @@ impl<S: Storage> WorkingSet<S> {
         CommitedWorkinSet::new(inner).to_revertable()
     }
 
-    // Todo remove it
     pub fn with_witness(inner: S, witness: S::Witness) -> Self {
         CommitedWorkinSet::with_witness(inner, witness).to_revertable()
     }
@@ -121,7 +123,7 @@ impl<S: Storage> WorkingSet<S> {
         &self.events
     }
 
-    //TODO do we need this function, probably not
+    #[cfg(test)]
     pub fn backing(&self) -> &S {
         &self.delta.inner.inner
     }

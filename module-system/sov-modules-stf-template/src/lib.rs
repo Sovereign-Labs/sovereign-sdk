@@ -20,7 +20,7 @@ pub use tx_verifier::RawTx;
 
 use sov_modules_api::{Context, DispatchCall, Genesis, Hasher, Spec};
 use sov_rollup_interface::{stf::StateTransitionFunction, traits::BatchTrait};
-use sov_state::{Storage, WorkingSet};
+use sov_state::Storage;
 use std::io::Read;
 
 pub struct AppTemplate<C: Context, RT, Vm> {
