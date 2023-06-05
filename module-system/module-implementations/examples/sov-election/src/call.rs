@@ -135,7 +135,7 @@ impl<C: sov_modules_api::Context> Election<C> {
 
     /// Clears the election.
     pub(crate) fn clear(&self) -> Result<CallResponse> {
-        // see https://github.com/Sovereign-Labs/sovereign/issues/62
+        // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/62
         todo!()
     }
 

@@ -1,7 +1,7 @@
 ![](./assets/banner.jpg)
 
 <div align="center">
-  <a href="https://github.com/Sovereign-Labs/sovereign/blob/main/LICENSE">
+  <a href="https://github.com/Sovereign-Labs/sovereign-sdk/blob/main/LICENSE">
     <img alt="License: Apache-2.0" src="https://img.shields.io/github/license/Sovereign-Labs/sovereign-sdk.svg" />
   </a>
   <a href="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk" > 

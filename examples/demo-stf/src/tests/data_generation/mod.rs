@@ -36,7 +36,7 @@ pub fn simulate_da_with_bad_sig(election_admin: DefaultPrivateKey) -> Vec<RawTx>
 }
 
 // TODO: Remove once we fix test with bad nonce
-//   https://github.com/Sovereign-Labs/sovereign/issues/235
+//   https://github.com/Sovereign-Labs/sovereign-sdk/issues/235
 #[allow(unused)]
 pub fn simulate_da_with_bad_nonce(election_admin: DefaultPrivateKey) -> Vec<RawTx> {
     let election = election_data::BadNonceElectionCallMessages::new(election_admin);

@@ -5,7 +5,7 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::Mutex;
 
 // TODO: Refactor witness trait so it only require Serialize / Deserialize
-//   https://github.com/Sovereign-Labs/sovereign/issues/263
+//   https://github.com/Sovereign-Labs/sovereign-sdk/issues/263
 pub trait Witness: Default + Serialize {
     fn add_hint<T: BorshSerialize>(&self, hint: T);
     fn get_hint<T: BorshDeserialize>(&self) -> T;

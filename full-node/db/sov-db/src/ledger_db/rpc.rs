@@ -38,7 +38,7 @@ impl LedgerRpcProvider for LedgerDB {
             slot_ids.len(),
             MAX_SLOTS_PER_REQUEST
         );
-        // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
+        // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/191 Sort the input
         //      and use an iterator instead of querying for each slot individually
         let mut out = Vec::with_capacity(slot_ids.len());
         for slot_id in slot_ids {
@@ -68,7 +68,7 @@ impl LedgerRpcProvider for LedgerDB {
             batch_ids.len(),
             MAX_BATCHES_PER_REQUEST
         );
-        // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
+        // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/191 Sort the input
         //      and use an iterator instead of querying for each slot individually
         let mut out = Vec::with_capacity(batch_ids.len());
         for batch_id in batch_ids {
@@ -98,7 +98,7 @@ impl LedgerRpcProvider for LedgerDB {
             tx_ids.len(),
             MAX_TRANSACTIONS_PER_REQUEST
         );
-        // TODO: https://github.com/Sovereign-Labs/sovereign/issues/191 Sort the input
+        // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/191 Sort the input
         //      and use an iterator instead of querying for each slot individually
         let mut out: Vec<Option<TxResponse<T>>> = Vec::with_capacity(tx_ids.len());
         for id in tx_ids {
@@ -128,7 +128,7 @@ impl LedgerRpcProvider for LedgerDB {
             MAX_EVENTS_PER_REQUEST
         );
         // TODO: Sort the input and use an iterator instead of querying for each slot individually
-        // https://github.com/Sovereign-Labs/sovereign/issues/191
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/191
         let mut out = Vec::with_capacity(event_ids.len());
         for id in event_ids {
             let num = self.resolve_event_identifier(id)?;
