@@ -207,7 +207,8 @@ mod tests {
     // Returns storage after genesis and admin private key of value setter
     fn setup_runtime_and_storage() -> (ProverStorage<DefaultStorageSpec>, DefaultPrivateKey) {
         let runtime = TestRuntime::<C>::new();
-        let storage = ProverStorage::<DefaultStorageSpec>::temporary();
+        let tmpdir = tempfile::tempdir().unwrap();
+        let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
         let mut working_set = WorkingSet::new(storage.clone());
         let admin_private_key = DefaultPrivateKey::generate();
         let value_setter_config = ValueSetterConfig {
