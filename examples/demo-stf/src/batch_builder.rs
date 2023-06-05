@@ -4,7 +4,6 @@ use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, DispatchCall, PublicKey, Spec};
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_state::WorkingSet;
-use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::io::Cursor;
 use tracing::warn;
@@ -12,17 +11,17 @@ use tracing::warn;
 /// BatchBuilder that creates batches of transactions in the order they were submitted
 /// Only transactions that were successfully dispatched are included.
 pub struct FiFoStrictBatchBuilder<R, C: Context> {
-    mempool: RefCell<VecDeque<Vec<u8>>>,
+    mempool: VecDeque<Vec<u8>>,
     mempool_max_txs_count: usize,
     runtime: R,
     max_batch_size_bytes: usize,
-    working_set: Option<RefCell<WorkingSet<<C as Spec>::Storage>>>,
+    working_set: Option<WorkingSet<<C as Spec>::Storage>>,
 }
 
 impl<R, C: Context> FiFoStrictBatchBuilder<R, C> {
     pub fn new(max_batch_size_bytes: usize, mempool_max_txs_count: usize, runtime: R) -> Self {
         Self {
-            mempool: RefCell::new(VecDeque::new()),
+            mempool: VecDeque::new(),
             mempool_max_txs_count,
             max_batch_size_bytes,
             runtime,
@@ -32,7 +31,7 @@ impl<R, C: Context> FiFoStrictBatchBuilder<R, C> {
 
     #[cfg(feature = "native")]
     pub fn set_working_set(&mut self, working_set: WorkingSet<<C as Spec>::Storage>) {
-        self.working_set = Some(RefCell::new(working_set));
+        self.working_set = Some(working_set);
     }
 }
 
@@ -41,19 +40,18 @@ where
     R: DispatchCall<Context = C>,
 {
     /// Transaction can only be declined only mempool is full
-    fn accept_tx(&self, tx: Vec<u8>) -> anyhow::Result<()> {
-        if self.mempool.borrow().len() > self.mempool_max_txs_count {
+    fn accept_tx(&mut self, tx: Vec<u8>) -> anyhow::Result<()> {
+        if self.mempool.len() > self.mempool_max_txs_count {
             bail!("Mempool is full")
         }
-        let mut mempool = self.mempool.borrow_mut();
-        mempool.push_back(tx);
+        self.mempool.push_back(tx);
         Ok(())
     }
 
     /// Builds a new batch of valid transactions in order they were added to mempool
     /// Only transactions, which are dispatched successfully are included in the batch
-    fn get_next_blob(&self) -> anyhow::Result<Vec<Vec<u8>>> {
-        let working_set = match self.working_set.as_ref() {
+    fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
+        let working_set = match self.working_set.as_mut() {
             None => {
                 bail!("Cannot build batch before working set is initialized");
             }
@@ -62,9 +60,8 @@ where
         let mut txs = Vec::new();
         let mut dismissed: Vec<(Vec<u8>, anyhow::Error)> = Vec::new();
         let mut current_batch_size = 0;
-        let mut mempool = self.mempool.borrow_mut();
 
-        while let Some(raw_tx) = mempool.pop_front() {
+        while let Some(raw_tx) = self.mempool.pop_front() {
             let tx_len = raw_tx.len();
 
             // Deserialize
@@ -99,10 +96,9 @@ where
             {
                 let sender_address: C::Address = tx.pub_key().to_address();
                 let ctx = C::new(sender_address);
-                let mut working_set = working_set.borrow_mut();
 
                 //
-                match self.runtime.dispatch_call(msg, &mut working_set, &ctx) {
+                match self.runtime.dispatch_call(msg, working_set, &ctx) {
                     Ok(_) => (),
                     Err(err) => {
                         let err = anyhow::Error::new(err)
@@ -118,7 +114,7 @@ where
             if current_batch_size + tx_len <= self.max_batch_size_bytes {
                 txs.push(raw_tx);
             } else {
-                mempool.push_front(raw_tx);
+                self.mempool.push_front(raw_tx);
                 break;
             }
 
@@ -229,14 +225,14 @@ mod tests {
         use super::*;
         #[test]
         fn accept_random_bytes_tx() {
-            let batch_builder = build_test_batch_builder(10);
+            let mut batch_builder = build_test_batch_builder(10);
             let tx = generate_random_bytes();
             batch_builder.accept_tx(tx).unwrap();
         }
 
         #[test]
         fn accept_signed_tx_with_invalid_payload() {
-            let batch_builder = build_test_batch_builder(10);
+            let mut batch_builder = build_test_batch_builder(10);
             let private_key = DefaultPrivateKey::generate();
             let tx = generate_signed_tx_with_invalid_payload(&private_key);
             batch_builder.accept_tx(tx).unwrap();
@@ -244,14 +240,14 @@ mod tests {
 
         #[test]
         fn accept_valid_tx() {
-            let batch_builder = build_test_batch_builder(10);
+            let mut batch_builder = build_test_batch_builder(10);
             let tx = generate_random_valid_tx();
             batch_builder.accept_tx(tx).unwrap();
         }
 
         #[test]
         fn decline_tx_on_full_mempool() {
-            let batch_builder = build_test_batch_builder(10);
+            let mut batch_builder = build_test_batch_builder(10);
 
             for _ in 0..=MAX_TX_POOL_SIZE {
                 let tx = generate_random_valid_tx();
@@ -285,7 +281,7 @@ mod tests {
 
         #[test]
         fn error_on_non_initialized_working_set() {
-            let batch_builder = build_test_batch_builder(1024);
+            let mut batch_builder = build_test_batch_builder(1024);
             let build_result = batch_builder.get_next_blob();
             assert!(build_result.is_err());
             assert_eq!(
@@ -322,7 +318,7 @@ mod tests {
                 batch_builder.accept_tx(tx.clone()).unwrap();
             }
 
-            assert_eq!(txs.len(), batch_builder.mempool.borrow().len());
+            assert_eq!(txs.len(), batch_builder.mempool.len());
 
             let build_result = batch_builder.get_next_blob();
             assert!(build_result.is_ok());
@@ -331,7 +327,7 @@ mod tests {
             assert!(blob.contains(&txs[0]));
             assert!(blob.contains(&txs[4]));
             assert!(!blob.contains(&txs[5]));
-            assert_eq!(1, batch_builder.mempool.borrow().len());
+            assert_eq!(1, batch_builder.mempool.len());
         }
     }
 }

@@ -25,11 +25,10 @@ use sov_state::ProverStorage;
 use sov_state::ZkStorage;
 
 use sov_state::Storage;
-use std::cell::RefCell;
 
 pub struct DemoAppRunner<C: Context, Vm: Zkvm> {
     pub stf: DemoApp<C, Vm>,
-    pub batch_builder: RefCell<FiFoStrictBatchBuilder<Runtime<C>, C>>,
+    pub batch_builder: FiFoStrictBatchBuilder<Runtime<C>, C>,
 }
 
 pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;
@@ -73,7 +72,7 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
             FiFoStrictBatchBuilder::new(batch_size_bytes, u32::MAX as usize, Runtime::new());
         Self {
             stf: app,
-            batch_builder: RefCell::new(batch_builder),
+            batch_builder,
         }
     }
 
@@ -101,7 +100,7 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
             FiFoStrictBatchBuilder::new(batch_size_bytes, u32::MAX as usize, Runtime::new());
         Self {
             stf: app,
-            batch_builder: RefCell::new(batch_builder),
+            batch_builder,
         }
     }
 
@@ -124,14 +123,13 @@ impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
 
 #[cfg(feature = "native")]
 impl<Vm: Zkvm> BatchBuilder for DemoAppRunner<DefaultContext, Vm> {
-    fn accept_tx(&self, tx: Vec<u8>) -> anyhow::Result<()> {
-        self.batch_builder.borrow().accept_tx(tx)
+    fn accept_tx(&mut self, tx: Vec<u8>) -> anyhow::Result<()> {
+        self.batch_builder.accept_tx(tx)
     }
 
-    fn get_next_blob(&self) -> anyhow::Result<Vec<Vec<u8>>> {
-        let mut batch_builder = self.batch_builder.borrow_mut();
+    fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
         let working_set = sov_state::WorkingSet::new(self.inner().current_storage.clone());
-        batch_builder.set_working_set(working_set);
-        batch_builder.get_next_blob()
+        self.batch_builder.set_working_set(working_set);
+        self.batch_builder.get_next_blob()
     }
 }
