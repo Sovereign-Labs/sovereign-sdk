@@ -12,7 +12,7 @@ use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::stf::TransactionReceipt;
 use sov_rollup_interface::zk::traits::Zkvm;
 use sov_rollup_interface::Buf;
-use sov_state::CommitedWorkinSet;
+use sov_state::CommittedWorkingSet;
 use tracing::debug;
 use tracing::error;
 use tx_verifier::verify_txs_stateless;
@@ -26,7 +26,7 @@ use std::io::Read;
 pub struct AppTemplate<C: Context, RT, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
-    working_set: Option<CommitedWorkinSet<C::Storage>>,
+    working_set: Option<CommittedWorkingSet<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
 }
 
@@ -270,7 +270,8 @@ where
     type MisbehaviorProof = ();
 
     fn init_chain(&mut self, params: Self::InitialState) {
-        let mut working_set = CommitedWorkinSet::new(self.current_storage.clone()).to_revertable();
+        let mut working_set =
+            CommittedWorkingSet::new(self.current_storage.clone()).to_revertable();
 
         self.runtime
             .genesis(&params, &mut working_set)
@@ -283,7 +284,7 @@ where
     }
 
     fn begin_slot(&mut self, witness: Self::Witness) {
-        self.working_set = Some(CommitedWorkinSet::with_witness(
+        self.working_set = Some(CommittedWorkingSet::with_witness(
             self.current_storage.clone(),
             witness,
         ));

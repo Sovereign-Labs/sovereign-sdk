@@ -42,11 +42,11 @@ impl<S: Storage> Debug for RevertableDelta<S> {
 
 /// This structure stores the read-write set, which will be persisted in the database at the
 /// at the end of the DA slot.
-pub struct CommitedWorkinSet<S: Storage> {
+pub struct CommittedWorkingSet<S: Storage> {
     delta: Delta<S>,
 }
 
-impl<S: Storage> CommitedWorkinSet<S> {
+impl<S: Storage> CommittedWorkingSet<S> {
     pub fn new(inner: S) -> Self {
         Self {
             delta: Delta::new(inner),
@@ -80,21 +80,21 @@ pub struct WorkingSet<S: Storage> {
 
 impl<S: Storage> WorkingSet<S> {
     pub fn new(inner: S) -> Self {
-        CommitedWorkinSet::new(inner).to_revertable()
+        CommittedWorkingSet::new(inner).to_revertable()
     }
 
     pub fn with_witness(inner: S, witness: S::Witness) -> Self {
-        CommitedWorkinSet::with_witness(inner, witness).to_revertable()
+        CommittedWorkingSet::with_witness(inner, witness).to_revertable()
     }
 
-    pub fn commit(self) -> CommitedWorkinSet<S> {
-        CommitedWorkinSet {
+    pub fn commit(self) -> CommittedWorkingSet<S> {
+        CommittedWorkingSet {
             delta: self.delta.commit(),
         }
     }
 
-    pub fn revert(self) -> CommitedWorkinSet<S> {
-        CommitedWorkinSet {
+    pub fn revert(self) -> CommittedWorkingSet<S> {
+        CommittedWorkingSet {
             delta: self.delta.revert(),
         }
     }

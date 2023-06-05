@@ -11,7 +11,7 @@ enum Operation {
 const EMPTY_ROOT: [u8; 32] = *b"SPARSE_MERKLE_PLACEHOLDER_HASH__";
 
 impl Operation {
-    fn execute<S: Storage>(&self, working_set: WorkingSet<S>) -> CommitedWorkinSet<S> {
+    fn execute<S: Storage>(&self, working_set: WorkingSet<S>) -> CommittedWorkingSet<S> {
         match self {
             Operation::Merge => working_set.commit(),
             Operation::Finalize => {
@@ -21,7 +21,7 @@ impl Operation {
                 db.validate_and_commit(cache_log, &witness)
                     .expect("JMT update is valid");
 
-                CommitedWorkinSet::new(db)
+                CommittedWorkingSet::new(db)
             }
         }
     }
