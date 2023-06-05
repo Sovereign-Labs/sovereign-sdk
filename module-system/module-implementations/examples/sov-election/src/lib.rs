@@ -33,10 +33,10 @@ pub struct Election<C: sov_modules_api::Context> {
     // There are two issues here:
     // 1. We use `std::Vec` inside `StateValue` this might be inefficient because
     //       on every get, we are fetching the whole vector. We will add `StateVec` type in the future,
-    //       see: https://github.com/Sovereign-Labs/sovereign/issues/33
+    //       see: https://github.com/Sovereign-Labs/sovereign-sdk/issues/33
     //
     // 2. It would be better to use `StateMap`, but it doesn't support iteration,
-    //      see: https://github.com/Sovereign-Labs/sovereign/issues/61
+    //      see: https://github.com/Sovereign-Labs/sovereign-sdk/issues/61
     #[state]
     pub(crate) candidates: sov_state::StateValue<Vec<Candidate>>,
 

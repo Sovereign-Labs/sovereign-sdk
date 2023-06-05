@@ -11,7 +11,7 @@ use crate::ProverIncentives;
 /// This enumeration represents the available call messages for interacting with the `ExampleModule` module.
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 // TODO: allow call messages to borrow data
-// https://github.com/Sovereign-Labs/sovereign/issues/274
+//     https://github.com/Sovereign-Labs/sovereign-sdk/issues/274
 pub enum CallMessage {
     BondProver(u64),
     UnbondProver,
@@ -133,11 +133,11 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
             Vm::verify(proof, &code_commitment).map_err(|e| anyhow::format_err!("{:?}", e))
         {
             // TODO: decide what the proof output is and do something with it
-            // https://github.com/Sovereign-Labs/sovereign/issues/272
+            //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/272
 
             // Unlock the prover's bond
             // TODO: reward the prover with newly minted tokens as appropriate based on gas fees.
-            // https://github.com/Sovereign-Labs/sovereign/issues/271
+            //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/271
             self.bonded_provers
                 .set(context.sender(), &old_balance, working_set);
 

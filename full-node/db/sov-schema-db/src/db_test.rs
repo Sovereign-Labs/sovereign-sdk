@@ -7,8 +7,10 @@ use sov_rollup_interface::{
     db::{errors::CodecError, ColumnFamilyName, KeyDecoder, KeyEncoder, Result, ValueCodec},
     define_schema,
 };
+use std::path::Path;
 
-use crate::{temppath::TempPath, Schema, SchemaBatch, DB};
+use crate::{Schema, SchemaBatch, DB};
+use tempfile::TempDir;
 
 // Creating two schemas that share exactly the same structure but are stored in different column
 // families. Also note that the key and value are of the same type `TestField`. By implementing
@@ -87,14 +89,14 @@ fn get_column_families() -> Vec<ColumnFamilyName> {
     ]
 }
 
-fn open_db(dir: &TempPath) -> DB {
+fn open_db(dir: impl AsRef<Path>) -> DB {
     let mut db_opts = rocksdb::Options::default();
     db_opts.create_if_missing(true);
     db_opts.create_missing_column_families(true);
-    DB::open(dir.path(), "test", get_column_families(), &db_opts).expect("Failed to open DB.")
+    DB::open(dir, "test", get_column_families(), &db_opts).expect("Failed to open DB.")
 }
 
-fn open_db_read_only(dir: &TempPath) -> DB {
+fn open_db_read_only(dir: &TempDir) -> DB {
     DB::open_cf_readonly(
         &rocksdb::Options::default(),
         dir.path(),
@@ -104,7 +106,7 @@ fn open_db_read_only(dir: &TempPath) -> DB {
     .expect("Failed to open DB.")
 }
 
-fn open_db_as_secondary(dir: &TempPath, dir_sec: &TempPath) -> DB {
+fn open_db_as_secondary(dir: &TempDir, dir_sec: &TempDir) -> DB {
     DB::open_cf_as_secondary(
         &rocksdb::Options::default(),
         &dir.path(),
@@ -116,13 +118,13 @@ fn open_db_as_secondary(dir: &TempPath, dir_sec: &TempPath) -> DB {
 }
 
 struct TestDB {
-    _tmpdir: TempPath,
+    _tmpdir: TempDir,
     db: DB,
 }
 
 impl TestDB {
     fn new() -> Self {
-        let tmpdir = TempPath::new();
+        let tmpdir = tempfile::tempdir().unwrap();
         let db = open_db(&tmpdir);
 
         TestDB {
@@ -279,7 +281,7 @@ fn test_two_schema_batches() {
 
 #[test]
 fn test_reopen() {
-    let tmpdir = TempPath::new();
+    let tmpdir = tempfile::tempdir().unwrap();
     {
         let db = open_db(&tmpdir);
         db.put::<TestSchema1>(&TestField(0), &TestField(0)).unwrap();
@@ -299,7 +301,7 @@ fn test_reopen() {
 
 #[test]
 fn test_open_read_only() {
-    let tmpdir = TempPath::new();
+    let tmpdir = tempfile::tempdir().unwrap();
     {
         let db = open_db(&tmpdir);
         db.put::<TestSchema1>(&TestField(0), &TestField(0)).unwrap();
@@ -316,8 +318,8 @@ fn test_open_read_only() {
 
 #[test]
 fn test_open_as_secondary() {
-    let tmpdir = TempPath::new();
-    let tmpdir_sec = TempPath::new();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let tmpdir_sec = tempfile::tempdir().unwrap();
 
     let db = open_db(&tmpdir);
     db.put::<TestSchema1>(&TestField(0), &TestField(0)).unwrap();
@@ -366,8 +368,9 @@ fn test_report_size() {
 
 #[test]
 fn test_checkpoint() {
-    let tmpdir = TempPath::new();
-    let checkpoint = TempPath::new();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let checkpoint_parent = tempfile::tempdir().unwrap();
+    let checkpoint = checkpoint_parent.path().join("checkpoint");
     {
         let db = open_db(&tmpdir);
         db.put::<TestSchema1>(&TestField(0), &TestField(0)).unwrap();

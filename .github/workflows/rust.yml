@@ -32,7 +32,7 @@ jobs:
             exit 1
           fi
 
-  # TODO: Temporary before migration to RiscZero 0.15: https://github.com/Sovereign-Labs/sovereign/issues/338
+  # TODO: Temporary before migration to RiscZero 0.15: https://github.com/Sovereign-Labs/sovereign-sdk/issues/338
   #   After that demo-prover should be integrated into workspace
   check-demo-prover:
     runs-on: ubuntu-latest

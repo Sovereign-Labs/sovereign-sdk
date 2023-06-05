@@ -15,17 +15,22 @@ use sov_modules_stf_template::AppTemplate;
 pub use sov_modules_stf_template::Batch;
 use sov_modules_stf_template::SequencerOutcome;
 use sov_modules_stf_template::TxEffect;
+use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::ProverConfig;
-use sov_rollup_interface::stf::StateTransitionRunner;
 use sov_rollup_interface::stf::ZkConfig;
 use sov_rollup_interface::zk::traits::Zkvm;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
-use sov_state::Storage;
 use sov_state::ZkStorage;
 
-pub struct DemoAppRunner<C: Context, Vm: Zkvm>(pub DemoApp<C, Vm>);
+use sov_state::Storage;
+
+pub struct DemoAppRunner<C: Context, Vm: Zkvm> {
+    pub stf: DemoApp<C, Vm>,
+    pub batch_builder: FiFoStrictBatchBuilder<Runtime<C>, C>,
+}
+
 pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;
 
 #[cfg(feature = "native")]
@@ -35,8 +40,11 @@ use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
 #[cfg(feature = "native")]
 use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
+use crate::batch_builder::FiFoStrictBatchBuilder;
 #[cfg(feature = "native")]
 use sov_modules_macros::expose_rpc;
+#[cfg(feature = "native")]
+use sov_rollup_interface::services::batch_builder::BatchBuilder;
 
 #[cfg(feature = "native")]
 pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
@@ -60,15 +68,21 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
         let storage = ProverStorage::with_config(runtime_config.storage)
             .expect("Failed to open prover storage");
         let app = AppTemplate::new(storage, runtime);
-        Self(app)
+        let batch_size_bytes = 1024 * 100; // 100 KB
+        let batch_builder =
+            FiFoStrictBatchBuilder::new(batch_size_bytes, u32::MAX as usize, Runtime::new());
+        Self {
+            stf: app,
+            batch_builder,
+        }
     }
 
     fn inner(&self) -> &Self::Inner {
-        &self.0
+        &self.stf
     }
 
     fn inner_mut(&mut self) -> &mut Self::Inner {
-        &mut self.0
+        &mut self.stf
     }
 }
 
@@ -81,15 +95,22 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
         let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
         let app: AppTemplate<ZkDefaultContext, Runtime<ZkDefaultContext>, Vm> =
             AppTemplate::new(storage, runtime);
-        Self(app)
+
+        let batch_size_bytes = 1024 * 100; // 100 KB
+        let batch_builder =
+            FiFoStrictBatchBuilder::new(batch_size_bytes, u32::MAX as usize, Runtime::new());
+        Self {
+            stf: app,
+            batch_builder,
+        }
     }
 
     fn inner(&self) -> &Self::Inner {
-        &self.0
+        &self.stf
     }
 
     fn inner_mut(&mut self) -> &mut Self::Inner {
-        &mut self.0
+        &mut self.stf
     }
 }
 
@@ -98,5 +119,18 @@ impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
     type Context = DefaultContext;
     fn get_storage(&self) -> <Self::Context as Spec>::Storage {
         self.inner().current_storage.clone()
+    }
+}
+
+#[cfg(feature = "native")]
+impl<Vm: Zkvm> BatchBuilder for DemoAppRunner<DefaultContext, Vm> {
+    fn accept_tx(&mut self, tx: Vec<u8>) -> anyhow::Result<()> {
+        self.batch_builder.accept_tx(tx)
+    }
+
+    fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
+        let working_set = sov_state::WorkingSet::new(self.inner().current_storage.clone());
+        self.batch_builder.set_working_set(working_set);
+        self.batch_builder.get_next_blob()
     }
 }

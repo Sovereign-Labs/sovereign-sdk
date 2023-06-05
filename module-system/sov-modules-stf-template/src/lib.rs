@@ -82,7 +82,7 @@ where
         }
 
         // TODO: don't ignore these events.
-        // https://github.com/Sovereign-Labs/sovereign/issues/350
+        //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/350
         let _ = batch_workspace.take_events();
 
         // Commit `enter_apply_batch` changes.
@@ -130,7 +130,7 @@ where
                 .runtime
                 .pre_dispatch_tx_hook(tx.clone(), &mut batch_workspace)
             {
-                Ok(verified_tx) => verified_tx,
+                Ok(sender_address) => sender_address,
                 Err(e) => {
                     // Don't revert any state changes made by the pre_dispatch_hook even if the Tx is rejected.
                     // For example nonce for the relevant account is incremented.

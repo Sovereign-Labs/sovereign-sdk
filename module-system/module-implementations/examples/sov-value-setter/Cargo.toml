@@ -14,7 +14,7 @@ publish = false
 
 [dev-dependencies]
 sov-modules-api = { path = "../../../sov-modules-api"}
-sov-state = { path = "../../../sov-state", features = ["temp"] }
+tempfile = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }

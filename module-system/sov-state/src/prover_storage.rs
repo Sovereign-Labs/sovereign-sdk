@@ -26,12 +26,6 @@ impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
 }
 
 impl<S: MerkleProofSpec> ProverStorage<S> {
-    #[cfg(any(test, feature = "temp"))]
-    pub fn temporary() -> Self {
-        let db = StateDB::temporary();
-        Self::with_db(db).unwrap()
-    }
-
     pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
         let db = StateDB::with_path(&path)?;
         Self::with_db(db)
@@ -186,7 +180,8 @@ mod test {
 
     #[test]
     fn test_jmt_storage() {
-        let path = sov_schema_db::temppath::TempPath::new();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
         let tests = create_tests();
         {
             for test in tests.clone() {
@@ -219,7 +214,8 @@ mod test {
 
     #[test]
     fn test_restart_lifecycle() {
-        let path = sov_schema_db::temppath::TempPath::new();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
         {
             let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
             assert!(prover_storage.is_empty());

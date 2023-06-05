@@ -67,3 +67,4 @@ derive_more = "0.99.11"
 clap = { version = "4.2.7", features = ["derive"] }
 toml = "0.7.3"
 jsonrpsee = "0.16.2"
+tempfile = "3.5"

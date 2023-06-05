@@ -86,7 +86,8 @@ mod module_c {
 
 #[test]
 fn nested_module_call_test() {
-    let native_storage = ProverStorage::temporary();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let native_storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(native_storage.clone());
 
     // Test the `native` execution.

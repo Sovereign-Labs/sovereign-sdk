@@ -23,16 +23,6 @@ prometheus = { workspace = true }
 rocksdb = { workspace = true }
 tracing = { workspace = true }
 
-# Temppath external dependencies
-byteorder = { workspace = true, optional = true }
-rand = { workspace = true, optional = true }
-hex = { workspace = true, optional = true }
-
 [dev-dependencies]
 byteorder = { workspace = true }
-rand = { workspace = true }
-hex = { workspace = true }
-
-[features]
-default = []
-temppath = ["dep:byteorder", "dep:rand", "dep:hex"]
+tempfile = { workspace = true }
