@@ -153,7 +153,7 @@ pub fn delete_storage(path: impl AsRef<Path>) {
 mod test {
     use jmt::Version;
 
-    use crate::{CommitedWorkinSet, DefaultStorageSpec, WorkingSet};
+    use crate::{DefaultStorageSpec, WorkingSet};
 
     use super::*;
 

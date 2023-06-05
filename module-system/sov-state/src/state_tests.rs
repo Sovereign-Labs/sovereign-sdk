@@ -8,20 +8,20 @@ enum Operation {
     Finalize,
 }
 
-/*
 const EMPTY_ROOT: [u8; 32] = *b"SPARSE_MERKLE_PLACEHOLDER_HASH__";
 
 impl Operation {
     fn execute<S: Storage>(&self, working_set: WorkingSet<S>) -> CommitedWorkinSet<S> {
         match self {
-            Operation::Merge => working_set.commit()
+            Operation::Merge => working_set.commit(),
             Operation::Finalize => {
+                let db = working_set.backing().clone();
                 let (cache_log, witness) = working_set.commit().freeze();
-                let db = working_set.backing();
+
                 db.validate_and_commit(cache_log, &witness)
                     .expect("JMT update is valid");
 
-                working_set.commit()
+                CommitedWorkinSet::new(db)
             }
         }
     }
@@ -32,9 +32,9 @@ struct StorageOperation {
 }
 
 impl StorageOperation {
-    fn execute<S: Storage>(&self, mut working_set: WorkingSet<S>) -> CommitedWorkinSet<S> {
+    fn execute<S: Storage>(&self, mut working_set: WorkingSet<S>) -> WorkingSet<S> {
         for op in self.operations.iter() {
-            working_set = op.execute(working_set)
+            working_set = op.execute(working_set).to_revertable()
         }
         working_set
     }
@@ -200,4 +200,3 @@ fn test_witness_roundtrip() {
             .expect("ZK validation should succeed");
     };
 }
-*/
