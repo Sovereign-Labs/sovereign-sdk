@@ -25,7 +25,7 @@ pub struct AppTemplate<C: Context, RT, Vm> {
     phantom_vm: PhantomData<Vm>,
 }
 
-pub enum ApplyBatchError {
+pub(crate) enum ApplyBatchError {
     Ignored([u8; 32]),
     Slashed {
         hash: [u8; 32],
@@ -216,7 +216,7 @@ where
         }
     }
 
-    pub fn apply_batch(
+    pub(crate) fn apply_batch(
         &mut self,
         sequencer: &[u8],
         batch: impl Buf,
