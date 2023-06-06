@@ -149,7 +149,7 @@ impl RpcImplBlock {
                     .filter(|arg| arg.to_string() != quote! { self }.to_string());
                 quote! {
                     #signature {
-                        <#type_name <#(#generics_params)*,> as std::default::Default>::default().#method_name(#(#arg_values),*)
+                        <#type_name <#(#generics_params)*,> as ::std::default::Default>::default().#method_name(#(#arg_values),*)
                     }
                 }
             };
