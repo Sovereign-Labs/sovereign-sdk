@@ -176,7 +176,7 @@ pub trait Spec {
 
 As you can see, a `Spec` for a rollup specifies the concrete types that will be used for many kinds of cryptographic operations.
 That way, you can define your business logic in terms of _abstract_ cryptography, and then instantiate it with cryptography which
-is efficient in your particular choice of zkvm.
+is efficient in your particular choice of ZKVM.
 
 In addition to the `Spec` trait, the Module System provides a simple `Context` trait which is defined like this:
 
