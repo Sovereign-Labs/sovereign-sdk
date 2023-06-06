@@ -8,6 +8,7 @@ KEY_NAME=sequencer-da-address
 AMOUNT=10000000utia
 START_HEIGHT=1
 BLOB_TXN_FEE=300utia
+TEST_PRIVATE_KEY_PATH=../demo-stf/src/sov-cli/test_data/minter_private_key.json
 
 ifndef NAMESPACE
 NAMESPACE := $(shell cd .. && cd demo-stf && cargo run --bin sov-cli util print-namespace)
@@ -80,7 +81,7 @@ clean: check-docker
 	docker stop $(CONTAINER_NAME)
 	docker rm $(CONTAINER_NAME)
 
-submit-txn: start
+submit-txn : start
 ifndef SERIALIZED_BLOB_PATH
 	$(error SERIALIZED_BLOB_PATH is not defined)
 else ifeq ($(wildcard $(SERIALIZED_BLOB_PATH)),)
@@ -88,5 +89,11 @@ else ifeq ($(wildcard $(SERIALIZED_BLOB_PATH)),)
 else
 	@echo $(CONTENT)
 	@echo $(NAMESPACE)
-	@echo docker exec $(CONTAINER_NAME) celestia-appd tx blob PayForBlobs $(NAMESPACE) $(CONTENT) --from $(KEY_NAME) --chain-id=test --fees=$(BLOB_TXN_FEE) -y
+	@docker exec $(CONTAINER_NAME) celestia-appd tx blob PayForBlobs $(NAMESPACE) $(CONTENT) --from $(KEY_NAME) --chain-id=test --fees=$(BLOB_TXN_FEE) -y
 endif
+
+test-serialize-create-token: start
+	cd ../demo-stf && cargo run --bin sov-cli serialize-call src/sov-cli/test_data/minter_private_key.json Bank src/sov-cli/test_data/create_token.json 0
+
+test-create-token: test-serialize-create-token
+	$(MAKE) submit-txn SERIALIZED_BLOB_PATH=../demo-stf/src/sov-cli/test_data/create_token.dat
