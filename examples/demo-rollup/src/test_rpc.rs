@@ -76,22 +76,22 @@ impl SlotData for TestBlock {
 fn populate_ledger(ledger_db: &mut LedgerDB) -> () {
 
     let mut slot: SlotCommit<TestBlock, i32, i32> = SlotCommit::new(TestBlock {
-        curr_hash: blake3::hash(b"slot_data").into(),
+        curr_hash: ::blake3::hash(b"slot_data").into(),
         header: TestBlockHeader {
-            prev_hash: (blake3::hash(b"prev_header").into()),
+            prev_hash: (::blake3::hash(b"prev_header").into()),
         },
     });
 
     slot.add_batch(BatchReceipt {
-        batch_hash: blake3::hash(b"batch_receipt").into(),
+        batch_hash: ::blake3::hash(b"batch_receipt").into(),
         tx_receipts: vec![TransactionReceipt::<i32> {
-            tx_hash: blake3::hash(b"tx1").into(),
+            tx_hash: ::blake3::hash(b"tx1").into(),
             body_to_save: Some(b"tx1 body".to_vec()),
             events: vec![],
             receipt: 0,
         }, 
        TransactionReceipt::<i32> {
-            tx_hash: blake3::hash(b"tx2").into(),
+            tx_hash: ::blake3::hash(b"tx2").into(),
             body_to_save: Some(b"tx2 body".to_vec()),
             events: vec![Event::new("event1_key", "event1_value"), Event::new("event2_key", "event2_value")],
             receipt: 1,
@@ -100,9 +100,9 @@ fn populate_ledger(ledger_db: &mut LedgerDB) -> () {
     });
 
     slot.add_batch(BatchReceipt {
-        batch_hash: blake3::hash(b"batch_receipt2").into(),
+        batch_hash: ::blake3::hash(b"batch_receipt2").into(),
         tx_receipts: vec![TransactionReceipt::<i32> {
-            tx_hash: blake3::hash(b"tx1").into(),
+            tx_hash: ::blake3::hash(b"tx1").into(),
             body_to_save: Some(b"tx1 body".to_vec()),
             events: vec![],
             receipt: 0,
