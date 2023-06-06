@@ -26,8 +26,10 @@ pub struct AppTemplate<C: Context, RT, Vm> {
 }
 
 pub(crate) enum ApplyBatchError {
+    /// Contains batch hash
     Ignored([u8; 32]),
     Slashed {
+        /// Contains batch hash
         hash: [u8; 32],
         reason: SlashingReason,
     },
@@ -138,11 +140,11 @@ where
         let mut tx_receipts = Vec::with_capacity(txs.len());
 
         // Process transactions in a loop, commit changes after every step of the loop.
-        for tx in txs {
+        for TransactionAndRawHash { tx, raw_tx_hash } in txs {
             // Run the stateful verification, possibly modifies the state.
             let sender_address = match self
                 .runtime
-                .pre_dispatch_tx_hook(tx.tx.clone(), &mut batch_workspace)
+                .pre_dispatch_tx_hook(tx.clone(), &mut batch_workspace)
             {
                 Ok(verified_tx) => verified_tx,
                 Err(e) => {
@@ -150,7 +152,7 @@ where
                     // For example nonce for the relevant account is incremented.
                     error!("Stateful verification error - the sequencer included an invalid transaction: {}", e);
                     let receipt = TransactionReceipt {
-                        tx_hash: tx.raw_tx_hash,
+                        tx_hash: raw_tx_hash,
                         body_to_save: None,
                         events: batch_workspace.take_events(),
                         receipt: TxEffect::Reverted,
@@ -161,18 +163,24 @@ where
                 }
             };
 
-            match RT::decode_call(tx.tx.runtime_msg()) {
+            match RT::decode_call(tx.runtime_msg()) {
                 Ok(msg) => {
                     let ctx = C::new(sender_address.clone());
                     let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
                     self.runtime
-                        .post_dispatch_tx_hook(&tx.tx, &mut batch_workspace)
+                        .post_dispatch_tx_hook(&tx, &mut batch_workspace)
                         .expect("Impossible happened: error in post_dispatch_tx_hook");
 
                     let tx_effect = match tx_result {
                         Ok(_) => TxEffect::Successful,
-                        Err(_e) => {
+                        Err(e) => {
+                            debug!(
+                                "Tx 0x{} was reverted error: {}",
+                                hex::encode(raw_tx_hash),
+                                e
+                            );
+
                             // The transaction causing invalid state transition is reverted but we don't slash and we continue
                             // processing remaining transactions.
                             batch_workspace = batch_workspace.revert().to_revertable();
@@ -181,7 +189,7 @@ where
                     };
 
                     let receipt = TransactionReceipt {
-                        tx_hash: tx.raw_tx_hash,
+                        tx_hash: raw_tx_hash,
                         body_to_save: None,
                         events: batch_workspace.take_events(),
                         receipt: tx_effect,
@@ -193,7 +201,7 @@ where
                     // If the serialization is invalid, the sequencer is malicious. Slash them (we don't run exit_apply_batch here)
                     let batch_workspace = batch_workspace.revert();
                     self.checkpoint = Some(batch_workspace);
-                    error!("Tx 0x{} decoding error: {}", hex::encode(tx.raw_tx_hash), e);
+                    error!("Tx 0x{} decoding error: {}", hex::encode(raw_tx_hash), e);
 
                     return Err(ApplyBatchError::Slashed {
                         hash: batch_data_and_hash.hash,
