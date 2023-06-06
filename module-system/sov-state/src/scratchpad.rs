@@ -7,7 +7,7 @@ use crate::{
     storage::{StorageKey, StorageValue},
     Prefix, Storage,
 };
-use first_read_last_write_cache::{CacheKey, CacheValue};
+use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
 /// A working set accumulates reads and writes on top of the underlying DB,
 /// automating witness creation.

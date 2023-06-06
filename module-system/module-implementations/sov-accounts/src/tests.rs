@@ -1,5 +1,5 @@
 use crate::{
-    call, hooks,
+    call,
     query::{self, Response},
     AccountConfig, Accounts,
 };
@@ -8,7 +8,6 @@ use sov_modules_api::{
     AddressBech32, Context, Module, PublicKey, Spec,
 };
 use sov_state::{ProverStorage, WorkingSet};
-
 type C = DefaultContext;
 
 #[test]
@@ -44,7 +43,6 @@ fn test_config_account() {
 fn test_update_account() {
     let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
     let accounts = &mut Accounts::<C>::default();
-    let hooks = hooks::Hooks::<C>::new();
 
     let priv_key = DefaultPrivateKey::generate();
 
@@ -54,8 +52,8 @@ fn test_update_account() {
 
     // Test new account creation
     {
-        hooks
-            .get_or_create_default_account(sender.clone(), native_working_set)
+        accounts
+            .create_default_account(sender.clone(), native_working_set)
             .unwrap();
 
         let query_response = accounts.get_account(sender.clone(), native_working_set);
@@ -104,20 +102,20 @@ fn test_update_account() {
 fn test_update_account_fails() {
     let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
     let accounts = &mut Accounts::<C>::default();
-    let hooks = hooks::Hooks::<C>::new();
 
     let sender_1 = DefaultPrivateKey::generate().pub_key();
     let sender_context_1 = C::new(sender_1.to_address());
-    hooks
-        .get_or_create_default_account(sender_1, native_working_set)
+
+    accounts
+        .create_default_account(sender_1, native_working_set)
         .unwrap();
 
     let priv_key = DefaultPrivateKey::generate();
     let sender_2 = priv_key.pub_key();
     let sig_2 = priv_key.sign(call::UPDATE_ACCOUNT_MSG);
 
-    hooks
-        .get_or_create_default_account(sender_2.clone(), native_working_set)
+    accounts
+        .create_default_account(sender_2.clone(), native_working_set)
         .unwrap();
 
     // The new public key already exists and the call fails.
@@ -134,14 +132,13 @@ fn test_update_account_fails() {
 fn test_get_acc_after_pub_key_update() {
     let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
     let accounts = &mut Accounts::<C>::default();
-    let hooks = hooks::Hooks::<C>::new();
 
     let sender_1 = DefaultPrivateKey::generate().pub_key();
     let sender_1_addr = sender_1.to_address::<<C as Spec>::Address>();
     let sender_context_1 = C::new(sender_1_addr.clone());
 
-    hooks
-        .get_or_create_default_account(sender_1, native_working_set)
+    accounts
+        .create_default_account(sender_1, native_working_set)
         .unwrap();
 
     let priv_key = DefaultPrivateKey::generate();
@@ -155,9 +152,11 @@ fn test_get_acc_after_pub_key_update() {
         )
         .unwrap();
 
-    let acc = hooks
-        .get_or_create_default_account(new_pub_key, native_working_set)
+    let acc = accounts
+        .accounts
+        .get(&new_pub_key, native_working_set)
         .unwrap();
+
     assert_eq!(acc.addr, sender_1_addr)
 }
 

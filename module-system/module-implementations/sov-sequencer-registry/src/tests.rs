@@ -1,9 +1,9 @@
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::hooks::ApplyBlobHooks;
 use sov_modules_api::Hasher;
 use sov_modules_api::{Address, Module, Spec};
 use sov_state::{ProverStorage, WorkingSet};
 
-use crate::hooks::Hooks;
 use crate::query;
 use crate::{Sequencer, SequencerConfig};
 
@@ -105,13 +105,6 @@ fn test_sequencer() {
     let working_set = &mut WorkingSet::new(ProverStorage::temporary());
     test_sequencer.geneses(working_set);
 
-    let hooks = Hooks::<C>::new();
-
-    assert_eq!(
-        SEQUENCER_DA_ADDRESS.to_vec(),
-        hooks.next_sequencer(working_set).unwrap()
-    );
-
     {
         let resp = test_sequencer.query_balance_via_bank(working_set);
         assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
@@ -122,7 +115,10 @@ fn test_sequencer() {
 
     // Lock
     {
-        hooks.lock(working_set).unwrap();
+        test_sequencer
+            .sequencer
+            .begin_blob_hook(&SEQUENCER_DA_ADDRESS, &[], working_set)
+            .unwrap();
 
         let resp = test_sequencer.query_balance_via_bank(working_set);
         assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, resp.amount.unwrap());
@@ -133,7 +129,10 @@ fn test_sequencer() {
 
     // Reward
     {
-        hooks.reward(0, working_set).unwrap();
+        test_sequencer
+            .sequencer
+            .end_blob_hook(0, working_set)
+            .unwrap();
         let resp = test_sequencer.query_balance_via_bank(working_set);
         assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
 

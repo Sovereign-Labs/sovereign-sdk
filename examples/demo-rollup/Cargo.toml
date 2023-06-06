@@ -1,9 +1,9 @@
 [package]
 name = "sov-demo-rollup"
-version = "0.1.0"
-edition = "2021"
+version = { workspace = true } 
+edition = { workspace = true } 
 resolver = "2"
-authors = ["Sovereign Labs <info@sovereign.xyz>"]
+authors = { workspace = true } 
 homepage = "sovereign.xyz"
 publish = false
 
@@ -31,7 +31,7 @@ demo-stf = { path = "../demo-stf", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-db = { path = "../../full-node/db/sov-db" }
 risc0-adapter = { path = "../../adapters/risc0" }
-sov-default-stf = { path = "../../module-system/sov-default-stf" }
+sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }
 
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", default-features = false }
 sov-election = { path = "../../module-system/module-implementations/examples/sov-election", default-features = false }

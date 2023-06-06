@@ -1,12 +1,13 @@
 use anyhow::Context;
 use borsh::BorshSerialize;
 use clap::Parser;
-use demo_stf::{runtime::Runtime, sign_tx, Transaction};
-use sov_default_stf::RawTx;
+use demo_stf::runtime::Runtime;
+use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, PublicKey,
     Spec,
 };
+use sov_modules_stf_template::RawTx;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
@@ -103,7 +104,7 @@ impl SerializedTx {
         let sender_address = sender_priv_key.pub_key().to_address();
         let message = Self::serialize_call_message(call_data_path, &sender_address)?;
 
-        let sig = sign_tx(&sender_priv_key, &message, nonce);
+        let sig = Transaction::<C>::sign(&sender_priv_key, &message, nonce);
         let tx = Transaction::<C>::new(message, sender_priv_key.pub_key(), sig, nonce);
 
         Ok(SerializedTx {
@@ -171,8 +172,8 @@ mod test {
     };
     use demo_stf::runner_config::Config;
     use demo_stf::runtime::GenesisConfig;
-    use sov_default_stf::{Batch, RawTx, SequencerOutcome};
     use sov_modules_api::Address;
+    use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome};
     use sov_rollup_interface::stf::StateTransitionRunner;
 
     use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
@@ -289,7 +290,7 @@ mod test {
         )
         .inner;
         assert!(
-            matches!(apply_blob_outcome, SequencerOutcome::Rewarded,),
+            matches!(apply_blob_outcome, SequencerOutcome::Rewarded(0),),
             "Sequencer execution should have succeeded but failed "
         );
         StateTransitionFunction::<MockZkvm>::end_slot(demo);

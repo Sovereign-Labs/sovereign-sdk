@@ -92,13 +92,22 @@ impl<C: sov_modules_api::Context> Token<C> {
             bail!("Attempt to mint frozen token")
         }
         self.is_authorized_minter(sender)?;
-        let to_balance = self
+        let to_balance: Amount = self
             .balances
             .get(minter_address, working_set)
             .unwrap_or_default()
-            + amount;
+            .checked_add(amount)
+            .ok_or(anyhow::Error::msg(
+                "Account Balance overflow in the mint method of bank module",
+            ))?;
+
         self.balances.set(minter_address, to_balance, working_set);
-        self.total_supply += amount;
+        self.total_supply = self
+            .total_supply
+            .checked_add(amount)
+            .ok_or(anyhow::Error::msg(
+                "Total Supply overflow in the mint method of bank module",
+            ))?;
         Ok(())
     }
 

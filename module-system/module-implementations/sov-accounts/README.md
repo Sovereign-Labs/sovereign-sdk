@@ -6,9 +6,7 @@ Account is represented by an `Address` and a `Nonce`.
 
 ## Warning
 
-The accounts module exports hooks which must be wired into your state transition function! Be sure to invoke `Hooks::get_or_create_default_account`
-in the pre-dispatch transaction hook, and `Hooks::inc_nonce` in the post-dispatch transaction hook. For more details on the
-proper usage of these hooks, see the [`demo-stf`](../../../examples/demo-stf/) documentation.
+The accounts module implements `TxHooks` which must be wired into your state transition function! Be sure that your `Runtime` implementation for `TxHooks` delegates to the `sov-accounts.` 
 
 ### The `sov-accounts` module offers the following functionality:
 

@@ -26,7 +26,7 @@ adaptive gas pricing depending on prover throughput.
 - **Arguments**
 
 | Name   | Type          | Description                             |
-| ------ | ------------- | --------------------------------------- |
+|--------|---------------|-----------------------------------------|
 | params | INITIAL_STATE | The initial state to set for the rollup |
 
 ### Begin Slot
@@ -39,7 +39,7 @@ adaptive gas pricing depending on prover throughput.
 - **Arguments**
 
 | Name    | Type    | Description                                                                                                                                                                                                                     |
-| ------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+|---------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | witness | WITNESS | The witness to be used to process this slot. In prover mode, the witness argument is an empty struct which is populated with "hints" for the ZKVM during execution. In ZK mode, the argument is the pre-populated set of hints. |
 
 ### Apply Blob

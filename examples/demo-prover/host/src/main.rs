@@ -10,9 +10,11 @@ use jupiter::verifier::RollupParams;
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::Risc0Host;
 use serde::Deserialize;
+use sov_modules_api::RpcRunner;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner};
 use sov_rollup_interface::zk::traits::ZkvmHost;
+use sov_state::Storage;
 use std::env;
 
 use tracing::{info, Level};
@@ -51,18 +53,22 @@ async fn main() -> Result<(), anyhow::Error> {
     );
 
     let sequencer_private_key = DefaultPrivateKey::generate();
-    let genesis_config = create_demo_genesis_config(
-        100000000,
-        sequencer_private_key.default_address(),
-        SEQUENCER_DA_ADDRESS.to_vec(),
-        &sequencer_private_key,
-        &sequencer_private_key,
-    );
 
     let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
+    let is_storage_empty = demo_runner.get_storage().is_empty();
     let demo = demo_runner.inner_mut();
 
-    demo.init_chain(genesis_config);
+    if is_storage_empty {
+        let genesis_config = create_demo_genesis_config(
+            100000000,
+            sequencer_private_key.default_address(),
+            SEQUENCER_DA_ADDRESS.to_vec(),
+            &sequencer_private_key,
+            &sequencer_private_key,
+        );
+        info!("Starting from empty storage, initialization chain");
+        demo.init_chain(genesis_config);
+    }
 
     demo.begin_slot(Default::default());
     let (prev_state_root, _) = demo.end_slot();

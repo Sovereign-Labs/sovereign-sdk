@@ -669,7 +669,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "first-read-last-write-cache"
+name = "sov-first-read-last-write-cache"
 version = "0.1.0"
 source = "git+https://github.com/Sovereign-Labs/sovereign.git?rev=04d1591b4568cdfbebaa05eeee020c811080a9af#04d1591b4568cdfbebaa05eeee020c811080a9af"
 dependencies = [
@@ -2619,7 +2619,7 @@ source = "git+https://github.com/Sovereign-Labs/sovereign.git?rev=04d1591b4568cd
 dependencies = [
  "anyhow",
  "borsh",
- "first-read-last-write-cache",
+ "sov-first-read-last-write-cache",
  "hex",
  "jmt",
  "serde",

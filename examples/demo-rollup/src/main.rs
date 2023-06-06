@@ -19,6 +19,7 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner};
+use sov_state::Storage;
 use std::env;
 use std::net::SocketAddr;
 use tracing::Level;
@@ -88,12 +89,15 @@ async fn main() -> Result<(), anyhow::Error> {
     // Initialize the ledger database, which stores blocks, transactions, events, etc.
     let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
 
-    // Our state transition function implements the StateTransitionRunner interface, so we use that to intitialize the STF
+    // Our state transition function implements the StateTransitionRunner interface,
+    // so we use that to initialize the STF
     let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
 
-    // Our state transition also implements the RpcRunner interface, so we use that to initialize the RPC server.
-    let storj = demo_runner.get_storage();
-    let mut methods = get_rpc_methods(storj);
+    // Our state transition also implements the RpcRunner interface,
+    // so we use that to initialize the RPC server.
+    let storage = demo_runner.get_storage();
+    let is_storage_empty = storage.is_empty();
+    let mut methods = get_rpc_methods(storage);
     let ledger_rpc_module =
         ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db.clone());
     methods
@@ -111,17 +115,15 @@ async fn main() -> Result<(), anyhow::Error> {
             namespace: ROLLUP_NAMESPACE,
         },
     );
-    // For demonstration,  we also intitalize the DaVerifier interface using the DaVerifier interface
+    // For demonstration,  we also initialize the DaVerifier interface using the DaVerifier interface
     // Running the verifier is only *necessary* during proof generation not normal execution
     let da_verifier = CelestiaVerifier::new(RollupParams {
         namespace: ROLLUP_NAMESPACE,
     });
 
     let demo = demo_runner.inner_mut();
-    // Check if the rollup has previously processed any data. If not, run it's "genesis" initialization code
-    let item_numbers = ledger_db.get_next_items_numbers();
-    let last_slot_processed_before_shutdown = item_numbers.slot_number - 1;
-    if last_slot_processed_before_shutdown == 0 {
+    // Check if the rollup has previously been initialized
+    if is_storage_empty {
         info!("No history detected. Initializing chain...");
         demo.init_chain(get_genesis_config());
         info!("Chain initialization is done.");
@@ -136,6 +138,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut prev_state_root = prev_state_root.0;
 
     // Start the main rollup loop
+    let item_numbers = ledger_db.get_next_items_numbers();
+    let last_slot_processed_before_shutdown = item_numbers.slot_number - 1;
     let start_height = rollup_config.start_height + last_slot_processed_before_shutdown;
 
     for height in start_height.. {
@@ -147,15 +151,16 @@ async fn main() -> Result<(), anyhow::Error> {
 
         // Fetch the relevant subset of the next Celestia block
         let filtered_block = da_service.get_finalized_at(height).await?;
-        let header = filtered_block.header().clone();
+        let header = filtered_block.header();
 
         // For the demo, we create and verify a proof that the data has been extracted from Celestia correctly.
         // In a production implementation, this logic would only run on the prover node - regular full nodes could
         // simply download the data from Celestia without extracting and checking a merkle proof here,
         let (blob_txs, inclusion_proof, completeness_proof) =
             da_service.extract_relevant_txs_with_proof(filtered_block.clone());
+
         assert!(da_verifier
-            .verify_relevant_tx_list(&header, &blob_txs, inclusion_proof, completeness_proof)
+            .verify_relevant_tx_list(header, &blob_txs, inclusion_proof, completeness_proof)
             .is_ok());
         info!("Received {} blobs", blob_txs.len());
 
@@ -163,7 +168,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let mut data_to_commit = SlotCommit::new(filtered_block);
         for blob in blob_txs.clone() {
             let receipts = demo.apply_blob(blob, None);
-            info!("er: {:?}", receipts);
+            info!("receipts: {:?}", receipts);
             data_to_commit.add_batch(receipts);
         }
         let (next_state_root, _witness) = demo.end_slot();

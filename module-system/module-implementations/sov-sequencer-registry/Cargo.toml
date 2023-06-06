@@ -1,7 +1,15 @@
 [package]
 name = "sov-sequencer-registry"
-version = "0.1.0"
-edition = "2021"
+description = "A Sovereign SDK module for registering rollup sequencers"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+
 resolver = "2"
 
 [dev-dependencies]

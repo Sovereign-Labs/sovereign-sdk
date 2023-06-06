@@ -15,6 +15,7 @@ impl StateTransitionConfig for ProverConfig {}
 impl StateTransitionConfig for ZkConfig {}
 impl StateTransitionConfig for StandardConfig {}
 
+// https://rust-lang.github.io/api-guidelines/future-proofing.html
 mod sealed {
     use super::{ProverConfig, StandardConfig, ZkConfig};
 
@@ -56,16 +57,10 @@ pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
 ///  - batch: Set of transactions grouped together, or block on L2
 ///  - blob: Non serialised batch
 pub trait StateTransitionFunction<Vm: Zkvm> {
+    /// Root hash of state merkle tree
     type StateRoot;
     /// The initial state of the rollup.
     type InitialState;
-
-    // TODO: remove unused types and their corresponding traits
-    // type Transaction: TransactionTrait;
-    // /// A batch of transactions. Also known as a "block" in most systems: we use
-    // /// the term batch in this context to avoid ambiguity with DA layer blocks
-    // type Batch: BatchTrait<Transaction = Self::Transaction>;
-    // type Proof: Decode;
 
     /// The contents of a transaction receipt. This is the data that is persisted in the database
     type TxReceiptContents: Serialize + DeserializeOwned + Clone;
@@ -83,22 +78,29 @@ pub trait StateTransitionFunction<Vm: Zkvm> {
     /// Perform one-time initialization for the genesis block.
     fn init_chain(&mut self, params: Self::InitialState);
 
-    /// Called at the beginning of each DA-layer block - whether or not that block contains any
+    /// Called at the beginning of each **DA-layer block** - whether or not that block contains any
     /// data relevant to the rollup.
-    /// If slot is started in Node context, default witness should be provided
-    /// if slot is tarted in Zero Knowledge context, witness from execution should be provided
+    /// If slot is started in Full Node mode, default witness should be provided.
+    /// If slot is started in Zero Knowledge mode, witness from execution should be provided.
     fn begin_slot(&mut self, witness: Self::Witness);
 
     /// Apply a blob/batch of transactions to the rollup, slashing the sequencer who proposed the blob on failure.
     /// The concrete blob type is defined by the DA layer implementation, which is why we use a generic here instead
     /// of an associated type.
+    /// Misbehavior hint allows prover optimizations - the sequencer can be slashed
+    /// for including a transaction which fails stateless checks (i.e. has an invalid signature) -
+    /// and in that case we ignore his entire batch.
+    /// This method lets you give a hint to the prover telling
+    /// it where that invalid signature is, so that it can skip signature checks on other transactions.
+    /// (If the misbehavior hint is wrong, then the host is malicious so we can
+    /// just panic - which means that no proof will be created).
     fn apply_blob(
         &mut self,
         blob: impl BlobTransactionTrait,
         misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents>;
 
-    /// Called once at the *end* of each DA layer block (i.e. after all rollup blob have been processed)
+    /// Called once at the *end* of each DA layer block (i.e. after all rollup blobs have been processed)
     /// Commits state changes to the database
     ///
     fn end_slot(&mut self) -> (Self::StateRoot, Self::Witness);

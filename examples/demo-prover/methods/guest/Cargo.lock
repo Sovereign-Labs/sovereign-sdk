@@ -596,7 +596,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "first-read-last-write-cache"
+name = "sov-first-read-last-write-cache"
 version = "0.1.0"
 dependencies = [
  "thiserror",
@@ -2268,6 +2268,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "bytes",
+ "hex",
  "serde",
  "thiserror",
 ]
@@ -2293,11 +2294,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
- "first-read-last-write-cache",
+ "sov-first-read-last-write-cache",
  "hex",
  "jmt",
  "serde",
  "sha2 0.10.6",
+ "sov-rollup-interface",
  "thiserror",
  "tracing",
 ]

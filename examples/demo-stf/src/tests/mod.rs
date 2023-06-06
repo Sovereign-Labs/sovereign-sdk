@@ -1,8 +1,8 @@
 use borsh::BorshSerialize;
-use sov_default_stf::{AppTemplate, Batch, SequencerOutcome, TxEffect};
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, Address,
 };
+use sov_modules_stf_template::{AppTemplate, Batch, SequencerOutcome, TxEffect};
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_state::ProverStorage;
 use std::path::Path;
@@ -14,8 +14,6 @@ use crate::{
         DEMO_SEQ_PUB_KEY_STR,
     },
     runtime::{GenesisConfig, Runtime},
-    tx_hooks_impl::DemoAppTxHooks,
-    tx_verifier_impl::DemoAppTxVerifier,
 };
 
 mod data_generation;
@@ -36,9 +34,7 @@ pub fn create_new_demo(
 ) -> DemoApp<DefaultContext, sov_rollup_interface::mocks::MockZkvm> {
     let runtime = Runtime::default();
     let storage = ProverStorage::with_path(path).unwrap();
-    let tx_hooks = DemoAppTxHooks::new();
-    let tx_verifier = DemoAppTxVerifier::new();
-    AppTemplate::new(storage, runtime, tx_verifier, tx_hooks)
+    AppTemplate::new(storage, runtime)
 }
 
 pub fn create_demo_config(
