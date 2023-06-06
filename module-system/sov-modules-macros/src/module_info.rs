@@ -314,7 +314,7 @@ fn make_init_address(
             let module_path = module_path!();
             let prefix = sov_modules_api::Prefix::new_module(module_path, stringify!(#struct_ident));
             let #field_ident : <#generic_param as sov_modules_api::Spec>::Address =
-                <#generic_param as sov_modules_api::Spec>::Address::try_from(&prefix.hash::<#generic_param>())
+                <#generic_param as ::sov_modules_api::Spec>::Address::try_from(&prefix.hash::<#generic_param>())
                     .unwrap_or_else(|e| panic!("ModuleInfo macro error, unable to create an Address for module: {}", e));
         }),
     }
