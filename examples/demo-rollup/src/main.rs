@@ -7,11 +7,11 @@ mod test_rpc;
 use crate::config::RollupConfig;
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::{DefaultContext, DemoBatchReceipt, DemoTxReceipt};
+use demo_stf::app::{DefaultContext, DemoAppRunner, DemoBatchReceipt, DemoTxReceipt};
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runner_config::from_toml_path;
-use demo_stf::runtime::GenesisConfig;
+use demo_stf::runtime::{GenesisConfig, Runtime};
 use jsonrpsee::core::server::rpc_module::Methods;
 use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
@@ -31,7 +31,9 @@ use tracing::{debug, info};
 
 // RPC related imports
 use demo_stf::app::get_rpc_methods;
+use demo_stf::batch_builder::FiFoStrictBatchBuilder;
 use sov_modules_api::RpcRunner;
+use sov_rollup_interface::services::batch_builder::BatchBuilder;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 // You can change this constant to point your rollup at a different namespace
@@ -69,6 +71,34 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
         &sequencer_private_key,
         &sequencer_private_key,
     )
+}
+
+fn start_batch_producing(
+    batch_builder: FiFoStrictBatchBuilder<Runtime<DefaultContext>, DefaultContext>,
+    da_service: CelestiaService,
+) {
+    let mut batch_builder = batch_builder;
+    tokio::spawn(async move {
+        loop {
+            match batch_builder.get_next_blob() {
+                Ok(blob) => {
+                    let blob: Vec<u8> = blob.into_iter().flatten().collect();
+                    match da_service.send_transaction(&blob).await {
+                        Ok(_) => {
+                            info!("Successfully produced batch");
+                        }
+                        Err(err) => {
+                            info!("Error while producing batch: {:?}", err);
+                        }
+                    };
+                }
+                Err(err) => {
+                    info!("Error while producing batch: {:?}", err);
+                }
+            };
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+    });
 }
 
 #[tokio::main]
@@ -119,6 +149,7 @@ async fn main() -> Result<(), anyhow::Error> {
             namespace: ROLLUP_NAMESPACE,
         },
     );
+
     // For demonstration,  we also initialize the DaVerifier interface using the DaVerifier interface
     // Running the verifier is only *necessary* during proof generation not normal execution
     let da_verifier = CelestiaVerifier::new(RollupParams {
