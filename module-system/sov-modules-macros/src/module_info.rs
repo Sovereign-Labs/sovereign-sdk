@@ -130,7 +130,7 @@ impl<'a> StructDef<'a> {
 
         Ok(quote::quote! {
             use sov_modules_api::AddressTrait;
-            impl #impl_generics Default for #ident #type_generics #where_clause{
+            impl #impl_generics ::std::default::Default for #ident #type_generics #where_clause{
 
                 fn default() -> Self {
                     #(#impl_self_init)*
