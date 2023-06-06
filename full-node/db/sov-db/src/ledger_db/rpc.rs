@@ -397,7 +397,6 @@ impl LedgerDB {
         mode: QueryMode,
     ) -> Result<BatchResponse<B, T>, anyhow::Error> {
         Ok(match mode {
-            // TODO: this conversion fails for the demo-rollup/src/test_rpc.rs data structures
             QueryMode::Compact => batch.try_into()?,
 
             QueryMode::Standard => {
@@ -408,8 +407,6 @@ impl LedgerDB {
                         .collect(),
                 );
 
-                // TODO: this conversion fails for the demo-rollup/src/test_rpc.rs data structures
-                // Raises the IO error: unexpected end of file
                 let mut batch_response: BatchResponse<B, T> = batch.try_into()?;
                 batch_response.txs = tx_hashes;
                 batch_response
@@ -421,7 +418,6 @@ impl LedgerDB {
                     txs.push(ItemOrHash::Full(tx.try_into()?));
                 }
 
-                // TODO: this conversion fails for the demo-rollup/src/test_rpc.rs data structures
                 let mut batch_response: BatchResponse<B, T> = batch.try_into()?;
                 batch_response.txs = Some(txs);
                 batch_response
