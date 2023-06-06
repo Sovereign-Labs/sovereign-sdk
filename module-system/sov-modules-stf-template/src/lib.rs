@@ -69,7 +69,7 @@ where
     }
 
     fn begin_slot(&mut self, witness: Self::Witness) {
-        self.working_set = Some(StateCheckpoint::with_witness(
+        self.checkpoint = Some(StateCheckpoint::with_witness(
             self.current_storage.clone(),
             witness,
         ));
@@ -90,7 +90,7 @@ where
     }
 
     fn end_slot(&mut self) -> (Self::StateRoot, Self::Witness) {
-        let (cache_log, witness) = self.working_set.take().unwrap().freeze();
+        let (cache_log, witness) = self.checkpoint.take().unwrap().freeze();
         let root_hash = self
             .current_storage
             .validate_and_commit(cache_log, &witness)

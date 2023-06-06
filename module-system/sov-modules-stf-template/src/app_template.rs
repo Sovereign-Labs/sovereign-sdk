@@ -21,7 +21,7 @@ type Result<T> = std::result::Result<T, ApplyBatchError>;
 pub struct AppTemplate<C: Context, RT, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
-    pub(crate) working_set: Option<StateCheckpoint<C::Storage>>,
+    pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
 }
 
@@ -67,7 +67,7 @@ where
             hex::encode(sequencer)
         );
         let mut batch_workspace = self
-            .working_set
+            .checkpoint
             .take()
             .expect("Working_set was initialized in begin_slot")
             .to_revertable();
@@ -80,7 +80,7 @@ where
                 "Error: The transaction was rejected by the 'enter_apply_blob' hook. Skipping batch without slashing the sequencer: {}",
                 e
             );
-            self.working_set = Some(batch_workspace.revert());
+            self.checkpoint = Some(batch_workspace.revert());
             return Err(ApplyBatchError::Ignored(batch_data_and_hash.hash));
         }
 
@@ -99,7 +99,7 @@ where
                     "Unable to deserialize batch provided by the sequencer {}",
                     e
                 );
-                self.working_set = Some(batch_workspace.revert());
+                self.checkpoint = Some(batch_workspace.revert());
                 Err(ApplyBatchError::Slashed {
                     hash: batch_data_and_hash.hash,
                     reason: SlashingReason::InvalidBatchEncoding,
@@ -119,7 +119,7 @@ where
             Ok(txs) => Ok((batch_workspace, txs)),
             Err(e) => {
                 // Revert on error
-                self.working_set = Some(batch_workspace.revert());
+                self.checkpoint = Some(batch_workspace.revert());
                 error!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}\n", e);
                 Err(ApplyBatchError::Slashed {
                     hash: batch_data_and_hash.hash,
@@ -192,7 +192,7 @@ where
                 Err(e) => {
                     // If the serialization is invalid, the sequencer is malicious. Slash them (we don't run exit_apply_batch here)
                     let batch_workspace = batch_workspace.revert();
-                    self.working_set = Some(batch_workspace);
+                    self.checkpoint = Some(batch_workspace);
                     error!("Tx 0x{} decoding error: {}", hex::encode(tx.raw_tx_hash), e);
 
                     return Err(ApplyBatchError::Slashed {
@@ -211,7 +211,7 @@ where
         Self {
             runtime,
             current_storage: storage,
-            working_set: None,
+            checkpoint: None,
             phantom_vm: PhantomData,
         }
     }
@@ -250,7 +250,7 @@ where
             .end_blob_hook(batch_receipt_contents, &mut batch_workspace)
             .expect("Impossible happened: error in exit_apply_batch");
 
-        self.working_set = Some(batch_workspace.checkpoint());
+        self.checkpoint = Some(batch_workspace.checkpoint());
         Ok(BatchReceipt {
             batch_hash: batch_data_and_hash.hash,
             tx_receipts,
