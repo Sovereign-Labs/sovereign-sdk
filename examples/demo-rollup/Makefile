@@ -1,4 +1,4 @@
-.PHONY: start start-existing start-new config
+.PHONY: start start-existing start-new config submit-txn
 
 CONTAINER_NAME=sov-celestia-local
 VALIDATOR_ADDRESS=celestia1w7wcupk5gswj25c0khnkey5fwmlndx6t5aarmk
@@ -7,6 +7,17 @@ RPC_PORT=26658
 KEY_NAME=sequencer-da-address
 AMOUNT=10000000utia
 START_HEIGHT=1
+BLOB_TXN_FEE=300utia
+
+ifndef NAMESPACE
+NAMESPACE := $(shell cd .. && cd demo-stf && cargo run --bin sov-cli util print-namespace)
+endif
+
+ifndef SERIALIZED_BLOB_PATH
+CONTENT :=
+else
+CONTENT := $(shell cat $(SERIALIZED_BLOB_PATH))
+endif
 
 get_address = $(shell docker exec $(CONTAINER_NAME) celestia-appd keys show $(KEY_NAME) | sed -n 's/- address: \(.*\)/\1/p')
 get_auth = $(shell docker exec $(CONTAINER_NAME) /celestia bridge auth admin --node.store /bridge)
@@ -69,3 +80,13 @@ clean: check-docker
 	docker stop $(CONTAINER_NAME)
 	docker rm $(CONTAINER_NAME)
 
+submit-txn: start
+ifndef SERIALIZED_BLOB_PATH
+	$(error SERIALIZED_BLOB_PATH is not defined)
+else ifeq ($(wildcard $(SERIALIZED_BLOB_PATH)),)
+	$(error The file $(SERIALIZED_BLOB_PATH) does not exist)
+else
+	@echo $(CONTENT)
+	@echo $(NAMESPACE)
+	@echo docker exec $(CONTAINER_NAME) celestia-appd tx blob PayForBlobs $(NAMESPACE) $(CONTENT) --from $(KEY_NAME) --chain-id=test --fees=$(BLOB_TXN_FEE) -y
+endif

@@ -7,6 +7,7 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 
 use demo_stf::runtime::cmd_parser;
 
@@ -81,6 +82,7 @@ enum UtilCommands {
         /// Folder to store the new private key json file. The filename is auto-generated
         priv_key_path: String,
     },
+    PrintNamespace,
 }
 
 struct SerializedTx {
@@ -224,6 +226,9 @@ pub fn main() {
             UtilCommands::CreatePrivateKey { priv_key_path } => {
                 PrivKeyAndAddress::generate_and_save_to_file(priv_key_path.as_ref())
                     .unwrap_or_else(|e| panic!("Create private key error: {}", e));
+            }
+            UtilCommands::PrintNamespace => {
+                println!("{}",hex::encode(ROLLUP_NAMESPACE_RAW));
             }
         },
     }
