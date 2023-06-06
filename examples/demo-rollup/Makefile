@@ -3,7 +3,7 @@
 CONTAINER_NAME=sov-celestia-local
 VALIDATOR_ADDRESS=celestia1w7wcupk5gswj25c0khnkey5fwmlndx6t5aarmk
 IMAGE_NAME=dubbelosix/sov-celestia-local:genesis-v0.7.1
-RPC_PORT=26659
+RPC_PORT=26658
 KEY_NAME=sequencer-da-address
 AMOUNT=10000000utia
 START_HEIGHT=1
@@ -68,8 +68,4 @@ stop: check-docker
 clean: check-docker
 	docker stop $(CONTAINER_NAME)
 	docker rm $(CONTAINER_NAME)
-
-auth: start
-	$(get_auth)
-
 
