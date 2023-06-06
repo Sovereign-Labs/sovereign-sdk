@@ -106,7 +106,7 @@ fn nested_module_call_test() {
         ]
     );
 
-    let (log, witness) = working_set.commit().freeze();
+    let (log, witness) = working_set.checkpoint().freeze();
     native_storage
         .validate_and_commit(log, &witness)
         .expect("State update is valid");

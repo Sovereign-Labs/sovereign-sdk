@@ -21,7 +21,7 @@ fn test_value_setter() {
         test_value_setter_helper(context, &config, &mut working_set);
     }
 
-    let (_, witness) = working_set.commit().freeze();
+    let (_, witness) = working_set.checkpoint().freeze();
 
     // Test Zk-Context
     {
@@ -82,7 +82,7 @@ fn test_err_on_sender_is_not_admin() {
         let context = DefaultContext::new(sender.clone());
         test_err_on_sender_is_not_admin_helper(context, &config, &mut native_working_set);
     }
-    let (_, witness) = native_working_set.commit().freeze();
+    let (_, witness) = native_working_set.checkpoint().freeze();
 
     // Test Zk-Context
     {
