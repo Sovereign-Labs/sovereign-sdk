@@ -17,7 +17,8 @@ pub mod test {
 
     #[test]
     fn test_demo_values_in_db() {
-        let path = sov_schema_db::temppath::TempPath::new();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();
 
@@ -73,7 +74,8 @@ pub mod test {
 
     #[test]
     fn test_demo_values_in_cache() {
-        let path = sov_schema_db::temppath::TempPath::new();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
         let mut demo = create_new_demo(&path);
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
@@ -125,7 +127,8 @@ pub mod test {
 
     #[test]
     fn test_demo_values_not_in_db() {
-        let path = sov_schema_db::temppath::TempPath::new();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();
@@ -176,7 +179,8 @@ pub mod test {
 
     #[test]
     fn test_sequencer_insufficient_funds() {
-        let path = sov_schema_db::temppath::TempPath::new();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();

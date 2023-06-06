@@ -62,8 +62,8 @@ fn setup(
 
 #[test]
 fn test_burn_on_invalid_proof() {
-    let storage = ProverStorage::temporary();
-    let mut working_set = WorkingSet::new(storage);
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let (module, prover_address) = setup(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
@@ -100,8 +100,8 @@ fn test_burn_on_invalid_proof() {
 
 #[test]
 fn test_valid_proof() {
-    let storage = ProverStorage::temporary();
-    let mut working_set = WorkingSet::new(storage);
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let (module, prover_address) = setup(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
@@ -138,8 +138,8 @@ fn test_valid_proof() {
 
 #[test]
 fn test_unbonding() {
-    let storage = ProverStorage::temporary();
-    let mut working_set = WorkingSet::new(storage);
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let (module, prover_address) = setup(&mut working_set);
     let context = DefaultContext {
         sender: prover_address.clone(),
@@ -196,8 +196,8 @@ fn test_unbonding() {
 
 #[test]
 fn test_prover_not_bonded() {
-    let storage = ProverStorage::temporary();
-    let mut working_set = WorkingSet::new(storage);
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let (module, prover_address) = setup(&mut working_set);
     let context = DefaultContext {
         sender: prover_address.clone(),

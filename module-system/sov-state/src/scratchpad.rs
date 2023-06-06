@@ -40,90 +40,77 @@ impl<S: Storage> Debug for RevertableDelta<S> {
     }
 }
 
-/// A read-write set which can be committed as a unit
-enum ReadWriteSet<S: Storage> {
-    Standard(Delta<S>),
-    Revertable(RevertableDelta<S>),
+/// This structure is responsible for storing the `read-write` set
+/// and is obtained from the `WorkingSet` by using either the `commit` or `revert` method.
+pub struct CommittedWorkingSet<S: Storage> {
+    delta: Delta<S>,
 }
 
-/// This structure holds the read-write set and the events gathered during the execution of a transaction.
-pub struct WorkingSet<S: Storage> {
-    read_write_set: ReadWriteSet<S>,
-    events: Vec<Event>,
-}
-
-impl<S: Storage> WorkingSet<S> {
+impl<S: Storage> CommittedWorkingSet<S> {
     pub fn new(inner: S) -> Self {
         Self {
-            read_write_set: ReadWriteSet::Standard(Delta::new(inner)),
-            events: Default::default(),
+            delta: Delta::new(inner),
         }
     }
 
     pub fn with_witness(inner: S, witness: S::Witness) -> Self {
         Self {
-            read_write_set: ReadWriteSet::Standard(Delta::with_witness(inner, witness)),
+            delta: Delta::with_witness(inner, witness),
+        }
+    }
+
+    pub fn to_revertable(self) -> WorkingSet<S> {
+        WorkingSet {
+            delta: self.delta.get_revertable_wrapper(),
             events: Default::default(),
         }
     }
 
-    pub fn to_revertable(self) -> Self {
-        let read_write_set = match self.read_write_set {
-            ReadWriteSet::Standard(delta) => {
-                ReadWriteSet::Revertable(delta.get_revertable_wrapper())
-            }
-            ReadWriteSet::Revertable(_) => self.read_write_set,
-        };
+    pub fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
+        self.delta.freeze()
+    }
+}
 
-        Self {
-            read_write_set,
-            events: self.events,
+/// This structure contains the read-write set and the events collected during the execution of a transaction.
+/// There are two ways to convert it into a CommittedWorkingSet:
+/// 1. By using the commit method, where all the changes are added to the underlying CommittedWorkingSet.
+/// 2. By using the revert method, where the most recent changes are reverted and the previously committed `CommittedWorkingSet` is returned.
+pub struct WorkingSet<S: Storage> {
+    delta: RevertableDelta<S>,
+    events: Vec<Event>,
+}
+
+impl<S: Storage> WorkingSet<S> {
+    pub fn new(inner: S) -> Self {
+        CommittedWorkingSet::new(inner).to_revertable()
+    }
+
+    pub fn with_witness(inner: S, witness: S::Witness) -> Self {
+        CommittedWorkingSet::with_witness(inner, witness).to_revertable()
+    }
+
+    pub fn commit(self) -> CommittedWorkingSet<S> {
+        CommittedWorkingSet {
+            delta: self.delta.commit(),
         }
     }
 
-    pub fn commit(self) -> Self {
-        let read_write_set = match self.read_write_set {
-            s @ ReadWriteSet::Standard(_) => s,
-            ReadWriteSet::Revertable(revertable) => ReadWriteSet::Standard(revertable.commit()),
-        };
-
-        Self {
-            read_write_set,
-            events: self.events,
-        }
-    }
-
-    pub fn revert(self) -> Self {
-        let read_write_set = match self.read_write_set {
-            s @ ReadWriteSet::Standard(_) => s,
-            ReadWriteSet::Revertable(revertable) => ReadWriteSet::Standard(revertable.revert()),
-        };
-        Self {
-            read_write_set,
-            // The `revert` removes all events associated with the transaction
-            events: Vec::default(),
+    pub fn revert(self) -> CommittedWorkingSet<S> {
+        CommittedWorkingSet {
+            delta: self.delta.revert(),
         }
     }
 
     pub(crate) fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
-        match &mut self.read_write_set {
-            ReadWriteSet::Standard(s) => s.get(key),
-            ReadWriteSet::Revertable(s) => s.get(key),
-        }
+        self.delta.get(key)
     }
 
     pub(crate) fn set(&mut self, key: StorageKey, value: StorageValue) {
-        match &mut self.read_write_set {
-            ReadWriteSet::Standard(s) => s.set(key, value),
-            ReadWriteSet::Revertable(s) => s.set(key, value),
-        }
+        self.delta.set(key, value)
     }
 
     pub(crate) fn delete(&mut self, key: StorageKey) {
-        match &mut self.read_write_set {
-            ReadWriteSet::Standard(s) => s.delete(key),
-            ReadWriteSet::Revertable(s) => s.delete(key),
-        }
+        self.delta.delete(key)
     }
 
     pub fn add_event(&mut self, key: &str, value: &str) {
@@ -138,18 +125,57 @@ impl<S: Storage> WorkingSet<S> {
         &self.events
     }
 
-    pub fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
-        match &mut self.read_write_set {
-            ReadWriteSet::Standard(delta) => delta.freeze(),
-            ReadWriteSet::Revertable(_) => todo!(),
-        }
+    #[cfg(test)]
+    pub fn backing(&self) -> &S {
+        &self.delta.inner.inner
+    }
+}
+
+impl<S: Storage> WorkingSet<S> {
+    pub(crate) fn set_value<K: BorshSerialize, V: BorshSerialize>(
+        &mut self,
+        prefix: &Prefix,
+        storage_key: &K,
+        value: &V,
+    ) {
+        let storage_key = StorageKey::new(prefix, storage_key);
+        let storage_value = StorageValue::new(value);
+        self.set(storage_key, storage_value);
     }
 
-    pub fn backing(&self) -> &S {
-        match &self.read_write_set {
-            ReadWriteSet::Standard(delta) => &delta.inner,
-            ReadWriteSet::Revertable(revertable) => &revertable.inner.inner,
-        }
+    pub(crate) fn get_value<K: BorshSerialize, V: BorshDeserialize>(
+        &mut self,
+        prefix: &Prefix,
+        storage_key: &K,
+    ) -> Option<V> {
+        let storage_key = StorageKey::new(prefix, storage_key);
+        self.get_decoded(storage_key)
+    }
+
+    pub(crate) fn remove_value<K: BorshSerialize, V: BorshDeserialize>(
+        &mut self,
+        prefix: &Prefix,
+        storage_key: &K,
+    ) -> Option<V> {
+        let storage_key = StorageKey::new(prefix, storage_key);
+        let storage_value = self.get_decoded(storage_key.clone())?;
+        self.delete(storage_key);
+        Some(storage_value)
+    }
+
+    pub(crate) fn delete_value<K: BorshSerialize>(&mut self, prefix: &Prefix, storage_key: &K) {
+        let storage_key = StorageKey::new(prefix, storage_key);
+        self.delete(storage_key);
+    }
+
+    fn get_decoded<V: BorshDeserialize>(&mut self, storage_key: StorageKey) -> Option<V> {
+        let storage_value = self.get(storage_key)?;
+
+        // It is ok to panic here. Deserialization problem means that something is terribly wrong.
+        Some(
+            V::deserialize_reader(&mut storage_value.value())
+                .unwrap_or_else(|e| panic!("Unable to deserialize storage value {e:?}")),
+        )
     }
 }
 
@@ -243,53 +269,5 @@ impl<S: Storage> Delta<S> {
         let witness = std::mem::take(&mut self.witness);
 
         (cache.into(), witness)
-    }
-}
-
-impl<S: Storage> WorkingSet<S> {
-    pub(crate) fn set_value<K: BorshSerialize, V: BorshSerialize>(
-        &mut self,
-        prefix: &Prefix,
-        storage_key: &K,
-        value: V,
-    ) {
-        let storage_key = StorageKey::new(prefix, storage_key);
-        let storage_value = StorageValue::new(value);
-        self.set(storage_key, storage_value);
-    }
-
-    pub(crate) fn get_value<K: BorshSerialize, V: BorshDeserialize>(
-        &mut self,
-        prefix: &Prefix,
-        storage_key: &K,
-    ) -> Option<V> {
-        let storage_key = StorageKey::new(prefix, storage_key);
-        self.get_decoded(storage_key)
-    }
-
-    pub(crate) fn remove_value<K: BorshSerialize, V: BorshDeserialize>(
-        &mut self,
-        prefix: &Prefix,
-        storage_key: &K,
-    ) -> Option<V> {
-        let storage_key = StorageKey::new(prefix, storage_key);
-        let storage_value = self.get_decoded(storage_key.clone())?;
-        self.delete(storage_key);
-        Some(storage_value)
-    }
-
-    pub(crate) fn delete_value<K: BorshSerialize>(&mut self, prefix: &Prefix, storage_key: &K) {
-        let storage_key = StorageKey::new(prefix, storage_key);
-        self.delete(storage_key);
-    }
-
-    fn get_decoded<V: BorshDeserialize>(&mut self, storage_key: StorageKey) -> Option<V> {
-        let storage_value = self.get(storage_key)?;
-
-        // It is ok to panic here. Deserialization problem means that something is terribly wrong.
-        Some(
-            V::deserialize_reader(&mut storage_value.value())
-                .unwrap_or_else(|e| panic!("Unable to deserialize storage value {e:?}")),
-        )
     }
 }

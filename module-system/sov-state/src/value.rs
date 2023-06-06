@@ -42,7 +42,7 @@ impl<V: BorshSerialize + BorshDeserialize> StateValue<V> {
     }
 
     /// Sets a value in the StateValue.
-    pub fn set<S: Storage>(&self, value: V, working_set: &mut WorkingSet<S>) {
+    pub fn set<S: Storage>(&self, value: &V, working_set: &mut WorkingSet<S>) {
         working_set.set_value(self.prefix(), &SingletonKey, value)
     }
 

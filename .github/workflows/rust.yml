@@ -2,9 +2,13 @@ name: Rust
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
   pull_request:
-    branches: ["main"]
+    branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
 
 env:
   CARGO_TERM_COLOR: always
@@ -32,7 +36,7 @@ jobs:
             exit 1
           fi
 
-  # TODO: Temporary before migration to RiscZero 0.15: https://github.com/Sovereign-Labs/sovereign/issues/338
+  # TODO: Temporary before migration to RiscZero 0.15: https://github.com/Sovereign-Labs/sovereign-sdk/issues/338
   #   After that demo-prover should be integrated into workspace
   check-demo-prover:
     runs-on: ubuntu-latest

@@ -21,7 +21,8 @@ fn main() {
     use sov_modules_api::Genesis;
 
     type C = DefaultContext;
-    let storage = ProverStorage::temporary();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut working_set = &mut sov_state::WorkingSet::new(storage);
     let runtime = &mut Runtime::<C>::default();
     let config = GenesisConfig::new((), ());

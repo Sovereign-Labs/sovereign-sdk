@@ -11,7 +11,7 @@ use crate::ProverIncentives;
 /// This enumeration represents the available call messages for interacting with the `ExampleModule` module.
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 // TODO: allow call messages to borrow data
-// https://github.com/Sovereign-Labs/sovereign/issues/274
+//     https://github.com/Sovereign-Labs/sovereign-sdk/issues/274
 pub enum CallMessage {
     BondProver(u64),
     UnbondProver,
@@ -46,7 +46,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
             .get(prover, working_set)
             .unwrap_or_default();
         let total_balance = old_balance + bond_amount;
-        self.bonded_provers.set(prover, total_balance, working_set);
+        self.bonded_provers.set(prover, &total_balance, working_set);
 
         // Emit the bonding event
         working_set.add_event(
@@ -90,7 +90,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
                 .transfer_from(&self.address, context.sender(), coins, working_set)?;
 
             // Update our internal tracking of the total bonded amount for the sender.
-            self.bonded_provers.set(context.sender(), 0, working_set);
+            self.bonded_provers.set(context.sender(), &0, working_set);
 
             // Emit the unbonding event
             working_set.add_event(
@@ -126,20 +126,20 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
 
         // Lock the prover's bond amount.
         self.bonded_provers
-            .set(context.sender(), old_balance - minimum_bond, working_set);
+            .set(context.sender(), &(old_balance - minimum_bond), working_set);
 
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
         if let Ok(_public_outputs) =
             Vm::verify(proof, &code_commitment).map_err(|e| anyhow::format_err!("{:?}", e))
         {
             // TODO: decide what the proof output is and do something with it
-            // https://github.com/Sovereign-Labs/sovereign/issues/272
+            //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/272
 
             // Unlock the prover's bond
             // TODO: reward the prover with newly minted tokens as appropriate based on gas fees.
-            // https://github.com/Sovereign-Labs/sovereign/issues/271
+            //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/271
             self.bonded_provers
-                .set(context.sender(), old_balance, working_set);
+                .set(context.sender(), &old_balance, working_set);
 
             working_set.add_event(
                 "processed_valid_proof",

@@ -20,7 +20,7 @@ serde = { workspace = true }
 anyhow = { workspace = true }
 
 # TODO: Consider replacing this serialization format
-# https://github.com/Sovereign-Labs/sovereign/issues/283
+#     https://github.com/Sovereign-Labs/sovereign-sdk/issues/283
 bincode = "1.3.3"
 
 

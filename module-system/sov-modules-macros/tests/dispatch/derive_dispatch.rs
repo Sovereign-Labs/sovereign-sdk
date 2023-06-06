@@ -18,7 +18,8 @@ fn main() {
     type RT = Runtime<DefaultContext>;
     let runtime = &mut RT::default();
 
-    let storage = ProverStorage::temporary();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut working_set = &mut sov_state::WorkingSet::new(storage);
     let config = GenesisConfig::new((), ());
     runtime.genesis(&config, working_set).unwrap();

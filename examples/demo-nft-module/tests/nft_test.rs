@@ -24,7 +24,9 @@ fn genesis_and_mint() {
         admin,
         owners: vec![(0, owner1.clone())],
     };
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let nft = NonFungibleToken::default();
 
     // Genesis
@@ -70,7 +72,8 @@ fn transfer() {
         admin: admin.clone(),
         owners: vec![(0, admin.clone()), (1, owner1.clone()), (2, owner2.clone())],
     };
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let nft = NonFungibleToken::default();
     nft.genesis(&config, &mut working_set).unwrap();
 
@@ -128,7 +131,8 @@ fn burn() {
         owners: vec![(0, owner1)],
     };
 
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let nft = NonFungibleToken::default();
     nft.genesis(&config, &mut working_set).unwrap();
 

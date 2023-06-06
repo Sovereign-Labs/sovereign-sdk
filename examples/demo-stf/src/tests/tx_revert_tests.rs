@@ -21,7 +21,8 @@ const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + SEQUENCER_BALANCE_DELTA;
 
 #[test]
 fn test_tx_revert() {
-    let path = sov_schema_db::temppath::TempPath::new();
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
     let value_setter_admin_private_key = DefaultPrivateKey::generate();
     let election_admin_private_key = DefaultPrivateKey::generate();
 
@@ -87,7 +88,8 @@ fn test_tx_revert() {
 
 #[test]
 fn test_tx_bad_sig() {
-    let path = sov_schema_db::temppath::TempPath::new();
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
     let value_setter_admin_private_key = DefaultPrivateKey::generate();
     let election_admin_private_key = DefaultPrivateKey::generate();
 
@@ -145,7 +147,8 @@ fn test_tx_bad_sig() {
 
 #[test]
 fn test_tx_bad_serialization() {
-    let path = sov_schema_db::temppath::TempPath::new();
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
 
     let value_setter_admin_private_key = DefaultPrivateKey::generate();
     let election_admin_private_key = DefaultPrivateKey::generate();

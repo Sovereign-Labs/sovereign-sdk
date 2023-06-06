@@ -13,8 +13,8 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
-sov-state = { path = "../sov-state", default-features = false }
-sov-rollup-interface = { path = "../../rollup-interface" }
+sov-state = { path = "../sov-state", version = "0.1", default-features = false }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
 serde = { workspace = true }
 borsh = { workspace = true }
 thiserror = { workspace = true }
@@ -22,6 +22,7 @@ jmt = { workspace = true }
 sha2 = { workspace = true }
 bech32 = { workspace = true }
 derive_more = { workspace = true }
+serde_json = { workspace = true }
 
 ed25519-dalek = { version = "1.0.1", default-features = false, features = ["alloc", "u64_backend"]}
 rand = {version = "0.7", optional = true}

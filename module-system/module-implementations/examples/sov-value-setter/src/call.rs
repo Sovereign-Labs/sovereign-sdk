@@ -7,7 +7,12 @@ use thiserror::Error;
 use super::ValueSetter;
 
 /// This enumeration represents the available call messages for interacting with the `sov-value-setter` module.
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
+)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage {
     SetValue(u32),
 }
@@ -36,7 +41,7 @@ impl<C: sov_modules_api::Context> ValueSetter<C> {
         }
 
         // This is how we set a new value:
-        self.value.set(new_value, working_set);
+        self.value.set(&new_value, working_set);
         working_set.add_event("set", &format!("value_set: {new_value:?}"));
 
         Ok(CallResponse::default())

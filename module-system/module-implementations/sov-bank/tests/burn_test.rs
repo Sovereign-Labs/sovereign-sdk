@@ -15,7 +15,8 @@ pub type Storage = ProverStorage<DefaultStorageSpec>;
 #[test]
 fn burn_deployed_tokens() {
     let bank = Bank::<C>::default();
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 
@@ -145,7 +146,8 @@ fn burn_deployed_tokens() {
 fn burn_initial_tokens() {
     let initial_balance = 100;
     let bank_config = create_bank_config_with_token(1, initial_balance);
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let bank = Bank::default();
     bank.genesis(&bank_config, &mut working_set).unwrap();
 

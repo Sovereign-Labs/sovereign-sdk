@@ -38,7 +38,7 @@ Module developers can interact with the `WorkingSet`, `StateValue`, and `StateMa
 The above API is used in the following way:
 
 ```Rust
-state.value.set(some_value, working_set);
+state.value.set(&some_value, working_set);
 let maybe_value = state.value.get(working_set);
 
 ```

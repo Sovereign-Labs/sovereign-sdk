@@ -12,10 +12,6 @@ readme = "README.md"
 resolver = "2"
 publish = false
 
-[dev-dependencies]
-sov-modules-api = { path = "../../../sov-modules-api" }
-sov-state = { path = "../../../sov-state", features = ["temp"] }
-
 [dependencies]
 anyhow = { workspace = true }
 sov-modules-api = { path = "../../../sov-modules-api", default-features = false }
@@ -29,8 +25,11 @@ borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
+[dev-dependencies]
+sov-modules-api = { path = "../../../sov-modules-api" }
+tempfile = { workspace = true }
 
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-modules-api/native","dep:jsonrpsee"]
+native = ["serde", "sov-modules-api/native", "dep:jsonrpsee"]

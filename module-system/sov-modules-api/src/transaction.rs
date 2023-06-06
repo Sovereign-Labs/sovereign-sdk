@@ -2,8 +2,6 @@
 use crate::default_context::DefaultContext;
 #[cfg(feature = "native")]
 use crate::default_signature::private_key::DefaultPrivateKey;
-#[cfg(feature = "native")]
-use crate::default_signature::DefaultSignature;
 use crate::Context;
 use crate::Hasher;
 use crate::Signature;
@@ -20,15 +18,6 @@ pub struct Transaction<C: Context> {
 }
 
 impl<C: Context> Transaction<C> {
-    pub fn new(msg: Vec<u8>, pub_key: C::PublicKey, signature: C::Signature, nonce: u64) -> Self {
-        Self {
-            signature,
-            runtime_msg: msg,
-            pub_key,
-            nonce,
-        }
-    }
-
     pub fn signature(&self) -> &C::Signature {
         &self.signature
     }
@@ -60,12 +49,36 @@ impl<C: Context> Transaction<C> {
 
 #[cfg(feature = "native")]
 impl Transaction<DefaultContext> {
-    /// Sign the transaction.
-    pub fn sign(priv_key: &DefaultPrivateKey, message: &[u8], nonce: u64) -> DefaultSignature {
+    /// New signed transaction.
+    pub fn new_signed_tx(priv_key: &DefaultPrivateKey, message: Vec<u8>, nonce: u64) -> Self {
         let mut hasher = <DefaultContext as Spec>::Hasher::new();
-        hasher.update(message);
+        hasher.update(&message);
         hasher.update(&nonce.to_le_bytes());
         let msg_hash = hasher.finalize();
-        priv_key.sign(msg_hash)
+
+        let pub_key = priv_key.pub_key();
+        let signature = priv_key.sign(msg_hash);
+
+        Self {
+            signature,
+            runtime_msg: message,
+            pub_key,
+            nonce,
+        }
+    }
+
+    /// New transaction.
+    pub fn new(
+        pub_key: <DefaultContext as Spec>::PublicKey,
+        message: Vec<u8>,
+        signature: <DefaultContext as Spec>::Signature,
+        nonce: u64,
+    ) -> Self {
+        Self {
+            signature,
+            runtime_msg: message,
+            pub_key,
+            nonce,
+        }
     }
 }

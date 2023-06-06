@@ -11,16 +11,17 @@ enum Operation {
 const EMPTY_ROOT: [u8; 32] = *b"SPARSE_MERKLE_PLACEHOLDER_HASH__";
 
 impl Operation {
-    fn execute<S: Storage>(&self, mut working_set: WorkingSet<S>) -> WorkingSet<S> {
+    fn execute<S: Storage>(&self, working_set: WorkingSet<S>) -> CommittedWorkingSet<S> {
         match self {
             Operation::Merge => working_set.commit(),
             Operation::Finalize => {
-                let (cache_log, witness) = working_set.freeze();
-                let db = working_set.backing();
+                let db = working_set.backing().clone();
+                let (cache_log, witness) = working_set.commit().freeze();
+
                 db.validate_and_commit(cache_log, &witness)
                     .expect("JMT update is valid");
 
-                working_set
+                CommittedWorkingSet::new(db)
             }
         }
     }
@@ -33,7 +34,7 @@ struct StorageOperation {
 impl StorageOperation {
     fn execute<S: Storage>(&self, mut working_set: WorkingSet<S>) -> WorkingSet<S> {
         for op in self.operations.iter() {
-            working_set = op.execute(working_set)
+            working_set = op.execute(working_set).to_revertable()
         }
         working_set
     }
@@ -86,13 +87,14 @@ fn create_state_map_and_storage(
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
     let state_map = StateMap::new(Prefix::new(vec![0]));
-    state_map.set(&key, value, &mut working_set);
+    state_map.set(&key, &value, &mut working_set);
     (state_map, working_set)
 }
 
 #[test]
 fn test_state_map_with_remove() {
-    let path = sov_schema_db::temppath::TempPath::new();
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
     for (before_remove, after_remove) in create_storage_operations() {
         let key = 1;
         let value = 11;
@@ -108,7 +110,8 @@ fn test_state_map_with_remove() {
 
 #[test]
 fn test_state_map_with_delete() {
-    let path = sov_schema_db::temppath::TempPath::new();
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
     for (before_delete, after_delete) in create_storage_operations() {
         let key = 1;
         let value = 11;
@@ -132,13 +135,14 @@ fn create_state_value_and_storage(
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
     let state_value = StateValue::new(Prefix::new(vec![0]));
-    state_value.set(value, &mut working_set);
+    state_value.set(&value, &mut working_set);
     (state_value, working_set)
 }
 
 #[test]
 fn test_state_value_with_remove() {
-    let path = sov_schema_db::temppath::TempPath::new();
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
     for (before_remove, after_remove) in create_storage_operations() {
         let value = 11;
         let (state_value, mut working_set) = create_state_value_and_storage(value, &path);
@@ -153,7 +157,8 @@ fn test_state_value_with_remove() {
 
 #[test]
 fn test_state_value_with_delete() {
-    let path = sov_schema_db::temppath::TempPath::new();
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
     for (before_delete, after_delete) in create_storage_operations() {
         let value = 11;
         let (state_value, mut working_set) = create_state_value_and_storage(value, &path);
@@ -168,17 +173,18 @@ fn test_state_value_with_delete() {
 
 #[test]
 fn test_witness_roundtrip() {
-    let path: sov_schema_db::temppath::TempPath = sov_schema_db::temppath::TempPath::new();
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
     let state_value = StateValue::new(Prefix::new(vec![0]));
 
     // Native execution
     let witness: ArrayWitness = {
         let storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
         let mut working_set = WorkingSet::new(storage.clone());
-        state_value.set(11, &mut working_set);
+        state_value.set(&11, &mut working_set);
         let _ = state_value.get(&mut working_set);
-        state_value.set(22, &mut working_set);
-        let (cache_log, witness) = working_set.freeze();
+        state_value.set(&22, &mut working_set);
+        let (cache_log, witness) = working_set.commit().freeze();
 
         let _ = storage
             .validate_and_commit(cache_log, &witness)
@@ -189,10 +195,10 @@ fn test_witness_roundtrip() {
     {
         let storage = ZkStorage::<DefaultStorageSpec>::new(EMPTY_ROOT);
         let mut working_set = WorkingSet::with_witness(storage.clone(), witness);
-        state_value.set(11, &mut working_set);
+        state_value.set(&11, &mut working_set);
         let _ = state_value.get(&mut working_set);
-        state_value.set(22, &mut working_set);
-        let (cache_log, witness) = working_set.freeze();
+        state_value.set(&22, &mut working_set);
+        let (cache_log, witness) = working_set.commit().freeze();
 
         let _ = storage
             .validate_and_commit(cache_log, &witness)

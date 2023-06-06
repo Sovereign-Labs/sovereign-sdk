@@ -1,7 +1,7 @@
 // AlignedVec keeps a vec whose length is guaranteed to be aligned to 4 bytes.
 // This makes certain operations cheaper in zk-context (concatenation)
 // TODO: Currently the implementation defaults to `stc::vec::Vec` see:
-// https://github.com/Sovereign-Labs/sovereign/issues/47
+// https://github.com/Sovereign-Labs/sovereign-sdk/issues/47
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Eq, Clone)]
 pub struct AlignedVec {
     inner: Vec<u8>,

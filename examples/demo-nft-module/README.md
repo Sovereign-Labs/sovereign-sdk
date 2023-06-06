@@ -41,8 +41,8 @@ Here are defining basic dependencies in `Cargo.toml` that module needs to get st
 ```toml
 [dependencies]
 anyhow = { anyhow = "1.0.62" }
-sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign.git", branch = "main", default-features = false }
-sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign.git", branch = "main" }
+sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main", default-features = false }
+sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main" }
 ```
 
 ### Establishing the Root Module Structure
@@ -121,9 +121,9 @@ Before we start implementing the `Module` trait, there are several preparatory s
     serde = { version = "1", features = ["derive"] }
     serde_json = "1"
 
-     sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign.git", branch = "main", default-features = false }
-     sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign.git", branch = "main" }
-     sov-state = { git = "https://github.com/Sovereign-Labs/sovereign.git", branch = "main", default-features = false }
+     sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main", default-features = false }
+     sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main" }
+     sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main", default-features = false }
 
      [features]
      default = ["native"]
@@ -238,12 +238,12 @@ impl<C: Context> NonFungibleToken<C> {
         config: &<Self as sov_modules_api::Module>::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
-        self.admin.set(config.admin.clone(), working_set);
+        self.admin.set(&config.admin, working_set);
         for (id, owner) in config.owners.iter() {
             if self.owners.get(id, working_set).is_some() {
                 bail!("Token id {} already exists", id);
             }
-            self.owners.set(id, owner.clone(), working_set);
+            self.owners.set(id, owner, working_set);
         }
         Ok(())
     }
@@ -268,7 +268,7 @@ impl<C: Context> NonFungibleToken<C> {
             bail!("Token with id {} already exists", id);
         }
 
-        self.owners.set(&id, context.sender().clone(), working_set);
+        self.owners.set(&id, context.sender(), working_set);
 
         working_set.add_event("NFT mint", &format!("A token with id {id} was minted"));
         Ok(CallResponse::default())
@@ -290,7 +290,7 @@ impl<C: Context> NonFungibleToken<C> {
         if &token_owner != context.sender() {
             bail!("Only token owner can transfer token");
         }
-        self.owners.set(&id, to, working_set);
+        self.owners.set(&id, &to, working_set);
         working_set.add_event(
             "NFT transfer",
             &format!("A token with id {id} was transferred"),
@@ -371,7 +371,7 @@ Temporary storage is needed for testing, so we enable the `temp` feature of `sov
 
 ```toml
 [dev-dependencies]
-sov-state = { git = "https://github.com/Sovereign-Labs/sovereign.git", branch = "main", features = ["temp"] }
+sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main", features = ["temp"] }
 ```
 
 Here is some boilerplate for NFT module integration tests:
