@@ -1,43 +1,13 @@
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{self, Hash, Hasher},
-    net::SocketAddr,
-    path::PathBuf,
-    time::Duration,
-};
-
-use serde::Deserialize;
-use serde::Serialize;
-use sov_rollup_interface::traits::CanonicalHash;
-
-use demo_stf::app::{get_rpc_methods, DemoBatchReceipt, DemoTxReceipt, NativeAppRunner};
-use jupiter::{
-    da_service::{CelestiaService, DaServiceConfig},
-    types::FilteredCelestiaBlock,
-    verifier::RollupParams,
-};
-use risc0_adapter::host::Risc0Host;
-use sha2::digest::typenum::private::PrivateAnd;
-use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_modules_api::RpcRunner;
-use sov_rollup_interface::{
-    services::da::{DaService, SlotData},
-    stf::{BatchReceipt, StateTransitionFunction, StateTransitionRunner, TransactionReceipt},
-    traits::BlockHeaderTrait,
-};
-use sov_state::{config::Config, Storage};
-use tracing::{debug, info, Level};
-
-use demo_stf::runner_config::Config as RunnerConfig;
-use demo_stf::runner_config::{from_toml_path, StorageConfig};
-
-use crate::{
-    config::{RollupConfig, RpcConfig},
-    get_genesis_config, initialize_ledger, ledger_rpc, start_rpc_server, ROLLUP_NAMESPACE,
-};
+use std::net::SocketAddr;
 
 use curl::easy::{Easy2, Handler, List, WriteError};
-use tokio::{sync::oneshot, time::sleep};
+use demo_stf::app::{DemoBatchReceipt, DemoTxReceipt};
+use serde::{Serialize, Deserialize};
+use sov_db::ledger_db::{LedgerDB, SlotCommit};
+use sov_rollup_interface::{traits::{CanonicalHash, BlockHeaderTrait}, services::da::SlotData, stf::{BatchReceipt, TransactionReceipt, Event, EventKey}};
+use tokio::{sync::oneshot};
+
+use crate::{config::RpcConfig, ledger_rpc};
 
 struct Collector(Vec<u8>);
 
@@ -123,7 +93,7 @@ fn populate_ledger(ledger_db: &mut LedgerDB) -> () {
        TransactionReceipt::<i32> {
             tx_hash: blake3::hash(b"tx2").into(),
             body_to_save: Some(b"tx2 body".to_vec()),
-            events: vec![],
+            events: vec![Event::new("event1_key", "event1_value"), Event::new("event2_key", "event2_value")],
             receipt: 1,
         } ],
         inner: 0,
@@ -143,6 +113,10 @@ fn populate_ledger(ledger_db: &mut LedgerDB) -> () {
     ledger_db.commit_slot(slot).unwrap()
 }
 
+// These tests reproduce the README workflow for the ledger_rpc, ie:
+// - It creates and populate a simple ledger with a few transactions
+// - It initializes the rpc server
+// - It successively calls the different rpc methods registered and tests the answer
 #[test]
 fn simple_test_rpc() {
     let rt = tokio::runtime::Builder::new_multi_thread()
@@ -167,7 +141,7 @@ fn simple_test_rpc() {
         populate_ledger(&mut ledger_db);
 
         let ledger_rpc_module =
-            ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db.clone());
+            ledger_rpc::get_ledger_rpc::<i32, i32>(ledger_db.clone());
 
         rt.spawn(async move {
             let server = jsonrpsee::server::ServerBuilder::default()
@@ -188,29 +162,42 @@ fn simple_test_rpc() {
 
         let data = r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{ "batch_id": 1, "offset": 0}]],"id":1}"#
             .as_bytes();
-        let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0x329c58b0a9b08973bed32452c2cefa0ab567146505711337c955b24cf41c6e99","event_range":{"start":1,"end":1},"body":[116,120,49,32,98,111,100,121],"custom_receipt":"Reverted"}],"id":1}"#;
+        let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0x329c58b0a9b08973bed32452c2cefa0ab567146505711337c955b24cf41c6e99","event_range":{"start":1,"end":1},"body":[116,120,49,32,98,111,100,121],"custom_receipt":0}],"id":1}"#;
         query_test_helper(data, expected);
 
         let data = r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{ "batch_id": 1, "offset": 1}]],"id":1}"#
             .as_bytes();
-        let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xae87c50974dc43f4f70e84cb27e4630e4e47f782cff1e3d484310d82cea9acf6","event_range":{"start":1,"end":1},"body":[116,120,50,32,98,111,100,121],"custom_receipt":"Successful"}],"id":1}"#;
+        let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xae87c50974dc43f4f70e84cb27e4630e4e47f782cff1e3d484310d82cea9acf6","event_range":{"start":1,"end":3},"body":[116,120,50,32,98,111,100,121],"custom_receipt":1}],"id":1}"#;
         query_test_helper(data, expected);
         
         
         let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[2], "Standard"],"id":1}"#
             .as_bytes();
-        let expected = r#"{"jsonrpc":"2.0","error":{"code":-32000,"message":"io error: unexpected end of file"},"id":1}"#;
+        let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0x41c8790eb95a24d1b4aabc606e88c602073c72ada51ebc72300a82591dc49459","tx_range":{"start":3,"end":4},"txs":["0x329c58b0a9b08973bed32452c2cefa0ab567146505711337c955b24cf41c6e99"],"custom_receipt":1}],"id":1}"#;
         query_test_helper(data, expected);
 
-        let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[0], "Standard"],"id":2}"#
+        let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[1], "Compact"],"id":1}"#
             .as_bytes();
-        let expected = r#"{"jsonrpc":"2.0","result":[null],"id":2}"#;
+        let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xf344c1da53b56f7a49d02ee20899fb914bdfc3632db4f337ade196e72f5eb083","tx_range":{"start":1,"end":3},"custom_receipt":0}],"id":1}"#;
         query_test_helper(data, expected);
 
-
-        let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[1],"id":1}"#.as_bytes();
+        let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[0], "Compact"],"id":1}"#
+            .as_bytes();
         let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
         query_test_helper(data, expected);
+
+        let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[1],"id":1}"#.as_bytes();
+        let expected = r#"{"jsonrpc":"2.0","result":[{"key":[101,118,101,110,116,49,95,107,101,121],"value":[101,118,101,110,116,49,95,118,97,108,117,101]}],"id":1}"#;
+        query_test_helper(data, expected);
+
+        let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[2],"id":1}"#.as_bytes();
+        let expected = r#"{"jsonrpc":"2.0","result":[{"key":[101,118,101,110,116,50,95,107,101,121],"value":[101,118,101,110,116,50,95,118,97,108,117,101]}],"id":1}"#;
+        query_test_helper(data, expected);
+
+        let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[3],"id":1}"#.as_bytes();
+        let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
+        query_test_helper(data, expected);
+
 
         tx_end.send("drop server").unwrap();
     });
