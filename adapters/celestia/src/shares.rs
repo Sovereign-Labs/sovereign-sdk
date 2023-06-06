@@ -10,7 +10,7 @@ use prost::{
 };
 use serde::{de::Error, Deserialize, Serialize, Serializer};
 use sov_rollup_interface::Bytes;
-use tracing::error;
+use tracing::{error, info};
 
 use crate::verifier::PFB_NAMESPACE;
 
@@ -279,7 +279,8 @@ impl NamespaceGroup {
     pub fn from_b64(b64: &str) -> Result<Self, ShareParsingError> {
         let mut decoded = Vec::with_capacity((b64.len() + 3) / 4 * 3);
         // unsafe { decoded.set_len((b64.len() / 4 * 3)) }
-        if let Err(_) = base64::decode_config_buf(b64, base64::STANDARD, &mut decoded) {
+        if let Err(err) = base64::decode_config_buf(b64, base64::STANDARD, &mut decoded) {
+            info!("Error decoding NamespaceGroup from base64: {}", err);
             return Err(ShareParsingError::ErrInvalidBase64);
         }
         let mut output: Bytes = decoded.into();
@@ -347,7 +348,7 @@ impl NamespaceGroup {
         }
     }
 
-    pub fn blobs<'a>(&self) -> NamespaceIterator {
+    pub fn blobs(&self) -> NamespaceIterator {
         NamespaceIterator {
             offset: 0,
             shares: self,
@@ -359,7 +360,7 @@ pub struct Blob(pub Vec<Share>);
 
 impl<'a> From<BlobRef<'a>> for Blob {
     fn from(value: BlobRef<'a>) -> Self {
-        Self(value.0.iter().map(|s| s.clone()).collect())
+        Self(value.0.to_vec())
     }
 }
 
@@ -639,7 +640,7 @@ mod tests {
             let share = Share::new(bytes);
             let serialized = share.try_to_vec().unwrap();
             let deserialized: Share = Share::try_from_slice(&serialized).unwrap();
-            prop_assert_eq!(share, deserialized.clone());
+            prop_assert_eq!(share, deserialized);
         }
     }
 }

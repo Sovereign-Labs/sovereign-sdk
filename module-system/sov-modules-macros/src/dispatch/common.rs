@@ -153,14 +153,12 @@ pub fn get_attribute_values(item: &syn::DeriveInput, attribute_name: &str) -> Ve
         .iter()
         .find(|attr| attr.path.is_ident(attribute_name))
     {
-        if let Ok(meta) = attr.parse_meta() {
-            if let Meta::List(list) = meta {
-                values.extend(list.nested.iter().map(|n| {
-                    let mut tokens = TokenStream::new();
-                    n.to_tokens(&mut tokens);
-                    return tokens;
-                }));
-            }
+        if let Ok(Meta::List(list)) = attr.parse_meta() {
+            values.extend(list.nested.iter().map(|n| {
+                let mut tokens = TokenStream::new();
+                n.to_tokens(&mut tokens);
+                tokens
+            }));
         }
     }
 

@@ -28,7 +28,7 @@ pub mod test {
             &election_admin_private_key,
         );
         {
-            let mut demo = create_new_demo(&path);
+            let mut demo = create_new_demo(path);
 
             StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
             StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
@@ -54,7 +54,7 @@ pub mod test {
         // Generate a new storage instance after dumping data to the db.
         {
             let runtime = &mut Runtime::<DefaultContext>::default();
-            let storage = ProverStorage::with_path(&path).unwrap();
+            let storage = ProverStorage::with_path(path).unwrap();
             let mut working_set = WorkingSet::new(storage);
 
             let resp = runtime.election.results(&mut working_set);
@@ -76,7 +76,7 @@ pub mod test {
     fn test_demo_values_in_cache() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
-        let mut demo = create_new_demo(&path);
+        let mut demo = create_new_demo(path);
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();
@@ -139,7 +139,7 @@ pub mod test {
             &election_admin_private_key,
         );
         {
-            let mut demo = create_new_demo(&path);
+            let mut demo = create_new_demo(path);
 
             StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
             StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
@@ -161,7 +161,7 @@ pub mod test {
         // Generate a new storage instance, value are missing because we didn't call `end_slot()`;
         {
             let runtime = &mut Runtime::<C>::default();
-            let storage = ProverStorage::with_path(&path).unwrap();
+            let storage = ProverStorage::with_path(path).unwrap();
             let mut working_set = WorkingSet::new(storage);
 
             let resp = runtime.election.results(&mut working_set);
@@ -191,7 +191,7 @@ pub mod test {
             &election_admin_private_key,
         );
 
-        let mut demo = create_new_demo(&path);
+        let mut demo = create_new_demo(path);
 
         StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
         StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());

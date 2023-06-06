@@ -311,7 +311,7 @@ mod tests {
 
             let batch_size = txs[0].len() + txs[4].len() + 1;
 
-            let working_set = WorkingSet::new(storage.clone());
+            let working_set = WorkingSet::new(storage);
             let mut batch_builder = build_test_batch_builder(batch_size);
             batch_builder.set_working_set(working_set);
 

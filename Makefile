@@ -27,7 +27,7 @@ fix:  ## cargo fmt and fix
 lint:  ## cargo check and clippy
 	cargo check
 	cargo check --all-targets --all-features
-	cargo clippy --all
+	cargo clippy --all-targets --all-features
 
 check-features: ## Checks that project compiles with all combinations of features
 	cargo hack --feature-powerset check

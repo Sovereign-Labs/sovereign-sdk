@@ -24,7 +24,7 @@ impl CliParserMacro {
             ident,
             generics,
             data,
-        } = input.clone();
+        } = input;
 
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
 

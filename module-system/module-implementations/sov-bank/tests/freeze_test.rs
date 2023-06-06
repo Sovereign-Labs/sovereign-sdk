@@ -47,7 +47,7 @@ fn freeze_token() {
     };
 
     let _freeze = bank
-        .call(freeze_message.clone(), &minter_context, &mut working_set)
+        .call(freeze_message, &minter_context, &mut working_set)
         .expect("Failed to freeze token");
     assert!(working_set.events().is_empty());
 
@@ -57,7 +57,7 @@ fn freeze_token() {
         token_address: token_address.clone(),
     };
 
-    let freeze = bank.call(freeze_message.clone(), &minter_context, &mut working_set);
+    let freeze = bank.call(freeze_message, &minter_context, &mut working_set);
     assert!(freeze.is_err());
 
     assert_eq!(
@@ -92,11 +92,7 @@ fn freeze_token() {
         token_address: token_address_2.clone(),
     };
 
-    let freeze = bank.call(
-        freeze_message.clone(),
-        &unauthorized_context,
-        &mut working_set,
-    );
+    let freeze = bank.call(freeze_message, &unauthorized_context, &mut working_set);
     assert!(freeze.is_err());
     let unauthorized_minter_msg = format!(
         "Sender {} is not an authorized minter",
@@ -111,19 +107,18 @@ fn freeze_token() {
     let mint_message = CallMessage::Mint {
         coins: Coins {
             amount: mint_amount,
-            token_address: token_address.clone(),
+            token_address,
         },
-        minter_address: new_holder.clone(),
+        minter_address: new_holder,
     };
 
-    let query_total_supply = |token_address: Address,
-                              working_set: &mut WorkingSet<Storage>|
-     -> Option<u64> {
-        let total_supply: TotalSupplyResponse = bank.supply_of(token_address.clone(), working_set);
-        total_supply.amount
-    };
+    let query_total_supply =
+        |token_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+            let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set);
+            total_supply.amount
+        };
 
-    let minted = bank.call(mint_message.clone(), &minter_context, &mut working_set);
+    let minted = bank.call(mint_message, &minter_context, &mut working_set);
     assert!(minted.is_err());
 
     assert_eq!(
@@ -143,20 +138,19 @@ fn freeze_token() {
     };
 
     let _minted = bank
-        .call(mint_message.clone(), &minter_context, &mut working_set)
+        .call(mint_message, &minter_context, &mut working_set)
         .expect("Failed to mint token");
     assert!(working_set.events().is_empty());
 
     let total_supply = query_total_supply(token_address_2.clone(), &mut working_set);
     assert_eq!(Some(initial_balance + mint_amount), total_supply);
 
-    let query_user_balance = |token_address: Address,
-                              user_address: Address,
-                              working_set: &mut WorkingSet<Storage>|
-     -> Option<u64> {
-        bank.get_balance_of(user_address, token_address.clone(), working_set)
-    };
-    let bal = query_user_balance(token_address_2.clone(), minter_address, &mut working_set);
+    let query_user_balance =
+        |token_address: Address,
+         user_address: Address,
+         working_set: &mut WorkingSet<Storage>|
+         -> Option<u64> { bank.get_balance_of(user_address, token_address, working_set) };
+    let bal = query_user_balance(token_address_2, minter_address, &mut working_set);
 
     assert_eq!(Some(110), bal);
 }

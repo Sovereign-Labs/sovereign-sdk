@@ -167,7 +167,7 @@ impl SerializedTx {
                 call_data_path.as_ref()
             )
         })?;
-        cmd_parser(&module_name, &call_data)
+        cmd_parser(module_name, &call_data)
     }
 }
 
@@ -205,10 +205,14 @@ pub fn main() {
                 sender_address,
                 salt,
             } => {
-                let sender_address =
-                    Address::from(AddressBech32::try_from(sender_address.clone()).expect(
-                        &format!("Failed to derive pub key from string: {}", sender_address),
-                    ));
+                let sender_address = Address::from(
+                    AddressBech32::try_from(sender_address.clone()).unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to derive pub key from string: {}: {}",
+                            sender_address, e
+                        )
+                    }),
+                );
                 let token_address =
                     sov_bank::create_token_address::<C>(&token_name, sender_address.as_ref(), salt);
                 println!("{}", token_address);
