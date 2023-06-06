@@ -11,8 +11,8 @@ use sov_modules_api::{
     Context, DispatchCall, Genesis, Spec,
 };
 use sov_rollup_interface::stf::BatchReceipt;
+use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::traits::Zkvm;
-use sov_rollup_interface::{stf::StateTransitionFunction, traits::BatchTrait};
 use sov_state::CommittedWorkingSet;
 use sov_state::Storage;
 
@@ -84,7 +84,10 @@ where
         let sequencer = blob.sender();
         let sequencer = sequencer.as_ref();
 
-        self.apply_batch(sequencer, blob.data())
+        match self.apply_batch(sequencer, blob.data()) {
+            Ok(batch) => batch,
+            Err(e) => e.into(),
+        }
     }
 
     fn end_slot(&mut self) -> (Self::StateRoot, Self::Witness) {
