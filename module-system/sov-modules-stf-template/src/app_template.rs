@@ -12,7 +12,7 @@ use sov_rollup_interface::{
     traits::BatchTrait,
     Buf,
 };
-use sov_state::{CommittedWorkingSet, WorkingSet};
+use sov_state::{StateCheckpoint, WorkingSet};
 use std::{io::Read, marker::PhantomData};
 use tracing::{debug, error};
 
@@ -21,7 +21,7 @@ type Result<T> = std::result::Result<T, ApplyBatchError>;
 pub struct AppTemplate<C: Context, RT, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
-    pub(crate) working_set: Option<CommittedWorkingSet<C::Storage>>,
+    pub(crate) working_set: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
 }
 
@@ -202,7 +202,7 @@ where
                 }
             };
             // commit each step of the loop
-            batch_workspace = batch_workspace.commit().to_revertable();
+            batch_workspace = batch_workspace.checkpoint().to_revertable();
         }
         Ok((batch_workspace, tx_receipts))
     }
@@ -230,7 +230,7 @@ where
         let _ = batch_workspace.take_events();
 
         // Commit changes.
-        batch_workspace = batch_workspace.commit().to_revertable();
+        batch_workspace = batch_workspace.checkpoint().to_revertable();
 
         let (batch_workspace, batch) =
             self.deserialize_batch(batch_workspace, &batch_data_and_hash)?;
@@ -250,7 +250,7 @@ where
             .end_blob_hook(batch_receipt_contents, &mut batch_workspace)
             .expect("Impossible happened: error in exit_apply_batch");
 
-        self.working_set = Some(batch_workspace.commit());
+        self.working_set = Some(batch_workspace.checkpoint());
         Ok(BatchReceipt {
             batch_hash: batch_data_and_hash.hash,
             tx_receipts,

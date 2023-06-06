@@ -13,7 +13,7 @@ use sov_modules_api::{
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::traits::Zkvm;
-use sov_state::CommittedWorkingSet;
+use sov_state::StateCheckpoint;
 use sov_state::Storage;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -56,21 +56,20 @@ where
     type MisbehaviorProof = ();
 
     fn init_chain(&mut self, params: Self::InitialState) {
-        let mut working_set =
-            CommittedWorkingSet::new(self.current_storage.clone()).to_revertable();
+        let mut working_set = StateCheckpoint::new(self.current_storage.clone()).to_revertable();
 
         self.runtime
             .genesis(&params, &mut working_set)
             .expect("module initialization must succeed");
 
-        let (log, witness) = working_set.commit().freeze();
+        let (log, witness) = working_set.checkpoint().freeze();
         self.current_storage
             .validate_and_commit(log, &witness)
             .expect("Storage update must succeed");
     }
 
     fn begin_slot(&mut self, witness: Self::Witness) {
-        self.working_set = Some(CommittedWorkingSet::with_witness(
+        self.working_set = Some(StateCheckpoint::with_witness(
             self.current_storage.clone(),
             witness,
         ));

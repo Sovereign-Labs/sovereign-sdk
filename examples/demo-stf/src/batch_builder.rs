@@ -216,7 +216,7 @@ mod tests {
         };
         let config = GenesisConfig::<C>::new(value_setter_config);
         runtime.genesis(&config, &mut working_set).unwrap();
-        let (log, witness) = working_set.commit().freeze();
+        let (log, witness) = working_set.checkpoint().freeze();
         storage.validate_and_commit(log, &witness).unwrap();
 
         (storage, admin_private_key)

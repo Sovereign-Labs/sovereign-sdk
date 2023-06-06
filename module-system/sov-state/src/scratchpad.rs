@@ -42,11 +42,11 @@ impl<S: Storage> Debug for RevertableDelta<S> {
 
 /// This structure is responsible for storing the `read-write` set
 /// and is obtained from the `WorkingSet` by using either the `commit` or `revert` method.
-pub struct CommittedWorkingSet<S: Storage> {
+pub struct StateCheckpoint<S: Storage> {
     delta: Delta<S>,
 }
 
-impl<S: Storage> CommittedWorkingSet<S> {
+impl<S: Storage> StateCheckpoint<S> {
     pub fn new(inner: S) -> Self {
         Self {
             delta: Delta::new(inner),
@@ -72,9 +72,9 @@ impl<S: Storage> CommittedWorkingSet<S> {
 }
 
 /// This structure contains the read-write set and the events collected during the execution of a transaction.
-/// There are two ways to convert it into a CommittedWorkingSet:
-/// 1. By using the commit method, where all the changes are added to the underlying CommittedWorkingSet.
-/// 2. By using the revert method, where the most recent changes are reverted and the previously committed `CommittedWorkingSet` is returned.
+/// There are two ways to convert it into a StateCheckpoint:
+/// 1. By using the checkpoint() method, where all the changes are added to the underlying StateCheckpoint.
+/// 2. By using the revert method, where the most recent changes are reverted and the previous `StateCheckpoint` is returned.
 pub struct WorkingSet<S: Storage> {
     delta: RevertableDelta<S>,
     events: Vec<Event>,
@@ -82,21 +82,21 @@ pub struct WorkingSet<S: Storage> {
 
 impl<S: Storage> WorkingSet<S> {
     pub fn new(inner: S) -> Self {
-        CommittedWorkingSet::new(inner).to_revertable()
+        StateCheckpoint::new(inner).to_revertable()
     }
 
     pub fn with_witness(inner: S, witness: S::Witness) -> Self {
-        CommittedWorkingSet::with_witness(inner, witness).to_revertable()
+        StateCheckpoint::with_witness(inner, witness).to_revertable()
     }
 
-    pub fn commit(self) -> CommittedWorkingSet<S> {
-        CommittedWorkingSet {
+    pub fn checkpoint(self) -> StateCheckpoint<S> {
+        StateCheckpoint {
             delta: self.delta.commit(),
         }
     }
 
-    pub fn revert(self) -> CommittedWorkingSet<S> {
-        CommittedWorkingSet {
+    pub fn revert(self) -> StateCheckpoint<S> {
+        StateCheckpoint {
             delta: self.delta.revert(),
         }
     }
