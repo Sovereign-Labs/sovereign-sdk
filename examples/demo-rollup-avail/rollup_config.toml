@@ -1,0 +1,15 @@
+# We define the rollup's genesis to occur at Celestia block number `start_height`. The rollup will ignore
+# any Celestia blocks before this height
+start_height = 2
+
+[da]
+light_client_url = "http://127.0.0.1:7000"
+
+[runner.storage]
+# The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
+path = "demo_data"
+
+[rpc_config]
+# the host and port to bind the rpc server for
+bind_host = "127.0.0.1"
+bind_port = 12345

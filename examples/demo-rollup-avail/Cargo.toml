@@ -1,0 +1,46 @@
+[package]
+name = "sov-demo-rollup-avail"
+version = "0.1.0"
+edition = "2021"
+resolver = "2"
+authors = ["Sovereign Labs <info@sovereign.xyz>"]
+homepage = "sovereign.xyz"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = { workspace = true }
+borsh = { workspace = true, features = ["bytes"] }
+jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+tracing = { workspace = true }
+hex = { workspace = true }
+bytes = { workspace = true }
+futures = "0.3"
+
+# Crates which only this package depends on 
+tendermint = "0.32"
+tokio = { version = "1", features = ["full"] }
+tracing-subscriber = "0.3.17"
+
+presence = { path = "../../adapters/avail" }
+demo-stf = { path = "../demo-stf", features = ["native"] }
+demo-simple-stf = { path = "../demo-simple-stf" }
+sov-rollup-interface = { path = "../../rollup-interface" }
+sov-db = { path = "../../full-node/db/sov-db" }
+risc0-adapter = { path = "../../adapters/risc0" }
+sov-default-stf = { path = "../../module-system/sov-default-stf" }
+
+sov-bank = { path = "../../module-system/module-implementations/sov-bank", default-features = false }
+sov-election = { path = "../../module-system/module-implementations/examples/sov-election", default-features = false }
+sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", default-features = false }
+sov-modules-api = { path = "../../module-system/sov-modules-api", features=["native"] }
+sov-state = { path = "../../module-system/sov-state", features=["native"] }
+const-rollup-config = { path = "../const-rollup-config" }
+
+
+[dev-dependencies]
+tempfile = "3.5.0"
