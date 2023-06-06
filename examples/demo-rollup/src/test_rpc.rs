@@ -1,10 +1,9 @@
 use std::net::SocketAddr;
 
 use curl::easy::{Easy2, Handler, List, WriteError};
-use demo_stf::app::{DemoBatchReceipt, DemoTxReceipt};
-use serde::{Serialize, Deserialize};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_rollup_interface::{traits::{CanonicalHash, BlockHeaderTrait}, services::da::SlotData, stf::{BatchReceipt, TransactionReceipt, Event, EventKey}};
+use sov_rollup_interface::{mocks::{TestBlock, TestBlockHeader}, stf::{BatchReceipt, TransactionReceipt, Event}};
+
 use tokio::{sync::oneshot};
 
 use crate::{config::RpcConfig, ledger_rpc};
@@ -35,43 +34,6 @@ fn query_test_helper(data: &[u8], expected: &str) {
     assert_eq!(String::from_utf8_lossy(&contents.0), expected);
 }
 
-#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
-struct TestBlockHeader {
-    prev_hash: [u8; 32],
-}
-
-impl CanonicalHash for TestBlockHeader {
-    type Output = [u8; 32];
-
-    fn hash(&self) -> Self::Output {
-        self.prev_hash
-    }
-}
-
-impl BlockHeaderTrait for TestBlockHeader {
-    type Hash = [u8; 32];
-
-    fn prev_hash(&self) -> Self::Hash {
-        self.prev_hash
-    }
-}
-
-#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
-struct TestBlock {
-    curr_hash: [u8; 32],
-    header: TestBlockHeader,
-}
-
-impl SlotData for TestBlock {
-    type BlockHeader = TestBlockHeader;
-    fn hash(&self) -> [u8; 32] {
-        self.curr_hash
-    }
-
-    fn header(&self) -> &Self::BlockHeader {
-        &self.header
-    }
-}
 
 fn populate_ledger(ledger_db: &mut LedgerDB) -> () {
 

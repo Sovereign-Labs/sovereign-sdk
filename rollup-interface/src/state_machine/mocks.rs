@@ -6,7 +6,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     da::BlobTransactionTrait,
-    traits::AddressTrait,
+    services::da::SlotData,
+    traits::{AddressTrait, BlockHeaderTrait, CanonicalHash},
     zk::traits::{Matches, Zkvm},
 };
 
@@ -119,5 +120,43 @@ impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
 impl<Address: AddressTrait> TestBlob<Address> {
     pub fn new(data: Vec<u8>, address: Address) -> Self {
         Self { address, data }
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
+pub struct TestBlockHeader {
+    pub prev_hash: [u8; 32],
+}
+
+impl CanonicalHash for TestBlockHeader {
+    type Output = [u8; 32];
+
+    fn hash(&self) -> Self::Output {
+        self.prev_hash
+    }
+}
+
+impl BlockHeaderTrait for TestBlockHeader {
+    type Hash = [u8; 32];
+
+    fn prev_hash(&self) -> Self::Hash {
+        self.prev_hash
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
+pub struct TestBlock {
+    pub curr_hash: [u8; 32],
+    pub header: TestBlockHeader,
+}
+
+impl SlotData for TestBlock {
+    type BlockHeader = TestBlockHeader;
+    fn hash(&self) -> [u8; 32] {
+        self.curr_hash
+    }
+
+    fn header(&self) -> &Self::BlockHeader {
+        &self.header
     }
 }
