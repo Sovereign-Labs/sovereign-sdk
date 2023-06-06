@@ -141,7 +141,7 @@ impl<'a> StructDef<'a> {
                 }
             }
 
-            impl #impl_generics sov_modules_api::ModuleInfo for #ident #type_generics #where_clause{
+            impl #impl_generics ::sov_modules_api::ModuleInfo for #ident #type_generics #where_clause{
                 type Context = #generic_param;
 
                 #fn_address
