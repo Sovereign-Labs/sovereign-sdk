@@ -1,4 +1,4 @@
-use std::{net::SocketAddr, path::PathBuf, thread::sleep, time::Duration};
+use std::{net::SocketAddr, path::PathBuf, time::Duration};
 
 use demo_stf::app::{DemoBatchReceipt, DemoTxReceipt, NativeAppRunner};
 use jupiter::{
@@ -8,6 +8,7 @@ use jupiter::{
 use risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::{services::da::DaService, stf::StateTransitionRunner};
 use sov_state::config::Config;
+use tokio::{process::Command, time::sleep};
 use tracing::Level;
 
 use demo_stf::runner_config::Config as RunnerConfig;
@@ -29,59 +30,9 @@ impl Handler for Collector {
     }
 }
 
-#[tokio::test]
-async fn simple_test_rpc() {
-    let config: RollupConfig = RollupConfig {
-        start_height: 31337,
-        da: DaServiceConfig {
-            celestia_rpc_auth_token: "SECRET_RPC_TOKEN".to_string(),
-            celestia_rpc_address: "http://localhost:11111/".into(),
-            max_celestia_response_body_size: 980,
-        },
-        runner: RunnerConfig {
-            storage: StorageConfig {
-                path: PathBuf::from("/tmp"),
-            },
-        },
-        rpc_config: RpcConfig {
-            bind_host: "127.0.0.1".to_string(),
-            bind_port: 12345,
-        },
-    };
-
-    let rpc_config = config.rpc_config;
-    let address = SocketAddr::new(rpc_config.bind_host.parse().unwrap(), rpc_config.bind_port);
-
-    // Initializing logging
-    let subscriber = tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .finish();
-    tracing::subscriber::set_global_default(subscriber)
-        .map_err(|_err| eprintln!("Unable to set global default subscriber"))
-        .expect("Cannot fail to set subscriber");
-
-    // Initialize the ledger database, which stores blocks, transactions, events, etc.
-    let ledger_db = initialize_ledger(&config.runner.storage.path);
-
-    let ledger_rpc_module =
-        ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db.clone());
-
-    let _handle = tokio::spawn(async move {
-        start_rpc_server(ledger_rpc_module, address).await;
-    });
-
-    // Initialize the Celestia service using the DaService interface
-    let da_service = CelestiaService::new(
-        config.da.clone(),
-        RollupParams {
-            namespace: ROLLUP_NAMESPACE,
-        },
-    );
-
+fn query_test_helper(data: &[u8], expected: &str) {
     let mut headers = List::new();
     headers.append("Content-Type: application/json").unwrap();
-
-    let data = "{\"jsonrpc\":\"2.0\",\"method\":\"ledger_head\",\"params\":[],\"id\":1}".as_bytes();
 
     let mut easy = Easy2::new(Collector(Vec::new()));
     easy.http_headers(headers).unwrap();
@@ -93,5 +44,56 @@ async fn simple_test_rpc() {
 
     assert_eq!(easy.response_code().unwrap(), 200);
     let contents = easy.get_ref();
-    println!("{}", String::from_utf8_lossy(&contents.0));
+    assert_eq!(String::from_utf8_lossy(&contents.0), expected);
+}
+
+#[tokio::test]
+async fn readme_test_rpc() {
+    //celestia light start --core.ip https://limani.celestia-devops.dev --p2p.network arabica --gateway --rpc.port 11111
+    let mut celestia_task = Command::new("celestia")
+        .arg("light")
+        .arg("start")
+        .arg("--core.ip")
+        .arg("https://limani.celestia-devops.dev")
+        .arg("--p2p.network")
+        .arg("arabica")
+        .arg("--gateway")
+        .arg("--rpc.port")
+        .arg("11111")
+        .spawn()
+        .expect("failed to execute process");
+
+    sleep(Duration::from_secs(10)).await;
+
+    let mut rpc_server = Command::new("cargo")
+        .arg("run")
+        .spawn()
+        .expect("failed to execute process");
+
+    sleep(Duration::from_secs(10)).await;
+
+    let data = r#"{"jsonrpc":"2.0","method":"ledger_getSlots","params":[[7], "Compact"],"id":1}"#
+        .as_bytes();
+    let expected = r#"{"jsonrpc":"2.0","result":[{"number":7,"hash":"0x4083ae3bf35acdcfe6e6d78841bbab2b28b8e051b1e3f89ea01a9bf740dd4d67","batch_range":{"start":2,"end":2}}],"id":1}"#;
+    query_test_helper(data, expected);
+
+    let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[["0xf784a42555ed652ed045cc8675f5bc11750f1c7fb0fbc8d6a04470a88c7e1b6c"]],"id":1}"#
+        .as_bytes();
+    let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xf784a42555ed652ed045cc8675f5bc11750f1c7fb0fbc8d6a04470a88c7e1b6c","tx_range":{"start":1,"end":1},"txs":[],"custom_receipt":{"Slashed":"InvalidTransactionEncoding"}}],"id":1}"#;
+    query_test_helper(data, expected);
+
+    let data = r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{ "batch_id": 1, "offset": 0}]],"id":1}"#
+        .as_bytes();
+    let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
+    query_test_helper(data, expected);
+
+    let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[1],"id":1}"#.as_bytes();
+    let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
+    query_test_helper(data, expected);
+
+    rpc_server.kill().await.unwrap();
+    println!("Killed the rpc server");
+
+    celestia_task.kill().await.unwrap();
+    println!("Killed the celestia server");
 }
