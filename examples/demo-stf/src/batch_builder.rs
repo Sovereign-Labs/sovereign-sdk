@@ -161,7 +161,7 @@ mod tests {
     impl<C: Context> TestRuntime<C> {
         fn new() -> Self {
             TestRuntime {
-                value_setter: sov_value_setter::ValueSetter::new(),
+                value_setter: sov_value_setter::ValueSetter::default(),
             }
         }
     }

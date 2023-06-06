@@ -64,13 +64,13 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
     type Inner = DemoApp<DefaultContext, Vm>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
-        let runtime = Runtime::new();
+        let runtime = Runtime::default();
         let storage = ProverStorage::with_config(runtime_config.storage)
             .expect("Failed to open prover storage");
         let app = AppTemplate::new(storage, runtime);
         let batch_size_bytes = 1024 * 100; // 100 KB
         let batch_builder =
-            FiFoStrictBatchBuilder::new(batch_size_bytes, u32::MAX as usize, Runtime::new());
+            FiFoStrictBatchBuilder::new(batch_size_bytes, u32::MAX as usize, Runtime::default());
         Self {
             stf: app,
             batch_builder,
@@ -91,14 +91,14 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
     type Inner = DemoApp<ZkDefaultContext, Vm>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
-        let runtime = Runtime::new();
+        let runtime = Runtime::default();
         let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
         let app: AppTemplate<ZkDefaultContext, Runtime<ZkDefaultContext>, Vm> =
             AppTemplate::new(storage, runtime);
 
         let batch_size_bytes = 1024 * 100; // 100 KB
         let batch_builder =
-            FiFoStrictBatchBuilder::new(batch_size_bytes, u32::MAX as usize, Runtime::new());
+            FiFoStrictBatchBuilder::new(batch_size_bytes, u32::MAX as usize, Runtime::default());
         Self {
             stf: app,
             batch_builder,

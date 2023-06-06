@@ -180,7 +180,6 @@ where
     }
 }
 
-/// Every module has to implement this trait.
 /// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
 /// This allows developers to override only some of the methods in their implementation and safely ignore the others.
 pub trait Module {
@@ -215,11 +214,8 @@ pub trait Module {
 }
 
 /// Every module has to implement this trait.
-pub trait ModuleInfo {
+pub trait ModuleInfo: Default {
     type Context: Context;
-
-    /// Module constructor.
-    fn new() -> Self;
 
     /// Returns address of the module.
     fn address(&self) -> &<Self::Context as Spec>::Address;
