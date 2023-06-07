@@ -12,7 +12,10 @@ pub trait Genesis {
     fn genesis(
         &self,
         config: &Self::Config,
-        working_set: &mut WorkingSet<<<Self as Genesis>::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<
+            <<Self as Genesis>::Context as Spec>::Storage,
+            <<Self as Genesis>::Context as Spec>::GasUnit,
+        >,
     ) -> Result<(), Error>;
 }
 
@@ -28,7 +31,10 @@ pub trait DispatchCall {
     fn dispatch_call(
         &self,
         message: Self::Decodable,
-        working_set: &mut WorkingSet<<<Self as DispatchCall>::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<
+            <<Self as DispatchCall>::Context as Spec>::Storage,
+            <<Self as DispatchCall>::Context as Spec>::GasUnit,
+        >,
         context: &Self::Context,
     ) -> Result<CallResponse, Error>;
 

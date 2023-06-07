@@ -1,6 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_rollup_interface::stf::Event;
-use std::{collections::HashMap, fmt::Debug};
+use std::{collections::HashMap, fmt::Debug, marker::PhantomData};
 
 use crate::{
     internal_cache::{OrderedReadsAndWrites, StorageInternalCache},
@@ -42,28 +42,32 @@ impl<S: Storage> Debug for RevertableDelta<S> {
 
 /// This structure is responsible for storing the `read-write` set
 /// and is obtained from the `WorkingSet` by using either the `commit` or `revert` method.
-pub struct CommittedWorkingSet<S: Storage> {
+pub struct CommittedWorkingSet<S: Storage, G: GasUnit> {
     delta: Delta<S>,
+    _p: PhantomData<G>,
 }
 
-impl<S: Storage> CommittedWorkingSet<S> {
+impl<S: Storage, G: GasUnit> CommittedWorkingSet<S, G> {
     pub fn new(inner: S) -> Self {
         Self {
             delta: Delta::new(inner),
+            _p: PhantomData,
         }
     }
 
     pub fn with_witness(inner: S, witness: S::Witness) -> Self {
         Self {
             delta: Delta::with_witness(inner, witness),
+            _p: PhantomData,
         }
     }
 
-    pub fn to_revertable(self) -> WorkingSet<S> {
+    pub fn to_revertable(self) -> WorkingSet<S, G> {
         WorkingSet {
             delta: self.delta.get_revertable_wrapper(),
             events: Default::default(),
             remaining_gas: todo!(),
+            _p: PhantomData,
         }
     }
 
@@ -82,18 +86,33 @@ pub struct StdGasConfig<G: GasUnit> {
     pub get_cost: G,
 }
 
+pub struct Gas2D {
+    pub native: u64,
+    pub zk: u64,
+}
+
+pub struct Price2D {}
+
+impl GasUnit for Gas2D {
+    type Price = Price2D;
+    fn value(&self, p: Price2D) -> u64 {
+        todo!()
+    }
+}
+
 /// This structure contains the read-write set and the events collected during the execution of a transaction.
 /// There are two ways to convert it into a CommittedWorkingSet:
 /// 1. By using the commit method, where all the changes are added to the underlying CommittedWorkingSet.
 /// 2. By using the revert method, where the most recent changes are reverted and the previously committed `CommittedWorkingSet` is returned.
-pub struct WorkingSet<S: Storage> {
+pub struct WorkingSet<S: Storage, G: GasUnit> {
     delta: RevertableDelta<S>,
     events: Vec<Event>,
     remaining_gas: u64,
+    _p: PhantomData<G>,
 }
 
-impl<S: Storage> WorkingSet<S> {
-    pub fn deduct_gas<G: GasUnit>(&mut self, value: &G) -> Result<(), anyhow::Error> {
+impl<S: Storage, G: GasUnit> WorkingSet<S, G> {
+    pub fn deduct_gas(&mut self, value: &G) -> Result<(), anyhow::Error> {
         todo!()
     }
 
@@ -105,15 +124,17 @@ impl<S: Storage> WorkingSet<S> {
         CommittedWorkingSet::with_witness(inner, witness).to_revertable()
     }
 
-    pub fn commit(self) -> CommittedWorkingSet<S> {
+    pub fn commit(self) -> CommittedWorkingSet<S, G> {
         CommittedWorkingSet {
             delta: self.delta.commit(),
+            _p: PhantomData,
         }
     }
 
-    pub fn revert(self) -> CommittedWorkingSet<S> {
+    pub fn revert(self) -> CommittedWorkingSet<S, G> {
         CommittedWorkingSet {
             delta: self.delta.revert(),
+            _p: PhantomData,
         }
     }
 
@@ -147,7 +168,7 @@ impl<S: Storage> WorkingSet<S> {
     }
 }
 
-impl<S: Storage> WorkingSet<S> {
+impl<S: Storage, G: GasUnit> WorkingSet<S, G> {
     pub(crate) fn set_value<K: BorshSerialize, V: BorshSerialize>(
         &mut self,
         prefix: &Prefix,

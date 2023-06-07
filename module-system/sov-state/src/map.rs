@@ -1,7 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use std::marker::PhantomData;
 
-use crate::{storage::StorageKey, Prefix, Storage, WorkingSet};
+use crate::{storage::StorageKey, GasUnit, Prefix, Storage, WorkingSet};
 use thiserror::Error;
 
 /// A container that maps keys to values.
@@ -28,20 +28,29 @@ impl<K: BorshSerialize, V: BorshSerialize + BorshDeserialize> StateMap<K, V> {
     }
 
     /// Inserts a key-value pair into the map.
-    pub fn set<S: Storage>(&self, key: &K, value: &V, working_set: &mut WorkingSet<S>) {
+    pub fn set<S: Storage, G: GasUnit>(
+        &self,
+        key: &K,
+        value: &V,
+        working_set: &mut WorkingSet<S, G>,
+    ) {
         working_set.set_value(self.prefix(), key, value)
     }
 
     /// Returns the value corresponding to the key or None if key is absent in the StateMap.
-    pub fn get<S: Storage>(&self, key: &K, working_set: &mut WorkingSet<S>) -> Option<V> {
+    pub fn get<S: Storage, G: GasUnit>(
+        &self,
+        key: &K,
+        working_set: &mut WorkingSet<S, G>,
+    ) -> Option<V> {
         working_set.get_value(self.prefix(), key)
     }
 
     /// Returns the value corresponding to the key or Error if key is absent in the StateMap.
-    pub fn get_or_err<S: Storage>(
+    pub fn get_or_err<S: Storage, G: GasUnit>(
         &self,
         key: &K,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut WorkingSet<S, G>,
     ) -> Result<V, Error> {
         self.get(key, working_set).ok_or_else(|| {
             Error::MissingValue(self.prefix().clone(), StorageKey::new(self.prefix(), key))
@@ -49,15 +58,19 @@ impl<K: BorshSerialize, V: BorshSerialize + BorshDeserialize> StateMap<K, V> {
     }
 
     /// Removes a key from the StateMap, returning the corresponding value (or None if the key is absent).
-    pub fn remove<S: Storage>(&self, key: &K, working_set: &mut WorkingSet<S>) -> Option<V> {
+    pub fn remove<S: Storage, G: GasUnit>(
+        &self,
+        key: &K,
+        working_set: &mut WorkingSet<S, G>,
+    ) -> Option<V> {
         working_set.remove_value(self.prefix(), key)
     }
 
     /// Removes a key from the StateMap, returning the corresponding value (or Error if the key is absent).
-    pub fn remove_or_err<S: Storage>(
+    pub fn remove_or_err<S: Storage, G: GasUnit>(
         &self,
         key: &K,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut WorkingSet<S, G>,
     ) -> Result<V, Error> {
         self.remove(key, working_set).ok_or_else(|| {
             Error::MissingValue(self.prefix().clone(), StorageKey::new(self.prefix(), key))
@@ -65,7 +78,7 @@ impl<K: BorshSerialize, V: BorshSerialize + BorshDeserialize> StateMap<K, V> {
     }
 
     /// Deletes a key from the StateMap.
-    pub fn delete<S: Storage>(&self, key: &K, working_set: &mut WorkingSet<S>) {
+    pub fn delete<S: Storage, G: GasUnit>(&self, key: &K, working_set: &mut WorkingSet<S, G>) {
         working_set.delete_value(self.prefix(), key);
     }
 

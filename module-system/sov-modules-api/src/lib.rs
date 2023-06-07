@@ -24,7 +24,7 @@ pub use prefix::Prefix;
 pub use response::CallResponse;
 use serde::{Deserialize, Serialize};
 pub use sov_rollup_interface::traits::AddressTrait;
-use sov_state::{Storage, Witness, WorkingSet};
+use sov_state::{GasUnit, Storage, Witness, WorkingSet};
 use thiserror::Error;
 
 impl AsRef<[u8]> for Address {
@@ -130,6 +130,8 @@ pub trait Spec {
     /// Authenticated state storage used by the rollup. Typically some variant of a merkle-patricia trie.
     type Storage: Storage + Clone;
 
+    type GasUnit: GasUnit;
+
     /// The public key used for digital signatures
     type PublicKey: borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug + PublicKey;
 
@@ -174,7 +176,10 @@ where
     fn genesis(
         &self,
         config: &Self::Config,
-        working_set: &mut WorkingSet<<<Self as Genesis>::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<
+            <<Self as Genesis>::Context as Spec>::Storage,
+            <Self::Context as Spec>::GasUnit,
+        >,
     ) -> Result<(), Error> {
         <Self as Module>::genesis(self, config, working_set)
     }
@@ -198,7 +203,10 @@ pub trait Module {
     fn genesis(
         &self,
         _config: &Self::Config,
-        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut WorkingSet<
+            <Self::Context as Spec>::Storage,
+            <Self::Context as Spec>::GasUnit,
+        >,
     ) -> Result<(), Error> {
         Ok(())
     }
@@ -209,7 +217,10 @@ pub trait Module {
         &self,
         _message: Self::CallMessage,
         _context: &Self::Context,
-        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut WorkingSet<
+            <Self::Context as Spec>::Storage,
+            <Self::Context as Spec>::GasUnit,
+        >,
     ) -> Result<CallResponse, Error> {
         unreachable!()
     }

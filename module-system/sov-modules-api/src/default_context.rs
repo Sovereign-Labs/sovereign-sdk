@@ -4,10 +4,10 @@ use crate::{Address, AddressTrait, Context, PublicKey, Spec};
 use jmt::SimpleHasher;
 #[cfg(feature = "native")]
 use serde::{Deserialize, Serialize};
-use sov_state::DefaultStorageSpec;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
 use sov_state::{ArrayWitness, ZkStorage};
+use sov_state::{DefaultStorageSpec, Gas2D};
 
 #[cfg(feature = "native")]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -23,6 +23,7 @@ impl Spec for DefaultContext {
     type Hasher = sha2::Sha256;
     type Signature = DefaultSignature;
     type Witness = ArrayWitness;
+    type GasUnit = Gas2D;
 }
 
 #[cfg(feature = "native")]
@@ -48,6 +49,7 @@ impl Spec for ZkDefaultContext {
     type Hasher = sha2::Sha256;
     type Signature = DefaultSignature;
     type Witness = ArrayWitness;
+    type GasUnit = Gas2D;
 }
 
 impl Context for ZkDefaultContext {

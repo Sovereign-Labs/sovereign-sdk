@@ -17,20 +17,6 @@ pub struct CallMessage<C: sov_modules_api::Context> {
     _p: PhantomData<C>,
 }
 
-pub struct Gas2D {
-    pub native: u64,
-    pub zk: u64,
-}
-
-pub struct Price2D {}
-
-impl GasUnit for Gas2D {
-    type Price = Price2D;
-    fn value(&self, p: Price2D) -> u64 {
-        todo!()
-    }
-}
-
 pub struct GasConfig<GasUnit> {
     pub method_1_cost: GasUnit,
 }
@@ -44,7 +30,7 @@ pub struct SomeModule<C: sov_modules_api::Context> {
     pub(crate) some_state_value: StateValue<u64>,
 
     //#[gas] Q should we hide it and gerenrate it?
-    pub(crate) gas_config: GasConfig<Gas2D>,
+    pub(crate) gas_config: GasConfig<C::GasUnit>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for SomeModule<C> {
@@ -52,14 +38,14 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for SomeModule<C> {
 
     type Config = SomeConfig<C>;
 
-    type GasConfig = GasConfig<Gas2D>;
+    type GasConfig = GasConfig<C::GasUnit>;
 
     type CallMessage = CallMessage<C>;
 
     fn genesis(
         &self,
         config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C::Storage, C::GasUnit>,
     ) -> Result<(), Error> {
         todo!()
     }
@@ -68,7 +54,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for SomeModule<C> {
         &self,
         msg: Self::CallMessage,
         context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C::Storage, C::GasUnit>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         working_set.deduct_gas(&self.gas_config.method_1_cost)?;
 

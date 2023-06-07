@@ -12,14 +12,20 @@ pub trait TxHooks {
     fn pre_dispatch_tx_hook(
         &self,
         tx: Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<
+            <Self::Context as Spec>::Storage,
+            <Self::Context as Spec>::GasUnit,
+        >,
     ) -> anyhow::Result<<Self::Context as Spec>::Address>;
 
     /// Runs after the tx is dispatched to an appropriate module.
     fn post_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<
+            <Self::Context as Spec>::Storage,
+            <Self::Context as Spec>::GasUnit,
+        >,
     ) -> anyhow::Result<()>;
 }
 
@@ -35,13 +41,19 @@ pub trait ApplyBlobHooks {
         &self,
         sequencer: &[u8],
         raw_blob: &[u8],
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<
+            <Self::Context as Spec>::Storage,
+            <Self::Context as Spec>::GasUnit,
+        >,
     ) -> anyhow::Result<()>;
 
     /// Executes at the end of apply_blob and rewards the sequencer. This method is not invoked if the sequencer has been slashed.
     fn end_blob_hook(
         &self,
         result: Self::BlobResult,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut WorkingSet<
+            <Self::Context as Spec>::Storage,
+            <Self::Context as Spec>::GasUnit,
+        >,
     ) -> anyhow::Result<()>;
 }
