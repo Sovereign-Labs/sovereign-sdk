@@ -11,7 +11,7 @@ use demo_stf::app::{DefaultContext, DemoBatchReceipt, DemoTxReceipt};
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runner_config::from_toml_path;
-use demo_stf::runtime::{GenesisConfig, Runtime};
+use demo_stf::runtime::GenesisConfig;
 use jsonrpsee::core::server::rpc_module::Methods;
 use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
@@ -26,12 +26,13 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::Storage;
 use std::env;
 use std::net::SocketAddr;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::Level;
 use tracing::{debug, info};
 
 // RPC related imports
 use demo_stf::app::get_rpc_methods;
-use demo_stf::batch_builder::FiFoStrictBatchBuilder;
 use sov_modules_api::RpcRunner;
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 
@@ -73,22 +74,24 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
     )
 }
 
-fn start_batch_producing(
-    batch_builder: FiFoStrictBatchBuilder<Runtime<DefaultContext>, DefaultContext>,
-    da_service: CelestiaService,
+fn start_batch_producing<
+    B: BatchBuilder + Send + Sync + 'static,
+    T: DaService + Send + Sync + 'static,
+>(
+    batch_builder: Arc<RwLock<B>>,
+    da_service: Arc<T>,
 ) {
-    let mut batch_builder = batch_builder;
     tokio::spawn(async move {
         loop {
-            match batch_builder.get_next_blob() {
+            match batch_builder.write().await.get_next_blob() {
                 Ok(blob) => {
                     let blob: Vec<u8> = blob.into_iter().flatten().collect();
                     match da_service.send_transaction(&blob).await {
                         Ok(_) => {
                             info!("Successfully produced batch");
                         }
-                        Err(err) => {
-                            info!("Error while producing batch: {:?}", err);
+                        Err(_err) => {
+                            info!("Error while producing batch");
                         }
                     };
                 }
@@ -125,11 +128,13 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Our state transition function implements the StateTransitionRunner interface,
     // so we use that to initialize the STF
-    let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
+    let demo_runner = Arc::new(RwLock::new(NativeAppRunner::<Risc0Host>::new(
+        rollup_config.runner.clone(),
+    )));
 
     // Our state transition also implements the RpcRunner interface,
     // so we use that to initialize the RPC server.
-    let storage = demo_runner.get_storage();
+    let storage = demo_runner.read().await.get_storage();
     let is_storage_empty = storage.is_empty();
     let mut methods = get_rpc_methods(storage);
     let ledger_rpc_module =
@@ -143,34 +148,39 @@ async fn main() -> Result<(), anyhow::Error> {
     });
 
     // Initialize the Celestia service using the DaService interface
-    let da_service = CelestiaService::new(
+    let da_service = Arc::new(CelestiaService::new(
         rollup_config.da.clone(),
         RollupParams {
             namespace: ROLLUP_NAMESPACE,
         },
-    );
+    ));
+
+    // start_batch_producing(demo_runner.clone(), da_service.clone());
 
     // For demonstration,  we also initialize the DaVerifier interface using the DaVerifier interface
     // Running the verifier is only *necessary* during proof generation not normal execution
-    let da_verifier = CelestiaVerifier::new(RollupParams {
+    let da_verifier = Arc::new(CelestiaVerifier::new(RollupParams {
         namespace: ROLLUP_NAMESPACE,
-    });
+    }));
 
-    let demo = demo_runner.inner_mut();
-    // Check if the rollup has previously been initialized
-    if is_storage_empty {
-        info!("No history detected. Initializing chain...");
-        demo.init_chain(get_genesis_config());
-        info!("Chain initialization is done.");
-    } else {
-        debug!("Chain is already initialized. Skipping initialization.");
-    }
+    let mut prev_state_root = {
+        let mut demo_runner = demo_runner.write().await;
+        let demo = demo_runner.inner_mut();
+        // Check if the rollup has previously been initialized
+        if is_storage_empty {
+            info!("No history detected. Initializing chain...");
+            demo.init_chain(get_genesis_config());
+            info!("Chain initialization is done.");
+        } else {
+            debug!("Chain is already initialized. Skipping initialization.");
+        }
 
-    // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
-    // This will be removed shortly.
-    demo.begin_slot(Default::default());
-    let (prev_state_root, _) = demo.end_slot();
-    let mut prev_state_root = prev_state_root.0;
+        // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
+        // This will be removed shortly.
+        demo.begin_slot(Default::default());
+        let (prev_state_root, _) = demo.end_slot();
+        prev_state_root.0
+    };
 
     // Start the main rollup loop
     let item_numbers = ledger_db.get_next_items_numbers();
@@ -199,14 +209,19 @@ async fn main() -> Result<(), anyhow::Error> {
             .is_ok());
         info!("Received {} blobs", blob_txs.len());
 
-        demo.begin_slot(Default::default());
         let mut data_to_commit = SlotCommit::new(filtered_block);
-        for blob in blob_txs.clone() {
-            let receipts = demo.apply_blob(blob, None);
-            info!("receipts: {:?}", receipts);
-            data_to_commit.add_batch(receipts);
-        }
-        let (next_state_root, _witness) = demo.end_slot();
+        let next_state_root = {
+            let mut demo_runner = demo_runner.write().await;
+            let demo = demo_runner.inner_mut();
+            demo.begin_slot(Default::default());
+            for blob in blob_txs.clone() {
+                let receipts = demo.apply_blob(blob, None);
+                info!("receipts: {:?}", receipts);
+                data_to_commit.add_batch(receipts);
+            }
+            let (next_state_root, _witness) = demo.end_slot();
+            next_state_root
+        };
 
         // Store the resulting receipts in the ledger database
         ledger_db.commit_slot(data_to_commit)?;
