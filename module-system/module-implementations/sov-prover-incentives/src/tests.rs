@@ -92,7 +92,7 @@ fn test_burn_on_invalid_proof() {
     // Assert that the prover's bond amount has been burned
     assert_eq!(
         module
-            .get_bond_amount(prover_address.clone(), &mut working_set)
+            .get_bond_amount(prover_address, &mut working_set)
             .value,
         0
     );
@@ -130,7 +130,7 @@ fn test_valid_proof() {
     // Assert that the prover's bond amount has not been burned
     assert_eq!(
         module
-            .get_bond_amount(prover_address.clone(), &mut working_set)
+            .get_bond_amount(prover_address, &mut working_set)
             .value,
         BOND_AMOUNT
     );
@@ -183,11 +183,10 @@ fn test_unbonding() {
     );
 
     // Assert that the prover's unlocked balance has increased by the amount they unbonded
-    let unlocked_balance = module.bank.get_balance_of(
-        prover_address.clone(),
-        token_address.clone(),
-        &mut working_set,
-    );
+    let unlocked_balance =
+        module
+            .bank
+            .get_balance_of(prover_address, token_address, &mut working_set);
     assert_eq!(
         unlocked_balance,
         Some(BOND_AMOUNT + initial_unlocked_balance)
@@ -211,7 +210,7 @@ fn test_prover_not_bonded() {
     // Assert that the prover no longer has bonded tokens
     assert_eq!(
         module
-            .get_bond_amount(prover_address.clone(), &mut working_set)
+            .get_bond_amount(prover_address, &mut working_set)
             .value,
         0
     );

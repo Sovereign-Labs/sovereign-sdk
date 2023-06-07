@@ -270,10 +270,10 @@ impl LedgerDB {
         let mut iter = db.iter::<T>()?;
         iter.seek_to_last();
 
-        return match iter.next() {
+        match iter.next() {
             Some(Ok((version, _))) => Ok(Some(version.into())),
             Some(Err(e)) => Err(e),
             _ => Ok(None),
-        };
+        }
     }
 }

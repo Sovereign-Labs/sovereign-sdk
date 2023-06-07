@@ -98,7 +98,7 @@ fn test_state_map_with_remove() {
     for (before_remove, after_remove) in create_storage_operations() {
         let key = 1;
         let value = 11;
-        let (state_map, mut working_set) = create_state_map_and_storage(key, value, &path);
+        let (state_map, mut working_set) = create_state_map_and_storage(key, value, path);
 
         working_set = before_remove.execute(working_set);
         assert_eq!(state_map.remove(&key, &mut working_set).unwrap(), value);
@@ -115,7 +115,7 @@ fn test_state_map_with_delete() {
     for (before_delete, after_delete) in create_storage_operations() {
         let key = 1;
         let value = 11;
-        let (state_map, mut working_set) = create_state_map_and_storage(key, value, &path);
+        let (state_map, mut working_set) = create_state_map_and_storage(key, value, path);
 
         working_set = before_delete.execute(working_set);
         state_map.delete(&key, &mut working_set);
@@ -145,7 +145,7 @@ fn test_state_value_with_remove() {
     let path = tempdir.path();
     for (before_remove, after_remove) in create_storage_operations() {
         let value = 11;
-        let (state_value, mut working_set) = create_state_value_and_storage(value, &path);
+        let (state_value, mut working_set) = create_state_value_and_storage(value, path);
 
         working_set = before_remove.execute(working_set);
         assert_eq!(state_value.remove(&mut working_set).unwrap(), value);
@@ -161,7 +161,7 @@ fn test_state_value_with_delete() {
     let path = tempdir.path();
     for (before_delete, after_delete) in create_storage_operations() {
         let value = 11;
-        let (state_value, mut working_set) = create_state_value_and_storage(value, &path);
+        let (state_value, mut working_set) = create_state_value_and_storage(value, path);
 
         working_set = before_delete.execute(working_set);
         state_value.delete(&mut working_set);
@@ -179,7 +179,7 @@ fn test_witness_roundtrip() {
 
     // Native execution
     let witness: ArrayWitness = {
-        let storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
+        let storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage.clone());
         state_value.set(&11, &mut working_set);
         let _ = state_value.get(&mut working_set);

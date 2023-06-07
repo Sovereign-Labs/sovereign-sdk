@@ -155,9 +155,9 @@ macro_rules! u64_wrapper {
         )]
         pub struct $name(pub u64);
 
-        impl Into<u64> for $name {
-            fn into(self) -> u64 {
-                self.0
+        impl From<$name> for u64 {
+            fn from(value: $name) -> Self {
+                value.0
             }
         }
     };

@@ -33,4 +33,4 @@ hex = { workspace = true }
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-modules-api/native",  "sov-state/native", "sov-bank/native" ]
+native = ["serde", "sov-modules-api/native", "sov-state/native", "sov-bank/native"]

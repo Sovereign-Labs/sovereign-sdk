@@ -56,6 +56,7 @@ pub enum CallMessage<C: sov_modules_api::Context> {
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn create_token(
         &self,
         token_name: String,

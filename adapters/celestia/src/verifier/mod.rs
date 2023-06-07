@@ -161,12 +161,11 @@ impl da::DaVerifier for CelestiaVerifier {
             // Collect all of the shares data into a single array
             let trailing_shares = tx_shares[1..]
                 .iter()
-                .map(|share| share.data_ref().iter())
-                .flatten();
+                .flat_map(|share| share.data_ref().iter());
             let tx_data: Vec<u8> = tx_shares[0].data_ref()[start_offset..]
                 .iter()
                 .chain(trailing_shares)
-                .map(|x| *x)
+                .copied()
                 .collect();
 
             // Deserialize the pfb transaction

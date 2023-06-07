@@ -185,7 +185,7 @@ mod test {
         let tests = create_tests();
         {
             for test in tests.clone() {
-                let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
+                let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
                 let mut storage = WorkingSet::new(prover_storage.clone());
                 assert_eq!(prover_storage.db.get_next_version(), test.version);
 
@@ -201,7 +201,7 @@ mod test {
         }
 
         {
-            let storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
+            let storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
             assert_eq!(storage.db.get_next_version(), (tests.len() + 1) as u64);
             for test in tests {
                 assert_eq!(
@@ -217,7 +217,7 @@ mod test {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
         {
-            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
+            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
             assert!(prover_storage.is_empty());
         }
 
@@ -225,7 +225,7 @@ mod test {
         let value = StorageValue::from("some_value");
         // First restart
         {
-            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
+            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
             assert!(prover_storage.is_empty());
             let mut storage = WorkingSet::new(prover_storage.clone());
             storage.set(key.clone(), value.clone());
@@ -237,7 +237,7 @@ mod test {
 
         // Correctly restart from disk
         {
-            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(&path).unwrap();
+            let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
             assert!(!prover_storage.is_empty());
             assert_eq!(value, prover_storage.get(key, &Default::default()).unwrap());
         }

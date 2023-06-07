@@ -164,9 +164,7 @@ fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> To
 #[proc_macro_attribute]
 pub fn expose_rpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as syn::ItemImpl);
-    handle_macro_error(
-        dispatch::derive_rpc::rpc_outer_impls(attr.into(), input).map(|ok| ok.into()),
-    )
+    handle_macro_error(dispatch::derive_rpc::rpc_outer_impls(attr.into(), input))
 }
 
 #[proc_macro_attribute]
@@ -177,9 +175,5 @@ pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
     // let input = parse_macro_input!(input);
     let cli_parser_macro = CliParserMacro::new("Cmd");
 
-    handle_macro_error(
-        cli_parser_macro
-            .derive_cli(input, context_type)
-            .map(|ok| ok.into()),
-    )
+    handle_macro_error(cli_parser_macro.derive_cli(input, context_type))
 }

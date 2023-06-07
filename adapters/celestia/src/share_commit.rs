@@ -66,11 +66,11 @@ fn power_of_2_mountain_range(mut len: usize, square_size: usize) -> Vec<usize> {
     while len != 0 {
         if len >= square_size {
             output.push(square_size);
-            len = len - square_size;
+            len -= square_size;
         } else {
             let p = next_lower_power_of_2(len);
             output.push(p);
-            len = len - p;
+            len -= p;
         }
     }
     output

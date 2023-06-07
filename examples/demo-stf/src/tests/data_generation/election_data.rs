@@ -127,7 +127,7 @@ impl MessageGenerator for ElectionCallMessages {
         _is_last: bool,
     ) -> Transaction<DefaultContext> {
         let message = Runtime::<DefaultContext>::encode_election_call(message);
-        Transaction::<DefaultContext>::new_signed_tx(&sender, message, nonce)
+        Transaction::<DefaultContext>::new_signed_tx(sender, message, nonce)
     }
 }
 
@@ -172,7 +172,7 @@ impl MessageGenerator for InvalidElectionCallMessages {
         _is_last: bool,
     ) -> Transaction<DefaultContext> {
         let message = Runtime::<DefaultContext>::encode_election_call(message);
-        Transaction::<DefaultContext>::new_signed_tx(&sender, message, nonce)
+        Transaction::<DefaultContext>::new_signed_tx(sender, message, nonce)
     }
 }
 
@@ -249,7 +249,7 @@ impl MessageGenerator for BadNonceElectionCallMessages {
         let nonce = if flag { nonce + 1 } else { nonce };
 
         let message = Runtime::<DefaultContext>::encode_election_call(message);
-        Transaction::<DefaultContext>::new_signed_tx(&sender, message, nonce)
+        Transaction::<DefaultContext>::new_signed_tx(sender, message, nonce)
     }
 }
 
@@ -286,6 +286,6 @@ impl MessageGenerator for BadSerializationElectionCallMessages {
             Runtime::<DefaultContext>::encode_election_call(message)
         };
 
-        Transaction::<DefaultContext>::new_signed_tx(&sender, call_data, nonce)
+        Transaction::<DefaultContext>::new_signed_tx(sender, call_data, nonce)
     }
 }
