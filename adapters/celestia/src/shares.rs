@@ -114,7 +114,7 @@ fn is_continuation_unchecked(share: &[u8]) -> bool {
 }
 
 fn enforce_version_zero(share: &[u8]) {
-    assert!(share[8] & !0x01 == 0)
+    assert_eq!(share[8] & !0x01, 0)
 }
 
 #[derive(Debug, Clone, PartialEq, Copy)]

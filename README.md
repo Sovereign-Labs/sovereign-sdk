@@ -84,12 +84,12 @@ issue! All of the core developers can be reached via [Discord](https://discord.g
 
 The easiest way to build a rollup is to use the Module System. You can find a tutorial [here](./examples/demo-nft-module/README.md).
 
-We also provide two examples - [`demo-stf`](./examples/demo-stf/), which shows how to use the Module System to implement a
-state transition, and [`demo-rollup`](./examples/demo-rollup/), which shows how to combine the demo STF with a DA layer and a ZKVM to
+We also provide two examples - [`demo-stf`](./examples/demo-stf/README.md), which shows how to use the Module System to implement a
+state transition, and [`demo-rollup`](./examples/demo-rollup/README.md), which shows how to combine the demo STF with a DA layer and a ZKVM to
 get a complete rollup implementation.
 
 If you want even more control over your rollup's functionality, you can implement a completely custom State Transition Function
-without using the Module System. You can find a tutorial [here](./examples/demo-simple-stf/).
+without using the Module System. You can find a tutorial [here](./examples/demo-simple-stf/README.md).
 
 ### Adding a new Data Availability Layer
 
@@ -100,7 +100,7 @@ If you want to add support for a new data availability layer, the easiest way to
 
 Adapters contain the logic integrating 3rd party codebases into the Sovereign SDK. Over time, we expect Sovereign SDK
 to have adapters for almost all Data Availability Layers and LLVM-compatible proof systems. Currently, we
-maintain adapters for [`Risc0`](www.risczero.com) (a ZKVM) and [`Celestia`](www.celestia.org) a (DA layer).
+maintain adapters for [`Risc0`](https://www.risczero.com) (a ZKVM) and [`Celestia`](https://www.celestia.org) a (DA layer).
 The Avail project also maintains an adapter for their DA layer, which can be found [here](https://github.com/availproject/avail-sovereign-da-adapter).
 
 ## Warning

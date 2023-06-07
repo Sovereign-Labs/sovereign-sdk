@@ -296,11 +296,11 @@ mod tests {
         let shares: Vec<Share> =
             serde_json::from_str(SERIALIZED_PFB_SHARES).expect("failed to deserialize pfb shares");
 
-        assert!(shares.len() == 1);
+        assert_eq!(shares.len(), 1);
 
         let pfb_ns = NamespaceGroup::Compact(shares);
         let pfbs = parse_pfb_namespace(pfb_ns).expect("failed to parse pfb shares");
-        assert!(pfbs.len() == 1);
+        assert_eq!(pfbs.len(), 1);
     }
 
     #[test]
