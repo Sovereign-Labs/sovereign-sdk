@@ -5,6 +5,8 @@ use ed25519_dalek::{
     Signature as DalekSignature,
 };
 use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
+use serde::de::Error;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 #[cfg(feature = "native")]
 pub mod private_key {
@@ -71,6 +73,29 @@ pub struct DefaultPublicKey {
     pub(crate) pub_key: DalekPublicKey,
 }
 
+impl Serialize for DefaultPublicKey {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = self.pub_key.as_bytes();
+        serializer.serialize_bytes(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for DefaultPublicKey {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let bytes = <Vec<u8> as serde::Deserialize>::deserialize(deserializer)?;
+        let dpk = DalekPublicKey::from_bytes(&bytes).or(Err(D::Error::custom(
+            "Couldn't convert bytes to ed25519 public key",
+        )))?;
+        Ok(DefaultPublicKey { pub_key: dpk })
+    }
+}
+
 impl BorshDeserialize for DefaultPublicKey {
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
         let mut buffer = [0; PUBLIC_KEY_LENGTH];
@@ -91,6 +116,29 @@ impl BorshSerialize for DefaultPublicKey {
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct DefaultSignature {
     pub msg_sig: DalekSignature,
+}
+
+impl Serialize for DefaultSignature {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let s = self.msg_sig.as_bytes();
+        serializer.serialize_bytes(s)
+    }
+}
+
+impl<'de> Deserialize<'de> for DefaultSignature {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let bytes = <Vec<u8> as serde::Deserialize>::deserialize(deserializer)?;
+        let dsig = DalekSignature::from_bytes(&bytes).or(Err(D::Error::custom(
+            "Couldn't convert bytes to ed25519 signature",
+        )))?;
+        Ok(DefaultSignature { msg_sig: dsig })
+    }
 }
 
 impl BorshDeserialize for DefaultSignature {

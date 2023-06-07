@@ -17,7 +17,8 @@ pub mod test {
 
     #[test]
     fn test_demo_values_in_db() {
-        let path = sov_schema_db::temppath::TempPath::new();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();
 
@@ -52,7 +53,7 @@ pub mod test {
 
         // Generate a new storage instance after dumping data to the db.
         {
-            let runtime = &mut Runtime::<DefaultContext>::new();
+            let runtime = &mut Runtime::<DefaultContext>::default();
             let storage = ProverStorage::with_path(&path).unwrap();
             let mut working_set = WorkingSet::new(storage);
 
@@ -73,7 +74,8 @@ pub mod test {
 
     #[test]
     fn test_demo_values_in_cache() {
-        let path = sov_schema_db::temppath::TempPath::new();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
         let mut demo = create_new_demo(&path);
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
@@ -105,7 +107,7 @@ pub mod test {
 
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
 
-        let runtime = &mut Runtime::<DefaultContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::default();
         let mut working_set = WorkingSet::new(demo.current_storage.clone());
 
         let resp = runtime.election.results(&mut working_set);
@@ -125,7 +127,8 @@ pub mod test {
 
     #[test]
     fn test_demo_values_not_in_db() {
-        let path = sov_schema_db::temppath::TempPath::new();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();
@@ -157,7 +160,7 @@ pub mod test {
 
         // Generate a new storage instance, value are missing because we didn't call `end_slot()`;
         {
-            let runtime = &mut Runtime::<C>::new();
+            let runtime = &mut Runtime::<C>::default();
             let storage = ProverStorage::with_path(&path).unwrap();
             let mut working_set = WorkingSet::new(storage);
 
@@ -176,7 +179,8 @@ pub mod test {
 
     #[test]
     fn test_sequencer_insufficient_funds() {
-        let path = sov_schema_db::temppath::TempPath::new();
+        let tempdir = tempfile::tempdir().unwrap();
+        let path = tempdir.path();
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();

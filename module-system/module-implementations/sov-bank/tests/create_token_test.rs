@@ -1,6 +1,6 @@
 use sov_bank::call::CallMessage;
 use sov_bank::{create_token_address, Bank};
-use sov_modules_api::{Context, Module, ModuleInfo};
+use sov_modules_api::{Context, Module};
 use sov_state::{ProverStorage, WorkingSet};
 
 mod helpers;
@@ -10,8 +10,9 @@ use helpers::*;
 #[test]
 fn initial_and_deployed_token() {
     let bank_config = create_bank_config_with_token(1, 100);
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
-    let bank = Bank::new();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let bank = Bank::default();
     bank.genesis(&bank_config, &mut working_set).unwrap();
 
     let sender_address = generate_address("sender");
@@ -46,8 +47,9 @@ fn initial_and_deployed_token() {
 #[test]
 /// Currently integer overflow happens on bank genesis
 fn overflow_max_supply() {
-    let bank = Bank::<C>::new();
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
+    let bank = Bank::<C>::default();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
 
     let bank_config = create_bank_config_with_token(2, u64::MAX - 2);
 

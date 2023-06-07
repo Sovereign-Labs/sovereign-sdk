@@ -40,7 +40,8 @@ mod second_test_module {
 
 fn main() {
     type C = DefaultContext;
-    let second_test_struct = <second_test_module::SecondTestStruct<C> as ModuleInfo>::new();
+    let second_test_struct =
+        <second_test_module::SecondTestStruct<C> as std::default::Default>::default();
 
     let prefix2 = second_test_struct.state_in_second_struct_1.prefix();
     assert_eq!(

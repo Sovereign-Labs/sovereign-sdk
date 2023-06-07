@@ -2,7 +2,7 @@ use demo_nft_module::call::CallMessage;
 use demo_nft_module::query::OwnerResponse;
 use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Hasher, Module, ModuleInfo, Spec};
+use sov_modules_api::{Address, Context, Hasher, Module, Spec};
 use sov_rollup_interface::stf::Event;
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
@@ -24,8 +24,10 @@ fn genesis_and_mint() {
         admin,
         owners: vec![(0, owner1.clone())],
     };
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
-    let nft = NonFungibleToken::new();
+
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let nft = NonFungibleToken::default();
 
     // Genesis
     let genesis_result = nft.genesis(&config, &mut working_set);
@@ -70,8 +72,9 @@ fn transfer() {
         admin: admin.clone(),
         owners: vec![(0, admin.clone()), (1, owner1.clone()), (2, owner2.clone())],
     };
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
-    let nft = NonFungibleToken::new();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let nft = NonFungibleToken::default();
     nft.genesis(&config, &mut working_set).unwrap();
 
     let transfer_message = CallMessage::Transfer {
@@ -128,8 +131,9 @@ fn burn() {
         owners: vec![(0, owner1)],
     };
 
-    let mut working_set = WorkingSet::new(ProverStorage::temporary());
-    let nft = NonFungibleToken::new();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let nft = NonFungibleToken::default();
     nft.genesis(&config, &mut working_set).unwrap();
 
     let burn_message = CallMessage::Burn { id: 0 };

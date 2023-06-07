@@ -21,7 +21,8 @@ const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + SEQUENCER_BALANCE_DELTA;
 
 #[test]
 fn test_tx_revert() {
-    let path = sov_schema_db::temppath::TempPath::new();
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
     let value_setter_admin_private_key = DefaultPrivateKey::generate();
     let election_admin_private_key = DefaultPrivateKey::generate();
 
@@ -58,7 +59,7 @@ fn test_tx_revert() {
 
     // Checks
     {
-        let runtime = &mut Runtime::<DefaultContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::default();
         let storage = ProverStorage::with_path(&path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
@@ -87,7 +88,8 @@ fn test_tx_revert() {
 
 #[test]
 fn test_tx_bad_sig() {
-    let path = sov_schema_db::temppath::TempPath::new();
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
     let value_setter_admin_private_key = DefaultPrivateKey::generate();
     let election_admin_private_key = DefaultPrivateKey::generate();
 
@@ -123,7 +125,7 @@ fn test_tx_bad_sig() {
     }
 
     {
-        let runtime = &mut Runtime::<DefaultContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::default();
         let storage = ProverStorage::with_path(&path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
@@ -145,7 +147,8 @@ fn test_tx_bad_sig() {
 
 #[test]
 fn test_tx_bad_serialization() {
-    let path = sov_schema_db::temppath::TempPath::new();
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
 
     let value_setter_admin_private_key = DefaultPrivateKey::generate();
     let election_admin_private_key = DefaultPrivateKey::generate();
@@ -181,7 +184,7 @@ fn test_tx_bad_serialization() {
     }
 
     {
-        let runtime = &mut Runtime::<DefaultContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::default();
         let storage = ProverStorage::with_path(&path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 

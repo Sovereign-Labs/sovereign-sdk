@@ -8,7 +8,7 @@ This crate contains an implementation of a `StateTransitionFunction` called `App
 pub struct AppTemplate<C: Context, RT, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
-    working_set: Option<WorkingSet<C::Storage>>,
+    pub (crate) working_set: Option<WorkingSet<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
 }
 

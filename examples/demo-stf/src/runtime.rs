@@ -1,5 +1,9 @@
+#[cfg(feature = "native")]
+pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Context;
-use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
+#[cfg(feature = "native")]
+use sov_modules_macros::cli_parser;
+use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
 
 /// The Rollup entrypoint.
 ///
@@ -36,7 +40,8 @@ use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
 /// Similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
 /// instead of going through the DA layer.
 
-#[derive(Genesis, DispatchCall, MessageCodec)]
+#[cfg_attr(feature = "native", cli_parser(DefaultContext))]
+#[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
     pub sequencer: sov_sequencer_registry::Sequencer<C>,
@@ -48,19 +53,4 @@ pub struct Runtime<C: Context> {
     pub value_setter: sov_value_setter::ValueSetter<C>,
 
     pub accounts: sov_accounts::Accounts<C>,
-}
-
-// TODO add macro to generate the following code:
-//      https://github.com/Sovereign-Labs/sovereign/issues/309
-impl<C: Context> Runtime<C> {
-    pub(crate) fn new() -> Self {
-        use sov_modules_api::ModuleInfo;
-        Self {
-            sequencer: sov_sequencer_registry::Sequencer::new(),
-            bank: sov_bank::Bank::new(),
-            election: sov_election::Election::new(),
-            value_setter: sov_value_setter::ValueSetter::new(),
-            accounts: sov_accounts::Accounts::new(),
-        }
-    }
 }

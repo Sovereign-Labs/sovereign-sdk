@@ -13,6 +13,7 @@ mod serde_address;
 #[cfg(test)]
 mod tests;
 pub mod transaction;
+
 pub use crate::bech32::AddressBech32;
 use borsh::{BorshDeserialize, BorshSerialize};
 use core::fmt::{self, Debug, Display};
@@ -21,6 +22,7 @@ pub use error::Error;
 pub use jmt::SimpleHasher as Hasher;
 pub use prefix::Prefix;
 pub use response::CallResponse;
+use serde::{Deserialize, Serialize};
 pub use sov_rollup_interface::traits::AddressTrait;
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
@@ -95,7 +97,7 @@ pub trait Signature {
 }
 
 /// A type that can't be instantiated.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum NonInstantiable {}
 
 /// PublicKey used in the Module System.
@@ -178,7 +180,6 @@ where
     }
 }
 
-/// Every module has to implement this trait.
 /// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
 /// This allows developers to override only some of the methods in their implementation and safely ignore the others.
 pub trait Module {
@@ -213,11 +214,8 @@ pub trait Module {
 }
 
 /// Every module has to implement this trait.
-pub trait ModuleInfo {
+pub trait ModuleInfo: Default {
     type Context: Context;
-
-    /// Module constructor.
-    fn new() -> Self;
 
     /// Returns address of the module.
     fn address(&self) -> &<Self::Context as Spec>::Address;

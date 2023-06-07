@@ -43,4 +43,4 @@ const-rollup-config = { path = "../const-rollup-config" }
 sha2 = { workspace = true }
 reqwest = "0.11"
 tendermint = "0.32"
-tempfile = "3.5.0"
+tempfile = { workspace = true }

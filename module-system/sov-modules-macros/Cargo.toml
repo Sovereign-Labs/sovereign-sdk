@@ -21,16 +21,16 @@ path = "tests/all_tests.rs"
 
 [dev-dependencies]
 trybuild = "1.0"
-sov-modules-api = { path = "../sov-modules-api"}
+sov-modules-api = { path = "../sov-modules-api", version = "0.1" }
 jsonrpsee = { version = "0.16.2", features = ["macros", "client-core", "server"] }
-sov-state = { path = "../sov-state", features = ["temp"] }
-sov-db = { path = "../../full-node/db/sov-db", features = ["temp"] }
+sov-state = { path = "../sov-state", version = "0.1" }
+tempfile = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
-jsonrpsee = { workspace = true, features = ["http-client", "server"]}
-sov-modules-api = { path = "../sov-modules-api", default-features = false }
-sov-rollup-interface = { path = "../../rollup-interface" }
+jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
 
 
 syn = { version = "1.0", features = ["full"] }

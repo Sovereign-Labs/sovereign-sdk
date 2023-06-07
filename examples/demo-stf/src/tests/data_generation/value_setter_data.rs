@@ -47,7 +47,6 @@ impl MessageGenerator for ValueSetterMessages {
         _is_last: bool,
     ) -> Transaction<DefaultContext> {
         let message = Runtime::<DefaultContext>::encode_value_setter_call(message);
-        let sig = Transaction::<DefaultContext>::sign(sender, &message, nonce);
-        Transaction::<DefaultContext>::new(message, sender.pub_key(), sig, nonce)
+        Transaction::<DefaultContext>::new_signed_tx(sender, message, nonce)
     }
 }

@@ -1,5 +1,5 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_api::{Context, ModuleInfo, Prefix};
+use sov_modules_api::{Context, Prefix};
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::stf::Event;
 use sov_state::{ProverStorage, StateMap, StateValue, Storage, WorkingSet, ZkStorage};
@@ -23,8 +23,8 @@ pub mod module_a {
         pub fn update(&mut self, key: &str, value: &str, working_set: &mut WorkingSet<C::Storage>) {
             working_set.add_event("module A", "update");
             self.state_1_a
-                .set(&key.to_owned(), value.to_owned(), working_set);
-            self.state_2_a.set(value.to_owned(), working_set)
+                .set(&key.to_owned(), &value.to_owned(), working_set);
+            self.state_2_a.set(&value.to_owned(), working_set)
         }
     }
 }
@@ -48,7 +48,7 @@ pub mod module_b {
         pub fn update(&mut self, key: &str, value: &str, working_set: &mut WorkingSet<C::Storage>) {
             working_set.add_event("module B", "update");
             self.state_1_b
-                .set(&key.to_owned(), value.to_owned(), working_set);
+                .set(&key.to_owned(), &value.to_owned(), working_set);
             self.mod_1_a.update("key_from_b", value, working_set);
         }
     }
@@ -86,19 +86,15 @@ mod module_c {
 
 #[test]
 fn nested_module_call_test() {
-    let native_storage = ProverStorage::temporary();
-    let working_set = &mut WorkingSet::new(native_storage.clone());
+    let tmpdir = tempfile::tempdir().unwrap();
+    let native_storage = ProverStorage::with_path(tmpdir.path()).unwrap();
+    let mut working_set = WorkingSet::new(native_storage.clone());
 
     // Test the `native` execution.
     {
-        execute_module_logic::<DefaultContext>(working_set);
-        test_state_update::<DefaultContext>(working_set);
+        execute_module_logic::<DefaultContext>(&mut working_set);
+        test_state_update::<DefaultContext>(&mut working_set);
     }
-    let (log, witness) = working_set.freeze();
-    native_storage
-        .validate_and_commit(log, &witness)
-        .expect("State update is valid");
-
     assert_eq!(
         working_set.events(),
         &vec![
@@ -110,6 +106,11 @@ fn nested_module_call_test() {
         ]
     );
 
+    let (log, witness) = working_set.checkpoint().freeze();
+    native_storage
+        .validate_and_commit(log, &witness)
+        .expect("State update is valid");
+
     // Test the `zk` execution.
     {
         let zk_storage = ZkStorage::new([0u8; 32]);
@@ -120,12 +121,12 @@ fn nested_module_call_test() {
 }
 
 fn execute_module_logic<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
-    let module = &mut module_c::ModuleC::<C>::new();
+    let module = &mut module_c::ModuleC::<C>::default();
     module.execute("some_key", "some_value", working_set);
 }
 
 fn test_state_update<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
-    let module = <module_c::ModuleC<C> as ModuleInfo>::new();
+    let module = <module_c::ModuleC<C> as Default>::default();
 
     let expected_value = "some_value".to_owned();
 

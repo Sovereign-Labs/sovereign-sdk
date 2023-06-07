@@ -8,7 +8,12 @@ use sov_modules_api::{CallResponse, Context};
 use sov_state::WorkingSet;
 
 /// Call actions supported byte the module.
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
+)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: Context> {
     SetCandidates { names: Vec<String> },
     AddVoter(C::Address),
@@ -30,7 +35,7 @@ impl<C: sov_modules_api::Context> Election<C> {
         self.exit_if_candidates_already_set(working_set)?;
 
         let candidates = candidate_names.into_iter().map(Candidate::new).collect();
-        self.candidates.set(candidates, working_set);
+        self.candidates.set(&candidates, working_set);
         working_set.add_event("Election: set_candidates", "Candidate was set");
 
         Ok(CallResponse::default())
@@ -48,7 +53,7 @@ impl<C: sov_modules_api::Context> Election<C> {
         self.exit_if_voter_already_set(&voter_address, working_set)?;
 
         self.allowed_voters
-            .set(&voter_address, Voter::fresh(), working_set);
+            .set(&voter_address, &Voter::fresh(), working_set);
 
         working_set.add_event(
             "Election: add_voter",
@@ -80,7 +85,7 @@ impl<C: sov_modules_api::Context> Election<C> {
             .checked_add(1)
             .ok_or(anyhow!("Vote count overflow"))?;
 
-        self.number_of_votes.set(new_number_of_votes, working_set);
+        self.number_of_votes.set(&new_number_of_votes, working_set);
         self.exit_if_frozen(working_set)?;
 
         let voter = self
@@ -91,7 +96,7 @@ impl<C: sov_modules_api::Context> Election<C> {
             Voter::Voted => bail!("Voter tried voting a second time!"),
             Voter::Fresh => {
                 self.allowed_voters
-                    .set(context.sender(), Voter::voted(), working_set);
+                    .set(context.sender(), &Voter::voted(), working_set);
 
                 let mut candidates = self.candidates.get_or_err(working_set)?;
 
@@ -105,7 +110,7 @@ impl<C: sov_modules_api::Context> Election<C> {
                     .checked_add(1)
                     .ok_or(anyhow!("Vote count overflow"))?;
 
-                self.candidates.set(candidates, working_set);
+                self.candidates.set(&candidates, working_set);
 
                 working_set.add_event(
                     "Election: make_vote",
@@ -123,14 +128,14 @@ impl<C: sov_modules_api::Context> Election<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         self.exit_if_not_admin(context, working_set)?;
-        self.is_frozen.set(true, working_set);
+        self.is_frozen.set(&true, working_set);
         working_set.add_event("Election: freeze_election", "Election was frozen");
         Ok(CallResponse::default())
     }
 
     /// Clears the election.
     pub(crate) fn clear(&self) -> Result<CallResponse> {
-        // see https://github.com/Sovereign-Labs/sovereign/issues/62
+        // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/62
         todo!()
     }
 

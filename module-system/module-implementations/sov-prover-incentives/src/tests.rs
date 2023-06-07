@@ -1,4 +1,4 @@
-use sov_modules_api::{default_context::DefaultContext, Address, Hasher, Module, ModuleInfo, Spec};
+use sov_modules_api::{default_context::DefaultContext, Address, Hasher, Module, Spec};
 use sov_rollup_interface::mocks::{MockCodeCommitment, MockProof, MockZkvm};
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -35,7 +35,7 @@ fn setup(
 ) -> (ProverIncentives<C, MockZkvm>, Address) {
     // Initialize bank
     let (bank_config, prover_address) = create_bank_config();
-    let bank = sov_bank::Bank::<C>::new();
+    let bank = sov_bank::Bank::<C>::default();
     bank.genesis(&bank_config, working_set)
         .expect("bank genesis must succeed");
 
@@ -46,7 +46,7 @@ fn setup(
     );
 
     // initialize prover incentives
-    let module = ProverIncentives::<C, MockZkvm>::new();
+    let module = ProverIncentives::<C, MockZkvm>::default();
     let config = crate::ProverIncentivesConfig {
         bonding_token_address: token_address,
         minimum_bond: BOND_AMOUNT,
@@ -62,8 +62,8 @@ fn setup(
 
 #[test]
 fn test_burn_on_invalid_proof() {
-    let storage = ProverStorage::temporary();
-    let mut working_set = WorkingSet::new(storage);
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let (module, prover_address) = setup(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
@@ -100,8 +100,8 @@ fn test_burn_on_invalid_proof() {
 
 #[test]
 fn test_valid_proof() {
-    let storage = ProverStorage::temporary();
-    let mut working_set = WorkingSet::new(storage);
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let (module, prover_address) = setup(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
@@ -138,8 +138,8 @@ fn test_valid_proof() {
 
 #[test]
 fn test_unbonding() {
-    let storage = ProverStorage::temporary();
-    let mut working_set = WorkingSet::new(storage);
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let (module, prover_address) = setup(&mut working_set);
     let context = DefaultContext {
         sender: prover_address.clone(),
@@ -196,8 +196,8 @@ fn test_unbonding() {
 
 #[test]
 fn test_prover_not_bonded() {
-    let storage = ProverStorage::temporary();
-    let mut working_set = WorkingSet::new(storage);
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let (module, prover_address) = setup(&mut working_set);
     let context = DefaultContext {
         sender: prover_address.clone(),

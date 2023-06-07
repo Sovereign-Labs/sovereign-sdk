@@ -5,7 +5,7 @@ use crate::{
 };
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
-    AddressBech32, Context, Module, ModuleInfo, PublicKey, Spec,
+    AddressBech32, Context, Module, PublicKey, Spec,
 };
 use sov_state::{ProverStorage, WorkingSet};
 type C = DefaultContext;
@@ -21,8 +21,9 @@ fn test_config_account() {
         pub_keys: vec![init_pub_key.clone()],
     };
 
-    let accounts = &mut Accounts::<C>::new();
-    let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
+    let accounts = &mut Accounts::<C>::default();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let native_working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
 
     accounts
         .init_module(&account_config, native_working_set)
@@ -41,8 +42,9 @@ fn test_config_account() {
 
 #[test]
 fn test_update_account() {
-    let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
-    let accounts = &mut Accounts::<C>::new();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let native_working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let accounts = &mut Accounts::<C>::default();
 
     let priv_key = DefaultPrivateKey::generate();
 
@@ -100,8 +102,9 @@ fn test_update_account() {
 
 #[test]
 fn test_update_account_fails() {
-    let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
-    let accounts = &mut Accounts::<C>::new();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let native_working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let accounts = &mut Accounts::<C>::default();
 
     let sender_1 = DefaultPrivateKey::generate().pub_key();
     let sender_context_1 = C::new(sender_1.to_address());
@@ -130,8 +133,9 @@ fn test_update_account_fails() {
 
 #[test]
 fn test_get_acc_after_pub_key_update() {
-    let native_working_set = &mut WorkingSet::new(ProverStorage::temporary());
-    let accounts = &mut Accounts::<C>::new();
+    let tmpdir = tempfile::tempdir().unwrap();
+    let native_working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+    let accounts = &mut Accounts::<C>::default();
 
     let sender_1 = DefaultPrivateKey::generate().pub_key();
     let sender_1_addr = sender_1.to_address::<<C as Spec>::Address>();
