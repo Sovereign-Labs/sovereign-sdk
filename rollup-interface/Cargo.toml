@@ -19,6 +19,9 @@ serde = { workspace = true }
 bytes = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
 
+sha2 = { workspace = true }
+tendermint = "0.32"
+
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 

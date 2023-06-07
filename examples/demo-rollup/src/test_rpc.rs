@@ -2,9 +2,13 @@ use std::net::SocketAddr;
 
 use curl::easy::{Easy2, Handler, List, WriteError};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_rollup_interface::{mocks::{TestBlock, TestBlockHeader}, stf::{BatchReceipt, TransactionReceipt, Event}};
 
-use tokio::{sync::oneshot};
+#[cfg(test)]
+use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader};
+
+use sov_rollup_interface::stf::{BatchReceipt, Event, TransactionReceipt};
+use tendermint::crypto::Sha256;
+use tokio::sync::oneshot;
 
 use crate::{config::RpcConfig, ledger_rpc};
 
@@ -17,7 +21,7 @@ impl Handler for Collector {
     }
 }
 
-fn query_test_helper(data: &[u8], expected: &str) {
+fn query_test_helper(data: &[u8], expected: &str, rpc_config: RpcConfig) {
     let mut headers = List::new();
     headers.append("Content-Type: application/json").unwrap();
 
@@ -26,7 +30,10 @@ fn query_test_helper(data: &[u8], expected: &str) {
     easy.post_fields_copy(data).unwrap();
     easy.post(true).unwrap();
 
-    easy.url("http://127.0.0.1:12345").unwrap();
+    let (addr, port) = (rpc_config.bind_host, rpc_config.bind_port);
+
+    let url_str = format!("http://{addr}:{port}");
+    easy.url(url_str.as_str()).unwrap();
     easy.perform().unwrap();
 
     assert_eq!(easy.response_code().unwrap(), 200);
@@ -34,37 +41,40 @@ fn query_test_helper(data: &[u8], expected: &str) {
     assert_eq!(String::from_utf8_lossy(&contents.0), expected);
 }
 
-
 fn populate_ledger(ledger_db: &mut LedgerDB) -> () {
-
     let mut slot: SlotCommit<TestBlock, i32, i32> = SlotCommit::new(TestBlock {
-        curr_hash: ::blake3::hash(b"slot_data").into(),
+        curr_hash: sha2::Sha256::digest(b"slot_data").into(),
         header: TestBlockHeader {
-            prev_hash: (::blake3::hash(b"prev_header").into()),
+            prev_hash: (sha2::Sha256::digest(b"prev_header").into()),
         },
     });
 
     slot.add_batch(BatchReceipt {
-        batch_hash: ::blake3::hash(b"batch_receipt").into(),
-        tx_receipts: vec![TransactionReceipt::<i32> {
-            tx_hash: ::blake3::hash(b"tx1").into(),
-            body_to_save: Some(b"tx1 body".to_vec()),
-            events: vec![],
-            receipt: 0,
-        }, 
-       TransactionReceipt::<i32> {
-            tx_hash: ::blake3::hash(b"tx2").into(),
-            body_to_save: Some(b"tx2 body".to_vec()),
-            events: vec![Event::new("event1_key", "event1_value"), Event::new("event2_key", "event2_value")],
-            receipt: 1,
-        } ],
+        batch_hash: ::sha2::Sha256::digest(b"batch_receipt").into(),
+        tx_receipts: vec![
+            TransactionReceipt::<i32> {
+                tx_hash: ::sha2::Sha256::digest(b"tx1").into(),
+                body_to_save: Some(b"tx1 body".to_vec()),
+                events: vec![],
+                receipt: 0,
+            },
+            TransactionReceipt::<i32> {
+                tx_hash: ::sha2::Sha256::digest(b"tx2").into(),
+                body_to_save: Some(b"tx2 body".to_vec()),
+                events: vec![
+                    Event::new("event1_key", "event1_value"),
+                    Event::new("event2_key", "event2_value"),
+                ],
+                receipt: 1,
+            },
+        ],
         inner: 0,
     });
 
     slot.add_batch(BatchReceipt {
-        batch_hash: ::blake3::hash(b"batch_receipt2").into(),
+        batch_hash: ::sha2::Sha256::digest(b"batch_receipt2").into(),
         tx_receipts: vec![TransactionReceipt::<i32> {
-            tx_hash: ::blake3::hash(b"tx1").into(),
+            tx_hash: ::sha2::Sha256::digest(b"tx1").into(),
             body_to_save: Some(b"tx1 body".to_vec()),
             events: vec![],
             receipt: 0,
@@ -75,12 +85,7 @@ fn populate_ledger(ledger_db: &mut LedgerDB) -> () {
     ledger_db.commit_slot(slot).unwrap()
 }
 
-// These tests reproduce the README workflow for the ledger_rpc, ie:
-// - It creates and populate a simple ledger with a few transactions
-// - It initializes the rpc server
-// - It successively calls the different rpc methods registered and tests the answer
-#[test]
-fn simple_test_rpc() {
+fn test_helper(data: &[u8], expected: &str, port: u16) {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_io()
         .enable_time()
@@ -92,7 +97,7 @@ fn simple_test_rpc() {
         let (tx_end, rx_end) = oneshot::channel();
         let rpc_config = RpcConfig {
             bind_host: "127.0.0.1".to_string(),
-            bind_port: 12345,
+            bind_port: port,
         };
 
         let address = SocketAddr::new(rpc_config.bind_host.parse().unwrap(), rpc_config.bind_port);
@@ -102,8 +107,7 @@ fn simple_test_rpc() {
 
         populate_ledger(&mut ledger_db);
 
-        let ledger_rpc_module =
-            ledger_rpc::get_ledger_rpc::<i32, i32>(ledger_db.clone());
+        let ledger_rpc_module = ledger_rpc::get_ledger_rpc::<i32, i32>(ledger_db.clone());
 
         rt.spawn(async move {
             let server = jsonrpsee::server::ServerBuilder::default()
@@ -114,54 +118,71 @@ fn simple_test_rpc() {
             tx_start.send("server started").unwrap();
             rx_end.await.unwrap();
         });
-    
+
         rx_start.await.unwrap();
-    
-        let data = r#"{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}"#.as_bytes();
-        let expected = r#"{"jsonrpc":"2.0","result":{"number":1,"hash":"0x75600b5af42511f76ae5bc4f2c884a0b8824d4617402adc9ff2320adf73a0d31","batch_range":{"start":1,"end":3}},"id":1}"#;
-        
-        query_test_helper(data, expected);
 
-        let data = r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{ "batch_id": 1, "offset": 0}]],"id":1}"#
-            .as_bytes();
-        let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0x329c58b0a9b08973bed32452c2cefa0ab567146505711337c955b24cf41c6e99","event_range":{"start":1,"end":1},"body":[116,120,49,32,98,111,100,121],"custom_receipt":0}],"id":1}"#;
-        query_test_helper(data, expected);
-
-        let data = r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{ "batch_id": 1, "offset": 1}]],"id":1}"#
-            .as_bytes();
-        let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xae87c50974dc43f4f70e84cb27e4630e4e47f782cff1e3d484310d82cea9acf6","event_range":{"start":1,"end":3},"body":[116,120,50,32,98,111,100,121],"custom_receipt":1}],"id":1}"#;
-        query_test_helper(data, expected);
-        
-        
-        let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[2], "Standard"],"id":1}"#
-            .as_bytes();
-        let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0x41c8790eb95a24d1b4aabc606e88c602073c72ada51ebc72300a82591dc49459","tx_range":{"start":3,"end":4},"txs":["0x329c58b0a9b08973bed32452c2cefa0ab567146505711337c955b24cf41c6e99"],"custom_receipt":1}],"id":1}"#;
-        query_test_helper(data, expected);
-
-        let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[1], "Compact"],"id":1}"#
-            .as_bytes();
-        let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xf344c1da53b56f7a49d02ee20899fb914bdfc3632db4f337ade196e72f5eb083","tx_range":{"start":1,"end":3},"custom_receipt":0}],"id":1}"#;
-        query_test_helper(data, expected);
-
-        let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[0], "Compact"],"id":1}"#
-            .as_bytes();
-        let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
-        query_test_helper(data, expected);
-
-        let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[1],"id":1}"#.as_bytes();
-        let expected = r#"{"jsonrpc":"2.0","result":[{"key":[101,118,101,110,116,49,95,107,101,121],"value":[101,118,101,110,116,49,95,118,97,108,117,101]}],"id":1}"#;
-        query_test_helper(data, expected);
-
-        let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[2],"id":1}"#.as_bytes();
-        let expected = r#"{"jsonrpc":"2.0","result":[{"key":[101,118,101,110,116,50,95,107,101,121],"value":[101,118,101,110,116,50,95,118,97,108,117,101]}],"id":1}"#;
-        query_test_helper(data, expected);
-
-        let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[3],"id":1}"#.as_bytes();
-        let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
-        query_test_helper(data, expected);
-
+        query_test_helper(data, expected, rpc_config);
 
         tx_end.send("drop server").unwrap();
     });
+}
 
+// These tests reproduce the README workflow for the ledger_rpc, ie:
+// - It creates and populate a simple ledger with a few transactions
+// - It initializes the rpc server
+// - It successively calls the different rpc methods registered and tests the answer
+// Side note: we need to change the port for each test to avoid concurrent access issues
+#[test]
+fn test_get_head() {
+    let data = r#"{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}"#.as_bytes();
+    let expected = r#"{"jsonrpc":"2.0","result":{"number":1,"hash":"0xd1231a38586e68d0405dc55ae6775e219f29fff1f7e0c6410d0ac069201e550b","batch_range":{"start":1,"end":3}},"id":1}"#;
+
+    test_helper(data, expected, 12345);
+}
+
+#[test]
+fn test_get_transactions() {
+    let data = r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{ "batch_id": 1, "offset": 0}]],"id":1}"#
+            .as_bytes();
+    let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b","event_range":{"start":1,"end":1},"body":[116,120,49,32,98,111,100,121],"custom_receipt":0}],"id":1}"#;
+    test_helper(data, expected, 12346);
+
+    let data = r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{ "batch_id": 1, "offset": 1}]],"id":1}"#
+            .as_bytes();
+    let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0x27ca64c092a959c7edc525ed45e845b1de6a7590d173fd2fad9133c8a779a1e3","event_range":{"start":1,"end":3},"body":[116,120,50,32,98,111,100,121],"custom_receipt":1}],"id":1}"#;
+    test_helper(data, expected, 12346);
+}
+
+#[test]
+fn test_get_batches() {
+    let data =
+        r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[2], "Standard"],"id":1}"#
+            .as_bytes();
+    let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xf85fe0cb36fdaeca571c896ed476b49bb3c8eff00d935293a8967e1e9a62071e","tx_range":{"start":3,"end":4},"txs":["0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b"],"custom_receipt":1}],"id":1}"#;
+    test_helper(data, expected, 12347);
+
+    let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[1], "Compact"],"id":1}"#
+        .as_bytes();
+    let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xb5515a80204963f7db40e98af11aedb49a394b1c7e3d8b5b7a33346b8627444f","tx_range":{"start":1,"end":3},"custom_receipt":0}],"id":1}"#;
+    test_helper(data, expected, 12347);
+
+    let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[0], "Compact"],"id":1}"#
+        .as_bytes();
+    let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
+    test_helper(data, expected, 12347);
+}
+
+#[test]
+fn test_get_events() {
+    let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[1],"id":1}"#.as_bytes();
+    let expected = r#"{"jsonrpc":"2.0","result":[{"key":[101,118,101,110,116,49,95,107,101,121],"value":[101,118,101,110,116,49,95,118,97,108,117,101]}],"id":1}"#;
+    test_helper(data, expected, 12348);
+
+    let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[2],"id":1}"#.as_bytes();
+    let expected = r#"{"jsonrpc":"2.0","result":[{"key":[101,118,101,110,116,50,95,107,101,121],"value":[101,118,101,110,116,50,95,118,97,108,117,101]}],"id":1}"#;
+    test_helper(data, expected, 12348);
+
+    let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[3],"id":1}"#.as_bytes();
+    let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
+    test_helper(data, expected, 12348);
 }

@@ -1,15 +1,14 @@
-use std::io::Write;
-
-use anyhow::ensure;
-use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
-
 use crate::{
     da::BlobTransactionTrait,
     services::da::SlotData,
     traits::{AddressTrait, BlockHeaderTrait, CanonicalHash},
     zk::traits::{Matches, Zkvm},
 };
+use anyhow::ensure;
+use borsh::{BorshDeserialize, BorshSerialize};
+use serde::{Deserialize, Serialize};
+use std::io::Write;
+use tendermint::crypto::Sha256;
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct MockCodeCommitment(pub [u8; 32]);
@@ -132,7 +131,7 @@ impl CanonicalHash for TestBlockHeader {
     type Output = [u8; 32];
 
     fn hash(&self) -> Self::Output {
-        self.prev_hash
+        sha2::Sha256::digest(&self.prev_hash).into()
     }
 }
 
