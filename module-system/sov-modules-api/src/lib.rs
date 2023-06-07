@@ -23,8 +23,9 @@ pub use jmt::SimpleHasher as Hasher;
 pub use prefix::Prefix;
 pub use response::CallResponse;
 use serde::{Deserialize, Serialize};
+use sov_gas::GasUnit;
 pub use sov_rollup_interface::traits::AddressTrait;
-use sov_state::{GasUnit, Storage, Witness, WorkingSet};
+use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
 
 impl AsRef<[u8]> for Address {
@@ -227,8 +228,11 @@ pub trait Module {
 }
 
 /// Every module has to implement this trait.
-pub trait ModuleInfo: Default {
+pub trait ModuleInfo {
     type Context: Context;
+    type GasConfig;
+
+    fn new(gas_config: Self::GasConfig) -> Self;
 
     /// Returns address of the module.
     fn address(&self) -> &<Self::Context as Spec>::Address;

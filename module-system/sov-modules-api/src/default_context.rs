@@ -4,10 +4,11 @@ use crate::{Address, AddressTrait, Context, PublicKey, Spec};
 use jmt::SimpleHasher;
 #[cfg(feature = "native")]
 use serde::{Deserialize, Serialize};
+use sov_gas::Gas2D;
+use sov_state::DefaultStorageSpec;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
 use sov_state::{ArrayWitness, ZkStorage};
-use sov_state::{DefaultStorageSpec, Gas2D};
 
 #[cfg(feature = "native")]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

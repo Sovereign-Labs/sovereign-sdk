@@ -1,4 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+
+use sov_gas::{GasUnit, StdGasConfig};
 use sov_rollup_interface::stf::Event;
 use std::{collections::HashMap, fmt::Debug, marker::PhantomData};
 
@@ -44,21 +46,38 @@ impl<S: Storage> Debug for RevertableDelta<S> {
 /// and is obtained from the `WorkingSet` by using either the `commit` or `revert` method.
 pub struct CommittedWorkingSet<S: Storage, G: GasUnit> {
     delta: Delta<S>,
-    _p: PhantomData<G>,
+    remaining_funds: u64,
+    gas_price: G::Price,
+    std_gas_config: StdGasConfig<G>,
 }
 
 impl<S: Storage, G: GasUnit> CommittedWorkingSet<S, G> {
-    pub fn new(inner: S) -> Self {
+    pub fn new(
+        inner: S,
+        remaining_funds: u64,
+        std_gas_cost: StdGasConfig<G>,
+        gas_price: G::Price,
+    ) -> Self {
         Self {
             delta: Delta::new(inner),
-            _p: PhantomData,
+            std_gas_config: std_gas_cost,
+            gas_price,
+            remaining_funds,
         }
     }
 
-    pub fn with_witness(inner: S, witness: S::Witness) -> Self {
+    pub fn with_witness(
+        inner: S,
+        witness: S::Witness,
+        remaining_funds: u64,
+        std_gas_cost: StdGasConfig<G>,
+        gas_price: G::Price,
+    ) -> Self {
         Self {
             delta: Delta::with_witness(inner, witness),
-            _p: PhantomData,
+            remaining_funds,
+            std_gas_config: std_gas_cost,
+            gas_price,
         }
     }
 
@@ -66,37 +85,14 @@ impl<S: Storage, G: GasUnit> CommittedWorkingSet<S, G> {
         WorkingSet {
             delta: self.delta.get_revertable_wrapper(),
             events: Default::default(),
-            remaining_gas: todo!(),
-            _p: PhantomData,
+            remaining_funds: self.remaining_funds,
+            std_gas_cost: self.std_gas_config,
+            gas_price: self.gas_price,
         }
     }
 
     pub fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
         self.delta.freeze()
-    }
-}
-
-pub trait GasUnit {
-    type Price;
-    fn value(&self, p: Self::Price) -> u64;
-}
-
-pub struct StdGasConfig<G: GasUnit> {
-    pub set_cost: G,
-    pub get_cost: G,
-}
-
-pub struct Gas2D {
-    pub native: u64,
-    pub zk: u64,
-}
-
-pub struct Price2D {}
-
-impl GasUnit for Gas2D {
-    type Price = Price2D;
-    fn value(&self, p: Price2D) -> u64 {
-        todo!()
     }
 }
 
@@ -107,34 +103,55 @@ impl GasUnit for Gas2D {
 pub struct WorkingSet<S: Storage, G: GasUnit> {
     delta: RevertableDelta<S>,
     events: Vec<Event>,
-    remaining_gas: u64,
-    _p: PhantomData<G>,
+    remaining_funds: u64,
+    std_gas_cost: StdGasConfig<G>,
+    // Should we pass it in the context?;
+    gas_price: G::Price,
 }
 
 impl<S: Storage, G: GasUnit> WorkingSet<S, G> {
-    pub fn deduct_gas(&mut self, value: &G) -> Result<(), anyhow::Error> {
-        todo!()
+    pub fn charge_gas(&mut self, gas_used: &G) -> Result<(), anyhow::Error> {
+        let cost = gas_used.value(&self.gas_price);
+        self.remaining_funds.checked_sub(cost).unwrap();
+
+        Ok(())
     }
 
-    pub fn new(inner: S) -> Self {
-        CommittedWorkingSet::new(inner).to_revertable()
+    pub fn new(
+        inner: S,
+        remaining_funds: u64,
+        std_gas_cost: StdGasConfig<G>,
+        gas_price: G::Price,
+    ) -> Self {
+        CommittedWorkingSet::new(inner, remaining_funds, std_gas_cost, gas_price).to_revertable()
     }
 
-    pub fn with_witness(inner: S, witness: S::Witness) -> Self {
-        CommittedWorkingSet::with_witness(inner, witness).to_revertable()
+    pub fn with_witness(
+        inner: S,
+        witness: S::Witness,
+        remaining_funds: u64,
+        std_gas_cost: StdGasConfig<G>,
+        gas_price: G::Price,
+    ) -> Self {
+        CommittedWorkingSet::with_witness(inner, witness, remaining_funds, std_gas_cost, gas_price)
+            .to_revertable()
     }
 
     pub fn commit(self) -> CommittedWorkingSet<S, G> {
         CommittedWorkingSet {
             delta: self.delta.commit(),
-            _p: PhantomData,
+            remaining_funds: self.remaining_funds,
+            std_gas_config: self.std_gas_cost,
+            gas_price: self.gas_price,
         }
     }
 
     pub fn revert(self) -> CommittedWorkingSet<S, G> {
         CommittedWorkingSet {
             delta: self.delta.revert(),
-            _p: PhantomData,
+            remaining_funds: self.remaining_funds,
+            std_gas_config: self.std_gas_cost,
+            gas_price: self.gas_price,
         }
     }
 

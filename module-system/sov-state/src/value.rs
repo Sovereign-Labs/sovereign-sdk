@@ -1,8 +1,9 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_gas::GasUnit;
 use std::io::Write;
 use std::marker::PhantomData;
 
-use crate::{GasUnit, Prefix, Storage, WorkingSet};
+use crate::{Prefix, Storage, WorkingSet};
 use thiserror::Error;
 
 // SingletonKey is very similar to the unit type `()` i.e. it has only one value.

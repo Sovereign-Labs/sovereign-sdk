@@ -14,6 +14,7 @@ members = [
     "module-system/sov-modules-stf-template",
     "module-system/sov-modules-macros",
     "module-system/sov-state",
+    "module-system/sov-gas",
     "module-system/sov-modules-api",
     "module-system/utils/sov-first-read-last-write-cache",
     "module-system/module-implementations/gas-prototype",

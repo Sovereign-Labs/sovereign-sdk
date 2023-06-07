@@ -1,7 +1,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_gas::GasUnit;
 use std::marker::PhantomData;
 
-use crate::{storage::StorageKey, GasUnit, Prefix, Storage, WorkingSet};
+use crate::{storage::StorageKey, Prefix, Storage, WorkingSet};
 use thiserror::Error;
 
 /// A container that maps keys to values.
