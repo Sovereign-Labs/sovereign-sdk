@@ -1,11 +1,11 @@
 [package]
 name = "sov-demo-rollup"
-version = { workspace = true } 
-edition = { workspace = true } 
-resolver = "2"
-authors = { workspace = true } 
+version = { workspace = true }
+edition = { workspace = true }
+authors = { workspace = true }
 homepage = "sovereign.xyz"
 publish = false
+resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -36,8 +36,8 @@ sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-templat
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", default-features = false }
 sov-election = { path = "../../module-system/module-implementations/examples/sov-election", default-features = false }
 sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", default-features = false }
-sov-modules-api = { path = "../../module-system/sov-modules-api", features=["native"] }
-sov-state = { path = "../../module-system/sov-state", features=["native"] }
+sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
+sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
 
 
