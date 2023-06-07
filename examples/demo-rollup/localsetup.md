@@ -41,3 +41,7 @@ make test-create-token
 2023-06-07T10:05:20.493991Z  INFO sov_demo_rollup: Received 1 blobs
 2023-06-07T10:05:20.496571Z  INFO sov_demo_rollup: receipts: BatchReceipt { batch_hash: [44, 38, 61, 124, 123, 92, 9, 196, 200, 211, 52, 149, 33, 172, 120, 239, 180, 106, 72, 9, 161, 68, 8, 87, 127, 190, 201, 94, 9, 30, 108, 188], tx_receipts: [TransactionReceipt { tx_hash: [160, 103, 81, 53, 69, 140, 72, 198, 215, 190, 38, 242, 70, 204, 226, 217, 216, 22, 210, 142, 110, 221, 222, 171, 26, 40, 158, 236, 110, 107, 160, 170], body_to_save: None, events: [], receipt: Successful }], inner: Rewarded(0) }
 ```
+* If you want to submit custom transactions that are serialized by `sov-cli` then you can use
+```
+SERIALIZED_BLOB_PATH=../demo-stf/src/sov-cli/test_data/create_token.dat make submit-txn
+```
