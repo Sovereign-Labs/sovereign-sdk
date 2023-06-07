@@ -17,7 +17,7 @@ use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::CelestiaVerifier;
 use jupiter::verifier::RollupParams;
-use risc0_adapter::host::Risc0Host;
+use serde::Serialize;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::{DaService, SlotData};
@@ -33,8 +33,34 @@ use tracing::{debug, info};
 
 // RPC related imports
 use demo_stf::app::get_rpc_methods;
+use risc0_adapter::Risc0MethodId;
 use sov_modules_api::RpcRunner;
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
+use sov_rollup_interface::zk::traits::{Zkvm, ZkvmHost};
+
+/// In order to allow DemoAppRunner to be `Send`, this Zkvm stub is added
+/// It can be used to communicate with a Risc0Host over socket.
+struct RemoteZkHost {
+    _address: SocketAddr,
+}
+
+impl Zkvm for RemoteZkHost {
+    type CodeCommitment = Risc0MethodId;
+    type Error = anyhow::Error;
+
+    fn verify<'a>(
+        _serialized_proof: &'a [u8],
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<&'a [u8], Self::Error> {
+        todo!()
+    }
+}
+
+impl ZkvmHost for RemoteZkHost {
+    fn write_to_guest<T: Serialize>(&self, _item: T) {
+        todo!()
+    }
+}
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 // You can change this constant to point your rollup at a different namespace
@@ -128,7 +154,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Our state transition function implements the StateTransitionRunner interface,
     // so we use that to initialize the STF
-    let demo_runner = Arc::new(RwLock::new(NativeAppRunner::<Risc0Host>::new(
+    let demo_runner = Arc::new(RwLock::new(NativeAppRunner::<RemoteZkHost>::new(
         rollup_config.runner.clone(),
     )));
 
