@@ -19,7 +19,7 @@ pub trait DaService {
     type Spec: DaSpec;
 
     /// A DA layer block, possibly excluding some irrelevant information.
-    type FilteredBlock: SlotData<BlockHeader = <Self::Spec as DaSpec>::BlockHeader> + Send;
+    type FilteredBlock: SlotData<BlockHeader = <Self::Spec as DaSpec>::BlockHeader>;
 
     /// The output of an async call. Used in place of a dependency on async_trait.
     type Future<T>: Future<Output = Result<T, Self::Error>> + Send;
