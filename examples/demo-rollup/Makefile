@@ -9,7 +9,7 @@ AMOUNT=10000000utia
 START_HEIGHT=1
 BLOB_TXN_FEE=300utia
 TEST_PRIVATE_KEY_PATH=../demo-stf/src/sov-cli/test_data/minter_private_key.json
-SOV_CLI_REL_PATH=../../target/release/sov-cli
+SOV_CLI_REL_PATH=../../target/debug/sov-cli
 
 ifndef SERIALIZED_BLOB_PATH
 CONTENT :=
