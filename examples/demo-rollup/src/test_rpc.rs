@@ -91,7 +91,8 @@ fn test_helper(data: String, expected: &str, port: u16) {
         let address = SocketAddr::new(rpc_config.bind_host.parse().unwrap(), rpc_config.bind_port);
 
         // Initialize the ledger database, which stores blocks, transactions, events, etc.
-        let mut ledger_db = LedgerDB::temporary();
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut ledger_db = LedgerDB::with_path(tmpdir.path()).unwrap();
 
         populate_ledger(&mut ledger_db);
 
