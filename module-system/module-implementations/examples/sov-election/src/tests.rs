@@ -6,7 +6,7 @@ use sov_modules_api::Address;
 use sov_modules_api::{
     default_context::{DefaultContext, ZkDefaultContext},
     default_signature::private_key::DefaultPrivateKey,
-    Context, Module, ModuleInfo, PublicKey,
+    Context, Module, PublicKey,
 };
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 
@@ -20,7 +20,7 @@ fn test_election() {
 
     test_module::<DefaultContext>(admin.clone(), &mut native_working_set);
 
-    let (_log, witness) = native_working_set.commit().freeze();
+    let (_log, witness) = native_working_set.checkpoint().freeze();
     let zk_storage = ZkStorage::new([0u8; 32]);
     let mut zk_working_set = WorkingSet::with_witness(zk_storage, witness);
     test_module::<ZkDefaultContext>(admin, &mut zk_working_set);
@@ -28,7 +28,7 @@ fn test_election() {
 
 fn test_module<C: Context>(admin: C::Address, working_set: &mut WorkingSet<C::Storage>) {
     let admin_context = C::new(admin.clone());
-    let election = &mut Election::<C>::new();
+    let election = &mut Election::<C>::default();
 
     // Init module
     {

@@ -1,5 +1,5 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_api::{Context, ModuleInfo, Prefix};
+use sov_modules_api::{Context, Prefix};
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::stf::Event;
 use sov_state::{ProverStorage, StateMap, StateValue, Storage, WorkingSet, ZkStorage};
@@ -106,7 +106,7 @@ fn nested_module_call_test() {
         ]
     );
 
-    let (log, witness) = working_set.commit().freeze();
+    let (log, witness) = working_set.checkpoint().freeze();
     native_storage
         .validate_and_commit(log, &witness)
         .expect("State update is valid");
@@ -121,12 +121,12 @@ fn nested_module_call_test() {
 }
 
 fn execute_module_logic<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
-    let module = &mut module_c::ModuleC::<C>::new();
+    let module = &mut module_c::ModuleC::<C>::default();
     module.execute("some_key", "some_value", working_set);
 }
 
 fn test_state_update<C: Context>(working_set: &mut WorkingSet<C::Storage>) {
-    let module = <module_c::ModuleC<C> as ModuleInfo>::new();
+    let module = <module_c::ModuleC<C> as Default>::default();
 
     let expected_value = "some_value".to_owned();
 

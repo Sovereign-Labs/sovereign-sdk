@@ -161,7 +161,7 @@ mod tests {
     impl<C: Context> TestRuntime<C> {
         fn new() -> Self {
             TestRuntime {
-                value_setter: sov_value_setter::ValueSetter::new(),
+                value_setter: sov_value_setter::ValueSetter::default(),
             }
         }
     }
@@ -216,7 +216,7 @@ mod tests {
         };
         let config = GenesisConfig::<C>::new(value_setter_config);
         runtime.genesis(&config, &mut working_set).unwrap();
-        let (log, witness) = working_set.commit().freeze();
+        let (log, witness) = working_set.checkpoint().freeze();
         storage.validate_and_commit(log, &witness).unwrap();
 
         (storage, admin_private_key)

@@ -18,7 +18,6 @@ pub struct NonFungibleToken<C: Context> {
     #[state]
     pub(crate) owners: sov_state::StateMap<u64, C::Address>,
 }
-
 pub struct NonFungibleTokenConfig<C: Context> {
     pub admin: C::Address,
     pub owners: Vec<(u64, C::Address)>,

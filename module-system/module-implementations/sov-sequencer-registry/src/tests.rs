@@ -1,7 +1,7 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::ApplyBlobHooks;
 use sov_modules_api::Hasher;
-use sov_modules_api::{Address, Module, ModuleInfo, Spec};
+use sov_modules_api::{Address, Module, Spec};
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::query;
@@ -79,7 +79,7 @@ fn create_sequencer_config(
 }
 
 fn create_test_sequencer() -> TestSequencer {
-    let bank = sov_bank::Bank::<C>::new();
+    let bank = sov_bank::Bank::<C>::default();
     let (bank_config, seq_rollup_address) = create_bank_config();
 
     let token_address = sov_bank::create_token_address::<C>(
@@ -88,7 +88,7 @@ fn create_test_sequencer() -> TestSequencer {
         sov_bank::genesis::SALT,
     );
 
-    let sequencer = Sequencer::<C>::new();
+    let sequencer = Sequencer::<C>::default();
     let sequencer_config = create_sequencer_config(seq_rollup_address, token_address);
 
     TestSequencer {

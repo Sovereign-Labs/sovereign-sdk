@@ -2,8 +2,8 @@ use super::ValueSetter;
 use crate::{call, query, ValueSetterConfig};
 
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
+use sov_modules_api::Module;
 use sov_modules_api::{Address, Context};
-use sov_modules_api::{Module, ModuleInfo};
 use sov_rollup_interface::stf::Event;
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 
@@ -21,7 +21,7 @@ fn test_value_setter() {
         test_value_setter_helper(context, &config, &mut working_set);
     }
 
-    let (_, witness) = working_set.commit().freeze();
+    let (_, witness) = working_set.checkpoint().freeze();
 
     // Test Zk-Context
     {
@@ -39,7 +39,7 @@ fn test_value_setter_helper<C: Context>(
     config: &ValueSetterConfig<C>,
     working_set: &mut WorkingSet<C::Storage>,
 ) {
-    let module = ValueSetter::<C>::new();
+    let module = ValueSetter::<C>::default();
     module.genesis(config, working_set).unwrap();
 
     let new_value = 99;
@@ -82,7 +82,7 @@ fn test_err_on_sender_is_not_admin() {
         let context = DefaultContext::new(sender.clone());
         test_err_on_sender_is_not_admin_helper(context, &config, &mut native_working_set);
     }
-    let (_, witness) = native_working_set.commit().freeze();
+    let (_, witness) = native_working_set.checkpoint().freeze();
 
     // Test Zk-Context
     {
@@ -101,7 +101,7 @@ fn test_err_on_sender_is_not_admin_helper<C: Context>(
     config: &ValueSetterConfig<C>,
     working_set: &mut WorkingSet<C::Storage>,
 ) {
-    let module = ValueSetter::<C>::new();
+    let module = ValueSetter::<C>::default();
     module.genesis(config, working_set).unwrap();
     let resp = module.set_value(11, &context, working_set);
 

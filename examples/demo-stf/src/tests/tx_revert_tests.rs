@@ -59,7 +59,7 @@ fn test_tx_revert() {
 
     // Checks
     {
-        let runtime = &mut Runtime::<DefaultContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::default();
         let storage = ProverStorage::with_path(&path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
@@ -125,7 +125,7 @@ fn test_tx_bad_sig() {
     }
 
     {
-        let runtime = &mut Runtime::<DefaultContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::default();
         let storage = ProverStorage::with_path(&path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
@@ -184,7 +184,7 @@ fn test_tx_bad_serialization() {
     }
 
     {
-        let runtime = &mut Runtime::<DefaultContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::default();
         let storage = ProverStorage::with_path(&path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 

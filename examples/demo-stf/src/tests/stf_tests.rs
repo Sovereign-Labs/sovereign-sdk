@@ -53,7 +53,7 @@ pub mod test {
 
         // Generate a new storage instance after dumping data to the db.
         {
-            let runtime = &mut Runtime::<DefaultContext>::new();
+            let runtime = &mut Runtime::<DefaultContext>::default();
             let storage = ProverStorage::with_path(&path).unwrap();
             let mut working_set = WorkingSet::new(storage);
 
@@ -107,7 +107,7 @@ pub mod test {
 
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
 
-        let runtime = &mut Runtime::<DefaultContext>::new();
+        let runtime = &mut Runtime::<DefaultContext>::default();
         let mut working_set = WorkingSet::new(demo.current_storage.clone());
 
         let resp = runtime.election.results(&mut working_set);
@@ -160,7 +160,7 @@ pub mod test {
 
         // Generate a new storage instance, value are missing because we didn't call `end_slot()`;
         {
-            let runtime = &mut Runtime::<C>::new();
+            let runtime = &mut Runtime::<C>::default();
             let storage = ProverStorage::with_path(&path).unwrap();
             let mut working_set = WorkingSet::new(storage);
 

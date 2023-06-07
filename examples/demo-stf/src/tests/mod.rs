@@ -32,7 +32,7 @@ pub fn new_test_blob(batch: Batch, address: &[u8]) -> TestBlob {
 pub fn create_new_demo(
     path: impl AsRef<Path>,
 ) -> DemoApp<DefaultContext, sov_rollup_interface::mocks::MockZkvm> {
-    let runtime = Runtime::new();
+    let runtime = Runtime::default();
     let storage = ProverStorage::with_path(path).unwrap();
     AppTemplate::new(storage, runtime)
 }

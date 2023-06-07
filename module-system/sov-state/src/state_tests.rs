@@ -11,17 +11,17 @@ enum Operation {
 const EMPTY_ROOT: [u8; 32] = *b"SPARSE_MERKLE_PLACEHOLDER_HASH__";
 
 impl Operation {
-    fn execute<S: Storage>(&self, working_set: WorkingSet<S>) -> CommittedWorkingSet<S> {
+    fn execute<S: Storage>(&self, working_set: WorkingSet<S>) -> StateCheckpoint<S> {
         match self {
-            Operation::Merge => working_set.commit(),
+            Operation::Merge => working_set.checkpoint(),
             Operation::Finalize => {
                 let db = working_set.backing().clone();
-                let (cache_log, witness) = working_set.commit().freeze();
+                let (cache_log, witness) = working_set.checkpoint().freeze();
 
                 db.validate_and_commit(cache_log, &witness)
                     .expect("JMT update is valid");
 
-                CommittedWorkingSet::new(db)
+                StateCheckpoint::new(db)
             }
         }
     }
@@ -184,7 +184,7 @@ fn test_witness_roundtrip() {
         state_value.set(&11, &mut working_set);
         let _ = state_value.get(&mut working_set);
         state_value.set(&22, &mut working_set);
-        let (cache_log, witness) = working_set.commit().freeze();
+        let (cache_log, witness) = working_set.checkpoint().freeze();
 
         let _ = storage
             .validate_and_commit(cache_log, &witness)
@@ -198,7 +198,7 @@ fn test_witness_roundtrip() {
         state_value.set(&11, &mut working_set);
         let _ = state_value.get(&mut working_set);
         state_value.set(&22, &mut working_set);
-        let (cache_log, witness) = working_set.commit().freeze();
+        let (cache_log, witness) = working_set.checkpoint().freeze();
 
         let _ = storage
             .validate_and_commit(cache_log, &witness)
