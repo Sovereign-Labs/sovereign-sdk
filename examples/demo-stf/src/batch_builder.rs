@@ -142,7 +142,7 @@ mod tests {
     use sov_modules_api::default_context::DefaultContext;
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_api::transaction::Transaction;
-    use sov_modules_api::{Context, Genesis, ModuleInfo};
+    use sov_modules_api::{Context, Genesis};
     use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
     use sov_rollup_interface::services::batch_builder::BatchBuilder;
     use sov_state::{DefaultStorageSpec, ProverStorage, Storage};

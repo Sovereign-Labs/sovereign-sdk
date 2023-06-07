@@ -45,7 +45,7 @@ impl DefaultRuntimeMacro {
     }
 
     pub(crate) fn make_default_runtime_fn_body(
-        fields: &Vec<StructNamedField>,
+        fields: &[StructNamedField],
     ) -> Vec<proc_macro2::TokenStream> {
         fields
             .iter()
