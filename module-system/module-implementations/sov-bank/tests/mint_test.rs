@@ -40,12 +40,11 @@ fn mint_token() {
     // No events at the moment. If there are, needs to be checked
     assert!(working_set.events().is_empty());
 
-    let query_total_supply = |token_address: Address,
-                              working_set: &mut WorkingSet<Storage>|
-     -> Option<u64> {
-        let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set);
-        total_supply.amount
-    };
+    let query_total_supply =
+        |token_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
+            let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set);
+            total_supply.amount
+        };
 
     let query_user_balance =
         |user_address: Address, working_set: &mut WorkingSet<Storage>| -> Option<u64> {
@@ -86,11 +85,7 @@ fn mint_token() {
     // Mint with an un-authorized user
     let unauthorized_address = generate_address("unauthorized_address");
     let unauthorized_context = C::new(unauthorized_address.clone());
-    let unauthorized_mint = bank.call(
-        mint_message,
-        &unauthorized_context,
-        &mut working_set,
-    );
+    let unauthorized_mint = bank.call(mint_message, &unauthorized_context, &mut working_set);
 
     assert!(unauthorized_mint.is_err());
     let expected_error = format!(
@@ -137,10 +132,7 @@ fn mint_token() {
     };
 
     let minted = bank.call(mint_message, &minter_context, &mut working_set);
-    let err = format!(
-        "Sender {} is not an authorized minter",
-        minter_address
-    );
+    let err = format!("Sender {} is not an authorized minter", minter_address);
     assert!(minted.is_err());
     assert_eq!(err, minted.err().unwrap().to_string());
 
@@ -155,11 +147,7 @@ fn mint_token() {
     };
 
     let _minted = bank
-        .call(
-            mint_message,
-            &authorized_minter_2_context,
-            &mut working_set,
-        )
+        .call(mint_message, &authorized_minter_2_context, &mut working_set)
         .expect("Failed to mint token");
     let supply = query_total_supply(token_address.clone(), &mut working_set);
     assert!(working_set.events().is_empty());
@@ -176,11 +164,7 @@ fn mint_token() {
     };
 
     let _minted = bank
-        .call(
-            mint_message,
-            &authorized_minter_1_context,
-            &mut working_set,
-        )
+        .call(mint_message, &authorized_minter_1_context, &mut working_set)
         .expect("Failed to mint token");
     let supply = query_total_supply(token_address.clone(), &mut working_set);
     assert!(working_set.events().is_empty());
