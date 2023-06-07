@@ -63,12 +63,23 @@ impl<S: Storage> CommittedWorkingSet<S> {
         WorkingSet {
             delta: self.delta.get_revertable_wrapper(),
             events: Default::default(),
+            remaining_gas: todo!(),
         }
     }
 
     pub fn freeze(&mut self) -> (OrderedReadsAndWrites, S::Witness) {
         self.delta.freeze()
     }
+}
+
+pub trait GasUnit {
+    type Price;
+    fn value(&self, p: Self::Price) -> u64;
+}
+
+pub struct StdGasConfig<G: GasUnit> {
+    pub set_cost: G,
+    pub get_cost: G,
 }
 
 /// This structure contains the read-write set and the events collected during the execution of a transaction.
@@ -78,9 +89,14 @@ impl<S: Storage> CommittedWorkingSet<S> {
 pub struct WorkingSet<S: Storage> {
     delta: RevertableDelta<S>,
     events: Vec<Event>,
+    remaining_gas: u64,
 }
 
 impl<S: Storage> WorkingSet<S> {
+    pub fn deduct_gas<G: GasUnit>(&mut self, value: &G) -> Result<(), anyhow::Error> {
+        todo!()
+    }
+
     pub fn new(inner: S) -> Self {
         CommittedWorkingSet::new(inner).to_revertable()
     }

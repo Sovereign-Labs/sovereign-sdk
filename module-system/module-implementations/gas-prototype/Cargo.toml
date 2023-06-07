@@ -1,0 +1,29 @@
+[package]
+name = "gas-prototype"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+
+[dependencies]
+anyhow = { workspace = true }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false}
+sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
+sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+hex = { workspace = true }
+jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
+
+[dev-dependencies]
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1"}
+tempfile = { workspace = true }
+
+[features]
+default = ["native"]
+serde = ["dep:serde", "dep:serde_json"]
+native = ["serde", "sov-state/native", "dep:jsonrpsee", "sov-modules-api/native"]

@@ -189,6 +189,8 @@ pub trait Module {
     /// Configuration for the genesis method.
     type Config;
 
+    type GasConfig;
+
     /// Module defined argument to the call method.
     type CallMessage: Debug + BorshSerialize + BorshDeserialize = NonInstantiable;
 

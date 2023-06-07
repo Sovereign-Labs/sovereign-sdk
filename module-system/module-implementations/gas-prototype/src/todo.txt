@@ -1,0 +1,6 @@
+1. WorkingSet deends on C and moves to sov-modules-api
+2. Gas crate (-sov state depends on it)
+3. Add new() method to ModuleInfo
+4  Hash, Signature etc take WorkingSet
+5. Add GasUnit to WorkingSet (Generic)
+6. Todo add GasUnit to Context

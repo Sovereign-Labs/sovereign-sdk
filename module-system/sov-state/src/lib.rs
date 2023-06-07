@@ -19,6 +19,7 @@ pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 pub use map::StateMap;
 #[cfg(feature = "native")]
 pub use prover_storage::{delete_storage, ProverStorage};
+pub use scratchpad::GasUnit;
 pub use scratchpad::*;
 pub use sov_first_read_last_write_cache::cache::CacheLog;
 use std::{fmt::Display, str};
