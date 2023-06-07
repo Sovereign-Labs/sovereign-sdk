@@ -7,3 +7,4 @@
 8. How do we pass GasPrice & GasUnit to BatchBuilder, Rpc macros etc
 9. Should the Context have `charge_gas(gas_cost, working_set)`
 10. DO we want multiple gas costs and gas prices
+11. set, get, hash, etc can run out of gas so they return Result

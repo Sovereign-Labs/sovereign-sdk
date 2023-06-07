@@ -86,7 +86,7 @@ impl<S: Storage, G: GasUnit> CommittedWorkingSet<S, G> {
             delta: self.delta.get_revertable_wrapper(),
             events: Default::default(),
             remaining_funds: self.remaining_funds,
-            std_gas_cost: self.std_gas_config,
+            std_gas_config: self.std_gas_config,
             gas_price: self.gas_price,
         }
     }
@@ -104,7 +104,7 @@ pub struct WorkingSet<S: Storage, G: GasUnit> {
     delta: RevertableDelta<S>,
     events: Vec<Event>,
     remaining_funds: u64,
-    std_gas_cost: StdGasConfig<G>,
+    std_gas_config: StdGasConfig<G>,
     // Should we pass it in the context?;
     gas_price: G::Price,
 }
@@ -141,7 +141,7 @@ impl<S: Storage, G: GasUnit> WorkingSet<S, G> {
         CommittedWorkingSet {
             delta: self.delta.commit(),
             remaining_funds: self.remaining_funds,
-            std_gas_config: self.std_gas_cost,
+            std_gas_config: self.std_gas_config,
             gas_price: self.gas_price,
         }
     }
@@ -150,7 +150,7 @@ impl<S: Storage, G: GasUnit> WorkingSet<S, G> {
         CommittedWorkingSet {
             delta: self.delta.revert(),
             remaining_funds: self.remaining_funds,
-            std_gas_config: self.std_gas_cost,
+            std_gas_config: self.std_gas_config,
             gas_price: self.gas_price,
         }
     }
@@ -160,6 +160,8 @@ impl<S: Storage, G: GasUnit> WorkingSet<S, G> {
     }
 
     pub(crate) fn set(&mut self, key: StorageKey, value: StorageValue) {
+        let gas = self.std_gas_config.set_gas;
+        self.charge_gas(&gas);
         self.delta.set(key, value)
     }
 
