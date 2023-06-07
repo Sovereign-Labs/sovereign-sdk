@@ -9,10 +9,7 @@ AMOUNT=10000000utia
 START_HEIGHT=1
 BLOB_TXN_FEE=300utia
 TEST_PRIVATE_KEY_PATH=../demo-stf/src/sov-cli/test_data/minter_private_key.json
-
-ifndef NAMESPACE
-NAMESPACE := $(shell cd .. && cd demo-stf && cargo run --bin sov-cli util print-namespace)
-endif
+SOV_CLI_REL_PATH=../../target/release/sov-cli
 
 ifndef SERIALIZED_BLOB_PATH
 CONTENT :=
@@ -22,15 +19,16 @@ endif
 
 get_address = $(shell docker exec $(CONTAINER_NAME) celestia-appd keys show $(KEY_NAME) | sed -n 's/- address: \(.*\)/\1/p')
 get_auth = $(shell docker exec $(CONTAINER_NAME) /celestia bridge auth admin --node.store /bridge)
+get_namespace = $(shell $(SOV_CLI_REL_PATH) util print-namespace)
 
-key-exists: start-container
+key-exists: check-container-running
 	@docker exec $(CONTAINER_NAME) celestia-appd keys show $(KEY_NAME) || make create-new-key
 
-create-new-key: start-container
+create-new-key: check-container-running
 	@echo "Creating new key..."
 	@output=$$(docker exec $(CONTAINER_NAME) celestia-appd keys add $(KEY_NAME)) 
 	
-fund-address: start-container
+fund-address: check-container-running
 	@docker exec $(CONTAINER_NAME) celestia-appd query bank balances $(get_address) | grep amount || docker exec $(CONTAINER_NAME) celestia-appd tx bank send validator $(get_address) $(AMOUNT) --fees=300utia -y
 
 check-docker:
@@ -60,7 +58,7 @@ validator-funded:
 		sleep 5; \
 	done
 
-config: start-container
+config: check-container-running 
 ifeq ($(shell uname -s),Darwin)
 	@sed -i '' 's/\(pub const SEQUENCER_DA_ADDRESS: \[u8; 47\] = \*\)b"[^"]*";/\1b"$(get_address)";/' ../const-rollup-config/src/lib.rs
 	@sed -i '' 's/^\(celestia_rpc_auth_token = \)"[^"]*"/\1"$(get_auth)"/' rollup_config.toml
@@ -81,19 +79,22 @@ clean: check-docker
 	docker stop $(CONTAINER_NAME)
 	docker rm $(CONTAINER_NAME)
 
-submit-txn : start
+submit-txn : check-container-running build-sov-cli
 ifndef SERIALIZED_BLOB_PATH
 	$(error SERIALIZED_BLOB_PATH is not defined)
 else ifeq ($(wildcard $(SERIALIZED_BLOB_PATH)),)
 	$(error The file $(SERIALIZED_BLOB_PATH) does not exist)
 else
-	@echo $(CONTENT)
-	@echo $(NAMESPACE)
-	@docker exec $(CONTAINER_NAME) celestia-appd tx blob PayForBlobs $(NAMESPACE) $(CONTENT) --from $(KEY_NAME) --chain-id=test --fees=$(BLOB_TXN_FEE) -y
+	@echo CONTENT:$(CONTENT)
+	@echo NAMESPACE:$(NAMESPACE)
+	@docker exec $(CONTAINER_NAME) celestia-appd tx blob PayForBlobs $(get_namespace) $(CONTENT) --from $(KEY_NAME) --chain-id=test --fees=$(BLOB_TXN_FEE) -y
 endif
 
-test-serialize-create-token: start
-	cd ../demo-stf && cargo run --bin sov-cli serialize-call src/sov-cli/test_data/minter_private_key.json Bank src/sov-cli/test_data/create_token.json 0
+build-sov-cli:
+	cd ../demo-stf && cargo build --bin sov-cli
+
+test-serialize-create-token: check-container-running build-sov-cli
+	$(SOV_CLI_REL_PATH) serialize-call ../demo-stf/src/sov-cli/test_data/minter_private_key.json Bank ../demo-stf/src/sov-cli/test_data/create_token.json 0
 
 test-create-token: test-serialize-create-token
 	$(MAKE) submit-txn SERIALIZED_BLOB_PATH=../demo-stf/src/sov-cli/test_data/create_token.dat
