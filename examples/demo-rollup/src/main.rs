@@ -155,7 +155,7 @@ async fn main() -> Result<(), anyhow::Error> {
         },
     ));
 
-    // start_batch_producing(demo_runner.clone(), da_service.clone());
+    start_batch_producing(demo_runner.clone(), da_service.clone());
 
     // For demonstration,  we also initialize the DaVerifier interface using the DaVerifier interface
     // Running the verifier is only *necessary* during proof generation not normal execution
