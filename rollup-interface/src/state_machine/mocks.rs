@@ -1,14 +1,14 @@
-use std::io::Write;
-
+use crate::{
+    da::BlobTransactionTrait,
+    services::da::SlotData,
+    traits::{AddressTrait, BlockHeaderTrait, CanonicalHash},
+    zk::traits::{Matches, Zkvm},
+};
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-
-use crate::{
-    da::BlobTransactionTrait,
-    traits::AddressTrait,
-    zk::traits::{Matches, Zkvm},
-};
+use std::io::Write;
+use tendermint::crypto::Sha256;
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct MockCodeCommitment(pub [u8; 32]);
@@ -119,5 +119,43 @@ impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
 impl<Address: AddressTrait> TestBlob<Address> {
     pub fn new(data: Vec<u8>, address: Address) -> Self {
         Self { address, data }
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
+pub struct TestBlockHeader {
+    pub prev_hash: [u8; 32],
+}
+
+impl CanonicalHash for TestBlockHeader {
+    type Output = [u8; 32];
+
+    fn hash(&self) -> Self::Output {
+        sha2::Sha256::digest(&self.prev_hash).into()
+    }
+}
+
+impl BlockHeaderTrait for TestBlockHeader {
+    type Hash = [u8; 32];
+
+    fn prev_hash(&self) -> Self::Hash {
+        self.prev_hash
+    }
+}
+
+#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
+pub struct TestBlock {
+    pub curr_hash: [u8; 32],
+    pub header: TestBlockHeader,
+}
+
+impl SlotData for TestBlock {
+    type BlockHeader = TestBlockHeader;
+    fn hash(&self) -> [u8; 32] {
+        self.curr_hash
+    }
+
+    fn header(&self) -> &Self::BlockHeader {
+        &self.header
     }
 }

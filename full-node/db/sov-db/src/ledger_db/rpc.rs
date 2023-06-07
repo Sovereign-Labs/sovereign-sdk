@@ -402,6 +402,7 @@ impl LedgerDB {
                         .map(|tx| ItemOrHash::Hash(tx.hash))
                         .collect(),
                 );
+
                 let mut batch_response: BatchResponse<B, T> = batch.try_into()?;
                 batch_response.txs = tx_hashes;
                 batch_response
@@ -412,6 +413,7 @@ impl LedgerDB {
                 for tx in self.get_tx_range(&batch.txs)? {
                     txs.push(ItemOrHash::Full(tx.try_into()?));
                 }
+
                 let mut batch_response: BatchResponse<B, T> = batch.try_into()?;
                 batch_response.txs = Some(txs);
                 batch_response

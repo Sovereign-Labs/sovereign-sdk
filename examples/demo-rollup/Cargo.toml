@@ -15,14 +15,12 @@ borsh = { workspace = true, features = ["bytes"] }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-sha2 = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
 bytes = { workspace = true }
 futures = "0.3"
 
 # Crates which only this package depends on 
-tendermint = "0.32"
 tokio = { version = "1", features = ["full"] }
 tracing-subscriber = "0.3.17"
 
@@ -42,4 +40,7 @@ const-rollup-config = { path = "../const-rollup-config" }
 
 
 [dev-dependencies]
+sha2 = { workspace = true }
+reqwest = "0.11"
+tendermint = "0.32"
 tempfile = { workspace = true }

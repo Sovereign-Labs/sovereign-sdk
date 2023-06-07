@@ -1,6 +1,9 @@
 mod config;
 mod ledger_rpc;
 
+#[cfg(test)]
+mod test_rpc;
+
 use crate::config::RollupConfig;
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
