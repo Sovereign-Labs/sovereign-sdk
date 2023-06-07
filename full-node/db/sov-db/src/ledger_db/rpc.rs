@@ -234,7 +234,7 @@ impl LedgerRpcProvider for LedgerDB {
             "requested slot range too large. Max: {}",
             MAX_SLOTS_PER_REQUEST
         );
-        let ids: Vec<_> = (start..=end).map(|n| SlotIdentifier::Number(n)).collect();
+        let ids: Vec<_> = (start..=end).map(SlotIdentifier::Number).collect();
         self.get_slots(&ids, query_mode)
     }
 
@@ -250,9 +250,7 @@ impl LedgerRpcProvider for LedgerDB {
             "requested batch range too large. Max: {}",
             MAX_BATCHES_PER_REQUEST
         );
-        let ids: Vec<_> = (start..=end)
-            .map(|n| sov_rollup_interface::rpc::BatchIdentifier::Number(n))
-            .collect();
+        let ids: Vec<_> = (start..=end).map(BatchIdentifier::Number).collect();
         self.get_batches(&ids, query_mode)
     }
 
@@ -268,9 +266,7 @@ impl LedgerRpcProvider for LedgerDB {
             "requested transaction range too large. Max: {}",
             MAX_TRANSACTIONS_PER_REQUEST
         );
-        let ids: Vec<_> = (start..=end)
-            .map(|n| sov_rollup_interface::rpc::TxIdentifier::Number(n))
-            .collect();
+        let ids: Vec<_> = (start..=end).map(TxIdentifier::Number).collect();
         self.get_transactions(&ids, query_mode)
     }
 }

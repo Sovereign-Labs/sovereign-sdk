@@ -13,7 +13,7 @@ resolver = "2"
 publish = false
 
 [dev-dependencies]
-sov-modules-api = { path = "../../../sov-modules-api"}
+sov-modules-api = { path = "../../../sov-modules-api" }
 tempfile = { workspace = true }
 
 [dependencies]
@@ -31,4 +31,4 @@ jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], 
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-modules-api/native","dep:jsonrpsee"]
+native = ["serde", "sov-modules-api/native", "dep:jsonrpsee"]

@@ -104,7 +104,7 @@ fn transfer_initial_token() {
             to: receiver_address.clone(),
             coins: Coins {
                 amount: 1,
-                token_address: token_address.clone(),
+                token_address,
             },
         };
 
@@ -121,7 +121,7 @@ fn transfer_initial_token() {
         let unknown_sender = generate_address("non_existing_sender");
         let unknown_sender_context = C::new(unknown_sender.clone());
 
-        let sender_balance = query_user_balance(unknown_sender.clone(), &mut working_set);
+        let sender_balance = query_user_balance(unknown_sender, &mut working_set);
         assert!(sender_balance.is_none());
 
         let receiver_balance_before =

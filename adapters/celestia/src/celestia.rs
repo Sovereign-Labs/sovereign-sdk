@@ -349,10 +349,10 @@ impl Address for H160 {}
 pub fn parse_pfb_namespace(
     group: NamespaceGroup,
 ) -> Result<Vec<(MsgPayForBlobs, TxPosition)>, BoxError> {
-    if group.shares().len() == 0 {
+    if group.shares().is_empty() {
         return Ok(vec![]);
     }
-    assert!(group.shares()[0].namespace() == PFB_NAMESPACE);
+    assert_eq!(group.shares()[0].namespace(), PFB_NAMESPACE);
     let mut pfbs = Vec::new();
     for blob in group.blobs() {
         let mut data = blob.data();

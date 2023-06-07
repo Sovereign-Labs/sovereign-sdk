@@ -181,17 +181,17 @@ use nmt_rs::{
     NAMESPACED_HASH_LEN,
 };
 
-impl Into<NamespaceProof<NamespacedSha2Hasher>> for JsonNamespaceProof {
-    fn into(self) -> NamespaceProof<NamespacedSha2Hasher> {
+impl From<JsonNamespaceProof> for NamespaceProof<NamespacedSha2Hasher> {
+    fn from(val: JsonNamespaceProof) -> Self {
         NamespaceProof::PresenceProof {
             proof: Proof {
-                siblings: self
+                siblings: val
                     .nodes
                     .unwrap_or_default()
                     .into_iter()
                     .map(|v| ns_hash_from_b64(&v.inner))
                     .collect(),
-                start_idx: self.start as u32,
+                start_idx: val.start as u32,
             },
             ignore_max_ns: true,
         }

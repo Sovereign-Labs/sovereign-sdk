@@ -33,7 +33,7 @@ fn test_tx_revert() {
     );
 
     {
-        let mut demo = create_new_demo(&path);
+        let mut demo = create_new_demo(path);
 
         StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
         StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
@@ -60,7 +60,7 @@ fn test_tx_revert() {
     // Checks
     {
         let runtime = &mut Runtime::<DefaultContext>::default();
-        let storage = ProverStorage::with_path(&path).unwrap();
+        let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
         // We sent 4 vote messages but one of them is invalid and should be reverted.
@@ -100,7 +100,7 @@ fn test_tx_bad_sig() {
     );
 
     {
-        let mut demo = create_new_demo(&path);
+        let mut demo = create_new_demo(path);
 
         StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
         StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
@@ -126,7 +126,7 @@ fn test_tx_bad_sig() {
 
     {
         let runtime = &mut Runtime::<DefaultContext>::default();
-        let storage = ProverStorage::with_path(&path).unwrap();
+        let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
         let resp = runtime.election.results(&mut working_set);
@@ -160,7 +160,7 @@ fn test_tx_bad_serialization() {
     );
 
     {
-        let mut demo = create_new_demo(&path);
+        let mut demo = create_new_demo(path);
 
         StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
         StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
@@ -185,7 +185,7 @@ fn test_tx_bad_serialization() {
 
     {
         let runtime = &mut Runtime::<DefaultContext>::default();
-        let storage = ProverStorage::with_path(&path).unwrap();
+        let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
         let resp = runtime.election.results(&mut working_set);

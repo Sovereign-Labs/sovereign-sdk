@@ -22,7 +22,7 @@ demo-stf = { path = "../../demo-stf" }
 sov-rollup-interface = { path = "../../../rollup-interface" }
 risc0-adapter = { path = "../../../adapters/risc0" }
 const-rollup-config = { path = "../../const-rollup-config" }
-sov-modules-api = { path = "../../../module-system/sov-modules-api", features=["native"] }
-sov-state = { path = "../../../module-system/sov-state", features=["native"] }
+sov-modules-api = { path = "../../../module-system/sov-modules-api", features = ["native"] }
+sov-state = { path = "../../../module-system/sov-state", features = ["native"] }
 
 methods = { path = "../methods" }

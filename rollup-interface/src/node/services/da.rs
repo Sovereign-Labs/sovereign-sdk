@@ -50,6 +50,7 @@ pub trait DaService {
     /// For example, this method might return all of the blob transactions in rollup's namespace on Celestia,
     /// together with a range proof against the root of the namespaced-merkle-tree, demonstrating that the entire
     /// rollup namespace has been covered.
+    #[allow(clippy::type_complexity)]
     fn extract_relevant_txs_with_proof(
         &self,
         block: Self::FilteredBlock,

@@ -32,8 +32,9 @@ pub struct StoredCodeCommitment<Vm: Zkvm> {
 
 impl<Vm: Zkvm> BorshSerialize for StoredCodeCommitment<Vm> {
     fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        Ok(bincode::serialize_into(writer, &self.commitment)
-            .expect("Serialization to vec is infallible"))
+        bincode::serialize_into(writer, &self.commitment)
+            .expect("Serialization to vec is infallible");
+        Ok(())
     }
 }
 
