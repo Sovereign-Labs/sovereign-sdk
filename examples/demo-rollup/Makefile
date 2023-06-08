@@ -76,8 +76,11 @@ start: check-docker start-container validator-funded key-exists fund-address con
 stop: check-docker
 	docker stop $(CONTAINER_NAME)
 clean: check-docker
-	docker stop $(CONTAINER_NAME)
-	docker rm $(CONTAINER_NAME)
+	-docker stop $(CONTAINER_NAME)
+	echo 1
+	-docker rm $(CONTAINER_NAME)
+	echo 2
+	$(MAKE) clean-rollup-db
 
 submit-txn : check-container-running build-sov-cli
 ifndef SERIALIZED_BLOB_PATH
@@ -98,3 +101,13 @@ test-serialize-create-token: check-container-running build-sov-cli
 
 test-create-token: test-serialize-create-token
 	$(MAKE) submit-txn SERIALIZED_BLOB_PATH=../demo-stf/src/sov-cli/test_data/create_token.dat
+
+clean-rollup-db:
+	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' rollup_config.toml | tr -d '[:space:]"\n'))
+	@if [ -z "${path}" ] || [ "${path}" = "./" ]; then \
+                echo "Path is empty or too short, not safe to remove"; \
+                exit 1; \
+        fi
+	@echo removing rollup database "${path}"
+	rm -rf "${path}"
+
