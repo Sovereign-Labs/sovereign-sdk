@@ -19,8 +19,8 @@ install-dev-tools:  ## Installs all necessary cargo helpers
 	cargo install flaky-finder
 
 lint:  ## cargo check and clippy
-	cargo check
 	cargo check --all-targets --all-features
+	cargo fmt --all --check
 	cargo clippy --all-targets --all-features
 
 lint-fix:  ## cargo fmt, fix and clippy

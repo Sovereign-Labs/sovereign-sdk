@@ -29,7 +29,7 @@ async fn query_test_helper(data: String, expected: &str, rpc_config: RpcConfig) 
     assert_eq!((&contents), expected);
 }
 
-fn populate_ledger(ledger_db: &mut LedgerDB) {
+fn populate_ledger(ledger_db: &mut LedgerDB) -> () {
     let mut slot: SlotCommit<TestBlock, i32, i32> = SlotCommit::new(TestBlock {
         curr_hash: sha2::Sha256::digest(b"slot_data"),
         header: TestBlockHeader {
