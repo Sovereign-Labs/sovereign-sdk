@@ -1,4 +1,5 @@
 use crate::{transaction::Transaction, Context, Spec};
+use sov_rollup_interface::Buf;
 use sov_state::WorkingSet;
 
 /// Hooks that execute within the `StateTransitionFunction::apply_blob` function for each processed transaction.
@@ -34,7 +35,7 @@ pub trait ApplyBlobHooks {
     fn begin_blob_hook(
         &self,
         sequencer: &[u8],
-        raw_blob: &[u8],
+        raw_blob: &impl Buf,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()>;
 

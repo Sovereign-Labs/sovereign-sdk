@@ -160,8 +160,7 @@ async fn main() -> Result<(), anyhow::Error> {
         // For the demo, we create and verify a proof that the data has been extracted from Celestia correctly.
         // In a production implementation, this logic would only run on the prover node - regular full nodes could
         // simply download the data from Celestia without extracting and checking a merkle proof here,
-        let (blob_txs, inclusion_proof, completeness_proof) =
-            da_service.extract_relevant_txs_with_proof(filtered_block.clone());
+        let (blob_txs) = da_service.extract_relevant_txs(filtered_block.clone());
 
         assert!(da_verifier
             .verify_relevant_tx_list(header, &blob_txs, inclusion_proof, completeness_proof)
@@ -176,6 +175,8 @@ async fn main() -> Result<(), anyhow::Error> {
             data_to_commit.add_batch(receipts);
         }
         let (next_state_root, _witness) = demo.end_slot();
+
+        let (inclusion_proof, completeness_proof) = da_service.get_extraction_proof(block, blobs);
 
         // Store the resulting receipts in the ledger database
         ledger_db.commit_slot(data_to_commit)?;

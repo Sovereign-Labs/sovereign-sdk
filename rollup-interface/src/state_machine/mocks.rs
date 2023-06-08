@@ -99,16 +99,20 @@ fn test_mock_proof_roundtrip() {
 )]
 pub struct TestBlob<Address> {
     address: Address,
+    hash: [u8; 32],
     data: Vec<u8>,
 }
 
 impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
     type Data = std::io::Cursor<Vec<u8>>;
-
     type Address = Address;
 
     fn sender(&self) -> Self::Address {
         self.address.clone()
+    }
+
+    fn hash(&self) -> [u8; 32] {
+        self.hash.clone()
     }
 
     fn data(&self) -> Self::Data {
@@ -117,8 +121,12 @@ impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
 }
 
 impl<Address: AddressTrait> TestBlob<Address> {
-    pub fn new(data: Vec<u8>, address: Address) -> Self {
-        Self { address, data }
+    pub fn new(data: Vec<u8>, address: Address, hash: [u8; 32]) -> Self {
+        Self {
+            address,
+            data,
+            hash,
+        }
     }
 }
 

@@ -46,6 +46,15 @@ pub trait DaService {
         block: Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction>;
 
+    fn get_extraction_proof(
+        &self,
+        block: Self::FilteredBlock,
+        blobs: &Vec<<Self::Spec as DaSpec>::BlobTransaction>,
+    ) -> (
+        <Self::Spec as DaSpec>::InclusionMultiProof,
+        <Self::Spec as DaSpec>::CompletenessProof,
+    );
+
     /// Extract the relevant transactions from a block, along with a proof that the extraction has been done correctly.
     /// For example, this method might return all of the blob transactions in rollup's namespace on Celestia,
     /// together with a range proof against the root of the namespaced-merkle-tree, demonstrating that the entire

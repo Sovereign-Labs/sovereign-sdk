@@ -4,6 +4,7 @@ use crate::traits::{AddressTrait, BlockHeaderTrait};
 use core::fmt::Debug;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use std::hash::Hash;
 
 /// A specification for the types used by a DA layer.
 pub trait DaSpec {
@@ -60,10 +61,13 @@ pub trait DaVerifier {
 pub trait BlobTransactionTrait: Serialize + DeserializeOwned {
     type Data: Buf;
     type Address: AddressTrait;
+
     /// Returns the address (on the DA layer) of the entity which submitted the blob transaction
     fn sender(&self) -> Self::Address;
     /// The raw data of the blob. For example, the "calldata" of an Ethereum rollup transaction
     fn data(&self) -> Self::Data;
+    // Returns the hash of the blob. If not provided with a hint, it is computed by hashing the blob data
+    fn hash(&self) -> [u8; 32];
 }
 
 /// Trait with collection of trait bounds for a block hash.

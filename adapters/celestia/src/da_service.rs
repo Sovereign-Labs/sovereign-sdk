@@ -231,6 +231,21 @@ impl DaService for CelestiaService {
         output
     }
 
+    fn get_extraction_proof(
+        &self,
+        block: Self::FilteredBlock,
+        blobs: &Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction>,
+    ) -> (
+        <Self::Spec as sov_rollup_interface::da::DaSpec>::InclusionMultiProof,
+        <Self::Spec as sov_rollup_interface::da::DaSpec>::CompletenessProof,
+    ) {
+        let etx_proofs = CorrectnessProof::for_block(&block, blobs);
+        let rollup_row_proofs =
+            CompletenessProof::from_filtered_block(&block, self.rollup_namespace);
+
+        (etx_proofs.0, rollup_row_proofs.0)
+    }
+
     fn extract_relevant_txs_with_proof(
         &self,
         block: Self::FilteredBlock,
@@ -240,11 +255,8 @@ impl DaService for CelestiaService {
         <Self::Spec as sov_rollup_interface::da::DaSpec>::CompletenessProof,
     ) {
         let relevant_txs = self.extract_relevant_txs(block.clone());
-        let etx_proofs = CorrectnessProof::for_block(&block, &relevant_txs);
-        let rollup_row_proofs =
-            CompletenessProof::from_filtered_block(&block, self.rollup_namespace);
-
-        (relevant_txs, etx_proofs.0, rollup_row_proofs.0)
+        let (etx_proofs, rollup_row_proofs) = self.get_extraction_proof(block, &relevant_txs);
+        (relevant_txs, etx_proofs, rollup_row_proofs)
     }
 
     fn send_transaction(&self, blob: &[u8]) -> <Self as DaService>::Future<()> {

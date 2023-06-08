@@ -29,12 +29,17 @@ pub const PARITY_SHARES_NAMESPACE: NamespaceId = NamespaceId(hex_literal::hex!("
 impl BlobTransactionTrait for BlobWithSender {
     type Data = BlobIterator;
     type Address = CelestiaAddress;
+
     fn sender(&self) -> CelestiaAddress {
         self.sender.clone()
     }
 
     fn data(&self) -> Self::Data {
         self.blob.clone().into_iter()
+    }
+
+    fn hash(&self) -> [u8; 32] {
+        todo!()
     }
 }
 

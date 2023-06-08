@@ -50,7 +50,7 @@ fn test_stf() {
     let address = DaAddress { addr: [1; 32] };
     let preimage = vec![0; 32];
 
-    let test_blob = TestBlob::<DaAddress>::new(preimage, address);
+    let test_blob = TestBlob::<DaAddress>::new(preimage, address, [0; 32]);
     let stf = &mut CheckHashPreimageStf {};
 
     StateTransitionFunction::<MockZkvm>::init_chain(stf, ());
