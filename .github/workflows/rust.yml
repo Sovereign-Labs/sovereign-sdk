@@ -56,8 +56,8 @@ jobs:
       - name: Run cargo fmt check
         run: |
           cd examples/demo-prover;
-          if ! cargo fmt --check ; then
-            echo "Formatting errors detected, please run 'cargo fmt' to fix it";
+          if ! make lint ; then
+            echo "Formatting errors detected, please run 'make lint-fix' to fix it";
             exit 1
           fi
 

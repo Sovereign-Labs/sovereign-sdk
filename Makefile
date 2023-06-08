@@ -9,8 +9,8 @@ build: ## Build the the project
 clean: ## Cleans compiled
 	@cargo clean
 
-test: ## Runs test suite
-	cargo test
+test: ## Runs test suite with output from tests printed
+	@cargo test -- --nocapture
 
 install-dev-tools:  ## Installs all necessary cargo helpers
 	cargo install cargo-llvm-cov
@@ -18,16 +18,15 @@ install-dev-tools:  ## Installs all necessary cargo helpers
 	cargo install cargo-udeps
 	cargo install flaky-finder
 
-fix: export RUSTFLAGS := -D warnings
-fix:  ## cargo fmt and fix
-	cargo fmt --all
-	cargo fix --allow-dirty
-
-
 lint:  ## cargo check and clippy
 	cargo check
 	cargo check --all-targets --all-features
 	cargo clippy --all-targets --all-features
+
+fix:  ## cargo fmt, fix and clippy
+	cargo fmt --all
+	cargo fix --allow-dirty
+	cargo clippy --fix
 
 check-features: ## Checks that project compiles with all combinations of features
 	cargo hack --feature-powerset check
