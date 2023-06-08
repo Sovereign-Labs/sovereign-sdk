@@ -89,7 +89,6 @@ else ifeq ($(wildcard $(SERIALIZED_BLOB_PATH)),)
 	$(error The file $(SERIALIZED_BLOB_PATH) does not exist)
 else
 	@echo CONTENT:$(CONTENT)
-	@echo NAMESPACE:$(NAMESPACE)
 	@docker exec $(CONTAINER_NAME) celestia-appd tx blob PayForBlobs $(get_namespace) $(CONTENT) --from $(KEY_NAME) --chain-id=test --fees=$(BLOB_TXN_FEE) -y
 endif
 
