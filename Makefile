@@ -23,10 +23,10 @@ lint:  ## cargo check and clippy
 	cargo check --all-targets --all-features
 	cargo clippy --all-targets --all-features
 
-fix:  ## cargo fmt, fix and clippy
+lint-fix:  ## cargo fmt, fix and clippy
 	cargo fmt --all
 	cargo fix --allow-dirty
-	cargo clippy --fix
+	cargo clippy --fix --allow-dirty
 
 check-features: ## Checks that project compiles with all combinations of features
 	cargo hack --feature-powerset check
