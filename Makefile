@@ -24,8 +24,8 @@ lint:  ## cargo check and clippy
 	cargo clippy --all-targets --all-features
 
 lint-fix:  ## cargo fmt, fix and clippy
-	cargo fmt --all
 	cargo fix --allow-dirty
+	cargo fmt --all
 	cargo clippy --fix --allow-dirty
 
 check-features: ## Checks that project compiles with all combinations of features
