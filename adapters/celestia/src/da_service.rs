@@ -208,7 +208,7 @@ impl DaService for CelestiaService {
 
     fn extract_relevant_txs(
         &self,
-        block: Self::FilteredBlock,
+        block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction> {
         let mut output = Vec::new();
         for blob in block.rollup_data.blobs() {
@@ -233,7 +233,7 @@ impl DaService for CelestiaService {
 
     fn get_extraction_proof(
         &self,
-        block: Self::FilteredBlock,
+        block: &Self::FilteredBlock,
         blobs: &Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction>,
     ) -> (
         <Self::Spec as sov_rollup_interface::da::DaSpec>::InclusionMultiProof,
@@ -248,13 +248,13 @@ impl DaService for CelestiaService {
 
     fn extract_relevant_txs_with_proof(
         &self,
-        block: Self::FilteredBlock,
+        block: &Self::FilteredBlock,
     ) -> (
         Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction>,
         <Self::Spec as sov_rollup_interface::da::DaSpec>::InclusionMultiProof,
         <Self::Spec as sov_rollup_interface::da::DaSpec>::CompletenessProof,
     ) {
-        let relevant_txs = self.extract_relevant_txs(block.clone());
+        let relevant_txs = self.extract_relevant_txs(block);
         let (etx_proofs, rollup_row_proofs) = self.get_extraction_proof(block, &relevant_txs);
         (relevant_txs, etx_proofs, rollup_row_proofs)
     }

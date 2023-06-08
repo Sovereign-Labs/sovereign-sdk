@@ -8,7 +8,7 @@ use sov_modules_api::{
     Context, DispatchCall, Genesis,
 };
 use sov_rollup_interface::{
-    da::BlobTransactionTrait,
+    da::{BlobTransactionTrait, BufWithCounter},
     stf::{BatchReceipt, TransactionReceipt},
     traits::BatchTrait,
     Buf,
@@ -74,10 +74,11 @@ where
             .expect("Working_set was initialized in begin_slot")
             .to_revertable();
 
-        if let Err(e) =
-            self.runtime
-                .begin_blob_hook(blob.sender().as_ref(), &blob.data(), &mut batch_workspace)
-        {
+        if let Err(e) = self.runtime.begin_blob_hook(
+            blob.sender().as_ref(),
+            &blob.data().reader(),
+            &mut batch_workspace,
+        ) {
             error!(
                 "Error: The transaction was rejected by the 'enter_apply_blob' hook. Skipping batch without slashing the sequencer: {}",
                 e
@@ -92,7 +93,7 @@ where
     fn deserialize_batch(
         &mut self,
         batch_workspace: WorkingSet<C::Storage>,
-        blob_data: impl Buf,
+        blob_data: BufWithCounter<impl Buf>,
         blob_hash: [u8; 32],
     ) -> Result<(WorkingSet<C::Storage>, Batch)> {
         match Batch::deserialize_reader(&mut blob_data.reader()) {

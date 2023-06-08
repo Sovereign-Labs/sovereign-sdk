@@ -1,5 +1,5 @@
 use crate::{
-    da::BlobTransactionTrait,
+    da::{BlobTransactionTrait, BufWithCounter},
     services::da::SlotData,
     traits::{AddressTrait, BlockHeaderTrait, CanonicalHash},
     zk::traits::{Matches, Zkvm},
@@ -115,8 +115,8 @@ impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
         self.hash.clone()
     }
 
-    fn data(&self) -> Self::Data {
-        std::io::Cursor::new(self.data.clone())
+    fn data(&self) -> BufWithCounter<Self::Data> {
+        BufWithCounter::new(std::io::Cursor::new(self.data.clone()))
     }
 }
 

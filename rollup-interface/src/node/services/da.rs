@@ -43,12 +43,12 @@ pub trait DaService {
     /// all of the blob transactions in rollup's namespace on Celestia.
     fn extract_relevant_txs(
         &self,
-        block: Self::FilteredBlock,
+        block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction>;
 
     fn get_extraction_proof(
         &self,
-        block: Self::FilteredBlock,
+        block: &Self::FilteredBlock,
         blobs: &Vec<<Self::Spec as DaSpec>::BlobTransaction>,
     ) -> (
         <Self::Spec as DaSpec>::InclusionMultiProof,
@@ -62,7 +62,7 @@ pub trait DaService {
     #[allow(clippy::type_complexity)]
     fn extract_relevant_txs_with_proof(
         &self,
-        block: Self::FilteredBlock,
+        block: &Self::FilteredBlock,
     ) -> (
         Vec<<Self::Spec as DaSpec>::BlobTransaction>,
         <Self::Spec as DaSpec>::InclusionMultiProof,

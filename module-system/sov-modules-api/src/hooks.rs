@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use crate::{transaction::Transaction, Context, Spec};
 use sov_rollup_interface::Buf;
 use sov_state::WorkingSet;
@@ -35,7 +37,7 @@ pub trait ApplyBlobHooks {
     fn begin_blob_hook(
         &self,
         sequencer: &[u8],
-        raw_blob: &impl Buf,
+        raw_blob: &impl Read,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()>;
 

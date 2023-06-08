@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use crate::runtime::Runtime;
 use sov_modules_api::{
     hooks::{ApplyBlobHooks, TxHooks},
@@ -34,7 +36,7 @@ impl<C: Context> ApplyBlobHooks for Runtime<C> {
     fn begin_blob_hook(
         &self,
         sequencer: &[u8],
-        raw_blob: &[u8],
+        raw_blob: &impl Read,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
         self.sequencer

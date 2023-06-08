@@ -118,7 +118,7 @@ fn test_sequencer() {
     {
         test_sequencer
             .sequencer
-            .begin_blob_hook(&SEQUENCER_DA_ADDRESS, &[], working_set)
+            .begin_blob_hook(&SEQUENCER_DA_ADDRESS, &([0_u8; 0].as_slice()), working_set)
             .unwrap();
 
         let resp = test_sequencer.query_balance_via_bank(working_set);

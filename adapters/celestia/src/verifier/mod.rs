@@ -1,7 +1,7 @@
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::{
-    da::{self, BlobTransactionTrait, BlockHashTrait as BlockHash, DaSpec},
+    da::{self, BlobTransactionTrait, BlockHashTrait as BlockHash, BufWithCounter, DaSpec},
     Bytes,
 };
 
@@ -34,8 +34,8 @@ impl BlobTransactionTrait for BlobWithSender {
         self.sender.clone()
     }
 
-    fn data(&self) -> Self::Data {
-        self.blob.clone().into_iter()
+    fn data(&self) -> BufWithCounter<Self::Data> {
+        BufWithCounter::new(self.blob.clone().into_iter())
     }
 
     fn hash(&self) -> [u8; 32] {
@@ -188,14 +188,14 @@ impl da::DaVerifier for CelestiaVerifier {
                 if nid != &self.rollup_namespace.0[..] {
                     continue;
                 }
-                let tx = tx_iter.next().ok_or(ValidationError::MissingTx)?;
+                let tx: &BlobWithSender = tx_iter.next().ok_or(ValidationError::MissingTx)?;
                 if tx.sender.as_ref() != pfb.signer.as_bytes() {
                     return Err(ValidationError::InvalidSigner);
                 }
 
                 let blob_ref = blob.clone();
                 let blob_data: Bytes = blob.clone().data().collect();
-                let tx_data: Bytes = tx.data().collect();
+                let tx_data: Bytes = tx.data().inner().collect();
                 assert_eq!(blob_data, tx_data);
 
                 // Link blob commitment to e-tx commitment

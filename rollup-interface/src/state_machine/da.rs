@@ -57,6 +57,38 @@ pub trait DaVerifier {
     ) -> Result<(), Self::Error>;
 }
 
+// Simple structure that implements a buffer that counts the number of bytes read from the beginning
+// Useful for the partial blob reading optimization: we know for each blob how many bytes have been read from the beginning
+pub struct BufWithCounter<B: Buf> {
+    inner: B,
+    counter: usize,
+}
+
+impl<B: Buf> BufWithCounter<B> {
+    pub fn new(inner: B) -> Self {
+        BufWithCounter { inner, counter: 0 }
+    }
+
+    pub fn inner(self) -> B {
+        self.inner
+    }
+}
+
+impl<B: Buf> Buf for BufWithCounter<B> {
+    fn remaining(&self) -> usize {
+        self.inner.remaining()
+    }
+
+    fn chunk(&self) -> &[u8] {
+        self.inner.chunk()
+    }
+
+    fn advance(&mut self, cnt: usize) {
+        self.counter += cnt;
+        self.inner.advance(cnt);
+    }
+}
+
 /// A transaction on a data availability layer, including the address of the sender.
 pub trait BlobTransactionTrait: Serialize + DeserializeOwned {
     type Data: Buf;
@@ -65,7 +97,7 @@ pub trait BlobTransactionTrait: Serialize + DeserializeOwned {
     /// Returns the address (on the DA layer) of the entity which submitted the blob transaction
     fn sender(&self) -> Self::Address;
     /// The raw data of the blob. For example, the "calldata" of an Ethereum rollup transaction
-    fn data(&self) -> Self::Data;
+    fn data(&self) -> BufWithCounter<Self::Data>;
     // Returns the hash of the blob. If not provided with a hint, it is computed by hashing the blob data
     fn hash(&self) -> [u8; 32];
 }

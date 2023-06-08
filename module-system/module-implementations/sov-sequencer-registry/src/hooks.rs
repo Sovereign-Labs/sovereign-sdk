@@ -1,3 +1,5 @@
+use std::io::Read;
+
 use crate::Sequencer;
 use sov_modules_api::{hooks::ApplyBlobHooks, Context};
 use sov_state::WorkingSet;
@@ -9,7 +11,7 @@ impl<C: Context> ApplyBlobHooks for Sequencer<C> {
     fn begin_blob_hook(
         &self,
         sequencer_da: &[u8],
-        _raw_blob: &[u8],
+        _raw_blob: &impl Read,
         working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
     ) -> anyhow::Result<()> {
         let next_sequencer_da = self.seq_da_address.get_or_err(working_set);
