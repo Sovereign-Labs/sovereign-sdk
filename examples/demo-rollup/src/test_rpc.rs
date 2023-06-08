@@ -1,8 +1,6 @@
 use reqwest::header::CONTENT_TYPE;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use std::net::SocketAddr;
-use std::sync::atomic::{AtomicU16, Ordering};
-use std::sync::Arc;
 
 #[cfg(test)]
 use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader};
@@ -85,6 +83,7 @@ fn test_helper(data: String, expected: &str) {
     rt.block_on(async {
         let (tx_start, rx_start) = oneshot::channel();
         let (tx_end, rx_end) = oneshot::channel();
+        let (port_sender, port_receiver) = oneshot::channel();
 
         let address = SocketAddr::new("127.0.0.1".parse().unwrap(), 0);
 
@@ -96,15 +95,13 @@ fn test_helper(data: String, expected: &str) {
 
         let ledger_rpc_module = ledger_rpc::get_ledger_rpc::<i32, i32>(ledger_db.clone());
 
-        let actual_port_placeholder: Arc<AtomicU16> = Arc::new(AtomicU16::new(0));
-        let actual_port_placeholder_clone = actual_port_placeholder.clone();
         rt.spawn(async move {
             let server = jsonrpsee::server::ServerBuilder::default()
                 .build([address].as_ref())
                 .await
                 .unwrap();
             let actual_address = server.local_addr().unwrap();
-            actual_port_placeholder_clone.store(actual_address.port(), Ordering::Relaxed);
+            port_sender.send(actual_address.port()).unwrap();
             let _server_handle = server.start(ledger_rpc_module).unwrap();
             tx_start.send("server started").unwrap();
             rx_end.await.unwrap();
@@ -112,16 +109,10 @@ fn test_helper(data: String, expected: &str) {
 
         rx_start.await.unwrap();
 
-        for _ in 0..1000 {
-            if actual_port_placeholder.load(Ordering::Relaxed) != 0 {
-                break;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-
+        let bind_port = port_receiver.await.unwrap();
         let rpc_config = RpcConfig {
             bind_host: "127.0.0.1".to_string(),
-            bind_port: actual_port_placeholder.load(Ordering::Relaxed),
+            bind_port,
         };
 
         query_test_helper(data, expected, rpc_config).await;
