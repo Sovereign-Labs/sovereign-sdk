@@ -29,25 +29,25 @@ async fn query_test_helper(data: String, expected: &str, rpc_config: RpcConfig) 
     assert_eq!((&contents), expected);
 }
 
-fn populate_ledger(ledger_db: &mut LedgerDB) -> () {
+fn populate_ledger(ledger_db: &mut LedgerDB) {
     let mut slot: SlotCommit<TestBlock, i32, i32> = SlotCommit::new(TestBlock {
-        curr_hash: sha2::Sha256::digest(b"slot_data").into(),
+        curr_hash: sha2::Sha256::digest(b"slot_data"),
         header: TestBlockHeader {
-            prev_hash: (sha2::Sha256::digest(b"prev_header").into()),
+            prev_hash: sha2::Sha256::digest(b"prev_header"),
         },
     });
 
     slot.add_batch(BatchReceipt {
-        batch_hash: ::sha2::Sha256::digest(b"batch_receipt").into(),
+        batch_hash: ::sha2::Sha256::digest(b"batch_receipt"),
         tx_receipts: vec![
             TransactionReceipt::<i32> {
-                tx_hash: ::sha2::Sha256::digest(b"tx1").into(),
+                tx_hash: ::sha2::Sha256::digest(b"tx1"),
                 body_to_save: Some(b"tx1 body".to_vec()),
                 events: vec![],
                 receipt: 0,
             },
             TransactionReceipt::<i32> {
-                tx_hash: ::sha2::Sha256::digest(b"tx2").into(),
+                tx_hash: ::sha2::Sha256::digest(b"tx2"),
                 body_to_save: Some(b"tx2 body".to_vec()),
                 events: vec![
                     Event::new("event1_key", "event1_value"),
@@ -60,9 +60,9 @@ fn populate_ledger(ledger_db: &mut LedgerDB) -> () {
     });
 
     slot.add_batch(BatchReceipt {
-        batch_hash: ::sha2::Sha256::digest(b"batch_receipt2").into(),
+        batch_hash: ::sha2::Sha256::digest(b"batch_receipt2"),
         tx_receipts: vec![TransactionReceipt::<i32> {
-            tx_hash: ::sha2::Sha256::digest(b"tx1").into(),
+            tx_hash: ::sha2::Sha256::digest(b"tx1"),
             body_to_save: Some(b"tx1 body".to_vec()),
             events: vec![],
             receipt: 0,
