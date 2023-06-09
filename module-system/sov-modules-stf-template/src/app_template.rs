@@ -228,9 +228,9 @@ where
 
     pub(crate) fn apply_blob(
         &mut self,
-        blob: impl BlobTransactionTrait,
+        blob: &impl BlobTransactionTrait,
     ) -> Result<BatchReceipt<SequencerOutcome, TxEffect>> {
-        let mut batch_workspace = self.init_sequencer_and_get_working_set(&blob)?;
+        let mut batch_workspace = self.init_sequencer_and_get_working_set(blob)?;
 
         // TODO: don't ignore these events.
         // https://github.com/Sovereign-Labs/sovereign/issues/350

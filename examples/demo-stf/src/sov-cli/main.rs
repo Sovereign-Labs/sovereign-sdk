@@ -359,7 +359,7 @@ mod test {
 
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             demo,
-            new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
+            &new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner;

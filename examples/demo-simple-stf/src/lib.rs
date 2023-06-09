@@ -51,7 +51,7 @@ impl<VM: Zkvm> StateTransitionFunction<VM> for CheckHashPreimageStf {
     // The core logic of our rollup.
     fn apply_blob(
         &mut self,
-        blob: impl BlobTransactionTrait,
+        blob: &impl BlobTransactionTrait,
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
         let blob_data = blob.data();

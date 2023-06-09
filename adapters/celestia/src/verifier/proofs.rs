@@ -1,6 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::{NamespaceId, NamespaceProof, NamespacedSha2Hasher};
 use serde::{Deserialize, Serialize};
+use sov_rollup_interface::da::BlobTransactionTrait;
 
 use crate::{
     share_commit::recreate_commitment, shares::BlobRef, types::FilteredCelestiaBlock,
@@ -50,14 +51,18 @@ impl CorrectnessProof {
 
         // Extract (and clone) the position of each transaction
         for tx in relevant_txs.iter() {
-            let commitment = recreate_commitment(block.square_size(), BlobRef::with(&tx.blob.0))
-                .expect("commitment is valid");
+            // We process the transaction only if we read something from it
+            if tx.data().counter() != 0 {
+                let commitment =
+                    recreate_commitment(block.square_size(), BlobRef::with(&tx.blob.0))
+                        .expect("commitment is valid");
 
-            let (_, position) = block
-                .relevant_pfbs
-                .get(&commitment[..])
-                .expect("commitment must exist in map");
-            needed_tx_shares.push(position.clone());
+                let (_, position) = block
+                    .relevant_pfbs
+                    .get(&commitment[..])
+                    .expect("commitment must exist in map");
+                needed_tx_shares.push(position.clone());
+            }
         }
 
         let mut needed_tx_shares = needed_tx_shares.into_iter().peekable();

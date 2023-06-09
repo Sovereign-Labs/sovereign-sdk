@@ -239,9 +239,9 @@ impl DaService for CelestiaService {
         <Self::Spec as sov_rollup_interface::da::DaSpec>::InclusionMultiProof,
         <Self::Spec as sov_rollup_interface::da::DaSpec>::CompletenessProof,
     ) {
-        let etx_proofs = CorrectnessProof::for_block(&block, blobs);
+        let etx_proofs = CorrectnessProof::for_block(block, blobs);
         let rollup_row_proofs =
-            CompletenessProof::from_filtered_block(&block, self.rollup_namespace);
+            CompletenessProof::from_filtered_block(block, self.rollup_namespace);
 
         (etx_proofs.0, rollup_row_proofs.0)
     }

@@ -166,7 +166,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
         demo.begin_slot(Default::default());
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
-        for blob in blob_txs.clone() {
+        for blob in &blob_txs {
             let receipts = demo.apply_blob(blob, None);
             info!("receipts: {:?}", receipts);
             data_to_commit.add_batch(receipts);

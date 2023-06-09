@@ -4,7 +4,6 @@ use crate::traits::{AddressTrait, BlockHeaderTrait};
 use core::fmt::Debug;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use std::hash::Hash;
 
 /// A specification for the types used by a DA layer.
 pub trait DaSpec {
@@ -69,8 +68,13 @@ impl<B: Buf> BufWithCounter<B> {
         BufWithCounter { inner, counter: 0 }
     }
 
+    // To use with care: if any Buf method is applied to inner directly the counter won't be updated
     pub fn inner(self) -> B {
         self.inner
+    }
+
+    pub fn counter(self) -> usize {
+        self.counter
     }
 }
 
