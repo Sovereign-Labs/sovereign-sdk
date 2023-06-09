@@ -136,6 +136,7 @@ mod tests {
     use rand::Rng;
     use sov_modules_api::default_context::DefaultContext;
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+    use sov_modules_api::default_signature::DefaultPublicKey;
     use sov_modules_api::transaction::Transaction;
     use sov_modules_api::{Context, Genesis};
     use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
@@ -185,10 +186,13 @@ mod tests {
             .unwrap()
     }
 
-    fn setup(
+    fn create_batch_builder(
         batch_size_bytes: usize,
         tmpdir: &TempDir,
-    ) -> (FiFoStrictBatchBuilder<TestRuntime<C>, C>, DefaultPrivateKey) {
+    ) -> (
+        FiFoStrictBatchBuilder<TestRuntime<C>, C>,
+        ProverStorage<DefaultStorageSpec>,
+    ) {
         let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
 
         let batch_builder = FiFoStrictBatchBuilder::new(
@@ -197,19 +201,24 @@ mod tests {
             TestRuntime::<C>::default(),
             storage.clone(),
         );
+        (batch_builder, storage)
+    }
 
+    fn setup_runtime(storage: ProverStorage<DefaultStorageSpec>, admin: Option<DefaultPublicKey>) {
         let runtime = TestRuntime::<C>::default();
         let mut working_set = WorkingSet::new(storage.clone());
-        let admin_private_key = DefaultPrivateKey::generate();
+
+        let admin = admin.unwrap_or_else(|| {
+            let admin_private_key = DefaultPrivateKey::generate();
+            admin_private_key.pub_key()
+        });
         let value_setter_config = ValueSetterConfig {
-            admin: admin_private_key.pub_key().to_address(),
+            admin: admin.to_address(),
         };
         let config = GenesisConfig::<C>::new(value_setter_config);
         runtime.genesis(&config, &mut working_set).unwrap();
         let (log, witness) = working_set.checkpoint().freeze();
         storage.validate_and_commit(log, &witness).unwrap();
-
-        (batch_builder, admin_private_key)
     }
 
     mod accept_tx {
@@ -217,7 +226,7 @@ mod tests {
         #[test]
         fn accept_random_bytes_tx() {
             let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = setup(10, &tmpdir);
+            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
             let tx = generate_random_bytes();
             batch_builder.accept_tx(tx).unwrap();
         }
@@ -225,7 +234,7 @@ mod tests {
         #[test]
         fn accept_signed_tx_with_invalid_payload() {
             let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = setup(10, &tmpdir);
+            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
             let private_key = DefaultPrivateKey::generate();
             let tx = generate_signed_tx_with_invalid_payload(&private_key);
             batch_builder.accept_tx(tx).unwrap();
@@ -234,7 +243,7 @@ mod tests {
         #[test]
         fn accept_valid_tx() {
             let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = setup(10, &tmpdir);
+            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
             let tx = generate_random_valid_tx();
             batch_builder.accept_tx(tx).unwrap();
         }
@@ -242,7 +251,7 @@ mod tests {
         #[test]
         fn decline_tx_on_full_mempool() {
             let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = setup(10, &tmpdir);
+            let (mut batch_builder, _) = create_batch_builder(10, &tmpdir);
 
             for _ in 0..=MAX_TX_POOL_SIZE {
                 let tx = generate_random_valid_tx();
@@ -263,7 +272,9 @@ mod tests {
         #[test]
         fn error_on_empty_mempool() {
             let tmpdir = tempfile::tempdir().unwrap();
-            let (mut batch_builder, _) = setup(10, &tmpdir);
+            let (mut batch_builder, storage) = create_batch_builder(10, &tmpdir);
+            setup_runtime(storage, None);
+
             let build_result = batch_builder.get_next_blob();
             assert!(build_result.is_err());
             assert_eq!(
@@ -273,14 +284,36 @@ mod tests {
         }
 
         #[test]
-        #[ignore = "TBD"]
-        fn build_batch_invalidates_everything_on_missed_genesis() {}
+        fn build_batch_invalidates_everything_on_missed_genesis() {
+            let value_setter_admin = DefaultPrivateKey::generate();
+            let txs = [
+                // Should be included: 113 bytes
+                generate_valid_tx(&value_setter_admin, 1),
+                generate_valid_tx(&value_setter_admin, 2),
+            ];
+
+            let tmpdir = tempfile::tempdir().unwrap();
+            let batch_size = txs[0].len() * 3 + 1;
+            let (mut batch_builder, _) = create_batch_builder(batch_size, &tmpdir);
+            // Skipping runtime setup
+
+            for tx in &txs {
+                batch_builder.accept_tx(tx.clone()).unwrap();
+            }
+
+            assert_eq!(txs.len(), batch_builder.mempool.len());
+
+            let build_result = batch_builder.get_next_blob();
+            assert!(build_result.is_err());
+            assert_eq!(
+                "No valid transactions are available",
+                build_result.unwrap_err().to_string()
+            );
+        }
 
         #[test]
         fn builds_batch_skipping_invalid_txs() {
-            let tmpdir = tempfile::tempdir().unwrap();
-            let batch_size = 256;
-            let (mut batch_builder, value_setter_admin) = setup(batch_size, &tmpdir);
+            let value_setter_admin = DefaultPrivateKey::generate();
             let txs = [
                 // Should be included: 113 bytes
                 generate_valid_tx(&value_setter_admin, 1),
@@ -295,6 +328,11 @@ mod tests {
                 // Should be skipped, more than batch size
                 generate_valid_tx(&value_setter_admin, 3),
             ];
+
+            let tmpdir = tempfile::tempdir().unwrap();
+            let batch_size = txs[0].len() + txs[4].len() + 1;
+            let (mut batch_builder, storage) = create_batch_builder(batch_size, &tmpdir);
+            setup_runtime(storage, Some(value_setter_admin.pub_key()));
 
             for tx in &txs {
                 batch_builder.accept_tx(tx.clone()).unwrap();
