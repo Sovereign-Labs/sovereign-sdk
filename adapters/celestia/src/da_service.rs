@@ -113,7 +113,7 @@ impl DaService for CelestiaService {
 
     type FilteredBlock = FilteredCelestiaBlock;
 
-    type Future<T> = Pin<Box<dyn Future<Output = Result<T, Self::Error>>>>;
+    type Future<T> = Pin<Box<dyn Future<Output = Result<T, Self::Error>> + Send>>;
 
     type Error = BoxError;
 

@@ -22,7 +22,7 @@ pub trait DaService {
     type FilteredBlock: SlotData<BlockHeader = <Self::Spec as DaSpec>::BlockHeader>;
 
     /// The output of an async call. Used in place of a dependency on async_trait.
-    type Future<T>: Future<Output = Result<T, Self::Error>>;
+    type Future<T>: Future<Output = Result<T, Self::Error>> + Send;
 
     /// The error type for fallible methods.
     type Error: Send + Sync;

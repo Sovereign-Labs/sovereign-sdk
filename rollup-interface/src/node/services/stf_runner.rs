@@ -1,5 +1,7 @@
+use crate::services::batch_builder::BatchBuilder;
 use crate::stf::{StateTransitionConfig, StateTransitionFunction};
 use crate::zk::traits::Zkvm;
+use std::fmt::Display;
 
 /// A StateTransitionRunner (STR) is responsible for running the state transition function. For any particular function,
 /// you might have a few different STRs, each with different runtime configs. For example, you might have a STR which takes
@@ -24,6 +26,8 @@ pub trait StateTransitionRunner<T: StateTransitionConfig, Vm: Zkvm> {
     /// the runtime config might contain path to a data directory.
     type RuntimeConfig;
     type Inner: StateTransitionFunction<Vm>;
+    type BatchBuilder: BatchBuilder;
+    type Error: Display;
 
     // TODO: decide if `new` also requires <Self as StateTransitionFunction>::ChainParams as an argument
     /// Create a state transition runner
@@ -34,6 +38,10 @@ pub trait StateTransitionRunner<T: StateTransitionConfig, Vm: Zkvm> {
 
     /// Return a mutable reference to the inner STF implementation
     fn inner_mut(&mut self) -> &mut Self::Inner;
+
+    /// Gives batch builder, after it has been initialized and configured
+    /// Can be only called once
+    fn take_batch_builder(&mut self) -> Result<Self::BatchBuilder, Self::Error>;
 
     // /// Report if the state transition function has been initialized.
     // /// If not, node implementations should respond by running `init_chain`
