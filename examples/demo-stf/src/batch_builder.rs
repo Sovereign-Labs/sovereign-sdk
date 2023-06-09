@@ -1,7 +1,7 @@
 use anyhow::bail;
 use borsh::BorshDeserialize;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Context, DispatchCall, PublicKey, Spec};
+use sov_modules_api::{Context, DispatchCall, PublicKey};
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_state::WorkingSet;
 use std::collections::VecDeque;
@@ -15,23 +15,23 @@ pub struct FiFoStrictBatchBuilder<R, C: Context> {
     mempool_max_txs_count: usize,
     runtime: R,
     max_batch_size_bytes: usize,
-    working_set: Option<WorkingSet<<C as Spec>::Storage>>,
+    current_storage: C::Storage,
 }
 
 impl<R, C: Context> FiFoStrictBatchBuilder<R, C> {
-    pub fn new(max_batch_size_bytes: usize, mempool_max_txs_count: usize, runtime: R) -> Self {
+    pub fn new(
+        max_batch_size_bytes: usize,
+        mempool_max_txs_count: usize,
+        runtime: R,
+        current_storage: C::Storage,
+    ) -> Self {
         Self {
             mempool: VecDeque::new(),
             mempool_max_txs_count,
             max_batch_size_bytes,
             runtime,
-            working_set: None,
+            current_storage,
         }
-    }
-
-    #[cfg(feature = "native")]
-    pub fn set_working_set(&mut self, working_set: WorkingSet<<C as Spec>::Storage>) {
-        self.working_set = Some(working_set);
     }
 }
 
@@ -51,12 +51,7 @@ where
     /// Builds a new batch of valid transactions in order they were added to mempool
     /// Only transactions, which are dispatched successfully are included in the batch
     fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
-        let working_set = match self.working_set.as_mut() {
-            None => {
-                bail!("Cannot build batch before working set is initialized");
-            }
-            Some(working_set) => working_set,
-        };
+        let mut working_set = WorkingSet::new(self.current_storage.clone());
         let mut txs = Vec::new();
         let mut dismissed: Vec<(Vec<u8>, anyhow::Error)> = Vec::new();
         let mut current_batch_size = 0;
@@ -98,7 +93,7 @@ where
                 let ctx = C::new(sender_address);
 
                 //
-                match self.runtime.dispatch_call(msg, working_set, &ctx) {
+                match self.runtime.dispatch_call(msg, &mut working_set, &ctx) {
                     Ok(_) => (),
                     Err(err) => {
                         let err = anyhow::Error::new(err)
@@ -143,27 +138,20 @@ mod tests {
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_api::transaction::Transaction;
     use sov_modules_api::{Context, Genesis};
-    use sov_modules_macros::{DispatchCall, Genesis, MessageCodec};
+    use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
     use sov_rollup_interface::services::batch_builder::BatchBuilder;
     use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
     use sov_value_setter::call::CallMessage;
     use sov_value_setter::ValueSetterConfig;
+    use tempfile::TempDir;
 
     const MAX_TX_POOL_SIZE: usize = 20;
     type C = DefaultContext;
 
-    #[derive(Genesis, DispatchCall, MessageCodec)]
+    #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
     #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
     struct TestRuntime<T: Context> {
         value_setter: sov_value_setter::ValueSetter<T>,
-    }
-
-    impl<C: Context> TestRuntime<C> {
-        fn new() -> Self {
-            TestRuntime {
-                value_setter: sov_value_setter::ValueSetter::default(),
-            }
-        }
     }
 
     fn generate_random_valid_tx() -> Vec<u8> {
@@ -197,18 +185,20 @@ mod tests {
             .unwrap()
     }
 
-    fn build_test_batch_builder(
+    fn setup(
         batch_size_bytes: usize,
-    ) -> FiFoStrictBatchBuilder<TestRuntime<C>, C> {
-        let runtime = TestRuntime::<C>::new();
-        FiFoStrictBatchBuilder::new(batch_size_bytes, MAX_TX_POOL_SIZE, runtime)
-    }
-
-    // Returns storage after genesis and admin private key of value setter
-    fn setup_runtime_and_storage() -> (ProverStorage<DefaultStorageSpec>, DefaultPrivateKey) {
-        let runtime = TestRuntime::<C>::new();
-        let tmpdir = tempfile::tempdir().unwrap();
+        tmpdir: &TempDir,
+    ) -> (FiFoStrictBatchBuilder<TestRuntime<C>, C>, DefaultPrivateKey) {
         let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
+
+        let batch_builder = FiFoStrictBatchBuilder::new(
+            batch_size_bytes,
+            MAX_TX_POOL_SIZE,
+            TestRuntime::<C>::default(),
+            storage.clone(),
+        );
+
+        let runtime = TestRuntime::<C>::default();
         let mut working_set = WorkingSet::new(storage.clone());
         let admin_private_key = DefaultPrivateKey::generate();
         let value_setter_config = ValueSetterConfig {
@@ -219,21 +209,23 @@ mod tests {
         let (log, witness) = working_set.checkpoint().freeze();
         storage.validate_and_commit(log, &witness).unwrap();
 
-        (storage, admin_private_key)
+        (batch_builder, admin_private_key)
     }
 
     mod accept_tx {
         use super::*;
         #[test]
         fn accept_random_bytes_tx() {
-            let mut batch_builder = build_test_batch_builder(10);
+            let tmpdir = tempfile::tempdir().unwrap();
+            let (mut batch_builder, _) = setup(10, &tmpdir);
             let tx = generate_random_bytes();
             batch_builder.accept_tx(tx).unwrap();
         }
 
         #[test]
         fn accept_signed_tx_with_invalid_payload() {
-            let mut batch_builder = build_test_batch_builder(10);
+            let tmpdir = tempfile::tempdir().unwrap();
+            let (mut batch_builder, _) = setup(10, &tmpdir);
             let private_key = DefaultPrivateKey::generate();
             let tx = generate_signed_tx_with_invalid_payload(&private_key);
             batch_builder.accept_tx(tx).unwrap();
@@ -241,14 +233,16 @@ mod tests {
 
         #[test]
         fn accept_valid_tx() {
-            let mut batch_builder = build_test_batch_builder(10);
+            let tmpdir = tempfile::tempdir().unwrap();
+            let (mut batch_builder, _) = setup(10, &tmpdir);
             let tx = generate_random_valid_tx();
             batch_builder.accept_tx(tx).unwrap();
         }
 
         #[test]
         fn decline_tx_on_full_mempool() {
-            let mut batch_builder = build_test_batch_builder(10);
+            let tmpdir = tempfile::tempdir().unwrap();
+            let (mut batch_builder, _) = setup(10, &tmpdir);
 
             for _ in 0..=MAX_TX_POOL_SIZE {
                 let tx = generate_random_valid_tx();
@@ -268,10 +262,8 @@ mod tests {
 
         #[test]
         fn error_on_empty_mempool() {
-            let (storage, _) = setup_runtime_and_storage();
-            let working_set = WorkingSet::new(storage);
-            let mut batch_builder = build_test_batch_builder(1024);
-            batch_builder.set_working_set(working_set);
+            let tmpdir = tempfile::tempdir().unwrap();
+            let (mut batch_builder, _) = setup(10, &tmpdir);
             let build_result = batch_builder.get_next_blob();
             assert!(build_result.is_err());
             assert_eq!(
@@ -281,19 +273,14 @@ mod tests {
         }
 
         #[test]
-        fn error_on_non_initialized_working_set() {
-            let mut batch_builder = build_test_batch_builder(1024);
-            let build_result = batch_builder.get_next_blob();
-            assert!(build_result.is_err());
-            assert_eq!(
-                "Cannot build batch before working set is initialized",
-                build_result.unwrap_err().to_string()
-            );
-        }
+        #[ignore = "TBD"]
+        fn build_batch_invalidates_everything_on_missed_genesis() {}
 
         #[test]
         fn builds_batch_skipping_invalid_txs() {
-            let (storage, value_setter_admin) = setup_runtime_and_storage();
+            let tmpdir = tempfile::tempdir().unwrap();
+            let batch_size = 256;
+            let (mut batch_builder, value_setter_admin) = setup(batch_size, &tmpdir);
             let txs = [
                 // Should be included: 113 bytes
                 generate_valid_tx(&value_setter_admin, 1),
@@ -308,12 +295,6 @@ mod tests {
                 // Should be skipped, more than batch size
                 generate_valid_tx(&value_setter_admin, 3),
             ];
-
-            let batch_size = txs[0].len() + txs[4].len() + 1;
-
-            let working_set = WorkingSet::new(storage);
-            let mut batch_builder = build_test_batch_builder(batch_size);
-            batch_builder.set_working_set(working_set);
 
             for tx in &txs {
                 batch_builder.accept_tx(tx.clone()).unwrap();

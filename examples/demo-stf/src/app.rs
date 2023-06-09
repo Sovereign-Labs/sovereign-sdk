@@ -64,13 +64,16 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
     type Inner = DemoApp<DefaultContext, Vm>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
-        let runtime = Runtime::default();
         let storage = ProverStorage::with_config(runtime_config.storage)
             .expect("Failed to open prover storage");
-        let app = AppTemplate::new(storage, runtime);
+        let app = AppTemplate::new(storage.clone(), Runtime::default());
         let batch_size_bytes = 1024 * 100; // 100 KB
-        let batch_builder =
-            FiFoStrictBatchBuilder::new(batch_size_bytes, u32::MAX as usize, Runtime::default());
+        let batch_builder = FiFoStrictBatchBuilder::new(
+            batch_size_bytes,
+            u32::MAX as usize,
+            Runtime::default(),
+            storage,
+        );
         Self {
             stf: app,
             batch_builder,
@@ -91,14 +94,17 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
     type Inner = DemoApp<ZkDefaultContext, Vm>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
-        let runtime = Runtime::default();
         let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
         let app: AppTemplate<ZkDefaultContext, Runtime<ZkDefaultContext>, Vm> =
-            AppTemplate::new(storage, runtime);
+            AppTemplate::new(storage.clone(), Runtime::default());
 
         let batch_size_bytes = 1024 * 100; // 100 KB
-        let batch_builder =
-            FiFoStrictBatchBuilder::new(batch_size_bytes, u32::MAX as usize, Runtime::default());
+        let batch_builder = FiFoStrictBatchBuilder::new(
+            batch_size_bytes,
+            u32::MAX as usize,
+            Runtime::default(),
+            storage,
+        );
         Self {
             stf: app,
             batch_builder,
@@ -129,8 +135,6 @@ impl<Vm: Zkvm> BatchBuilder for DemoAppRunner<DefaultContext, Vm> {
     }
 
     fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
-        let working_set = sov_state::WorkingSet::new(self.inner().current_storage.clone());
-        self.batch_builder.set_working_set(working_set);
         self.batch_builder.get_next_blob()
     }
 }
