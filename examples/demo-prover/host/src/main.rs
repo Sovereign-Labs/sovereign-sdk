@@ -86,7 +86,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let header_hash = hex::encode(filtered_block.header.header.hash());
         host.write_to_guest(&filtered_block.header);
         let (blob_txs, inclusion_proof, completeness_proof) =
-            da_service.extract_relevant_txs_with_proof(filtered_block);
+            da_service.extract_relevant_txs_with_proof(&filtered_block);
 
         host.write_to_guest(&blob_txs);
         host.write_to_guest(&inclusion_proof);
@@ -103,7 +103,7 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         info!("Block has {} batches", blob_txs.len());
         for blob in blob_txs.clone() {
-            let receipt = demo.apply_blob(blob, None);
+            let receipt = demo.apply_blob(&blob, None);
             info!(
                 "batch with hash=0x{} has been applied",
                 hex::encode(receipt.batch_hash)
