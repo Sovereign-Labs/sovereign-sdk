@@ -26,7 +26,6 @@ use sov_state::Storage;
 use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::RwLock;
 use tracing::Level;
 use tracing::{debug, info};
 
@@ -78,12 +77,13 @@ fn start_batch_producing<
     B: BatchBuilder + Send + Sync + 'static,
     T: DaService + Send + Sync + 'static,
 >(
-    batch_builder: Arc<RwLock<B>>,
+    batch_builder: B,
     da_service: Arc<T>,
 ) {
+    let mut batch_builder = batch_builder;
     tokio::spawn(async move {
         loop {
-            match batch_builder.write().await.get_next_blob() {
+            match batch_builder.get_next_blob() {
                 Ok(blob) => {
                     let blob: Vec<u8> = blob.into_iter().flatten().collect();
                     match da_service.send_transaction(&blob).await {
@@ -128,13 +128,11 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Our state transition function implements the StateTransitionRunner interface,
     // so we use that to initialize the STF
-    let demo_runner = Arc::new(RwLock::new(NativeAppRunner::<Risc0Verifier>::new(
-        rollup_config.runner.clone(),
-    )));
+    let mut demo_runner = NativeAppRunner::<Risc0Verifier>::new(rollup_config.runner.clone());
 
     // Our state transition also implements the RpcRunner interface,
     // so we use that to initialize the RPC server.
-    let storage = demo_runner.read().await.get_storage();
+    let storage = demo_runner.get_storage();
     let is_storage_empty = storage.is_empty();
     let mut methods = get_rpc_methods(storage);
     let ledger_rpc_module =
@@ -155,7 +153,9 @@ async fn main() -> Result<(), anyhow::Error> {
         },
     ));
 
-    start_batch_producing(demo_runner.clone(), da_service.clone());
+    let batch_builder = demo_runner.take_batch_builder()?;
+
+    start_batch_producing(batch_builder, da_service.clone());
 
     // For demonstration,  we also initialize the DaVerifier interface using the DaVerifier interface
     // Running the verifier is only *necessary* during proof generation not normal execution
@@ -163,9 +163,8 @@ async fn main() -> Result<(), anyhow::Error> {
         namespace: ROLLUP_NAMESPACE,
     }));
 
+    let demo = demo_runner.inner_mut();
     let mut prev_state_root = {
-        let mut demo_runner = demo_runner.write().await;
-        let demo = demo_runner.inner_mut();
         // Check if the rollup has previously been initialized
         if is_storage_empty {
             info!("No history detected. Initializing chain...");
@@ -210,18 +209,13 @@ async fn main() -> Result<(), anyhow::Error> {
         info!("Received {} blobs", blob_txs.len());
 
         let mut data_to_commit = SlotCommit::new(filtered_block);
-        let next_state_root = {
-            let mut demo_runner = demo_runner.write().await;
-            let demo = demo_runner.inner_mut();
-            demo.begin_slot(Default::default());
-            for blob in blob_txs.clone() {
-                let receipts = demo.apply_blob(blob, None);
-                info!("receipts: {:?}", receipts);
-                data_to_commit.add_batch(receipts);
-            }
-            let (next_state_root, _witness) = demo.end_slot();
-            next_state_root
-        };
+        demo.begin_slot(Default::default());
+        for blob in blob_txs.clone() {
+            let receipts = demo.apply_blob(blob, None);
+            info!("receipts: {:?}", receipts);
+            data_to_commit.add_batch(receipts);
+        }
+        let (next_state_root, _witness) = demo.end_slot();
 
         // Store the resulting receipts in the ledger database
         ledger_db.commit_slot(data_to_commit)?;
