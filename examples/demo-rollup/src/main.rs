@@ -17,7 +17,6 @@ use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::CelestiaVerifier;
 use jupiter::verifier::RollupParams;
-use risc0_adapter::host::Risc0Host;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::{DaService, SlotData};
@@ -26,12 +25,15 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::Storage;
 use std::env;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use tracing::Level;
 use tracing::{debug, info};
 
 // RPC related imports
 use demo_stf::app::get_rpc_methods;
+use risc0_adapter::host::Risc0Verifier;
 use sov_modules_api::RpcRunner;
+use sov_rollup_interface::services::batch_builder::BatchBuilder;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 // You can change this constant to point your rollup at a different namespace
@@ -71,6 +73,37 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
     )
 }
 
+fn start_batch_producing<
+    B: BatchBuilder + Send + Sync + 'static,
+    T: DaService + Send + Sync + 'static,
+>(
+    batch_builder: B,
+    da_service: Arc<T>,
+) {
+    let mut batch_builder = batch_builder;
+    tokio::spawn(async move {
+        loop {
+            match batch_builder.get_next_blob() {
+                Ok(blob) => {
+                    let blob: Vec<u8> = blob.into_iter().flatten().collect();
+                    match da_service.send_transaction(&blob).await {
+                        Ok(_) => {
+                            info!("Successfully produced batch");
+                        }
+                        Err(_err) => {
+                            info!("Error while producing batch");
+                        }
+                    };
+                }
+                Err(err) => {
+                    info!("Error while producing batch: {:?}", err);
+                }
+            };
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+    });
+}
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
@@ -95,7 +128,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Our state transition function implements the StateTransitionRunner interface,
     // so we use that to initialize the STF
-    let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
+    let mut demo_runner = NativeAppRunner::<Risc0Verifier>::new(rollup_config.runner.clone());
 
     // Our state transition also implements the RpcRunner interface,
     // so we use that to initialize the RPC server.
@@ -113,33 +146,40 @@ async fn main() -> Result<(), anyhow::Error> {
     });
 
     // Initialize the Celestia service using the DaService interface
-    let da_service = CelestiaService::new(
+    let da_service = Arc::new(CelestiaService::new(
         rollup_config.da.clone(),
         RollupParams {
             namespace: ROLLUP_NAMESPACE,
         },
-    );
+    ));
+
+    let batch_builder = demo_runner.take_batch_builder()?;
+
+    start_batch_producing(batch_builder, da_service.clone());
+
     // For demonstration,  we also initialize the DaVerifier interface using the DaVerifier interface
     // Running the verifier is only *necessary* during proof generation not normal execution
-    let da_verifier = CelestiaVerifier::new(RollupParams {
+    let da_verifier = Arc::new(CelestiaVerifier::new(RollupParams {
         namespace: ROLLUP_NAMESPACE,
-    });
+    }));
 
     let demo = demo_runner.inner_mut();
-    // Check if the rollup has previously been initialized
-    if is_storage_empty {
-        info!("No history detected. Initializing chain...");
-        demo.init_chain(get_genesis_config());
-        info!("Chain initialization is done.");
-    } else {
-        debug!("Chain is already initialized. Skipping initialization.");
-    }
+    let mut prev_state_root = {
+        // Check if the rollup has previously been initialized
+        if is_storage_empty {
+            info!("No history detected. Initializing chain...");
+            demo.init_chain(get_genesis_config());
+            info!("Chain initialization is done.");
+        } else {
+            debug!("Chain is already initialized. Skipping initialization.");
+        }
 
-    // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
-    // This will be removed shortly.
-    demo.begin_slot(Default::default());
-    let (prev_state_root, _) = demo.end_slot();
-    let mut prev_state_root = prev_state_root.0;
+        // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
+        // This will be removed shortly.
+        demo.begin_slot(Default::default());
+        let (prev_state_root, _) = demo.end_slot();
+        prev_state_root.0
+    };
 
     // Start the main rollup loop
     let item_numbers = ledger_db.get_next_items_numbers();
@@ -168,8 +208,8 @@ async fn main() -> Result<(), anyhow::Error> {
             .is_ok());
         info!("Received {} blobs", blob_txs.len());
 
-        demo.begin_slot(Default::default());
         let mut data_to_commit = SlotCommit::new(filtered_block);
+        demo.begin_slot(Default::default());
         for blob in blob_txs.clone() {
             let receipts = demo.apply_blob(blob, None);
             info!("receipts: {:?}", receipts);

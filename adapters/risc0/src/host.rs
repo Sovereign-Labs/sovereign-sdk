@@ -42,17 +42,39 @@ impl<'prover> Zkvm for Risc0Host<'prover> {
         serialized_proof: &'a [u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error> {
-        let receipt: Risc0Proof<'a> = bincode::deserialize(serialized_proof)?;
-        verify_with_hal(
-            &risc0_zkp::verify::CpuVerifyHal::<BabyBear, HashSuiteSha256<BabyBear, Impl>, _>::new(
-                &CIRCUIT,
-            ),
-            &code_commitment.0,
-            &receipt.seal,
-            receipt.journal,
-        )?;
-        Ok(receipt.journal)
+        verify_from_slice(serialized_proof, code_commitment)
     }
+}
+
+pub struct Risc0Verifier;
+
+impl Zkvm for Risc0Verifier {
+    type CodeCommitment = Risc0MethodId;
+
+    type Error = anyhow::Error;
+
+    fn verify<'a>(
+        serialized_proof: &'a [u8],
+        code_commitment: &Self::CodeCommitment,
+    ) -> Result<&'a [u8], Self::Error> {
+        verify_from_slice(serialized_proof, code_commitment)
+    }
+}
+
+fn verify_from_slice<'a>(
+    serialized_proof: &'a [u8],
+    code_commitment: &Risc0MethodId,
+) -> Result<&'a [u8], anyhow::Error> {
+    let receipt: Risc0Proof<'a> = bincode::deserialize(serialized_proof)?;
+    verify_with_hal(
+        &risc0_zkp::verify::CpuVerifyHal::<BabyBear, HashSuiteSha256<BabyBear, Impl>, _>::new(
+            &CIRCUIT,
+        ),
+        &code_commitment.0,
+        &receipt.seal,
+        receipt.journal,
+    )?;
+    Ok(receipt.journal)
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
