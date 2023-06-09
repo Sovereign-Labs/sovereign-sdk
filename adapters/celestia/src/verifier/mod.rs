@@ -1,9 +1,13 @@
+use std::io::Read;
+
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::{
     da::{self, BlobTransactionTrait, BlockHashTrait as BlockHash, BufWithCounter, DaSpec},
-    Bytes,
+    Buf, Bytes,
 };
+
+use tendermint::crypto::Sha256;
 
 pub mod address;
 pub mod proofs;
@@ -39,7 +43,20 @@ impl BlobTransactionTrait for BlobWithSender {
     }
 
     fn hash(&self) -> [u8; 32] {
-        todo!()
+        // We first try to compute the hash using a hint
+        if let Some(hash) = self.hash {
+            return hash;
+        }
+
+        // If there is no hash computed yet we have to calculate it using the buf data
+        let mut reader = self.data().inner().reader();
+        let mut batch_data = Vec::new();
+        reader
+            .read_to_end(&mut batch_data)
+            .unwrap_or_else(|e| panic!("Unable to read batch data {}", e));
+
+        let hash = sha2::Sha256::digest(&batch_data);
+        hash
     }
 }
 

@@ -1,10 +1,8 @@
-use bytes::Buf;
-
 use crate::traits::{AddressTrait, BlockHeaderTrait};
+use bytes::Buf;
 use core::fmt::Debug;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-
 /// A specification for the types used by a DA layer.
 pub trait DaSpec {
     /// The hash of a DA layer block

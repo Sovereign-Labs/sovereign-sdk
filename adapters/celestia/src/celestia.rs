@@ -264,6 +264,7 @@ impl CanonicalHash for CelestiaHeader {
 pub struct BlobWithSender {
     pub blob: Blob,
     pub sender: CelestiaAddress,
+    pub hash: Option<[u8; 32]>,
 }
 
 impl BlockHeader for CelestiaHeader {

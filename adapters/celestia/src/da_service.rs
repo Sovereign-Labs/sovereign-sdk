@@ -225,7 +225,9 @@ impl DaService for CelestiaService {
             let blob_tx = BlobWithSender {
                 blob: blob.into(),
                 sender: CelestiaAddress(sender.as_bytes().to_vec()),
+                hash: None,
             };
+
             output.push(blob_tx)
         }
         output
