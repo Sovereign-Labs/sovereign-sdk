@@ -49,7 +49,7 @@ pub trait DaService {
     fn get_extraction_proof(
         &self,
         block: &Self::FilteredBlock,
-        blobs: &Vec<<Self::Spec as DaSpec>::BlobTransaction>,
+        blobs: &[<Self::Spec as DaSpec>::BlobTransaction],
     ) -> (
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,

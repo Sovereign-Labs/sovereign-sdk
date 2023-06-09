@@ -112,7 +112,7 @@ impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
     }
 
     fn hash(&self) -> [u8; 32] {
-        self.hash.clone()
+        self.hash
     }
 
     fn data(&self) -> BufWithCounter<Self::Data> {

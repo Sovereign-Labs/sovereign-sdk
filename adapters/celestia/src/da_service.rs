@@ -236,12 +236,12 @@ impl DaService for CelestiaService {
     fn get_extraction_proof(
         &self,
         block: &Self::FilteredBlock,
-        blobs: &Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction>,
+        blobs: &[<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction],
     ) -> (
         <Self::Spec as sov_rollup_interface::da::DaSpec>::InclusionMultiProof,
         <Self::Spec as sov_rollup_interface::da::DaSpec>::CompletenessProof,
     ) {
-        let etx_proofs = CorrectnessProof::for_block(block, blobs);
+        let etx_proofs = CorrectnessProof::for_block(block, &blobs.to_vec());
         let rollup_row_proofs =
             CompletenessProof::from_filtered_block(block, self.rollup_namespace);
 

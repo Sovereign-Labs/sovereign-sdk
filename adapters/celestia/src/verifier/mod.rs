@@ -55,8 +55,7 @@ impl BlobTransactionTrait for BlobWithSender {
             .read_to_end(&mut batch_data)
             .unwrap_or_else(|e| panic!("Unable to read batch data {}", e));
 
-        let hash = sha2::Sha256::digest(&batch_data);
-        hash
+        sha2::Sha256::digest(&batch_data)
     }
 }
 
