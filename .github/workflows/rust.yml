@@ -27,12 +27,10 @@ jobs:
         uses: mozilla-actions/sccache-action@v0.0.3
         with:
           version: "v0.4.0"
-      - name: Run cargo check
-        run: cargo check
-      - name: Run cargo fmt check
+      - name: Run lint
         run: |
-          if ! cargo fmt --all --check ; then
-            echo "Formatting errors detected, please run 'cargo fmt --all' to fix it";
+          if ! make lint ; then
+            echo "Linting or formatting errors detected, please run 'make lint-fix' to fix it";
             exit 1
           fi
 
@@ -114,4 +112,5 @@ jobs:
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3
         with:
-          fail_ci_if_error: true
+          # When retry is implemented, we can enable it again: https://github.com/codecov/codecov-action/issues/926
+          fail_ci_if_error: false

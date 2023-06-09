@@ -139,7 +139,7 @@ impl CanonicalHash for TestBlockHeader {
     type Output = [u8; 32];
 
     fn hash(&self) -> Self::Output {
-        sha2::Sha256::digest(&self.prev_hash).into()
+        sha2::Sha256::digest(self.prev_hash)
     }
 }
 
