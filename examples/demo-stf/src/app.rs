@@ -28,7 +28,7 @@ use sov_state::Storage;
 
 pub struct DemoAppRunner<C: Context, Vm: Zkvm> {
     pub stf: DemoApp<C, Vm>,
-    pub batch_builder: FiFoStrictBatchBuilder<Runtime<C>, C>,
+    pub batch_builder: Option<FiFoStrictBatchBuilder<Runtime<C>, C>>,
 }
 
 pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;
@@ -43,8 +43,6 @@ use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 use crate::batch_builder::FiFoStrictBatchBuilder;
 #[cfg(feature = "native")]
 use sov_modules_macros::expose_rpc;
-#[cfg(feature = "native")]
-use sov_rollup_interface::services::batch_builder::BatchBuilder;
 
 #[cfg(feature = "native")]
 pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
@@ -62,18 +60,23 @@ pub type DemoTxReceipt = TxEffect;
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
     type RuntimeConfig = Config;
     type Inner = DemoApp<DefaultContext, Vm>;
+    type BatchBuilder = FiFoStrictBatchBuilder<Runtime<DefaultContext>, DefaultContext>;
+    type Error = anyhow::Error;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
-        let runtime = Runtime::default();
         let storage = ProverStorage::with_config(runtime_config.storage)
             .expect("Failed to open prover storage");
-        let app = AppTemplate::new(storage, runtime);
+        let app = AppTemplate::new(storage.clone(), Runtime::default());
         let batch_size_bytes = 1024 * 100; // 100 KB
-        let batch_builder =
-            FiFoStrictBatchBuilder::new(batch_size_bytes, u32::MAX as usize, Runtime::default());
+        let batch_builder = FiFoStrictBatchBuilder::new(
+            batch_size_bytes,
+            u32::MAX as usize,
+            Runtime::default(),
+            storage,
+        );
         Self {
             stf: app,
-            batch_builder,
+            batch_builder: Some(batch_builder),
         }
     }
 
@@ -83,25 +86,36 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
 
     fn inner_mut(&mut self) -> &mut Self::Inner {
         &mut self.stf
+    }
+
+    fn take_batch_builder(&mut self) -> Result<Self::BatchBuilder, Self::Error> {
+        self.batch_builder
+            .take()
+            .ok_or(anyhow::anyhow!("Batch builder already taken"))
     }
 }
 
 impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultContext, Vm> {
     type RuntimeConfig = [u8; 32];
     type Inner = DemoApp<ZkDefaultContext, Vm>;
+    type BatchBuilder = FiFoStrictBatchBuilder<Runtime<ZkDefaultContext>, ZkDefaultContext>;
+    type Error = anyhow::Error;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
-        let runtime = Runtime::default();
         let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
         let app: AppTemplate<ZkDefaultContext, Runtime<ZkDefaultContext>, Vm> =
-            AppTemplate::new(storage, runtime);
+            AppTemplate::new(storage.clone(), Runtime::default());
 
         let batch_size_bytes = 1024 * 100; // 100 KB
-        let batch_builder =
-            FiFoStrictBatchBuilder::new(batch_size_bytes, u32::MAX as usize, Runtime::default());
+        let batch_builder = FiFoStrictBatchBuilder::new(
+            batch_size_bytes,
+            u32::MAX as usize,
+            Runtime::default(),
+            storage,
+        );
         Self {
             stf: app,
-            batch_builder,
+            batch_builder: Some(batch_builder),
         }
     }
 
@@ -111,6 +125,12 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
 
     fn inner_mut(&mut self) -> &mut Self::Inner {
         &mut self.stf
+    }
+
+    fn take_batch_builder(&mut self) -> Result<Self::BatchBuilder, Self::Error> {
+        self.batch_builder
+            .take()
+            .ok_or(anyhow::anyhow!("Batch builder already taken"))
     }
 }
 
@@ -119,18 +139,5 @@ impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
     type Context = DefaultContext;
     fn get_storage(&self) -> <Self::Context as Spec>::Storage {
         self.inner().current_storage.clone()
-    }
-}
-
-#[cfg(feature = "native")]
-impl<Vm: Zkvm> BatchBuilder for DemoAppRunner<DefaultContext, Vm> {
-    fn accept_tx(&mut self, tx: Vec<u8>) -> anyhow::Result<()> {
-        self.batch_builder.accept_tx(tx)
-    }
-
-    fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
-        let working_set = sov_state::WorkingSet::new(self.inner().current_storage.clone());
-        self.batch_builder.set_working_set(working_set);
-        self.batch_builder.get_next_blob()
     }
 }

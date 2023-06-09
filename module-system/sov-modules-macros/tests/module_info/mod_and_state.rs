@@ -1,5 +1,5 @@
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Context, ModuleInfo};
+use sov_modules_api::Context;
 use sov_modules_macros::ModuleInfo;
 use sov_state::StateMap;
 

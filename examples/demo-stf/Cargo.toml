@@ -39,6 +39,7 @@ sov-modules-macros = { path = "../../module-system/sov-modules-macros" }
 # Only enable the db on "native" feature
 sov-schema-db = { path = "../../full-node/db/sov-schema-db", optional = true }
 sov-db = { path = "../../full-node/db/sov-db", optional = true }
+const-rollup-config = { path = "../const-rollup-config" }
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
