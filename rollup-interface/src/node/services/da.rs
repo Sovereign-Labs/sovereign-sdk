@@ -1,3 +1,4 @@
+use std::fmt;
 use std::future::Future;
 
 use serde::de::DeserializeOwned;
@@ -25,7 +26,7 @@ pub trait DaService {
     type Future<T>: Future<Output = Result<T, Self::Error>> + Send;
 
     /// The error type for fallible methods.
-    type Error: Send + Sync;
+    type Error: fmt::Debug + Send + Sync;
 
     /// Create a new instance of the DaService
     fn new(config: Self::RuntimeConfig, chain_params: <Self::Spec as DaSpec>::ChainParams) -> Self;

@@ -37,6 +37,7 @@ pub trait AddressTrait:
     + DeserializeOwned
     + From<[u8; 32]>
     + Send
+    + Sync
     + Display
 {
 }
