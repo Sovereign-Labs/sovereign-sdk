@@ -1,3 +1,4 @@
+mod prp;
 use sov_modules_api::CallResponse;
 use sov_modules_api::Context;
 use sov_modules_api::Error;
@@ -123,3 +124,104 @@ impl<C: sov_modules_api::Context> SomeModule<C> {
         todo!()
     }
 }
+
+struct Scratchpad<C: Context> {
+    working_set: WorkingSet<C>,
+    gaso_meter: Gasometer<C>,
+}
+
+/*
+pub struct Bank<C: Context> {
+    _P: PhantomData<C>,
+}
+
+impl<C: Context> Bank<C> {
+    fn transfer(&self, working_set: &mut WorkingSet<C::Storage, C::GasUnit>) {}
+}
+
+pub struct SomeConfig<C: sov_modules_api::Context> {
+    _p: PhantomData<C>,
+}
+
+#[cfg_attr(
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
+)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
+pub enum CallMessage {
+    Method1,
+    Method2,
+}
+
+//#[derive(ModuleInfo, Clone)]
+pub struct SomeModule<C: sov_modules_api::Context> {
+    // #[address]
+    pub(crate) address: C::Address,
+
+    /// #[state]
+    pub(crate) some_state_value: StateValue<u64>,
+
+    /// #[module]
+    pub(crate) bank: Bank<C>,
+}
+
+impl<C: sov_modules_api::Context> sov_modules_api::Module for SomeModule<C> {
+    type Context = C;
+
+    type Config = SomeConfig<C>;
+
+    type CallMessage = CallMessage;
+
+    fn genesis(
+        &self,
+        config: &Self::Config,
+        working_set: &mut WorkingSet<C::Storage, C::GasUnit>,
+    ) -> Result<(), Error> {
+        todo!()
+    }
+
+    fn call(
+        &self,
+        msg: Self::CallMessage,
+        context: &Self::Context,
+        working_set: &mut WorkingSet<C::Storage, C::GasUnit>,
+    ) -> Result<sov_modules_api::CallResponse, Error> {
+        match msg {
+            CallMessage::Method1 => Ok(self.some_complex_math_operation(context, working_set)?),
+            CallMessage::Method2 => Ok(self.some_expensive_check_in_loop(context, working_set)?),
+        }
+    }
+}
+
+impl<C: sov_modules_api::Context> SomeModule<C> {
+    pub(crate) fn some_complex_math_operation(
+        &self,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage, C::GasUnit>,
+    ) -> anyhow::Result<CallResponse> {
+        working_set.gaso_meter_charge_gas(&3000)?;
+
+        //  <Self::Context as sov_modules_api::Spec>::Hasher::hash(&[0; 32], working_set);
+        self.some_state_value.set(&22, working_set);
+
+        self.bank.transfer(/*from, to, etc */ working_set);
+        todo!()
+    }
+
+    pub(crate) fn some_expensive_check_in_loop(
+        &self,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage, C::GasUnit>,
+    ) -> anyhow::Result<CallResponse> {
+        for i in 0..100 {
+            working_set.gaso_meter.charge_gas(&100)?;
+            // some expensive operation
+
+            self.some_state_value.set(&99, working_set);
+        }
+
+        todo!()
+    }
+}
+*/

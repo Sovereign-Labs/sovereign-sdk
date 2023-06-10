@@ -160,8 +160,9 @@ impl<S: Storage, G: GasUnit> WorkingSet<S, G> {
     }
 
     pub(crate) fn set(&mut self, key: StorageKey, value: StorageValue) {
-        let gas = self.std_gas_config.set_gas;
-        self.charge_gas(&gas);
+        // let gas = self.std_gas_config.set_gas;
+        // self.charge_gas(gas);
+        todo!();
         self.delta.set(key, value)
     }
 
