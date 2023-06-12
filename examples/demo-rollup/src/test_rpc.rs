@@ -1,3 +1,6 @@
+use hex;
+use proptest::proptest;
+use proptest::{array::uniform32, strategy::Strategy};
 use reqwest::header::CONTENT_TYPE;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use std::net::SocketAddr;
@@ -223,3 +226,31 @@ fn test_get_events() {
     let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
     regular_test_helper(data, expected);
 }
+
+proptest!(
+    #[test]
+    // Generates multiple slots with random headers and try to retrieve them
+    fn proptest_get_head(hashs in proptest::collection::vec(proptest::array::uniform32(0_u8..), 1..100)){
+        let mut slots = vec![];
+
+        let mut prev_hash = [0;32];
+
+        let num_hashes = hashs.len();
+
+        for hash in hashs{
+            slots.push(SlotCommit::new(TestBlock {
+                curr_hash: hash,
+                header: TestBlockHeader {
+                    prev_hash,
+                },
+            }));
+
+            prev_hash = hash;
+        }
+
+        let prev_hash_str = hex::encode(prev_hash);
+        let data = r#"{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}"#.to_string();
+        let expected = format!("{{\"jsonrpc\":\"2.0\",\"result\":{{\"number\":{num_hashes},\"hash\":\"0x{prev_hash_str}\",\"batch_range\":{{\"start\":1,\"end\":1}}}},\"id\":1}}");
+        test_helper(data, expected.as_str(), slots);
+    }
+);
