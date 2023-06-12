@@ -1,11 +1,15 @@
 #![feature(log_syntax)]
+mod cli_parser;
+mod common;
+mod default_runtime;
 mod dispatch;
 mod module_info;
 mod rpc;
-use crate::dispatch::cli_parser::CliParserMacro;
+
+use cli_parser::CliParserMacro;
+use default_runtime::DefaultRuntimeMacro;
 use dispatch::{
-    default_runtime::DefaultRuntimeMacro, dispatch_call::DispatchCallMacro, genesis::GenesisMacro,
-    message_codec::MessageCodec,
+    dispatch_call::DispatchCallMacro, genesis::GenesisMacro, message_codec::MessageCodec,
 };
 use proc_macro::TokenStream;
 use syn::parse_macro_input;
@@ -164,9 +168,7 @@ pub fn expose_rpc(attr: TokenStream, item: TokenStream) -> TokenStream {
 pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
     let context_type = parse_macro_input!(attr);
     let input = parse_macro_input!(input);
+    let cli_parser = CliParserMacro::new("Cmd");
 
-    // let input = parse_macro_input!(input);
-    let cli_parser_macro = CliParserMacro::new("Cmd");
-
-    handle_macro_error(cli_parser_macro.derive_cli(input, context_type))
+    handle_macro_error(cli_parser.cli_parser(input, context_type))
 }

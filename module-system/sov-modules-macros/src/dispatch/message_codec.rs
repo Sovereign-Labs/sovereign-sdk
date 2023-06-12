@@ -1,4 +1,4 @@
-use super::common::{parse_generic_params, StructDef, StructFieldExtractor, CALL};
+use crate::common::{parse_generic_params, StructDef, StructFieldExtractor, CALL};
 use proc_macro2::TokenStream;
 use quote::format_ident;
 use syn::DeriveInput;
