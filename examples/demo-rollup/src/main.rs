@@ -133,9 +133,7 @@ async fn main() -> Result<(), anyhow::Error> {
         start_rpc_server(methods, address).await;
     });
 
-    // start_batch_producing(batch_builder, da_service.clone());
-
-    // For demonstration,  we also initialize the DaVerifier interface using the DaVerifier interface
+    // For demonstration, we also initialize the DaVerifier interface.
     // Running the verifier is only *necessary* during proof generation not normal execution
     let da_verifier = Arc::new(CelestiaVerifier::new(RollupParams {
         namespace: ROLLUP_NAMESPACE,

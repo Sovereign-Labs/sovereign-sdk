@@ -1,20 +1,21 @@
 use jsonrpsee::RpcModule;
 // use serde::de::DeserializeOwned;
 // use serde::Serialize;
+use anyhow::anyhow;
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_rollup_interface::services::da::DaService;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex};
 
 /// Single data structure that manages mempool and batch producing.
 pub struct TxsRpcHandler<B: BatchBuilder, T: DaService> {
-    batch_builder: RwLock<B>,
+    batch_builder: Mutex<B>,
     da_service: Arc<T>,
 }
 
 impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> TxsRpcHandler<B, T> {
     pub fn new(batch_builder: B, da_service: Arc<T>) -> Self {
         Self {
-            batch_builder: RwLock::new(batch_builder),
+            batch_builder: Mutex::new(batch_builder),
             da_service,
         }
     }
@@ -22,7 +23,10 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> TxsRpcHandler<B,
     async fn submit_batch(&self) -> Result<(), anyhow::Error> {
         // Need to release lock before await, so Future is `Send`.
         let blob = {
-            let mut batch_builder = self.batch_builder.write().unwrap();
+            let mut batch_builder = self
+                .batch_builder
+                .lock()
+                .map_err(|e| anyhow!("failed to lock mempool: {}", e.to_string()))?;
             batch_builder.get_next_blob()?
         };
         let blob: Vec<u8> = blob.into_iter().flatten().collect();
@@ -40,7 +44,7 @@ where
     B: BatchBuilder + Send + Sync + 'static,
     D: DaService + Send + Sync + 'static,
 {
-    rpc.register_async_method("submit_batch", |_, batch_builder| async move {
+    rpc.register_async_method("builder_submitBatch", |_, batch_builder| async move {
         batch_builder
             .submit_batch()
             .await
