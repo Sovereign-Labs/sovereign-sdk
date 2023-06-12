@@ -72,7 +72,7 @@ fn state_transition(guest: &Risc0Guest, batches: Vec<BlobWithSender>) {
     demo.begin_slot(witness);
     env::write(&"Slot has begun\n");
     for batch in batches {
-        demo.apply_blob(&batch, None);
+        demo.apply_blob(&mut batch, None);
         env::write(&"Blob applied\n");
     }
     let (state_root, _) = demo.end_slot();
