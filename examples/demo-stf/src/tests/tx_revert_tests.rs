@@ -42,7 +42,7 @@ fn test_tx_revert() {
 
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            &new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
+            &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         );
 
@@ -109,7 +109,7 @@ fn test_tx_bad_sig() {
 
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            &new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
+            &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         );
 
@@ -169,7 +169,7 @@ fn test_tx_bad_serialization() {
 
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            &new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
+            &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         );
 

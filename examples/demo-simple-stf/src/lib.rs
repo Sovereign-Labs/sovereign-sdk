@@ -51,10 +51,10 @@ impl<VM: Zkvm> StateTransitionFunction<VM> for CheckHashPreimageStf {
     // The core logic of our rollup.
     fn apply_blob(
         &mut self,
-        blob: &impl BlobTransactionTrait,
+        blob: &mut impl BlobTransactionTrait,
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
-        let blob_data = blob.data();
+        let blob_data = blob.data_mut();
         let mut reader = blob_data.reader();
 
         // Read the data from the blob as a byte vec.

@@ -3,10 +3,9 @@ use nmt_rs::{NamespaceId, NamespaceProof, NamespacedSha2Hasher};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::BlobTransactionTrait;
 
-use crate::{
-    share_commit::recreate_commitment, shares::BlobRef, types::FilteredCelestiaBlock,
-    BlobWithSender,
-};
+use crate::types::FilteredCelestiaBlock;
+
+use super::CelestiaSpec;
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 pub struct EtxProof {
@@ -46,20 +45,19 @@ impl CompletenessProof {
 pub struct CorrectnessProof(pub Vec<EtxProof>);
 
 impl CorrectnessProof {
-    pub fn for_block(block: &FilteredCelestiaBlock, relevant_txs: &Vec<BlobWithSender>) -> Self {
+    pub fn for_block(
+        block: &FilteredCelestiaBlock,
+        blobs: &[<CelestiaSpec as sov_rollup_interface::da::DaSpec>::BlobTransaction],
+    ) -> Self {
         let mut needed_tx_shares = Vec::new();
 
         // Extract (and clone) the position of each transaction
-        for tx in relevant_txs.iter() {
+        for tx in blobs.iter() {
             // We process the transaction only if we read something from it
             if tx.data().counter() != 0 {
-                let commitment =
-                    recreate_commitment(block.square_size(), BlobRef::with(&tx.blob.0))
-                        .expect("commitment is valid");
-
                 let (_, position) = block
                     .relevant_pfbs
-                    .get(&commitment[..])
+                    .get(tx.hash.as_slice())
                     .expect("commitment must exist in map");
                 needed_tx_shares.push(position.clone());
             }
@@ -67,7 +65,7 @@ impl CorrectnessProof {
 
         let mut needed_tx_shares = needed_tx_shares.into_iter().peekable();
         let mut current_tx_proof: EtxProof = EtxProof { proof: Vec::new() };
-        let mut tx_proofs: Vec<EtxProof> = Vec::with_capacity(relevant_txs.len());
+        let mut tx_proofs: Vec<EtxProof> = Vec::with_capacity(blobs.len());
 
         for (row_idx, row) in block.pfb_rows.iter().enumerate() {
             let mut nmt = row.merklized();

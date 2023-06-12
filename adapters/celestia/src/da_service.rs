@@ -5,7 +5,7 @@ use jsonrpsee::{
     http_client::{HeaderMap, HttpClient},
 };
 use nmt_rs::NamespaceId;
-use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::{da::BufWithCounter, services::da::DaService};
 use tracing::{debug, info, span, Level};
 
 // 0x736f762d74657374 = b"sov-test"
@@ -15,7 +15,7 @@ use tracing::{debug, info, span, Level};
 use crate::{
     parse_pfb_namespace,
     share_commit::recreate_commitment,
-    shares::{NamespaceGroup, Share},
+    shares::{Blob, NamespaceGroup, Share},
     types::{ExtendedDataSquare, FilteredCelestiaBlock, Row, RpcNamespacedSharesResponse},
     utils::BoxError,
     verifier::{
@@ -211,9 +211,9 @@ impl DaService for CelestiaService {
         block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction> {
         let mut output = Vec::new();
-        for blob in block.rollup_data.blobs() {
-            let commitment =
-                recreate_commitment(block.square_size(), blob.clone()).expect("blob must be valid");
+        for blob_ref in block.rollup_data.blobs() {
+            let commitment = recreate_commitment(block.square_size(), blob_ref.clone())
+                .expect("blob must be valid");
             let sender = block
                 .relevant_pfbs
                 .get(&commitment[..])
@@ -222,10 +222,13 @@ impl DaService for CelestiaService {
                 .signer
                 .clone();
 
+            let blob: Blob = blob_ref.into();
+
+            // TODO: can't we just use the commitment as a blob hash?
             let blob_tx = BlobWithSender {
-                blob: blob.into(),
+                blob: BufWithCounter::new(blob.into_iter()),
                 sender: CelestiaAddress(sender.as_bytes().to_vec()),
-                hash: None,
+                hash: commitment,
             };
 
             output.push(blob_tx)
@@ -241,7 +244,7 @@ impl DaService for CelestiaService {
         <Self::Spec as sov_rollup_interface::da::DaSpec>::InclusionMultiProof,
         <Self::Spec as sov_rollup_interface::da::DaSpec>::CompletenessProof,
     ) {
-        let etx_proofs = CorrectnessProof::for_block(block, &blobs.to_vec());
+        let etx_proofs = CorrectnessProof::for_block(block, blobs);
         let rollup_row_proofs =
             CompletenessProof::from_filtered_block(block, self.rollup_namespace);
 
@@ -257,7 +260,10 @@ impl DaService for CelestiaService {
         <Self::Spec as sov_rollup_interface::da::DaSpec>::CompletenessProof,
     ) {
         let relevant_txs = self.extract_relevant_txs(block);
-        let (etx_proofs, rollup_row_proofs) = self.get_extraction_proof(block, &relevant_txs);
+
+        let (etx_proofs, rollup_row_proofs) =
+            self.get_extraction_proof(block, relevant_txs.as_slice());
+
         (relevant_txs, etx_proofs, rollup_row_proofs)
     }
 

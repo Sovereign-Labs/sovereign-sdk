@@ -6,6 +6,7 @@ use crate::{
 };
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use tendermint::crypto::Sha256;
@@ -100,11 +101,11 @@ fn test_mock_proof_roundtrip() {
 pub struct TestBlob<Address> {
     address: Address,
     hash: [u8; 32],
-    data: Vec<u8>,
+    data: BufWithCounter<Bytes>,
 }
 
 impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
-    type Data = std::io::Cursor<Vec<u8>>;
+    type Data = Bytes;
     type Address = Address;
 
     fn sender(&self) -> Self::Address {
@@ -115,8 +116,12 @@ impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
         self.hash
     }
 
-    fn data(&self) -> BufWithCounter<Self::Data> {
-        BufWithCounter::new(std::io::Cursor::new(self.data.clone()))
+    fn data_mut(&mut self) -> &mut BufWithCounter<Self::Data> {
+        &mut self.data
+    }
+
+    fn data(&self) -> &BufWithCounter<Self::Data> {
+        &self.data
     }
 }
 
@@ -124,7 +129,7 @@ impl<Address: AddressTrait> TestBlob<Address> {
     pub fn new(data: Vec<u8>, address: Address, hash: [u8; 32]) -> Self {
         Self {
             address,
-            data,
+            data: BufWithCounter::new(bytes::Bytes::from(data)),
             hash,
         }
     }

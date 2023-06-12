@@ -1,13 +1,9 @@
-use std::io::Read;
-
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::{
     da::{self, BlobTransactionTrait, BlockHashTrait as BlockHash, BufWithCounter, DaSpec},
-    Buf, Bytes,
+    Bytes,
 };
-
-use tendermint::crypto::Sha256;
 
 pub mod address;
 pub mod proofs;
@@ -38,24 +34,18 @@ impl BlobTransactionTrait for BlobWithSender {
         self.sender.clone()
     }
 
-    fn data(&self) -> BufWithCounter<Self::Data> {
-        BufWithCounter::new(self.blob.clone().into_iter())
+    // Creates a new BufWithCounter structure to read the data
+    fn data_mut(&mut self) -> &mut BufWithCounter<Self::Data> {
+        &mut self.blob
+    }
+
+    // Creates a new BufWithCounter structure to read the data
+    fn data(&self) -> &BufWithCounter<Self::Data> {
+        &self.blob
     }
 
     fn hash(&self) -> [u8; 32] {
-        // We first try to compute the hash using a hint
-        if let Some(hash) = self.hash {
-            return hash;
-        }
-
-        // If there is no hash computed yet we have to calculate it using the buf data
-        let mut reader = self.data().inner().reader();
-        let mut batch_data = Vec::new();
-        reader
-            .read_to_end(&mut batch_data)
-            .unwrap_or_else(|e| panic!("Unable to read batch data {}", e));
-
-        sha2::Sha256::digest(&batch_data)
+        self.hash
     }
 }
 
@@ -211,7 +201,7 @@ impl da::DaVerifier for CelestiaVerifier {
 
                 let blob_ref = blob.clone();
                 let blob_data: Bytes = blob.clone().data().collect();
-                let tx_data: Bytes = tx.data().inner().collect();
+                let tx_data: Bytes = tx.data().inner().clone().collect();
                 assert_eq!(blob_data, tx_data);
 
                 // Link blob commitment to e-tx commitment

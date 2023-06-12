@@ -62,7 +62,7 @@ where
 {
     fn init_sequencer_and_get_working_set(
         &mut self,
-        blob: &impl BlobTransactionTrait,
+        blob: &mut impl BlobTransactionTrait,
     ) -> Result<WorkingSet<C::Storage>> {
         debug!(
             "Applying batch from sequencer: 0x{}",
@@ -76,7 +76,7 @@ where
 
         if let Err(e) = self.runtime.begin_blob_hook(
             blob.sender().as_ref(),
-            &blob.data().reader(),
+            &blob.data_mut().reader(),
             &mut batch_workspace,
         ) {
             error!(
@@ -93,7 +93,7 @@ where
     fn deserialize_batch(
         &mut self,
         batch_workspace: WorkingSet<C::Storage>,
-        blob_data: BufWithCounter<impl Buf>,
+        blob_data: &mut BufWithCounter<impl Buf>,
         blob_hash: [u8; 32],
     ) -> Result<(WorkingSet<C::Storage>, Batch)> {
         match Batch::deserialize_reader(&mut blob_data.reader()) {
@@ -228,7 +228,7 @@ where
 
     pub(crate) fn apply_blob(
         &mut self,
-        blob: &impl BlobTransactionTrait,
+        blob: &mut impl BlobTransactionTrait,
     ) -> Result<BatchReceipt<SequencerOutcome, TxEffect>> {
         let mut batch_workspace = self.init_sequencer_and_get_working_set(blob)?;
 
@@ -236,21 +236,23 @@ where
         // https://github.com/Sovereign-Labs/sovereign/issues/350
         let _ = batch_workspace.take_events();
 
+        let blob_hash = blob.hash();
+
         // Commit changes.
         batch_workspace = batch_workspace.checkpoint().to_revertable();
 
         // This function consumes the blob data
         let (batch_workspace, batch) =
-            self.deserialize_batch(batch_workspace, blob.data(), blob.hash())?;
+            self.deserialize_batch(batch_workspace, blob.data_mut(), blob_hash)?;
 
         debug!("Deserialized batch with {} txs", batch.txs.len());
 
         // Run the stateless verification, since it is stateless we don't commit.
         let (batch_workspace, txs) =
-            self.verify_txs_stateless(batch_workspace, batch, blob.hash())?;
+            self.verify_txs_stateless(batch_workspace, batch, blob_hash)?;
 
         let (mut batch_workspace, tx_receipts) =
-            self.execute_txs(batch_workspace, txs, blob.hash())?;
+            self.execute_txs(batch_workspace, txs, blob_hash)?;
 
         // TODO: calculate the amount based of gas and fees
         let batch_receipt_contents = SequencerOutcome::Rewarded(0);
@@ -260,7 +262,7 @@ where
 
         self.checkpoint = Some(batch_workspace.checkpoint());
         Ok(BatchReceipt {
-            batch_hash: blob.hash(),
+            batch_hash: blob_hash,
             tx_receipts,
             inner: batch_receipt_contents,
         })

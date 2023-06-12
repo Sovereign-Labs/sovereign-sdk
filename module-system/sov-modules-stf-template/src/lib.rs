@@ -77,7 +77,7 @@ where
 
     fn apply_blob(
         &mut self,
-        blob: &impl sov_rollup_interface::da::BlobTransactionTrait,
+        blob: &mut impl sov_rollup_interface::da::BlobTransactionTrait,
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
         match self.apply_blob(blob) {

@@ -1,8 +1,10 @@
 use crate::traits::{AddressTrait, BlockHeaderTrait};
+use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Buf;
 use core::fmt::Debug;
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
+
 /// A specification for the types used by a DA layer.
 pub trait DaSpec {
     /// The hash of a DA layer block
@@ -54,8 +56,14 @@ pub trait DaVerifier {
     ) -> Result<(), Self::Error>;
 }
 
+pub struct BlobDataAndHash<B: Buf> {
+    pub data: BufWithCounter<B>,
+    pub hash: [u8; 32],
+}
+
 // Simple structure that implements a buffer that counts the number of bytes read from the beginning
 // Useful for the partial blob reading optimization: we know for each blob how many bytes have been read from the beginning
+#[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize, PartialEq)]
 pub struct BufWithCounter<B: Buf> {
     inner: B,
     counter: usize,
@@ -66,12 +74,15 @@ impl<B: Buf> BufWithCounter<B> {
         BufWithCounter { inner, counter: 0 }
     }
 
-    // To use with care: if any Buf method is applied to inner directly the counter won't be updated
-    pub fn inner(self) -> B {
-        self.inner
+    pub fn inner(&self) -> &B {
+        &self.inner
     }
 
-    pub fn counter(self) -> usize {
+    pub fn inner_mut(&mut self) -> &mut B {
+        &mut self.inner
+    }
+
+    pub fn counter(&self) -> usize {
         self.counter
     }
 }
@@ -98,8 +109,13 @@ pub trait BlobTransactionTrait: Serialize + DeserializeOwned {
 
     /// Returns the address (on the DA layer) of the entity which submitted the blob transaction
     fn sender(&self) -> Self::Address;
+
     /// The raw data of the blob. For example, the "calldata" of an Ethereum rollup transaction
-    fn data(&self) -> BufWithCounter<Self::Data>;
+    /// This function clones the data of the blob to an external BufWithCounter
+    fn data_mut(&mut self) -> &mut BufWithCounter<Self::Data>;
+
+    fn data(&self) -> &BufWithCounter<Self::Data>;
+
     // Returns the hash of the blob. If not provided with a hint, it is computed by hashing the blob data
     fn hash(&self) -> [u8; 32];
 }

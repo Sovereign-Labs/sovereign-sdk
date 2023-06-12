@@ -96,7 +96,7 @@ pub trait StateTransitionFunction<Vm: Zkvm> {
     /// just panic - which means that no proof will be created).
     fn apply_blob(
         &mut self,
-        blob: &impl BlobTransactionTrait,
+        blob: &mut impl BlobTransactionTrait,
         misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents>;
 
