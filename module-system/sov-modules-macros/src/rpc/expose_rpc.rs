@@ -1,4 +1,3 @@
-use proc_macro2::{Ident, Span};
 use quote::quote;
 use syn::DeriveInput;
 
@@ -19,15 +18,10 @@ impl ExposeRpcMacro {
         &self,
         original: proc_macro::TokenStream,
         input: DeriveInput,
+        context_type: syn::Type,
     ) -> Result<proc_macro::TokenStream, syn::Error> {
-        let DeriveInput {
-            data,
-            ident,
-            generics,
-            ..
-        } = input;
+        let DeriveInput { data, .. } = input;
 
-        let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
 
         let rpc_storage_struct = quote! {
@@ -74,9 +68,9 @@ impl ExposeRpcMacro {
         }
 
         let get_rpc_methods = quote! {
-            pub fn get_rpc_methods(storage: <DefaultContext as ::sov_modules_api::Spec>::Storage) -> jsonrpsee::RpcModule<()> {
+            pub fn get_rpc_methods(storage: <#context_type as ::sov_modules_api::Spec>::Storage) -> jsonrpsee::RpcModule<()> {
                 let mut module = jsonrpsee::RpcModule::new(());
-                let r = RpcStorage::<DefaultContext> {
+                let r = RpcStorage::<#context_type> {
                     storage: storage.clone(),
                 };
 
@@ -87,9 +81,8 @@ impl ExposeRpcMacro {
 
         let mut tokens = proc_macro::TokenStream::new();
         tokens.extend(original);
-        let q: proc_macro::TokenStream = quote! {
 
-
+        let generated_from_runtime: proc_macro::TokenStream = quote! {
             #get_rpc_methods
 
             #rpc_storage_struct
@@ -98,7 +91,7 @@ impl ExposeRpcMacro {
         }
         .into();
 
-        tokens.extend(q);
+        tokens.extend(generated_from_runtime);
 
         Ok(tokens)
     }

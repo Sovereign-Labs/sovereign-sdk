@@ -161,10 +161,12 @@ fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> To
 /// It iterates over each struct
 #[proc_macro_attribute]
 pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
+    let context_type = parse_macro_input!(attr);
+
     let original = input.clone();
     let input = parse_macro_input!(input);
     let expose_macro = ExposeRpcMacro::new("Expose");
-    handle_macro_error(expose_macro.generate_rpc(original, input))
+    handle_macro_error(expose_macro.generate_rpc(original, input, context_type))
 }
 
 #[proc_macro_attribute]
