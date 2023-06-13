@@ -31,9 +31,8 @@ impl ExposeRpcMacro {
 
         let rpc_storage_struct = quote! {
             #[derive(Clone)]
-            pub struct RpcStorage<C: ::sov_modules_api::Context>
-            {
-                pub storage: C::Storage
+            struct RpcStorage<C: ::sov_modules_api::Context> {
+                 storage: C::Storage
             }
         };
 
