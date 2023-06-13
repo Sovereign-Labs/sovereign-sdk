@@ -3,8 +3,9 @@ pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Context;
 #[cfg(feature = "native")]
 use sov_modules_macros::cli_parser;
-use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
+use sov_modules_macros::{DefaultRuntime, DispatchCall, Expose, Genesis, MessageCodec};
 
+use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
 /// The Rollup entrypoint.
 ///
 /// On a high level, the rollup node receives serialized call messages from the DA layer and executes them as atomic transactions.
@@ -39,18 +40,18 @@ use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
 ///
 /// Similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
 /// instead of going through the DA layer.
+use sov_bank::query::{BankRpcImpl, BankRpcServer};
+use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
+use sov_sequencer_registry::query::{SequencerRpcImpl, SequencerRpcServer};
+use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
-#[cfg_attr(feature = "native", cli_parser(DefaultContext))]
+#[cfg_attr(feature = "native", cli_parser(DefaultContext), derive(Expose))]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
     pub sequencer: sov_sequencer_registry::Sequencer<C>,
-
     pub bank: sov_bank::Bank<C>,
-
     pub election: sov_election::Election<C>,
-
     pub value_setter: sov_value_setter::ValueSetter<C>,
-
     pub accounts: sov_accounts::Accounts<C>,
 }

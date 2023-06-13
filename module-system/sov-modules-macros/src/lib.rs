@@ -12,6 +12,7 @@ use dispatch::{
     dispatch_call::DispatchCallMacro, genesis::GenesisMacro, message_codec::MessageCodec,
 };
 use proc_macro::TokenStream;
+use rpc::ExposeRpcMacro;
 use syn::parse_macro_input;
 
 /// Derives the `sov-modules-api::ModuleInfo` implementation for the underlying type.
@@ -162,6 +163,13 @@ fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> To
 pub fn expose_rpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as syn::ItemImpl);
     handle_macro_error(rpc::expose_rpc(attr.into(), input))
+}
+
+#[proc_macro_derive(Expose)]
+pub fn expose_rpc2(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+    let expose_macro = ExposeRpcMacro::new("Expose");
+    handle_macro_error(expose_macro.derive_rpc(input))
 }
 
 #[proc_macro_attribute]

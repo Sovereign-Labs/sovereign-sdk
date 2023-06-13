@@ -115,6 +115,5 @@ pub(crate) fn expose_rpc(
     };
 
     output_tokens.extend(create_rpc_tokens);
-
     Ok(output_tokens.into())
 }

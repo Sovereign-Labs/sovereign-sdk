@@ -1,14 +1,10 @@
-#[cfg(feature = "native")]
 use crate::Sequencer;
 use sov_modules_api::AddressBech32;
-#[cfg(feature = "native")]
 use sov_modules_api::Context;
-
-#[cfg(feature = "native")]
+use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
 
-#[cfg_attr(feature = "native", derive(serde::Deserialize, serde::Serialize))]
-#[derive(Debug, Eq, PartialEq)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, Eq, PartialEq)]
 pub struct Data {
     pub address: AddressBech32,
     pub balance: u64,
@@ -20,8 +16,9 @@ pub struct SequencerAndBalanceResponse {
     pub data: Option<Data>,
 }
 
-#[cfg(feature = "native")]
+#[rpc_gen(client, server, namespace = "sequencer")]
 impl<C: Context> Sequencer<C> {
+    #[rpc_method(name = "getSequencerAddressAndBalance")]
     pub fn sequencer_address_and_balance(
         &self,
         working_set: &mut WorkingSet<C::Storage>,
@@ -32,7 +29,6 @@ impl<C: Context> Sequencer<C> {
     }
 }
 
-#[cfg(feature = "native")]
 impl<C: Context> Sequencer<C> {
     fn get_seq_and_balance(&self, working_set: &mut WorkingSet<C::Storage>) -> Option<Data> {
         let seq_address = self.seq_rollup_address.get(working_set)?;

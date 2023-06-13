@@ -28,9 +28,10 @@ serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
+jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
 
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-modules-api/native", "sov-state/native", "sov-bank/native"]
+native = ["serde", "sov-modules-api/native", "sov-state/native", "sov-bank/native", "dep:jsonrpsee"]

@@ -1,3 +1,4 @@
+#[cfg(feature = "native")]
 pub mod genesis;
 pub mod hooks;
 pub mod query;

@@ -131,6 +131,19 @@ pub trait Spec {
     type Storage: Storage + Clone;
 
     /// The public key used for digital signatures
+    #[cfg(feature = "native")]
+    type PublicKey: borsh::BorshDeserialize
+        + borsh::BorshSerialize
+        + Eq
+        + Clone
+        + Debug
+        + PublicKey
+        + Serialize
+        + for<'a> Deserialize<'a>
+        + Send
+        + Sync;
+
+    #[cfg(not(feature = "native"))]
     type PublicKey: borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug + PublicKey;
 
     /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
