@@ -30,7 +30,6 @@ borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
-
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
