@@ -1,11 +1,11 @@
 use hex;
-use proptest::proptest;
 use proptest::{array::uniform32, strategy::Strategy};
+use proptest::{prop_compose, proptest};
 use reqwest::header::CONTENT_TYPE;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
+use sov_rollup_interface::services::da::SlotData;
 use std::net::SocketAddr;
 
-#[cfg(test)]
 use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader};
 
 use sov_rollup_interface::stf::{BatchReceipt, Event, TransactionReceipt};
@@ -251,6 +251,95 @@ proptest!(
         let prev_hash_str = hex::encode(prev_hash);
         let data = r#"{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}"#.to_string();
         let expected = format!("{{\"jsonrpc\":\"2.0\",\"result\":{{\"number\":{num_hashes},\"hash\":\"0x{prev_hash_str}\",\"batch_range\":{{\"start\":1,\"end\":1}}}},\"id\":1}}");
+        test_helper(data, expected.as_str(), slots);
+    }
+);
+
+prop_compose! {
+    fn arb_event()(key in "\\w*", value in "\\w*") -> Event {
+        Event::new(key.as_str(), value.as_str())
+    }
+}
+
+prop_compose! {
+    fn arb_txs(max_events : usize)(tx_hash in proptest::array::uniform32(0_u8..), body_to_save in "[\\w\\d]*", events in proptest::collection::vec(arb_event(), 0..max_events),
+receipt in 0..3) -> TransactionReceipt::<i32> {
+    TransactionReceipt{
+        tx_hash,
+        body_to_save: Some(body_to_save.into_bytes()),
+        events,
+        receipt
+    }
+
+}
+}
+
+prop_compose! {
+    fn arb_batch(max_txs: usize, max_events: usize)(batch_hash in proptest::array::uniform32(0_u8..), tx_receipts in proptest::collection::vec(arb_txs(max_events), 0..max_txs), inner in 0..3) -> BatchReceipt<i32, i32>{
+        BatchReceipt{
+            batch_hash,
+            tx_receipts,
+            inner
+        }
+
+    }
+}
+
+prop_compose! {
+    fn arb_batches_and_slot_hash(max_batch : usize, max_txs: usize, max_events: usize)
+    (slot_hash in proptest::array::uniform32(0_u8..), batches in proptest::collection::vec(arb_batch(max_txs, max_events), 1..max_batch)) -> (Vec<BatchReceipt<i32, i32>>, [u8;32]){
+        (batches, slot_hash)
+    }
+}
+
+prop_compose! {
+    fn arb_slots(max_slots : usize, max_batch: usize, max_txs: usize, max_events: usize)
+    (batches_and_hashes in proptest::collection::vec(arb_batches_and_slot_hash(max_batch, max_txs, max_events), 1..max_slots)) -> (Vec<SlotCommit<TestBlock, i32, i32>>, usize)
+    {
+        let mut slots = std::vec::Vec::with_capacity(max_slots);
+
+        let mut total_num_batches = 1;
+
+        let mut prev_hash = [0;32];
+
+        for (batches, hash) in batches_and_hashes{
+            let mut new_slot = SlotCommit::new(TestBlock {
+                curr_hash: hash,
+                header: TestBlockHeader {
+                    prev_hash,
+                },
+            });
+
+            total_num_batches += batches.len();
+
+            for batch in batches {
+                    new_slot.add_batch(batch)
+            }
+
+
+            slots.push(new_slot);
+
+            prev_hash = hash;
+        }
+
+        (slots, total_num_batches)
+    }
+}
+
+proptest!(
+    #[test]
+    fn proptest_get_head_complete((slots, total_num_batches) in arb_slots(10, 10, 10, 10)){
+        let num_slots = slots.len();
+        let last_slot = slots.last().unwrap();
+
+        let last_slot_hash = hex::encode(last_slot.slot_data().hash());
+        let last_slot_num_batches = last_slot.batch_receipts().len();
+
+        let last_slot_start_batch = total_num_batches - last_slot_num_batches;
+        let last_slot_end_batch = total_num_batches;
+
+        let data = r#"{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}"#.to_string();
+        let expected = format!("{{\"jsonrpc\":\"2.0\",\"result\":{{\"number\":{num_slots},\"hash\":\"0x{last_slot_hash}\",\"batch_range\":{{\"start\":{last_slot_start_batch},\"end\":{last_slot_end_batch}}}}},\"id\":1}}");
         test_helper(data, expected.as_str(), slots);
     }
 );
