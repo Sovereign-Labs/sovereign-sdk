@@ -44,7 +44,7 @@ where
     B: BatchBuilder + Send + Sync + 'static,
     D: DaService + Send + Sync + 'static,
 {
-    rpc.register_async_method("builder_submitBatch", |_, batch_builder| async move {
+    rpc.register_async_method("batchBuilder_submit", |_, batch_builder| async move {
         batch_builder
             .submit_batch()
             .await

@@ -48,7 +48,6 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
     type RuntimeConfig = Config;
     type Inner = DemoApp<DefaultContext, Vm>;
     type BatchBuilder = FiFoStrictBatchBuilder<Runtime<DefaultContext>, DefaultContext>;
-    type Error = anyhow::Error;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let storage = ProverStorage::with_config(runtime_config.storage)
@@ -75,10 +74,8 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
         &mut self.stf
     }
 
-    fn take_batch_builder(&mut self) -> Result<Self::BatchBuilder, Self::Error> {
-        self.batch_builder
-            .take()
-            .ok_or(anyhow::anyhow!("Batch builder already taken"))
+    fn take_batch_builder(&mut self) -> Option<Self::BatchBuilder> {
+        self.batch_builder.take()
     }
 }
 
@@ -86,7 +83,6 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
     type RuntimeConfig = [u8; 32];
     type Inner = DemoApp<ZkDefaultContext, Vm>;
     type BatchBuilder = FiFoStrictBatchBuilder<Runtime<ZkDefaultContext>, ZkDefaultContext>;
-    type Error = anyhow::Error;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
@@ -114,10 +110,8 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
         &mut self.stf
     }
 
-    fn take_batch_builder(&mut self) -> Result<Self::BatchBuilder, Self::Error> {
-        self.batch_builder
-            .take()
-            .ok_or(anyhow::anyhow!("Batch builder already taken"))
+    fn take_batch_builder(&mut self) -> Option<Self::BatchBuilder> {
+        self.batch_builder.take()
     }
 }
 

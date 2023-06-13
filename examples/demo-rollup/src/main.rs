@@ -10,7 +10,6 @@ use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{DefaultContext, DemoBatchReceipt, DemoTxReceipt};
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
-use demo_stf::batch_builder::FiFoStrictBatchBuilder;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runner_config::from_toml_path;
 use demo_stf::runtime::GenesisConfig;
@@ -120,12 +119,9 @@ async fn main() -> Result<(), anyhow::Error> {
         .merge(ledger_rpc_module)
         .expect("Failed to merge ledger RPC modules");
 
-    let batch_builder = demo_runner.take_batch_builder()?;
+    let batch_builder = demo_runner.take_batch_builder().unwrap();
 
-    let r = get_txs_rpc::<
-        FiFoStrictBatchBuilder<demo_stf::runtime::Runtime<DefaultContext>, DefaultContext>,
-        CelestiaService,
-    >(batch_builder, da_service.clone());
+    let r = get_txs_rpc(batch_builder, da_service.clone());
 
     methods.merge(r).expect("Failed to merge Txs RPC modules");
 
