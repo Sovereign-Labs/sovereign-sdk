@@ -2,7 +2,9 @@ use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::{
     da::{self, BlobTransactionTrait, BlockHashTrait as BlockHash, CountedBufReader, DaSpec},
-    Buf,
+    traits::{BlockHeaderTrait, CanonicalHash},
+    zk::traits::ValidityCondition,
+    Buf, Bytes,
 };
 
 pub mod address;
@@ -102,10 +104,26 @@ pub struct RollupParams {
     pub namespace: NamespaceId,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+/// A validity condition expressing that a chain of DA layer blocks is contiguous and canonical
+pub struct ChainValidityCondition {
+    pub prev_hash: [u8; 32],
+    pub block_hash: [u8; 32],
+}
+
+impl ValidityCondition for ChainValidityCondition {
+    fn combine(&self, rhs: Self) -> Result<Self, anyhow::Error> {
+        anyhow::ensure!(self.block_hash == rhs.prev_hash);
+        Ok(rhs)
+    }
+}
+
 impl da::DaVerifier for CelestiaVerifier {
     type Spec = CelestiaSpec;
 
     type Error = ValidationError;
+
+    type ValidityCondition = ChainValidityCondition;
 
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self {
         Self {
@@ -119,16 +137,20 @@ impl da::DaVerifier for CelestiaVerifier {
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
         inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
         completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
-    ) -> Result<(), Self::Error> {
+    ) -> Result<Self::ValidityCondition, Self::Error> {
         // Validate that the provided DAH is well-formed
         block_header.validate_dah()?;
+        let validity_condition = ChainValidityCondition {
+            prev_hash: block_header.prev_hash().inner().clone(),
+            block_hash: block_header.hash().inner().clone(),
+        };
 
         // Check the validity and completeness of the rollup row proofs, against the DAH.
         // Extract the data from the row proofs and build a namespace_group from it
         let rollup_shares_u8 = self.verify_row_proofs(completeness_proof, &block_header.dah)?;
         if rollup_shares_u8.is_empty() {
             if txs.is_empty() {
-                return Ok(());
+                return Ok(validity_condition);
             }
             return Err(ValidationError::MissingTx);
         }
@@ -218,7 +240,7 @@ impl da::DaVerifier for CelestiaVerifier {
             }
         }
 
-        Ok(())
+        Ok(validity_condition)
     }
 }
 

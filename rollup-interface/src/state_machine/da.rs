@@ -1,4 +1,5 @@
 use crate::traits::{AddressTrait, BlockHeaderTrait};
+use crate::zk::traits::ValidityCondition;
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Buf;
 use core::fmt::Debug;
@@ -46,6 +47,10 @@ pub trait DaVerifier {
     /// TODO: Should we add `std::Error` bound so it can be `()?` ?
     type Error: Debug;
 
+    /// Any conditions imposed by the DA layer which need to be checked outside of the SNARK
+    type ValidityCondition: ValidityCondition;
+
+    /// Create a new da verifier with the given chain parameters
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self;
 
     /// Verify a claimed set of transactions against a block header.
@@ -55,7 +60,7 @@ pub trait DaVerifier {
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
         inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
         completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
-    ) -> Result<(), Self::Error>;
+    ) -> Result<Self::ValidityCondition, Self::Error>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize, PartialEq)]
