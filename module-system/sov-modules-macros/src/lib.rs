@@ -160,16 +160,11 @@ fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> To
 /// This proc macro generates the actual implementations for the trait created above for the module
 /// It iterates over each struct
 #[proc_macro_attribute]
-pub fn expose_rpc(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as syn::ItemImpl);
-    handle_macro_error(rpc::expose_rpc(attr.into(), input))
-}
-
-#[proc_macro_derive(Expose)]
-pub fn expose_rpc2(input: TokenStream) -> TokenStream {
+pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
+    let original = input.clone();
     let input = parse_macro_input!(input);
     let expose_macro = ExposeRpcMacro::new("Expose");
-    handle_macro_error(expose_macro.derive_rpc(input))
+    handle_macro_error(expose_macro.generate_rpc(original, input))
 }
 
 #[proc_macro_attribute]

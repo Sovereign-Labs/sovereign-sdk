@@ -3,7 +3,7 @@ pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Context;
 #[cfg(feature = "native")]
 use sov_modules_macros::cli_parser;
-use sov_modules_macros::{DefaultRuntime, DispatchCall, Expose, Genesis, MessageCodec};
+use sov_modules_macros::{expose_rpc, DefaultRuntime, DispatchCall, Genesis, MessageCodec};
 
 use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
 /// The Rollup entrypoint.
@@ -45,7 +45,11 @@ use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
 use sov_sequencer_registry::query::{SequencerRpcImpl, SequencerRpcServer};
 use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
-#[cfg_attr(feature = "native", cli_parser(DefaultContext), derive(Expose))]
+#[cfg_attr(
+    feature = "native",
+    cli_parser(DefaultContext),
+    expose_rpc(DefaultContext)
+)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
