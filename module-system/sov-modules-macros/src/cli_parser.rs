@@ -1,4 +1,4 @@
-use super::common::StructFieldExtractor;
+use crate::common::StructFieldExtractor;
 use quote::{format_ident, quote};
 use syn::{DeriveInput, Path, PathArguments, Type};
 
@@ -13,7 +13,7 @@ impl CliParserMacro {
         }
     }
 
-    pub(crate) fn derive_cli(
+    pub(crate) fn cli_parser(
         &self,
         input: DeriveInput,
         context_type: Type,

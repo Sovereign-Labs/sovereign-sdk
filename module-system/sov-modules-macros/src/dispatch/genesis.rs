@@ -1,5 +1,5 @@
-use super::common::parse_generic_params;
-use super::common::{StructFieldExtractor, StructNamedField};
+use crate::common::{parse_generic_params, StructFieldExtractor, StructNamedField};
+
 use proc_macro2::Ident;
 use syn::{DeriveInput, TypeGenerics};
 
