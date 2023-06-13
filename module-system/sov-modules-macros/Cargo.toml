@@ -28,8 +28,8 @@ tempfile = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
-jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
-sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false, optional = true }
+jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"] }
+sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
 
 
@@ -38,6 +38,3 @@ quote = "1.0"
 proc-macro2 = "1.0"
 borsh = { workspace = true }
 
-[features]
-default = ["native"]
-native = ["sov-state/native", "dep:jsonrpsee", "sov-modules-api/native"]
