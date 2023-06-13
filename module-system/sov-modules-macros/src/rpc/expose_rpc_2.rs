@@ -74,8 +74,6 @@ impl ExposeRpcMacro {
         }
 
         let create_rpc_tokens = quote! {
-
-
             pub fn get_rpc_methods(storage: <DefaultContext as ::sov_modules_api::Spec>::Storage) -> jsonrpsee::RpcModule<()> {
                 let mut module = jsonrpsee::RpcModule::new(());
                 let r = RpcStorage::<DefaultContext> {
