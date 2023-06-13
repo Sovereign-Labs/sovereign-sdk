@@ -54,8 +54,8 @@ pub type DemoBatchReceipt = SequencerOutcome;
 /// Tx receipt type used by the demo app. We export this type so that it's easily accessible to the full node.
 pub type DemoTxReceipt = TxEffect;
 
-#[cfg(feature = "native")]
-#[expose_rpc((Bank<DefaultContext>, Election<DefaultContext>, ValueSetter<DefaultContext>))]
+//#[cfg(feature = "native")]
+//#[expose_rpc((Bank<DefaultContext>, Election<DefaultContext>, ValueSetter<DefaultContext>))]
 #[cfg(feature = "native")]
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
     type RuntimeConfig = Config;

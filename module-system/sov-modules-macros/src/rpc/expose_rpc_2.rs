@@ -31,7 +31,8 @@ impl ExposeRpcMacro {
 
         let rpc_storage_struct = quote! {
             #[derive(Clone)]
-            pub struct RpcStorage<C: Context> {
+            pub struct RpcStorage<C: ::sov_modules_api::Context>
+            {
                 pub storage: C::Storage
             }
         };
@@ -62,9 +63,9 @@ impl ExposeRpcMacro {
             merge_operations.extend(merge_operation);
 
             let rpc_trait_impl = quote! {
-                impl #rpc_trait_ident<DefaultContext> for RpcStorage<DefaultContext>{
-                    fn get_working_set(&self) -> ::sov_state::WorkingSet<<DefaultContext
-                        as ::sov_modules_api::Spec>::Storage> {
+                impl <C: ::sov_modules_api::Context> #rpc_trait_ident<C> for RpcStorage<C>{
+                    fn get_working_set(&self) -> ::sov_state::WorkingSet<<C as ::sov_modules_api::Spec>::Storage>
+                    {
                         ::sov_state::WorkingSet::new(self.storage.clone())
                     }
                 }
@@ -73,9 +74,11 @@ impl ExposeRpcMacro {
         }
 
         let create_rpc_tokens = quote! {
+
+
             pub fn get_rpc_methods(storage: <DefaultContext as ::sov_modules_api::Spec>::Storage) -> jsonrpsee::RpcModule<()> {
                 let mut module = jsonrpsee::RpcModule::new(());
-                let r = RpcStorage {
+                let r = RpcStorage::<DefaultContext> {
                     storage: storage.clone(),
                 };
 
