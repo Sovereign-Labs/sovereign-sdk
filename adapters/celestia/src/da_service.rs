@@ -224,7 +224,6 @@ impl DaService for CelestiaService {
 
             let blob: Blob = blob_ref.into();
 
-            // TODO: can't we just use the commitment as a blob hash?
             let blob_tx = BlobWithSender {
                 blob: BufWithCounter::new(blob.into_iter()),
                 sender: CelestiaAddress(sender.as_bytes().to_vec()),

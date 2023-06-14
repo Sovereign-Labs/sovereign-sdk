@@ -27,7 +27,6 @@ pub fn new_test_blob(batch: Batch, address: &[u8]) -> TestBlob {
     let address = Address::try_from(address).unwrap();
     let data = batch.try_to_vec().unwrap();
 
-    // TODO: Compute the hash of the test blob?
     TestBlob::new(data, address, [0; 32])
 }
 
