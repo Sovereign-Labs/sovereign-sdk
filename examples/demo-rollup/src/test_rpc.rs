@@ -372,13 +372,12 @@ proptest!(
 
     #[test]
     fn proptest_get_batches((slots, tx_id_to_event_range, _total_num_batches) in arb_slots(10, 10, 10, 10), random_batch_num in 1..100){
-        let mut curr_slot_num = 0;
         let mut curr_batch_num = 1;
         let mut curr_tx_num = 1;
 
         let random_batch_num_usize = usize::try_from(random_batch_num).unwrap();
 
-        while let Some(slot) = slots.get(curr_slot_num){
+        for slot in &slots{
             if curr_batch_num > random_batch_num_usize {
                 break;
             }
@@ -452,8 +451,6 @@ proptest!(
                 curr_tx_num += batch.tx_receipts.len();
             }
 
-            curr_slot_num += 1;
-
         }
 
         let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Compact"],"id":1}}"#)
@@ -464,12 +461,11 @@ proptest!(
 
     #[test]
     fn proptest_get_transactions((slots, tx_id_to_event_range, _total_num_batches) in arb_slots(10, 10, 10, 10), random_tx_num in 1..1000){
-        let mut curr_slot_num = 0;
         let mut curr_tx_num = 1;
 
         let random_tx_num_usize = usize::try_from(random_tx_num).unwrap();
 
-        while let Some(slot) = slots.get(curr_slot_num){
+        for slot in &slots{
             for batch in slot.batch_receipts(){
                 if curr_tx_num > random_tx_num_usize {
                     break;
@@ -515,8 +511,6 @@ proptest!(
 
                 curr_tx_num += batch.tx_receipts.len();
             }
-
-            curr_slot_num += 1;
         }
 
         let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}]],"id":1}}"#)
@@ -526,4 +520,57 @@ proptest!(
 
     }
 
+    #[test]
+    fn proptest_get_events((slots, tx_id_to_event_range, _total_num_batches) in arb_slots(10, 10, 10, 10), random_event_num in 1..10000){
+        let mut curr_tx_num = 1;
+        let mut curr_event_num = 1;
+
+        let random_event_num_usize = usize::try_from(random_event_num).unwrap();
+
+        for slot in &slots{
+            for batch in slot.batch_receipts(){
+                for tx in &batch.tx_receipts{
+                    if curr_event_num > random_event_num_usize {
+                        break;
+                    }
+
+                    if random_event_num_usize < tx_id_to_event_range.get(&curr_tx_num).unwrap().1 {
+                        let event_index = random_event_num_usize - curr_event_num;
+                        let event : &Event = tx.events.get(event_index).unwrap();
+
+                        let key_str_vec : Vec<String> = event.key().inner().into_iter().map(|x| x.to_string()).collect();
+                        let key_str = key_str_vec.join(",");
+
+                        let value_str_vec : Vec<String> = event.value().inner().into_iter().map(|x| x.to_string()).collect();
+                        let value_str = value_str_vec.join(",");
+
+                        let event_formatted = format!(r#"{{"key":[{key_str}],"value":[{value_str}]}}"#);
+
+
+                    test_helper(vec![TestExpect{
+                        data:
+                        format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_event_num}]],"id":1}}"#),
+                        expected:
+                        format!(r#"{{"jsonrpc":"2.0","result":[{event_formatted}],"id":1}}"#)},
+                        ]
+                        , slots);
+
+                    return Ok(());
+                    }
+
+                    curr_tx_num += 1;
+                    curr_event_num += tx.events.len();
+                }
+
+            }
+
+        }
+
+        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_event_num}]],"id":1}}"#)
+            .to_string();
+        let expected : String= r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
+        test_helper(vec![TestExpect{data, expected}], slots);
+
+
+    }
 );

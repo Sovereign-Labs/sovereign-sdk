@@ -145,5 +145,17 @@ impl Event {
 )]
 pub struct EventKey(Vec<u8>);
 
+impl EventKey {
+    pub fn inner(&self) -> &Vec<u8> {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct EventValue(Vec<u8>);
+
+impl EventValue {
+    pub fn inner(&self) -> &Vec<u8> {
+        &self.0
+    }
+}
