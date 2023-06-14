@@ -64,14 +64,6 @@ impl<S: SlotData, B, T> SlotCommit<S, B, T> {
     pub fn batch_receipts(&self) -> &Vec<BatchReceipt<B, T>> {
         &self.batch_receipts
     }
-
-    pub fn num_txs(&self) -> &usize {
-        &self.num_txs
-    }
-
-    pub fn num_events(&self) -> &usize {
-        &self.num_events
-    }
 }
 
 impl<S: SlotData, B, T> SlotCommit<S, B, T> {
