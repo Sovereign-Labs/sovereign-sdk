@@ -1,7 +1,7 @@
 use core::fmt::Debug;
 
 use serde::de::DeserializeOwned;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// A trait implemented by the prover ("host") of a zkVM program.
 pub trait ZkvmHost: Zkvm {
@@ -47,6 +47,7 @@ pub trait ValidityCondition: Serialize + DeserializeOwned {
 /// if and only if the condition `validity_condition` is satisfied.
 ///
 /// The period of time covered by a state transition proof may be a single slot, or a range of slots on the DA layer.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct StateTransition<C> {
     /// The state of the rollup before the transition
     pub initial_state_root: [u8; 32],

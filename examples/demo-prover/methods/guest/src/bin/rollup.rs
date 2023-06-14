@@ -14,7 +14,7 @@ use risc0_zkvm::guest::env;
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::{StateTransitionFunction, ZkConfig};
-use sov_rollup_interface::zk::traits::ZkvmGuest;
+use sov_rollup_interface::zk::traits::{StateTransition, ValidityCondition, ZkvmGuest};
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
@@ -46,17 +46,20 @@ pub fn main() {
     let completeness_proof: <CelestiaSpec as DaSpec>::CompletenessProof = guest.read_from_host();
 
     // Step 2: Verify tx list
-    verifier
+    let validity_condition = verifier
         .verify_relevant_tx_list(&header, &txs, inclusion_proof, completeness_proof)
         .expect("Transaction list must be correct");
     env::write(&"Relevant txs verified\n");
 
-    state_transition(&guest, txs);
+    state_transition(&guest, txs, validity_condition);
 }
 
-fn state_transition(guest: &Risc0Guest, batches: Vec<BlobWithSender>) {
+fn state_transition(
+    guest: &Risc0Guest,
+    batches: Vec<BlobWithSender>,
+    validity_condition: impl ValidityCondition,
+) {
     let prev_state_root_hash: [u8; 32] = guest.read_from_host();
-    env::commit_slice(&prev_state_root_hash[..]);
     env::write(&"Prev root hash read\n");
 
     let mut demo_runner = <ZkAppRunner<Risc0Guest> as StateTransitionRunner<
@@ -77,7 +80,12 @@ fn state_transition(guest: &Risc0Guest, batches: Vec<BlobWithSender>) {
     }
     let (state_root, _) = demo.end_slot();
     env::write(&"Slot has ended\n");
-    env::commit(&state_root);
+    let output = StateTransition {
+        initial_state_root: prev_state_root_hash,
+        final_state_root: state_root.0,
+        validity_condition,
+    };
+    env::commit(&output);
     env::write(&"new state root committed\n");
 }
 

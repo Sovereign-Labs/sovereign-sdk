@@ -16,14 +16,17 @@ use demo_stf::runtime::GenesisConfig;
 use jsonrpsee::core::server::rpc_module::Methods;
 use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
-use jupiter::verifier::CelestiaVerifier;
 use jupiter::verifier::RollupParams;
+use jupiter::verifier::{CelestiaVerifier, ChainValidityCondition};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::da::DaVerifier;
+use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_rollup_interface::traits::CanonicalHash;
+use sov_rollup_interface::zk::traits::ValidityConditionChecker;
 use sov_state::Storage;
 use std::env;
 use std::net::SocketAddr;
@@ -72,6 +75,50 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
         &sequencer_private_key,
         &sequencer_private_key,
     )
+}
+
+fn start_batch_producing<
+    B: BatchBuilder + Send + Sync + 'static,
+    T: DaService + Send + Sync + 'static,
+>(
+    batch_builder: B,
+    da_service: Arc<T>,
+) {
+    let mut batch_builder = batch_builder;
+    tokio::spawn(async move {
+        loop {
+            match batch_builder.get_next_blob() {
+                Ok(blob) => {
+                    let blob: Vec<u8> = blob.into_iter().flatten().collect();
+                    match da_service.send_transaction(&blob).await {
+                        Ok(_) => {
+                            info!("Successfully produced batch");
+                        }
+                        Err(_err) => {
+                            info!("Error while producing batch");
+                        }
+                    };
+                }
+                Err(err) => {
+                    info!("Error while producing batch: {:?}", err);
+                }
+            };
+            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+        }
+    });
+}
+pub struct CelestiaChainChecker {
+    current_block_hash: [u8; 32],
+}
+
+impl ValidityConditionChecker<ChainValidityCondition> for CelestiaChainChecker {
+    fn check(&mut self, condition: &ChainValidityCondition) -> Result<(), anyhow::Error> {
+        anyhow::ensure!(
+            condition.block_hash == self.current_block_hash,
+            "Invalid block hash"
+        );
+        Ok(())
+    }
 }
 
 #[tokio::main]
@@ -188,9 +235,17 @@ async fn main() -> Result<(), anyhow::Error> {
         let (inclusion_proof, completeness_proof) =
             da_service.get_extraction_proof(&filtered_block, &blob_txs);
 
-        assert!(da_verifier
+        let validity_condition = da_verifier
             .verify_relevant_tx_list(header, &blob_txs, inclusion_proof, completeness_proof)
-            .is_ok());
+            .expect("Failed to verify relevant tx list but prover is honest");
+
+        // For demonstration purposes, we also show how you would check the extra validity condition
+        // imposed by celestia (that the Celestia block processed be the next one from the canonical chain).
+        // In a real rollup, this check would only be made by light clients.
+        let mut checker = CelestiaChainChecker {
+            current_block_hash: header.hash().inner().clone(),
+        };
+        checker.check(&validity_condition)?;
 
         // Store the resulting receipts in the ledger database
         ledger_db.commit_slot(data_to_commit)?;
