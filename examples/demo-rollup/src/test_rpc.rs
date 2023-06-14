@@ -1,4 +1,5 @@
 use hex;
+use proptest::prelude::any;
 use proptest::{array::uniform32, strategy::Strategy};
 use proptest::{prop_compose, proptest};
 use reqwest::header::CONTENT_TYPE;
@@ -14,22 +15,29 @@ use tokio::sync::oneshot;
 
 use crate::{config::RpcConfig, ledger_rpc};
 
-async fn query_test_helper(data: String, expected: &str, rpc_config: RpcConfig) {
+struct TestExpect {
+    data: String,
+    expected: String,
+}
+
+async fn query_test_helper(test_queries: Vec<TestExpect>, rpc_config: RpcConfig) {
     let (addr, port) = (rpc_config.bind_host, rpc_config.bind_port);
     let client = reqwest::Client::new();
     let url_str = format!("http://{addr}:{port}");
 
-    let res = client
-        .post(url_str)
-        .header(CONTENT_TYPE, "application/json")
-        .body(data)
-        .send()
-        .await
-        .unwrap();
+    for query in test_queries {
+        let res = client
+            .post(url_str.clone())
+            .header(CONTENT_TYPE, "application/json")
+            .body(query.data)
+            .send()
+            .await
+            .unwrap();
 
-    assert_eq!(res.status().as_u16(), 200);
-    let contents = res.text().await.unwrap();
-    assert_eq!((&contents), expected);
+        assert_eq!(res.status().as_u16(), 200);
+        let contents = res.text().await.unwrap();
+        assert_eq!((&contents), query.expected.as_str());
+    }
 }
 
 fn populate_ledger(ledger_db: &mut LedgerDB, slots: Vec<SlotCommit<TestBlock, i32, i32>>) {
@@ -38,7 +46,7 @@ fn populate_ledger(ledger_db: &mut LedgerDB, slots: Vec<SlotCommit<TestBlock, i3
     }
 }
 
-fn test_helper(data: String, expected: &str, slots: Vec<SlotCommit<TestBlock, i32, i32>>) {
+fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, i32, i32>>) {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_io()
         .enable_time()
@@ -76,7 +84,7 @@ fn test_helper(data: String, expected: &str, slots: Vec<SlotCommit<TestBlock, i3
             bind_port,
         };
 
-        query_test_helper(data, expected, rpc_config).await;
+        query_test_helper(test_queries, rpc_config).await;
 
         tx_end.send("drop server").unwrap();
     });
@@ -128,7 +136,13 @@ fn regular_test_helper(data: String, expected: &str) {
         slots.get_mut(0).unwrap().add_batch(batch)
     }
 
-    test_helper(data, expected, slots)
+    test_helper(
+        vec![TestExpect {
+            data,
+            expected: expected.to_string(),
+        }],
+        slots,
+    )
 }
 
 // These tests reproduce the README workflow for the ledger_rpc, ie:
@@ -227,34 +241,6 @@ fn test_get_events() {
     regular_test_helper(data, expected);
 }
 
-proptest!(
-    #[test]
-    // Generates multiple slots with random headers and try to retrieve them
-    fn proptest_get_head(hashs in proptest::collection::vec(proptest::array::uniform32(0_u8..), 1..100)){
-        let mut slots = vec![];
-
-        let mut prev_hash = [0;32];
-
-        let num_hashes = hashs.len();
-
-        for hash in hashs{
-            slots.push(SlotCommit::new(TestBlock {
-                curr_hash: hash,
-                header: TestBlockHeader {
-                    prev_hash,
-                },
-            }));
-
-            prev_hash = hash;
-        }
-
-        let prev_hash_str = hex::encode(prev_hash);
-        let data = r#"{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}"#.to_string();
-        let expected = format!("{{\"jsonrpc\":\"2.0\",\"result\":{{\"number\":{num_hashes},\"hash\":\"0x{prev_hash_str}\",\"batch_range\":{{\"start\":1,\"end\":1}}}},\"id\":1}}");
-        test_helper(data, expected.as_str(), slots);
-    }
-);
-
 prop_compose! {
     fn arb_event()(key in "\\w*", value in "\\w*") -> Event {
         Event::new(key.as_str(), value.as_str())
@@ -281,7 +267,6 @@ prop_compose! {
             tx_receipts,
             inner
         }
-
     }
 }
 
@@ -328,7 +313,7 @@ prop_compose! {
 
 proptest!(
     #[test]
-    fn proptest_get_head_complete((slots, total_num_batches) in arb_slots(10, 10, 10, 10)){
+    fn proptest_get_head((slots, total_num_batches) in arb_slots(10, 10, 10, 10)){
         let num_slots = slots.len();
         let last_slot = slots.last().unwrap();
 
@@ -340,6 +325,60 @@ proptest!(
 
         let data = r#"{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}"#.to_string();
         let expected = format!("{{\"jsonrpc\":\"2.0\",\"result\":{{\"number\":{num_slots},\"hash\":\"0x{last_slot_hash}\",\"batch_range\":{{\"start\":{last_slot_start_batch},\"end\":{last_slot_end_batch}}}}},\"id\":1}}");
-        test_helper(data, expected.as_str(), slots);
+        test_helper(vec![TestExpect{ data, expected}], slots);
+    }
+
+    #[test]
+    fn proptest_get_batches((slots, _total_num_batches) in arb_slots(10, 10, 10, 10), random_batch_num in 1..100){
+        let mut curr_slot_num = 0;
+        let mut curr_batch_num = 1;
+        let mut curr_tx_num = 1;
+
+        let random_batch_num_usize = usize::try_from(random_batch_num).unwrap();
+
+        while let Some(slot) = slots.get(curr_slot_num){
+            if curr_batch_num > random_batch_num_usize {
+                break;
+            }
+
+            if curr_batch_num + slot.batch_receipts().len() > random_batch_num_usize {
+                let curr_slot_batches = slot.batch_receipts();
+
+                let batch_index = random_batch_num_usize - curr_batch_num;
+
+                for i in 0..batch_index{
+                    curr_tx_num += curr_slot_batches.get(i).unwrap().tx_receipts.len();
+                }
+
+                let first_tx_num = curr_tx_num;
+
+                let curr_batch = curr_slot_batches.get(batch_index).unwrap();
+                let last_tx_num = first_tx_num + curr_batch.tx_receipts.len();
+
+                let batch_hash = hex::encode(curr_batch.batch_hash);
+                let batch_receipt= curr_batch.inner;
+
+                let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Compact"],"id":1}}"#)
+                    .to_string();
+                let expected = format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"custom_receipt":{batch_receipt}}}],"id":1}}"#);
+                test_helper(vec![TestExpect{data, expected}], slots);
+
+                return Ok(());
+            }
+
+            curr_batch_num += slot.batch_receipts().len();
+
+            for batch in slot.batch_receipts(){
+                curr_tx_num += batch.tx_receipts.len();
+            }
+
+            curr_slot_num += 1;
+
+        }
+
+        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Compact"],"id":1}}"#)
+            .to_string();
+        let expected : String= r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
+        test_helper(vec![TestExpect{data, expected}], slots);
     }
 );

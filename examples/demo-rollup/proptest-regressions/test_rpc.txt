@@ -5,3 +5,4 @@
 # It is recommended to check this file in to source control so that
 # everyone who runs the test benefits from these saved cases.
 cc fab0c06ba9f6bd15f35211b156da6be837017f7b69934a498481c3584647474f # shrinks to hashs = []
+cc 6805677eeea0a33645505430353d94a78a56b61833b3ad242642df676c124244 # shrinks to (slots, _total_num_batches) = ([SlotCommit { slot_data: TestBlock { curr_hash: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], header: TestBlockHeader { prev_hash: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] } }, batch_receipts: [BatchReceipt { batch_hash: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], tx_receipts: [], inner: 0 }], num_txs: 0, num_events: 0 }], 2), random_batch_num = 0
