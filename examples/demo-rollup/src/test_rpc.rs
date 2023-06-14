@@ -330,6 +330,28 @@ prop_compose! {
     }
 }
 
+fn format_tx(
+    tx_id: usize,
+    tx: &TransactionReceipt<i32>,
+    tx_id_to_event_range: &HashMap<usize, (usize, usize)>,
+) -> String {
+    let (event_range_begin, event_range_end) = tx_id_to_event_range.get(&(tx_id)).unwrap();
+    let encoding = hex::encode(tx.tx_hash);
+    let custom_receipt = tx.receipt;
+    match &tx.body_to_save {
+        None => format!(
+            r#"{{"hash":"0x{encoding}","event_range":{{"start":{event_range_begin},"end":{event_range_end}}},"custom_receipt":{custom_receipt}}}"#
+        ),
+        Some(body) => {
+            let body_formatted: Vec<String> = body.into_iter().map(|x| x.to_string()).collect();
+            let body_str = body_formatted.join(",");
+            format!(
+                r#"{{"hash":"0x{encoding}","event_range":{{"start":{event_range_begin},"end":{event_range_end}}},"body":[{body_str}],"custom_receipt":{custom_receipt}}}"#
+            )
+        }
+    }
+}
+
 proptest!(
     #[test]
     fn proptest_get_head((slots, _, total_num_batches) in arb_slots(10, 10, 10, 10)){
@@ -346,6 +368,7 @@ proptest!(
         let expected = format!("{{\"jsonrpc\":\"2.0\",\"result\":{{\"number\":{num_slots},\"hash\":\"0x{last_slot_hash}\",\"batch_range\":{{\"start\":{last_slot_start_batch},\"end\":{last_slot_end_batch}}}}},\"id\":1}}");
         test_helper(vec![TestExpect{ data, expected}], slots);
     }
+
 
     #[test]
     fn proptest_get_batches((slots, tx_id_to_event_range, _total_num_batches) in arb_slots(10, 10, 10, 10), random_batch_num in 1..100){
@@ -386,19 +409,7 @@ proptest!(
                 let mut tx_full_data : Vec<String> = Vec::new();
 
                 for (tx_id, tx) in curr_batch.tx_receipts.clone().into_iter().enumerate(){
-                   let (event_range_begin, event_range_end) = tx_id_to_event_range.get(&(first_tx_num + tx_id)).unwrap();
-                   let encoding = hex::encode(tx.tx_hash);
-                   let custom_receipt = tx.receipt;
-                   let tx_formatted = match tx.body_to_save {
-                        None => format!(r#"{{"hash":"0x{encoding}","event_range":{{"start":{event_range_begin},"end":{event_range_end}}},"custom_receipt":{custom_receipt}}}"#),
-                        Some(body) =>
-                        {
-                            let body_formatted: Vec<String> = body.into_iter().map(|x| x.to_string()).collect();
-                            let body_str = body_formatted.join(",");
-                            format!(r#"{{"hash":"0x{encoding}","event_range":{{"start":{event_range_begin},"end":{event_range_end}}},"body":[{body_str}],"custom_receipt":{custom_receipt}}}"#)
-                        }
-                   };
-                   tx_full_data.push(tx_formatted);
+                   tx_full_data.push(format_tx(curr_tx_num + tx_id, &tx, &tx_id_to_event_range));
                 }
 
                 let tx_full_data = tx_full_data.join(",");
@@ -450,4 +461,69 @@ proptest!(
         let expected : String= r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
         test_helper(vec![TestExpect{data, expected}], slots);
     }
+
+    #[test]
+    fn proptest_get_transactions((slots, tx_id_to_event_range, _total_num_batches) in arb_slots(10, 10, 10, 10), random_tx_num in 1..1000){
+        let mut curr_slot_num = 0;
+        let mut curr_tx_num = 1;
+
+        let random_tx_num_usize = usize::try_from(random_tx_num).unwrap();
+
+        while let Some(slot) = slots.get(curr_slot_num){
+            for batch in slot.batch_receipts(){
+                if curr_tx_num > random_tx_num_usize {
+                    break;
+                }
+
+                if curr_tx_num + batch.tx_receipts.len() > random_tx_num_usize {
+                    let tx_index = random_tx_num_usize - curr_tx_num;
+                    let tx = batch.tx_receipts.get(tx_index).unwrap();
+
+                    let tx_formatted = format_tx(curr_tx_num + tx_index, tx, &tx_id_to_event_range);
+
+
+                    test_helper(vec![TestExpect{
+                        data:
+                        format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}]],"id":1}}"#),
+                        expected:
+                        format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
+                        TestExpect{
+                        data:
+                        format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[{random_tx_num}],"id":1}}"#),
+                        expected:
+                        format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
+                        TestExpect{
+                        data:
+                        format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}], "Compact"],"id":1}}"#),
+                        expected:
+                        format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
+                        TestExpect{
+                        data:
+                        format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}], "Standard"],"id":1}}"#),
+                        expected:
+                        format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
+                        TestExpect{
+                        data:
+                        format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}], "Full"],"id":1}}"#),
+                        expected:
+                        format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
+                        ]
+                        , slots);
+
+                    return Ok(());
+                }
+
+                curr_tx_num += batch.tx_receipts.len();
+            }
+
+            curr_slot_num += 1;
+        }
+
+        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}]],"id":1}}"#)
+            .to_string();
+        let expected : String= r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
+        test_helper(vec![TestExpect{data, expected}], slots);
+
+    }
+
 );
