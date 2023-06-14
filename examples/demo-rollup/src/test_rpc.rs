@@ -552,7 +552,6 @@ proptest!(
 
                     return Ok(());
                     }
-
                     curr_tx_num += 1;
                 }
 
