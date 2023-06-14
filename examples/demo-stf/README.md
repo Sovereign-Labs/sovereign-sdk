@@ -149,8 +149,8 @@ complete State Transition Function!
 
 ### Exposing RPC
 
-Your modules implement rpc methods via the `rpc_gen` macro, in order to enable the full-node to expose them annotate the `Runtime` with `expose_rpc`.
-In the example above, you can see an example of how to use the `expose_rpc` macro on the `native` `Runtime`.
+Your modules implement rpc methods via the `rpc_gen` macro, in order to enable the full-node to expose them, annotate the `Runtime` with `expose_rpc`.
+In the example above, you can see how to use the `expose_rpc` macro on the `native` `Runtime`.
 
 
 ## Make Full Node Itegrations Simpler with the State Transition Runner trait:
