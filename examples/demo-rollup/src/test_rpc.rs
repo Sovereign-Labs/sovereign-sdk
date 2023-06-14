@@ -1,6 +1,3 @@
-use hex;
-use proptest::prelude::any;
-use proptest::{array::uniform32, strategy::Strategy};
 use proptest::{prop_compose, proptest};
 use reqwest::header::CONTENT_TYPE;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
@@ -251,7 +248,7 @@ prop_compose! {
 prop_compose! {
     fn arb_txs(max_events : usize)(tx_hash in proptest::array::uniform32(0_u8..), body_to_save in "[\\w\\d]*", events in proptest::collection::vec(arb_event(), 0..max_events),
 receipt in 0..3) -> TransactionReceipt::<i32> {
-    let body_to_save = if body_to_save.len() > 0 { Some(body_to_save.into_bytes())} else { None};
+    let body_to_save = if !body_to_save.is_empty() { Some(body_to_save.into_bytes())} else { None};
 
     TransactionReceipt{
         tx_hash,
@@ -343,7 +340,7 @@ fn format_tx(
             r#"{{"hash":"0x{encoding}","event_range":{{"start":{event_range_begin},"end":{event_range_end}}},"custom_receipt":{custom_receipt}}}"#
         ),
         Some(body) => {
-            let body_formatted: Vec<String> = body.into_iter().map(|x| x.to_string()).collect();
+            let body_formatted: Vec<String> = body.iter().map(|x| x.to_string()).collect();
             let body_str = body_formatted.join(",");
             format!(
                 r#"{{"hash":"0x{encoding}","event_range":{{"start":{event_range_begin},"end":{event_range_end}}},"body":[{body_str}],"custom_receipt":{custom_receipt}}}"#
@@ -453,8 +450,7 @@ proptest!(
 
         }
 
-        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Compact"],"id":1}}"#)
-            .to_string();
+        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Compact"],"id":1}}"#);
         let expected : String= r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
         test_helper(vec![TestExpect{data, expected}], slots);
     }
@@ -513,9 +509,8 @@ proptest!(
             }
         }
 
-        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}]],"id":1}}"#)
-            .to_string();
-        let expected : String= r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
+        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}]],"id":1}}"#);
+        let expected : String = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
         test_helper(vec![TestExpect{data, expected}], slots);
 
     }
@@ -523,25 +518,25 @@ proptest!(
     #[test]
     fn proptest_get_events((slots, tx_id_to_event_range, _total_num_batches) in arb_slots(10, 10, 10, 10), random_event_num in 1..10000){
         let mut curr_tx_num = 1;
-        let mut curr_event_num = 1;
 
         let random_event_num_usize = usize::try_from(random_event_num).unwrap();
 
         for slot in &slots{
             for batch in slot.batch_receipts(){
                 for tx in &batch.tx_receipts{
-                    if curr_event_num > random_event_num_usize {
+                    let (start_event_range, end_event_range) = tx_id_to_event_range.get(&curr_tx_num).unwrap();
+                    if *start_event_range > random_event_num_usize {
                         break;
                     }
 
-                    if random_event_num_usize < tx_id_to_event_range.get(&curr_tx_num).unwrap().1 {
-                        let event_index = random_event_num_usize - curr_event_num;
+                    if random_event_num_usize < *end_event_range {
+                        let event_index = random_event_num_usize - *start_event_range;
                         let event : &Event = tx.events.get(event_index).unwrap();
 
-                        let key_str_vec : Vec<String> = event.key().inner().into_iter().map(|x| x.to_string()).collect();
+                        let key_str_vec : Vec<String> = event.key().inner().iter().map(|x| x.to_string()).collect();
                         let key_str = key_str_vec.join(",");
 
-                        let value_str_vec : Vec<String> = event.value().inner().into_iter().map(|x| x.to_string()).collect();
+                        let value_str_vec : Vec<String> = event.value().inner().iter().map(|x| x.to_string()).collect();
                         let value_str = value_str_vec.join(",");
 
                         let event_formatted = format!(r#"{{"key":[{key_str}],"value":[{value_str}]}}"#);
@@ -549,7 +544,7 @@ proptest!(
 
                     test_helper(vec![TestExpect{
                         data:
-                        format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_event_num}]],"id":1}}"#),
+                        format!(r#"{{"jsonrpc":"2.0","method":"ledger_getEvents","params":[{random_event_num_usize}],"id":1}}"#),
                         expected:
                         format!(r#"{{"jsonrpc":"2.0","result":[{event_formatted}],"id":1}}"#)},
                         ]
@@ -559,15 +554,13 @@ proptest!(
                     }
 
                     curr_tx_num += 1;
-                    curr_event_num += tx.events.len();
                 }
 
             }
 
         }
 
-        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_event_num}]],"id":1}}"#)
-            .to_string();
+        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getEvents","params":[{random_event_num}],"id":1}}"#);
         let expected : String= r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
         test_helper(vec![TestExpect{data, expected}], slots);
 
