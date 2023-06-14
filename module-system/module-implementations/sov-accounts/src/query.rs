@@ -1,5 +1,6 @@
 use crate::{Account, Accounts};
 use sov_modules_api::AddressBech32;
+use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
 
 #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
@@ -8,7 +9,9 @@ pub enum Response {
     AccountEmpty,
 }
 
+#[rpc_gen(client, server, namespace = "accounts")]
 impl<C: sov_modules_api::Context> Accounts<C> {
+    #[rpc_method(name = "getAccount")]
     pub fn get_account(
         &self,
         pub_key: C::PublicKey,

@@ -1,3 +1,4 @@
+use crate::batch_builder::FiFoStrictBatchBuilder;
 #[cfg(feature = "native")]
 use crate::runner_config::Config;
 use crate::runtime::Runtime;
@@ -22,9 +23,8 @@ use sov_rollup_interface::stf::ZkConfig;
 use sov_rollup_interface::zk::traits::Zkvm;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
-use sov_state::ZkStorage;
-
 use sov_state::Storage;
+use sov_state::ZkStorage;
 
 pub struct DemoAppRunner<C: Context, Vm: Zkvm> {
     pub stf: DemoApp<C, Vm>,
@@ -32,17 +32,6 @@ pub struct DemoAppRunner<C: Context, Vm: Zkvm> {
 }
 
 pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;
-
-#[cfg(feature = "native")]
-use sov_bank::query::{BankRpcImpl, BankRpcServer};
-#[cfg(feature = "native")]
-use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
-#[cfg(feature = "native")]
-use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
-
-use crate::batch_builder::FiFoStrictBatchBuilder;
-#[cfg(feature = "native")]
-use sov_modules_macros::expose_rpc;
 
 #[cfg(feature = "native")]
 pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
@@ -54,8 +43,6 @@ pub type DemoBatchReceipt = SequencerOutcome;
 /// Tx receipt type used by the demo app. We export this type so that it's easily accessible to the full node.
 pub type DemoTxReceipt = TxEffect;
 
-#[cfg(feature = "native")]
-#[expose_rpc((Bank<DefaultContext>, Election<DefaultContext>, ValueSetter<DefaultContext>))]
 #[cfg(feature = "native")]
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
     type RuntimeConfig = Config;

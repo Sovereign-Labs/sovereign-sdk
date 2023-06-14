@@ -12,6 +12,7 @@ use dispatch::{
     dispatch_call::DispatchCallMacro, genesis::GenesisMacro, message_codec::MessageCodec,
 };
 use proc_macro::TokenStream;
+use rpc::ExposeRpcMacro;
 use syn::parse_macro_input;
 
 /// Derives the `sov-modules-api::ModuleInfo` implementation for the underlying type.
@@ -159,9 +160,13 @@ fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> To
 /// This proc macro generates the actual implementations for the trait created above for the module
 /// It iterates over each struct
 #[proc_macro_attribute]
-pub fn expose_rpc(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as syn::ItemImpl);
-    handle_macro_error(rpc::expose_rpc(attr.into(), input))
+pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
+    let context_type = parse_macro_input!(attr);
+
+    let original = input.clone();
+    let input = parse_macro_input!(input);
+    let expose_macro = ExposeRpcMacro::new("Expose");
+    handle_macro_error(expose_macro.generate_rpc(original, input, context_type))
 }
 
 #[proc_macro_attribute]

@@ -30,7 +30,7 @@ use tracing::Level;
 use tracing::{debug, info};
 
 // RPC related imports
-use demo_stf::app::get_rpc_methods;
+use demo_stf::runtime::get_rpc_methods;
 use risc0_adapter::host::Risc0Verifier;
 use sov_modules_api::RpcRunner;
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
