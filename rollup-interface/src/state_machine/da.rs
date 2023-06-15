@@ -1,6 +1,6 @@
 use crate::traits::{AddressTrait, BlockHeaderTrait};
 use borsh::{BorshDeserialize, BorshSerialize};
-use bytes::{Buf, BufMut};
+use bytes::Buf;
 use core::fmt::Debug;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
@@ -92,12 +92,7 @@ impl<B: Buf> Read for BufReaderWithCounter<B> {
     fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
         let len_before_reading = self.inner.remaining();
 
-        buf.write(
-            &self
-                .inner
-                .copy_to_bytes(min(buf.len(), len_before_reading))
-                .to_vec(),
-        )?;
+        buf.write_all(&self.inner.copy_to_bytes(min(buf.len(), len_before_reading)))?;
 
         let num_read = len_before_reading - self.inner.remaining();
 
