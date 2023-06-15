@@ -1,6 +1,5 @@
-use std::io::Read;
-
 use crate::{transaction::Transaction, Context, Spec};
+use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_state::WorkingSet;
 
 /// Hooks that execute within the `StateTransitionFunction::apply_blob` function for each processed transaction.
@@ -35,8 +34,7 @@ pub trait ApplyBlobHooks {
     /// Runs at the beginning of apply_blob, locks the sequencer bond.
     fn begin_blob_hook(
         &self,
-        sequencer: &[u8],
-        raw_blob: &impl Read,
+        blob: &mut impl BlobTransactionTrait,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()>;
 

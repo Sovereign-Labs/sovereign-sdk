@@ -1,9 +1,11 @@
 use crate::traits::{AddressTrait, BlockHeaderTrait};
 use borsh::{BorshDeserialize, BorshSerialize};
-use bytes::Buf;
+use bytes::{Buf, BufMut};
 use core::fmt::Debug;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::cmp::min;
+use std::io::{Read, Write};
 
 /// A specification for the types used by a DA layer.
 pub trait DaSpec {
@@ -56,49 +58,54 @@ pub trait DaVerifier {
     ) -> Result<(), Self::Error>;
 }
 
-pub struct BlobDataAndHash<B: Buf> {
-    pub data: BufWithCounter<B>,
-    pub hash: [u8; 32],
-}
-
-// Simple structure that implements a buffer that counts the number of bytes read from the beginning
+// Simple structure that implements the Read trait for a buffer and  counts the number of bytes read from the beginning
 // Useful for the partial blob reading optimization: we know for each blob how many bytes have been read from the beginning
+// Because of soundness issues we cannot implement the Buf trait because the prover could get unproved blob data using the chunk method.
 #[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize, PartialEq)]
-pub struct BufWithCounter<B: Buf> {
+pub struct BufReaderWithCounter<B: Buf> {
     inner: B,
+    acc: Vec<u8>,
     counter: usize,
 }
 
-impl<B: Buf> BufWithCounter<B> {
+impl<B: Buf> BufReaderWithCounter<B> {
     pub fn new(inner: B) -> Self {
-        BufWithCounter { inner, counter: 0 }
-    }
-
-    pub fn inner(&self) -> &B {
-        &self.inner
-    }
-
-    pub fn inner_mut(&mut self) -> &mut B {
-        &mut self.inner
+        let buf_size = inner.remaining();
+        BufReaderWithCounter {
+            inner,
+            counter: 0,
+            acc: Vec::with_capacity(buf_size),
+        }
     }
 
     pub fn counter(&self) -> usize {
         self.counter
     }
+
+    pub fn acc(&self) -> &Vec<u8> {
+        &self.acc
+    }
 }
 
-impl<B: Buf> Buf for BufWithCounter<B> {
-    fn remaining(&self) -> usize {
-        self.inner.remaining()
-    }
+impl<B: Buf> Read for BufReaderWithCounter<B> {
+    // Reads the inner buf into the provided buffer, and appends the data read to inner accumulator
+    fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
+        let len_before_reading = self.inner.remaining();
 
-    fn chunk(&self) -> &[u8] {
-        self.inner.chunk()
-    }
+        buf.write(
+            &self
+                .inner
+                .copy_to_bytes(min(buf.len(), len_before_reading))
+                .to_vec(),
+        )?;
 
-    fn advance(&mut self, cnt: usize) {
-        self.counter += cnt;
-        self.inner.advance(cnt);
+        let num_read = len_before_reading - self.inner.remaining();
+
+        self.acc.append(&mut buf.to_vec());
+
+        self.counter += num_read;
+
+        Ok(num_read)
     }
 }
 
@@ -112,9 +119,9 @@ pub trait BlobTransactionTrait: Serialize + DeserializeOwned {
 
     /// The raw data of the blob. For example, the "calldata" of an Ethereum rollup transaction
     /// This function clones the data of the blob to an external BufWithCounter
-    fn data_mut(&mut self) -> &mut BufWithCounter<Self::Data>;
+    fn data_mut(&mut self) -> &mut BufReaderWithCounter<Self::Data>;
 
-    fn data(&self) -> &BufWithCounter<Self::Data>;
+    fn data(&self) -> &BufReaderWithCounter<Self::Data>;
 
     // Returns the hash of the blob. If not provided with a hint, it is computed by hashing the blob data
     fn hash(&self) -> [u8; 32];

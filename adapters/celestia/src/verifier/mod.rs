@@ -1,8 +1,8 @@
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::{
-    da::{self, BlobTransactionTrait, BlockHashTrait as BlockHash, BufWithCounter, DaSpec},
-    Bytes,
+    da::{self, BlobTransactionTrait, BlockHashTrait as BlockHash, BufReaderWithCounter, DaSpec},
+    Buf,
 };
 
 pub mod address;
@@ -35,12 +35,12 @@ impl BlobTransactionTrait for BlobWithSender {
     }
 
     // Creates a new BufWithCounter structure to read the data
-    fn data_mut(&mut self) -> &mut BufWithCounter<Self::Data> {
+    fn data_mut(&mut self) -> &mut BufReaderWithCounter<Self::Data> {
         &mut self.blob
     }
 
     // Creates a new BufWithCounter structure to read the data
-    fn data(&self) -> &BufWithCounter<Self::Data> {
+    fn data(&self) -> &BufReaderWithCounter<Self::Data> {
         &self.blob
     }
 
@@ -200,9 +200,13 @@ impl da::DaVerifier for CelestiaVerifier {
                 }
 
                 let blob_ref = blob.clone();
-                let blob_data: Bytes = blob.clone().data().collect();
-                let tx_data: Bytes = tx.data().inner().clone().collect();
-                assert_eq!(blob_data, tx_data);
+
+                let mut blob_iter = blob_ref.data();
+                let mut blob_data = Vec::with_capacity(blob_iter.remaining());
+                blob_iter.copy_to_slice(blob_data.as_mut_slice());
+                let tx_data = tx.data().acc();
+
+                assert_eq!(blob_data, *tx_data);
 
                 // Link blob commitment to e-tx commitment
                 let expected_commitment =

@@ -3,7 +3,6 @@ use sov_rollup_interface::{
     da::BlobTransactionTrait,
     stf::{BatchReceipt, StateTransitionFunction},
     zk::traits::Zkvm,
-    Buf,
 };
 use std::io::Read;
 
@@ -55,14 +54,13 @@ impl<VM: Zkvm> StateTransitionFunction<VM> for CheckHashPreimageStf {
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
         let blob_data = blob.data_mut();
-        let mut reader = blob_data.reader();
 
         // Read the data from the blob as a byte vec.
         let mut data = Vec::new();
 
         // Panicking within the `StateTransitionFunction` is generally not recommended.
         // But here if we encounter an error while reading the bytes, it suggests a serious issue with the DA layer or our setup.
-        reader
+        blob_data
             .read_to_end(&mut data)
             .unwrap_or_else(|e| panic!("Unable to read blob data {}", e));
 

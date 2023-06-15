@@ -1,11 +1,12 @@
 use crate::{
-    da::{BlobTransactionTrait, BufWithCounter},
+    da::{BlobTransactionTrait, BufReaderWithCounter},
     services::da::SlotData,
     traits::{AddressTrait, BlockHeaderTrait, CanonicalHash},
     zk::traits::{Matches, Zkvm},
 };
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
+
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
@@ -90,18 +91,11 @@ fn test_mock_proof_roundtrip() {
     assert_eq!(proof, decoded);
 }
 
-#[derive(
-    Debug,
-    Clone,
-    borsh::BorshDeserialize,
-    borsh::BorshSerialize,
-    serde::Serialize,
-    serde::Deserialize,
-)]
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct TestBlob<Address> {
     address: Address,
     hash: [u8; 32],
-    data: BufWithCounter<Bytes>,
+    data: BufReaderWithCounter<Bytes>,
 }
 
 impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
@@ -116,11 +110,11 @@ impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
         self.hash
     }
 
-    fn data_mut(&mut self) -> &mut BufWithCounter<Self::Data> {
+    fn data_mut(&mut self) -> &mut BufReaderWithCounter<Self::Data> {
         &mut self.data
     }
 
-    fn data(&self) -> &BufWithCounter<Self::Data> {
+    fn data(&self) -> &BufReaderWithCounter<Self::Data> {
         &self.data
     }
 }
@@ -129,7 +123,7 @@ impl<Address: AddressTrait> TestBlob<Address> {
     pub fn new(data: Vec<u8>, address: Address, hash: [u8; 32]) -> Self {
         Self {
             address,
-            data: BufWithCounter::new(bytes::Bytes::from(data)),
+            data: BufReaderWithCounter::new(bytes::Bytes::from(data)),
             hash,
         }
     }
