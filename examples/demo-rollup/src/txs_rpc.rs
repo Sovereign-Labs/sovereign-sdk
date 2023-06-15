@@ -155,8 +155,8 @@ mod tests {
 
         fn get_extraction_proof(
             &self,
-            block: &Self::FilteredBlock,
-            blobs: &[<Self::Spec as DaSpec>::BlobTransaction],
+            _block: &Self::FilteredBlock,
+            _blobs: &[<Self::Spec as DaSpec>::BlobTransaction],
         ) -> (
             <Self::Spec as DaSpec>::InclusionMultiProof,
             <Self::Spec as DaSpec>::CompletenessProof,

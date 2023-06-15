@@ -1,7 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::{NamespaceId, NamespaceProof, NamespacedSha2Hasher};
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::da::BlobTransactionTrait;
 
 use crate::types::FilteredCelestiaBlock;
 
