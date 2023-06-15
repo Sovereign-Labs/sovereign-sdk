@@ -144,7 +144,14 @@ pub trait Spec {
         + Sync;
 
     #[cfg(not(feature = "native"))]
-    type PublicKey: borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug + PublicKey;
+    type PublicKey: borsh::BorshDeserialize
+        + borsh::BorshSerialize
+        + Eq
+        + Clone
+        + Debug
+        + Send
+        + Sync
+        + PublicKey;
 
     /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
     type Hasher: Hasher;
