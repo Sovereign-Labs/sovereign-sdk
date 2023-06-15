@@ -1,9 +1,9 @@
-use crate::Sequencer;
+use crate::SequencerRegistry;
 use sov_modules_api::{hooks::ApplyBlobHooks, Context};
 use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_state::WorkingSet;
 
-impl<C: Context> ApplyBlobHooks for Sequencer<C> {
+impl<C: Context> ApplyBlobHooks for SequencerRegistry<C> {
     type Context = C;
     type BlobResult = u64;
 

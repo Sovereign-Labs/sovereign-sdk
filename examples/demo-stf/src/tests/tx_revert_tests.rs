@@ -84,7 +84,7 @@ fn test_tx_revert() {
         );
 
         let resp = runtime
-            .sequencer
+            .sequencer_registry
             .sequencer_address_and_balance(&mut working_set);
         // Sequencer is rewarded
         assert_eq!(resp.data.unwrap().balance, SEQUENCER_BALANCE);
@@ -238,7 +238,7 @@ fn test_tx_bad_sig() {
         );
 
         let resp = runtime
-            .sequencer
+            .sequencer_registry
             .sequencer_address_and_balance(&mut working_set);
 
         // Sequencer is slashed
@@ -298,7 +298,7 @@ fn test_tx_bad_serialization() {
         );
 
         let resp = runtime
-            .sequencer
+            .sequencer_registry
             .sequencer_address_and_balance(&mut working_set);
 
         // Sequencer is slashed
