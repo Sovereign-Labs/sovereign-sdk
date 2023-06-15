@@ -35,6 +35,15 @@ pub(crate) enum ApplyBatchError {
     },
 }
 
+impl From<ApplyBatchError> for SequencerOutcome {
+    fn from(value: ApplyBatchError) -> Self {
+        match value {
+            ApplyBatchError::Ignored(_) => SequencerOutcome::Ignored,
+            ApplyBatchError::Slashed { reason, .. } => SequencerOutcome::Slashed(reason),
+        }
+    }
+}
+
 impl From<ApplyBatchError> for BatchReceipt<SequencerOutcome, TxEffect> {
     fn from(value: ApplyBatchError) -> Self {
         match value {
@@ -230,6 +239,40 @@ where
         batch: impl Buf,
     ) -> Result<BatchReceipt<SequencerOutcome, TxEffect>> {
         let batch_data_and_hash = BatchDataAndHash::new::<C>(batch);
+        let batch_hash = batch_data_and_hash.hash;
+        //
+
+        let result = self.apply_batch_inner(sequencer, batch_data_and_hash);
+        let sequencer_outcome: SequencerOutcome = match &result {
+            Ok((w, s, _)) => s.clone(),
+            Err(e) => match e {
+                ApplyBatchError::Ignored(_) => SequencerOutcome::Ignored,
+                ApplyBatchError::Slashed { reason, .. } => SequencerOutcome::Slashed(*reason),
+            },
+        };
+        self.runtime
+            .end_blob_hook(sequencer_outcome, &mut batch_workspace)
+            .expect("Impossible happened: error in exit_apply_batch"); // TODO: Fix this
+
+        let (batch_workspace, _, tx_receipts) = result?;
+
+        self.checkpoint = Some(batch_workspace.checkpoint());
+        Ok(BatchReceipt {
+            batch_hash,
+            tx_receipts,
+            inner: sequencer_outcome,
+        })
+    }
+
+    pub fn apply_batch_inner(
+        &mut self,
+        sequencer: &[u8],
+        batch_data_and_hash: BatchDataAndHash,
+    ) -> Result<(
+        WorkingSet<C::Storage>,
+        SequencerOutcome,
+        Vec<TransactionReceipt<TxEffect>>,
+    )> {
         let mut batch_workspace =
             self.init_sequencer_and_get_working_set(sequencer, &batch_data_and_hash)?;
 
@@ -254,16 +297,7 @@ where
 
         // TODO: calculate the amount based of gas and fees
         let batch_receipt_contents = SequencerOutcome::Rewarded(0);
-        self.runtime
-            .end_blob_hook(batch_receipt_contents, &mut batch_workspace)
-            .expect("Impossible happened: error in exit_apply_batch");
-
-        self.checkpoint = Some(batch_workspace.checkpoint());
-        Ok(BatchReceipt {
-            batch_hash: batch_data_and_hash.hash,
-            tx_receipts,
-            inner: batch_receipt_contents,
-        })
+        Ok((batch_workspace, batch_receipt_contents, tx_receipts))
     }
 }
 
