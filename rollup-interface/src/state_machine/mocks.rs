@@ -1,12 +1,14 @@
+use crate::da::BlockHashTrait;
 use crate::{
     da::BlobTransactionTrait,
     services::da::SlotData,
     traits::{AddressTrait, BlockHeaderTrait, CanonicalHash},
     zk::traits::{Matches, Zkvm},
 };
-use anyhow::ensure;
+use anyhow::{ensure, Error};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use std::io::Write;
 use tendermint::crypto::Sha256;
 
@@ -89,6 +91,44 @@ fn test_mock_proof_roundtrip() {
     assert_eq!(proof, decoded);
 }
 
+#[derive(Debug, PartialEq, Clone, Eq, serde::Serialize, serde::Deserialize)]
+pub struct MockAddress {
+    addr: [u8; 32],
+}
+
+impl<'a> TryFrom<&'a [u8]> for MockAddress {
+    type Error = Error;
+
+    fn try_from(addr: &'a [u8]) -> Result<Self, Self::Error> {
+        if addr.len() != 32 {
+            anyhow::bail!("Address must be 32 bytes long");
+        }
+        let mut addr_bytes = [0u8; 32];
+        addr_bytes.copy_from_slice(addr);
+        Ok(Self { addr: addr_bytes })
+    }
+}
+
+impl AsRef<[u8]> for MockAddress {
+    fn as_ref(&self) -> &[u8] {
+        &self.addr
+    }
+}
+
+impl From<[u8; 32]> for MockAddress {
+    fn from(addr: [u8; 32]) -> Self {
+        MockAddress { addr }
+    }
+}
+
+impl Display for MockAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.addr)
+    }
+}
+
+impl AddressTrait for MockAddress {}
+
 #[derive(
     Debug,
     Clone,
@@ -122,21 +162,32 @@ impl<Address: AddressTrait> TestBlob<Address> {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct TestHash(pub [u8; 32]);
+
+impl AsRef<[u8]> for TestHash {
+    fn as_ref(&self) -> &[u8] {
+        &self.0
+    }
+}
+
+impl BlockHashTrait for TestHash {}
+
 #[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
 pub struct TestBlockHeader {
-    pub prev_hash: [u8; 32],
+    pub prev_hash: TestHash,
 }
 
 impl CanonicalHash for TestBlockHeader {
-    type Output = [u8; 32];
+    type Output = TestHash;
 
     fn hash(&self) -> Self::Output {
-        sha2::Sha256::digest(self.prev_hash)
+        TestHash(sha2::Sha256::digest(self.prev_hash.0))
     }
 }
 
 impl BlockHeaderTrait for TestBlockHeader {
-    type Hash = [u8; 32];
+    type Hash = TestHash;
 
     fn prev_hash(&self) -> Self::Hash {
         self.prev_hash

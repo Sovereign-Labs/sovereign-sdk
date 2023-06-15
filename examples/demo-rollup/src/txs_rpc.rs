@@ -30,8 +30,11 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> TxsRpcHandler<B,
             batch_builder.get_next_blob()?
         };
         let blob: Vec<u8> = blob.into_iter().flatten().collect();
-        self.da_service.send_transaction(&blob).await.unwrap();
-        Ok(())
+        match self.da_service.send_transaction(&blob).await {
+            Ok(_) => Ok(()),
+            Err(e) => Err(anyhow!("failed to submit batch: {:?}", e)),
+        }
+        // Ok(())
     }
 }
 
@@ -64,4 +67,143 @@ where
     let mut rpc = RpcModule::new(txs_handler);
     register_txs_rpc_methods::<B, D>(&mut rpc).expect("Failed to register txs RPC methods");
     rpc
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sov_rollup_interface::da::DaSpec;
+    use sov_rollup_interface::mocks::{
+        MockAddress, TestBlob, TestBlock, TestBlockHeader, TestHash,
+    };
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::sync::Arc;
+
+    struct MockDaService {
+        submitted: Arc<Mutex<Vec<Vec<u8>>>>,
+    }
+
+    impl MockDaService {
+        fn new() -> Self {
+            MockDaService {
+                submitted: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+
+        fn is_empty(&self) -> bool {
+            self.submitted.lock().unwrap().is_empty()
+        }
+
+        fn get_submitted(&self) -> Vec<Vec<u8>> {
+            self.submitted.lock().unwrap().clone()
+        }
+    }
+
+    struct MockDaSpec;
+
+    impl DaSpec for MockDaSpec {
+        type SlotHash = TestHash;
+        type BlockHeader = TestBlockHeader;
+        type BlobTransaction = TestBlob<MockAddress>;
+        type InclusionMultiProof = [u8; 32];
+        type CompletenessProof = ();
+        type ChainParams = ();
+    }
+
+    impl DaService for MockDaService {
+        type RuntimeConfig = ();
+        type Spec = MockDaSpec;
+        type FilteredBlock = TestBlock;
+        type Future<T> = Pin<Box<dyn Future<Output = Result<T, Self::Error>> + Send>>;
+        // type Future<T> = Pin<Box<T> + Send>;
+        type Error = anyhow::Error;
+
+        fn new(
+            _config: Self::RuntimeConfig,
+            _chain_params: <Self::Spec as DaSpec>::ChainParams,
+        ) -> Self {
+            MockDaService::new()
+        }
+
+        fn get_finalized_at(&self, _height: u64) -> Self::Future<Self::FilteredBlock> {
+            todo!()
+        }
+
+        fn get_block_at(&self, _height: u64) -> Self::Future<Self::FilteredBlock> {
+            todo!()
+        }
+
+        fn extract_relevant_txs(
+            &self,
+            _block: Self::FilteredBlock,
+        ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
+            todo!()
+        }
+
+        fn extract_relevant_txs_with_proof(
+            &self,
+            _block: Self::FilteredBlock,
+        ) -> (
+            Vec<<Self::Spec as DaSpec>::BlobTransaction>,
+            <Self::Spec as DaSpec>::InclusionMultiProof,
+            <Self::Spec as DaSpec>::CompletenessProof,
+        ) {
+            todo!()
+        }
+
+        fn send_transaction(&self, blob: &[u8]) -> Self::Future<()> {
+            self.submitted.lock().unwrap().push(blob.to_vec());
+            Box::pin(async move { Ok(()) })
+        }
+    }
+
+    struct MockBatchBuilder {
+        mempool: Vec<Vec<u8>>,
+    }
+
+    /// It only takes the first byte of the tx, when submits it.
+    /// This allows to show effect of batch builder
+    impl BatchBuilder for MockBatchBuilder {
+        fn accept_tx(&mut self, tx: Vec<u8>) -> anyhow::Result<()> {
+            self.mempool.push(tx);
+            Ok(())
+        }
+
+        fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
+            let txs = std::mem::take(&mut self.mempool)
+                .into_iter()
+                .filter_map(|tx| {
+                    if !tx.is_empty() {
+                        Some(vec![tx[0]])
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            Ok(txs)
+        }
+    }
+
+    #[tokio::test]
+    async fn test_txs_rpc() {
+        // test for TxsRpcHandler
+        let tx1 = vec![1, 2, 3];
+        let tx2 = vec![3, 4, 5];
+        let batch_builder = MockBatchBuilder {
+            mempool: vec![tx1.clone(), tx2.clone()],
+        };
+        let da_service = Arc::new(MockDaService::new());
+        assert!(da_service.is_empty());
+        let rpc = get_txs_rpc(batch_builder, da_service.clone());
+
+        let _: () = rpc.call("batchBuilder_submit", [1u64]).await.unwrap();
+
+        assert!(!da_service.is_empty());
+
+        let submitted = da_service.get_submitted();
+        assert_eq!(1, submitted.len());
+        // First bytes of each tx, flattened
+        assert_eq!(vec![tx1[0], tx2[0]], submitted[0]);
+    }
 }
