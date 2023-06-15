@@ -22,6 +22,8 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> TxsRpcHandler<B,
 
     async fn submit_batch(&self) -> Result<(), anyhow::Error> {
         // Need to release lock before await, so Future is `Send`.
+        // But potentially it can create blobs that sent out of order.
+        // Can be improved with atomics, so new batch is only created after previous was submitted.
         let blob = {
             let mut batch_builder = self
                 .batch_builder
@@ -34,7 +36,6 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> TxsRpcHandler<B,
             Ok(_) => Ok(()),
             Err(e) => Err(anyhow!("failed to submit batch: {:?}", e)),
         }
-        // Ok(())
     }
 }
 
@@ -72,6 +73,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use anyhow::bail;
     use sov_rollup_interface::da::DaSpec;
     use sov_rollup_interface::mocks::{
         MockAddress, TestBlob, TestBlock, TestBlockHeader, TestHash,
@@ -116,7 +118,6 @@ mod tests {
         type Spec = MockDaSpec;
         type FilteredBlock = TestBlock;
         type Future<T> = Pin<Box<dyn Future<Output = Result<T, Self::Error>> + Send>>;
-        // type Future<T> = Pin<Box<T> + Send>;
         type Error = anyhow::Error;
 
         fn new(
@@ -171,6 +172,9 @@ mod tests {
         }
 
         fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
+            if self.mempool.is_empty() {
+                bail!("Mock mempool is empty");
+            }
             let txs = std::mem::take(&mut self.mempool)
                 .into_iter()
                 .filter_map(|tx| {
@@ -186,8 +190,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_txs_rpc() {
+    async fn test_submit_on_empty_mempool() {
         // test for TxsRpcHandler
+        let batch_builder = MockBatchBuilder { mempool: vec![] };
+        let da_service = Arc::new(MockDaService::new());
+        assert!(da_service.is_empty());
+        let rpc = get_txs_rpc(batch_builder, da_service.clone());
+
+        let result: Result<(), jsonrpsee::core::Error> =
+            rpc.call("batchBuilder_submit", [1u64]).await;
+
+        assert!(result.is_err());
+        let error = result.err().unwrap();
+        assert_eq!(
+            "RPC call failed: ErrorObject { code: ServerError(-32001), message: \"Custom error: Mock mempool is empty\", data: None }", 
+            error.to_string());
+    }
+
+    #[tokio::test]
+    async fn test_submit_happy_path() {
         let tx1 = vec![1, 2, 3];
         let tx2 = vec![3, 4, 5];
         let batch_builder = MockBatchBuilder {
