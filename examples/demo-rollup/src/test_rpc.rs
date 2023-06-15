@@ -84,6 +84,13 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, i
 
         query_test_helper(test_queries, rpc_config).await;
 
+        // By closing the `TempDir` explicitly we can check that it has
+        // been deleted successfully. If we don't close it explicitly,
+        // the directory will still be deleted when `tmp_dir` goes out
+        // of scope, but we won't know whether deleting the directory
+        // succeeded.
+        tmpdir.close().unwrap();
+
         tx_end.send("drop server").unwrap();
     });
 }
