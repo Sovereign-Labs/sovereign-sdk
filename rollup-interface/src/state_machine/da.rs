@@ -1,5 +1,5 @@
 use crate::traits::{AddressTrait, BlockHeaderTrait};
-use crate::zk::traits::ValidityCondition;
+use crate::zk::traits::{SimpleHasher, ValidityCondition};
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Buf;
 use core::fmt::Debug;
@@ -54,7 +54,7 @@ pub trait DaVerifier {
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self;
 
     /// Verify a claimed set of transactions against a block header.
-    fn verify_relevant_tx_list(
+    fn verify_relevant_tx_list<H: SimpleHasher>(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],

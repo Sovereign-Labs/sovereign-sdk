@@ -14,7 +14,7 @@ use risc0_zkvm::guest::env;
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::{StateTransitionFunction, ZkConfig};
-use sov_rollup_interface::zk::traits::{StateTransition, ValidityCondition, ZkvmGuest};
+use sov_rollup_interface::zk::traits::{NoOpHasher, StateTransition, ValidityCondition, ZkvmGuest};
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
@@ -47,7 +47,7 @@ pub fn main() {
 
     // Step 2: Verify tx list
     let validity_condition = verifier
-        .verify_relevant_tx_list(&header, &txs, inclusion_proof, completeness_proof)
+        .verify_relevant_tx_list::<NoOpHasher>(&header, &txs, inclusion_proof, completeness_proof)
         .expect("Transaction list must be correct");
     env::write(&"Relevant txs verified\n");
 
