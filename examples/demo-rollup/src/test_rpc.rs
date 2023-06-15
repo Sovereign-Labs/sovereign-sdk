@@ -3,7 +3,7 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use std::net::SocketAddr;
 
 #[cfg(test)]
-use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader};
+use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader, TestHash};
 
 use sov_rollup_interface::stf::{BatchReceipt, Event, TransactionReceipt};
 use tendermint::crypto::Sha256;
@@ -33,7 +33,7 @@ fn populate_ledger(ledger_db: &mut LedgerDB) {
     let mut slot: SlotCommit<TestBlock, i32, i32> = SlotCommit::new(TestBlock {
         curr_hash: sha2::Sha256::digest(b"slot_data"),
         header: TestBlockHeader {
-            prev_hash: sha2::Sha256::digest(b"prev_header"),
+            prev_hash: TestHash(sha2::Sha256::digest(b"prev_header")),
         },
     });
 

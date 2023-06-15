@@ -128,10 +128,30 @@ pub trait Spec {
     type Address: AddressTrait + BorshSerialize + BorshDeserialize;
 
     /// Authenticated state storage used by the rollup. Typically some variant of a merkle-patricia trie.
-    type Storage: Storage + Clone;
+    type Storage: Storage + Clone + Send + Sync;
 
     /// The public key used for digital signatures
-    type PublicKey: borsh::BorshDeserialize + borsh::BorshSerialize + Eq + Clone + Debug + PublicKey;
+    #[cfg(feature = "native")]
+    type PublicKey: borsh::BorshDeserialize
+        + borsh::BorshSerialize
+        + Eq
+        + Clone
+        + Debug
+        + PublicKey
+        + Serialize
+        + for<'a> Deserialize<'a>
+        + Send
+        + Sync;
+
+    #[cfg(not(feature = "native"))]
+    type PublicKey: borsh::BorshDeserialize
+        + borsh::BorshSerialize
+        + Eq
+        + Clone
+        + Debug
+        + Send
+        + Sync
+        + PublicKey;
 
     /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
     type Hasher: Hasher;

@@ -36,7 +36,7 @@ impl DefaultRuntimeMacro {
                 use ::sov_modules_api::ModuleInfo;
 
                 Self {
-                #(#runtime_fn_body)*
+                   #(#runtime_fn_body)*
                 }
             }
         }

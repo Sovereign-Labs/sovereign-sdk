@@ -22,7 +22,7 @@ path = "tests/all_tests.rs"
 [dev-dependencies]
 trybuild = "1.0"
 sov-modules-api = { path = "../sov-modules-api", version = "0.1" }
-jsonrpsee = { version = "0.16.2", features = ["macros", "client-core", "server"] }
+jsonrpsee = { workspace = true, features = ["macros", "http-client", "server"] }
 sov-state = { path = "../sov-state", version = "0.1" }
 tempfile = { workspace = true }
 
@@ -37,3 +37,4 @@ syn = { version = "1.0", features = ["full"] }
 quote = "1.0"
 proc-macro2 = "1.0"
 borsh = { workspace = true }
+

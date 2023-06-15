@@ -53,14 +53,11 @@ impl CorrectnessProof {
 
         // Extract (and clone) the position of each transaction
         for tx in blobs.iter() {
-            // We process the transaction only if we read something from it
-            if tx.data().counter() != 0 {
-                let (_, position) = block
-                    .relevant_pfbs
-                    .get(tx.hash.as_slice())
-                    .expect("commitment must exist in map");
-                needed_tx_shares.push(position.clone());
-            }
+            let (_, position) = block
+                .relevant_pfbs
+                .get(tx.hash.as_slice())
+                .expect("commitment must exist in map");
+            needed_tx_shares.push(position.clone());
         }
 
         let mut needed_tx_shares = needed_tx_shares.into_iter().peekable();
