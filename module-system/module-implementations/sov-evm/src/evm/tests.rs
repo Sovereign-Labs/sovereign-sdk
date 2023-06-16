@@ -85,9 +85,11 @@ fn simple_contract_execution() {
     {
         let call_data = contract.encode("set", set_arg).unwrap();
 
-        let mut tx_env = TxEnv::default();
-        tx_env.transact_to = TransactTo::Call(contract_address);
-        tx_env.data = Bytes::from(hex::decode(hex::encode(&call_data)).unwrap());
+        let tx_env = TxEnv {
+            transact_to: TransactTo::Call(contract_address),
+            data: Bytes::from(hex::decode(hex::encode(&call_data)).unwrap()),
+            ..Default::default()
+        };
 
         executor::execute_tx(EvmDb { db: &mut db }, tx_env).unwrap();
     }
@@ -95,9 +97,11 @@ fn simple_contract_execution() {
     let get_res = {
         let call_data = contract.encode("get", ()).unwrap();
 
-        let mut tx_env = TxEnv::default();
-        tx_env.transact_to = TransactTo::Call(contract_address);
-        tx_env.data = Bytes::from(hex::decode(hex::encode(&call_data)).unwrap());
+        let tx_env = TxEnv {
+            transact_to: TransactTo::Call(contract_address),
+            data: Bytes::from(hex::decode(hex::encode(&call_data)).unwrap()),
+            ..Default::default()
+        };
 
         let result = executor::execute_tx(EvmDb { db: &mut db }, tx_env).unwrap();
 
