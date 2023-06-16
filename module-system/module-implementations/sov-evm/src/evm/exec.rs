@@ -48,7 +48,7 @@ impl<'a> DatabaseCommit for Foo<'a> {
 fn simple_storage() {
     let caller = B160::from_str("0x1000000000000000000000000000000000000000").unwrap();
     let mut evm = revm::new();
-    let mut db = DummyStateDB::default();
+    let mut db = CachedDb::default();
 
     db.insert_account_info(
         caller,

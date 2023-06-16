@@ -8,10 +8,10 @@ use revm::{
     },
     DummyStateDB,
 };
-use sov_rollup_interface::da;
+
 use std::{path::PathBuf, str::FromStr};
 
-use super::executor;
+use super::{db::EvmDb, executor};
 
 fn output(result: ExecutionResult) -> Bytes {
     match result {
@@ -19,8 +19,7 @@ fn output(result: ExecutionResult) -> Bytes {
             Output::Call(out) => out,
             Output::Create(out, _) => out,
         },
-        ExecutionResult::Revert { gas_used, output } => todo!(),
-        ExecutionResult::Halt { reason, gas_used } => todo!(),
+        _ => panic!(),
     }
 }
 
@@ -54,7 +53,7 @@ fn simple_contract_execution() {
         tx_env.transact_to = TransactTo::create();
         tx_env.data = data;
 
-        let result = executor::execute_tx(db.clone(), tx_env).unwrap();
+        let result = executor::execute_tx(EvmDb { db: &mut db }, tx_env).unwrap();
 
         match result {
             ExecutionResult::Success {
@@ -65,7 +64,7 @@ fn simple_contract_execution() {
         }
     };
 
-    let arg = EU256::from(21989);
+    let set_arg = EU256::from(21989);
 
     let mut path: PathBuf = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("src");
@@ -79,25 +78,26 @@ fn simple_contract_execution() {
     let abi = BaseContract::from(abi);
 
     {
-        let encoded = abi.encode("set", arg).unwrap();
+        let encoded = abi.encode("set", set_arg).unwrap();
 
         let mut tx_env = TxEnv::default();
         tx_env.transact_to = TransactTo::Call(contract_address);
         tx_env.data = Bytes::from(hex::decode(hex::encode(&encoded)).unwrap());
 
-        executor::execute_tx(db.clone(), tx_env).unwrap();
+        executor::execute_tx(EvmDb { db: &mut db }, tx_env).unwrap();
     }
 
-    {
+    let get_res = {
         let encoded = abi.encode("get", ()).unwrap();
         let mut tx_env = TxEnv::default();
         tx_env.transact_to = TransactTo::Call(contract_address);
         tx_env.data = Bytes::from(hex::decode(hex::encode(&encoded)).unwrap());
 
-        let result = executor::execute_tx(db, tx_env).unwrap();
+        let result = executor::execute_tx(EvmDb { db: &mut db }, tx_env).unwrap();
 
         let out = output(result);
-        let r = EU256::from(out.as_ref());
-        println!("{:?}", r);
-    }
+        EU256::from(out.as_ref())
+    };
+
+    assert_eq!(set_arg, get_res)
 }

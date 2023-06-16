@@ -1,13 +1,13 @@
+use super::db::EvmDb;
 use std::convert::Infallible;
 
 use revm::{
     self,
     primitives::{EVMError, ExecutionResult, TxEnv},
-    DummyStateDB,
 };
 
 pub(crate) fn execute_tx(
-    db: DummyStateDB,
+    db: EvmDb,
     tx_env: TxEnv,
 ) -> Result<ExecutionResult, EVMError<Infallible>> {
     let mut evm = revm::new();
