@@ -80,10 +80,10 @@ fn simple_contract_execution() {
     let mut path = test_data_path();
     path.push("SimpleStorage.abi");
 
-    let abi = make_contract_from_abi(path);
+    let contract = make_contract_from_abi(path);
 
     {
-        let call_data = abi.encode("set", set_arg).unwrap();
+        let call_data = contract.encode("set", set_arg).unwrap();
 
         let mut tx_env = TxEnv::default();
         tx_env.transact_to = TransactTo::Call(contract_address);
@@ -93,7 +93,7 @@ fn simple_contract_execution() {
     }
 
     let get_res = {
-        let call_data = abi.encode("get", ()).unwrap();
+        let call_data = contract.encode("get", ()).unwrap();
 
         let mut tx_env = TxEnv::default();
         tx_env.transact_to = TransactTo::Call(contract_address);
