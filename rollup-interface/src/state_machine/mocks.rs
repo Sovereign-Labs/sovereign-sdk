@@ -1,6 +1,6 @@
 use crate::da::BlockHashTrait;
 use crate::{
-    da::{BlobTransactionTrait, BufReaderWithCounter},
+    da::{BlobTransactionTrait, CountedBufReader},
     services::da::SlotData,
     traits::{AddressTrait, BlockHeaderTrait, CanonicalHash},
     zk::traits::{Matches, Zkvm},
@@ -142,7 +142,7 @@ impl AddressTrait for MockAddress {}
 pub struct TestBlob<Address> {
     address: Address,
     hash: [u8; 32],
-    data: BufReaderWithCounter<Bytes>,
+    data: CountedBufReader<Bytes>,
 }
 
 impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
@@ -157,11 +157,11 @@ impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
         self.hash
     }
 
-    fn data_mut(&mut self) -> &mut BufReaderWithCounter<Self::Data> {
+    fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
         &mut self.data
     }
 
-    fn data(&self) -> &BufReaderWithCounter<Self::Data> {
+    fn data(&self) -> &CountedBufReader<Self::Data> {
         &self.data
     }
 }
@@ -170,7 +170,7 @@ impl<Address: AddressTrait> TestBlob<Address> {
     pub fn new(data: Vec<u8>, address: Address, hash: [u8; 32]) -> Self {
         Self {
             address,
-            data: BufReaderWithCounter::new(bytes::Bytes::from(data)),
+            data: CountedBufReader::new(bytes::Bytes::from(data)),
             hash,
         }
     }

@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
-use std::io::{Read, Write};
+use std::io::Read;
 
 /// A specification for the types used by a DA layer.
 pub trait DaSpec {
@@ -58,45 +58,57 @@ pub trait DaVerifier {
     ) -> Result<(), Self::Error>;
 }
 
-// Simple structure that implements the Read trait for a buffer and  counts the number of bytes read from the beginning
-// Useful for the partial blob reading optimization: we know for each blob how many bytes have been read from the beginning
-// Because of soundness issues we cannot implement the Buf trait because the prover could get unproved blob data using the chunk method.
 #[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize, PartialEq)]
-pub struct BufReaderWithCounter<B: Buf> {
+/// Simple structure that implements the Read trait for a buffer and  counts the number of bytes read from the beginning.
+/// Useful for the partial blob reading optimization: we know for each blob how many bytes have been read from the beginning.
+///
+/// Because of soundness issues we cannot implement the Buf trait because the prover could get unproved blob data using the chunk method.
+pub struct CountedBufReader<B: Buf> {
+    /// The original blob data
     inner: B,
-    acc: Vec<u8>,
+
+    /// An internal counter used to know how far we should read the blob data when
+    /// generating the proof of authenticity.
     counter: usize,
+
+    /// An accumulator that stores the data read from the blob buffer into a vector.
+    /// Allows easy access to the data that has already been read
+    reading_acc: Vec<u8>,
 }
 
-impl<B: Buf> BufReaderWithCounter<B> {
+impl<B: Buf> CountedBufReader<B> {
+    /// Creates a new buffer reader with counter from an objet that implements the buffer trait
     pub fn new(inner: B) -> Self {
         let buf_size = inner.remaining();
-        BufReaderWithCounter {
+        CountedBufReader {
             inner,
             counter: 0,
-            acc: Vec::with_capacity(buf_size),
+            reading_acc: Vec::with_capacity(buf_size),
         }
     }
 
+    /// Getter: returns the internal counter to the buffer reader
     pub fn counter(&self) -> usize {
         self.counter
     }
 
+    /// Getter: returns a reference to an accumulator of the blob data read by the rollup
     pub fn acc(&self) -> &Vec<u8> {
-        &self.acc
+        &self.reading_acc
     }
 }
 
-impl<B: Buf> Read for BufReaderWithCounter<B> {
-    // Reads the inner buf into the provided buffer, and appends the data read to inner accumulator
-    fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
+impl<B: Buf> Read for CountedBufReader<B> {
+    /// Reads the inner buf into the provided buffer, and appends the data read to inner accumulator
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let len_before_reading = self.inner.remaining();
 
-        buf.write_all(&self.inner.copy_to_bytes(min(buf.len(), len_before_reading)))?;
+        let buf_end = min(buf.len(), len_before_reading);
+        self.inner.copy_to_slice(&mut buf[..buf_end]);
 
         let num_read = len_before_reading - self.inner.remaining();
 
-        self.acc.append(&mut buf.to_vec());
+        self.reading_acc.extend_from_slice(&buf[..buf_end]);
 
         self.counter += num_read;
 
@@ -114,11 +126,17 @@ pub trait BlobTransactionTrait: Serialize + DeserializeOwned {
 
     /// The raw data of the blob. For example, the "calldata" of an Ethereum rollup transaction
     /// This function clones the data of the blob to an external BufWithCounter
-    fn data_mut(&mut self) -> &mut BufReaderWithCounter<Self::Data>;
+    ///
+    /// This function returns a mutable reference to the blob data
+    fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data>;
 
-    fn data(&self) -> &BufReaderWithCounter<Self::Data>;
+    /// The raw data of the blob. For example, the "calldata" of an Ethereum rollup transaction
+    /// This function clones the data of the blob to an external BufWithCounter
+    ///
+    /// This function returns a simple reference to the blob data
+    fn data(&self) -> &CountedBufReader<Self::Data>;
 
-    // Returns the hash of the blob. If not provided with a hint, it is computed by hashing the blob data
+    /// Returns the hash of the blob. If not provided with a hint, it is computed by hashing the blob data
     fn hash(&self) -> [u8; 32];
 }
 

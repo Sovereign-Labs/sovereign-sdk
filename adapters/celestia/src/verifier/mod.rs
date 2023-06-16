@@ -1,7 +1,7 @@
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::{
-    da::{self, BlobTransactionTrait, BlockHashTrait as BlockHash, BufReaderWithCounter, DaSpec},
+    da::{self, BlobTransactionTrait, BlockHashTrait as BlockHash, CountedBufReader, DaSpec},
     Buf,
 };
 
@@ -35,12 +35,12 @@ impl BlobTransactionTrait for BlobWithSender {
     }
 
     // Creates a new BufWithCounter structure to read the data
-    fn data_mut(&mut self) -> &mut BufReaderWithCounter<Self::Data> {
+    fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
         &mut self.blob
     }
 
     // Creates a new BufWithCounter structure to read the data
-    fn data(&self) -> &BufReaderWithCounter<Self::Data> {
+    fn data(&self) -> &CountedBufReader<Self::Data> {
         &self.blob
     }
 

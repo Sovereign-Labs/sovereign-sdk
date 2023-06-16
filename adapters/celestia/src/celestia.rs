@@ -5,7 +5,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespacedHash;
 use prost::{bytes::Buf, Message};
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::da::BufReaderWithCounter;
+use sov_rollup_interface::da::CountedBufReader;
 use sov_rollup_interface::traits::{
     AddressTrait as Address, BlockHeaderTrait as BlockHeader, CanonicalHash,
 };
@@ -264,7 +264,7 @@ impl CanonicalHash for CelestiaHeader {
 
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 pub struct BlobWithSender {
-    pub blob: BufReaderWithCounter<BlobIterator>,
+    pub blob: CountedBufReader<BlobIterator>,
     pub sender: CelestiaAddress,
     pub hash: [u8; 32],
 }

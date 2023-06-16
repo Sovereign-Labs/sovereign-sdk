@@ -5,7 +5,7 @@ use jsonrpsee::{
     http_client::{HeaderMap, HttpClient},
 };
 use nmt_rs::NamespaceId;
-use sov_rollup_interface::{da::BufReaderWithCounter, services::da::DaService};
+use sov_rollup_interface::{da::CountedBufReader, services::da::DaService};
 use tracing::{debug, info, span, Level};
 
 // 0x736f762d74657374 = b"sov-test"
@@ -225,7 +225,7 @@ impl DaService for CelestiaService {
             let blob: Blob = blob_ref.into();
 
             let blob_tx = BlobWithSender {
-                blob: BufReaderWithCounter::new(blob.into_iter()),
+                blob: CountedBufReader::new(blob.into_iter()),
                 sender: CelestiaAddress(sender.as_bytes().to_vec()),
                 hash: commitment,
             };

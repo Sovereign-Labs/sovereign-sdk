@@ -8,7 +8,7 @@ use sov_modules_api::{
     Context, DispatchCall, Genesis,
 };
 use sov_rollup_interface::{
-    da::{BlobTransactionTrait, BufReaderWithCounter},
+    da::{BlobTransactionTrait, CountedBufReader},
     stf::{BatchReceipt, TransactionReceipt},
     traits::BatchTrait,
     Buf,
@@ -89,7 +89,7 @@ where
     fn deserialize_batch(
         &mut self,
         batch_workspace: WorkingSet<C::Storage>,
-        blob_data: &mut BufReaderWithCounter<impl Buf>,
+        blob_data: &mut CountedBufReader<impl Buf>,
         blob_hash: [u8; 32],
     ) -> Result<(WorkingSet<C::Storage>, Batch)> {
         match Batch::deserialize_reader(blob_data) {
