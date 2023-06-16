@@ -1,12 +1,14 @@
 use crate::da::BlockHashTrait;
 use crate::{
-    da::BlobTransactionTrait,
+    da::{BlobTransactionTrait, CountedBufReader},
     services::da::SlotData,
     traits::{AddressTrait, BlockHeaderTrait, CanonicalHash},
     zk::traits::{Matches, Zkvm},
 };
 use anyhow::{ensure, Error};
 use borsh::{BorshDeserialize, BorshSerialize};
+
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::io::Write;
@@ -139,26 +141,38 @@ impl AddressTrait for MockAddress {}
 )]
 pub struct TestBlob<Address> {
     address: Address,
-    data: Vec<u8>,
+    hash: [u8; 32],
+    data: CountedBufReader<Bytes>,
 }
 
 impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
-    type Data = std::io::Cursor<Vec<u8>>;
-
+    type Data = Bytes;
     type Address = Address;
 
     fn sender(&self) -> Self::Address {
         self.address.clone()
     }
 
-    fn data(&self) -> Self::Data {
-        std::io::Cursor::new(self.data.clone())
+    fn hash(&self) -> [u8; 32] {
+        self.hash
+    }
+
+    fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
+        &mut self.data
+    }
+
+    fn data(&self) -> &CountedBufReader<Self::Data> {
+        &self.data
     }
 }
 
 impl<Address: AddressTrait> TestBlob<Address> {
-    pub fn new(data: Vec<u8>, address: Address) -> Self {
-        Self { address, data }
+    pub fn new(data: Vec<u8>, address: Address, hash: [u8; 32]) -> Self {
+        Self {
+            address,
+            data: CountedBufReader::new(bytes::Bytes::from(data)),
+            hash,
+        }
     }
 }
 

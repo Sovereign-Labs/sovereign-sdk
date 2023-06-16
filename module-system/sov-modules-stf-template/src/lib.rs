@@ -77,13 +77,10 @@ where
 
     fn apply_blob(
         &mut self,
-        blob: impl sov_rollup_interface::da::BlobTransactionTrait,
+        blob: &mut impl sov_rollup_interface::da::BlobTransactionTrait,
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
-        let sequencer = blob.sender();
-        let sequencer = sequencer.as_ref();
-
-        match self.apply_batch(sequencer, blob.data()) {
+        match self.apply_blob(blob) {
             Ok(batch) => batch,
             Err(e) => e.into(),
         }

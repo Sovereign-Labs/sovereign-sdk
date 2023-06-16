@@ -172,22 +172,25 @@ async fn main() -> Result<(), anyhow::Error> {
         // For the demo, we create and verify a proof that the data has been extracted from Celestia correctly.
         // In a production implementation, this logic would only run on the prover node - regular full nodes could
         // simply download the data from Celestia without extracting and checking a merkle proof here,
-        let (blob_txs, inclusion_proof, completeness_proof) =
-            da_service.extract_relevant_txs_with_proof(filtered_block.clone());
+        let mut blob_txs = da_service.extract_relevant_txs(&filtered_block);
 
-        assert!(da_verifier
-            .verify_relevant_tx_list(header, &blob_txs, inclusion_proof, completeness_proof)
-            .is_ok());
         info!("Received {} blobs", blob_txs.len());
 
-        let mut data_to_commit = SlotCommit::new(filtered_block);
+        let mut data_to_commit = SlotCommit::new(filtered_block.clone());
         demo.begin_slot(Default::default());
-        for blob in blob_txs.clone() {
+        for blob in &mut blob_txs {
             let receipts = demo.apply_blob(blob, None);
             info!("receipts: {:?}", receipts);
             data_to_commit.add_batch(receipts);
         }
         let (next_state_root, _witness) = demo.end_slot();
+
+        let (inclusion_proof, completeness_proof) =
+            da_service.get_extraction_proof(&filtered_block, &blob_txs);
+
+        assert!(da_verifier
+            .verify_relevant_tx_list(header, &blob_txs, inclusion_proof, completeness_proof)
+            .is_ok());
 
         // Store the resulting receipts in the ledger database
         ledger_db.commit_slot(data_to_commit)?;
