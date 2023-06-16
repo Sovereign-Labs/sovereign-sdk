@@ -142,17 +142,6 @@ mod tests {
             todo!()
         }
 
-        fn extract_relevant_txs_with_proof(
-            &self,
-            _block: &Self::FilteredBlock,
-        ) -> (
-            Vec<<Self::Spec as DaSpec>::BlobTransaction>,
-            <Self::Spec as DaSpec>::InclusionMultiProof,
-            <Self::Spec as DaSpec>::CompletenessProof,
-        ) {
-            todo!()
-        }
-
         fn get_extraction_proof(
             &self,
             _block: &Self::FilteredBlock,

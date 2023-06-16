@@ -250,22 +250,6 @@ impl DaService for CelestiaService {
         (etx_proofs.0, rollup_row_proofs.0)
     }
 
-    fn extract_relevant_txs_with_proof(
-        &self,
-        block: &Self::FilteredBlock,
-    ) -> (
-        Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction>,
-        <Self::Spec as sov_rollup_interface::da::DaSpec>::InclusionMultiProof,
-        <Self::Spec as sov_rollup_interface::da::DaSpec>::CompletenessProof,
-    ) {
-        let relevant_txs = self.extract_relevant_txs(block);
-
-        let (etx_proofs, rollup_row_proofs) =
-            self.get_extraction_proof(block, relevant_txs.as_slice());
-
-        (relevant_txs, etx_proofs, rollup_row_proofs)
-    }
-
     fn send_transaction(&self, blob: &[u8]) -> <Self as DaService>::Future<()> {
         // https://node-rpc-docs.celestia.org/
         let client = self.client.clone();
