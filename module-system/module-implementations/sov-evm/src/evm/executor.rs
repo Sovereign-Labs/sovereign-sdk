@@ -6,6 +6,7 @@ use revm::{
     primitives::{EVMError, ExecutionResult, TxEnv},
 };
 
+#[allow(dead_code)]
 pub(crate) fn execute_tx(
     db: EvmDb,
     tx_env: TxEnv,
