@@ -31,7 +31,7 @@ fn contract_address(result: ExecutionResult) -> B160 {
     }
 }
 
-fn path_test() -> PathBuf {
+fn test_data_path() -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("src");
     path.push("evm");
@@ -61,15 +61,15 @@ fn simple_contract_execution() {
     );
 
     let contract_address = {
-        let mut path = path_test();
+        let mut path = test_data_path();
         path.push("SimpleStorage.bin");
 
-        let data = std::fs::read_to_string(path).unwrap();
-        let data = Bytes::from(hex::decode(data).unwrap());
+        let contract_data = std::fs::read_to_string(path).unwrap();
+        let contract_data = Bytes::from(hex::decode(contract_data).unwrap());
 
         let mut tx_env = TxEnv::default();
         tx_env.transact_to = TransactTo::create();
-        tx_env.data = data;
+        tx_env.data = contract_data;
 
         let result = executor::execute_tx(EvmDb { db: &mut db }, tx_env).unwrap();
         contract_address(result)
@@ -77,27 +77,27 @@ fn simple_contract_execution() {
 
     let set_arg = EU256::from(21989);
 
-    let mut path = path_test();
+    let mut path = test_data_path();
     path.push("SimpleStorage.abi");
 
     let abi = make_contract_from_abi(path);
 
     {
-        let encoded = abi.encode("set", set_arg).unwrap();
+        let call_data = abi.encode("set", set_arg).unwrap();
 
         let mut tx_env = TxEnv::default();
         tx_env.transact_to = TransactTo::Call(contract_address);
-        tx_env.data = Bytes::from(hex::decode(hex::encode(&encoded)).unwrap());
+        tx_env.data = Bytes::from(hex::decode(hex::encode(&call_data)).unwrap());
 
         executor::execute_tx(EvmDb { db: &mut db }, tx_env).unwrap();
     }
 
     let get_res = {
-        let encoded = abi.encode("get", ()).unwrap();
+        let call_data = abi.encode("get", ()).unwrap();
 
         let mut tx_env = TxEnv::default();
         tx_env.transact_to = TransactTo::Call(contract_address);
-        tx_env.data = Bytes::from(hex::decode(hex::encode(&encoded)).unwrap());
+        tx_env.data = Bytes::from(hex::decode(hex::encode(&call_data)).unwrap());
 
         let result = executor::execute_tx(EvmDb { db: &mut db }, tx_env).unwrap();
 
