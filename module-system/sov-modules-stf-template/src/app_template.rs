@@ -13,11 +13,11 @@ use sov_rollup_interface::{
     traits::BatchTrait,
     Buf,
 };
-use sov_state::{StateCheckpoint, WorkingSet};
+use sov_state::StateCheckpoint;
 use std::marker::PhantomData;
 use tracing::{debug, error};
 
-type Result<T> = std::result::Result<T, ApplyBatchError>;
+type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
 
 pub struct AppTemplate<C: Context, RT, Vm> {
     pub current_storage: C::Storage,
@@ -60,89 +60,89 @@ where
         + TxHooks<Context = C>
         + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
 {
-    fn init_sequencer_and_get_working_set(
+    pub fn new(storage: C::Storage, runtime: RT) -> Self {
+        Self {
+            runtime,
+            current_storage: storage,
+            checkpoint: None,
+            phantom_vm: PhantomData,
+        }
+    }
+
+    pub(crate) fn apply_batch(
         &mut self,
-        blob: &mut impl BlobTransactionTrait,
-    ) -> Result<WorkingSet<C::Storage>> {
+        sequencer: &[u8],
+        batch: impl Buf,
+    ) -> ApplyBatchResult<BatchReceipt<SequencerOutcome, TxEffect>> {
+        let batch_data_and_hash = BatchDataAndHash::new::<C>(batch);
         debug!(
             "Applying batch from sequencer: 0x{}",
             hex::encode(blob.sender())
         );
+
+        // Initialize batch workspace
         let mut batch_workspace = self
             .checkpoint
             .take()
             .expect("Working_set was initialized in begin_slot")
             .to_revertable();
 
+        // ApplyBlobHook: begin
         if let Err(e) = self.runtime.begin_blob_hook(blob, &mut batch_workspace) {
             error!(
-                "Error: The transaction was rejected by the 'enter_apply_blob' hook. Skipping batch without slashing the sequencer: {}",
+                "Error: The batch was rejected by the 'begin_blob_hook' hook. Skipping batch without slashing the sequencer: {}",
                 e
             );
+            // TODO: Should it commit?
             self.checkpoint = Some(batch_workspace.revert());
             return Err(ApplyBatchError::Ignored(blob.hash()));
         }
+        batch_workspace = batch_workspace.checkpoint().to_revertable();
 
-        Ok(batch_workspace)
-    }
+        // TODO: don't ignore these events: https://github.com/Sovereign-Labs/sovereign/issues/350
+        let _ = batch_workspace.take_events();
 
-    fn deserialize_batch(
-        &mut self,
-        batch_workspace: WorkingSet<C::Storage>,
-        blob_data: &mut CountedBufReader<impl Buf>,
-        blob_hash: [u8; 32],
-    ) -> Result<(WorkingSet<C::Storage>, Batch)> {
-        match Batch::deserialize_reader(blob_data) {
-            Ok(batch) => Ok((batch_workspace, batch)),
-            Err(e) => {
-                error!(
-                    "Unable to deserialize batch provided by the sequencer {}",
-                    e
-                );
-                self.checkpoint = Some(batch_workspace.revert());
-                Err(ApplyBatchError::Slashed {
-                    hash: blob_hash,
-                    reason: SlashingReason::InvalidBatchEncoding,
-                })
+        let (txs, messages) = match self.pre_process_batch(&batch_data_and_hash) {
+            Ok((txs, messages)) => (txs, messages),
+            Err(slashing_reason) => {
+                // Explicitly revert on slashing, even though nothing has changed in pre_process.
+                let mut batch_workspace = batch_workspace.revert().to_revertable();
+                let sequencer_outcome = SequencerOutcome::Slashed(slashing_reason);
+                match self
+                    .runtime
+                    .end_blob_hook(sequencer_outcome, &mut batch_workspace)
+                {
+                    Ok(()) => {
+                        // TODO:Should we save changes after end_blob_hook
+                        self.checkpoint = Some(batch_workspace.checkpoint());
+                    }
+                    Err(e) => {
+                        error!("End blob hook failed: {}", e);
+                        self.checkpoint = Some(batch_workspace.revert());
+                    }
+                };
+
+                return Err(ApplyBatchError::Slashed {
+                    hash: batch_data_and_hash.hash,
+                    reason: slashing_reason,
+                });
             }
-        }
-    }
+        };
 
-    fn verify_txs_stateless(
-        &mut self,
-        batch_workspace: WorkingSet<C::Storage>,
-        batch: Batch,
-        blob_hash: [u8; 32],
-    ) -> Result<(WorkingSet<C::Storage>, Vec<TransactionAndRawHash<C>>)> {
-        // Run the stateless verification, since it is stateless we don't commit.
-        match verify_txs_stateless(batch.take_transactions()) {
-            Ok(txs) => Ok((batch_workspace, txs)),
-            Err(e) => {
-                // Revert on error
-                self.checkpoint = Some(batch_workspace.revert());
-                error!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}\n", e);
-                Err(ApplyBatchError::Slashed {
-                    hash: blob_hash,
-                    reason: SlashingReason::StatelessVerificationFailed,
-                })
-            }
-        }
-    }
+        // Sanity check after pre processing
+        assert_eq!(
+            txs.len(),
+            messages.len(),
+            "Error in preprocessing batch, there should be same number of txs and messages"
+        );
 
-    fn execute_txs(
-        &mut self,
-        mut batch_workspace: WorkingSet<C::Storage>,
-        txs: Vec<TransactionAndRawHash<C>>,
-        blob_hash: [u8; 32],
-    ) -> Result<(WorkingSet<C::Storage>, Vec<TransactionReceipt<TxEffect>>)> {
+        // Dispatching transactions
         let mut tx_receipts = Vec::with_capacity(txs.len());
-
-        // Process transactions in a loop, commit changes after every step of the loop.
-        for TransactionAndRawHash { tx, raw_tx_hash } in txs {
-            // Run the stateful verification, possibly modifies the state.
-            let sender_address = match self
-                .runtime
-                .pre_dispatch_tx_hook(tx.clone(), &mut batch_workspace)
+        for (TransactionAndRawHash { tx, raw_tx_hash }, msg) in
+            txs.into_iter().zip(messages.into_iter())
+        {
+            // Pre dispatch hook
+            let sender_address = match self.runtime.pre_dispatch_tx_hook(&tx, &mut batch_workspace)
             {
                 Ok(verified_tx) => verified_tx,
                 Err(e) => {
@@ -160,107 +160,130 @@ where
                     continue;
                 }
             };
+            // Commit changes after pre_dispatch_tx_hook
+            batch_workspace = batch_workspace.checkpoint().to_revertable();
 
-            match RT::decode_call(tx.runtime_msg()) {
-                Ok(msg) => {
-                    let ctx = C::new(sender_address.clone());
-                    let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
+            let ctx = C::new(sender_address.clone());
+            let tx_result = self.runtime.dispatch_call(msg, &mut batch_workspace, &ctx);
 
-                    self.runtime
-                        .post_dispatch_tx_hook(&tx, &mut batch_workspace)
-                        .expect("Impossible happened: error in post_dispatch_tx_hook");
-
-                    let tx_effect = match tx_result {
-                        Ok(_) => TxEffect::Successful,
-                        Err(e) => {
-                            debug!(
-                                "Tx 0x{} was reverted error: {}",
-                                hex::encode(raw_tx_hash),
-                                e
-                            );
-
-                            // The transaction causing invalid state transition is reverted but we don't slash and we continue
-                            // processing remaining transactions.
-                            batch_workspace = batch_workspace.revert().to_revertable();
-                            TxEffect::Reverted
-                        }
-                    };
-
-                    let receipt = TransactionReceipt {
-                        tx_hash: raw_tx_hash,
-                        body_to_save: None,
-                        events: batch_workspace.take_events(),
-                        receipt: tx_effect,
-                    };
-
-                    tx_receipts.push(receipt);
-                }
+            let events = batch_workspace.take_events();
+            let tx_effect = match tx_result {
+                Ok(_) => TxEffect::Successful,
                 Err(e) => {
-                    // If the serialization is invalid, the sequencer is malicious. Slash them (we don't run exit_apply_batch here)
-                    let batch_workspace = batch_workspace.revert();
-                    self.checkpoint = Some(batch_workspace);
-                    error!("Tx 0x{} decoding error: {}", hex::encode(raw_tx_hash), e);
-
-                    return Err(ApplyBatchError::Slashed {
-                        hash: blob_hash,
-                        reason: SlashingReason::InvalidTransactionEncoding,
-                    });
+                    debug!(
+                        "Tx 0x{} was reverted error: {}",
+                        hex::encode(raw_tx_hash),
+                        e
+                    );
+                    // The transaction causing invalid state transition is reverted
+                    // but we don't slash and we continue processing remaining transactions.
+                    batch_workspace = batch_workspace.revert().to_revertable();
+                    TxEffect::Reverted
                 }
             };
-            // commit each step of the loop
+            debug!("Tx {} effect: {:?}", hex::encode(raw_tx_hash), tx_effect);
+
+            let receipt = TransactionReceipt {
+                tx_hash: raw_tx_hash,
+                body_to_save: None,
+                events,
+                receipt: tx_effect,
+            };
+
+            tx_receipts.push(receipt);
+            // We commit after events have been extracted into receipt.
             batch_workspace = batch_workspace.checkpoint().to_revertable();
+
+            self.runtime
+                .post_dispatch_tx_hook(&tx, &mut batch_workspace)
+                .expect("Impossible happened: error in post_dispatch_tx_hook");
         }
-        Ok((batch_workspace, tx_receipts))
-    }
-
-    pub fn new(storage: C::Storage, runtime: RT) -> Self {
-        Self {
-            runtime,
-            current_storage: storage,
-            checkpoint: None,
-            phantom_vm: PhantomData,
-        }
-    }
-
-    pub(crate) fn apply_blob(
-        &mut self,
-        blob: &mut impl BlobTransactionTrait,
-    ) -> Result<BatchReceipt<SequencerOutcome, TxEffect>> {
-        let mut batch_workspace = self.init_sequencer_and_get_working_set(blob)?;
-
-        // TODO: don't ignore these events.
-        // https://github.com/Sovereign-Labs/sovereign/issues/350
-        let _ = batch_workspace.take_events();
-
-        let blob_hash = blob.hash();
-
-        // Commit changes.
-        batch_workspace = batch_workspace.checkpoint().to_revertable();
-
-        // This function consumes the blob data
-        let (batch_workspace, batch) =
-            self.deserialize_batch(batch_workspace, blob.data_mut(), blob_hash)?;
-
-        debug!("Deserialized batch with {} txs", batch.txs.len());
-
-        // Run the stateless verification, since it is stateless we don't commit.
-        let (batch_workspace, txs) =
-            self.verify_txs_stateless(batch_workspace, batch, blob_hash)?;
-
-        let (mut batch_workspace, tx_receipts) =
-            self.execute_txs(batch_workspace, txs, blob_hash)?;
 
         // TODO: calculate the amount based of gas and fees
-        let batch_receipt_contents = SequencerOutcome::Rewarded(0);
-        self.runtime
-            .end_blob_hook(batch_receipt_contents, &mut batch_workspace)
-            .expect("Impossible happened: error in exit_apply_batch");
+        let sequencer_outcome = SequencerOutcome::Rewarded(0);
+
+        if let Err(e) = self
+            .runtime
+            .end_blob_hook(sequencer_outcome, &mut batch_workspace)
+        {
+            error!("Failed on `end_blob_hook`: {}", e);
+        };
 
         self.checkpoint = Some(batch_workspace.checkpoint());
         Ok(BatchReceipt {
             batch_hash: blob_hash,
             tx_receipts,
-            inner: batch_receipt_contents,
+            inner: sequencer_outcome,
         })
+    }
+
+    // Do all stateless checks and data formatting, that can be results in sequencer slashing
+    fn pre_process_batch(
+        &self,
+        batch_data_and_hash: &BatchDataAndHash,
+    ) -> Result<
+        (
+            Vec<TransactionAndRawHash<C>>,
+            Vec<<RT as DispatchCall>::Decodable>,
+        ),
+        SlashingReason,
+    > {
+        let batch = self.deserialize_batch(&mut &batch_data_and_hash.data[..])?;
+        debug!("Deserialized batch with {} txs", batch.txs.len());
+
+        // Run the stateless verification, since it is stateless we don't commit.
+        let txs = self.verify_txs_stateless(batch)?;
+
+        let messages = self.decode_txs(&txs)?;
+
+        Ok((txs, messages))
+    }
+
+    // Attempt to deserialize batch, error results in sequencer slashing.
+    fn deserialize_batch(&self, raw_batch: &mut &[u8]) -> Result<Batch, SlashingReason> {
+        match Batch::deserialize(raw_batch) {
+            Ok(batch) => Ok(batch),
+            Err(e) => {
+                error!(
+                    "Unable to deserialize batch provided by the sequencer {}",
+                    e
+                );
+                Err(SlashingReason::InvalidBatchEncoding)
+            }
+        }
+    }
+
+    // Stateless verification of transaction, such as signature check
+    // Single malformed transaction results in sequencer slashing.
+    fn verify_txs_stateless(
+        &self,
+        batch: Batch,
+    ) -> Result<Vec<TransactionAndRawHash<C>>, SlashingReason> {
+        match verify_txs_stateless(batch.take_transactions()) {
+            Ok(txs) => Ok(txs),
+            Err(e) => {
+                error!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}\n", e);
+                Err(SlashingReason::StatelessVerificationFailed)
+            }
+        }
+    }
+
+    // Checks that runtime message can be decoded from transaction.
+    // If a single message cannot be decoded, sequencer is slashed
+    fn decode_txs(
+        &self,
+        txs: &[TransactionAndRawHash<C>],
+    ) -> Result<Vec<<RT as DispatchCall>::Decodable>, SlashingReason> {
+        let mut decoded_messages = Vec::with_capacity(txs.len());
+        for TransactionAndRawHash { tx, raw_tx_hash } in txs {
+            match RT::decode_call(tx.runtime_msg()) {
+                Ok(msg) => decoded_messages.push(msg),
+                Err(e) => {
+                    error!("Tx 0x{} decoding error: {}", hex::encode(raw_tx_hash), e);
+                    return Err(SlashingReason::InvalidTransactionEncoding);
+                }
+            }
+        }
+        Ok(decoded_messages)
     }
 }

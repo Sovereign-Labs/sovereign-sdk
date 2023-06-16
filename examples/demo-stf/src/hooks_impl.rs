@@ -13,7 +13,7 @@ impl<C: Context> TxHooks for Runtime<C> {
 
     fn pre_dispatch_tx_hook(
         &self,
-        tx: Transaction<Self::Context>,
+        tx: &Transaction<Self::Context>,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<<Self::Context as Spec>::Address> {
         self.accounts.pre_dispatch_tx_hook(tx, working_set)
@@ -45,11 +45,10 @@ impl<C: Context> ApplyBlobHooks for Runtime<C> {
         result: Self::BlobResult,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
-        let reward = match result {
-            SequencerOutcome::Rewarded(r) => r,
-            SequencerOutcome::Slashed(_) => 0,
-            SequencerOutcome::Ignored => 0,
-        };
-        self.sequencer.end_blob_hook(reward, working_set)
+        match result {
+            SequencerOutcome::Rewarded(reward) => self.sequencer.end_blob_hook(reward, working_set),
+            SequencerOutcome::Ignored => self.sequencer.end_blob_hook(0, working_set),
+            SequencerOutcome::Slashed(_) => Ok(()),
+        }
     }
 }
