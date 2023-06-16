@@ -18,6 +18,7 @@ hex = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
+jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false }
 sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
@@ -32,4 +33,4 @@ tempfile = { workspace = true }
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-state/native", "sov-modules-api/native"]
+native = ["serde", "sov-state/native", "sov-modules-api/native", "dep:jsonrpsee"]

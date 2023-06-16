@@ -1,8 +1,8 @@
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::{
-    da::{self, BlobTransactionTrait, BlockHashTrait as BlockHash, DaSpec},
-    Bytes,
+    da::{self, BlobTransactionTrait, BlockHashTrait as BlockHash, CountedBufReader, DaSpec},
+    Buf,
 };
 
 pub mod address;
@@ -29,12 +29,23 @@ pub const PARITY_SHARES_NAMESPACE: NamespaceId = NamespaceId(hex_literal::hex!("
 impl BlobTransactionTrait for BlobWithSender {
     type Data = BlobIterator;
     type Address = CelestiaAddress;
+
     fn sender(&self) -> CelestiaAddress {
         self.sender.clone()
     }
 
-    fn data(&self) -> Self::Data {
-        self.blob.clone().into_iter()
+    // Creates a new BufWithCounter structure to read the data
+    fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
+        &mut self.blob
+    }
+
+    // Creates a new BufWithCounter structure to read the data
+    fn data(&self) -> &CountedBufReader<Self::Data> {
+        &self.blob
+    }
+
+    fn hash(&self) -> [u8; 32] {
+        self.hash
     }
 }
 
@@ -183,15 +194,19 @@ impl da::DaVerifier for CelestiaVerifier {
                 if nid != &self.rollup_namespace.0[..] {
                     continue;
                 }
-                let tx = tx_iter.next().ok_or(ValidationError::MissingTx)?;
+                let tx: &BlobWithSender = tx_iter.next().ok_or(ValidationError::MissingTx)?;
                 if tx.sender.as_ref() != pfb.signer.as_bytes() {
                     return Err(ValidationError::InvalidSigner);
                 }
 
                 let blob_ref = blob.clone();
-                let blob_data: Bytes = blob.clone().data().collect();
-                let tx_data: Bytes = tx.data().collect();
-                assert_eq!(blob_data, tx_data);
+
+                let mut blob_iter = blob_ref.data();
+                let mut blob_data = Vec::with_capacity(blob_iter.remaining());
+                blob_iter.copy_to_slice(blob_data.as_mut_slice());
+                let tx_data = tx.data().acc();
+
+                assert_eq!(blob_data, *tx_data);
 
                 // Link blob commitment to e-tx commitment
                 let expected_commitment =

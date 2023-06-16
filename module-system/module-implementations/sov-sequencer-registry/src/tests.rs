@@ -2,6 +2,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::ApplyBlobHooks;
 use sov_modules_api::Hasher;
 use sov_modules_api::{Address, Module, Spec};
+use sov_rollup_interface::mocks::TestBlob;
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::query;
@@ -116,9 +117,12 @@ fn test_sequencer() {
 
     // Lock
     {
+        let mut test_blob =
+            TestBlob::new(Vec::new(), Address::from(SEQUENCER_DA_ADDRESS), [0_u8; 32]);
+
         test_sequencer
             .sequencer
-            .begin_blob_hook(&SEQUENCER_DA_ADDRESS, &[], working_set)
+            .begin_blob_hook(&mut test_blob, working_set)
             .unwrap();
 
         let resp = test_sequencer.query_balance_via_bank(working_set);

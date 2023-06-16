@@ -55,6 +55,10 @@ The final piece of the puzzle is your app's runtime. A runtime is just a list of
 module to your app, just add an additional field to the runtime.
 
 ```rust
+#[cfg_attr(
+    feature = "native",
+    expose_rpc(DefaultContext)
+)]
 #[derive(Genesis, DispatchCall, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct MyRuntime<C: Context> {
@@ -143,6 +147,12 @@ impl<C: Context> ApplyBlobHooks for Runtime<C> {
 That's it - with those three structs implemented, you can plug them into your `AppTemplate` and get a
 complete State Transition Function!
 
+### Exposing RPC
+
+Your modules implement rpc methods via the `rpc_gen` macro, in order to enable the full-node to expose them, annotate the `Runtime` with `expose_rpc`.
+In the example above, you can see how to use the `expose_rpc` macro on the `native` `Runtime`.
+
+
 ## Make Full Node Itegrations Simpler with the State Transition Runner trait:
 
 Now that we have an app, we want to be able to run it. For any custom state transition, your full node implementation is going to need a little
@@ -170,14 +180,14 @@ and once for `Zk` mode.
 
 The `Prover` implementation is gated behind the `native` feature flag. This flag is what we use in the SDK to mark code which can only be run
 outside of the zk-circuit. Since this implementation will always run on a physical machine, we can annotate it with the
-`expose_rpc` macro telling it to enable RPC queries against the Bank, Election, and ValueSetter modules.
+`
+c` macro telling it to enable RPC queries against the Bank, Election, and ValueSetter modules.
 We'll cover this macro in more detail in the next section.
 
 ```rust
 pub struct DemoAppRunner<C: Context, Vm: Zkvm>(pub DemoApp<C, Vm>);
 
 #[cfg(feature = "native")]
-#[expose_rpc((Bank<DefaultContext>,Election<DefaultContext>,ValueSetter<DefaultContext>))]
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
     type RuntimeConfig = Config;
     type Inner = DemoApp<DefaultContext, Vm>;
@@ -201,30 +211,6 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
         Self(app)
     }
 	// ...
-}
-```
-
-### Exposing RPC
-
-If any of your modules expose rpc methods via the `rpc_gen` macro, there are two things that you should do in your STF package to
-enable the full-node to expose them:
-
-1. Annotate the `StateTransitionRunner` with the specific modules you want to expose with `expose_rpc`.
-2. Implement the `RpcRunner` trait. Provide an implementation for the `get_storage` function.
-
-In the example above, you can see an example of how to use the `expose_rpc` macro on the `native` `StateTransitionRunner`
-implementation. That macro
-takes a tuple of modules (with the appropriate generics) as arguments, and generates RPC servers for each one. In order to
-make those generated RPC servers work, though, we need to provide them with access to the database. This is where the RpcRunner
-trait comes in:
-
-```rust
-#[cfg(feature = "native")]
-impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
-    type Context = DefaultContext;
-    fn get_storage(&self) -> <Self::Context as Spec>::Storage {
-        self.inner().current_storage.clone()
-    }
 }
 ```
 

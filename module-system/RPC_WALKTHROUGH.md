@@ -7,7 +7,7 @@ from scratch.
 There are 5 steps that need to be completed to enable RPC on the full node:
 
 1. Annotate you modules with `rpc_gen` and `rpc_method`.
-2. Annotate your `native` [`StateTransitionRunner`](../rollup-interface/src/state_machine/stf.rs) with the `expose_rpc` macro.
+2. Annotate your `native` `Runtime` with the `expose_rpc` macro.
 3. Implement the `RpcRunner` trait on your `StateTransitionRunner`.
 4. Import and call `get_rpc_methods` in your full node implementation.
 5. Configure and start your RPC server in your full node implementation.
@@ -54,22 +54,28 @@ However, the do need to be imported to the file where the `expose_rpc` macro is 
 
 ### Step 2: Expose Your RPC Server
 
-The next layer of abstraction where we need to think about RPC is the `StateTransitionRunner`. Just because a module defines
-some RPC methods doesn't necessarily mean that we want to use them. So, when we're building a `StateTransitionRunner`, we have
-to specify which modules' RPC servers we want to expose (if any). In this example, we'll only expose the `Bank` rpc.
+The next layer of abstraction where we need to think about RPC is the `Runtime`. Just because a module defines
+some RPC methods doesn't necessarily mean that we want to use them. So, when we're building a `Runtime`, we have
+to enable RPC servers of the modules.
 
 ```rust
-// This code goes in your state transition function crate. For example demo-stf/app.rs
+// This code goes in your state transition function crate. For example demo-stf/runtime.rs
 
 use sov_bank::query::{BankRpcImpl, BankRpcServer};
 
-#[expose_rpc((Bank<DefaultContext>,))]
-impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
-...
+#[cfg_attr(
+    feature = "native",
+    expose_rpc(DefaultContext)
+)]
+#[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
+#[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
+pub struct Runtime<C: Context> {
+    pub bank: sov_bank::Bank<C>,
+    ...
 }
 ```
 
-Note that`expose_rpc` takes a tuple as argument, and each element of the tuple is a module with a concrete Context.
+Note that`expose_rpc` takes a tuple as argument, each element of the tuple is a concrete Context.
 
 ### Step 3: Implement RpcRunner
 
@@ -100,7 +106,7 @@ storage instance.
 
 ```rust
 // This code goes in your full node implementation. For example demo-rollup/main.rs
-use demo_stf::app::get_rpc_methods;
+use demo_stf::runtime::get_rpc_methods;
 use sov_modules_api::RpcRunner;
 
 #[tokio::main]

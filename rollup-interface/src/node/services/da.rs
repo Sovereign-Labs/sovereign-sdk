@@ -1,9 +1,11 @@
+use std::fmt;
 use std::future::Future;
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::da::DaSpec;
+
 use crate::traits::BlockHeaderTrait;
 
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer
@@ -25,7 +27,7 @@ pub trait DaService {
     type Future<T>: Future<Output = Result<T, Self::Error>> + Send;
 
     /// The error type for fallible methods.
-    type Error: Send + Sync;
+    type Error: fmt::Debug + Send + Sync;
 
     /// Create a new instance of the DaService
     fn new(config: Self::RuntimeConfig, chain_params: <Self::Spec as DaSpec>::ChainParams) -> Self;
@@ -43,8 +45,17 @@ pub trait DaService {
     /// all of the blob transactions in rollup's namespace on Celestia.
     fn extract_relevant_txs(
         &self,
-        block: Self::FilteredBlock,
+        block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction>;
+
+    fn get_extraction_proof(
+        &self,
+        block: &Self::FilteredBlock,
+        blobs: &[<Self::Spec as DaSpec>::BlobTransaction],
+    ) -> (
+        <Self::Spec as DaSpec>::InclusionMultiProof,
+        <Self::Spec as DaSpec>::CompletenessProof,
+    );
 
     /// Extract the relevant transactions from a block, along with a proof that the extraction has been done correctly.
     /// For example, this method might return all of the blob transactions in rollup's namespace on Celestia,
@@ -53,12 +64,19 @@ pub trait DaService {
     #[allow(clippy::type_complexity)]
     fn extract_relevant_txs_with_proof(
         &self,
-        block: Self::FilteredBlock,
+        block: &Self::FilteredBlock,
     ) -> (
         Vec<<Self::Spec as DaSpec>::BlobTransaction>,
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,
-    );
+    ) {
+        let relevant_txs = self.extract_relevant_txs(block);
+
+        let (etx_proofs, rollup_row_proofs) =
+            self.get_extraction_proof(block, relevant_txs.as_slice());
+
+        (relevant_txs, etx_proofs, rollup_row_proofs)
+    }
 
     /// Send a transaction directly to the DA layer.
     /// blob is the serialized and signed transaction.

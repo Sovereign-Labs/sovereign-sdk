@@ -5,6 +5,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespacedHash;
 use prost::{bytes::Buf, Message};
 use serde::{Deserialize, Serialize};
+use sov_rollup_interface::da::CountedBufReader;
 use sov_rollup_interface::traits::{
     AddressTrait as Address, BlockHeaderTrait as BlockHeader, CanonicalHash,
 };
@@ -17,9 +18,10 @@ pub use tendermint_proto::v0_34 as celestia_tm_version;
 
 const NAMESPACED_HASH_LEN: usize = 48;
 
+use crate::shares::BlobIterator;
 use crate::{
     pfb::{BlobTx, MsgPayForBlobs, Tx},
-    shares::{read_varint, Blob, BlobRefIterator, NamespaceGroup},
+    shares::{read_varint, BlobRefIterator, NamespaceGroup},
     utils::BoxError,
     verifier::PFB_NAMESPACE,
     verifier::{address::CelestiaAddress, TmHash},
@@ -262,8 +264,9 @@ impl CanonicalHash for CelestiaHeader {
 
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 pub struct BlobWithSender {
-    pub blob: Blob,
+    pub blob: CountedBufReader<BlobIterator>,
     pub sender: CelestiaAddress,
+    pub hash: [u8; 32],
 }
 
 impl BlockHeader for CelestiaHeader {

@@ -3,6 +3,7 @@ mod ledger_rpc;
 
 #[cfg(test)]
 mod test_rpc;
+mod txs_rpc;
 
 use crate::config::RollupConfig;
 use anyhow::Context;
@@ -17,6 +18,7 @@ use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::CelestiaVerifier;
 use jupiter::verifier::RollupParams;
+use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::{DaService, SlotData};
@@ -30,10 +32,9 @@ use tracing::Level;
 use tracing::{debug, info};
 
 // RPC related imports
-use demo_stf::app::get_rpc_methods;
-use risc0_adapter::host::Risc0Verifier;
+use crate::txs_rpc::get_txs_rpc;
+use demo_stf::runtime::get_rpc_methods;
 use sov_modules_api::RpcRunner;
-use sov_rollup_interface::services::batch_builder::BatchBuilder;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 // You can change this constant to point your rollup at a different namespace
@@ -73,37 +74,6 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
     )
 }
 
-fn start_batch_producing<
-    B: BatchBuilder + Send + Sync + 'static,
-    T: DaService + Send + Sync + 'static,
->(
-    batch_builder: B,
-    da_service: Arc<T>,
-) {
-    let mut batch_builder = batch_builder;
-    tokio::spawn(async move {
-        loop {
-            match batch_builder.get_next_blob() {
-                Ok(blob) => {
-                    let blob: Vec<u8> = blob.into_iter().flatten().collect();
-                    match da_service.send_transaction(&blob).await {
-                        Ok(_) => {
-                            info!("Successfully produced batch");
-                        }
-                        Err(_err) => {
-                            info!("Error while producing batch");
-                        }
-                    };
-                }
-                Err(err) => {
-                    info!("Error while producing batch: {:?}", err);
-                }
-            };
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-        }
-    });
-}
-
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
@@ -126,6 +96,14 @@ async fn main() -> Result<(), anyhow::Error> {
     // Initialize the ledger database, which stores blocks, transactions, events, etc.
     let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
 
+    // Initialize the Celestia service using the DaService interface
+    let da_service = Arc::new(CelestiaService::new(
+        rollup_config.da.clone(),
+        RollupParams {
+            namespace: ROLLUP_NAMESPACE,
+        },
+    ));
+
     // Our state transition function implements the StateTransitionRunner interface,
     // so we use that to initialize the STF
     let mut demo_runner = NativeAppRunner::<Risc0Verifier>::new(rollup_config.runner.clone());
@@ -139,25 +117,19 @@ async fn main() -> Result<(), anyhow::Error> {
         ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db.clone());
     methods
         .merge(ledger_rpc_module)
-        .expect("Failed to merge rpc modules");
+        .expect("Failed to merge ledger RPC modules");
+
+    let batch_builder = demo_runner.take_batch_builder().unwrap();
+
+    let r = get_txs_rpc(batch_builder, da_service.clone());
+
+    methods.merge(r).expect("Failed to merge Txs RPC modules");
 
     let _handle = tokio::spawn(async move {
         start_rpc_server(methods, address).await;
     });
 
-    // Initialize the Celestia service using the DaService interface
-    let da_service = Arc::new(CelestiaService::new(
-        rollup_config.da.clone(),
-        RollupParams {
-            namespace: ROLLUP_NAMESPACE,
-        },
-    ));
-
-    let batch_builder = demo_runner.take_batch_builder()?;
-
-    start_batch_producing(batch_builder, da_service.clone());
-
-    // For demonstration,  we also initialize the DaVerifier interface using the DaVerifier interface
+    // For demonstration, we also initialize the DaVerifier interface.
     // Running the verifier is only *necessary* during proof generation not normal execution
     let da_verifier = Arc::new(CelestiaVerifier::new(RollupParams {
         namespace: ROLLUP_NAMESPACE,
@@ -200,22 +172,25 @@ async fn main() -> Result<(), anyhow::Error> {
         // For the demo, we create and verify a proof that the data has been extracted from Celestia correctly.
         // In a production implementation, this logic would only run on the prover node - regular full nodes could
         // simply download the data from Celestia without extracting and checking a merkle proof here,
-        let (blob_txs, inclusion_proof, completeness_proof) =
-            da_service.extract_relevant_txs_with_proof(filtered_block.clone());
+        let mut blob_txs = da_service.extract_relevant_txs(&filtered_block);
 
-        assert!(da_verifier
-            .verify_relevant_tx_list(header, &blob_txs, inclusion_proof, completeness_proof)
-            .is_ok());
         info!("Received {} blobs", blob_txs.len());
 
-        let mut data_to_commit = SlotCommit::new(filtered_block);
+        let mut data_to_commit = SlotCommit::new(filtered_block.clone());
         demo.begin_slot(Default::default());
-        for blob in blob_txs.clone() {
+        for blob in &mut blob_txs {
             let receipts = demo.apply_blob(blob, None);
             info!("receipts: {:?}", receipts);
             data_to_commit.add_batch(receipts);
         }
         let (next_state_root, _witness) = demo.end_slot();
+
+        let (inclusion_proof, completeness_proof) =
+            da_service.get_extraction_proof(&filtered_block, &blob_txs);
+
+        assert!(da_verifier
+            .verify_relevant_tx_list(header, &blob_txs, inclusion_proof, completeness_proof)
+            .is_ok());
 
         // Store the resulting receipts in the ledger database
         ledger_db.commit_slot(data_to_commit)?;

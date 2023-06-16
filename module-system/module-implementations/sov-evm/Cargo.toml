@@ -1,6 +1,6 @@
 [package]
-name = "sov-sequencer-registry"
-description = "A Sovereign SDK module for registering rollup sequencers"
+name = "sov-evm"
+description = "A Sovereign SDK managing fungible tokens"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
@@ -9,20 +9,17 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 readme = "README.md"
-
 resolver = "2"
 
-[dev-dependencies]
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-tempfile = { workspace = true }
 
 [dependencies]
-anyhow = { workspace = true }
-sov-bank = { path = "../sov-bank", version = "0.1", default-features = false }
+revm = "3.3.0"
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false }
 sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
 sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
+
+anyhow = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
@@ -30,7 +27,17 @@ borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
+[dev-dependencies]
+ethereum-types = "0.14.1"
+ethers-contract = "2.0.7"
+ethers-core = "2.0.7"
+primitive-types = "0.12.1"
+
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+tempfile = { workspace = true }
+bytes = { workspace = true }
+
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-modules-api/native", "sov-state/native", "sov-bank/native", "dep:jsonrpsee"]
+native = ["serde", "sov-state/native", "dep:jsonrpsee", "sov-modules-api/native"]

@@ -1,3 +1,4 @@
+use crate::batch_builder::FiFoStrictBatchBuilder;
 #[cfg(feature = "native")]
 use crate::runner_config::Config;
 use crate::runtime::Runtime;
@@ -22,9 +23,8 @@ use sov_rollup_interface::stf::ZkConfig;
 use sov_rollup_interface::zk::traits::Zkvm;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
-use sov_state::ZkStorage;
-
 use sov_state::Storage;
+use sov_state::ZkStorage;
 
 pub struct DemoAppRunner<C: Context, Vm: Zkvm> {
     pub stf: DemoApp<C, Vm>,
@@ -32,17 +32,6 @@ pub struct DemoAppRunner<C: Context, Vm: Zkvm> {
 }
 
 pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;
-
-#[cfg(feature = "native")]
-use sov_bank::query::{BankRpcImpl, BankRpcServer};
-#[cfg(feature = "native")]
-use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
-#[cfg(feature = "native")]
-use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
-
-use crate::batch_builder::FiFoStrictBatchBuilder;
-#[cfg(feature = "native")]
-use sov_modules_macros::expose_rpc;
 
 #[cfg(feature = "native")]
 pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
@@ -55,13 +44,10 @@ pub type DemoBatchReceipt = SequencerOutcome;
 pub type DemoTxReceipt = TxEffect;
 
 #[cfg(feature = "native")]
-#[expose_rpc((Bank<DefaultContext>, Election<DefaultContext>, ValueSetter<DefaultContext>))]
-#[cfg(feature = "native")]
 impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
     type RuntimeConfig = Config;
     type Inner = DemoApp<DefaultContext, Vm>;
     type BatchBuilder = FiFoStrictBatchBuilder<Runtime<DefaultContext>, DefaultContext>;
-    type Error = anyhow::Error;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let storage = ProverStorage::with_config(runtime_config.storage)
@@ -88,10 +74,8 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
         &mut self.stf
     }
 
-    fn take_batch_builder(&mut self) -> Result<Self::BatchBuilder, Self::Error> {
-        self.batch_builder
-            .take()
-            .ok_or(anyhow::anyhow!("Batch builder already taken"))
+    fn take_batch_builder(&mut self) -> Option<Self::BatchBuilder> {
+        self.batch_builder.take()
     }
 }
 
@@ -99,7 +83,6 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
     type RuntimeConfig = [u8; 32];
     type Inner = DemoApp<ZkDefaultContext, Vm>;
     type BatchBuilder = FiFoStrictBatchBuilder<Runtime<ZkDefaultContext>, ZkDefaultContext>;
-    type Error = anyhow::Error;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
@@ -127,10 +110,8 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
         &mut self.stf
     }
 
-    fn take_batch_builder(&mut self) -> Result<Self::BatchBuilder, Self::Error> {
-        self.batch_builder
-            .take()
-            .ok_or(anyhow::anyhow!("Batch builder already taken"))
+    fn take_batch_builder(&mut self) -> Option<Self::BatchBuilder> {
+        self.batch_builder.take()
     }
 }
 

@@ -1,12 +1,18 @@
 #![feature(log_syntax)]
+mod cli_parser;
+mod common;
+mod default_runtime;
 mod dispatch;
 mod module_info;
-use crate::dispatch::cli_parser::CliParserMacro;
+mod rpc;
+
+use cli_parser::CliParserMacro;
+use default_runtime::DefaultRuntimeMacro;
 use dispatch::{
-    default_runtime::DefaultRuntimeMacro, dispatch_call::DispatchCallMacro, genesis::GenesisMacro,
-    message_codec::MessageCodec,
+    dispatch_call::DispatchCallMacro, genesis::GenesisMacro, message_codec::MessageCodec,
 };
 use proc_macro::TokenStream;
+use rpc::ExposeRpcMacro;
 use syn::parse_macro_input;
 
 /// Derives the `sov-modules-api::ModuleInfo` implementation for the underlying type.
@@ -141,7 +147,7 @@ pub fn codec(input: TokenStream) -> TokenStream {
 #[proc_macro_attribute]
 pub fn rpc_gen(attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as syn::ItemImpl);
-    handle_macro_error(dispatch::derive_rpc::derive_rpc(attr.into(), input).map(|ok| ok.into()))
+    handle_macro_error(rpc::rpc_gen(attr.into(), input).map(|ok| ok.into()))
 }
 
 fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> TokenStream {
@@ -150,30 +156,24 @@ fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> To
         Err(err) => err.to_compile_error().into(),
     }
 }
-/// TODO: this isn't needed anymore
-/// This proc macro generates the actual implementations for the trait created above for the module
-/// It iterates over each struct
-// #[proc_macro_derive(rpc)]
-// pub fn rpc_impls(input: TokenStream) -> TokenStream {
-//     let input = parse_macro_input!(input);
-//     handle_macro_error(dispatch::derive_rpc::rpc_impls(input))
-// }
 
 /// This proc macro generates the actual implementations for the trait created above for the module
 /// It iterates over each struct
 #[proc_macro_attribute]
-pub fn expose_rpc(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as syn::ItemImpl);
-    handle_macro_error(dispatch::derive_rpc::rpc_outer_impls(attr.into(), input))
+pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
+    let context_type = parse_macro_input!(attr);
+
+    let original = input.clone();
+    let input = parse_macro_input!(input);
+    let expose_macro = ExposeRpcMacro::new("Expose");
+    handle_macro_error(expose_macro.generate_rpc(original, input, context_type))
 }
 
 #[proc_macro_attribute]
 pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
     let context_type = parse_macro_input!(attr);
     let input = parse_macro_input!(input);
+    let cli_parser = CliParserMacro::new("Cmd");
 
-    // let input = parse_macro_input!(input);
-    let cli_parser_macro = CliParserMacro::new("Cmd");
-
-    handle_macro_error(cli_parser_macro.derive_cli(input, context_type))
+    handle_macro_error(cli_parser.cli_parser(input, context_type))
 }

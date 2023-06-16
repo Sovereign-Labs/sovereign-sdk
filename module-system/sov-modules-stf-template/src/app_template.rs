@@ -5,15 +5,16 @@ use crate::{
 use borsh::BorshDeserialize;
 use sov_modules_api::{
     hooks::{ApplyBlobHooks, TxHooks},
-    Context, DispatchCall, Genesis, Hasher, Spec,
+    Context, DispatchCall, Genesis,
 };
 use sov_rollup_interface::{
+    da::{BlobTransactionTrait, CountedBufReader},
     stf::{BatchReceipt, TransactionReceipt},
     traits::BatchTrait,
     Buf,
 };
 use sov_state::{StateCheckpoint, WorkingSet};
-use std::{io::Read, marker::PhantomData};
+use std::marker::PhantomData;
 use tracing::{debug, error};
 
 type Result<T> = std::result::Result<T, ApplyBatchError>;
@@ -61,12 +62,11 @@ where
 {
     fn init_sequencer_and_get_working_set(
         &mut self,
-        sequencer: &[u8],
-        batch_data_and_hash: &BatchDataAndHash,
+        blob: &mut impl BlobTransactionTrait,
     ) -> Result<WorkingSet<C::Storage>> {
         debug!(
             "Applying batch from sequencer: 0x{}",
-            hex::encode(sequencer)
+            hex::encode(blob.sender())
         );
         let mut batch_workspace = self
             .checkpoint
@@ -74,16 +74,13 @@ where
             .expect("Working_set was initialized in begin_slot")
             .to_revertable();
 
-        if let Err(e) =
-            self.runtime
-                .begin_blob_hook(sequencer, &batch_data_and_hash.data, &mut batch_workspace)
-        {
+        if let Err(e) = self.runtime.begin_blob_hook(blob, &mut batch_workspace) {
             error!(
                 "Error: The transaction was rejected by the 'enter_apply_blob' hook. Skipping batch without slashing the sequencer: {}",
                 e
             );
             self.checkpoint = Some(batch_workspace.revert());
-            return Err(ApplyBatchError::Ignored(batch_data_and_hash.hash));
+            return Err(ApplyBatchError::Ignored(blob.hash()));
         }
 
         Ok(batch_workspace)
@@ -92,9 +89,10 @@ where
     fn deserialize_batch(
         &mut self,
         batch_workspace: WorkingSet<C::Storage>,
-        batch_data_and_hash: &BatchDataAndHash,
+        blob_data: &mut CountedBufReader<impl Buf>,
+        blob_hash: [u8; 32],
     ) -> Result<(WorkingSet<C::Storage>, Batch)> {
-        match Batch::deserialize(&mut batch_data_and_hash.data.as_ref()) {
+        match Batch::deserialize_reader(blob_data) {
             Ok(batch) => Ok((batch_workspace, batch)),
             Err(e) => {
                 error!(
@@ -103,7 +101,7 @@ where
                 );
                 self.checkpoint = Some(batch_workspace.revert());
                 Err(ApplyBatchError::Slashed {
-                    hash: batch_data_and_hash.hash,
+                    hash: blob_hash,
                     reason: SlashingReason::InvalidBatchEncoding,
                 })
             }
@@ -114,7 +112,7 @@ where
         &mut self,
         batch_workspace: WorkingSet<C::Storage>,
         batch: Batch,
-        batch_data_and_hash: &BatchDataAndHash,
+        blob_hash: [u8; 32],
     ) -> Result<(WorkingSet<C::Storage>, Vec<TransactionAndRawHash<C>>)> {
         // Run the stateless verification, since it is stateless we don't commit.
         match verify_txs_stateless(batch.take_transactions()) {
@@ -124,7 +122,7 @@ where
                 self.checkpoint = Some(batch_workspace.revert());
                 error!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}\n", e);
                 Err(ApplyBatchError::Slashed {
-                    hash: batch_data_and_hash.hash,
+                    hash: blob_hash,
                     reason: SlashingReason::StatelessVerificationFailed,
                 })
             }
@@ -135,7 +133,7 @@ where
         &mut self,
         mut batch_workspace: WorkingSet<C::Storage>,
         txs: Vec<TransactionAndRawHash<C>>,
-        batch_data_and_hash: &BatchDataAndHash,
+        blob_hash: [u8; 32],
     ) -> Result<(WorkingSet<C::Storage>, Vec<TransactionReceipt<TxEffect>>)> {
         let mut tx_receipts = Vec::with_capacity(txs.len());
 
@@ -204,7 +202,7 @@ where
                     error!("Tx 0x{} decoding error: {}", hex::encode(raw_tx_hash), e);
 
                     return Err(ApplyBatchError::Slashed {
-                        hash: batch_data_and_hash.hash,
+                        hash: blob_hash,
                         reason: SlashingReason::InvalidTransactionEncoding,
                     });
                 }
@@ -224,33 +222,33 @@ where
         }
     }
 
-    pub(crate) fn apply_batch(
+    pub(crate) fn apply_blob(
         &mut self,
-        sequencer: &[u8],
-        batch: impl Buf,
+        blob: &mut impl BlobTransactionTrait,
     ) -> Result<BatchReceipt<SequencerOutcome, TxEffect>> {
-        let batch_data_and_hash = BatchDataAndHash::new::<C>(batch);
-        let mut batch_workspace =
-            self.init_sequencer_and_get_working_set(sequencer, &batch_data_and_hash)?;
+        let mut batch_workspace = self.init_sequencer_and_get_working_set(blob)?;
 
         // TODO: don't ignore these events.
         // https://github.com/Sovereign-Labs/sovereign/issues/350
         let _ = batch_workspace.take_events();
 
+        let blob_hash = blob.hash();
+
         // Commit changes.
         batch_workspace = batch_workspace.checkpoint().to_revertable();
 
+        // This function consumes the blob data
         let (batch_workspace, batch) =
-            self.deserialize_batch(batch_workspace, &batch_data_and_hash)?;
+            self.deserialize_batch(batch_workspace, blob.data_mut(), blob_hash)?;
 
         debug!("Deserialized batch with {} txs", batch.txs.len());
 
         // Run the stateless verification, since it is stateless we don't commit.
         let (batch_workspace, txs) =
-            self.verify_txs_stateless(batch_workspace, batch, &batch_data_and_hash)?;
+            self.verify_txs_stateless(batch_workspace, batch, blob_hash)?;
 
         let (mut batch_workspace, tx_receipts) =
-            self.execute_txs(batch_workspace, txs, &batch_data_and_hash)?;
+            self.execute_txs(batch_workspace, txs, blob_hash)?;
 
         // TODO: calculate the amount based of gas and fees
         let batch_receipt_contents = SequencerOutcome::Rewarded(0);
@@ -260,30 +258,9 @@ where
 
         self.checkpoint = Some(batch_workspace.checkpoint());
         Ok(BatchReceipt {
-            batch_hash: batch_data_and_hash.hash,
+            batch_hash: blob_hash,
             tx_receipts,
             inner: batch_receipt_contents,
         })
-    }
-}
-
-struct BatchDataAndHash {
-    hash: [u8; 32],
-    data: Vec<u8>,
-}
-
-impl BatchDataAndHash {
-    fn new<C: Context>(batch: impl Buf) -> BatchDataAndHash {
-        let mut reader = batch.reader();
-        let mut batch_data = Vec::new();
-        reader
-            .read_to_end(&mut batch_data)
-            .unwrap_or_else(|e| panic!("Unable to read batch data {}", e));
-
-        let hash = <C as Spec>::Hasher::hash(&batch_data);
-        BatchDataAndHash {
-            hash,
-            data: batch_data,
-        }
     }
 }

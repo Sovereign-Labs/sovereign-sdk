@@ -405,7 +405,7 @@ impl<'a> BlobRef<'a> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize, PartialEq)]
 pub struct BlobIterator {
     sequence_len: usize,
     consumed: usize,
