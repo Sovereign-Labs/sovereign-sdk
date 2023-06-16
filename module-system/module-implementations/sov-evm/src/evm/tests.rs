@@ -67,9 +67,11 @@ fn simple_contract_execution() {
         let contract_data = std::fs::read_to_string(path).unwrap();
         let contract_data = Bytes::from(hex::decode(contract_data).unwrap());
 
-        let mut tx_env = TxEnv::default();
-        tx_env.transact_to = TransactTo::create();
-        tx_env.data = contract_data;
+        let tx_env = TxEnv {
+            transact_to: TransactTo::create(),
+            data: contract_data,
+            ..Default::default()
+        };
 
         let result = executor::execute_tx(EvmDb { db: &mut db }, tx_env).unwrap();
         contract_address(result)
