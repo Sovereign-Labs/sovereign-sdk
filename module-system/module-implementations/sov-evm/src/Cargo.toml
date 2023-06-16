@@ -1,0 +1,30 @@
+[package]
+name = "revm-test"
+version = "0.1.0"
+edition = "2021"
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ethers-contract = "2.0.7"
+ethers-core = "2.0.7"
+primitive-types = "0.12.1"
+ethereum-types = "0.14.1"
+serde_json = "1.0"
+
+bytes = "1.4"
+hex = "0.4"
+revm = { path = "../../crates/revm", version = "3.3.0" }
+microbench = "0.5"
+
+
+[[bin]]
+name = "analysis"
+
+[[bin]]
+name = "snailtracer"
+
+[[bin]]
+name = "transfer"
+
+[[bin]]
+name = "exec"
