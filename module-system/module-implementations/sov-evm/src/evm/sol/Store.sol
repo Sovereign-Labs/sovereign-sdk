@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: MIT
+
+// solc --abi --bin  Store.sol -o build
 pragma solidity ^0.8.0;
 contract SimpleStorage {
     uint256 public num;

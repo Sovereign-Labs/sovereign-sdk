@@ -3,6 +3,7 @@ use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
 
 pub mod call;
+mod evm;
 pub mod genesis;
 #[cfg(feature = "native")]
 pub mod query;

@@ -64,9 +64,6 @@ fn simple_storage() {
     let foo = Foo { x: &x };
     evm.database(foo);
 
-    // execution globals block hash/gas_limit/coinbase/timestamp..
-    //evm.env.tx.caller = caller.into();
-
     evm.env.tx.transact_to = TransactTo::create();
 
     let data = std::fs::read_to_string("../sol/build/SimpleStorage.bin").unwrap();

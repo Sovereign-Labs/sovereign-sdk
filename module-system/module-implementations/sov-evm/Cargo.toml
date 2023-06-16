@@ -13,6 +13,7 @@ resolver = "2"
 
 
 [dependencies]
+revm = "3.3.0"
 ethers-contract = "2.0.7"
 ethers-core = "2.0.7"
 primitive-types = "0.12.1"
@@ -34,6 +35,7 @@ jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], 
 [dev-dependencies]
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
 tempfile = { workspace = true }
+bytes = { workspace = true }
 
 [features]
 default = ["native"]
