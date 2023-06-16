@@ -10,7 +10,6 @@ pub mod query;
 
 #[derive(ModuleInfo, Clone)]
 pub struct Evm<C: sov_modules_api::Context> {
-    /// The address of the sov-bank module.
     #[address]
     pub(crate) address: C::Address,
 }
