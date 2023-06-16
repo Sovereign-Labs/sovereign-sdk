@@ -69,7 +69,14 @@ pub trait DaService {
         Vec<<Self::Spec as DaSpec>::BlobTransaction>,
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,
-    );
+    ) {
+        let relevant_txs = self.extract_relevant_txs(block);
+
+        let (etx_proofs, rollup_row_proofs) =
+            self.get_extraction_proof(block, relevant_txs.as_slice());
+
+        (relevant_txs, etx_proofs, rollup_row_proofs)
+    }
 
     /// Send a transaction directly to the DA layer.
     /// blob is the serialized and signed transaction.
