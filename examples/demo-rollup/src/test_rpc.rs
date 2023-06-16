@@ -439,7 +439,7 @@ proptest!(
                     expected:
                     format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)}
                     ,
-                    // TODO: Solve this test
+                    // TODO #417: Solve this test
                     // TestExpect{
                     // data:
                     // format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Full"],"id":1}}"#),
