@@ -61,7 +61,7 @@ pub struct StateTransition<C> {
     pub validity_condition: C,
 }
 
-/// This trait is implemented by the node
+/// This trait expresses that a type can check a validity condition.
 pub trait ValidityConditionChecker<Condition: ValidityCondition> {
     /// Check a validity condition
     fn check(&mut self, condition: &Condition) -> Result<(), anyhow::Error>;
