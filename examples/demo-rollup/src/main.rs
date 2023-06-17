@@ -26,7 +26,7 @@ use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::traits::CanonicalHash;
-use sov_rollup_interface::zk::traits::ValidityConditionChecker;
+use sov_rollup_interface::zk::traits::{NoOpHasher, ValidityConditionChecker};
 use sov_state::Storage;
 use std::env;
 use std::net::SocketAddr;
@@ -77,36 +77,6 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
     )
 }
 
-fn start_batch_producing<
-    B: BatchBuilder + Send + Sync + 'static,
-    T: DaService + Send + Sync + 'static,
->(
-    batch_builder: B,
-    da_service: Arc<T>,
-) {
-    let mut batch_builder = batch_builder;
-    tokio::spawn(async move {
-        loop {
-            match batch_builder.get_next_blob() {
-                Ok(blob) => {
-                    let blob: Vec<u8> = blob.into_iter().flatten().collect();
-                    match da_service.send_transaction(&blob).await {
-                        Ok(_) => {
-                            info!("Successfully produced batch");
-                        }
-                        Err(_err) => {
-                            info!("Error while producing batch");
-                        }
-                    };
-                }
-                Err(err) => {
-                    info!("Error while producing batch: {:?}", err);
-                }
-            };
-            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-        }
-    });
-}
 pub struct CelestiaChainChecker {
     current_block_hash: [u8; 32],
 }
@@ -236,7 +206,12 @@ async fn main() -> Result<(), anyhow::Error> {
             da_service.get_extraction_proof(&filtered_block, &blob_txs);
 
         let validity_condition = da_verifier
-            .verify_relevant_tx_list(header, &blob_txs, inclusion_proof, completeness_proof)
+            .verify_relevant_tx_list::<NoOpHasher>(
+                header,
+                &blob_txs,
+                inclusion_proof,
+                completeness_proof,
+            )
             .expect("Failed to verify relevant tx list but prover is honest");
 
         // For demonstration purposes, we also show how you would check the extra validity condition
