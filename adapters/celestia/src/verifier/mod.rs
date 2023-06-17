@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use sov_rollup_interface::{
     da::{self, BlobTransactionTrait, BlockHashTrait as BlockHash, CountedBufReader, DaSpec},
     traits::{BlockHeaderTrait, CanonicalHash},
-    zk::traits::ValidityCondition,
-    Buf, Bytes,
+    zk::traits::{SimpleHasher, ValidityCondition},
+    Buf,
 };
 
 pub mod address;
@@ -112,7 +112,7 @@ pub struct ChainValidityCondition {
 }
 
 impl ValidityCondition for ChainValidityCondition {
-    fn combine(&self, rhs: Self) -> Result<Self, anyhow::Error> {
+    fn combine<H: SimpleHasher>(&self, rhs: Self) -> Result<Self, anyhow::Error> {
         anyhow::ensure!(self.block_hash == rhs.prev_hash);
         Ok(rhs)
     }
@@ -131,7 +131,7 @@ impl da::DaVerifier for CelestiaVerifier {
         }
     }
 
-    fn verify_relevant_tx_list(
+    fn verify_relevant_tx_list<H: SimpleHasher>(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
