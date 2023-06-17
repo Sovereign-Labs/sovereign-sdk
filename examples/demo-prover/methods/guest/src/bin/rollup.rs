@@ -11,10 +11,11 @@ use jupiter::{BlobWithSender, CelestiaHeader};
 use log::info;
 use risc0_adapter::guest::Risc0Guest;
 use risc0_zkvm::guest::env;
+use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::{StateTransitionFunction, ZkConfig};
-use sov_rollup_interface::zk::traits::{NoOpHasher, StateTransition, ValidityCondition, ZkvmGuest};
+use sov_rollup_interface::zk::traits::{StateTransition, ValidityCondition, ZkvmGuest};
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
