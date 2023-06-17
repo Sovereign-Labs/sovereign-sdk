@@ -31,7 +31,7 @@ impl SimpleHasher for NoOpHasher {
     }
 }
 
-// Blanekt implement SimpleHasher for the rust-crypto hashers
+// Blanket implement SimpleHasher for the rust-crypto hashers
 impl<T: Digest> SimpleHasher for T
 where
     [u8; 32]: From<GenericArray<u8, <T as OutputSizeUser>::OutputSize>>,
