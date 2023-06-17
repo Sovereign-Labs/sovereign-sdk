@@ -1,5 +1,6 @@
+use crate::crypto::SimpleHasher;
 use crate::traits::{AddressTrait, BlockHeaderTrait};
-use crate::zk::traits::{SimpleHasher, ValidityCondition};
+use crate::zk::traits::ValidityCondition;
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Buf;
 use core::fmt::Debug;

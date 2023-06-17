@@ -1,9 +1,10 @@
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::{
+    crypto::SimpleHasher,
     da::{self, BlobTransactionTrait, BlockHashTrait as BlockHash, CountedBufReader, DaSpec},
     traits::{BlockHeaderTrait, CanonicalHash},
-    zk::traits::{SimpleHasher, ValidityCondition},
+    zk::traits::ValidityCondition,
     Buf,
 };
 
