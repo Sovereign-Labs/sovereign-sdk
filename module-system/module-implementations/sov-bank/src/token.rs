@@ -1,6 +1,8 @@
 use anyhow::{bail, Result};
 use sov_state::{Prefix, WorkingSet};
 use std::collections::HashSet;
+use std::str::FromStr;
+use sov_modules_api::Context;
 
 use crate::call::prefix_from_address_with_parent;
 
@@ -9,13 +11,42 @@ pub type Amount = u64;
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
-    derive(serde::Deserialize)
+    derive(serde::Deserialize),
+    derive(clap::Parser)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct Coins<C: sov_modules_api::Context> {
     pub amount: Amount,
     pub token_address: C::Address,
 }
+
+// pub fn parse_amount(s: &str) -> Result<Amount, anyhow::Error> {
+//     match s.parse::<u64>() {
+//         Ok(val) => Ok(val),
+//         Err(e) => Err(anyhow::Error::new(e)),
+//     }
+// }
+
+
+impl<C: Context> FromStr for Coins<C>
+    where
+        C::Address: FromStr<Err = anyhow::Error>,
+{
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.splitn(2, ',');
+
+        let amount_str = parts.next().ok_or(anyhow::Error::msg("Missing amount"))?;
+        let token_address_str = parts.next().ok_or(anyhow::Error::msg("Missing token address"))?;
+
+        let amount = amount_str.parse::<Amount>().map_err(anyhow::Error::new)?;
+        let token_address = C::Address::from_str(token_address_str)?;
+
+        Ok(Self { amount, token_address })
+    }
+}
+
 
 /// This struct represents a token in the sov-bank module.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]

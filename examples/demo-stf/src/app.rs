@@ -26,7 +26,7 @@ use sov_state::ProverStorage;
 use sov_state::Storage;
 use sov_state::ZkStorage;
 
-pub struct DemoAppRunner<C: Context, Vm: Zkvm> {
+pub struct DemoAppRunner<C: Context+ 'static, Vm: Zkvm> {
     pub stf: DemoApp<C, Vm>,
     pub batch_builder: Option<FiFoStrictBatchBuilder<Runtime<C>, C>>,
 }

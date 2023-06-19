@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::{cell::RefCell, ops::Range};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespacedHash;
@@ -338,6 +339,22 @@ impl From<[u8; 32]> for H160 {
         let mut addr = [0u8; 20];
         addr.copy_from_slice(&value[12..]);
         Self(addr)
+    }
+}
+
+impl FromStr for H160 {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Remove the "0x" prefix, if it exists.
+        let s = s.strip_prefix("0x").unwrap_or(s);
+        let bytes = hex::decode(s)?;
+        if bytes.len() != 20 {
+            return Err(anyhow::anyhow!("Invalid address length"));
+        }
+        let mut array = [0; 20];
+        array.copy_from_slice(&bytes);
+        Ok(H160(array))
     }
 }
 

@@ -12,6 +12,7 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::io::Write;
+use std::str::FromStr;
 use tendermint::crypto::Sha256;
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
@@ -96,6 +97,21 @@ fn test_mock_proof_roundtrip() {
 #[derive(Debug, PartialEq, Clone, Eq, serde::Serialize, serde::Deserialize)]
 pub struct MockAddress {
     addr: [u8; 32],
+}
+
+impl FromStr for MockAddress {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let addr = hex::decode(s)?;
+        if addr.len() != 32 {
+            return Err(anyhow::anyhow!("Invalid address length"));
+        }
+
+        let mut array = [0; 32];
+        array.copy_from_slice(&addr);
+        Ok(MockAddress { addr: array })
+    }
 }
 
 impl<'a> TryFrom<&'a [u8]> for MockAddress {

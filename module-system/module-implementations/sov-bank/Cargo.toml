@@ -23,6 +23,7 @@ thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
+clap = {workspace = true, features = ["derive"]}
 
 [dev-dependencies]
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
@@ -32,3 +33,4 @@ tempfile = { workspace = true }
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
 native = ["serde", "sov-state/native", "dep:jsonrpsee", "sov-modules-api/native"]
+cli = ["native"]

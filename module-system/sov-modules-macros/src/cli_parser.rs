@@ -1,6 +1,8 @@
+use proc_macro2::Span;
 use crate::common::StructFieldExtractor;
 use quote::{format_ident, quote};
-use syn::{DeriveInput, Path, PathArguments, Type};
+use syn::{DeriveInput, Path, PathArguments, Type, Data, DataEnum, Fields, Ident, Meta, Lit, NestedMeta, AttributeArgs, MetaNameValue};
+use syn::spanned::Spanned;
 
 pub(crate) struct CliParserMacro {
     field_extractor: StructFieldExtractor,
@@ -100,3 +102,246 @@ impl CliParserMacro {
         Ok(cmd_parser_tokens.into())
     }
 }
+
+// pub fn derive_clap_custom_enum(ast: DeriveInput)
+//                                -> Result<proc_macro::TokenStream, syn::Error> {
+//     let enum_name = &ast.ident;
+//     let generics = &ast.generics;
+//
+//     if let Data::Enum(DataEnum { variants, .. }) = ast.data {
+//         let mut variants_with_fields = vec![];
+//         let mut convert_cases = vec![];
+//
+//         let cli_enum_with_fields_ident = Ident::new(
+//             &format!("{}WithNamedFields", enum_name),
+//             proc_macro2::Span::call_site(),
+//         );
+//
+//         for variant in variants {
+//             let ident = &variant.ident;
+//
+//             // Filter out doc comment attributes for the variant
+//             let doc_attrs_variant = variant.attrs.iter()
+//                 .filter(|attr| attr.path.is_ident("doc"))
+//                 .collect::<Vec<_>>();
+//
+//             match &variant.fields {
+//                 Fields::Unnamed(unnamed_fields) => {
+//                     let named_fields = unnamed_fields.unnamed.iter().enumerate().map(|(i, field)| {
+//                         let name = Ident::new(&format!("field{}", i), field.span());
+//                         let ty = &field.ty;
+//                         // Filter out doc comment attributes for the field
+//                         let doc_attrs_field = field.attrs.iter()
+//                             .filter(|attr| attr.path.is_ident("doc"))
+//                             .collect::<Vec<_>>();
+//                         quote! {
+//                             #( #doc_attrs_field )*
+//                             #name: #ty
+//                         }
+//                     }).collect::<Vec<_>>();
+//                     variants_with_fields.push(quote! {
+//                         #( #doc_attrs_variant )*
+//                         #ident {#(#named_fields),*}
+//                     });
+//
+//                     let fields = unnamed_fields.unnamed.iter().enumerate().map(|(i, _)| {
+//                         let name = Ident::new(&format!("field{}", i), unnamed_fields.span());
+//                         quote! {#name}
+//                     }).collect::<Vec<_>>();
+//
+//                     convert_cases.push(quote! {
+//                         #cli_enum_with_fields_ident::#ident {#(#fields),*} => #enum_name::#ident(#(#fields),*),
+//                     });
+//                 },
+//                 Fields::Named(fields_named) => {
+//                     let field_tokens = fields_named.named.iter().map(|field| {
+//                         let name = field.ident.as_ref().unwrap();
+//                         let ty = &field.ty;
+//                         // Filter out doc comment attributes for the field
+//                         let doc_attrs_field = field.attrs.iter()
+//                             .filter(|attr| attr.path.is_ident("doc"))
+//                             .collect::<Vec<_>>();
+//                         quote! {
+//                             #( #doc_attrs_field )*
+//                             #name: #ty
+//                         }
+//                     }).collect::<Vec<_>>();
+//
+//                     variants_with_fields.push(quote! {
+//                         #( #doc_attrs_variant )*
+//                         #ident {#(#field_tokens),*}
+//                     });
+//
+//                     let fields = fields_named.named.iter().map(|field| {
+//                         let name = field.ident.as_ref().unwrap();
+//                         quote! {#name}
+//                     }).collect::<Vec<_>>();
+//
+//                     convert_cases.push(quote! {
+//                         #cli_enum_with_fields_ident::#ident {#(#fields),*} => #enum_name::#ident {#(#fields),*},
+//                     });
+//                 },
+//                 Fields::Unit => {
+//                     variants_with_fields.push(quote! {
+//                         #( #doc_attrs_variant )*
+//                         #ident
+//                     });
+//                     convert_cases.push(quote! {
+//                         #cli_enum_with_fields_ident::#ident => #enum_name::#ident,
+//                     });
+//                 }
+//             }
+//         }
+//
+//         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+//         let expanded = quote! {
+//             #[derive(clap::Parser)]
+//             pub enum #cli_enum_with_fields_ident #impl_generics #where_clause {
+//                 #(#variants_with_fields,)*
+//             }
+//
+//             impl #impl_generics From<#cli_enum_with_fields_ident #ty_generics> for #enum_name #ty_generics #where_clause {
+//                 fn from(item: #cli_enum_with_fields_ident #ty_generics) -> Self {
+//                     match item {
+//                         #(#convert_cases)*
+//                     }
+//                 }
+//             }
+//         };
+//
+//         Ok(expanded.into())
+//     } else {
+//         panic!("This derive macro only works with enums");
+//     }
+// }
+
+
+pub fn derive_clap_custom_enum(mut ast: DeriveInput) -> Result<proc_macro::TokenStream, syn::Error> {
+    let enum_name = &ast.ident;
+    let generics = &ast.generics;
+
+    // Extract module_name attribute
+    let module_name = ast
+        .attrs
+        .iter()
+        .find_map(|attr| attr.parse_meta().ok().and_then(|meta| {
+            if meta.path().is_ident("module_name") {
+                match meta {
+                    Meta::NameValue(MetaNameValue { lit: Lit::Str(lit_str), .. }) => Some(lit_str),
+                    _ => None,
+                }
+            } else {
+                None
+            }
+        }))
+        .ok_or_else(|| syn::Error::new(enum_name.span(), "Expected module_name attribute"))?;
+
+    let trait_type_ident = syn::Ident::new(&module_name.value(), module_name.span());
+
+    if let Data::Enum(DataEnum { variants, .. }) = ast.data.clone() {
+        let mut variants_with_fields = vec![];
+        let mut convert_cases = vec![];
+
+        let cli_enum_with_fields_ident = Ident::new(
+            &format!("{}WithNamedFields", enum_name),
+            proc_macro2::Span::call_site(),
+        );
+
+        for variant in variants {
+            let ident = &variant.ident;
+            let doc_attrs_variant = variant.attrs.iter()
+                .filter(|attr| attr.path.is_ident("doc"))
+                .collect::<Vec<_>>();
+
+            match &variant.fields {
+                Fields::Unnamed(unnamed_fields) => {
+                    let named_fields = unnamed_fields.unnamed.iter().enumerate().map(|(i, field)| {
+                        let name = Ident::new(&format!("field{}", i), field.span());
+                        let ty = &field.ty;
+                        let doc_attrs_field = field.attrs.iter()
+                            .filter(|attr| attr.path.is_ident("doc"))
+                            .collect::<Vec<_>>();
+                        quote! {
+                            #( #doc_attrs_field )*
+                            #name: #ty
+                        }
+                    }).collect::<Vec<_>>();
+                    variants_with_fields.push(quote! {
+                        #( #doc_attrs_variant )*
+                        #ident {#(#named_fields),*}
+                    });
+
+                    let fields = unnamed_fields.unnamed.iter().enumerate().map(|(i, _)| {
+                        let name = Ident::new(&format!("field{}", i), unnamed_fields.span());
+                        quote! {#name}
+                    }).collect::<Vec<_>>();
+
+                    convert_cases.push(quote! {
+                        #cli_enum_with_fields_ident::#ident {#(#fields),*} => #enum_name::#ident(#(#fields),*),
+                    });
+                },
+                Fields::Named(fields_named) => {
+                    let field_tokens = fields_named.named.iter().map(|field| {
+                        let name = field.ident.as_ref().unwrap();
+                        let ty = &field.ty;
+                        let doc_attrs_field = field.attrs.iter()
+                            .filter(|attr| attr.path.is_ident("doc"))
+                            .collect::<Vec<_>>();
+                        quote! {
+                            #( #doc_attrs_field )*
+                            #name: #ty
+                        }
+                    }).collect::<Vec<_>>();
+
+                    variants_with_fields.push(quote! {
+                        #( #doc_attrs_variant )*
+                        #ident {#(#field_tokens),*}
+                    });
+
+                    let fields = fields_named.named.iter().map(|field| {
+                        let name = field.ident.as_ref().unwrap();
+                        quote! {#name}
+                    }).collect::<Vec<_>>();
+
+                    convert_cases.push(quote! {
+                        #cli_enum_with_fields_ident::#ident {#(#fields),*} => #enum_name::#ident {#(#fields),*},
+                    });
+                },
+                Fields::Unit => {
+                    variants_with_fields.push(quote! {
+                        #( #doc_attrs_variant )*
+                        #ident
+                    });
+                    convert_cases.push(quote! {
+                        #cli_enum_with_fields_ident::#ident => #enum_name::#ident,
+                    });
+                }
+            }
+        }
+
+        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+        let expanded = quote! {
+            #[derive(clap::Parser)]
+            pub enum #cli_enum_with_fields_ident #impl_generics #where_clause {
+                #(#variants_with_fields,)*
+            }
+
+            impl #impl_generics From<#cli_enum_with_fields_ident #ty_generics> for #enum_name #ty_generics #where_clause {
+                fn from(item: #cli_enum_with_fields_ident #ty_generics) -> Self {
+                    match item {
+                        #(#convert_cases)*
+                    }
+                }
+            }
+
+            impl<C: sov_modules_api::Context> sov_modules_api::AutoClap for #trait_type_ident<C> {
+                type ClapType = #cli_enum_with_fields_ident<C>;
+            }
+        };
+
+        Ok(expanded.into())
+    } else {
+        panic!("This derive macro only works with enums");
+    }
+}
+

@@ -1,4 +1,5 @@
 use core::fmt::{Debug, Display};
+use std::str::FromStr;
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -39,5 +40,6 @@ pub trait AddressTrait:
     + Send
     + Sync
     + Display
+    + 'static + FromStr<Err = anyhow::Error>
 {
 }

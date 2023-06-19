@@ -6,7 +6,7 @@ mod dispatch;
 mod module_info;
 mod rpc;
 
-use cli_parser::CliParserMacro;
+use cli_parser::{CliParserMacro, derive_clap_custom_enum};
 use default_runtime::DefaultRuntimeMacro;
 use dispatch::{
     dispatch_call::DispatchCallMacro, genesis::GenesisMacro, message_codec::MessageCodec,
@@ -14,6 +14,9 @@ use dispatch::{
 use proc_macro::TokenStream;
 use rpc::ExposeRpcMacro;
 use syn::parse_macro_input;
+use syn::DeriveInput;
+use syn::Ident;
+use syn::AttributeArgs;
 
 /// Derives the `sov-modules-api::ModuleInfo` implementation for the underlying type.
 ///
@@ -177,3 +180,23 @@ pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
 
     handle_macro_error(cli_parser.cli_parser(input, context_type))
 }
+
+// #[proc_macro_derive(CustomParser)]
+// pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
+//     let input = parse_macro_input!(input);
+//     handle_macro_error(derive_clap_custom_enum(input))
+// }
+
+// #[proc_macro_derive(CustomParser, attributes(custom_parser))]
+// pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
+//     let input = parse_macro_input!(input as DeriveInput);
+//     handle_macro_error(derive_clap_custom_enum(input))
+// }
+
+
+#[proc_macro_derive(CustomParser, attributes(module_name))]
+pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+    handle_macro_error(derive_clap_custom_enum(input))
+}
+

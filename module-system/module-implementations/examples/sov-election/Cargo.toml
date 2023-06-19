@@ -24,7 +24,7 @@ thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
-
+clap = {workspace = true, features = ["derive"]}
 [dev-dependencies]
 sov-modules-api = { path = "../../../sov-modules-api" }
 tempfile = { workspace = true }

@@ -63,3 +63,4 @@ native = [
 	"jsonrpsee",
 	"toml"]
 verifier = []
+cli = ["native"]
