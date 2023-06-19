@@ -16,10 +16,7 @@ use sov_modules_api::{
     AddressBech32, PublicKey, Spec,
 };
 
-// type BankCommands = sov_bank::call::CallMessageWithNamedFields<DefaultContext>;
-
-type BankCommands = <sov_bank::Bank<DefaultContext> as sov_modules_api::AutoClap>::ClapType;
-
+use demo_stf::runtime::ModuleCommands;
 
 type C = DefaultContext;
 type Address = <C as Spec>::Address;
@@ -57,14 +54,14 @@ enum Commands {
     },
     /// Utility commands
     Util(UtilArgs),
-    Bank(BankArgs)
+    Module(ModuleArgs)
 }
 
 #[derive(Parser)]
-struct BankArgs {
+struct ModuleArgs {
     #[clap(subcommand)]
-    /// Commands under Bank
-    command: BankCommands,
+    /// Commands under Module
+    command: ModuleCommands,
 }
 
 /// Arguments for utility commands
@@ -264,9 +261,10 @@ pub fn main() {
                 println!("{}", hex::encode(ROLLUP_NAMESPACE_RAW));
             }
         },
-        Commands::Bank(bank_args) => {
-            println!("calling Bank");
+        Commands::Module(module_args) => {
+            println!("BANK");
         }
+
     }
 }
 

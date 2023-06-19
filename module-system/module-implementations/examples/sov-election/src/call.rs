@@ -6,12 +6,18 @@ use anyhow::{anyhow, bail, ensure, Result};
 
 use sov_modules_api::{CallResponse, Context};
 use sov_state::WorkingSet;
+use sov_modules_macros::CustomParser;
 
 /// Call actions supported byte the module.
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
     derive(serde::Deserialize),
+)]
+#[cfg_attr(
+feature = "native",
+derive(CustomParser),
+module_name = "Election"
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: Context> {

@@ -178,25 +178,20 @@ pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let cli_parser = CliParserMacro::new("Cmd");
 
-    handle_macro_error(cli_parser.cli_parser(input, context_type))
+    handle_macro_error(cli_parser.merged_macro(input, context_type))
 }
-
-// #[proc_macro_derive(CustomParser)]
-// pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
-//     let input = parse_macro_input!(input);
-//     handle_macro_error(derive_clap_custom_enum(input))
-// }
-
-// #[proc_macro_derive(CustomParser, attributes(custom_parser))]
-// pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
-//     let input = parse_macro_input!(input as DeriveInput);
-//     handle_macro_error(derive_clap_custom_enum(input))
-// }
-
 
 #[proc_macro_derive(CustomParser, attributes(module_name))]
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     handle_macro_error(derive_clap_custom_enum(input))
 }
+
+
+// #[proc_macro_attribute]
+// pub fn module_cli_generator(attr: TokenStream, input: TokenStream) -> TokenStream {
+//     let context_type = parse_macro_input!(attr);
+//     let input = parse_macro_input!(input);
+//     handle_macro_error(generate_cli( input, context_type))
+// }
 

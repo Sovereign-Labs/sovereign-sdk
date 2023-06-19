@@ -11,7 +11,7 @@ use sov_modules_macros::CustomParser;
     derive(serde::Serialize,serde::Deserialize),
 )]
 #[cfg_attr(
-feature = "cli",
+feature = "native",
 derive(CustomParser),
 module_name = "Bank"
 )]

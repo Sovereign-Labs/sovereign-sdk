@@ -16,6 +16,9 @@ use sov_sequencer_registry::query::{SequencerRpcImpl, SequencerRpcServer};
 #[cfg(feature = "native")]
 use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
+
+use clap::Parser;
+
 /// The Rollup entrypoint.
 ///
 /// On a high level, the rollup node receives serialized call messages from the DA layer and executes them as atomic transactions.
@@ -54,7 +57,7 @@ use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 #[cfg_attr(
     feature = "native",
     cli_parser(DefaultContext),
-    expose_rpc(DefaultContext)
+    expose_rpc(DefaultContext),
 )]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
