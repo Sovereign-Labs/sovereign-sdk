@@ -416,7 +416,7 @@ proptest!(
                    tx_full_data.push(format_tx(curr_tx_num + tx_id, &tx, &tx_id_to_event_range));
                 }
 
-                let _tx_full_data = tx_full_data.join(",");
+                let tx_full_data = tx_full_data.join(",");
 
                 test_helper(vec![TestExpect{
                     data:
@@ -440,11 +440,11 @@ proptest!(
                     format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)}
                     ,
                     // TODO #417: Solve this test
-                    // TestExpect{
-                    // data:
-                    // format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Full"],"id":1}}"#),
-                    // expected:
-                    // format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{tx_full_data}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
+                    TestExpect{
+                    data:
+                    format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Full"],"id":1}}"#),
+                    expected:
+                    format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{tx_full_data}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
                     ]
                     , slots);
 
