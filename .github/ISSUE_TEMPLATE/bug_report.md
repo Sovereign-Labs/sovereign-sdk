@@ -9,7 +9,7 @@ assignees: ''
 
 ## Summary
 
-<!-- Short summary on what is wrong -->
+<!-- Short summary of what is wrong -->
 
 ## Steps to reproduce
 
@@ -17,12 +17,12 @@ assignees: ''
 2.
 
 <!-- Detailed and easy to follow steps on how to reproduce this issue -->
-<!-- Quality of this section marginally improves speed of bug resolution -->
+<!-- The better instructions, the faster we can find and fix the bug -->
 
 
 ## Expected Result
 
-<!-- What was expected from user perspective -->
+<!-- What was expected from the user's perspective -->
 
 ## Actual Result
 
