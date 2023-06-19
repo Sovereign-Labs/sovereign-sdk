@@ -1,5 +1,5 @@
 use demo_stf::runner_config::Config as RunnerConfig;
-use presence::service::RuntimeConfig;
+//use presence::service::RuntimeConfig;
 use serde::Deserialize;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -8,8 +8,9 @@ pub struct RpcConfig {
     pub bind_port: u16,
 }
 
+//TODO - replace with runtime config.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct DaConfig {
+pub struct DaServiceConfig {
     pub light_client_url: String, 
     pub node_client_url: String
 }
@@ -17,7 +18,7 @@ pub struct DaConfig {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RollupConfig {
     pub start_height: u64,
-    pub da: DaConfig,
+    pub da: DaServiceConfig,
     pub runner: RunnerConfig,
     pub rpc_config: RpcConfig,
 }
@@ -42,9 +43,8 @@ mod tests {
         let config = r#"
             start_height = 31337
             [da]
-            celestia_rpc_auth_token = "SECRET_RPC_TOKEN"
-            celestia_rpc_address = "http://localhost:11111/"
-            max_celestia_response_body_size = 980
+            light_client_url = "http://127.0.0.1:7000"
+            node_client_url = "ws://127.0.0.1:9944"
             [runner.storage]
             path = "/tmp"
             [rpc_config]
@@ -58,9 +58,8 @@ mod tests {
         let expected = RollupConfig {
             start_height: 31337,
             da: DaServiceConfig {
-                celestia_rpc_auth_token: "SECRET_RPC_TOKEN".to_string(),
-                celestia_rpc_address: "http://localhost:11111/".into(),
-                max_celestia_response_body_size: 980,
+                light_client_url: "http://127.0.0.1:7000".to_string(),
+                node_client_url: "ws://127.0.0.1:9944".into(),
             },
             runner: RunnerConfig {
                 storage: StorageConfig {
