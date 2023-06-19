@@ -7,6 +7,7 @@ use sov_rollup_interface::{
     zk::traits::ValidityCondition,
     Buf,
 };
+use thiserror::Error;
 
 pub mod address;
 pub mod proofs;
@@ -111,10 +112,18 @@ pub struct ChainValidityCondition {
     pub prev_hash: [u8; 32],
     pub block_hash: [u8; 32],
 }
+#[derive(Error, Debug)]
+pub enum ValidityConditionError {
+    #[error("conditions for validity can only be combined if the blocks are consecutive")]
+    BlocksNotConsecutive,
+}
 
 impl ValidityCondition for ChainValidityCondition {
-    fn combine<H: SimpleHasher>(&self, rhs: Self) -> Result<Self, anyhow::Error> {
-        anyhow::ensure!(self.block_hash == rhs.prev_hash);
+    type Error = ValidityConditionError;
+    fn combine<H: SimpleHasher>(&self, rhs: Self) -> Result<Self, Self::Error> {
+        if self.block_hash != rhs.prev_hash {
+            return Err(ValidityConditionError::BlocksNotConsecutive);
+        }
         Ok(rhs)
     }
 }

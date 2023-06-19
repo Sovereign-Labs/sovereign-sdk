@@ -82,6 +82,8 @@ pub struct CelestiaChainChecker {
 }
 
 impl ValidityConditionChecker<ChainValidityCondition> for CelestiaChainChecker {
+    type Error = anyhow::Error;
+
     fn check(&mut self, condition: &ChainValidityCondition) -> Result<(), anyhow::Error> {
         anyhow::ensure!(
             condition.block_hash == self.current_block_hash,

@@ -24,6 +24,7 @@ serde = { workspace = true }
 serde_cbor = "0.11.2"
 serde_json = { workspace = true }
 tokio = { version = "1", features = ["full"], optional = true }
+thiserror = { workspace = true }
 tracing = "0.1.37"
 
 sov-rollup-interface = { path = "../../rollup-interface" }
