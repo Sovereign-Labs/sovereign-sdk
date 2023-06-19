@@ -176,13 +176,13 @@ fn test_response_serialization() {
     let json = serde_json::to_string(&response).unwrap();
     assert_eq!(
         json,
-        r#"{"AccountExists":{"addr":"sov1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5z5tpwxqergd3c8g7rusq4vrkje","nonce":123456789}}"#
+        r#"{"AccountExists":{"addr":"sov1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5z5tpwxqergd3c8g7rusqqsn6hm","nonce":123456789}}"#
     );
 }
 
 #[test]
 fn test_response_deserialization() {
-    let json = r#"{"AccountExists":{"addr":"sov1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5z5tpwxqergd3c8g7rusq4vrkje","nonce":123456789}}"#;
+    let json = r#"{"AccountExists":{"addr":"sov1qypqxpq9qcrsszg2pvxq6rs0zqg3yyc5z5tpwxqergd3c8g7rusqqsn6hm","nonce":123456789}}"#;
     let response: Response = serde_json::from_str(json).unwrap();
 
     let expected_addr: Vec<u8> = (1..=32).collect();

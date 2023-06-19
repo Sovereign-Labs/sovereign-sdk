@@ -41,7 +41,7 @@ mod test {
         assert_eq!(address, deserialized_address);
         assert_eq!(
             deserialized_address.to_string(),
-            "sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9s7q3twy"
+            "sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9stup8tx"
         );
     }
 }
