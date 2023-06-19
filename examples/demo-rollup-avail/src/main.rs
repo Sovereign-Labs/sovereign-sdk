@@ -3,7 +3,6 @@ mod ledger_rpc;
 
 use crate::config::RollupConfig;
 use anyhow::Context;
-// use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::app::{DefaultContext, DemoBatchReceipt, DemoTxReceipt};
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
 use demo_stf::genesis_config::create_demo_genesis_config;
@@ -43,11 +42,11 @@ async fn start_rpc_server(methods: impl Into<Methods>, address: SocketAddr) {
 /// address constant. Since the centralize sequencer's address is consensus critical,
 /// it has to be hardcoded as a constant, rather than read from the config at runtime.
 ///
-/// If you want to customize the rollup to accept transactions from your own celestia
+/// If you want to customize the rollup to accept transactions from your own avail
 /// address, simply change the value of the SEQUENCER_DA_ADDRESS to your own address.
 /// For example:
 /// ```rust,no_run
-/// const SEQUENCER_DA_ADDRESS: [u8;47] = *b"celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208"
+/// const SEQUENCER_DA_ADDRESS: &str = "d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d";
 /// ```
 
 const SEQUENCER_DA_ADDRESS: &str =

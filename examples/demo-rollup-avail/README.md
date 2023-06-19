@@ -29,9 +29,8 @@ tasks a full-node needs to accomplish.
 The first _mandatory_ step is to initialize a DA service, which allows the full node implementation to
 communicate with the DA layer's RPC endpoints.
 
-If you're using Celestia as your DA layer, you can follow the instructions at the end
-of this document to set up a local full node, or connect to
-a remote node. Whichever option you pick, simply place the URL and authentication token
+If you're using Avail as your DA layer, you can follow the instructions at the end
+of this document to set up a local full node and light client. Simply place the URLs and your App ID
 in the `rollup_config.toml` file and it will be
 automatically picked up by the node implementation.
 
@@ -74,43 +73,40 @@ circumstances.
 
 ## Getting Started
 
-### Set up Celestia
+### Set up Avail node
 
-The current prototype runs against Celestia-node version `v0.7.1`. This is the version used on the `arabica` testnet
-as of Mar 18, 2023. To get started, you'll need to sync a Celestia light node running on the Arabica testnet
+The current prototype runs against Avail-node version `v1.6.0`. To get started, you'll need to run 
+a celestia node locally. 
 
-1. Clone the repository: `git clone https://github.com/celestiaorg/celestia-node.git`.
-1. `cd celestia-node`
-1. Checkout the code at v0.7.1: `git checkout tags/v0.7.1`
-1. Build and install the celestia binary: `make build && make go-install`
-1. Build celestia's key management tool `make cel-key`
-1. Initialize the node: `celestia light init --p2p.network arabica`
-1. Start the node with rpc enabled. Our default config uses port 11111: `celestia light start --core.ip https://limani.celestia-devops.dev --p2p.network arabica --gateway --rpc.port 11111`. If you want to use a different port, you can adjust the rollup's configuration in rollup_config.toml.
-1. Obtain a JWT for RPC access: `celestia light auth admin --p2p.network arabica`
-1. Copy the JWT and and store it in the `celestia_rpc_auth_token` field of the rollup's config file (`rollup_config.toml`). Be careful to paste the entire JWT - it may wrap across several lines in your terminal.
-1. Wait a few minutes for your Celestia node to sync. It needs to have synced to the rollup's configured `start_height `671431` before the demo can run properly.
+1. Clone the repository: `git clone https://github.com/availproject/avail.git`.
+2. `cd avail`
+3. Checkout version v1.6.0: `git checkout v1.6.0`.
+4. Checkout the code at v0.7.1: `git checkout tags/v0.7.1`
+5. Run the node with command: `cargo run --release -p data-avail -- --dev --tmp`
 
-Once your Celestia node is up and running, simply `cargo +nightly run` to test out the prototype.
+For more details check instructions at: https://github.com/availproject/avail/tree/v1.6.0#readme
+
+### Set up Avail light client
+1. Clone the bootstrap node: `git clone https://github.com/availproject/avail-light-bootstrap.git`.
+2. `cd avail-light-bootstrap`
+3. Create config.yaml with content: `libp2p_port = 39000`
+5. Run the node: `cargo run --release`
+6. Clone the light client repository:  `git clone https://github.com/availproject/avail-light.git` 
+7. Checkout develop branch: `git checkout develop`
+9. Create config.yaml with following content:
+```
+app_id = 1
+libp2p_bootstraps = [["{peer-id}", "/ip4/127.0.0.1/udp/39000"]]
+```
+Replace {peer-id} in config with ID from bootstrap logs and ensure app id is correct as adapter expects light client to be running in app specific mode.
+10. Run the light client with command: `run cargo run --release`
 
 ### Submitting transactions
 
-You can use either the rest API or celestia-appd. The following instructions assume celestia-appd.
+You can use either the avail's subxt or the explorer. The following instructions are for subxt.
 For testing, we can submit a transaction to the bank module to create a new token
 
 - Ensure demo-rollup is running in one window following the steps from the previous section, and that it's caught up
-
-### Install celestia-appd
-
-1. Install Go 1.20 - https://go.dev/doc/install
-2. Clone the repository: `git clone https://github.com/celestiaorg/celestia-app.git`.
-3. `cd celestia-node`
-4. Check out tag v0.13.0 - `git checkout tags/v0.13.0`
-5. `make install`
-
-### Create local keypair
-
-1. `celestia-appd keys add sequencer_keypair` (this will be the sequencer da keypair)
-2. For the arabica testnet, you can get tokens from the arabica-faucet channel in the celestia discord https://discord.gg/celestiacommunity
 
 ### Create bank transaction
 
@@ -122,21 +118,21 @@ For testing, we can submit a transaction to the bank module to create a new toke
 6. Get the token address from the above the command. eg: `sov1jzvd95rjx7xpcdun2h8kyqee2z5r988h3wy4gsdn6ukc5ae04dvsrad3jj`
 7. The binary serialized transaction is created at : `examples/demo-stf/src/bank_cmd/test_data/create_token.dat`
 
-### Submit blob to celestia
+### Use subxt to submit
+
+1. Use the cloned avail repository
+3. Copy the file create_token.dat generated by bank-cmd to root of the repository.
+3. Replace example data with what is generated by bank module in avail-subxt/examples/submit_data.rs: `let example_data = fs::read("create_token.dat").expect("Should have been able to read the file");`
+5. Submit the data by running this command from root: `cargo run --example submit_data`
+
+### Convert blob to hex to submit through explorer
 
 ```
 $ xxd -p examples/demo-stf/src/bank_cmd/test_data/create_token.dat | tr -d '\n'
 01000000b0000000dd02eda4c1d40cdbb13686c58a127b82cb18d36191afd7eddd7e6eaeeee5bc82f139a4ef84f578e86f9f6c920fb32f505a1fa78d11ff4059263dd3037d44d8035b35bae2751216067eef40b8bad501bab50111e8f74dbb1d64c1a629dcf093c74400000001000b000000000000000e000000736f762d746573742d746f6b656ee803000000000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba75980000000000000000
-
-$ celestia-appd tx blob PayForBlobs 736f762d74657374 01000000b000000004ee8ca2c343fe0acd2b72249c48b56351ebfb4b7eef73ddae363880b61380cc23b3ebf15375aa110d7aa84206b1f22c1885b26e980d5e03244cc588e314b004a60b594d5751dc2a326c18923eaa74b48424c0f246733c6c028d7ee16899ad944400000001000b000000000000000e000000736f762d746573742d746f6b656e8813000000000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba75980000000000000000 --from sequencer_keypair --node tcp://limani.celestia-devops.dev:26657 --chain-id=arabica-6 --fees=300utia
-
 ```
 
 - `xxd` is used to convert the serialized file into hex to post as an argument to `celestia-appd`
-- `736f762d74657374` is the namespace `ROLLUP_NAMESPACE` in `examples/demo-rollup/src/main.rs`
-- `01000000b000000004ee8ca2....` is the serialized binary blob in hex
-- `sequencer_keypair` is the keypair created earlier and should also match the value of `SEQUENCER_DA_ADDRESS` in `examples/demo-rollup/src/main.rs`
-- `celestia-appd` asks for confirmation - accept with y/Y
 
 ### Verify the supply of the new token created
 
