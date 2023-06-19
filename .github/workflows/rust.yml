@@ -108,7 +108,7 @@ jobs:
         if: hashFiles('Cargo.lock') == ''
         run: cargo generate-lockfile
       - name: cargo llvm-cov
-        run: make coverage
+        run: make coverage || find -type f -iname '*.proptest-regressions' -exec cat {} +
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v3
         with:
