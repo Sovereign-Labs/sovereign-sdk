@@ -1,4 +1,4 @@
-use proptest::{prelude::any, prop_compose, proptest};
+use proptest::{prelude::any_with, prop_compose, proptest};
 use reqwest::header::CONTENT_TYPE;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::services::da::SlotData;
@@ -248,23 +248,8 @@ fn test_get_events() {
 }
 
 prop_compose! {
-    fn arb_txs(max_events : usize)(tx_hash in proptest::array::uniform32(0_u8..), body_to_save in "[\\w\\d]*", events in proptest::collection::vec(any::<Event>(), 0..max_events),
-receipt in 0..3) -> TransactionReceipt::<i32> {
-    let body_to_save = if !body_to_save.is_empty() { Some(body_to_save.into_bytes())} else { None};
-
-    TransactionReceipt{
-        tx_hash,
-        body_to_save,
-        events,
-        receipt
-    }
-
-}
-}
-
-prop_compose! {
     fn arb_batch(max_txs: usize, max_events: usize)
-    (batch_hash in proptest::array::uniform32(0_u8..), tx_receipts in proptest::collection::vec(arb_txs(max_events), 0..max_txs), inner in 0..3) -> BatchReceipt<i32, i32>{
+    (batch_hash in proptest::array::uniform32(0_u8..), tx_receipts in proptest::collection::vec(any_with::<TransactionReceipt<i32>>(max_events), 0..max_txs), inner in 0..3) -> BatchReceipt<i32, i32>{
 
         BatchReceipt{
             batch_hash,

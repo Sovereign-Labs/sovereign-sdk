@@ -26,6 +26,11 @@ mod sealed {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(
+    any(test, feature = "fuzzing"),
+    derive(proptest_derive::Arbitrary),
+    proptest(params(usize))
+)]
 pub struct TransactionReceipt<R> {
     /// The canonical hash of this transaction
     pub tx_hash: [u8; 32],
@@ -33,6 +38,12 @@ pub struct TransactionReceipt<R> {
     /// in the database
     pub body_to_save: Option<Vec<u8>>,
     /// The events output by this transaction
+    #[cfg_attr(
+        any(test, feature = "fuzzing"),
+        proptest(
+            strategy = "proptest::collection::vec(proptest::prelude::any::<Event>(), 0..(params % 1000) )"
+        )
+    )]
     pub events: Vec<Event>,
     /// Any additional structured data to be saved in the database and served over RPC
     /// For example, this might contain a status code.
@@ -40,6 +51,7 @@ pub struct TransactionReceipt<R> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
     /// The canonical hash of this batch
     pub batch_hash: [u8; 32],
