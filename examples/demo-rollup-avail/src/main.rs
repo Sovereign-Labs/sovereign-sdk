@@ -103,11 +103,11 @@ async fn main() -> Result<(), anyhow::Error> {
         start_rpc_server(methods, address).await;
     });
 
-    let node_client = presence::build_client("ws://127.0.0.1:9944".to_string(), false)
+    let node_client = presence::build_client(rollup_config.da.node_client_url.to_string(), false)
         .await
         .unwrap();
-    let light_client_url = "http://127.0.0.1:7000".to_string();
-    // Initialize the Celestia service using the DaService interface
+    let light_client_url = rollup_config.da.light_client_url.to_string();
+    // Initialize the Avail service using the DaService interface
     let da_service = AvailDaProvider {
         node_client,
         light_client_url,
@@ -144,13 +144,13 @@ async fn main() -> Result<(), anyhow::Error> {
             hex::encode(prev_state_root)
         );
 
-        // Fetch the relevant subset of the next Celestia block
+        // Fetch the relevant subset of the next Avail block
         let filtered_block = da_service.get_finalized_at(height).await?;
         let header = filtered_block.header().clone();
 
-        // For the demo, we create and verify a proof that the data has been extracted from Celestia correctly.
-        // In a production implementation, this logic would only run on the prover node - regular full nodes could
-        // simply download the data from Celestia without extracting and checking a merkle proof here,
+        // For the demo, we create and verify a proof that the data has been extracted from Avail correctly.
+        // The inclusion and completeness proof in the case is not verified by the adapter, but the light client is trusted to have 
+        // verified it already.
         let (blob_txs, inclusion_proof, completeness_proof) =
             da_service.extract_relevant_txs_with_proof(filtered_block.clone());
         assert!(da_verifier

@@ -9,9 +9,15 @@ pub struct RpcConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct DaConfig {
+    pub light_client_url: String, 
+    pub node_client_url: String
+}
+
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RollupConfig {
     pub start_height: u64,
-    pub da: RuntimeConfig,
+    pub da: DaConfig,
     pub runner: RunnerConfig,
     pub rpc_config: RpcConfig,
 }
