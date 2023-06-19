@@ -157,9 +157,8 @@ impl DaService for DaProvider {
     }
 
     // Extract the blob transactions relevant to a particular rollup from a block.
-    // This method is usually (but not always) parameterized by some configuration option,
-    // such as the rollup's namespace on Celestia. If configuration is needed, it should be provided
-    // to the DaProvider struct through its constructor.
+    // NOTE: The avail light client is expected to be run in app specific mode, and hence the 
+    // transactions in the block are already rollup specific.
     fn extract_relevant_txs(
         &self,
         block: Self::FilteredBlock,
@@ -169,10 +168,8 @@ impl DaService for DaProvider {
 
     // Extract the list blob transactions relevant to a particular rollup from a block, along with inclusion and
     // completeness proofs for that set of transactions. The output of this method will be passed to the verifier.
-    //
-    // Like extract_relevant_txs, This method is usually (but not always) parameterized by some configuration option,
-    // such as the rollup's namespace on Celestia. If configuration is needed, it should be provided
-    // to the DaProvider struct through its constructor.
+    // NOTE: The light client here is trusted to have completed DA sampling and verification of inlusion and soundness.
+    // Hence only the block transactions relevant is returned.
     fn extract_relevant_txs_with_proof(
         &self,
         block: Self::FilteredBlock,
