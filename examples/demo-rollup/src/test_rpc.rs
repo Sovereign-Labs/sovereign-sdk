@@ -1,4 +1,4 @@
-use proptest::{prop_compose, proptest};
+use proptest::{prelude::any, prop_compose, proptest};
 use reqwest::header::CONTENT_TYPE;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::services::da::SlotData;
@@ -248,13 +248,7 @@ fn test_get_events() {
 }
 
 prop_compose! {
-    fn arb_event()(key in "\\w*", value in "\\w*") -> Event {
-        Event::new(key.as_str(), value.as_str())
-    }
-}
-
-prop_compose! {
-    fn arb_txs(max_events : usize)(tx_hash in proptest::array::uniform32(0_u8..), body_to_save in "[\\w\\d]*", events in proptest::collection::vec(arb_event(), 0..max_events),
+    fn arb_txs(max_events : usize)(tx_hash in proptest::array::uniform32(0_u8..), body_to_save in "[\\w\\d]*", events in proptest::collection::vec(any::<Event>(), 0..max_events),
 receipt in 0..3) -> TransactionReceipt::<i32> {
     let body_to_save = if !body_to_save.is_empty() { Some(body_to_save.into_bytes())} else { None};
 

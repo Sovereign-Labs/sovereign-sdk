@@ -108,6 +108,7 @@ pub trait StateTransitionFunction<Vm: Zkvm> {
 
 /// A key-value pair representing a change to the rollup state
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 pub struct Event {
     key: EventKey,
     value: EventValue,
@@ -143,6 +144,7 @@ impl Event {
     Serialize,
     Deserialize,
 )]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 pub struct EventKey(Vec<u8>);
 
 impl EventKey {
@@ -152,6 +154,7 @@ impl EventKey {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 pub struct EventValue(Vec<u8>);
 
 impl EventValue {
