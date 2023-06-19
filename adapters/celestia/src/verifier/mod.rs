@@ -142,8 +142,8 @@ impl da::DaVerifier for CelestiaVerifier {
         // Validate that the provided DAH is well-formed
         block_header.validate_dah()?;
         let validity_condition = ChainValidityCondition {
-            prev_hash: block_header.prev_hash().inner().clone(),
-            block_hash: block_header.hash().inner().clone(),
+            prev_hash: *block_header.prev_hash().inner(),
+            block_hash: *block_header.hash().inner(),
         };
 
         // Check the validity and completeness of the rollup row proofs, against the DAH.

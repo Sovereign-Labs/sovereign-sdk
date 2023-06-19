@@ -218,7 +218,7 @@ async fn main() -> Result<(), anyhow::Error> {
         // imposed by celestia (that the Celestia block processed be the next one from the canonical chain).
         // In a real rollup, this check would only be made by light clients.
         let mut checker = CelestiaChainChecker {
-            current_block_hash: header.hash().inner().clone(),
+            current_block_hash: *header.hash().inner(),
         };
         checker.check(&validity_condition)?;
 
