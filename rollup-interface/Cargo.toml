@@ -22,8 +22,9 @@ borsh = { workspace = true, features = ["rc"] }
 serde = { workspace = true }
 bytes = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
+jmt = { workspace = true }
 
-sha2 = { workspace = true }
+sha2 = { workspace = true, optional = true }
 tendermint = "0.32"
 
 anyhow = { workspace = true }
@@ -38,4 +39,4 @@ serde_json = "1"
 [features]
 default = []
 fuzzing = ["proptest"]
-mocks = []
+mocks = ["sha2"]
