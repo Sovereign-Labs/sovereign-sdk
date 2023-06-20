@@ -92,12 +92,15 @@ fn test_tx_revert() {
 }
 
 #[test]
+// In this test single call is invalid, which means it returned error on dispatch,
+// But nonce of the account should be increased.
 fn test_nonce_incremented_on_revert() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
     let value_setter_admin_private_key = DefaultPrivateKey::generate();
     let election_admin_private_key = DefaultPrivateKey::generate();
     let voter = DefaultPrivateKey::generate();
+    let original_nonce = 0;
 
     let config = create_demo_config(
         SEQUENCER_BALANCE,
@@ -131,10 +134,12 @@ fn test_nonce_incremented_on_revert() {
             1,
         );
 
+        // There's only 2 candidates
         let vote_message = Runtime::<DefaultContext>::encode_election_call(
             sov_election::call::CallMessage::Vote(100),
         );
-        let vote_message = Transaction::<DefaultContext>::new_signed_tx(&voter, vote_message, 0);
+        let vote_message =
+            Transaction::<DefaultContext>::new_signed_tx(&voter, vote_message, original_nonce);
 
         let txs = vec![set_candidates_message, add_voter_message, vote_message];
         let txs = txs
@@ -163,7 +168,7 @@ fn test_nonce_incremented_on_revert() {
         let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
-        // We sent 4 vote messages but one of them is invalid and should be reverted.
+        // No votes actually recorded, because there was invalid vote
         let resp = runtime.election.number_of_votes(&mut working_set);
 
         assert_eq!(resp, sov_election::query::GetNbOfVotesResponse::Result(0));
@@ -176,8 +181,8 @@ fn test_nonce_incremented_on_revert() {
             Response::AccountEmpty => 0,
         };
 
-        // Voter should have its nonce implemented
-        assert_eq!(1, nonce);
+        // Voter should have its nonce increased
+        assert_eq!(original_nonce + 1, nonce);
     }
 }
 
