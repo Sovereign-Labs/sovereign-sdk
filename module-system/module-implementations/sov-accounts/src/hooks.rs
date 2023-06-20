@@ -11,24 +11,23 @@ impl<C: Context> TxHooks for Accounts<C> {
 
     fn pre_dispatch_tx_hook(
         &self,
-        tx: Transaction<C>,
+        tx: &Transaction<C>,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<<Self::Context as Spec>::Address> {
         let pub_key = tx.pub_key().clone();
 
-        let acc = match self.accounts.get(&pub_key, working_set) {
+        let account = match self.accounts.get(&pub_key, working_set) {
             Some(acc) => Ok(acc),
             None => self.create_default_account(pub_key, working_set),
         }?;
 
         let tx_nonce = tx.nonce();
-        let acc_nonce = acc.nonce;
+        let account_nonce = account.nonce;
         anyhow::ensure!(
-            acc_nonce == tx_nonce,
-            "Tx bad nonce, expected: {acc_nonce}, but found: {tx_nonce}",
+            account_nonce == tx_nonce,
+            "Tx bad nonce, expected: {account_nonce}, but found: {tx_nonce}",
         );
-
-        Ok(acc.addr)
+        Ok(account.addr)
     }
 
     fn post_dispatch_tx_hook(

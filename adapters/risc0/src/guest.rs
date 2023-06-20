@@ -11,11 +11,19 @@ impl ZkvmGuest for Risc0Guest {
     fn read_from_host<T: serde::de::DeserializeOwned>(&self) -> T {
         env::read()
     }
+
+    fn commit<T: serde::Serialize>(&self, item: &T) {
+        env::commit(item);
+    }
 }
 
 #[cfg(not(target_os = "zkvm"))]
 impl ZkvmGuest for Risc0Guest {
     fn read_from_host<T: serde::de::DeserializeOwned>(&self) -> T {
+        unimplemented!("This method should only be called in zkvm mode")
+    }
+
+    fn commit<T: serde::Serialize>(&self, _item: &T) {
         unimplemented!("This method should only be called in zkvm mode")
     }
 }

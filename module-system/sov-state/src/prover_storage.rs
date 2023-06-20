@@ -1,3 +1,4 @@
+use std::marker::PhantomData;
 use std::{fs, path::Path, sync::Arc};
 
 use crate::config::Config;
@@ -8,12 +9,13 @@ use crate::{
     tree_db::TreeReadLogger,
     MerkleProofSpec, Storage,
 };
-use jmt::{storage::TreeWriter, JellyfishMerkleTree, KeyHash, PhantomHasher, SimpleHasher};
+use jmt::{storage::TreeWriter, JellyfishMerkleTree, KeyHash};
 use sov_db::state_db::StateDB;
+use sov_rollup_interface::crypto::SimpleHasher;
 
 pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,
-    _phantom_hasher: PhantomHasher<S::Hasher>,
+    _phantom_hasher: PhantomData<S::Hasher>,
 }
 
 impl<S: MerkleProofSpec> Clone for ProverStorage<S> {

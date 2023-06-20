@@ -24,8 +24,11 @@ pub enum TxEffect {
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SequencerOutcome {
+    /// Sequencer receives reward amount in defined token and can withdraw its deposit
     Rewarded(u64),
+    /// Sequencer loses its deposit and receives no reward
     Slashed(SlashingReason),
+    /// Batch was ignored, sequencer deposit left untouched.
     Ignored,
 }
 
