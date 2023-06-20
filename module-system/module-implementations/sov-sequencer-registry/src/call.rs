@@ -68,4 +68,8 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
 
         Ok(CallResponse::default())
     }
+
+    fn slash(&self, da_address: Vec<u8>, working_set: &mut WorkingSet<C::Storage>) {
+        self.allowed_sequencers.delete(&da_address, working_set)
+    }
 }

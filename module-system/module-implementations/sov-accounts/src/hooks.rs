@@ -33,7 +33,7 @@ impl<C: Context> TxHooks for Accounts<C> {
     fn post_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
         let mut account = self.accounts.get_or_err(tx.pub_key(), working_set)?;
         account.nonce += 1;
