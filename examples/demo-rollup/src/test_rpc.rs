@@ -1,4 +1,4 @@
-use proptest::{prop_compose, proptest};
+use proptest::{prelude::any_with, prop_compose, proptest};
 use reqwest::header::CONTENT_TYPE;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::services::da::SlotData;
@@ -248,29 +248,8 @@ fn test_get_events() {
 }
 
 prop_compose! {
-    fn arb_event()(key in "\\w*", value in "\\w*") -> Event {
-        Event::new(key.as_str(), value.as_str())
-    }
-}
-
-prop_compose! {
-    fn arb_txs(max_events : usize)(tx_hash in proptest::array::uniform32(0_u8..), body_to_save in "[\\w\\d]*", events in proptest::collection::vec(arb_event(), 0..max_events),
-receipt in 0..3) -> TransactionReceipt::<i32> {
-    let body_to_save = if !body_to_save.is_empty() { Some(body_to_save.into_bytes())} else { None};
-
-    TransactionReceipt{
-        tx_hash,
-        body_to_save,
-        events,
-        receipt
-    }
-
-}
-}
-
-prop_compose! {
     fn arb_batch(max_txs: usize, max_events: usize)
-    (batch_hash in proptest::array::uniform32(0_u8..), tx_receipts in proptest::collection::vec(arb_txs(max_events), 0..max_txs), inner in 0..3) -> BatchReceipt<i32, i32>{
+    (batch_hash in proptest::array::uniform32(0_u8..), tx_receipts in proptest::collection::vec(any_with::<TransactionReceipt<i32>>(max_events), 0..max_txs), inner in 0..3) -> BatchReceipt<i32, i32>{
 
         BatchReceipt{
             batch_hash,
@@ -416,7 +395,7 @@ proptest!(
                    tx_full_data.push(format_tx(curr_tx_num + tx_id, &tx, &tx_id_to_event_range));
                 }
 
-                let _tx_full_data = tx_full_data.join(",");
+                let tx_full_data = tx_full_data.join(",");
 
                 test_helper(vec![TestExpect{
                     data:
@@ -439,12 +418,12 @@ proptest!(
                     expected:
                     format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)}
                     ,
-                    // TODO: Solve this test
-                    // TestExpect{
-                    // data:
-                    // format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Full"],"id":1}}"#),
-                    // expected:
-                    // format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{tx_full_data}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
+                    // TODO #417: Solve this test
+                    TestExpect{
+                    data:
+                    format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Full"],"id":1}}"#),
+                    expected:
+                    format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{tx_full_data}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
                     ]
                     , slots);
 

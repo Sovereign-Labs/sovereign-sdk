@@ -44,4 +44,5 @@ sha2 = { workspace = true }
 reqwest = "0.11"
 tendermint = "0.32"
 tempfile = { workspace = true }
-proptest = "1.0"
+proptest = { workspace = true}
+sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }
