@@ -3,13 +3,13 @@ use bech32::{Error, FromBase32, ToBase32};
 use derive_more::{Display, Into};
 use std::str::FromStr;
 
-pub fn vec_to_bech32(vec: &[u8], hrp: &str) -> Result<String, Error> {
+pub fn vec_to_bech32m(vec: &[u8], hrp: &str) -> Result<String, Error> {
     let data = vec.to_base32();
-    let bech32_addr = bech32::encode(hrp, data, bech32::Variant::Bech32)?;
+    let bech32_addr = bech32::encode(hrp, data, bech32::Variant::Bech32m)?;
     Ok(bech32_addr)
 }
 
-pub fn bech32_to_decoded_vec(bech32_addr: &str) -> Result<(String, Vec<u8>), Error> {
+pub fn bech32m_to_decoded_vec(bech32_addr: &str) -> Result<(String, Vec<u8>), Error> {
     let (hrp, data, _) = bech32::decode(bech32_addr)?;
     let vec = Vec::<u8>::from_base32(&data)?;
     Ok((hrp, vec))
@@ -37,7 +37,7 @@ pub struct AddressBech32 {
 
 impl AddressBech32 {
     pub(crate) fn to_byte_array(&self) -> [u8; 32] {
-        let (_, data) = bech32_to_decoded_vec(&self.value).unwrap();
+        let (_, data) = bech32m_to_decoded_vec(&self.value).unwrap();
 
         if data.len() != 32 {
             panic!("Invalid length {}, should be 32", data.len())
@@ -57,21 +57,21 @@ impl TryFrom<&[u8]> for AddressBech32 {
         if addr.len() != 32 {
             return Err(bech32::Error::InvalidLength);
         }
-        let string = vec_to_bech32(addr, HRP)?;
+        let string = vec_to_bech32m(addr, HRP)?;
         Ok(AddressBech32 { value: string })
     }
 }
 
 impl From<&Address> for AddressBech32 {
     fn from(addr: &Address) -> Self {
-        let string = vec_to_bech32(&addr.addr, HRP).unwrap();
+        let string = vec_to_bech32m(&addr.addr, HRP).unwrap();
         AddressBech32 { value: string }
     }
 }
 
 impl From<Address> for AddressBech32 {
     fn from(addr: Address) -> Self {
-        let string = vec_to_bech32(&addr.addr, HRP).unwrap();
+        let string = vec_to_bech32m(&addr.addr, HRP).unwrap();
         AddressBech32 { value: string }
     }
 }
@@ -96,7 +96,7 @@ impl FromStr for AddressBech32 {
     type Err = Bech32ParseError;
 
     fn from_str(s: &str) -> Result<Self, Bech32ParseError> {
-        let (hrp, _) = bech32_to_decoded_vec(s)?;
+        let (hrp, _) = bech32m_to_decoded_vec(s)?;
 
         if HRP != hrp {
             return Err(Bech32ParseError::WrongHPR(hrp));
