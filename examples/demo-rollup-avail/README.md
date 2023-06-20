@@ -1,6 +1,6 @@
 # Demo Rollup
 
-This is a demo full node running a simple Sovereign SDK rollup on [Celestia](https://celestia.org/).
+This is a demo full node running a simple Sovereign SDK rollup on [Avail](https://www.availproject.org/).
 
 ## What is it?
 
@@ -76,13 +76,12 @@ circumstances.
 ### Set up Avail node
 
 The current prototype runs against Avail-node version `v1.6.0`. To get started, you'll need to run 
-a celestia node locally. 
+an avail node locally. 
 
 1. Clone the repository: `git clone https://github.com/availproject/avail.git`.
 2. `cd avail`
 3. Checkout version v1.6.0: `git checkout v1.6.0`.
-4. Checkout the code at v0.7.1: `git checkout tags/v0.7.1`
-5. Run the node with command: `cargo run --release -p data-avail -- --dev --tmp`
+4. Run the node with command: `cargo run --release -p data-avail -- --dev --tmp`
 
 For more details check instructions at: https://github.com/availproject/avail/tree/v1.6.0#readme
 
@@ -93,13 +92,13 @@ For more details check instructions at: https://github.com/availproject/avail/tr
 5. Run the node: `cargo run --release`
 6. Clone the light client repository:  `git clone https://github.com/availproject/avail-light.git` 
 7. Checkout develop branch: `git checkout develop`
-9. Create config.yaml with following content:
+8. Create config.yaml with following content:
 ```
 app_id = 1
 libp2p_bootstraps = [["{peer-id}", "/ip4/127.0.0.1/udp/39000"]]
 ```
 Replace {peer-id} in config with ID from bootstrap logs and ensure app id is correct as adapter expects light client to be running in app specific mode.
-10. Run the light client with command: `run cargo run --release`
+9. Run the light client with command: `run cargo run --release`.
 
 ### Submitting transactions
 
@@ -132,7 +131,7 @@ $ xxd -p examples/demo-stf/src/bank_cmd/test_data/create_token.dat | tr -d '\n'
 01000000b0000000dd02eda4c1d40cdbb13686c58a127b82cb18d36191afd7eddd7e6eaeeee5bc82f139a4ef84f578e86f9f6c920fb32f505a1fa78d11ff4059263dd3037d44d8035b35bae2751216067eef40b8bad501bab50111e8f74dbb1d64c1a629dcf093c74400000001000b000000000000000e000000736f762d746573742d746f6b656ee803000000000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba75980000000000000000
 ```
 
-- `xxd` is used to convert the serialized file into hex to post as an argument to `celestia-appd`
+- `xxd` is used to convert the serialized file into hex to post as an argument to other tools like the explorer.
 
 ### Verify the supply of the new token created
 

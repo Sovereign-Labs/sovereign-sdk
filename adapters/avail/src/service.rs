@@ -158,7 +158,7 @@ impl DaService for DaProvider {
 
     // Extract the blob transactions relevant to a particular rollup from a block.
     // NOTE: The avail light client is expected to be run in app specific mode, and hence the 
-    // transactions in the block are already rollup specific.
+    // transactions in the block are already filtered and retrieved by light client.
     fn extract_relevant_txs(
         &self,
         block: Self::FilteredBlock,
@@ -168,7 +168,7 @@ impl DaService for DaProvider {
 
     // Extract the list blob transactions relevant to a particular rollup from a block, along with inclusion and
     // completeness proofs for that set of transactions. The output of this method will be passed to the verifier.
-    // NOTE: The light client here is trusted to have completed DA sampling and verification of inlusion and soundness.
+    // NOTE: The light client here is trusted to have completed DA sampling and verification of inclusion and soundness.
     // Hence only the block transactions relevant is returned.
     fn extract_relevant_txs_with_proof(
         &self,
