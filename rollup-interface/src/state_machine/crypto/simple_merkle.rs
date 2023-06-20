@@ -33,21 +33,21 @@ pub trait MerkleHasher {
 /// domain-separated RC6962-style merkle trees.
 macro_rules! impl_merkle_hasher(
 	($name:ty) => {
-		impl crate::crypto::simple_merkle::MerkleHasher for $name {
+		impl $crate::crypto::simple_merkle::MerkleHasher for $name {
 			fn empty_root(&mut self) -> [u8; 32] {
 				<$name as SimpleHasher>::new().finalize()
 			}
 
 			fn leaf_hash(&mut self, bytes: impl AsRef<[u8]>) -> [u8; 32] {
 				let mut hasher = <$name as SimpleHasher>::new();
-				hasher.update(&crate::crypto::simple_merkle::DEFAULT_LEAF_DOMAIN_SEPARATOR);
+				hasher.update(& $crate::crypto::simple_merkle::DEFAULT_LEAF_DOMAIN_SEPARATOR);
 				hasher.update(bytes.as_ref());
 				hasher.finalize()
 			}
 
 			fn inner_hash(&mut self, left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
 				let mut hasher = <$name as SimpleHasher>::new();
-				hasher.update(&crate::crypto::simple_merkle::DEFAULT_INTERNAL_DOMAIN_SEPARATOR);
+				hasher.update(& $crate::crypto::simple_merkle::DEFAULT_INTERNAL_DOMAIN_SEPARATOR);
 				hasher.update(left);
 				hasher.update(right);
 				hasher.finalize()

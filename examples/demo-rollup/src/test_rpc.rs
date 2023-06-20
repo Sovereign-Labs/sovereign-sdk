@@ -248,8 +248,10 @@ fn test_get_events() {
 }
 
 fn batch_receipt_without_hasher() -> impl Strategy<Value = BatchReceipt<u32, u32>> {
-    let mut args: BatchReceiptStrategyArgs = Default::default();
-    args.hasher = None;
+    let mut args = BatchReceiptStrategyArgs {
+        hasher: None,
+        ..Default::default()
+    };
     args.transaction_strategy_args.hasher = None;
     any_with::<BatchReceipt<u32, u32>>(args)
 }

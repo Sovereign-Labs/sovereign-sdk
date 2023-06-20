@@ -18,7 +18,7 @@ pub trait FuzzHasher {
 
 /// The default hasher to use for fuzzing
 fn default_fuzz_hasher() -> Box<dyn FuzzHasher> {
-    Box::new(sha2::Sha256::new())
+    Box::new(::sha2::Sha256::new())
 }
 
 impl<T: SimpleHasher + Clone> FuzzHasher for T {
@@ -32,6 +32,7 @@ impl<T: SimpleHasher + Clone> FuzzHasher for T {
 /// A special merkle hasher used only for fuzz tests. This hasher sacrifices some
 /// efficiency for object safety.
 struct FuzzMerkleHasher<'a> {
+    #[allow(clippy::borrowed_box)]
     hasher: &'a Box<dyn FuzzHasher>,
 }
 
