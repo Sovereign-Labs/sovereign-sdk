@@ -205,7 +205,6 @@ impl LedgerDB {
         &self,
         data_to_commit: SlotCommit<S, B, T>,
     ) -> Result<(), anyhow::Error> {
-        // TODO: expose a batch API on the db to commit everything atomically
         // Create a scope to ensure that the lock is released before we commit to the db
         let mut current_item_numbers = {
             let mut next_item_numbers = self.next_item_numbers.lock().unwrap();
