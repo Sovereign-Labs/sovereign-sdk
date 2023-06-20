@@ -159,7 +159,9 @@ pub trait Spec {
         + Serialize
         + for<'a> Deserialize<'a>
         + Send
-        + Sync;
+        + Sync
+        + 'static + FromStr<Err = anyhow::Error>;
+
 
     #[cfg(not(feature = "native"))]
     type PublicKey: borsh::BorshDeserialize
@@ -180,7 +182,10 @@ pub trait Spec {
         + Eq
         + Clone
         + Debug
-        + Signature<PublicKey = Self::PublicKey>;
+        + Signature<PublicKey = Self::PublicKey>
+        + Send
+        + Sync
+        + 'static + FromStr<Err = anyhow::Error>;
 
     /// A structure containing the non-deterministic inputs from the prover to the zk-circuit
     type Witness: Witness;

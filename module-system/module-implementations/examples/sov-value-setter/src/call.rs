@@ -4,6 +4,8 @@ use sov_state::WorkingSet;
 use std::fmt::Debug;
 use thiserror::Error;
 
+use sov_modules_macros::CustomParser;
+
 use super::ValueSetter;
 
 /// This enumeration represents the available call messages for interacting with the `sov-value-setter` module.
@@ -12,8 +14,14 @@ use super::ValueSetter;
     derive(serde::Serialize),
     derive(serde::Deserialize)
 )]
+#[cfg_attr(
+feature = "native",
+derive(CustomParser),
+module_name = "ValueSetter"
+)]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage {
+    /// value to set
     SetValue(u32),
 }
 

@@ -62,6 +62,7 @@ use clap::Parser;
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
+    #[cli_skip]
     pub sequencer: sov_sequencer_registry::Sequencer<C>,
     pub bank: sov_bank::Bank<C>,
     pub election: sov_election::Election<C>,

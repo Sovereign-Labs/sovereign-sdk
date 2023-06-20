@@ -4,12 +4,19 @@ use sov_modules_api::CallResponse;
 use sov_modules_api::Signature;
 use sov_state::WorkingSet;
 
+use sov_modules_macros::CustomParser;
+
 pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
     derive(serde::Deserialize)
+)]
+#[cfg_attr(
+feature = "native",
+derive(CustomParser),
+module_name = "Accounts"
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: sov_modules_api::Context> {

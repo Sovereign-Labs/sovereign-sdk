@@ -8,6 +8,8 @@ use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use std::str::FromStr;
+
 #[cfg(feature = "native")]
 pub mod private_key {
 
@@ -180,4 +182,27 @@ fn map_error(e: ed25519_dalek::SignatureError) -> std::io::Error {
 #[cfg(not(feature = "native"))]
 fn map_error(_e: ed25519_dalek::SignatureError) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::Other, "Signature error")
+}
+
+
+impl FromStr for DefaultPublicKey {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let bytes = hex::decode(s)?;
+        let pub_key = DalekPublicKey::from_bytes(&bytes)
+            .map_err(|_| anyhow::anyhow!("Invalid public key"))?;
+        Ok(DefaultPublicKey { pub_key })
+    }
+}
+
+impl FromStr for DefaultSignature {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let bytes = hex::decode(s)?;
+        let msg_sig = DalekSignature::from_bytes(&bytes)
+            .map_err(|_| anyhow::anyhow!("Invalid signature"))?;
+        Ok(DefaultSignature { msg_sig })
+    }
 }
