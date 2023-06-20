@@ -4,6 +4,8 @@ use sov_state::{ProverStorage, WorkingSet};
 mod helpers;
 
 use helpers::*;
+use sov_modules_api::Address;
+use sov_rollup_interface::mocks::TestBlob;
 
 #[test]
 fn test_sequencer() {
@@ -22,9 +24,15 @@ fn test_sequencer() {
 
     // Lock
     {
+        let mut test_blob = TestBlob::new(
+            Vec::new(),
+            Address::from(GENESIS_SEQUENCER_DA_ADDRESS),
+            [0_u8; 32],
+        );
+
         test_sequencer
             .registry
-            .begin_blob_hook(&GENESIS_SEQUENCER_DA_ADDRESS, &[], working_set)
+            .begin_blob_hook(&mut test_blob, working_set)
             .unwrap();
 
         let resp = test_sequencer.query_balance_via_bank(working_set);
@@ -49,11 +57,15 @@ fn test_sequencer() {
 
     // Unknown sequencer
     {
-        let result = test_sequencer.registry.begin_blob_hook(
-            &UNKNOWN_SEQUENCER_DA_ADDRESS,
-            &[],
-            working_set,
+        let mut test_blob = TestBlob::new(
+            Vec::new(),
+            Address::from(UNKNOWN_SEQUENCER_DA_ADDRESS),
+            [0_u8; 32],
         );
+
+        let result = test_sequencer
+            .registry
+            .begin_blob_hook(&mut test_blob, working_set);
         assert!(result.is_err());
         assert_eq!("Invalid next sequencer.", result.err().unwrap().to_string());
     }

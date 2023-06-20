@@ -46,7 +46,9 @@ impl<C: Context> ApplyBlobHooks for Runtime<C> {
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
         match result {
-            SequencerOutcome::Rewarded(reward) => self.sequencer.end_blob_hook(reward, working_set),
+            SequencerOutcome::Rewarded(reward) => {
+                self.sequencer_registry.end_blob_hook(reward, working_set)
+            }
             SequencerOutcome::Ignored => self.sequencer_registry.end_blob_hook(0, working_set),
             SequencerOutcome::Slashed(_) => Ok(()),
         }
