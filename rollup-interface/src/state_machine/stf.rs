@@ -2,6 +2,9 @@ use crate::{da::BlobTransactionTrait, zk::traits::Zkvm};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+#[cfg(any(test, feature = "fuzzing"))]
+pub mod fuzzing;
+
 /// The configuration of a full node of the rollup which creates zk proofs.
 pub struct ProverConfig;
 /// The configuration used to initialize the "Verifier" of the state transition function
@@ -26,11 +29,6 @@ mod sealed {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(
-    any(test, feature = "fuzzing"),
-    derive(proptest_derive::Arbitrary),
-    proptest(params(usize))
-)]
 pub struct TransactionReceipt<R> {
     /// The canonical hash of this transaction
     pub tx_hash: [u8; 32],
@@ -38,12 +36,6 @@ pub struct TransactionReceipt<R> {
     /// in the database
     pub body_to_save: Option<Vec<u8>>,
     /// The events output by this transaction
-    #[cfg_attr(
-        any(test, feature = "fuzzing"),
-        proptest(
-            strategy = "proptest::collection::vec(proptest::prelude::any::<Event>(), 0..(params % 1000) )"
-        )
-    )]
     pub events: Vec<Event>,
     /// Any additional structured data to be saved in the database and served over RPC
     /// For example, this might contain a status code.
@@ -51,11 +43,17 @@ pub struct TransactionReceipt<R> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
+// #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
     /// The canonical hash of this batch
     pub batch_hash: [u8; 32],
     /// The receipt of each transaction in the batch
+    // #[cfg_attr(
+    //     any(test, feature = "fuzzing"),
+    //     proptest(
+    //         strategy = "proptest::collection::vec(proptest::prelude::any::<TransactionReceipt<TxReceiptContents>>(), 1..10)"
+    //     )
+    // )]
     pub tx_receipts: Vec<TransactionReceipt<TxReceiptContents>>,
     /// Any additional structured data to be saved in the database and served over RPC
     pub inner: BatchReceiptContents,

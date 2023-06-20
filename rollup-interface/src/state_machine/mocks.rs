@@ -7,12 +7,12 @@ use crate::{
 };
 use anyhow::{ensure, Error};
 use borsh::{BorshDeserialize, BorshSerialize};
+use sha2::Digest;
 
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::io::Write;
-use tendermint::crypto::Sha256;
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct MockCodeCommitment(pub [u8; 32]);
@@ -196,7 +196,7 @@ impl CanonicalHash for TestBlockHeader {
     type Output = TestHash;
 
     fn hash(&self) -> Self::Output {
-        TestHash(sha2::Sha256::digest(self.prev_hash.0))
+        TestHash(sha2::Sha256::digest(self.prev_hash.0).into())
     }
 }
 
