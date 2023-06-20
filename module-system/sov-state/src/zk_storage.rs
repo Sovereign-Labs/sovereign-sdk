@@ -1,7 +1,8 @@
-use std::sync::Arc;
+use std::{marker::PhantomData, sync::Arc};
 
 use crate::witness::{TreeWitnessReader, Witness};
-use jmt::{JellyfishMerkleTree, KeyHash, PhantomHasher, SimpleHasher, Version};
+use jmt::{JellyfishMerkleTree, KeyHash, Version};
+use sov_rollup_interface::crypto::SimpleHasher;
 
 use crate::{
     internal_cache::OrderedReadsAndWrites,
@@ -11,7 +12,7 @@ use crate::{
 
 pub struct ZkStorage<S: MerkleProofSpec> {
     prev_state_root: [u8; 32],
-    _phantom_hasher: PhantomHasher<S::Hasher>,
+    _phantom_hasher: PhantomData<S::Hasher>,
 }
 
 impl<S: MerkleProofSpec> Clone for ZkStorage<S> {

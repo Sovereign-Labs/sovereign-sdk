@@ -22,9 +22,9 @@ borsh = { workspace = true, features = ["rc"] }
 serde = { workspace = true }
 bytes = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
+jmt = { workspace = true }
 
-sha2 = { workspace = true }
-tendermint = "0.32"
+sha2 = { workspace = true, optional = true }
 
 anyhow = { workspace = true }
 thiserror = { workspace = true }
@@ -40,5 +40,5 @@ proptest-derive =  { workspace = true }
 
 [features]
 default = []
-fuzzing = ["proptest", "proptest-derive"]
-mocks = []
+fuzzing = ["proptest", "proptest-derive", "sha2"]
+mocks = ["sha2"]

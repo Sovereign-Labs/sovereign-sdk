@@ -1,6 +1,6 @@
+pub mod crypto;
 pub mod da;
 pub mod stf;
-
 pub mod zk;
 
 pub use bytes::{Buf, BufMut, Bytes, BytesMut};

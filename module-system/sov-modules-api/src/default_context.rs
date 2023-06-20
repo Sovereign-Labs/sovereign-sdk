@@ -1,7 +1,7 @@
 use crate::default_signature::{DefaultPublicKey, DefaultSignature};
 use crate::{Address, AddressTrait, Context, PublicKey, Spec};
+use sov_rollup_interface::crypto::SimpleHasher;
 
-use jmt::SimpleHasher;
 #[cfg(feature = "native")]
 use serde::{Deserialize, Serialize};
 use sov_state::DefaultStorageSpec;

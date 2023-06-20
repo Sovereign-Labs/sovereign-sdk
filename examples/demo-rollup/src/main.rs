@@ -16,14 +16,17 @@ use demo_stf::runtime::GenesisConfig;
 use jsonrpsee::core::server::rpc_module::Methods;
 use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
-use jupiter::verifier::CelestiaVerifier;
 use jupiter::verifier::RollupParams;
+use jupiter::verifier::{CelestiaVerifier, ChainValidityCondition};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
+use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_rollup_interface::traits::CanonicalHash;
+use sov_rollup_interface::zk::traits::ValidityConditionChecker;
 use sov_state::Storage;
 use std::env;
 use std::net::SocketAddr;
@@ -72,6 +75,22 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
         &sequencer_private_key,
         &sequencer_private_key,
     )
+}
+
+pub struct CelestiaChainChecker {
+    current_block_hash: [u8; 32],
+}
+
+impl ValidityConditionChecker<ChainValidityCondition> for CelestiaChainChecker {
+    type Error = anyhow::Error;
+
+    fn check(&mut self, condition: &ChainValidityCondition) -> Result<(), anyhow::Error> {
+        anyhow::ensure!(
+            condition.block_hash == self.current_block_hash,
+            "Invalid block hash"
+        );
+        Ok(())
+    }
 }
 
 #[tokio::main]
@@ -188,9 +207,22 @@ async fn main() -> Result<(), anyhow::Error> {
         let (inclusion_proof, completeness_proof) =
             da_service.get_extraction_proof(&filtered_block, &blob_txs);
 
-        assert!(da_verifier
-            .verify_relevant_tx_list(header, &blob_txs, inclusion_proof, completeness_proof)
-            .is_ok());
+        let validity_condition = da_verifier
+            .verify_relevant_tx_list::<NoOpHasher>(
+                header,
+                &blob_txs,
+                inclusion_proof,
+                completeness_proof,
+            )
+            .expect("Failed to verify relevant tx list but prover is honest");
+
+        // For demonstration purposes, we also show how you would check the extra validity condition
+        // imposed by celestia (that the Celestia block processed be the next one from the canonical chain).
+        // In a real rollup, this check would only be made by light clients.
+        let mut checker = CelestiaChainChecker {
+            current_block_hash: *header.hash().inner(),
+        };
+        checker.check(&validity_condition)?;
 
         // Store the resulting receipts in the ledger database
         ledger_db.commit_slot(data_to_commit)?;
