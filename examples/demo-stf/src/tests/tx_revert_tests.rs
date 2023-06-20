@@ -146,7 +146,7 @@ fn test_nonce_incremented_on_revert() {
 
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
+            &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         );
 

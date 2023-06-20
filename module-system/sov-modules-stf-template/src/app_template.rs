@@ -69,12 +69,10 @@ where
         }
     }
 
-    pub(crate) fn apply_batch(
+    pub(crate) fn apply_blob(
         &mut self,
-        sequencer: &[u8],
-        batch: impl Buf,
+        blob: &mut impl BlobTransactionTrait,
     ) -> ApplyBatchResult<BatchReceipt<SequencerOutcome, TxEffect>> {
-        let batch_data_and_hash = BatchDataAndHash::new::<C>(batch);
         debug!(
             "Applying batch from sequencer: 0x{}",
             hex::encode(blob.sender())
@@ -97,12 +95,13 @@ where
             self.checkpoint = Some(batch_workspace.revert());
             return Err(ApplyBatchError::Ignored(blob.hash()));
         }
+        let blob_hash = blob.hash();
         batch_workspace = batch_workspace.checkpoint().to_revertable();
 
         // TODO: don't ignore these events: https://github.com/Sovereign-Labs/sovereign/issues/350
         let _ = batch_workspace.take_events();
 
-        let (txs, messages) = match self.pre_process_batch(&batch_data_and_hash) {
+        let (txs, messages) = match self.pre_process_batch(blob.data_mut()) {
             Ok((txs, messages)) => (txs, messages),
             Err(slashing_reason) => {
                 // Explicitly revert on slashing, even though nothing has changed in pre_process.
@@ -123,7 +122,7 @@ where
                 };
 
                 return Err(ApplyBatchError::Slashed {
-                    hash: batch_data_and_hash.hash,
+                    hash: blob_hash,
                     reason: slashing_reason,
                 });
             }
@@ -220,7 +219,7 @@ where
     // Do all stateless checks and data formatting, that can be results in sequencer slashing
     fn pre_process_batch(
         &self,
-        batch_data_and_hash: &BatchDataAndHash,
+        blob_data: &mut CountedBufReader<impl Buf>,
     ) -> Result<
         (
             Vec<TransactionAndRawHash<C>>,
@@ -228,7 +227,7 @@ where
         ),
         SlashingReason,
     > {
-        let batch = self.deserialize_batch(&mut &batch_data_and_hash.data[..])?;
+        let batch = self.deserialize_batch(blob_data)?;
         debug!("Deserialized batch with {} txs", batch.txs.len());
 
         // Run the stateless verification, since it is stateless we don't commit.
@@ -240,8 +239,11 @@ where
     }
 
     // Attempt to deserialize batch, error results in sequencer slashing.
-    fn deserialize_batch(&self, raw_batch: &mut &[u8]) -> Result<Batch, SlashingReason> {
-        match Batch::deserialize(raw_batch) {
+    fn deserialize_batch(
+        &self,
+        blob_data: &mut CountedBufReader<impl Buf>,
+    ) -> Result<Batch, SlashingReason> {
+        match Batch::deserialize_reader(blob_data) {
             Ok(batch) => Ok(batch),
             Err(e) => {
                 error!(
