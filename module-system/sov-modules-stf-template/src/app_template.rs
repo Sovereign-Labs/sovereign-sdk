@@ -91,11 +91,10 @@ where
                 "Error: The batch was rejected by the 'begin_blob_hook' hook. Skipping batch without slashing the sequencer: {}",
                 e
             );
-            // TODO: Should it commit?
+            // TODO: will be covered in https://github.com/Sovereign-Labs/sovereign-sdk/issues/421
             self.checkpoint = Some(batch_workspace.revert());
             return Err(ApplyBatchError::Ignored(blob.hash()));
         }
-        let blob_hash = blob.hash();
         batch_workspace = batch_workspace.checkpoint().to_revertable();
 
         // TODO: don't ignore these events: https://github.com/Sovereign-Labs/sovereign/issues/350
@@ -112,7 +111,7 @@ where
                     .end_blob_hook(sequencer_outcome, &mut batch_workspace)
                 {
                     Ok(()) => {
-                        // TODO:Should we save changes after end_blob_hook
+                        // TODO: will be covered in https://github.com/Sovereign-Labs/sovereign-sdk/issues/421
                         self.checkpoint = Some(batch_workspace.checkpoint());
                     }
                     Err(e) => {
@@ -122,7 +121,7 @@ where
                 };
 
                 return Err(ApplyBatchError::Slashed {
-                    hash: blob_hash,
+                    hash: blob.hash(),
                     reason: slashing_reason,
                 });
             }
@@ -193,6 +192,7 @@ where
             // We commit after events have been extracted into receipt.
             batch_workspace = batch_workspace.checkpoint().to_revertable();
 
+            // TODO: `panic` will be covered in https://github.com/Sovereign-Labs/sovereign-sdk/issues/421
             self.runtime
                 .post_dispatch_tx_hook(&tx, &mut batch_workspace)
                 .expect("Impossible happened: error in post_dispatch_tx_hook");
@@ -205,12 +205,13 @@ where
             .runtime
             .end_blob_hook(sequencer_outcome, &mut batch_workspace)
         {
+            // TODO: will be covered in https://github.com/Sovereign-Labs/sovereign-sdk/issues/421
             error!("Failed on `end_blob_hook`: {}", e);
         };
 
         self.checkpoint = Some(batch_workspace.checkpoint());
         Ok(BatchReceipt {
-            batch_hash: blob_hash,
+            batch_hash: blob.hash(),
             tx_receipts,
             inner: sequencer_outcome,
         })
