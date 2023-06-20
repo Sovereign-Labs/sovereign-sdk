@@ -1,7 +1,7 @@
-use proptest::{prelude::any_with, prop_compose, proptest};
+use proptest::{prelude::any_with, prop_compose, proptest, strategy::Strategy};
 use reqwest::header::CONTENT_TYPE;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_rollup_interface::services::da::SlotData;
+use sov_rollup_interface::{services::da::SlotData, stf::fuzzing::BatchReceiptStrategyArgs};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
@@ -39,13 +39,13 @@ async fn query_test_helper(test_queries: Vec<TestExpect>, rpc_config: RpcConfig)
     }
 }
 
-fn populate_ledger(ledger_db: &mut LedgerDB, slots: Vec<SlotCommit<TestBlock, i32, i32>>) {
+fn populate_ledger(ledger_db: &mut LedgerDB, slots: Vec<SlotCommit<TestBlock, u32, u32>>) {
     for slot in slots {
         ledger_db.commit_slot(slot).unwrap();
     }
 }
 
-fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, i32, i32>>) {
+fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u32, u32>>) {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_io()
         .enable_time()
@@ -64,7 +64,7 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, i
 
         populate_ledger(&mut ledger_db, slots);
 
-        let ledger_rpc_module = ledger_rpc::get_ledger_rpc::<i32, i32>(ledger_db.clone());
+        let ledger_rpc_module = ledger_rpc::get_ledger_rpc::<u32, u32>(ledger_db.clone());
 
         rt.spawn(async move {
             let server = jsonrpsee::server::ServerBuilder::default()
@@ -97,7 +97,7 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, i
 }
 
 fn regular_test_helper(data: String, expected: &str) {
-    let mut slots: Vec<SlotCommit<TestBlock, i32, i32>> = vec![SlotCommit::new(TestBlock {
+    let mut slots: Vec<SlotCommit<TestBlock, u32, u32>> = vec![SlotCommit::new(TestBlock {
         curr_hash: sha2::Sha256::digest(b"slot_data"),
         header: TestBlockHeader {
             prev_hash: TestHash(sha2::Sha256::digest(b"prev_header")),
@@ -108,13 +108,13 @@ fn regular_test_helper(data: String, expected: &str) {
         BatchReceipt {
             batch_hash: ::sha2::Sha256::digest(b"batch_receipt"),
             tx_receipts: vec![
-                TransactionReceipt::<i32> {
+                TransactionReceipt::<u32> {
                     tx_hash: ::sha2::Sha256::digest(b"tx1"),
                     body_to_save: Some(b"tx1 body".to_vec()),
                     events: vec![],
                     receipt: 0,
                 },
-                TransactionReceipt::<i32> {
+                TransactionReceipt::<u32> {
                     tx_hash: ::sha2::Sha256::digest(b"tx2"),
                     body_to_save: Some(b"tx2 body".to_vec()),
                     events: vec![
@@ -128,7 +128,7 @@ fn regular_test_helper(data: String, expected: &str) {
         },
         BatchReceipt {
             batch_hash: ::sha2::Sha256::digest(b"batch_receipt2"),
-            tx_receipts: vec![TransactionReceipt::<i32> {
+            tx_receipts: vec![TransactionReceipt::<u32> {
                 tx_hash: ::sha2::Sha256::digest(b"tx1"),
                 body_to_save: Some(b"tx1 body".to_vec()),
                 events: vec![],
@@ -247,30 +247,25 @@ fn test_get_events() {
     regular_test_helper(data, expected);
 }
 
-prop_compose! {
-    fn arb_batch(max_txs: usize, max_events: usize)
-    (batch_hash in proptest::array::uniform32(0_u8..), tx_receipts in proptest::collection::vec(any_with::<TransactionReceipt<i32>>(max_events), 0..max_txs), inner in 0..3) -> BatchReceipt<i32, i32>{
-
-        BatchReceipt{
-            batch_hash,
-            tx_receipts,
-            inner
-        }
-    }
+fn batch_receipt_without_hasher() -> impl Strategy<Value = BatchReceipt<u32, u32>> {
+    let mut args: BatchReceiptStrategyArgs = Default::default();
+    args.hasher = None;
+    args.transaction_strategy_args.hasher = None;
+    any_with::<BatchReceipt<u32, u32>>(args)
 }
 
 prop_compose! {
-    fn arb_batches_and_slot_hash(max_batch : usize, max_txs: usize, max_events: usize)
-    (slot_hash in proptest::array::uniform32(0_u8..), batches in proptest::collection::vec(arb_batch(max_txs, max_events), 1..max_batch)) ->
-     (Vec<BatchReceipt<i32, i32>>, [u8;32]){
+    fn arb_batches_and_slot_hash(max_batches : usize)
+    (slot_hash in proptest::array::uniform32(0_u8..), batches in proptest::collection::vec(batch_receipt_without_hasher(), 1..max_batches)) ->
+     (Vec<BatchReceipt<u32, u32>>, [u8;32]){
 
         (batches, slot_hash)
     }
 }
 
 prop_compose! {
-    fn arb_slots(max_slots : usize, max_batch: usize, max_txs: usize, max_events: usize)
-    (batches_and_hashes in proptest::collection::vec(arb_batches_and_slot_hash(max_batch, max_txs, max_events), 1..max_slots)) -> (Vec<SlotCommit<TestBlock, i32, i32>>, HashMap<usize, (usize, usize)>, usize)
+    fn arb_slots(max_slots : usize, max_batches: usize)
+    (batches_and_hashes in proptest::collection::vec(arb_batches_and_slot_hash(max_batches), 1..max_slots)) -> (Vec<SlotCommit<TestBlock, u32, u32>>, HashMap<usize, (usize, usize)>, usize)
     {
         let mut slots = std::vec::Vec::with_capacity(max_slots);
 
@@ -316,7 +311,7 @@ prop_compose! {
 
 fn format_tx(
     tx_id: usize,
-    tx: &TransactionReceipt<i32>,
+    tx: &TransactionReceipt<u32>,
     tx_id_to_event_range: &HashMap<usize, (usize, usize)>,
 ) -> String {
     let (event_range_begin, event_range_end) = tx_id_to_event_range.get(&(tx_id)).unwrap();
@@ -338,7 +333,7 @@ fn format_tx(
 
 proptest!(
     #[test]
-    fn proptest_get_head((slots, _, total_num_batches) in arb_slots(10, 10, 10, 10)){
+    fn proptest_get_head((slots, _, total_num_batches) in arb_slots(10, 10)){
         let num_slots = slots.len();
         let last_slot = slots.last().unwrap();
 
@@ -355,7 +350,7 @@ proptest!(
 
 
     #[test]
-    fn proptest_get_batches((slots, tx_id_to_event_range, _total_num_batches) in arb_slots(10, 10, 10, 10), random_batch_num in 1..100){
+    fn proptest_get_batches((slots, tx_id_to_event_range, _total_num_batches) in arb_slots(10, 10), random_batch_num in 1..100){
         let mut curr_batch_num = 1;
         let mut curr_tx_num = 1;
 
@@ -444,7 +439,7 @@ proptest!(
     }
 
     #[test]
-    fn proptest_get_transactions((slots, tx_id_to_event_range, _total_num_batches) in arb_slots(10, 10, 10, 10), random_tx_num in 1..1000){
+    fn proptest_get_transactions((slots, tx_id_to_event_range, _total_num_batches) in arb_slots(10, 10), random_tx_num in 1..1000){
         let mut curr_tx_num = 1;
 
         let random_tx_num_usize = usize::try_from(random_tx_num).unwrap();
@@ -504,7 +499,7 @@ proptest!(
     }
 
     #[test]
-    fn proptest_get_events((slots, tx_id_to_event_range, _total_num_batches) in arb_slots(10, 10, 10, 10), random_event_num in 1..10000){
+    fn proptest_get_events((slots, tx_id_to_event_range, _total_num_batches) in arb_slots(10, 10), random_event_num in 1..10000){
         let mut curr_tx_num = 1;
 
         let random_event_num_usize = usize::try_from(random_event_num).unwrap();
