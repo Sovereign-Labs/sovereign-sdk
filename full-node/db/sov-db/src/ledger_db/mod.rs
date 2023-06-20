@@ -9,7 +9,7 @@ use sov_rollup_interface::{
     services::da::SlotData,
     stf::{BatchReceipt, Event},
 };
-use sov_schema_db::{Schema, DB};
+use sov_schema_db::{Schema, SchemaBatch, DB};
 
 use crate::{
     rocks_db_config::gen_rocksdb_options,
@@ -158,27 +158,34 @@ impl LedgerDB {
         Ok(out)
     }
 
-    fn put_slot(&self, slot: &StoredSlot, slot_number: &SlotNumber) -> Result<(), anyhow::Error> {
-        self.db.put::<SlotByNumber>(slot_number, slot)?;
-        self.db.put::<SlotByHash>(&slot.hash, slot_number)
+    fn put_slot(
+        &self,
+        slot: &StoredSlot,
+        slot_number: &SlotNumber,
+        schema_batch: &mut SchemaBatch,
+    ) -> Result<(), anyhow::Error> {
+        schema_batch.put::<SlotByNumber>(slot_number, slot)?;
+        schema_batch.put::<SlotByHash>(&slot.hash, slot_number)
     }
 
     fn put_batch(
         &self,
         batch: &StoredBatch,
         batch_number: &BatchNumber,
+        schema_batch: &mut SchemaBatch,
     ) -> Result<(), anyhow::Error> {
-        self.db.put::<BatchByNumber>(batch_number, batch)?;
-        self.db.put::<BatchByHash>(&batch.hash, batch_number)
+        schema_batch.put::<BatchByNumber>(batch_number, batch)?;
+        schema_batch.put::<BatchByHash>(&batch.hash, batch_number)
     }
 
     fn put_transaction(
         &self,
         tx: &StoredTransaction,
         tx_number: &TxNumber,
+        schema_batch: &mut SchemaBatch,
     ) -> Result<(), anyhow::Error> {
-        self.db.put::<TxByNumber>(tx_number, tx)?;
-        self.db.put::<TxByHash>(&tx.hash, tx_number)
+        schema_batch.put::<TxByNumber>(tx_number, tx)?;
+        schema_batch.put::<TxByHash>(&tx.hash, tx_number)
     }
 
     fn put_event(
@@ -186,10 +193,10 @@ impl LedgerDB {
         event: &Event,
         event_number: &EventNumber,
         tx_number: TxNumber,
+        schema_batch: &mut SchemaBatch,
     ) -> Result<(), anyhow::Error> {
-        self.db.put::<EventByNumber>(event_number, event)?;
-        self.db
-            .put::<EventByKey>(&(event.key().clone(), tx_number, *event_number), &())
+        schema_batch.put::<EventByNumber>(event_number, event)?;
+        schema_batch.put::<EventByKey>(&(event.key().clone(), tx_number, *event_number), &())
     }
 
     /// Commits a slot to the database by inserting its events, transactions, and batches before
@@ -211,6 +218,8 @@ impl LedgerDB {
             // The lock is released here
         };
 
+        let mut schema_batch = SchemaBatch::new();
+
         let first_batch_number = current_item_numbers.batch_number;
         let last_batch_number = first_batch_number + data_to_commit.batch_receipts.len() as u64;
         // Insert data from "bottom up" to ensure consistency if the application crashes during insertion
@@ -226,10 +235,15 @@ impl LedgerDB {
                         &event,
                         &EventNumber(current_item_numbers.event_number),
                         TxNumber(current_item_numbers.tx_number),
+                        &mut schema_batch,
                     )?;
                     current_item_numbers.event_number += 1;
                 }
-                self.put_transaction(&tx_to_store, &TxNumber(current_item_numbers.tx_number))?;
+                self.put_transaction(
+                    &tx_to_store,
+                    &TxNumber(current_item_numbers.tx_number),
+                    &mut schema_batch,
+                )?;
                 current_item_numbers.tx_number += 1;
             }
 
@@ -244,6 +258,7 @@ impl LedgerDB {
             self.put_batch(
                 &batch_to_store,
                 &BatchNumber(current_item_numbers.batch_number),
+                &mut schema_batch,
             )?;
             current_item_numbers.batch_number += 1;
         }
@@ -258,7 +273,10 @@ impl LedgerDB {
         self.put_slot(
             &slot_to_store,
             &SlotNumber(current_item_numbers.slot_number),
+            &mut schema_batch,
         )?;
+
+        self.db.write_schemas(schema_batch)?;
 
         Ok(())
     }
