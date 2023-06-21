@@ -10,6 +10,7 @@ impl<'a, C: sov_modules_api::Context> DatabaseCommit for EvmDb<'a, C> {
             let address = address.0;
 
             // TODO figure out what to do when account is destroyed.
+            // https://github.com/Sovereign-Labs/sovereign-sdk/issues/425
             if account.is_destroyed {
                 todo!("Account destruction not supported")
             }
