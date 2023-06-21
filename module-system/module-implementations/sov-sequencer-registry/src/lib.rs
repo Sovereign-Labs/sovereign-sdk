@@ -26,18 +26,23 @@ pub struct SequencerRegistry<C: sov_modules_api::Context> {
     #[module]
     pub(crate) bank: sov_bank::Bank<C>,
 
+    /// Only batches from sequencers from this list are going to be processed
+    ///
     #[state]
     pub(crate) allowed_sequencers: StateMap<Vec<u8>, C::Address>,
 
-    /// The sequencer address on the rollup.
-    #[state]
-    pub(crate) seq_rollup_address: StateValue<C::Address>,
-
     /// Coin's that will be slashed if the sequencer is malicious.
     /// The coins will be transferred from `self.seq_rollup_address` to `self.address`
-    /// and locked forever.
+    /// and locked forever, until sequencer decides to exit
+    /// Only sequencers in `allowed_sequencers` list are allowed to exit.
     #[state]
     pub(crate) coins_to_lock: StateValue<sov_bank::Coins<C>>,
+}
+
+/// Result of applying blob, from sequencer point of view.
+pub enum SequencerOutcome {
+    Completed,
+    Slashed { sequencer: Vec<u8> },
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for SequencerRegistry<C> {
@@ -69,5 +74,14 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for SequencerRegistry<
                 self.exit(da_address, context, working_set)?
             }
         })
+    }
+}
+
+impl<C: sov_modules_api::Context> SequencerRegistry<C> {
+    pub fn get_coins_to_lock(
+        &self,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Option<sov_bank::Coins<C>> {
+        self.coins_to_lock.get(working_set)
     }
 }

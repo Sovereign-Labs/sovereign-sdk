@@ -178,7 +178,7 @@ pub mod test {
     }
 
     #[test]
-    fn test_sequencer_insufficient_funds() {
+    fn test_sequencer_unknown_sequencer() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
 
@@ -198,15 +198,16 @@ pub mod test {
 
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
+        let some_sequencer: [u8; 32] = [101; 32];
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
+            &mut new_test_blob(Batch { txs }, &some_sequencer),
             None,
         );
 
         assert!(
             matches!(apply_blob_outcome.inner, SequencerOutcome::Ignored),
-            "Batch should have been skipped due to insufficient funds"
+            "Batch should have been skipped due to unknown sequencer"
         );
 
         // Assert that there are no events

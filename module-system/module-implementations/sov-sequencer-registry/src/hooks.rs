@@ -1,11 +1,11 @@
-use crate::SequencerRegistry;
+use crate::{SequencerOutcome, SequencerRegistry};
 use sov_modules_api::{hooks::ApplyBlobHooks, Context};
 use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_state::WorkingSet;
 
 impl<C: Context> ApplyBlobHooks for SequencerRegistry<C> {
     type Context = C;
-    type BlobResult = u64;
+    type BlobResult = SequencerOutcome;
 
     fn begin_blob_hook(
         &self,
@@ -20,9 +20,15 @@ impl<C: Context> ApplyBlobHooks for SequencerRegistry<C> {
 
     fn end_blob_hook(
         &self,
-        _result: Self::BlobResult,
-        _working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+        result: Self::BlobResult,
+        working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
     ) -> anyhow::Result<()> {
+        match result {
+            SequencerOutcome::Completed => (),
+            SequencerOutcome::Slashed { sequencer } => {
+                self.allowed_sequencers.delete(&sequencer, working_set);
+            }
+        }
         Ok(())
     }
 }

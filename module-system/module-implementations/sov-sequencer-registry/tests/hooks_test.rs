@@ -6,6 +6,7 @@ mod helpers;
 use helpers::*;
 use sov_modules_api::Address;
 use sov_rollup_interface::mocks::TestBlob;
+use sov_sequencer_registry::SequencerOutcome;
 
 #[test]
 fn test_sequencer() {
@@ -46,7 +47,7 @@ fn test_sequencer() {
     {
         test_sequencer
             .registry
-            .end_blob_hook(0, working_set)
+            .end_blob_hook(SequencerOutcome::Completed, working_set)
             .unwrap();
         let resp = test_sequencer.query_balance_via_bank(working_set);
         assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());

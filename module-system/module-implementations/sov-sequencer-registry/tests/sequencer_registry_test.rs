@@ -8,6 +8,7 @@ mod helpers;
 
 use helpers::*;
 use sov_rollup_interface::mocks::TestBlob;
+use sov_sequencer_registry::SequencerOutcome;
 
 // Happy path for registration and exit
 // This test checks:
@@ -215,7 +216,7 @@ fn test_sequencer() {
     {
         test_sequencer
             .registry
-            .end_blob_hook(0, working_set)
+            .end_blob_hook(SequencerOutcome::Completed, working_set)
             .unwrap();
         let resp = test_sequencer.query_balance_via_bank(working_set);
         assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
