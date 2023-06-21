@@ -2,7 +2,6 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Hasher, Module, Spec};
 use sov_state::WorkingSet;
 
-use sov_sequencer_registry::query;
 use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
 
 pub type C = DefaultContext;
@@ -34,13 +33,6 @@ impl TestSequencer {
         self.registry
             .genesis(&self.sequencer_config, working_set)
             .unwrap();
-    }
-    #[allow(dead_code)]
-    pub fn query_balance_via_sequencer(
-        &self,
-        working_set: &mut WorkingSet<<C as Spec>::Storage>,
-    ) -> query::SequencerAndBalanceResponse {
-        self.registry.sequencer_address_and_balance(working_set)
     }
 
     #[allow(dead_code)]

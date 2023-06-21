@@ -86,9 +86,9 @@ fn test_tx_revert() {
 
         let resp = runtime
             .sequencer_registry
-            .sequencer_address_and_balance(DEMO_SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set);
-        // Sequencer is rewarded
-        assert_eq!(resp.data.unwrap().balance, SEQUENCER_BALANCE);
+            .sequencer_address(DEMO_SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set);
+        // Sequencer is not excluded from list of allowed!
+        assert!(resp.address.is_some());
     }
 }
 
@@ -241,12 +241,6 @@ fn test_tx_bad_sig() {
             sov_election::query::GetResultResponse::Err("Election is not frozen".to_owned())
         );
 
-        let resp = runtime
-            .sequencer_registry
-            .sequencer_address_and_balance(DEMO_SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set);
-
-        // runtime.sequencer_registry
-
         // Sequencer is slashed
     }
 }
@@ -264,8 +258,9 @@ fn test_tx_bad_serialization() {
         &value_setter_admin_private_key,
         &election_admin_private_key,
     );
+    let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address.clone();
 
-    {
+    let sequencer_balance_before = {
         let mut demo = create_new_demo(path);
         StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
         let mut working_set = WorkingSet::new(demo.current_storage);
@@ -274,8 +269,16 @@ fn test_tx_bad_serialization() {
             .sequencer_registry
             .get_coins_to_lock(&mut working_set)
             .unwrap();
-        println!("COINS: {}", coins.amount);
-    }
+
+        demo.runtime
+            .bank
+            .get_balance_of(
+                sequencer_rollup_address.clone(),
+                coins.token_address,
+                &mut working_set,
+            )
+            .unwrap()
+    };
 
     {
         let mut demo = create_new_demo(path);
@@ -321,6 +324,19 @@ fn test_tx_bad_serialization() {
             .sequencer_address(SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set);
         assert!(allowed_sequencer.address.is_none());
 
-        // TODO: Check that sequencer balances hasn't increased after genesis
+        // Balance of sequencer is not increased
+        let coins = runtime
+            .sequencer_registry
+            .get_coins_to_lock(&mut working_set)
+            .unwrap();
+        let sequencer_balance_after = runtime
+            .bank
+            .get_balance_of(
+                sequencer_rollup_address,
+                coins.token_address,
+                &mut working_set,
+            )
+            .unwrap();
+        assert_eq!(sequencer_balance_before, sequencer_balance_after);
     }
 }

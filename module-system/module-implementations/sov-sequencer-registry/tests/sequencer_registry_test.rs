@@ -1,5 +1,4 @@
-use sov_modules_api::hooks::ApplyBlobHooks;
-use sov_modules_api::{Address, Context, Module};
+use sov_modules_api::{Context, Module};
 use sov_state::{ProverStorage, WorkingSet};
 
 use sov_sequencer_registry::call::CallMessage;
@@ -7,8 +6,6 @@ use sov_sequencer_registry::call::CallMessage;
 mod helpers;
 
 use helpers::*;
-use sov_rollup_interface::mocks::TestBlob;
-use sov_sequencer_registry::SequencerOutcome;
 
 // Happy path for registration and exit
 // This test checks:
@@ -178,68 +175,20 @@ fn test_exit_different_sender() {
 }
 
 #[test]
-fn test_sequencer() {
+#[ignore = "TODO: needs resolution"]
+fn test_allow_exit_last_sequencer() {
     let mut test_sequencer = create_test_sequencer();
     let tmpdir = tempfile::tempdir().unwrap();
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
 
-    {
-        let resp = test_sequencer.query_balance_via_bank(working_set);
-        assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
-
-        let resp = test_sequencer.query_balance_via_sequencer(working_set);
-        assert_eq!(INITIAL_BALANCE, resp.data.unwrap().balance);
-    }
-
-    // Lock
-    {
-        let mut test_blob = TestBlob::new(
-            Vec::new(),
-            Address::from(GENESIS_SEQUENCER_DA_ADDRESS),
-            [0_u8; 32],
-        );
-
-        test_sequencer
-            .registry
-            .begin_blob_hook(&mut test_blob, working_set)
-            .unwrap();
-
-        let resp = test_sequencer.query_balance_via_bank(working_set);
-        assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, resp.amount.unwrap());
-
-        let resp = test_sequencer.query_balance_via_sequencer(working_set);
-        assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, resp.data.unwrap().balance);
-    }
-
-    // Reward
-    {
-        test_sequencer
-            .registry
-            .end_blob_hook(SequencerOutcome::Completed, working_set)
-            .unwrap();
-        let resp = test_sequencer.query_balance_via_bank(working_set);
-        assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
-
-        let resp = test_sequencer.query_balance_via_sequencer(working_set);
-        assert_eq!(INITIAL_BALANCE, resp.data.unwrap().balance);
-    }
-
-    // Unknown sequencer
-    {
-        let mut test_blob = TestBlob::new(
-            Vec::new(),
-            Address::from(UNKNOWN_SEQUENCER_DA_ADDRESS),
-            [0_u8; 32],
-        );
-
-        let result = test_sequencer
-            .registry
-            .begin_blob_hook(&mut test_blob, working_set);
-        assert!(result.is_err());
-        assert_eq!("Invalid next sequencer.", result.err().unwrap().to_string());
-    }
+    let sequencer_address = generate_address(GENESIS_SEQUENCER_KEY);
+    let sender_context = C::new(sequencer_address.clone());
+    let exit_message = CallMessage::Exit {
+        da_address: GENESIS_SEQUENCER_DA_ADDRESS.to_vec(),
+    };
+    test_sequencer
+        .registry
+        .call(exit_message, &sender_context, working_set)
+        .expect("Last sequencer exit has failed");
 }
-
-// TODO: Last sequencer exit
-//
