@@ -33,10 +33,6 @@ pub struct SequencerRegistry<C: sov_modules_api::Context> {
     #[state]
     pub(crate) seq_rollup_address: StateValue<C::Address>,
 
-    /// The sequencer address on the DA.
-    #[state]
-    pub(crate) seq_da_address: StateValue<Vec<u8>>,
-
     /// Coin's that will be slashed if the sequencer is malicious.
     /// The coins will be transferred from `self.seq_rollup_address` to `self.address`
     /// and locked forever.
