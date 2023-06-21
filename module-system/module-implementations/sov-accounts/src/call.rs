@@ -13,11 +13,7 @@ pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
     derive(serde::Serialize),
     derive(serde::Deserialize)
 )]
-#[cfg_attr(
-feature = "native",
-derive(CustomParser),
-module_name = "Accounts"
-)]
+#[cfg_attr(feature = "native", derive(CustomParser), module_name = "Accounts")]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: sov_modules_api::Context> {
     // Updates a PublicKey for the corresponding Account.

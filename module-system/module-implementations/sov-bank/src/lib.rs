@@ -38,7 +38,7 @@ pub struct Bank<C: sov_modules_api::Context> {
     pub(crate) tokens: sov_state::StateMap<C::Address, Token<C>>,
 }
 
-impl<C: sov_modules_api::Context+'static> sov_modules_api::Module for Bank<C> {
+impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
     type Context = C;
 
     type Config = BankConfig<C>;

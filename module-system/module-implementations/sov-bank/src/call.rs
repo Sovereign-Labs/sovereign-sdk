@@ -2,21 +2,14 @@ use crate::{Amount, Bank, Coins, Token};
 use anyhow::{bail, Result};
 
 use sov_modules_api::CallResponse;
-use sov_state::WorkingSet;
 use sov_modules_macros::CustomParser;
+use sov_state::WorkingSet;
 
 /// This enumeration represents the available call messages for interacting with the sov-bank module.
-#[cfg_attr(
-    feature = "native",
-    derive(serde::Serialize,serde::Deserialize),
-)]
-#[cfg_attr(
-feature = "native",
-derive(CustomParser),
-module_name = "Bank"
-)]
+#[cfg_attr(feature = "native", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "native", derive(CustomParser), module_name = "Bank")]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub enum CallMessage<C: sov_modules_api::Context + 'static> {
+pub enum CallMessage<C: sov_modules_api::Context> {
     /// Creates a new token with the specified name and initial balance.
     CreateToken {
         /// Random value use to create a unique token address.
@@ -60,7 +53,7 @@ pub enum CallMessage<C: sov_modules_api::Context + 'static> {
     },
 }
 
-impl<C: sov_modules_api::Context + 'static> Bank<C> {
+impl<C: sov_modules_api::Context> Bank<C> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn create_token(
         &self,

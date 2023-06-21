@@ -40,6 +40,7 @@ pub trait AddressTrait:
     + Send
     + Sync
     + Display
-    + 'static + FromStr<Err = anyhow::Error>
+    + 'static
+    + FromStr<Err = anyhow::Error>
 {
 }

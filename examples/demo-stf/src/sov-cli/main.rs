@@ -16,7 +16,7 @@ use sov_modules_api::{
     AddressBech32, PublicKey, Spec,
 };
 
-use demo_stf::runtime::ModuleCommands;
+use demo_stf::runtime::{module_parse_helper, ModuleCommands};
 
 type C = DefaultContext;
 type Address = <C as Spec>::Address;
@@ -54,11 +54,18 @@ enum Commands {
     },
     /// Utility commands
     Util(UtilArgs),
-    Module(ModuleArgs)
+    Module(ModuleArgs),
 }
 
 #[derive(Parser)]
 struct ModuleArgs {
+    /// An optional argument
+    #[clap(long)]
+    private_key: Option<String>,
+
+    /// Another optional argument
+    #[clap(long)]
+    nonce: Option<u64>,
     #[clap(subcommand)]
     /// Commands under Module
     command: ModuleCommands,
@@ -143,8 +150,26 @@ impl SerializedTx {
         let sender_priv_key = Self::deserialize_priv_key(sender_priv_key_path)?;
         let sender_address = sender_priv_key.pub_key().to_address();
         let message = Self::serialize_call_message(module_name, call_data_path)?;
-
+        println!("{:?}", message);
         let tx = Transaction::<C>::new_signed_tx(&sender_priv_key, message, nonce);
+
+        Ok(SerializedTx {
+            raw: RawTx {
+                data: tx.try_to_vec()?,
+            },
+            sender: sender_address,
+        })
+    }
+
+    fn new_from_call<P: AsRef<Path>>(
+        sender_priv_key_path: P,
+        call_data: Vec<u8>,
+        nonce: u64,
+    ) -> anyhow::Result<SerializedTx> {
+        println!("{:?}", call_data);
+        let sender_priv_key = Self::deserialize_priv_key(sender_priv_key_path)?;
+        let sender_address = sender_priv_key.pub_key().to_address();
+        let tx = Transaction::<C>::new_signed_tx(&sender_priv_key, call_data, nonce);
 
         Ok(SerializedTx {
             raw: RawTx {
@@ -187,7 +212,6 @@ impl SerializedTx {
 
 pub fn main() {
     let cli = Cli::parse();
-
     match cli.command {
         Commands::SerializeCall {
             sender_priv_key_path,
@@ -262,9 +286,17 @@ pub fn main() {
             }
         },
         Commands::Module(module_args) => {
-            println!("BANK");
-        }
+            let sender_priv_key_path = &module_args.private_key.unwrap();
+            let nonce = module_args.nonce.unwrap();
 
+            let serialized_call: Vec<u8> = module_parse_helper(module_args.command);
+            let serialized =
+                SerializedTx::new_from_call(&sender_priv_key_path, serialized_call, nonce)
+                    .unwrap_or_else(|e| panic!("Call message serialization error: {}", e));
+
+            let raw_contents = hex::encode(serialized.raw.data);
+            println!("{}", raw_contents);
+        }
     }
 }
 

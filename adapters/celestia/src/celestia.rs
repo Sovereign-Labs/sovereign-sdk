@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
-use std::{cell::RefCell, ops::Range};
 use std::str::FromStr;
+use std::{cell::RefCell, ops::Range};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespacedHash;

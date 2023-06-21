@@ -6,7 +6,7 @@ mod dispatch;
 mod module_info;
 mod rpc;
 
-use cli_parser::{CliParserMacro, derive_clap_custom_enum};
+use cli_parser::{derive_clap_custom_enum, CliParserMacro};
 use default_runtime::DefaultRuntimeMacro;
 use dispatch::{
     dispatch_call::DispatchCallMacro, genesis::GenesisMacro, message_codec::MessageCodec,
@@ -14,9 +14,6 @@ use dispatch::{
 use proc_macro::TokenStream;
 use rpc::ExposeRpcMacro;
 use syn::parse_macro_input;
-use syn::DeriveInput;
-use syn::Ident;
-use syn::AttributeArgs;
 
 /// Derives the `sov-modules-api::ModuleInfo` implementation for the underlying type.
 ///

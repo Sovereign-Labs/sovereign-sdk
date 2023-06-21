@@ -14,11 +14,7 @@ use super::ValueSetter;
     derive(serde::Serialize),
     derive(serde::Deserialize)
 )]
-#[cfg_attr(
-feature = "native",
-derive(CustomParser),
-module_name = "ValueSetter"
-)]
+#[cfg_attr(feature = "native", derive(CustomParser), module_name = "ValueSetter")]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage {
     /// value to set

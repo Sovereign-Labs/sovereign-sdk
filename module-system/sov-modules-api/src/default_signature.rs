@@ -184,7 +184,6 @@ fn map_error(_e: ed25519_dalek::SignatureError) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::Other, "Signature error")
 }
 
-
 impl FromStr for DefaultPublicKey {
     type Err = anyhow::Error;
 
@@ -201,8 +200,8 @@ impl FromStr for DefaultSignature {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let bytes = hex::decode(s)?;
-        let msg_sig = DalekSignature::from_bytes(&bytes)
-            .map_err(|_| anyhow::anyhow!("Invalid signature"))?;
+        let msg_sig =
+            DalekSignature::from_bytes(&bytes).map_err(|_| anyhow::anyhow!("Invalid signature"))?;
         Ok(DefaultSignature { msg_sig })
     }
 }
