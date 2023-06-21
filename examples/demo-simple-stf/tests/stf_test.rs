@@ -6,6 +6,7 @@ use sov_rollup_interface::{
 
 use sov_rollup_interface::traits::AddressTrait;
 use std::fmt::Display;
+use std::str::FromStr;
 
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DaAddress {
@@ -23,6 +24,13 @@ impl AsRef<[u8]> for DaAddress {
 impl From<[u8; 32]> for DaAddress {
     fn from(addr: [u8; 32]) -> Self {
         DaAddress { addr }
+    }
+}
+
+impl FromStr for DaAddress {
+    type Err = anyhow::Error;
+    fn from_str(_s: &str) -> Result<Self, Self::Err> {
+        unimplemented!()
     }
 }
 
