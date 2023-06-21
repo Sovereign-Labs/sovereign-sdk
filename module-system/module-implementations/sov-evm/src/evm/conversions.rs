@@ -20,7 +20,7 @@ impl From<ReVmAccountInfo> for AccountInfo {
         Self {
             balance: info.balance.to_le_bytes(),
             code_hash: info.code_hash.to_fixed_bytes(),
-            code: info.code.unwrap().bytes().to_vec(),
+            code: info.code.unwrap_or_default().bytes().to_vec(),
             nonce: info.nonce,
         }
     }
