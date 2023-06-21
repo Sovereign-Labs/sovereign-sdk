@@ -6,6 +6,8 @@ use sov_modules_macros::{cli_parser, expose_rpc};
 use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
 
 #[cfg(feature = "native")]
+use clap::Parser;
+#[cfg(feature = "native")]
 use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
 use sov_bank::query::{BankRpcImpl, BankRpcServer};
@@ -15,9 +17,6 @@ use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
 use sov_sequencer_registry::query::{SequencerRpcImpl, SequencerRpcServer};
 #[cfg(feature = "native")]
 use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
-#[cfg(feature = "native")]
-use clap::Parser;
-
 
 /// The Rollup entrypoint.
 ///
@@ -54,11 +53,9 @@ use clap::Parser;
 /// Similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
 /// instead of going through the DA layer.
 
-
-
 #[cfg_attr(
     feature = "native",
-    cli_parser(DefaultContext,"sequencer"),
+    cli_parser(DefaultContext, "sequencer"),
     expose_rpc(DefaultContext)
 )]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]

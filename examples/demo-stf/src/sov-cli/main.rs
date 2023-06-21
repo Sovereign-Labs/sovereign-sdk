@@ -1,7 +1,6 @@
 #[cfg(feature = "native")]
 mod native;
 #[cfg(feature = "native")]
-
 #[cfg(feature = "native")]
 fn main() {
     native::main()
@@ -11,6 +10,3 @@ fn main() {
 fn main() {
     println!("non native binary. cli only works with native");
 }
-
-
-

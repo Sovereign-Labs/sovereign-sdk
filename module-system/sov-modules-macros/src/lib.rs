@@ -188,8 +188,8 @@ pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
                         &path,
                         "Unexpected multiple type path in the attribute list",
                     )
-                        .to_compile_error()
-                        .into();
+                    .to_compile_error()
+                    .into();
                 }
             }
             syn::NestedMeta::Lit(syn::Lit::Str(lit_str)) => {
@@ -205,7 +205,6 @@ pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
 
     handle_macro_error(cli_parser.cli_macro(input, context_type, skip_fields))
 }
-
 
 #[proc_macro_derive(CustomParser, attributes(module_name))]
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
