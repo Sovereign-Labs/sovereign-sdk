@@ -34,12 +34,6 @@ pub struct MarshalledDataAvailabilityHeader {
     pub column_roots: Vec<String>,
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
-pub struct PartialBlockId {
-    pub hash: ProtobufHash,
-    pub part_set_header: Vec<u8>,
-}
-
 /// A partially serialized tendermint header. Only fields which are actually inspected by
 /// Jupiter are included in their raw form. Other fields are pre-encoded as protobufs.
 ///

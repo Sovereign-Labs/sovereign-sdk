@@ -89,7 +89,7 @@ fn transfer_initial_token() {
         assert!(result.is_err());
         let error = result.err().unwrap();
         assert_eq!(
-            "Insufficient funds for sov1h5567we4l0ne5vyrkvqd6jq5qp2cs7sa780vut0vrwr8pytwrzess8mu2s",
+            "Insufficient funds for sov1h5567we4l0ne5vyrkvqd6jq5qp2cs7sa780vut0vrwr8pytwrzes9mts0j",
             error.to_string()
         );
     }

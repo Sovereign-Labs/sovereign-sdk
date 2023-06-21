@@ -119,7 +119,7 @@ fn burn_deployed_tokens() {
     let failed_to_burn = bank.call(burn_message, &minter_context, &mut working_set);
     assert!(failed_to_burn.is_err());
     assert_eq!(
-        "Insufficient funds for sov1h6t805h2vjfzpa3m9n8kyadyng9xf604nhvev8tf5qdg65jh3ruqfckjuq",
+        "Insufficient funds for sov1h6t805h2vjfzpa3m9n8kyadyng9xf604nhvev8tf5qdg65jh3ruquyx7ez",
         failed_to_burn.err().unwrap().to_string()
     );
 
