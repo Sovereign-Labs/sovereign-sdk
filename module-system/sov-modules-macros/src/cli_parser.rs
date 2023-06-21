@@ -28,7 +28,7 @@ impl CliParserMacro {
             ident,
             generics,
             data,
-        } = input.clone();
+        } = input;
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
 
         let mut command_types = vec![];
@@ -43,45 +43,44 @@ impl CliParserMacro {
             if skip_fields.contains(&field.ident.to_string()) {
                 continue;
             }
-            match &field.ty {
-                syn::Type::Path(type_path) => {
-                    let mut module_path = type_path.path.clone();
-                    if let Some(segment) = module_path.segments.last_mut() {
-                        if let syn::PathArguments::AngleBracketed(angle_bracketed_data) =
-                            &mut segment.arguments
-                        {
-                            let mut new_args = Vec::new();
-                            for gen_arg in &angle_bracketed_data.args {
-                                match gen_arg {
-                                    syn::GenericArgument::Type(syn::Type::Path(type_path))
-                                        if type_path.path.is_ident("C") =>
+            if let syn::Type::Path(type_path) = &field.ty {
+                let mut module_path = type_path.path.clone();
+                if let Some(segment) = module_path.segments.last_mut() {
+                    if let syn::PathArguments::AngleBracketed(angle_bracketed_data) =
+                        &mut segment.arguments
+                    {
+                        let mut new_args = Vec::new();
+                        for gen_arg in &angle_bracketed_data.args {
+                            match gen_arg {
+                                syn::GenericArgument::Type(syn::Type::Path(type_path))
+                                if type_path.path.is_ident("C") =>
                                     {
                                         new_args
                                             .push(syn::GenericArgument::Type(context_type.clone()));
                                     }
-                                    _ => new_args.push(gen_arg.clone()),
-                                }
+                                _ => new_args.push(gen_arg.clone()),
                             }
-                            angle_bracketed_data.args = new_args.into_iter().collect();
                         }
+                        angle_bracketed_data.args = new_args.into_iter().collect();
+                    }
 
-                        let module = segment.ident.clone();
-                        let command_type_ident = format_ident!("{}Commands", module);
-                        let module_type_ident = format_ident!("{}Module", module);
-                        command_idents.push(command_type_ident.clone());
-                        command_types.push(quote! {
+                    let module = segment.ident.clone();
+                    let command_type_ident = format_ident!("{}Commands", module);
+                    let module_type_ident = format_ident!("{}Module", module);
+                    command_idents.push(command_type_ident.clone());
+                    command_types.push(quote! {
                         type #command_type_ident = <#module_path as sov_modules_api::AutoClap>::ClapType;
                         type #module_type_ident = <#module_path as sov_modules_api::AutoClap>::ModuleType;
                     });
 
-                        let module_ident = format_ident!("{}", module);
-                        // module_idents.push(module_ident.clone());
-                        let module_args_ident = format_ident!("{}Args", module);
-                        module_commands.push(quote! {
+                    let module_ident = format_ident!("{}", module);
+                    // module_idents.push(module_ident.clone());
+                    let module_args_ident = format_ident!("{}Args", module);
+                    module_commands.push(quote! {
                             #module_ident(#module_args_ident)
                         });
 
-                        module_args.push(quote! {
+                    module_args.push(quote! {
                             #[derive(Parser)]
                             pub struct #module_args_ident {
                                 #[clap(subcommand)]
@@ -90,34 +89,34 @@ impl CliParserMacro {
                             }
                         });
 
-                        let field_name = field.ident.clone();
-                        let field_name_string = field_name.to_string();
-                        let encode_function_name =
-                            format_ident!("encode_{}_call", field_name_string);
+                    let field_name = field.ident.clone();
+                    let field_name_string = field_name.to_string();
+                    let encode_function_name =
+                        format_ident!("encode_{}_call", field_name_string);
 
-                        let type_path = match &field.ty {
-                            Type::Path(type_path) => {
-                                let mut segments = type_path.path.segments.clone();
-                                let last = segments
-                                    .last_mut()
-                                    .expect("Impossible happened! A type path has no segments");
-                                last.arguments = PathArguments::None;
-                                Path {
-                                    segments,
-                                    ..type_path.path.clone()
-                                }
+                    let type_path = match &field.ty {
+                        Type::Path(type_path) => {
+                            let mut segments = type_path.path.segments.clone();
+                            let last = segments
+                                .last_mut()
+                                .expect("Impossible happened! A type path has no segments");
+                            last.arguments = PathArguments::None;
+                            Path {
+                                segments,
+                                ..type_path.path.clone()
                             }
-                            _ => {
-                                return Err(syn::Error::new_spanned(
-                                    field.ident.clone(),
-                                    "expected a type path",
-                                ))
-                            }
-                        };
+                        }
+                        _ => {
+                            return Err(syn::Error::new_spanned(
+                                field.ident.clone(),
+                                "expected a type path",
+                            ))
+                        }
+                    };
 
-                        let type_name_string = type_path.segments.last().unwrap().ident.to_string();
+                    let type_name_string = type_path.segments.last().unwrap().ident.to_string();
 
-                        parse_match_arms.push(quote! {
+                    parse_match_arms.push(quote! {
                             ModuleCommands::#module_ident(mod_args) => {
                                 use borsh::BorshSerialize;
                                 let command_as_call_message: <#module_type_ident as sov_modules_api::Module>::CallMessage = mod_args.command.into();
@@ -127,16 +126,14 @@ impl CliParserMacro {
                             },
                          });
 
-                        match_arms.push(quote! {
+                    match_arms.push(quote! {
                             #type_name_string => Ok({
                                 #ident::<#context_type>::#encode_function_name(
                                     serde_json::from_str::<<#type_path<#context_type> as sov_modules_api::Module>::CallMessage>(&call_data)?
                                 )
                             }),
                         });
-                    }
                 }
-                _ => {}
             }
         }
 
