@@ -17,9 +17,9 @@ path = "src/sov-cli/main.rs"
 anyhow = { workspace = true}
 borsh = { workspace = true }
 serde = { workspace = true }
-serde_json = { workspace = true, optional = true }
+serde_json = { workspace = true}
 sha2 = { workspace = true }
-clap = { workspace = true, optional = true }
+clap = { workspace = true}
 toml = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"], optional = true }
 hex = { workspace = true }
@@ -57,8 +57,6 @@ native = [
 	"sov-value-setter/native",
 	"sov-modules-api/native",
 	"sov-rollup-interface/mocks",
-	"clap",
-	"serde_json",
 	"jsonrpsee",
 	"toml"]
 verifier = []

@@ -2,8 +2,10 @@ use crate::{Amount, Bank, Coins, Token};
 use anyhow::{bail, Result};
 
 use sov_modules_api::CallResponse;
-use sov_modules_macros::CustomParser;
 use sov_state::WorkingSet;
+
+#[cfg(feature = "native")]
+use sov_modules_macros::CustomParser;
 
 /// This enumeration represents the available call messages for interacting with the sov-bank module.
 #[cfg_attr(feature = "native", derive(serde::Serialize, serde::Deserialize))]

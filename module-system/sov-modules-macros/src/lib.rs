@@ -171,15 +171,49 @@ pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
 
 #[proc_macro_attribute]
 pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
-    let context_type = parse_macro_input!(attr);
+    let attrs = parse_macro_input!(attr as syn::AttributeArgs);
     let input = parse_macro_input!(input);
+
+    let mut context_type: Option<syn::Type> = None;
+    let mut skip_fields = Vec::new();
+
+    // Parse attributes
+    for attr in attrs {
+        match attr {
+            syn::NestedMeta::Meta(syn::Meta::Path(path)) => {
+                if context_type.is_none() {
+                    context_type = Some(syn::Type::Path(syn::TypePath { qself: None, path }));
+                } else {
+                    return syn::Error::new_spanned(
+                        &path,
+                        "Unexpected multiple type path in the attribute list",
+                    )
+                        .to_compile_error()
+                        .into();
+                }
+            }
+            syn::NestedMeta::Lit(syn::Lit::Str(lit_str)) => {
+                skip_fields = lit_str.value().split(',').map(|s| s.to_string()).collect();
+            }
+            _ => {}
+        }
+    }
+
+    let context_type = context_type.expect("No context type provided");
+
     let cli_parser = CliParserMacro::new("Cmd");
 
-    handle_macro_error(cli_parser.cli_macro(input, context_type))
+    handle_macro_error(cli_parser.cli_macro(input, context_type, skip_fields))
 }
+
 
 #[proc_macro_derive(CustomParser, attributes(module_name))]
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     handle_macro_error(derive_clap_custom_enum(input))
+}
+
+#[proc_macro_attribute]
+pub fn cli_skip(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    item
 }

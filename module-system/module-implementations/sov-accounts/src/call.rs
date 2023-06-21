@@ -4,6 +4,7 @@ use sov_modules_api::CallResponse;
 use sov_modules_api::Signature;
 use sov_state::WorkingSet;
 
+#[cfg(feature = "native")]
 use sov_modules_macros::CustomParser;
 
 pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];

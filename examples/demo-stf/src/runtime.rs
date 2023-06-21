@@ -15,8 +15,9 @@ use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
 use sov_sequencer_registry::query::{SequencerRpcImpl, SequencerRpcServer};
 #[cfg(feature = "native")]
 use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
-
+#[cfg(feature = "native")]
 use clap::Parser;
+
 
 /// The Rollup entrypoint.
 ///
@@ -53,15 +54,17 @@ use clap::Parser;
 /// Similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
 /// instead of going through the DA layer.
 
+
+
 #[cfg_attr(
     feature = "native",
-    cli_parser(DefaultContext),
+    cli_parser(DefaultContext,"sequencer"),
     expose_rpc(DefaultContext)
 )]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
-    #[cli_skip]
+    // #[cli_skip]
     pub sequencer: sov_sequencer_registry::Sequencer<C>,
     pub bank: sov_bank::Bank<C>,
     pub election: sov_election::Election<C>,

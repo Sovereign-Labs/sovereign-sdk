@@ -20,6 +20,7 @@ impl CliParserMacro {
         &self,
         input: DeriveInput,
         context_type: Type,
+        skip_fields: Vec<String>,
     ) -> Result<proc_macro::TokenStream, syn::Error> {
         let DeriveInput {
             attrs,
@@ -39,11 +40,7 @@ impl CliParserMacro {
 
         // Loop over the fields
         for field in &fields {
-            if field
-                .attrs
-                .iter()
-                .any(|attr| attr.path.is_ident("cli_skip"))
-            {
+            if skip_fields.contains(&field.ident.to_string()) {
                 continue;
             }
             match &field.ty {

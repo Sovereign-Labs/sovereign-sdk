@@ -7,7 +7,6 @@ pub(crate) struct StructNamedField {
     pub(crate) ident: proc_macro2::Ident,
     pub(crate) ty: syn::Type,
     pub(crate) vis: syn::Visibility,
-    pub(crate) attrs: Vec<syn::Attribute>,
 }
 
 pub(crate) struct StructFieldExtractor {
@@ -59,7 +58,6 @@ impl StructFieldExtractor {
                 ident: field_ident.clone(),
                 ty: original_field.ty.clone(),
                 vis: original_field.vis.clone(),
-                attrs: original_field.attrs.clone(),
             };
 
             output_fields.push(field);
