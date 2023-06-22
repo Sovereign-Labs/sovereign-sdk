@@ -183,7 +183,7 @@ fn test_allow_exit_last_sequencer() {
     test_sequencer.genesis(working_set);
 
     let sequencer_address = generate_address(GENESIS_SEQUENCER_KEY);
-    let sender_context = C::new(sequencer_address.clone());
+    let sender_context = C::new(sequencer_address);
     let exit_message = CallMessage::Exit {
         da_address: GENESIS_SEQUENCER_DA_ADDRESS.to_vec(),
     };

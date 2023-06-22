@@ -59,8 +59,8 @@ use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
-    pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     pub bank: sov_bank::Bank<C>,
+    pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,

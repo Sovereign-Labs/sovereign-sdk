@@ -23,22 +23,7 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let sequencer = context.sender();
-        if self
-            .allowed_sequencers
-            .get(&da_address, working_set)
-            .is_some()
-        {
-            bail!("sequencer {} already registered", sequencer)
-        }
-
-        let locker = &self.address;
-        let coins = self.coins_to_lock.get_or_err(working_set)?;
-        self.bank
-            .transfer_from(sequencer, locker, coins, working_set)?;
-
-        self.allowed_sequencers
-            .set(&da_address, sequencer, working_set);
-
+        self.register_sequencer(da_address, sequencer, working_set)?;
         Ok(CallResponse::default())
     }
 

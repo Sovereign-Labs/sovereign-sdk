@@ -15,6 +15,12 @@ fn begin_blob_hook_known_sequencer() {
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
 
+    let balance_after_genesis = {
+        let resp = test_sequencer.query_balance_via_bank(working_set);
+        resp.amount.unwrap()
+    };
+    assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
+
     let mut test_blob = TestBlob::new(
         Vec::new(),
         Address::from(GENESIS_SEQUENCER_DA_ADDRESS),
@@ -27,7 +33,7 @@ fn begin_blob_hook_known_sequencer() {
         .unwrap();
 
     let resp = test_sequencer.query_balance_via_bank(working_set);
-    assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
+    assert_eq!(balance_after_genesis, resp.amount.unwrap());
     let resp = test_sequencer
         .registry
         .sequencer_address(GENESIS_SEQUENCER_DA_ADDRESS.to_vec(), working_set);
@@ -62,6 +68,11 @@ fn end_blob_hook_success() {
     let tmpdir = tempfile::tempdir().unwrap();
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
+    let balance_after_genesis = {
+        let resp = test_sequencer.query_balance_via_bank(working_set);
+        resp.amount.unwrap()
+    };
+    assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
 
     let mut test_blob = TestBlob::new(
         Vec::new(),
@@ -79,7 +90,7 @@ fn end_blob_hook_success() {
         .end_blob_hook(SequencerOutcome::Completed, working_set)
         .unwrap();
     let resp = test_sequencer.query_balance_via_bank(working_set);
-    assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
+    assert_eq!(balance_after_genesis, resp.amount.unwrap());
     let resp = test_sequencer
         .registry
         .sequencer_address(GENESIS_SEQUENCER_DA_ADDRESS.to_vec(), working_set);
@@ -92,6 +103,11 @@ fn end_blob_hook_slash() {
     let tmpdir = tempfile::tempdir().unwrap();
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
+    let balance_after_genesis = {
+        let resp = test_sequencer.query_balance_via_bank(working_set);
+        resp.amount.unwrap()
+    };
+    assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
 
     let mut test_blob = TestBlob::new(
         Vec::new(),
@@ -113,7 +129,7 @@ fn end_blob_hook_slash() {
         .unwrap();
 
     let resp = test_sequencer.query_balance_via_bank(working_set);
-    assert_eq!(INITIAL_BALANCE, resp.amount.unwrap());
+    assert_eq!(balance_after_genesis, resp.amount.unwrap());
     let resp = test_sequencer
         .registry
         .sequencer_address(GENESIS_SEQUENCER_DA_ADDRESS.to_vec(), working_set);

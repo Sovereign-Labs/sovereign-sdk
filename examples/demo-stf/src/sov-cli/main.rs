@@ -259,8 +259,7 @@ mod test {
     use super::*;
     use demo_stf::app::{DemoApp, DemoAppRunner};
     use demo_stf::genesis_config::{
-        create_demo_genesis_config, generate_address, DEMO_SEQUENCER_DA_ADDRESS,
-        DEMO_SEQ_PUB_KEY_STR, LOCKED_AMOUNT,
+        create_demo_config, new_test_blob, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT,
     };
     use demo_stf::runner_config::Config;
     use demo_stf::runtime::GenesisConfig;
@@ -410,27 +409,5 @@ mod test {
 
     fn create_token_address(token_deployer_address: &Address) -> Address {
         sov_bank::create_token_address::<C>("sov-test-token", token_deployer_address.as_ref(), 11)
-    }
-
-    pub type TestBlob = sov_rollup_interface::mocks::TestBlob<Address>;
-
-    pub fn new_test_blob(batch: Batch, address: &[u8]) -> TestBlob {
-        let address = Address::try_from(address).unwrap();
-        let data = batch.try_to_vec().unwrap();
-        TestBlob::new(data, address, [0; 32])
-    }
-
-    pub fn create_demo_config(
-        initial_sequencer_balance: u64,
-        value_setter_admin_private_key: &DefaultPrivateKey,
-        election_admin_private_key: &DefaultPrivateKey,
-    ) -> GenesisConfig<DefaultContext> {
-        create_demo_genesis_config::<DefaultContext>(
-            initial_sequencer_balance,
-            generate_address::<DefaultContext>(DEMO_SEQ_PUB_KEY_STR),
-            DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
-            value_setter_admin_private_key,
-            election_admin_private_key,
-        )
     }
 }

@@ -1,3 +1,4 @@
+use crate::genesis_config::{create_demo_config, new_test_blob};
 use crate::{
     genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
     runtime::Runtime,
@@ -16,9 +17,8 @@ use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
 use sov_state::{ProverStorage, WorkingSet};
 
 use super::{
-    create_demo_config, create_new_demo,
+    create_new_demo,
     data_generation::{simulate_da_with_bad_sig, simulate_da_with_revert_msg},
-    new_test_blob,
 };
 
 const SEQUENCER_BALANCE_DELTA: u64 = 1;
@@ -36,6 +36,7 @@ fn test_tx_revert() {
         &value_setter_admin_private_key,
         &election_admin_private_key,
     );
+    let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address.clone();
 
     {
         let mut demo = create_new_demo(path);
@@ -88,8 +89,7 @@ fn test_tx_revert() {
             .sequencer_registry
             .sequencer_address(DEMO_SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set);
         // Sequencer is not excluded from list of allowed!
-        assert_eq!(Some(config.sequencer_registry.seq_rollup_address), resp);
-        assert!(resp.address.is_some());
+        assert_eq!(Some(sequencer_rollup_address), resp.address);
     }
 }
 

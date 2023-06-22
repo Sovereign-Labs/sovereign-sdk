@@ -1,12 +1,10 @@
 #[cfg(test)]
 pub mod test {
+    use crate::genesis_config::{create_demo_config, new_test_blob};
     use crate::{
         genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
         runtime::Runtime,
-        tests::{
-            create_demo_config, create_new_demo, data_generation::simulate_da, has_tx_events,
-            new_test_blob, C,
-        },
+        tests::{create_new_demo, data_generation::simulate_da, has_tx_events, C},
     };
     use sov_modules_api::{
         default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
@@ -186,7 +184,7 @@ pub mod test {
         let election_admin_private_key = DefaultPrivateKey::generate();
 
         let config = create_demo_config(
-            LOCKED_AMOUNT - 1,
+            LOCKED_AMOUNT + 1,
             &value_setter_admin_private_key,
             &election_admin_private_key,
         );

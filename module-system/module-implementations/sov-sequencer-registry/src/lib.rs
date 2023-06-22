@@ -84,4 +84,28 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
     ) -> Option<sov_bank::Coins<C>> {
         self.coins_to_lock.get(working_set)
     }
+
+    pub(crate) fn register_sequencer(
+        &self,
+        da_address: Vec<u8>,
+        rollup_address: &C::Address,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> anyhow::Result<()> {
+        if self
+            .allowed_sequencers
+            .get(&da_address, working_set)
+            .is_some()
+        {
+            anyhow::bail!("sequencer {} already registered", rollup_address)
+        }
+        let locker = &self.address;
+        let coins = self.coins_to_lock.get_or_err(working_set)?;
+        self.bank
+            .transfer_from(rollup_address, locker, coins, working_set)?;
+
+        self.allowed_sequencers
+            .set(&da_address, rollup_address, working_set);
+
+        Ok(())
+    }
 }
