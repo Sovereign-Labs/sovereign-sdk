@@ -175,7 +175,6 @@ fn test_exit_different_sender() {
 }
 
 #[test]
-#[ignore = "TODO: needs resolution"]
 fn test_allow_exit_last_sequencer() {
     let mut test_sequencer = create_test_sequencer();
     let tmpdir = tempfile::tempdir().unwrap();
