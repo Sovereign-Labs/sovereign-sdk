@@ -88,6 +88,7 @@ fn test_tx_revert() {
             .sequencer_registry
             .sequencer_address(DEMO_SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set);
         // Sequencer is not excluded from list of allowed!
+        assert_eq!(Some(config.sequencer_registry.seq_rollup_address), resp);
         assert!(resp.address.is_some());
     }
 }
