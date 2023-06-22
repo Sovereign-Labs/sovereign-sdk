@@ -53,11 +53,10 @@ impl CliParserMacro {
                         for gen_arg in &angle_bracketed_data.args {
                             match gen_arg {
                                 syn::GenericArgument::Type(syn::Type::Path(type_path))
-                                if type_path.path.is_ident("C") =>
-                                    {
-                                        new_args
-                                            .push(syn::GenericArgument::Type(context_type.clone()));
-                                    }
+                                    if type_path.path.is_ident("C") =>
+                                {
+                                    new_args.push(syn::GenericArgument::Type(context_type.clone()));
+                                }
                                 _ => new_args.push(gen_arg.clone()),
                             }
                         }
@@ -77,22 +76,21 @@ impl CliParserMacro {
                     // module_idents.push(module_ident.clone());
                     let module_args_ident = format_ident!("{}Args", module);
                     module_commands.push(quote! {
-                            #module_ident(#module_args_ident)
-                        });
+                        #module_ident(#module_args_ident)
+                    });
 
                     module_args.push(quote! {
-                            #[derive(Parser)]
-                            pub struct #module_args_ident {
-                                #[clap(subcommand)]
-                                /// Commands under #module
-                                command: #command_type_ident,
-                            }
-                        });
+                        #[derive(Parser)]
+                        pub struct #module_args_ident {
+                            #[clap(subcommand)]
+                            /// Commands under #module
+                            command: #command_type_ident,
+                        }
+                    });
 
                     let field_name = field.ident.clone();
                     let field_name_string = field_name.to_string();
-                    let encode_function_name =
-                        format_ident!("encode_{}_call", field_name_string);
+                    let encode_function_name = format_ident!("encode_{}_call", field_name_string);
 
                     let type_path = match &field.ty {
                         Type::Path(type_path) => {

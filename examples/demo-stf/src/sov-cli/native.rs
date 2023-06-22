@@ -291,7 +291,7 @@ pub fn main() {
 
             let serialized_call: Vec<u8> = module_parse_helper(module_args.command);
             let serialized =
-                SerializedTx::new_from_call(&sender_priv_key_path, serialized_call, nonce)
+                SerializedTx::new_from_call(sender_priv_key_path, serialized_call, nonce)
                     .unwrap_or_else(|e| panic!("Call message serialization error: {}", e));
 
             let raw_contents = hex::encode(serialized.raw.data);
