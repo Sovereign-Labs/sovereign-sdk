@@ -26,6 +26,7 @@ mod sealed {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// A receipt showing the result of a transaction
 pub struct TransactionReceipt<R> {
     /// The canonical hash of this transaction
     pub tx_hash: [u8; 32],
@@ -40,6 +41,7 @@ pub struct TransactionReceipt<R> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// A receipt giving the outcome of a batch of transactions
 pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
     /// The canonical hash of this batch
     pub batch_hash: [u8; 32],
@@ -49,7 +51,15 @@ pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
     pub inner: BatchReceiptContents,
 }
 
-// TODO(@preston-evans98): update spec with simplified API
+#[derive(Debug, Clone, Serialize, Deserialize)]
+/// A receipt giving the outcome of a batch of transactions
+pub struct SyncReceipt<S> {
+    /// The canonical hash of this batch
+    pub blob_hash: [u8; 32],
+    /// Any additional structured data to be saved in the database and served over RPC
+    pub inner: S,
+}
+
 /// State transition function defines business logic that responsible for changing state.
 /// Terminology:
 ///  - state root: root hash of state merkle tree
@@ -64,8 +74,12 @@ pub trait StateTransitionFunction<Vm: Zkvm> {
 
     /// The contents of a transaction receipt. This is the data that is persisted in the database
     type TxReceiptContents: Serialize + DeserializeOwned + Clone;
+
     /// The contents of a batch receipt. This is the data that is persisted in the database
     type BatchReceiptContents: Serialize + DeserializeOwned + Clone;
+
+    /// The contents of a sync receipt. This is the data that is persisted in the database
+    type SyncReceiptContents: Serialize + DeserializeOwned + Clone;
 
     /// Witness is a data that is produced during actual batch execution
     /// or validated together with proof during verification
@@ -94,15 +108,19 @@ pub trait StateTransitionFunction<Vm: Zkvm> {
     /// it where that invalid signature is, so that it can skip signature checks on other transactions.
     /// (If the misbehavior hint is wrong, then the host is malicious so we can
     /// just panic - which means that no proof will be created).
-    fn apply_blob(
+    fn apply_tx_blob(
         &mut self,
         blob: &mut impl BlobTransactionTrait,
         misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents>;
 
+    fn apply_sync_data_blob(
+        &mut self,
+        blob: &mut impl BlobTransactionTrait,
+    ) -> SyncReceipt<Self::SyncReceiptContents>;
+
     /// Called once at the *end* of each DA layer block (i.e. after all rollup blobs have been processed)
     /// Commits state changes to the database
-    ///
     fn end_slot(&mut self) -> (Self::StateRoot, Self::Witness);
 }
 

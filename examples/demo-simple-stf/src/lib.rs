@@ -26,7 +26,7 @@ impl<VM: Zkvm> StateTransitionFunction<VM> for CheckHashPreimageStf {
     // We could incorporate the concept of a transaction into the rollup, but we leave it as an exercise for the reader.
     type TxReceiptContents = ();
 
-    // This is the type that will be returned as a result of `apply_blob`.
+    // This is the type that will be returned as a result of `apply_tx_blob`.
     type BatchReceiptContents = ApplyBlobResult;
 
     // This data is produced during actual batch execution or validated with proof during verification.
@@ -48,7 +48,7 @@ impl<VM: Zkvm> StateTransitionFunction<VM> for CheckHashPreimageStf {
     }
 
     // The core logic of our rollup.
-    fn apply_blob(
+    fn apply_tx_blob(
         &mut self,
         blob: &mut impl BlobTransactionTrait,
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
@@ -87,5 +87,14 @@ impl<VM: Zkvm> StateTransitionFunction<VM> for CheckHashPreimageStf {
 
     fn end_slot(&mut self) -> (Self::StateRoot, Self::Witness) {
         ((), ())
+    }
+
+    type SyncReceiptContents = ();
+
+    fn apply_sync_data_blob(
+        &mut self,
+        _blob: &mut impl BlobTransactionTrait,
+    ) -> sov_rollup_interface::stf::SyncReceipt<Self::SyncReceiptContents> {
+        todo!()
     }
 }

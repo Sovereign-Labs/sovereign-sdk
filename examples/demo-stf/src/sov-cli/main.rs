@@ -265,7 +265,7 @@ mod test {
     use demo_stf::runner_config::Config;
     use demo_stf::runtime::GenesisConfig;
     use sov_modules_api::Address;
-    use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome};
+    use sov_modules_stf_template::{Batch, RawTx, SenderOutcome};
     use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 
     use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
@@ -378,14 +378,14 @@ mod test {
         StateTransitionFunction::<MockZkvm>::init_chain(demo, config);
         StateTransitionFunction::<MockZkvm>::begin_slot(demo, Default::default());
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_tx_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_tx_blob(
             demo,
             &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         )
         .inner;
         assert!(
-            matches!(apply_blob_outcome, SequencerOutcome::Rewarded(0),),
+            matches!(apply_tx_blob_outcome, SenderOutcome::Rewarded(0),),
             "Sequencer execution should have succeeded but failed "
         );
         StateTransitionFunction::<MockZkvm>::end_slot(demo);

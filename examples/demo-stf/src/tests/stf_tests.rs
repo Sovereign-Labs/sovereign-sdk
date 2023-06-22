@@ -11,7 +11,7 @@ pub mod test {
     use sov_modules_api::{
         default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
     };
-    use sov_modules_stf_template::{Batch, SequencerOutcome};
+    use sov_modules_stf_template::{Batch, SenderOutcome};
     use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
     use sov_state::{ProverStorage, WorkingSet};
 
@@ -35,18 +35,18 @@ pub mod test {
 
             let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
-            let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+            let apply_tx_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_tx_blob(
                 &mut demo,
                 &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
                 None,
             );
 
             assert!(
-                matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded(0),),
+                matches!(apply_tx_blob_outcome.inner, SenderOutcome::Rewarded(0),),
                 "Sequencer execution should have succeeded but failed "
             );
 
-            assert!(has_tx_events(&apply_blob_outcome),);
+            assert!(has_tx_events(&apply_tx_blob_outcome),);
 
             StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
         }
@@ -92,18 +92,18 @@ pub mod test {
 
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_tx_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_tx_blob(
             &mut demo,
             &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         );
 
         assert!(
-            matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded(0),),
+            matches!(apply_tx_blob_outcome.inner, SenderOutcome::Rewarded(0),),
             "Sequencer execution should have succeeded but failed "
         );
 
-        assert!(has_tx_events(&apply_blob_outcome),);
+        assert!(has_tx_events(&apply_tx_blob_outcome),);
 
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
 
@@ -146,14 +146,14 @@ pub mod test {
 
             let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
-            let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+            let apply_tx_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_tx_blob(
                 &mut demo,
                 &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
                 None,
             )
             .inner;
             assert!(
-                matches!(apply_blob_outcome, SequencerOutcome::Rewarded(0),),
+                matches!(apply_tx_blob_outcome, SenderOutcome::Rewarded(0),),
                 "Sequencer execution should have succeeded but failed "
             );
         }
@@ -198,18 +198,18 @@ pub mod test {
 
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_tx_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_tx_blob(
             &mut demo,
             &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         );
 
         assert!(
-            matches!(apply_blob_outcome.inner, SequencerOutcome::Ignored),
+            matches!(apply_tx_blob_outcome.inner, SenderOutcome::Ignored),
             "Batch should have been skipped due to insufficient funds"
         );
 
         // Assert that there are no events
-        assert!(!has_tx_events(&apply_blob_outcome));
+        assert!(!has_tx_events(&apply_tx_blob_outcome));
     }
 }

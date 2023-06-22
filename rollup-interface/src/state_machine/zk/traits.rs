@@ -50,7 +50,7 @@ pub trait ValidityCondition: Serialize + DeserializeOwned {
 /// if and only if the condition `validity_condition` is satisfied.
 ///
 /// The period of time covered by a state transition proof may be a single slot, or a range of slots on the DA layer.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct StateTransition<C> {
     /// The state of the rollup before the transition
     pub initial_state_root: [u8; 32],

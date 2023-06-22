@@ -56,7 +56,7 @@ fn test_stf() {
     StateTransitionFunction::<MockZkvm>::init_chain(stf, ());
     StateTransitionFunction::<MockZkvm>::begin_slot(stf, ());
 
-    let receipt = StateTransitionFunction::<MockZkvm>::apply_blob(stf, &mut test_blob, None);
+    let receipt = StateTransitionFunction::<MockZkvm>::apply_tx_blob(stf, &mut test_blob, None);
     assert_eq!(receipt.inner, ApplyBlobResult::Success);
 
     StateTransitionFunction::<MockZkvm>::end_slot(stf);

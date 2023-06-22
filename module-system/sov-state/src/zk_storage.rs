@@ -1,6 +1,9 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use crate::witness::{TreeWitnessReader, Witness};
+use crate::{
+    storage::StorageProof,
+    witness::{TreeWitnessReader, Witness},
+};
 use jmt::{JellyfishMerkleTree, KeyHash, Version};
 use sov_rollup_interface::crypto::SimpleHasher;
 
@@ -37,6 +40,8 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     type Witness = S::Witness;
 
     type RuntimeConfig = [u8; 32];
+
+    type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Ok(Self::new(config))
@@ -95,5 +100,21 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
 
     fn is_empty(&self) -> bool {
         unimplemented!("Needs simplification in JellyfishMerkleTree: https://github.com/Sovereign-Labs/sovereign-sdk/issues/362")
+    }
+
+    fn open_proof(
+        &self,
+        state_root: [u8; 32],
+        state_proof: StorageProof<Self::Proof>,
+    ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {
+        let StorageProof { key, value, proof } = state_proof;
+        let key_hash = KeyHash(S::Hasher::hash(key.as_ref()));
+
+        proof.verify(
+            jmt::RootHash(state_root),
+            key_hash,
+            value.as_ref().map(|v| v.value()),
+        )?;
+        Ok((key, value))
     }
 }

@@ -183,7 +183,7 @@ impl<S: Storage> RevertableDelta<S> {
     fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
         let key = key.as_cache_key();
         if let Some(value) = self.writes.get(&key) {
-            return value.clone().map(StorageValue::new_from_cache_value);
+            return value.clone().map(Into::into);
         }
         self.inner.get(key.into())
     }
@@ -204,7 +204,7 @@ impl<S: Storage> RevertableDelta<S> {
 
         for (k, v) in self.writes.into_iter() {
             if let Some(v) = v {
-                inner.set(k.into(), StorageValue::new_from_cache_value(v));
+                inner.set(k.into(), v.into());
             } else {
                 inner.delete(k.into());
             }

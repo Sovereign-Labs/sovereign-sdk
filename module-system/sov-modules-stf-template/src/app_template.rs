@@ -1,10 +1,10 @@
 use crate::{
     tx_verifier::{verify_txs_stateless, TransactionAndRawHash},
-    Batch, SequencerOutcome, SlashingReason, TxEffect,
+    Batch, SenderOutcome, SlashingReason, TxEffect,
 };
 use borsh::BorshDeserialize;
 use sov_modules_api::{
-    hooks::{ApplyBlobHooks, TxHooks},
+    hooks::{ApplyBlobHooks, SyncHooks, TxHooks},
     Context, DispatchCall, Genesis,
 };
 use sov_rollup_interface::{
@@ -19,9 +19,10 @@ use tracing::{debug, error};
 
 type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
 
-pub struct AppTemplate<C: Context, RT, Vm> {
+pub struct AppTemplate<C: Context, RT, Syncer, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
+    pub syncer: Syncer,
     pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
 }
@@ -36,43 +37,45 @@ pub(crate) enum ApplyBatchError {
     },
 }
 
-impl From<ApplyBatchError> for BatchReceipt<SequencerOutcome, TxEffect> {
+impl From<ApplyBatchError> for BatchReceipt<SenderOutcome, TxEffect> {
     fn from(value: ApplyBatchError) -> Self {
         match value {
             ApplyBatchError::Ignored(hash) => BatchReceipt {
                 batch_hash: hash,
                 tx_receipts: Vec::new(),
-                inner: SequencerOutcome::Ignored,
+                inner: SenderOutcome::Ignored,
             },
             ApplyBatchError::Slashed { hash, reason } => BatchReceipt {
                 batch_hash: hash,
                 tx_receipts: Vec::new(),
-                inner: SequencerOutcome::Slashed(reason),
+                inner: SenderOutcome::Slashed(reason),
             },
         }
     }
 }
 
-impl<C: Context, RT, Vm> AppTemplate<C, RT, Vm>
+impl<C: Context, RT, Syncer, Vm> AppTemplate<C, RT, Syncer, Vm>
 where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
         + TxHooks<Context = C>
-        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
+        + ApplyBlobHooks<Context = C, BlobResult = SenderOutcome>,
+    Syncer: DispatchCall<Context = C> + SyncHooks<Context = C>,
 {
-    pub fn new(storage: C::Storage, runtime: RT) -> Self {
+    pub fn new(storage: C::Storage, runtime: RT, syncer: Syncer) -> Self {
         Self {
             runtime,
+            syncer,
             current_storage: storage,
             checkpoint: None,
             phantom_vm: PhantomData,
         }
     }
 
-    pub(crate) fn apply_blob(
+    pub(crate) fn apply_tx_blob(
         &mut self,
         blob: &mut impl BlobTransactionTrait,
-    ) -> ApplyBatchResult<BatchReceipt<SequencerOutcome, TxEffect>> {
+    ) -> ApplyBatchResult<BatchReceipt<SenderOutcome, TxEffect>> {
         debug!(
             "Applying batch from sequencer: 0x{}",
             hex::encode(blob.sender())
@@ -105,7 +108,7 @@ where
             Err(slashing_reason) => {
                 // Explicitly revert on slashing, even though nothing has changed in pre_process.
                 let mut batch_workspace = batch_workspace.revert().to_revertable();
-                let sequencer_outcome = SequencerOutcome::Slashed(slashing_reason);
+                let sequencer_outcome = SenderOutcome::Slashed(slashing_reason);
                 match self
                     .runtime
                     .end_blob_hook(sequencer_outcome, &mut batch_workspace)
@@ -199,7 +202,7 @@ where
         }
 
         // TODO: calculate the amount based of gas and fees
-        let sequencer_outcome = SequencerOutcome::Rewarded(0);
+        let sequencer_outcome = SenderOutcome::Rewarded(0);
 
         if let Err(e) = self
             .runtime

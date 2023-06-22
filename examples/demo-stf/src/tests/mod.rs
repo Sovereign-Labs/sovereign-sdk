@@ -2,7 +2,7 @@ use borsh::BorshSerialize;
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, Address,
 };
-use sov_modules_stf_template::{AppTemplate, Batch, SequencerOutcome, TxEffect};
+use sov_modules_stf_template::{AppTemplate, Batch, SenderOutcome, TxEffect};
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_state::ProverStorage;
 use std::path::Path;
@@ -52,8 +52,8 @@ pub fn create_demo_config(
     )
 }
 
-pub fn has_tx_events(apply_blob_outcome: &BatchReceipt<SequencerOutcome, TxEffect>) -> bool {
-    let events = apply_blob_outcome
+pub fn has_tx_events(apply_tx_blob_outcome: &BatchReceipt<SenderOutcome, TxEffect>) -> bool {
+    let events = apply_tx_blob_outcome
         .tx_receipts
         .iter()
         .flat_map(|receipts| receipts.events.iter());

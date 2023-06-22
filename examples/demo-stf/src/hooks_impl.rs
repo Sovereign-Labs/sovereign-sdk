@@ -4,7 +4,7 @@ use sov_modules_api::{
     transaction::Transaction,
     Context, Spec,
 };
-use sov_modules_stf_template::SequencerOutcome;
+use sov_modules_stf_template::SenderOutcome;
 use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_state::WorkingSet;
 
@@ -30,7 +30,7 @@ impl<C: Context> TxHooks for Runtime<C> {
 
 impl<C: Context> ApplyBlobHooks for Runtime<C> {
     type Context = C;
-    type BlobResult = SequencerOutcome;
+    type BlobResult = SenderOutcome;
 
     fn begin_blob_hook(
         &self,
@@ -46,9 +46,9 @@ impl<C: Context> ApplyBlobHooks for Runtime<C> {
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
         match result {
-            SequencerOutcome::Rewarded(reward) => self.sequencer.end_blob_hook(reward, working_set),
-            SequencerOutcome::Ignored => self.sequencer.end_blob_hook(0, working_set),
-            SequencerOutcome::Slashed(_) => Ok(()),
+            SenderOutcome::Rewarded(reward) => self.sequencer.end_blob_hook(reward, working_set),
+            SenderOutcome::Ignored => self.sequencer.end_blob_hook(0, working_set),
+            SenderOutcome::Slashed(_) => Ok(()),
         }
     }
 }

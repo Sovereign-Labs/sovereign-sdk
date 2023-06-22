@@ -103,7 +103,7 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         info!("Block has {} batches", blob_txs.len());
         for mut blob in blob_txs.clone() {
-            let receipt = demo.apply_blob(&mut blob, None);
+            let receipt = demo.apply_tx_blob(&mut blob, None);
             info!(
                 "batch with hash=0x{} has been applied",
                 hex::encode(receipt.batch_hash)

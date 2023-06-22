@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 use std::{fs, path::Path, sync::Arc};
 
 use crate::config::Config;
+use crate::storage::StorageProof;
 use crate::witness::Witness;
 use crate::{
     internal_cache::OrderedReadsAndWrites,
@@ -45,7 +46,7 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
             .db
             .get_value_option_by_key(self.db.get_next_version(), key.as_ref())
         {
-            Ok(value) => value.map(StorageValue::new_from_bytes),
+            Ok(value) => value.map(Into::into),
             // It is ok to panic here, we assume the db is available and consistent.
             Err(e) => panic!("Unable to read value from db: {e}"),
         }
@@ -55,6 +56,7 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
 impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type Witness = S::Witness;
     type RuntimeConfig = Config;
+    type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Self::with_path(config.path.as_path())
@@ -136,6 +138,22 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     // Based on assumption `validate_and_commit` increments version.
     fn is_empty(&self) -> bool {
         self.db.get_next_version() <= 1
+    }
+
+    fn open_proof(
+        &self,
+        state_root: [u8; 32],
+        state_proof: StorageProof<Self::Proof>,
+    ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {
+        let StorageProof { key, value, proof } = state_proof;
+        let key_hash = KeyHash(S::Hasher::hash(key.as_ref()));
+
+        proof.verify(
+            jmt::RootHash(state_root),
+            key_hash,
+            value.as_ref().map(|v| v.value()),
+        )?;
+        Ok((key, value))
     }
 }
 

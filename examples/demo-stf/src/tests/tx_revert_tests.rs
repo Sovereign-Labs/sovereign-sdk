@@ -10,7 +10,7 @@ use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, PublicKey,
 };
 use sov_modules_stf_template::RawTx;
-use sov_modules_stf_template::{Batch, SequencerOutcome, SlashingReason};
+use sov_modules_stf_template::{Batch, SenderOutcome, SlashingReason};
 use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -44,20 +44,23 @@ fn test_tx_revert() {
 
         let txs = simulate_da_with_revert_msg(election_admin_private_key);
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_tx_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_tx_blob(
             &mut demo,
             &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         );
 
         assert_eq!(
-            SequencerOutcome::Rewarded(0),
-            apply_blob_outcome.inner,
+            SenderOutcome::Rewarded(0),
+            apply_tx_blob_outcome.inner,
             "Unexpected outcome: Batch execution should have succeeded",
         );
 
         // Some events were observed
-        assert!(has_tx_events(&apply_blob_outcome), "No events were taken");
+        assert!(
+            has_tx_events(&apply_tx_blob_outcome),
+            "No events were taken"
+        );
 
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
     }
@@ -149,15 +152,15 @@ fn test_nonce_incremented_on_revert() {
             })
             .collect();
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_tx_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_tx_blob(
             &mut demo,
             &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         );
 
         assert_eq!(
-            SequencerOutcome::Rewarded(0),
-            apply_blob_outcome.inner,
+            SenderOutcome::Rewarded(0),
+            apply_tx_blob_outcome.inner,
             "Unexpected outcome: Batch execution should have succeeded",
         );
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
@@ -207,20 +210,20 @@ fn test_tx_bad_sig() {
 
         let txs = simulate_da_with_bad_sig(election_admin_private_key);
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_tx_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_tx_blob(
             &mut demo,
             &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         );
 
         assert_eq!(
-            SequencerOutcome::Slashed(SlashingReason::StatelessVerificationFailed),
-            apply_blob_outcome.inner,
+            SenderOutcome::Slashed(SlashingReason::StatelessVerificationFailed),
+            apply_tx_blob_outcome.inner,
             "Unexpected outcome: Stateless verification should have failed due to invalid signature"
         );
 
         // The batch receipt contains no events.
-        assert!(!has_tx_events(&apply_blob_outcome));
+        assert!(!has_tx_events(&apply_tx_blob_outcome));
 
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
     }
@@ -268,20 +271,20 @@ fn test_tx_bad_serialization() {
 
         let txs = simulate_da_with_bad_serialization(election_admin_private_key);
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_tx_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_tx_blob(
             &mut demo,
             &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
         );
 
         assert_eq!(
-            SequencerOutcome::Slashed(SlashingReason::InvalidTransactionEncoding),
-            apply_blob_outcome.inner,
+            SenderOutcome::Slashed(SlashingReason::InvalidTransactionEncoding),
+            apply_tx_blob_outcome.inner,
             "Unexpected outcome: Stateless verification should have failed due to invalid signature"
         );
 
         // The batch receipt contains no events.
-        assert!(!has_tx_events(&apply_blob_outcome));
+        assert!(!has_tx_events(&apply_tx_blob_outcome));
         StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
     }
 

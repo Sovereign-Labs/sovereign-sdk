@@ -4,6 +4,7 @@ use crate::witness::Witness;
 use crate::{internal_cache::OrderedReadsAndWrites, utils::AlignedVec, Prefix};
 use borsh::{BorshDeserialize, BorshSerialize};
 use hex;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
@@ -58,46 +59,68 @@ impl StorageKey {
     }
 }
 
-// `Value` type for the `Storage`
+/// A serialized value suitable for storing. Internally uses an Arc<u8> for cheap cloning.
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 pub struct StorageValue {
     value: Arc<Vec<u8>>,
 }
 
-impl StorageValue {
-    pub fn new<V: BorshSerialize>(value: &V) -> Self {
-        let encoded_value = value.try_to_vec().unwrap();
-        Self {
-            value: Arc::new(encoded_value),
-        }
-    }
-
-    pub fn value(&self) -> &[u8] {
-        &self.value
-    }
-
-    pub fn as_cache_value(self) -> CacheValue {
-        CacheValue { value: self.value }
-    }
-
-    pub fn new_from_cache_value(cache_value: CacheValue) -> Self {
+impl From<CacheValue> for StorageValue {
+    fn from(cache_value: CacheValue) -> Self {
         Self {
             value: cache_value.value,
         }
     }
+}
 
-    pub fn new_from_bytes(value: Vec<u8>) -> Self {
+impl From<Vec<u8>> for StorageValue {
+    fn from(value: Vec<u8>) -> Self {
         Self {
             value: Arc::new(value),
         }
     }
 }
 
+impl StorageValue {
+    /// Create a new storage value by serializing the input
+    pub fn new(value: &impl BorshSerialize) -> Self {
+        let encoded_value = value.try_to_vec().unwrap();
+        Self {
+            value: Arc::new(encoded_value),
+        }
+    }
+
+    /// Get the bytes of this value.
+    pub fn value(&self) -> &[u8] {
+        &self.value
+    }
+
+    /// Convert this value into a `CacheValue`.
+    pub fn as_cache_value(self) -> CacheValue {
+        CacheValue { value: self.value }
+    }
+}
+
+/// A proof that a particular storage key has a particular value, or is absent.
+pub struct StorageProof<P> {
+    /// The key which is proven
+    pub key: StorageKey,
+    /// The value, if any, which is proven
+    pub value: Option<StorageValue>,
+    /// The cryptographic proof
+    pub proof: P,
+}
+
 /// An interface for storing and retrieving values in the storage.
 pub trait Storage: Clone {
+    /// The witness type for this storage instance.
     type Witness: Witness;
+
     /// The runtime config for this storage instance.
     type RuntimeConfig;
+
+    /// A cryptographic proof that a particular key has a particular value, or is absent.
+    type Proof: Serialize + DeserializeOwned + core::fmt::Debug + Clone;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error>;
 
@@ -111,6 +134,12 @@ pub trait Storage: Clone {
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error>;
+
+    fn open_proof(
+        &self,
+        state_root: [u8; 32],
+        proof: StorageProof<Self::Proof>,
+    ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error>;
 
     /// Indicates if storage is empty or not.
     /// Useful during initialization

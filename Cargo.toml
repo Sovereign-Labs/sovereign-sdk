@@ -19,6 +19,7 @@ members = [
     "module-system/module-implementations/sov-accounts",
     "module-system/module-implementations/sov-bank",
     "module-system/module-implementations/sov-evm",
+    "module-system/module-implementations/sov-attester-incentives",
     "module-system/module-implementations/sov-prover-incentives",
     "module-system/module-implementations/sov-sequencer-registry",
     "module-system/module-implementations/module-template",
@@ -42,7 +43,8 @@ rust-version = "1.66"
 
 [workspace.dependencies]
 # Dependencies maintained by sovereign
-jmt = "0.6.0"
+# jmt = "0.6.0"
+jmt = {path = "../penumbra-jmt/jmt" }
 
 # External dependencies
 anyhow = "1.0.68"

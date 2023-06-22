@@ -98,9 +98,13 @@ impl<B: Buf> CountedBufReader<B> {
         self.counter
     }
 
-    /// Getter: returns a reference to an accumulator of the blob data read by the rollup
+    /// Getter: returns a reference to an accumulator of the blob data read by the rollup so far
     pub fn acc(&self) -> &Vec<u8> {
         &self.reading_acc
+    }
+
+    pub fn total_len(&self) -> usize {
+        self.inner.remaining() + self.counter
     }
 }
 
@@ -136,10 +140,8 @@ pub trait BlobTransactionTrait: Serialize + DeserializeOwned {
     /// This function returns a mutable reference to the blob data
     fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data>;
 
-    /// The raw data of the blob. For example, the "calldata" of an Ethereum rollup transaction
-    /// This function clones the data of the blob to an external BufWithCounter
-    ///
-    /// This function returns a simple reference to the blob data
+    /// Returns a reference to a `CountedBufReader`, which allows the caller to re-read
+    /// any data read so far, but not to advance the buffer
     fn data(&self) -> &CountedBufReader<Self::Data>;
 
     /// Returns the hash of the blob. If not provided with a hint, it is computed by hashing the blob data

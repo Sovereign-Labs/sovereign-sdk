@@ -1,20 +1,23 @@
 pub mod app_template;
 mod batch;
+pub mod sync_strategies;
 mod tx_verifier;
 
 pub use app_template::AppTemplate;
 pub use batch::Batch;
+use tracing::log::info;
 pub use tx_verifier::RawTx;
 
 use sov_modules_api::{
-    hooks::{ApplyBlobHooks, TxHooks},
+    hooks::{ApplyBlobHooks, SyncHooks, TxHooks},
     Context, DispatchCall, Genesis, Spec,
 };
-use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_rollup_interface::stf::{BatchReceipt, SyncReceipt};
 use sov_rollup_interface::zk::traits::Zkvm;
 use sov_state::StateCheckpoint;
 use sov_state::Storage;
+use std::io::Read;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TxEffect {
@@ -23,7 +26,7 @@ pub enum TxEffect {
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum SequencerOutcome {
+pub enum SenderOutcome {
     /// Sequencer receives reward amount in defined token and can withdraw its deposit
     Rewarded(u64),
     /// Sequencer loses its deposit and receives no reward
@@ -39,12 +42,14 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-impl<C: Context, RT, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, RT, Vm>
+impl<C: Context, RT, Syncer, Vm: Zkvm> StateTransitionFunction<Vm>
+    for AppTemplate<C, RT, Syncer, Vm>
 where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
         + TxHooks<Context = C>
-        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
+        + ApplyBlobHooks<Context = C, BlobResult = SenderOutcome>,
+    Syncer: DispatchCall<Context = C> + SyncHooks<Context = C>,
 {
     type StateRoot = jmt::RootHash;
 
@@ -52,7 +57,7 @@ where
 
     type TxReceiptContents = TxEffect;
 
-    type BatchReceiptContents = SequencerOutcome;
+    type BatchReceiptContents = SenderOutcome;
 
     type Witness = <<C as Spec>::Storage as Storage>::Witness;
 
@@ -78,12 +83,12 @@ where
         ));
     }
 
-    fn apply_blob(
+    fn apply_tx_blob(
         &mut self,
         blob: &mut impl sov_rollup_interface::da::BlobTransactionTrait,
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
-        match self.apply_blob(blob) {
+        match self.apply_tx_blob(blob) {
             Ok(batch) => batch,
             Err(e) => e.into(),
         }
@@ -96,5 +101,56 @@ where
             .validate_and_commit(cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
         (jmt::RootHash(root_hash), witness)
+    }
+
+    type SyncReceiptContents = SenderOutcome;
+
+    fn apply_sync_data_blob(
+        &mut self,
+        blob: &mut impl sov_rollup_interface::da::BlobTransactionTrait,
+    ) -> sov_rollup_interface::stf::SyncReceipt<Self::SyncReceiptContents> {
+        let mut batch_workspace = self
+            .checkpoint
+            .take()
+            .expect("Working_set was initialized in begin_slot")
+            .to_revertable();
+
+        let address = match self.syncer.pre_blob_hook(blob, &mut batch_workspace) {
+            Ok(address) => address,
+            Err(e) => {
+                info!("Sync pre-blob hook rejected: {:?}", e);
+                return SyncReceipt {
+                    blob_hash: blob.hash(),
+                    inner: SenderOutcome::Ignored,
+                };
+            }
+        };
+
+        let data = blob.data_mut();
+        let mut contiguous_data = Vec::with_capacity(data.total_len());
+        data.read_to_end(&mut contiguous_data)
+            .expect("Reading from blob should succeed");
+
+        let decoded = Syncer::decode_call(&contiguous_data);
+        match decoded {
+            Ok(call) => {
+                // TODO: do something with this result
+                let _ =
+                    self.syncer
+                        .dispatch_call(call, &mut batch_workspace, &Context::new(address));
+            }
+            Err(e) => {
+                info!("Sync data blob decoding failed: {:?}", e);
+                return SyncReceipt {
+                    blob_hash: blob.hash(),
+                    inner: SenderOutcome::Slashed(SlashingReason::InvalidBatchEncoding),
+                };
+            }
+        };
+        // TODO: Make the reward sensible
+        SyncReceipt {
+            blob_hash: blob.hash(),
+            inner: SenderOutcome::Rewarded(0),
+        }
     }
 }
