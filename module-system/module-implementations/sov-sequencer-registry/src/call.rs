@@ -12,7 +12,6 @@ use sov_state::WorkingSet;
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage {
     Register { da_address: Vec<u8> },
-    // TODO: Allow to exit funds to another address?
     Exit { da_address: Vec<u8> },
 }
 

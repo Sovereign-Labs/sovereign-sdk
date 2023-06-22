@@ -23,6 +23,4 @@ impl<C: Context> SequencerRegistry<C> {
             address: self.allowed_sequencers.get(&da_address, working_set),
         }
     }
-
-    // TODO: Do we want to list all sequencers?
 }
