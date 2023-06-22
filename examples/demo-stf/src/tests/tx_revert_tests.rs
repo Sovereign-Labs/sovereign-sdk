@@ -1,5 +1,5 @@
 use crate::genesis_config::create_demo_config;
-use crate::mocks::new_test_blob;
+use crate::tests::new_test_blob;
 use crate::{
     genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
     runtime::Runtime,

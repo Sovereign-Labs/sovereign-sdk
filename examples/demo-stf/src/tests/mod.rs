@@ -1,5 +1,6 @@
+use borsh::BorshSerialize;
 use sov_modules_api::{default_context::DefaultContext, Address};
-use sov_modules_stf_template::{AppTemplate, SequencerOutcome, TxEffect};
+use sov_modules_stf_template::{AppTemplate, Batch, SequencerOutcome, TxEffect};
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_state::ProverStorage;
 use std::path::Path;
@@ -28,4 +29,10 @@ pub fn has_tx_events(apply_blob_outcome: &BatchReceipt<SequencerOutcome, TxEffec
         .flat_map(|receipts| receipts.events.iter());
 
     events.peekable().peek().is_some()
+}
+
+pub fn new_test_blob(batch: Batch, address: &[u8]) -> TestBlob {
+    let address = Address::try_from(address).unwrap();
+    let data = batch.try_to_vec().unwrap();
+    TestBlob::new(data, address, [0; 32])
 }

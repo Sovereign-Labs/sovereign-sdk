@@ -259,7 +259,6 @@ mod test {
     use super::*;
     use demo_stf::app::{DemoApp, DemoAppRunner};
     use demo_stf::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
-    use demo_stf::mocks::new_test_blob;
     use demo_stf::runner_config::Config;
     use demo_stf::runtime::GenesisConfig;
     use sov_modules_api::Address;
@@ -268,6 +267,14 @@ mod test {
 
     use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
     use sov_state::WorkingSet;
+
+    type TestBlob = sov_rollup_interface::mocks::TestBlob<Address>;
+
+    fn new_test_blob(batch: Batch, address: &[u8]) -> TestBlob {
+        let address = Address::try_from(address).unwrap();
+        let data = batch.try_to_vec().unwrap();
+        TestBlob::new(data, address, [0; 32])
+    }
 
     #[test]
     fn test_sov_cli() {
