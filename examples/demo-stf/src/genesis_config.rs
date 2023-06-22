@@ -1,15 +1,12 @@
 /// Creates config for a rollup with some default settings, the config is used in demos and tests.
 use crate::runtime::GenesisConfig;
-use borsh::BorshSerialize;
 use sov_election::ElectionConfig;
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_modules_api::Context;
 use sov_modules_api::Hasher;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
-use sov_modules_api::{Address, Context};
-use sov_modules_stf_template::Batch;
-use sov_rollup_interface::mocks::TestBlob;
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
 
@@ -69,12 +66,6 @@ pub fn create_demo_genesis_config<C: Context>(
 pub fn generate_address<C: Context>(key: &str) -> <C as Spec>::Address {
     let hash = <C as Spec>::Hasher::hash(key.as_bytes());
     <C as Spec>::Address::from(hash)
-}
-
-pub fn new_test_blob(batch: Batch, address: &[u8]) -> TestBlob<Address> {
-    let address = Address::try_from(address).unwrap();
-    let data = batch.try_to_vec().unwrap();
-    TestBlob::new(data, address, [0; 32])
 }
 
 pub fn create_demo_config(

@@ -258,9 +258,8 @@ pub fn main() {
 mod test {
     use super::*;
     use demo_stf::app::{DemoApp, DemoAppRunner};
-    use demo_stf::genesis_config::{
-        create_demo_config, new_test_blob, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT,
-    };
+    use demo_stf::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
+    use demo_stf::mocks::new_test_blob;
     use demo_stf::runner_config::Config;
     use demo_stf::runtime::GenesisConfig;
     use sov_modules_api::Address;

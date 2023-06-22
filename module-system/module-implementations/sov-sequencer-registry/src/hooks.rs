@@ -13,6 +13,7 @@ impl<C: Context> ApplyBlobHooks for SequencerRegistry<C> {
         working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
     ) -> anyhow::Result<()> {
         // Clone to satisfy StateMap API
+        // TODO: can be fixed after https://github.com/Sovereign-Labs/sovereign-sdk/issues/427
         let sender = blob.sender().as_ref().to_vec();
         self.allowed_sequencers.get_or_err(&sender, working_set)?;
         Ok(())
