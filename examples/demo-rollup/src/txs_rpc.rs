@@ -75,9 +75,7 @@ mod tests {
     use super::*;
     use anyhow::bail;
     use sov_rollup_interface::da::DaSpec;
-    use sov_rollup_interface::mocks::{
-        MockAddress, TestBlob, TestBlock, TestBlockHeader, TestHash,
-    };
+    use sov_rollup_interface::mocks::{MockDaSpec, TestBlock};
     use std::future::Future;
     use std::pin::Pin;
     use std::sync::Arc;
@@ -100,17 +98,6 @@ mod tests {
         fn get_submitted(&self) -> Vec<Vec<u8>> {
             self.submitted.lock().unwrap().clone()
         }
-    }
-
-    struct MockDaSpec;
-
-    impl DaSpec for MockDaSpec {
-        type SlotHash = TestHash;
-        type BlockHeader = TestBlockHeader;
-        type BlobTransaction = TestBlob<MockAddress>;
-        type InclusionMultiProof = [u8; 32];
-        type CompletenessProof = ();
-        type ChainParams = ();
     }
 
     impl DaService for MockDaService {
