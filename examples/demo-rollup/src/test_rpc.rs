@@ -46,6 +46,11 @@ fn populate_ledger(ledger_db: &mut LedgerDB, slots: Vec<SlotCommit<TestBlock, u3
 }
 
 fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u32, u32>>) {
+    // Initialize the ledger database, which stores blocks, transactions, events, etc.
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut ledger_db = LedgerDB::with_path(tmpdir.path()).unwrap();
+    populate_ledger(&mut ledger_db, slots);
+
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_io()
         .enable_time()
@@ -55,15 +60,7 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u
     rt.block_on(async {
         let (tx_start, rx_start) = oneshot::channel();
         let (tx_end, rx_end) = oneshot::channel();
-
         let address = SocketAddr::new("127.0.0.1".parse().unwrap(), 0);
-
-        // Initialize the ledger database, which stores blocks, transactions, events, etc.
-        let tmpdir = tempfile::tempdir().unwrap();
-        let mut ledger_db = LedgerDB::with_path(tmpdir.path()).unwrap();
-
-        populate_ledger(&mut ledger_db, slots);
-
         let ledger_rpc_module = ledger_rpc::get_ledger_rpc::<u32, u32>(ledger_db.clone());
 
         rt.spawn(async move {
@@ -84,14 +81,6 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u
         };
 
         query_test_helper(test_queries, rpc_config).await;
-
-        // By closing the `TempDir` explicitly we can check that it has
-        // been deleted successfully. If we don't close it explicitly,
-        // the directory will still be deleted when `tmp_dir` goes out
-        // of scope, but we won't know whether deleting the directory
-        // succeeded.
-        tmpdir.close().unwrap();
-
         tx_end.send("drop server").unwrap();
     });
 }
@@ -333,6 +322,121 @@ fn format_tx(
     }
 }
 
+fn get_batches_test(
+    slots: Vec<SlotCommit<TestBlock, u32, u32>>,
+    tx_id_to_event_range: HashMap<usize, (usize, usize)>,
+    _total_num_batches: usize,
+    random_batch_num: i32,
+) {
+    let mut curr_batch_num = 1;
+    let mut curr_tx_num = 1;
+
+    let random_batch_num_usize = usize::try_from(random_batch_num).unwrap();
+
+    for slot in &slots {
+        if curr_batch_num > random_batch_num_usize {
+            break;
+        }
+
+        if curr_batch_num + slot.batch_receipts().len() > random_batch_num_usize {
+            let curr_slot_batches = slot.batch_receipts();
+
+            let batch_index = random_batch_num_usize - curr_batch_num;
+
+            for i in 0..batch_index {
+                curr_tx_num += curr_slot_batches.get(i).unwrap().tx_receipts.len();
+            }
+
+            let first_tx_num = curr_tx_num;
+
+            let curr_batch = curr_slot_batches.get(batch_index).unwrap();
+            let last_tx_num = first_tx_num + curr_batch.tx_receipts.len();
+
+            let batch_hash = hex::encode(curr_batch.batch_hash);
+            let batch_receipt = curr_batch.inner;
+
+            let tx_hashes: Vec<String> = curr_batch
+                .tx_receipts
+                .clone()
+                .into_iter()
+                .map(|x| {
+                    let encoding = hex::encode(x.tx_hash);
+                    format!("\"0x{encoding}\"")
+                })
+                .collect();
+            let formatted_hashes = tx_hashes.join(",");
+
+            let mut tx_full_data: Vec<String> = Vec::new();
+
+            for (tx_id, tx) in curr_batch.tx_receipts.clone().into_iter().enumerate() {
+                tx_full_data.push(format_tx(curr_tx_num + tx_id, &tx, &tx_id_to_event_range));
+            }
+
+            let tx_full_data = tx_full_data.join(",");
+
+            test_helper(
+                vec![
+                    TestExpect {
+                        data: format!(
+                            r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Compact"],"id":1}}"#
+                        ),
+                        expected: format!(
+                            r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"custom_receipt":{batch_receipt}}}],"id":1}}"#
+                        ),
+                    },
+                    TestExpect {
+                        data: format!(
+                            r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Standard"],"id":1}}"#
+                        ),
+                        expected: format!(
+                            r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#
+                        ),
+                    },
+                    TestExpect {
+                        data: format!(
+                            r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}]],"id":1}}"#
+                        ),
+                        expected: format!(
+                            r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#
+                        ),
+                    },
+                    TestExpect {
+                        data: format!(
+                            r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[{random_batch_num}],"id":1}}"#
+                        ),
+                        expected: format!(
+                            r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#
+                        ),
+                    },
+                    // TODO #417: Solve this test
+                    TestExpect {
+                        data: format!(
+                            r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Full"],"id":1}}"#
+                        ),
+                        expected: format!(
+                            r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{tx_full_data}],"custom_receipt":{batch_receipt}}}],"id":1}}"#
+                        ),
+                    },
+                ],
+                slots,
+            );
+            return;
+        }
+
+        curr_batch_num += slot.batch_receipts().len();
+
+        for batch in slot.batch_receipts() {
+            curr_tx_num += batch.tx_receipts.len();
+        }
+    }
+
+    let data = format!(
+        r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Compact"],"id":1}}"#
+    );
+    let expected: String = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
+    test_helper(vec![TestExpect { data, expected }], slots);
+}
+
 proptest!(
     #[test]
     fn proptest_get_head((slots, _, total_num_batches) in arb_slots(10, 10)){
@@ -347,97 +451,13 @@ proptest!(
 
         let data = r#"{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}"#.to_string();
         let expected = format!("{{\"jsonrpc\":\"2.0\",\"result\":{{\"number\":{num_slots},\"hash\":\"0x{last_slot_hash}\",\"batch_range\":{{\"start\":{last_slot_start_batch},\"end\":{last_slot_end_batch}}}}},\"id\":1}}");
-        test_helper(vec![TestExpect{ data, expected}], slots);
+        test_helper(vec![TestExpect{ data, expected }], slots);
     }
 
 
     #[test]
     fn proptest_get_batches((slots, tx_id_to_event_range, _total_num_batches) in arb_slots(10, 10), random_batch_num in 1..100){
-        let mut curr_batch_num = 1;
-        let mut curr_tx_num = 1;
-
-        let random_batch_num_usize = usize::try_from(random_batch_num).unwrap();
-
-        for slot in &slots{
-            if curr_batch_num > random_batch_num_usize {
-                break;
-            }
-
-            if curr_batch_num + slot.batch_receipts().len() > random_batch_num_usize {
-                let curr_slot_batches = slot.batch_receipts();
-
-                let batch_index = random_batch_num_usize - curr_batch_num;
-
-                for i in 0..batch_index{
-                    curr_tx_num += curr_slot_batches.get(i).unwrap().tx_receipts.len();
-                }
-
-                let first_tx_num = curr_tx_num;
-
-                let curr_batch = curr_slot_batches.get(batch_index).unwrap();
-                let last_tx_num = first_tx_num + curr_batch.tx_receipts.len();
-
-                let batch_hash = hex::encode(curr_batch.batch_hash);
-                let batch_receipt= curr_batch.inner;
-
-                let tx_hashes : Vec<String> = curr_batch.tx_receipts.clone().into_iter().map(|x| {
-                    let encoding = hex::encode(x.tx_hash);
-                    format!("\"0x{encoding}\"")
-                }).collect();
-                let formatted_hashes = tx_hashes.join(",");
-
-                let mut tx_full_data : Vec<String> = Vec::new();
-
-                for (tx_id, tx) in curr_batch.tx_receipts.clone().into_iter().enumerate(){
-                   tx_full_data.push(format_tx(curr_tx_num + tx_id, &tx, &tx_id_to_event_range));
-                }
-
-                let tx_full_data = tx_full_data.join(",");
-
-                test_helper(vec![TestExpect{
-                    data:
-                    format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Compact"],"id":1}}"#),
-                    expected:
-                    format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
-                    TestExpect{
-                    data:
-                    format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Standard"],"id":1}}"#),
-                    expected:
-                    format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
-                    TestExpect{
-                    data:
-                    format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}]],"id":1}}"#),
-                    expected:
-                    format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
-                    TestExpect{
-                    data:
-                    format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[{random_batch_num}],"id":1}}"#),
-                    expected:
-                    format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)}
-                    ,
-                    // TODO #417: Solve this test
-                    TestExpect{
-                    data:
-                    format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Full"],"id":1}}"#),
-                    expected:
-                    format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{tx_full_data}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
-                    ]
-                    , slots);
-
-                return Ok(());
-            }
-
-            curr_batch_num += slot.batch_receipts().len();
-
-            for batch in slot.batch_receipts(){
-                curr_tx_num += batch.tx_receipts.len();
-            }
-
-        }
-
-        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Compact"],"id":1}}"#);
-        let expected : String= r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
-        test_helper(vec![TestExpect{data, expected}], slots);
+        get_batches_test(slots, tx_id_to_event_range, _total_num_batches, random_batch_num);
     }
 
     #[test]
