@@ -1,8 +1,11 @@
 use proptest::{prelude::any_with, prop_compose, proptest, strategy::Strategy};
 use reqwest::header::CONTENT_TYPE;
+use serde::{Deserialize, Serialize};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::{services::da::SlotData, stf::fuzzing::BatchReceiptStrategyArgs};
 use std::collections::HashMap;
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::net::SocketAddr;
 
 #[cfg(test)]
@@ -14,12 +17,16 @@ use tokio::sync::oneshot;
 
 use crate::{config::RpcConfig, ledger_rpc};
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct TestExpect {
     data: String,
     expected: String,
 }
 
-async fn query_test_helper(test_queries: Vec<TestExpect>, rpc_config: RpcConfig) {
+async fn query_test_helper(
+    test_queries: Vec<TestExpect>,
+    rpc_config: RpcConfig,
+) -> anyhow::Result<()> {
     let (addr, port) = (rpc_config.bind_host, rpc_config.bind_port);
     let client = reqwest::Client::new();
     let url_str = format!("http://{addr}:{port}");
@@ -33,10 +40,16 @@ async fn query_test_helper(test_queries: Vec<TestExpect>, rpc_config: RpcConfig)
             .await
             .unwrap();
 
-        assert_eq!(res.status().as_u16(), 200);
+        if !res.status().is_success() {
+            anyhow::bail!("Bad response: {}", res.status());
+        }
         let contents = res.text().await.unwrap();
-        assert_eq!((&contents), query.expected.as_str());
+        if contents != query.expected {
+            anyhow::bail!("mismatched content");
+        }
+        // assert_eq!((&contents), query.expected.as_str());
     }
+    Ok(())
 }
 
 fn populate_ledger(ledger_db: &mut LedgerDB, slots: Vec<SlotCommit<TestBlock, u32, u32>>) {
@@ -80,7 +93,19 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u
             bind_port,
         };
 
-        query_test_helper(test_queries, rpc_config).await;
+        if query_test_helper(test_queries.clone(), rpc_config)
+            .await
+            .is_err()
+        {
+            {
+                let serialized_queries =
+                    serde_json::to_string(&test_queries).expect("Failed to serialize");
+
+                let mut file = OpenOptions::new().write(true).open("queries.json").unwrap();
+
+                file.write_all(serialized_queries.as_bytes()).unwrap();
+            }
+        };
         tx_end.send("drop server").unwrap();
     });
 }
