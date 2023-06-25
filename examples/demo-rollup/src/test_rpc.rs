@@ -4,8 +4,8 @@ use serde::{Deserialize, Serialize};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::{services::da::SlotData, stf::fuzzing::BatchReceiptStrategyArgs};
 use std::collections::HashMap;
-use std::fs::OpenOptions;
-use std::io::Write;
+use std::fs::{File, OpenOptions};
+use std::io::{Read, Write};
 use std::net::SocketAddr;
 
 #[cfg(test)]
@@ -16,6 +16,9 @@ use tendermint::crypto::Sha256;
 use tokio::sync::oneshot;
 
 use crate::{config::RpcConfig, ledger_rpc};
+
+const QUERIES_FILE: &str = "/tmp/queries.json";
+const SLOTS_FILE: &str = "/tmp/slots.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct TestExpect {
@@ -58,7 +61,35 @@ fn populate_ledger(ledger_db: &mut LedgerDB, slots: Vec<SlotCommit<TestBlock, u3
     }
 }
 
+#[derive(Clone, Serialize, Deserialize)]
+struct SerializableSlotCommit {
+    slot_data: TestBlock,
+    receipts: Vec<BatchReceipt<u32, u32>>,
+}
+
+impl SerializableSlotCommit {
+    fn produce_slot_commit(&self) -> SlotCommit<TestBlock, u32, u32> {
+        let mut slot_commit = SlotCommit::new(self.slot_data.clone());
+        for r in &self.receipts {
+            slot_commit.add_batch(r.clone());
+        }
+        slot_commit
+    }
+}
+
 fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u32, u32>>) {
+    let mut to_serialize_slots = vec![];
+    for s in &slots {
+        let slot_data = s.slot_data().clone();
+        // let serialized_slot_data = serde_json::to_string(slot_data).unwrap();
+        let receipts = s.batch_receipts().clone();
+        let serializable = SerializableSlotCommit {
+            slot_data,
+            receipts,
+        };
+        to_serialize_slots.push(serializable);
+    }
+
     // Initialize the ledger database, which stores blocks, transactions, events, etc.
     let tmpdir = tempfile::tempdir().unwrap();
     let mut ledger_db = LedgerDB::with_path(tmpdir.path()).unwrap();
@@ -82,9 +113,10 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u
                 .await
                 .unwrap();
             let actual_address = server.local_addr().unwrap();
-            let _server_handle = server.start(ledger_rpc_module).unwrap();
+            let server_handle = server.start(ledger_rpc_module).unwrap();
             tx_start.send(actual_address.port()).unwrap();
             rx_end.await.unwrap();
+            server_handle.stop().unwrap();
         });
 
         let bind_port = rx_start.await.unwrap();
@@ -100,10 +132,13 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u
             {
                 let serialized_queries =
                     serde_json::to_string(&test_queries).expect("Failed to serialize");
-
-                let mut file = OpenOptions::new().write(true).open("queries.json").unwrap();
-
+                let mut file = OpenOptions::new().write(true).open(QUERIES_FILE).unwrap();
                 file.write_all(serialized_queries.as_bytes()).unwrap();
+            }
+            {
+                let serialized_slots = serde_json::to_string(&to_serialize_slots).unwrap();
+                let mut file = OpenOptions::new().write(true).open(SLOTS_FILE).unwrap();
+                file.write_all(serialized_slots.as_bytes()).unwrap();
             }
         };
         tx_end.send("drop server").unwrap();
@@ -596,3 +631,28 @@ proptest!(
 
     }
 );
+
+#[test]
+#[ignore = "WHEN DATA IS THERE"]
+fn test_get_batches_from_proptest() {
+    let queries: Vec<TestExpect> = {
+        let mut file = File::open(QUERIES_FILE).unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+        serde_json::from_str(&contents).unwrap()
+    };
+
+    let deserialized_slots: Vec<SerializableSlotCommit> = {
+        let mut file = File::open(SLOTS_FILE).unwrap();
+        let mut contents = String::new();
+        file.read_to_string(&mut contents).unwrap();
+        serde_json::from_str(&contents).unwrap()
+    };
+
+    let slots: Vec<SlotCommit<TestBlock, u32, u32>> = deserialized_slots
+        .iter()
+        .map(|s| s.produce_slot_commit())
+        .collect();
+
+    test_helper(queries, slots);
+}
