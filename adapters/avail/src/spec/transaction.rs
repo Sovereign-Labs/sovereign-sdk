@@ -60,4 +60,15 @@ impl AvailBlobTransaction {
             blob,
         }
     }
+
+    fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
+        match &self.0.function {
+            DataAvailability(Call::submit_data { data }) => &mut CountedBufReader::<Bytes>::new(Bytes::copy_from_slice(&data.0)),
+            _ => unimplemented!(),
+        }
+    }
+
+    fn hash(&self) -> [u8; 32] {
+        self.0.encode()
+    }
 }
