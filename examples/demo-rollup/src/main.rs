@@ -3,7 +3,6 @@ mod ledger_rpc;
 
 #[cfg(test)]
 mod test_rpc;
-mod txs_rpc;
 
 use crate::config::RollupConfig;
 use anyhow::Context;
@@ -35,7 +34,7 @@ use tracing::Level;
 use tracing::{debug, info};
 
 // RPC related imports
-use crate::txs_rpc::get_txs_rpc;
+use sov_sequencer::get_sequencer_rpc;
 use demo_stf::runtime::get_rpc_methods;
 use sov_modules_api::RpcRunner;
 
@@ -140,7 +139,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let batch_builder = demo_runner.take_batch_builder().unwrap();
 
-    let r = get_txs_rpc(batch_builder, da_service.clone());
+    let r = get_sequencer_rpc(batch_builder, da_service.clone());
 
     methods.merge(r).expect("Failed to merge Txs RPC modules");
 
