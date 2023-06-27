@@ -132,12 +132,12 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u
             {
                 let serialized_queries =
                     serde_json::to_string(&test_queries).expect("Failed to serialize");
-                let mut file = OpenOptions::new().write(true).open(QUERIES_FILE).unwrap();
+                let mut file = OpenOptions::new().write(true).create(true).open(QUERIES_FILE).unwrap();
                 file.write_all(serialized_queries.as_bytes()).unwrap();
             }
             {
                 let serialized_slots = serde_json::to_string(&to_serialize_slots).unwrap();
-                let mut file = OpenOptions::new().write(true).open(SLOTS_FILE).unwrap();
+                let mut file = OpenOptions::new().write(true).create(true).open(SLOTS_FILE).unwrap();
                 file.write_all(serialized_slots.as_bytes()).unwrap();
             }
         };
@@ -633,7 +633,7 @@ proptest!(
 );
 
 #[test]
-#[ignore = "WHEN DATA IS THERE"]
+// #[ignore = "WHEN DATA IS THERE"]
 fn test_get_batches_from_proptest() {
     let queries: Vec<TestExpect> = {
         let mut file = File::open(QUERIES_FILE).unwrap();
