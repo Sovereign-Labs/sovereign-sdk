@@ -7,7 +7,9 @@ use ethers_contract::BaseContract;
 use ethers_core::abi::Abi;
 use revm::{
     db::CacheDB,
-    primitives::{ExecutionResult, Output, TransactTo, TxEnv, B160, KECCAK_EMPTY, U256},
+    primitives::{
+        BlockEnv, CfgEnv, Env, ExecutionResult, Output, TransactTo, TxEnv, B160, KECCAK_EMPTY, U256,
+    },
     Database, DatabaseCommit,
 };
 use sov_state::{ProverStorage, WorkingSet};
@@ -94,7 +96,13 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
             ..Default::default()
         };
 
-        let result = executor::execute_tx(&mut evm_db, tx_env).unwrap();
+        let env = Env {
+            cfg: CfgEnv::default(),
+            block: BlockEnv::default(),
+            tx: tx_env,
+        };
+
+        let result = executor::execute_tx(&mut evm_db, env).unwrap();
         contract_address(result)
     };
 
@@ -114,7 +122,13 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
             ..Default::default()
         };
 
-        executor::execute_tx(&mut evm_db, tx_env).unwrap();
+        let env = Env {
+            cfg: CfgEnv::default(),
+            block: BlockEnv::default(),
+            tx: tx_env,
+        };
+
+        executor::execute_tx(&mut evm_db, env).unwrap();
     }
 
     let get_res = {
@@ -126,7 +140,13 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
             ..Default::default()
         };
 
-        let result = executor::execute_tx(&mut evm_db, tx_env).unwrap();
+        let env = Env {
+            cfg: CfgEnv::default(),
+            block: BlockEnv::default(),
+            tx: tx_env,
+        };
+
+        let result = executor::execute_tx(&mut evm_db, env).unwrap();
 
         let out = output(result);
         EU256::from(out.as_ref())

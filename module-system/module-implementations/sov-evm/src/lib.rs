@@ -45,7 +45,6 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {
 }
 
 impl<C: sov_modules_api::Context> Evm<C> {
-    #[allow(dead_code)]
     pub(crate) fn get_db<'a>(&self, working_set: &'a mut WorkingSet<C::Storage>) -> EvmDb<'a, C> {
         EvmDb::new(self.accounts.clone(), working_set)
     }

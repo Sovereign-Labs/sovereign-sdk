@@ -4,7 +4,7 @@ mod conversions;
 pub(crate) mod db;
 mod db_commit;
 mod db_init;
-mod executor;
+pub(crate) mod executor;
 #[cfg(test)]
 mod tests;
 
