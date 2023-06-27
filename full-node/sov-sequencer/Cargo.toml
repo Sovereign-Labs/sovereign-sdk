@@ -15,3 +15,7 @@ resolver = "2"
 anyhow = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
 sov-rollup-interface = { path = "../../rollup-interface" }
+
+[dev-dependencies]
+sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
+tokio = { version = "1", features = ["full"] }
