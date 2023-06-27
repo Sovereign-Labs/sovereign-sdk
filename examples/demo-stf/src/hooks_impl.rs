@@ -7,6 +7,7 @@ use sov_modules_api::{
 use sov_modules_stf_template::SequencerOutcome;
 use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_state::WorkingSet;
+use tracing::info;
 
 impl<C: Context> TxHooks for Runtime<C> {
     type Context = C;
@@ -37,7 +38,7 @@ impl<C: Context> ApplyBlobHooks for Runtime<C> {
         blob: &mut impl BlobTransactionTrait,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
-        self.sequencer.begin_blob_hook(blob, working_set)
+        self.sequencer_registry.begin_blob_hook(blob, working_set)
     }
 
     fn end_blob_hook(
@@ -46,9 +47,26 @@ impl<C: Context> ApplyBlobHooks for Runtime<C> {
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
         match result {
-            SequencerOutcome::Rewarded(reward) => self.sequencer.end_blob_hook(reward, working_set),
-            SequencerOutcome::Ignored => self.sequencer.end_blob_hook(0, working_set),
-            SequencerOutcome::Slashed(_) => Ok(()),
+            SequencerOutcome::Rewarded(_reward) => {
+                // TODO: Process reward here or above.
+                self.sequencer_registry.end_blob_hook(
+                    sov_sequencer_registry::SequencerOutcome::Completed,
+                    working_set,
+                )
+            }
+            SequencerOutcome::Ignored => Ok(()),
+            SequencerOutcome::Slashed {
+                reason,
+                sequencer_da_address,
+            } => {
+                info!("Sequencer slashed: {:?}", reason);
+                self.sequencer_registry.end_blob_hook(
+                    sov_sequencer_registry::SequencerOutcome::Slashed {
+                        sequencer: sequencer_da_address,
+                    },
+                    working_set,
+                )
+            }
         }
     }
 }

@@ -1,12 +1,11 @@
 #[cfg(test)]
 pub mod test {
+    use crate::genesis_config::create_demo_config;
+    use crate::tests::new_test_blob;
     use crate::{
         genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
         runtime::Runtime,
-        tests::{
-            create_demo_config, create_new_demo, data_generation::simulate_da, has_tx_events,
-            new_test_blob, C,
-        },
+        tests::{create_new_demo, data_generation::simulate_da, has_tx_events, C},
     };
     use sov_modules_api::{
         default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
@@ -178,7 +177,7 @@ pub mod test {
     }
 
     #[test]
-    fn test_sequencer_insufficient_funds() {
+    fn test_sequencer_unknown_sequencer() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
 
@@ -186,7 +185,7 @@ pub mod test {
         let election_admin_private_key = DefaultPrivateKey::generate();
 
         let config = create_demo_config(
-            LOCKED_AMOUNT - 1,
+            LOCKED_AMOUNT + 1,
             &value_setter_admin_private_key,
             &election_admin_private_key,
         );
@@ -198,15 +197,16 @@ pub mod test {
 
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
+        let some_sequencer: [u8; 32] = [101; 32];
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
-            &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
+            &mut new_test_blob(Batch { txs }, &some_sequencer),
             None,
         );
 
         assert!(
             matches!(apply_blob_outcome.inner, SequencerOutcome::Ignored),
-            "Batch should have been skipped due to insufficient funds"
+            "Batch should have been skipped due to unknown sequencer"
         );
 
         // Assert that there are no events

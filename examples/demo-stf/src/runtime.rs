@@ -12,7 +12,7 @@ use sov_bank::query::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
 use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
 #[cfg(feature = "native")]
-use sov_sequencer_registry::query::{SequencerRpcImpl, SequencerRpcServer};
+use sov_sequencer_registry::query::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 #[cfg(feature = "native")]
 use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
@@ -59,8 +59,8 @@ use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
-    pub sequencer: sov_sequencer_registry::Sequencer<C>,
     pub bank: sov_bank::Bank<C>,
+    pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,

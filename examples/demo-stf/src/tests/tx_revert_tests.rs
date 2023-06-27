@@ -1,9 +1,12 @@
+use crate::genesis_config::create_demo_config;
+use crate::tests::new_test_blob;
 use crate::{
     genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
     runtime::Runtime,
     tests::{data_generation::simulate_da_with_bad_serialization, has_tx_events},
 };
 use borsh::BorshSerialize;
+use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use sov_accounts::query::Response;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{
@@ -15,9 +18,8 @@ use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
 use sov_state::{ProverStorage, WorkingSet};
 
 use super::{
-    create_demo_config, create_new_demo,
+    create_new_demo,
     data_generation::{simulate_da_with_bad_sig, simulate_da_with_revert_msg},
-    new_test_blob,
 };
 
 const SEQUENCER_BALANCE_DELTA: u64 = 1;
@@ -35,6 +37,7 @@ fn test_tx_revert() {
         &value_setter_admin_private_key,
         &election_admin_private_key,
     );
+    let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address.clone();
 
     {
         let mut demo = create_new_demo(path);
@@ -84,10 +87,10 @@ fn test_tx_revert() {
         );
 
         let resp = runtime
-            .sequencer
-            .sequencer_address_and_balance(&mut working_set);
-        // Sequencer is rewarded
-        assert_eq!(resp.data.unwrap().balance, SEQUENCER_BALANCE);
+            .sequencer_registry
+            .sequencer_address(DEMO_SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set);
+        // Sequencer is not excluded from list of allowed!
+        assert_eq!(Some(sequencer_rollup_address), resp.address);
     }
 }
 
@@ -214,7 +217,10 @@ fn test_tx_bad_sig() {
         );
 
         assert_eq!(
-            SequencerOutcome::Slashed(SlashingReason::StatelessVerificationFailed),
+            SequencerOutcome::Slashed{
+                reason:SlashingReason::StatelessVerificationFailed,
+                sequencer_da_address: DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
+            },
             apply_blob_outcome.inner,
             "Unexpected outcome: Stateless verification should have failed due to invalid signature"
         );
@@ -237,12 +243,7 @@ fn test_tx_bad_sig() {
             sov_election::query::GetResultResponse::Err("Election is not frozen".to_owned())
         );
 
-        let resp = runtime
-            .sequencer
-            .sequencer_address_and_balance(&mut working_set);
-
         // Sequencer is slashed
-        assert_eq!(resp.data.unwrap().balance, SEQUENCER_BALANCE_DELTA);
     }
 }
 
@@ -259,11 +260,30 @@ fn test_tx_bad_serialization() {
         &value_setter_admin_private_key,
         &election_admin_private_key,
     );
+    let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address.clone();
+
+    let sequencer_balance_before = {
+        let mut demo = create_new_demo(path);
+        StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
+        let mut working_set = WorkingSet::new(demo.current_storage);
+        let coins = demo
+            .runtime
+            .sequencer_registry
+            .get_coins_to_lock(&mut working_set)
+            .unwrap();
+
+        demo.runtime
+            .bank
+            .get_balance_of(
+                sequencer_rollup_address.clone(),
+                coins.token_address,
+                &mut working_set,
+            )
+            .unwrap()
+    };
 
     {
         let mut demo = create_new_demo(path);
-
-        StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
         StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
 
         let txs = simulate_da_with_bad_serialization(election_admin_private_key);
@@ -275,7 +295,10 @@ fn test_tx_bad_serialization() {
         );
 
         assert_eq!(
-            SequencerOutcome::Slashed(SlashingReason::InvalidTransactionEncoding),
+            SequencerOutcome::Slashed {
+                reason: SlashingReason::InvalidTransactionEncoding ,
+                sequencer_da_address: DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
+            },
             apply_blob_outcome.inner,
             "Unexpected outcome: Stateless verification should have failed due to invalid signature"
         );
@@ -297,11 +320,25 @@ fn test_tx_bad_serialization() {
             sov_election::query::GetResultResponse::Err("Election is not frozen".to_owned())
         );
 
-        let resp = runtime
-            .sequencer
-            .sequencer_address_and_balance(&mut working_set);
+        // Sequencer is not in list of allowed sequencers
+        let allowed_sequencer = runtime
+            .sequencer_registry
+            .sequencer_address(SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set);
+        assert!(allowed_sequencer.address.is_none());
 
-        // Sequencer is slashed
-        assert_eq!(resp.data.unwrap().balance, SEQUENCER_BALANCE_DELTA);
+        // Balance of sequencer is not increased
+        let coins = runtime
+            .sequencer_registry
+            .get_coins_to_lock(&mut working_set)
+            .unwrap();
+        let sequencer_balance_after = runtime
+            .bank
+            .get_balance_of(
+                sequencer_rollup_address,
+                coins.token_address,
+                &mut working_set,
+            )
+            .unwrap();
+        assert_eq!(sequencer_balance_before, sequencer_balance_after);
     }
 }
