@@ -318,7 +318,7 @@ $ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method"
 ```
 
 ### Remote setup
-The above setup runs celestia node locally to avoid any external network dependencies and to speed up development. The sovereign sdk can also be configured to 
+The above setup runs celestia node locally to avoid any external network dependencies and to speed up development. The sovereign SDK can also be configured to 
 connect to the celestia testnet using a celestia light node running on your machine. T
 here are instructions on how to do this at [Remote Setup](remote_setup.md) the remote setup has a dependency on the versions of the testnet, the light client as well as the adapters use to connect to the light client.
 Currently, the remote setup doesn't work due to breaking changes but the general process is still the same if developers wish to try different versions for the nodes
