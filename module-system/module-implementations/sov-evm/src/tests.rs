@@ -16,16 +16,6 @@ use std::path::PathBuf;
 
 type C = DefaultContext;
 
-fn contract_address(result: ExecutionResult) -> B160 {
-    match result {
-        ExecutionResult::Success {
-            output: Output::Create(_, Some(addr)),
-            ..
-        } => addr,
-        _ => panic!("Expected successful contract creation"),
-    }
-}
-
 fn output(result: ExecutionResult) -> Bytes {
     match result {
         ExecutionResult::Success { output, .. } => match output {
@@ -50,10 +40,48 @@ fn make_contract_from_abi(path: PathBuf) -> BaseContract {
     BaseContract::from(abi)
 }
 
-/*
 fn transactions() -> Vec<EvmTransaction> {
+    let mut path = test_data_path();
+    path.push("SimpleStorage.bin");
 
-}*/
+    let contract_data = std::fs::read_to_string(path).unwrap();
+    let contract_data = hex::decode(contract_data).unwrap();
+
+    let tx0 = EvmTransaction {
+        to: None,
+        data: contract_data,
+        ..Default::default()
+    };
+
+    let set_arg = EU256::from(21989);
+
+    let mut path = test_data_path();
+    path.push("SimpleStorage.abi");
+
+    let contract = make_contract_from_abi(path);
+    let addr: [u8; 20] = hex::decode("bd770416a3345f91e4b34576cb804a576fa48eb1")
+        .unwrap()
+        .try_into()
+        .unwrap();
+
+    let call_data = contract.encode("set", set_arg).unwrap();
+    let tx1 = EvmTransaction {
+        to: Some(addr),
+        data: hex::decode(hex::encode(&call_data)).unwrap(),
+        nonce: 1,
+        ..Default::default()
+    };
+
+    let call_data = contract.encode("get", ()).unwrap();
+    let tx2 = EvmTransaction {
+        to: Some(addr),
+        data: hex::decode(hex::encode(&call_data)).unwrap(),
+        nonce: 2,
+        ..Default::default()
+    };
+
+    vec![tx0, tx1, tx2]
+}
 
 #[test]
 fn evm_test() {
@@ -64,7 +92,7 @@ fn evm_test() {
 
     let sender = priv_key.pub_key();
     let sender_addr = sender.to_address::<<C as Spec>::Address>();
-    let sender_context = C::new(sender_addr.clone());
+    let sender_context = C::new(sender_addr);
     let caller = [0; 20];
 
     let evm = Evm::<C>::default();
@@ -80,56 +108,14 @@ fn evm_test() {
         },
     );
 
-    let mut path = test_data_path();
-    path.push("SimpleStorage.bin");
-
-    let contract_data = std::fs::read_to_string(path).unwrap();
-    let contract_data = hex::decode(contract_data).unwrap();
-
-    let tx = EvmTransaction {
-        to: None,
-        data: contract_data,
-        ..Default::default()
-    };
-
-    let result = evm.execute_tx(tx, &sender_context, working_set).unwrap();
-    let contract_address = contract_address(result);
-
     let set_arg = EU256::from(21989);
+    let mut out = Bytes::new();
 
-    let mut path = test_data_path();
-    path.push("SimpleStorage.abi");
-
-    let contract = make_contract_from_abi(path);
-
-    {
-        let call_data = contract.encode("set", set_arg).unwrap();
-
-        let tx = EvmTransaction {
-            to: Some(*contract_address.as_fixed_bytes()),
-            data: hex::decode(hex::encode(&call_data)).unwrap(),
-            nonce: 1,
-            ..Default::default()
-        };
-
-        evm.execute_tx(tx, &sender_context, working_set).unwrap();
+    for tx in transactions() {
+        let result = evm.execute_tx(tx, &sender_context, working_set).unwrap();
+        out = output(result);
     }
 
-    let get_res = {
-        let call_data = contract.encode("get", ()).unwrap();
-
-        let tx = EvmTransaction {
-            to: Some(*contract_address.as_fixed_bytes()),
-            data: hex::decode(hex::encode(&call_data)).unwrap(),
-            nonce: 2,
-            ..Default::default()
-        };
-
-        let result = evm.execute_tx(tx, &sender_context, working_set).unwrap();
-
-        let out = output(result);
-        EU256::from(out.as_ref())
-    };
-
+    let get_res = EU256::from(out.as_ref());
     assert_eq!(set_arg, get_res)
 }
