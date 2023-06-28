@@ -1,5 +1,6 @@
 use proptest::{prelude::any_with, prop_compose, proptest, strategy::Strategy};
 use reqwest::header::CONTENT_TYPE;
+use serde_json::json;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::{services::da::SlotData, stf::fuzzing::BatchReceiptStrategyArgs};
 use std::collections::HashMap;
@@ -15,11 +16,11 @@ use tokio::sync::oneshot;
 use crate::{config::RpcConfig, ledger_rpc};
 
 struct TestExpect {
-    data: String,
-    expected: String,
+    payload: serde_json::Value,
+    expected: serde_json::Value,
 }
 
-async fn query_test_helper(test_queries: Vec<TestExpect>, rpc_config: RpcConfig) {
+async fn queries_test_runner(test_queries: Vec<TestExpect>, rpc_config: RpcConfig) {
     let (addr, port) = (rpc_config.bind_host, rpc_config.bind_port);
     let client = reqwest::Client::new();
     let url_str = format!("http://{addr}:{port}");
@@ -28,14 +29,18 @@ async fn query_test_helper(test_queries: Vec<TestExpect>, rpc_config: RpcConfig)
         let res = client
             .post(url_str.clone())
             .header(CONTENT_TYPE, "application/json")
-            .body(query.data)
+            .body(query.payload.to_string())
             .send()
             .await
             .unwrap();
 
         assert_eq!(res.status().as_u16(), 200);
-        let contents = res.text().await.unwrap();
-        assert_eq!((&contents), query.expected.as_str());
+
+        let response_body = res.text().await.unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&response_body).unwrap(),
+            query.expected,
+        );
     }
 }
 
@@ -83,7 +88,7 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u
             bind_port,
         };
 
-        query_test_helper(test_queries, rpc_config).await;
+        queries_test_runner(test_queries, rpc_config).await;
 
         // By closing the `TempDir` explicitly we can check that it has
         // been deleted successfully. If we don't close it explicitly,
@@ -96,7 +101,18 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u
     });
 }
 
-fn regular_test_helper(data: String, expected: &str) {
+fn batch2_tx_receipts() -> Vec<TransactionReceipt<u32>> {
+    (0..260u64)
+        .map(|i| TransactionReceipt::<u32> {
+            tx_hash: ::sha2::Sha256::digest(i.to_string()),
+            body_to_save: Some(b"tx body".to_vec()),
+            events: vec![],
+            receipt: 0,
+        })
+        .collect()
+}
+
+fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value) {
     let mut slots: Vec<SlotCommit<TestBlock, u32, u32>> = vec![SlotCommit::new(TestBlock {
         curr_hash: sha2::Sha256::digest(b"slot_data"),
         header: TestBlockHeader {
@@ -128,12 +144,7 @@ fn regular_test_helper(data: String, expected: &str) {
         },
         BatchReceipt {
             batch_hash: ::sha2::Sha256::digest(b"batch_receipt2"),
-            tx_receipts: vec![TransactionReceipt::<u32> {
-                tx_hash: ::sha2::Sha256::digest(b"tx1"),
-                body_to_save: Some(b"tx1 body".to_vec()),
-                events: vec![],
-                receipt: 0,
-            }],
+            tx_receipts: batch2_tx_receipts(),
             inner: 1,
         },
     ];
@@ -144,107 +155,131 @@ fn regular_test_helper(data: String, expected: &str) {
 
     test_helper(
         vec![TestExpect {
-            data,
-            expected: expected.to_string(),
+            payload,
+            expected: expected.clone(),
         }],
         slots,
     )
+}
+
+/// Concisely generate a [JSON-RPC 2.0](https://www.jsonrpc.org/specification)
+/// request [`String`]. You must provide the method name and the parameters of
+/// the request, using [`serde_json::json!`] syntax.
+///
+/// ```
+/// let req: String = jsonrpc_req!("method", ["param1", "param2"]);
+/// ```
+macro_rules! jsonrpc_req {
+    ($method:expr, $params:tt) => {
+        ::serde_json::json!({
+            "jsonrpc": "2.0",
+            "method": $method,
+            "params": $params,
+            "id": 1
+        })
+    };
+}
+
+/// A counterpart to [`jsonrpc_req!`] which generates successful responses.
+macro_rules! jsonrpc_result {
+    ($result:tt) => {{
+        ::serde_json::json!({
+            "jsonrpc": "2.0",
+            "result": $result,
+            "id": 1
+        })
+    }};
 }
 
 // These tests reproduce the README workflow for the ledger_rpc, ie:
 // - It creates and populate a simple ledger with a few transactions
 // - It initializes the rpc server
 // - It successively calls the different rpc methods registered and tests the answer
-// Side note: we need to change the port for each test to avoid concurrent access issues
 #[test]
 fn test_get_head() {
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}"#.to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":{"number":1,"hash":"0xd1231a38586e68d0405dc55ae6775e219f29fff1f7e0c6410d0ac069201e550b","batch_range":{"start":1,"end":3}},"id":1}"#;
+    let payload = jsonrpc_req!("ledger_getHead", []);
+    let expected = jsonrpc_result!({"number":1,"hash":"0xd1231a38586e68d0405dc55ae6775e219f29fff1f7e0c6410d0ac069201e550b","batch_range":{"start":1,"end":3}});
 
-    regular_test_helper(data, expected);
+    regular_test_helper(payload, &expected);
 }
 
 #[test]
 fn test_get_transactions() {
     // Tests for different types of argument
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{ "batch_id": 1, "offset": 0}]],"id":1}"#.to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b","event_range":{"start":1,"end":1},"body":[116,120,49,32,98,111,100,121],"custom_receipt":0}],"id":1}"#;
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getTransactions", [[{"batch_id": 1, "offset": 0}]]);
+    let expected = jsonrpc_result!([{"hash":"0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b","event_range":{"start":1,"end":1},"body":[116,120,49,32,98,111,100,121],"custom_receipt":0}]);
+    regular_test_helper(payload, &expected);
 
     // Tests for flattened args
-    let data =
-        r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[1],"id":1}"#.to_string();
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getTransactions", [1]);
+    regular_test_helper(payload, &expected);
 
-    let data =
-        r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[1]],"id":1}"#.to_string();
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getTransactions", [[1]]);
+    regular_test_helper(payload, &expected);
 
-    let data =
-        r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[1], "Standard"],"id":1}"#
-            .to_string();
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getTransactions", [[1], "Standard"]);
+    regular_test_helper(payload, &expected);
 
-    let data =
-        r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[1], "Compact"],"id":1}"#
-            .to_string();
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getTransactions", [[1], "Compact"]);
+    regular_test_helper(payload, &expected);
 
-    let data =
-        r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[1], "Full"],"id":1}"#
-            .to_string();
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getTransactions", [[1], "Full"]);
+    regular_test_helper(payload, &expected);
 
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{ "batch_id": 1, "offset": 1}]],"id":1}"#
-            .to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0x27ca64c092a959c7edc525ed45e845b1de6a7590d173fd2fad9133c8a779a1e3","event_range":{"start":1,"end":3},"body":[116,120,50,32,98,111,100,121],"custom_receipt":1}],"id":1}"#;
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getTransactions", [[{ "batch_id": 1, "offset": 1}]]);
+    let expected = jsonrpc_result!([{"hash":"0x27ca64c092a959c7edc525ed45e845b1de6a7590d173fd2fad9133c8a779a1e3","event_range":{"start":1,"end":3},"body":[116,120,50,32,98,111,100,121],"custom_receipt":1}]);
+    regular_test_helper(payload, &expected);
 }
 
 #[test]
 fn test_get_batches() {
-    let data =
-        r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[2], "Standard"],"id":1}"#
-            .to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xf85fe0cb36fdaeca571c896ed476b49bb3c8eff00d935293a8967e1e9a62071e","tx_range":{"start":3,"end":4},"txs":["0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b"],"custom_receipt":1}],"id":1}"#;
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getBatches", [[2], "Standard"]);
+    let expected = jsonrpc_result!([{
+        "hash":"0xf85fe0cb36fdaeca571c896ed476b49bb3c8eff00d935293a8967e1e9a62071e",
+        "tx_range":{"start":3,"end":263},
+        "txs": batch2_tx_receipts().into_iter().map(|tx_receipt| format!("0x{}", hex::encode(tx_receipt.tx_hash) )).collect::<Vec<_>>(),
+        "custom_receipt":1
+    }]);
+    regular_test_helper(payload, &expected);
 
-    let data =
-        r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[2]],"id":1}"#.to_string();
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getBatches", [[2]]);
+    regular_test_helper(payload, &expected);
 
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[2],"id":1}"#.to_string();
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getBatches", [2]);
+    regular_test_helper(payload, &expected);
 
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[1], "Compact"],"id":1}"#
-        .to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xb5515a80204963f7db40e98af11aedb49a394b1c7e3d8b5b7a33346b8627444f","tx_range":{"start":1,"end":3},"custom_receipt":0}],"id":1}"#;
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getBatches", [[1], "Compact"]);
+    let expected = jsonrpc_result!([{"hash":"0xb5515a80204963f7db40e98af11aedb49a394b1c7e3d8b5b7a33346b8627444f","tx_range":{"start":1,"end":3},"custom_receipt":0}]);
+    regular_test_helper(payload, &expected);
 
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[1], "Full"],"id":1}"#
-        .to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xb5515a80204963f7db40e98af11aedb49a394b1c7e3d8b5b7a33346b8627444f","tx_range":{"start":1,"end":3},"txs":[{"hash":"0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b","event_range":{"start":1,"end":1},"body":[116,120,49,32,98,111,100,121],"custom_receipt":0},{"hash":"0x27ca64c092a959c7edc525ed45e845b1de6a7590d173fd2fad9133c8a779a1e3","event_range":{"start":1,"end":3},"body":[116,120,50,32,98,111,100,121],"custom_receipt":1}],"custom_receipt":0}],"id":1}"#;
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getBatches", [[1], "Full"]);
+    let expected = jsonrpc_result!([{"hash":"0xb5515a80204963f7db40e98af11aedb49a394b1c7e3d8b5b7a33346b8627444f","tx_range":{"start":1,"end":3},"txs":[{"hash":"0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b","event_range":{"start":1,"end":1},"body":[116,120,49,32,98,111,100,121],"custom_receipt":0},{"hash":"0x27ca64c092a959c7edc525ed45e845b1de6a7590d173fd2fad9133c8a779a1e3","event_range":{"start":1,"end":3},"body":[116,120,50,32,98,111,100,121],"custom_receipt":1}],"custom_receipt":0}]);
+    regular_test_helper(payload, &expected);
 
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[0], "Compact"],"id":1}"#
-        .to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getBatches", [[0], "Compact"]);
+    let expected = jsonrpc_result!([null]);
+    regular_test_helper(payload, &expected);
 }
 
 #[test]
 fn test_get_events() {
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[1],"id":1}"#.to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[{"key":[101,118,101,110,116,49,95,107,101,121],"value":[101,118,101,110,116,49,95,118,97,108,117,101]}],"id":1}"#;
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getEvents", [1]);
+    let expected = jsonrpc_result!([{
+        "key":[101,118,101,110,116,49,95,107,101,121],
+        "value":[101,118,101,110,116,49,95,118,97,108,117,101]
+    }]);
+    regular_test_helper(payload, &expected);
 
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[2],"id":1}"#.to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[{"key":[101,118,101,110,116,50,95,107,101,121],"value":[101,118,101,110,116,50,95,118,97,108,117,101]}],"id":1}"#;
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getEvents", [2]);
+    let expected = jsonrpc_result!([{
+        "key":[101,118,101,110,116,50,95,107,101,121],
+        "value":[101,118,101,110,116,50,95,118,97,108,117,101]
+    }]);
+    regular_test_helper(payload, &expected);
 
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[3],"id":1}"#.to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
-    regular_test_helper(data, expected);
+    let payload = jsonrpc_req!("ledger_getEvents", [3]);
+    let expected = jsonrpc_result!([null]);
+    regular_test_helper(payload, &expected);
 }
 
 fn batch_receipt_without_hasher() -> impl Strategy<Value = BatchReceipt<u32, u32>> {
@@ -266,7 +301,7 @@ prop_compose! {
 }
 
 prop_compose! {
-    fn arb_slots(max_slots : usize, max_batches: usize)
+    fn arb_slots(max_slots: usize, max_batches: usize)
     (batches_and_hashes in proptest::collection::vec(arb_batches_and_slot_hash(max_batches), 1..max_slots)) -> (Vec<SlotCommit<TestBlock, u32, u32>>, HashMap<usize, (usize, usize)>, usize)
     {
         let mut slots = std::vec::Vec::with_capacity(max_slots);
@@ -311,24 +346,32 @@ prop_compose! {
     }
 }
 
-fn format_tx(
+fn full_tx_json(
     tx_id: usize,
     tx: &TransactionReceipt<u32>,
     tx_id_to_event_range: &HashMap<usize, (usize, usize)>,
-) -> String {
-    let (event_range_begin, event_range_end) = tx_id_to_event_range.get(&(tx_id)).unwrap();
-    let encoding = hex::encode(tx.tx_hash);
-    let custom_receipt = tx.receipt;
+) -> serde_json::Value {
+    let (event_range_begin, event_range_end) = tx_id_to_event_range.get(&tx_id).unwrap();
+    let tx_hash_hex = hex::encode(tx.tx_hash);
     match &tx.body_to_save {
-        None => format!(
-            r#"{{"hash":"0x{encoding}","event_range":{{"start":{event_range_begin},"end":{event_range_end}}},"custom_receipt":{custom_receipt}}}"#
-        ),
+        None => json!({
+            "hash": format!("0x{tx_hash_hex}"),
+            "event_range": {
+                "start": event_range_begin,
+                "end": event_range_end
+            },
+            "custom_receipt": tx.receipt,
+        }),
         Some(body) => {
-            let body_formatted: Vec<String> = body.iter().map(|x| x.to_string()).collect();
-            let body_str = body_formatted.join(",");
-            format!(
-                r#"{{"hash":"0x{encoding}","event_range":{{"start":{event_range_begin},"end":{event_range_end}}},"body":[{body_str}],"custom_receipt":{custom_receipt}}}"#
-            )
+            json!({
+                "hash": format!("0x{tx_hash_hex}"),
+                "event_range": {
+                    "start": event_range_begin,
+                    "end": event_range_end
+                },
+                "body": body,
+                "custom_receipt": tx.receipt,
+            })
         }
     }
 }
@@ -336,18 +379,22 @@ fn format_tx(
 proptest!(
     #[test]
     fn proptest_get_head((slots, _, total_num_batches) in arb_slots(10, 10)){
-        let num_slots = slots.len();
         let last_slot = slots.last().unwrap();
-
-        let last_slot_hash = hex::encode(last_slot.slot_data().hash());
         let last_slot_num_batches = last_slot.batch_receipts().len();
 
         let last_slot_start_batch = total_num_batches - last_slot_num_batches;
         let last_slot_end_batch = total_num_batches;
 
-        let data = r#"{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}"#.to_string();
-        let expected = format!("{{\"jsonrpc\":\"2.0\",\"result\":{{\"number\":{num_slots},\"hash\":\"0x{last_slot_hash}\",\"batch_range\":{{\"start\":{last_slot_start_batch},\"end\":{last_slot_end_batch}}}}},\"id\":1}}");
-        test_helper(vec![TestExpect{ data, expected}], slots);
+        let payload = jsonrpc_req!("ledger_getHead", []);
+        let expected = jsonrpc_result!({
+            "number": slots.len(),
+            "hash": format!("0x{}", hex::encode(last_slot.slot_data().hash())),
+            "batch_range": {
+                "start": last_slot_start_batch,
+                "end": last_slot_end_batch
+            }
+        });
+        test_helper(vec![TestExpect{ payload, expected }], slots);
     }
 
 
@@ -358,7 +405,7 @@ proptest!(
 
         let random_batch_num_usize = usize::try_from(random_batch_num).unwrap();
 
-        for slot in &slots{
+        for slot in &slots {
             if curr_batch_num > random_batch_num_usize {
                 break;
             }
@@ -380,49 +427,42 @@ proptest!(
                 let batch_hash = hex::encode(curr_batch.batch_hash);
                 let batch_receipt= curr_batch.inner;
 
-                let tx_hashes : Vec<String> = curr_batch.tx_receipts.clone().into_iter().map(|x| {
-                    let encoding = hex::encode(x.tx_hash);
-                    format!("\"0x{encoding}\"")
+                let tx_hashes: Vec<String> = curr_batch.tx_receipts.iter().map(|tx| {
+                    format!("0x{}", hex::encode(tx.tx_hash))
                 }).collect();
-                let formatted_hashes = tx_hashes.join(",");
 
-                let mut tx_full_data : Vec<String> = Vec::new();
+                let full_txs = curr_batch.tx_receipts.iter().enumerate().map(|(tx_id, tx)|
+                   full_tx_json(curr_tx_num + tx_id, &tx, &tx_id_to_event_range)
+                ).collect::<Vec<_>>();
 
-                for (tx_id, tx) in curr_batch.tx_receipts.clone().into_iter().enumerate(){
-                   tx_full_data.push(format_tx(curr_tx_num + tx_id, &tx, &tx_id_to_event_range));
-                }
-
-                let tx_full_data = tx_full_data.join(",");
-
-                test_helper(vec![TestExpect{
-                    data:
-                    format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Compact"],"id":1}}"#),
-                    expected:
-                    format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
+                test_helper(
+                    vec![TestExpect{
+                        payload:
+                        jsonrpc_req!("ledger_getBatches", [[random_batch_num], "Compact"]),
+                        expected:
+                        jsonrpc_result!([{"hash": format!("0x{batch_hash}"),"tx_range": {"start":first_tx_num,"end":last_tx_num},"custom_receipt": batch_receipt}])},
                     TestExpect{
-                    data:
-                    format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Standard"],"id":1}}"#),
-                    expected:
-                    format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
+                        payload:
+                        jsonrpc_req!("ledger_getBatches", [[random_batch_num], "Standard"]),
+                        expected:
+                        jsonrpc_result!([{"hash":format!("0x{batch_hash}"),"tx_range":{"start":first_tx_num,"end":last_tx_num},"txs":tx_hashes,"custom_receipt":batch_receipt}])},
                     TestExpect{
-                    data:
-                    format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}]],"id":1}}"#),
-                    expected:
-                    format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
+                        payload:
+                        jsonrpc_req!("ledger_getBatches", [[random_batch_num]]),
+                        expected:
+                        jsonrpc_result!([{"hash":format!("0x{batch_hash}"),"tx_range":{"start":first_tx_num,"end":last_tx_num},"txs":tx_hashes,"custom_receipt":batch_receipt}])},
                     TestExpect{
-                    data:
-                    format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[{random_batch_num}],"id":1}}"#),
-                    expected:
-                    format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)}
-                    ,
-                    // TODO #417: Solve this test
+                        payload:
+                        jsonrpc_req!("ledger_getBatches", [random_batch_num]),
+                        expected:
+                        jsonrpc_result!([{"hash":format!("0x{batch_hash}"),"tx_range":{"start":first_tx_num,"end":last_tx_num},"txs":tx_hashes,"custom_receipt":batch_receipt}])},
                     TestExpect{
-                    data:
-                    format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Full"],"id":1}}"#),
-                    expected:
-                    format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{tx_full_data}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
-                    ]
-                    , slots);
+                        payload:
+                        jsonrpc_req!("ledger_getBatches", [[random_batch_num], "Full"]),
+                        expected:
+                        jsonrpc_result!([{"hash":format!("0x{batch_hash}"),"tx_range":{"start":first_tx_num,"end":last_tx_num},"txs":full_txs,"custom_receipt":batch_receipt}])},
+                    ],
+                    slots);
 
                 return Ok(());
             }
@@ -435,9 +475,9 @@ proptest!(
 
         }
 
-        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Compact"],"id":1}}"#);
-        let expected : String= r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
-        test_helper(vec![TestExpect{data, expected}], slots);
+        let payload = jsonrpc_req!("ledger_getBatches", [[random_batch_num], "Compact"]);
+        let expected = jsonrpc_result!([null]);
+        test_helper(vec![TestExpect{payload, expected}], slots);
     }
 
     #[test]
@@ -456,34 +496,33 @@ proptest!(
                     let tx_index = random_tx_num_usize - curr_tx_num;
                     let tx = batch.tx_receipts.get(tx_index).unwrap();
 
-                    let tx_formatted = format_tx(curr_tx_num + tx_index, tx, &tx_id_to_event_range);
-
+                    let tx_formatted = full_tx_json(curr_tx_num + tx_index, tx, &tx_id_to_event_range);
 
                     test_helper(vec![TestExpect{
-                        data:
-                        format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}]],"id":1}}"#),
+                        payload:
+                        jsonrpc_req!("ledger_getTransactions", [[random_tx_num]]),
                         expected:
-                        format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
+                        jsonrpc_result!([tx_formatted])},
                         TestExpect{
-                        data:
-                        format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[{random_tx_num}],"id":1}}"#),
+                        payload:
+                        jsonrpc_req!("ledger_getTransactions", [random_tx_num]),
                         expected:
-                        format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
+                        jsonrpc_result!([tx_formatted])},
                         TestExpect{
-                        data:
-                        format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}], "Compact"],"id":1}}"#),
+                        payload:
+                        jsonrpc_req!("ledger_getTransactions", [[random_tx_num], "Compact"]),
                         expected:
-                        format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
+                        jsonrpc_result!([tx_formatted])},
                         TestExpect{
-                        data:
-                        format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}], "Standard"],"id":1}}"#),
+                        payload:
+                        jsonrpc_req!("ledger_getTransactions", [[random_tx_num], "Standard"]),
                         expected:
-                        format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
+                        jsonrpc_result!([tx_formatted])},
                         TestExpect{
-                        data:
-                        format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}], "Full"],"id":1}}"#),
+                        payload:
+                        jsonrpc_req!("ledger_getTransactions", [[random_tx_num], "Full"]),
                         expected:
-                        format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
+                        jsonrpc_result!([tx_formatted])},
                         ]
                         , slots);
 
@@ -494,9 +533,9 @@ proptest!(
             }
         }
 
-        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}]],"id":1}}"#);
-        let expected : String = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
-        test_helper(vec![TestExpect{data, expected}], slots);
+        let payload = jsonrpc_req!("ledger_getTransactions", [[random_tx_num]]);
+        let expected = jsonrpc_result!([null]);
+        test_helper(vec![TestExpect{payload, expected}], slots);
 
     }
 
@@ -506,7 +545,7 @@ proptest!(
 
         let random_event_num_usize = usize::try_from(random_event_num).unwrap();
 
-        for slot in &slots{
+        for slot in &slots {
             for batch in slot.batch_receipts(){
                 for tx in &batch.tx_receipts{
                     let (start_event_range, end_event_range) = tx_id_to_event_range.get(&curr_tx_num).unwrap();
@@ -516,38 +555,28 @@ proptest!(
 
                     if random_event_num_usize < *end_event_range {
                         let event_index = random_event_num_usize - *start_event_range;
-                        let event : &Event = tx.events.get(event_index).unwrap();
+                        let event: &Event = tx.events.get(event_index).unwrap();
+                        let event_json = json!({
+                            "key": event.key().inner(),
+                            "value": event.value().inner(),
+                        });
 
-                        let key_str_vec : Vec<String> = event.key().inner().iter().map(|x| x.to_string()).collect();
-                        let key_str = key_str_vec.join(",");
+                        test_helper(vec![TestExpect{
+                            payload:
+                            jsonrpc_req!("ledger_getEvents", [random_event_num_usize]),
+                            expected:
+                            jsonrpc_result!([event_json])}]
+                            , slots);
 
-                        let value_str_vec : Vec<String> = event.value().inner().iter().map(|x| x.to_string()).collect();
-                        let value_str = value_str_vec.join(",");
-
-                        let event_formatted = format!(r#"{{"key":[{key_str}],"value":[{value_str}]}}"#);
-
-
-                    test_helper(vec![TestExpect{
-                        data:
-                        format!(r#"{{"jsonrpc":"2.0","method":"ledger_getEvents","params":[{random_event_num_usize}],"id":1}}"#),
-                        expected:
-                        format!(r#"{{"jsonrpc":"2.0","result":[{event_formatted}],"id":1}}"#)},
-                        ]
-                        , slots);
-
-                    return Ok(());
+                        return Ok(());
                     }
                     curr_tx_num += 1;
                 }
-
             }
-
         }
 
-        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getEvents","params":[{random_event_num}],"id":1}}"#);
-        let expected : String= r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
-        test_helper(vec![TestExpect{data, expected}], slots);
-
-
+        let payload = jsonrpc_req!("ledger_getEvents", [random_event_num]);
+        let expected = jsonrpc_result!([null]);
+        test_helper(vec![TestExpect{payload, expected}], slots);
     }
 );
