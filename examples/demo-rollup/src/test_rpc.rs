@@ -15,7 +15,7 @@ use tokio::sync::oneshot;
 use crate::{config::RpcConfig, ledger_rpc};
 
 struct TestExpect {
-    data: String,
+    payload: String,
     expected: String,
 }
 
@@ -28,7 +28,7 @@ async fn query_test_helper(test_queries: Vec<TestExpect>, rpc_config: RpcConfig)
         let res = client
             .post(url_str.clone())
             .header(CONTENT_TYPE, "application/json")
-            .body(query.data)
+            .body(query.payload)
             .send()
             .await
             .unwrap();
@@ -85,18 +85,11 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u
 
         query_test_helper(test_queries, rpc_config).await;
 
-        // By closing the `TempDir` explicitly we can check that it has
-        // been deleted successfully. If we don't close it explicitly,
-        // the directory will still be deleted when `tmp_dir` goes out
-        // of scope, but we won't know whether deleting the directory
-        // succeeded.
-        tmpdir.close().unwrap();
-
         tx_end.send("drop server").unwrap();
     });
 }
 
-fn regular_test_helper(data: String, expected: &str) {
+fn regular_test_helper(payload: String, expected: &str) {
     let mut slots: Vec<SlotCommit<TestBlock, u32, u32>> = vec![SlotCommit::new(TestBlock {
         curr_hash: sha2::Sha256::digest(b"slot_data"),
         header: TestBlockHeader {
@@ -144,7 +137,7 @@ fn regular_test_helper(data: String, expected: &str) {
 
     test_helper(
         vec![TestExpect {
-            data,
+            payload,
             expected: expected.to_string(),
         }],
         slots,
@@ -158,93 +151,128 @@ fn regular_test_helper(data: String, expected: &str) {
 // Side note: we need to change the port for each test to avoid concurrent access issues
 #[test]
 fn test_get_head() {
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}"#.to_string();
+    let payload = r#"{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}"#.to_string();
     let expected = r#"{"jsonrpc":"2.0","result":{"number":1,"hash":"0xd1231a38586e68d0405dc55ae6775e219f29fff1f7e0c6410d0ac069201e550b","batch_range":{"start":1,"end":3}},"id":1}"#;
 
-    regular_test_helper(data, expected);
+    regular_test_helper(payload, expected);
 }
 
 #[test]
-fn test_get_transactions() {
+fn test_get_transactions_offset_first_batch() {
     // Tests for different types of argument
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{ "batch_id": 1, "offset": 0}]],"id":1}"#.to_string();
+    let payload = r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{ "batch_id": 1, "offset": 0}]],"id":1}"#.to_string();
     let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b","event_range":{"start":1,"end":1},"body":[116,120,49,32,98,111,100,121],"custom_receipt":0}],"id":1}"#;
-    regular_test_helper(data, expected);
+    regular_test_helper(payload, expected);
 
     // Tests for flattened args
-    let data =
+    let payload =
         r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[1],"id":1}"#.to_string();
-    regular_test_helper(data, expected);
+    regular_test_helper(payload, expected);
 
-    let data =
+    let payload =
         r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[1]],"id":1}"#.to_string();
-    regular_test_helper(data, expected);
+    regular_test_helper(payload, expected);
 
-    let data =
+    let payload =
         r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[1], "Standard"],"id":1}"#
             .to_string();
-    regular_test_helper(data, expected);
+    regular_test_helper(payload, expected);
 
-    let data =
+    let payload =
         r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[1], "Compact"],"id":1}"#
             .to_string();
-    regular_test_helper(data, expected);
+    regular_test_helper(payload, expected);
 
-    let data =
+    let payload =
         r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[1], "Full"],"id":1}"#
             .to_string();
-    regular_test_helper(data, expected);
+    regular_test_helper(payload, expected);
+}
 
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{ "batch_id": 1, "offset": 1}]],"id":1}"#
+#[test]
+fn test_get_transactions_offset_1() {
+    let payload = r#"{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{ "batch_id": 1, "offset": 1}]],"id":1}"#
             .to_string();
     let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0x27ca64c092a959c7edc525ed45e845b1de6a7590d173fd2fad9133c8a779a1e3","event_range":{"start":1,"end":3},"body":[116,120,50,32,98,111,100,121],"custom_receipt":1}],"id":1}"#;
-    regular_test_helper(data, expected);
+    regular_test_helper(payload, expected);
 }
 
-#[test]
-fn test_get_batches() {
-    let data =
-        r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[2], "Standard"],"id":1}"#
-            .to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xf85fe0cb36fdaeca571c896ed476b49bb3c8eff00d935293a8967e1e9a62071e","tx_range":{"start":3,"end":4},"txs":["0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b"],"custom_receipt":1}],"id":1}"#;
-    regular_test_helper(data, expected);
+#[cfg(test)]
+mod test_get_batches {
+    use super::*;
 
-    let data =
-        r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[2]],"id":1}"#.to_string();
-    regular_test_helper(data, expected);
+    #[test]
+    fn test_get_batches_standard() {
+        let data =
+            r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[2], "Standard"],"id":1}"#
+                .to_string();
+        let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xf85fe0cb36fdaeca571c896ed476b49bb3c8eff00d935293a8967e1e9a62071e","tx_range":{"start":3,"end":4},"txs":["0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b"],"custom_receipt":1}],"id":1}"#;
+        regular_test_helper(data, expected);
 
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[2],"id":1}"#.to_string();
-    regular_test_helper(data, expected);
+        let data =
+            r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[2]],"id":1}"#.to_string();
+        regular_test_helper(data, expected);
 
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[1], "Compact"],"id":1}"#
-        .to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xb5515a80204963f7db40e98af11aedb49a394b1c7e3d8b5b7a33346b8627444f","tx_range":{"start":1,"end":3},"custom_receipt":0}],"id":1}"#;
-    regular_test_helper(data, expected);
+        let data =
+            r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[2],"id":1}"#.to_string();
+        regular_test_helper(data, expected);
+    }
 
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[1], "Full"],"id":1}"#
-        .to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xb5515a80204963f7db40e98af11aedb49a394b1c7e3d8b5b7a33346b8627444f","tx_range":{"start":1,"end":3},"txs":[{"hash":"0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b","event_range":{"start":1,"end":1},"body":[116,120,49,32,98,111,100,121],"custom_receipt":0},{"hash":"0x27ca64c092a959c7edc525ed45e845b1de6a7590d173fd2fad9133c8a779a1e3","event_range":{"start":1,"end":3},"body":[116,120,50,32,98,111,100,121],"custom_receipt":1}],"custom_receipt":0}],"id":1}"#;
-    regular_test_helper(data, expected);
+    #[test]
+    fn test_get_batches_compact() {
+        let data =
+            r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[1], "Compact"],"id":1}"#
+                .to_string();
+        let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xb5515a80204963f7db40e98af11aedb49a394b1c7e3d8b5b7a33346b8627444f","tx_range":{"start":1,"end":3},"custom_receipt":0}],"id":1}"#;
+        regular_test_helper(data, expected);
+    }
 
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[0], "Compact"],"id":1}"#
-        .to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
-    regular_test_helper(data, expected);
+    #[test]
+    fn test_get_batches_compact_not_found() {
+        let data =
+            r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[0], "Compact"],"id":1}"#
+                .to_string();
+        let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
+        regular_test_helper(data, expected);
+    }
+
+    #[test]
+    fn test_get_batches_full() {
+        let data =
+            r#"{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[1], "Full"],"id":1}"#
+                .to_string();
+        let expected = r#"{"jsonrpc":"2.0","result":[{"hash":"0xb5515a80204963f7db40e98af11aedb49a394b1c7e3d8b5b7a33346b8627444f","tx_range":{"start":1,"end":3},"txs":[{"hash":"0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b","event_range":{"start":1,"end":1},"body":[116,120,49,32,98,111,100,121],"custom_receipt":0},{"hash":"0x27ca64c092a959c7edc525ed45e845b1de6a7590d173fd2fad9133c8a779a1e3","event_range":{"start":1,"end":3},"body":[116,120,50,32,98,111,100,121],"custom_receipt":1}],"custom_receipt":0}],"id":1}"#;
+        regular_test_helper(data, expected);
+    }
 }
 
-#[test]
-fn test_get_events() {
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[1],"id":1}"#.to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[{"key":[101,118,101,110,116,49,95,107,101,121],"value":[101,118,101,110,116,49,95,118,97,108,117,101]}],"id":1}"#;
-    regular_test_helper(data, expected);
+#[cfg(test)]
+mod test_get_events {
+    use super::*;
 
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[2],"id":1}"#.to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[{"key":[101,118,101,110,116,50,95,107,101,121],"value":[101,118,101,110,116,50,95,118,97,108,117,101]}],"id":1}"#;
-    regular_test_helper(data, expected);
+    #[test]
+    fn test_get_events_first() {
+        let data =
+            r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[1],"id":1}"#.to_string();
+        let expected = r#"{"jsonrpc":"2.0","result":[{"key":[101,118,101,110,116,49,95,107,101,121],"value":[101,118,101,110,116,49,95,118,97,108,117,101]}],"id":1}"#;
+        regular_test_helper(data, expected);
+    }
 
-    let data = r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[3],"id":1}"#.to_string();
-    let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
-    regular_test_helper(data, expected);
+    #[test]
+    fn test_get_events_second() {
+        let data =
+            r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[2],"id":1}"#.to_string();
+        let expected = r#"{"jsonrpc":"2.0","result":[{"key":[101,118,101,110,116,50,95,107,101,121],"value":[101,118,101,110,116,50,95,118,97,108,117,101]}],"id":1}"#;
+        regular_test_helper(data, expected);
+    }
+
+    #[test]
+    fn test_get_events_third() {
+        let data =
+            r#"{"jsonrpc":"2.0","method":"ledger_getEvents","params":[3],"id":1}"#.to_string();
+        let expected = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#;
+        regular_test_helper(data, expected);
+    }
 }
 
 fn batch_receipt_without_hasher() -> impl Strategy<Value = BatchReceipt<u32, u32>> {
@@ -258,9 +286,8 @@ fn batch_receipt_without_hasher() -> impl Strategy<Value = BatchReceipt<u32, u32
 
 prop_compose! {
     fn arb_batches_and_slot_hash(max_batches : usize)
-    (slot_hash in proptest::array::uniform32(0_u8..), batches in proptest::collection::vec(batch_receipt_without_hasher(), 1..max_batches)) ->
-     (Vec<BatchReceipt<u32, u32>>, [u8;32]){
-
+     (slot_hash in proptest::array::uniform32(0_u8..), batches in proptest::collection::vec(batch_receipt_without_hasher(), 1..max_batches)) ->
+       (Vec<BatchReceipt<u32, u32>>, [u8;32]) {
         (batches, slot_hash)
     }
 }
@@ -345,9 +372,9 @@ proptest!(
         let last_slot_start_batch = total_num_batches - last_slot_num_batches;
         let last_slot_end_batch = total_num_batches;
 
-        let data = r#"{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}"#.to_string();
+        let payload = r#"{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}"#.to_string();
         let expected = format!("{{\"jsonrpc\":\"2.0\",\"result\":{{\"number\":{num_slots},\"hash\":\"0x{last_slot_hash}\",\"batch_range\":{{\"start\":{last_slot_start_batch},\"end\":{last_slot_end_batch}}}}},\"id\":1}}");
-        test_helper(vec![TestExpect{ data, expected}], slots);
+        test_helper(vec![TestExpect{payload, expected}], slots);
     }
 
 
@@ -395,34 +422,34 @@ proptest!(
                 let tx_full_data = tx_full_data.join(",");
 
                 test_helper(vec![TestExpect{
-                    data:
+                    payload:
                     format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Compact"],"id":1}}"#),
                     expected:
                     format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
                     TestExpect{
-                    data:
+                    payload:
                     format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Standard"],"id":1}}"#),
                     expected:
                     format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
                     TestExpect{
-                    data:
+                    payload:
                     format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}]],"id":1}}"#),
                     expected:
                     format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
                     TestExpect{
-                    data:
+                    payload:
                     format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[{random_batch_num}],"id":1}}"#),
                     expected:
                     format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{formatted_hashes}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)}
                     ,
                     // TODO #417: Solve this test
                     TestExpect{
-                    data:
+                    payload:
                     format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Full"],"id":1}}"#),
                     expected:
                     format!(r#"{{"jsonrpc":"2.0","result":[{{"hash":"0x{batch_hash}","tx_range":{{"start":{first_tx_num},"end":{last_tx_num}}},"txs":[{tx_full_data}],"custom_receipt":{batch_receipt}}}],"id":1}}"#)},
-                    ]
-                    , slots);
+                    ],
+                    slots);
 
                 return Ok(());
             }
@@ -435,9 +462,9 @@ proptest!(
 
         }
 
-        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Compact"],"id":1}}"#);
+        let payload = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[{random_batch_num}], "Compact"],"id":1}}"#);
         let expected : String= r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
-        test_helper(vec![TestExpect{data, expected}], slots);
+        test_helper(vec![TestExpect{payload, expected}], slots);
     }
 
     #[test]
@@ -460,32 +487,32 @@ proptest!(
 
 
                     test_helper(vec![TestExpect{
-                        data:
+                        payload:
                         format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}]],"id":1}}"#),
                         expected:
                         format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
                         TestExpect{
-                        data:
+                        payload:
                         format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[{random_tx_num}],"id":1}}"#),
                         expected:
                         format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
                         TestExpect{
-                        data:
+                        payload:
                         format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}], "Compact"],"id":1}}"#),
                         expected:
                         format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
                         TestExpect{
-                        data:
+                        payload:
                         format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}], "Standard"],"id":1}}"#),
                         expected:
                         format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
                         TestExpect{
-                        data:
+                        payload:
                         format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}], "Full"],"id":1}}"#),
                         expected:
                         format!(r#"{{"jsonrpc":"2.0","result":[{tx_formatted}],"id":1}}"#)},
-                        ]
-                        , slots);
+                        ],
+                        slots);
 
                     return Ok(());
                 }
@@ -494,9 +521,9 @@ proptest!(
             }
         }
 
-        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}]],"id":1}}"#);
-        let expected : String = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
-        test_helper(vec![TestExpect{data, expected}], slots);
+        let payload = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getTransactions","params":[[{random_tx_num}]],"id":1}}"#);
+        let expected: String = r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
+        test_helper(vec![TestExpect{payload, expected}], slots);
 
     }
 
@@ -528,7 +555,7 @@ proptest!(
 
 
                     test_helper(vec![TestExpect{
-                        data:
+                        payload:
                         format!(r#"{{"jsonrpc":"2.0","method":"ledger_getEvents","params":[{random_event_num_usize}],"id":1}}"#),
                         expected:
                         format!(r#"{{"jsonrpc":"2.0","result":[{event_formatted}],"id":1}}"#)},
@@ -544,9 +571,9 @@ proptest!(
 
         }
 
-        let data = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getEvents","params":[{random_event_num}],"id":1}}"#);
+        let payload = format!(r#"{{"jsonrpc":"2.0","method":"ledger_getEvents","params":[{random_event_num}],"id":1}}"#);
         let expected : String= r#"{"jsonrpc":"2.0","result":[null],"id":1}"#.to_string();
-        test_helper(vec![TestExpect{data, expected}], slots);
+        test_helper(vec![TestExpect{payload, expected}], slots);
 
 
     }
