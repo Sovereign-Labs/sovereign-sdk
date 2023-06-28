@@ -136,12 +136,13 @@ jobs:
       - name: wait for service to be up
         run: |
           SECONDS=0
-          until curl -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_balanceOf","params":["sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6","sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsgscxvf"],"id":1}' http://127.0.0.1:12345; [ $? -eq 0 ] || [ $SECONDS -ge 600 ]
+          until curl -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_balanceOf","params":["sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6","sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsgscxvf"],"id":1}' http://127.0.0.1:12345; [ $? -eq 0 ] || [ $SECONDS -ge 1200 ]
           do
             echo "Curl failed or server not ready yet, sleeping for 5 seconds..."
             sleep 5
           done
       - name: submit rollup transaction
+        working-directory: ./examples/demo-rollup
         run: make test-create-token
       - name: evaluate result
         run: |
