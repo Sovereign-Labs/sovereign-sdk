@@ -301,7 +301,7 @@ make start
 * Start the demo-rollup
 ```
 cd examples/demo-rollup
-cargo +nightly run
+cargo run
 ```
 * Submit the transaction
 ```
