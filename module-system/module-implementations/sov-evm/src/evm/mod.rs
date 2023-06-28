@@ -6,6 +6,8 @@ mod db_commit;
 pub(crate) mod db_init;
 pub(crate) mod executor;
 #[cfg(test)]
+pub(crate) mod test_helpers;
+#[cfg(test)]
 mod tests;
 
 pub(crate) type Address = [u8; 20];

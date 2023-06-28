@@ -1,10 +1,7 @@
 use super::SovU256;
-use bytes::Bytes;
 use revm::{
     self,
-    primitives::{
-        CfgEnv, CreateScheme, EVMError, Env, ExecutionResult, TransactTo, TxEnv, B160, B256, U256,
-    },
+    primitives::{CfgEnv, EVMError, Env, ExecutionResult},
     Database, DatabaseCommit,
 };
 use std::convert::Infallible;

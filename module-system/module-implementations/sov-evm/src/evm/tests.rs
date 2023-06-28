@@ -1,53 +1,24 @@
+use super::{db::EvmDb, db_init::InitEvmDb, executor};
 use crate::{
     evm::{
         executor::{BlockEnv, EvmTransaction},
+        test_helpers::{contract_address, output, test_data_path},
         AccountInfo,
     },
     Evm,
 };
-
-use super::{db::EvmDb, db_init::InitEvmDb, executor};
-use bytes::Bytes;
 use ethereum_types::U256 as EU256;
 use ethers_contract::BaseContract;
 use ethers_core::abi::Abi;
 use revm::{
     db::CacheDB,
-    primitives::{CfgEnv, ExecutionResult, Output, B160, KECCAK_EMPTY, U256},
+    primitives::{CfgEnv, KECCAK_EMPTY, U256},
     Database, DatabaseCommit,
 };
 use sov_state::{ProverStorage, WorkingSet};
 use std::{convert::Infallible, path::PathBuf};
 
 type C = sov_modules_api::default_context::DefaultContext;
-
-fn output(result: ExecutionResult) -> Bytes {
-    match result {
-        ExecutionResult::Success { output, .. } => match output {
-            Output::Call(out) => out,
-            Output::Create(out, _) => out,
-        },
-        _ => panic!("Expected successful ExecutionResult"),
-    }
-}
-
-fn contract_address(result: ExecutionResult) -> B160 {
-    match result {
-        ExecutionResult::Success {
-            output: Output::Create(_, Some(addr)),
-            ..
-        } => addr,
-        _ => panic!("Expected successful contract creation"),
-    }
-}
-
-fn test_data_path() -> PathBuf {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("src");
-    path.push("evm");
-    path.push("test_data");
-    path
-}
 
 fn make_contract_from_abi(path: PathBuf) -> BaseContract {
     let abi_json = std::fs::read_to_string(path).unwrap();
