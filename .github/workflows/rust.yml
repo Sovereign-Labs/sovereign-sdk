@@ -24,9 +24,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-        with:
-          # False, so sccache handles target caching/compilation
-          cache-targets: "false"
       - uses: mozilla-actions/sccache-action@v0.0.3
       - name: Run lint
         run: |
@@ -47,9 +44,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-        with:
-          # False, so sccache handles target caching/compilation
-          cache-targets: "false"
       - uses: mozilla-actions/sccache-action@v0.0.3
       - name: Run cargo check
         run: cd examples/demo-prover && cargo check
@@ -72,9 +66,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-        with:
-          # False, so sccache handles target caching/compilation
-          cache-targets: "false"
       - uses: mozilla-actions/sccache-action@v0.0.3
       - name: cargo install cargo-hack
         uses: taiki-e/install-action@cargo-hack
@@ -89,9 +80,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-        with:
-          # False, so sccache handles target caching/compilation
-          cache-targets: "false"
       - uses: mozilla-actions/sccache-action@v0.0.3
       - name: Run cargo test
         run: cargo test
@@ -107,9 +95,6 @@ jobs:
       - name: add llvm component
         run: rustup component add llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
-        with:
-          # False, so sccache handles target caching/compilation
-          cache-targets: "false"
       - uses: mozilla-actions/sccache-action@v0.0.3
       - name: cargo install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov

@@ -153,9 +153,10 @@ pub mod test {
                 None,
             )
             .inner;
-            assert!(
-                matches!(apply_blob_outcome, SequencerOutcome::Rewarded(0),),
-                "Sequencer execution should have succeeded but failed "
+            assert_eq!(
+                SequencerOutcome::Rewarded(0),
+                apply_blob_outcome,
+                "Sequencer execution should have succeeded but failed",
             );
         }
 
