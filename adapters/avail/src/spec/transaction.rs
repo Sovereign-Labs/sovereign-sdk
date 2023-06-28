@@ -62,13 +62,31 @@ impl AvailBlobTransaction {
     }
 
     fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
-        match &self.0.function {
-            DataAvailability(Call::submit_data { data }) => &mut CountedBufReader::<Bytes>::new(Bytes::copy_from_slice(&data.0)),
-            _ => unimplemented!(),
-        }
+        &mut self.blob
     }
 
     fn hash(&self) -> [u8; 32] {
-        self.0.encode()
+        self.hash
+    }
+}
+
+impl AvailBlobTransaction {
+    pub fn new(unchecked_extrinsic: &AppUncheckedExtrinsic) -> Self {
+        let address = match &unchecked_extrinsic.signature {
+            Some((subxt::utils::MultiAddress::Id(id), _, _)) => AvailAddress(id.clone().0),
+            _ => unimplemented!(),
+        };
+        let blob = match &unchecked_extrinsic.function {
+            DataAvailability(Call::submit_data { data }) => {
+                CountedBufReader::<Bytes>::new(Bytes::copy_from_slice(&data.0))
+            }
+            _ => unimplemented!(),
+        };
+
+        AvailBlobTransaction {
+            hash: H256::from(sp_core::blake2_256(&unchecked_extrinsic.encode())).to_fixed_bytes(),
+            address,
+            blob,
+        }
     }
 }
