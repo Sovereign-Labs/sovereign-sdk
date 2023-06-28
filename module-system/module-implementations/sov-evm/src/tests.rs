@@ -1,4 +1,5 @@
 use crate::{
+    call::CallMessage,
     evm::{db_init::InitEvmDb, executor::EvmTransaction, AccountInfo},
     Evm,
 };
@@ -9,22 +10,12 @@ use ethers_core::abi::Abi;
 use revm::primitives::{ExecutionResult, Output, B160, KECCAK_EMPTY, U256};
 use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, Context,
-    PublicKey, Spec,
+    Module, PublicKey, Spec,
 };
 use sov_state::{ProverStorage, WorkingSet};
 use std::path::PathBuf;
 
 type C = DefaultContext;
-
-fn output(result: ExecutionResult) -> Bytes {
-    match result {
-        ExecutionResult::Success { output, .. } => match output {
-            Output::Call(out) => out,
-            Output::Create(out, _) => out,
-        },
-        _ => panic!("Expected successful ExecutionResult"),
-    }
-}
 
 fn test_data_path() -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -40,7 +31,7 @@ fn make_contract_from_abi(path: PathBuf) -> BaseContract {
     BaseContract::from(abi)
 }
 
-fn transactions() -> Vec<EvmTransaction> {
+fn transactions() -> Vec<CallMessage> {
     let mut path = test_data_path();
     path.push("SimpleStorage.bin");
 
@@ -53,7 +44,7 @@ fn transactions() -> Vec<EvmTransaction> {
         ..Default::default()
     };
 
-    let set_arg = EU256::from(21989);
+    let set_arg = EU256::from(999);
 
     let mut path = test_data_path();
     path.push("SimpleStorage.abi");
@@ -80,7 +71,7 @@ fn transactions() -> Vec<EvmTransaction> {
         ..Default::default()
     };
 
-    vec![tx0, tx1, tx2]
+    vec![CallMessage { tx: tx0 }, CallMessage { tx: tx1 }]
 }
 
 #[test]
@@ -108,14 +99,19 @@ fn evm_test() {
         },
     );
 
-    let set_arg = EU256::from(21989);
-    let mut out = Bytes::new();
-
     for tx in transactions() {
-        let result = evm.execute_tx(tx, &sender_context, working_set).unwrap();
-        out = output(result);
+        evm.call(tx, &sender_context, working_set).unwrap();
     }
 
-    let get_res = EU256::from(out.as_ref());
-    assert_eq!(set_arg, get_res)
+    let addr: [u8; 20] = hex::decode("bd770416a3345f91e4b34576cb804a576fa48eb1")
+        .unwrap()
+        .try_into()
+        .unwrap();
+
+    let account = evm.accounts.get(&addr, working_set).unwrap();
+    let s = &[0; 32];
+    let r = account.storage.get(s, working_set).unwrap();
+
+    let set_arg = EU256::from(999);
+    assert_eq!(set_arg, EU256::from_little_endian(&r))
 }

@@ -20,10 +20,10 @@ pub struct Evm<C: sov_modules_api::Context> {
     pub(crate) address: C::Address,
 
     #[state]
-    accounts: sov_state::StateMap<Address, DbAccount>,
+    pub(crate) accounts: sov_state::StateMap<Address, DbAccount>,
 
     #[state]
-    block_env: sov_state::StateValue<BlockEnv>,
+    pub(crate) block_env: sov_state::StateValue<BlockEnv>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {
