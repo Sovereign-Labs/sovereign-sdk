@@ -200,7 +200,7 @@ pub mod test {
 
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
-        let some_sequencer: [u8; 32] = [102; 32];
+        let some_sequencer: [u8; 32] = [110; 32];
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
             &mut new_test_blob(Batch { txs }, &some_sequencer),
