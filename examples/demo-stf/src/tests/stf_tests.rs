@@ -98,9 +98,10 @@ pub mod test {
             None,
         );
 
-        assert!(
-            matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded(0),),
-            "Sequencer execution should have succeeded but failed "
+        assert_eq!(
+            SequencerOutcome::Rewarded(0),
+            apply_blob_outcome.inner,
+            "Sequencer execution should have succeeded but failed"
         );
 
         assert!(has_tx_events(&apply_blob_outcome),);
