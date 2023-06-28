@@ -1,7 +1,7 @@
 // Copyright (c) Aptos
 // SPDX-License-Identifier: Apache-2.0
 
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use sov_rollup_interface::{
     db::{errors::CodecError, ColumnFamilyName, KeyDecoder, KeyEncoder, Result, ValueCodec},
@@ -24,14 +24,14 @@ pub(crate) struct TestField(u32);
 
 impl TestField {
     fn to_bytes(&self) -> Vec<u8> {
-        self.0.to_le_bytes().to_vec()
+        self.0.to_be_bytes().to_vec()
     }
 
     fn from_bytes(data: &[u8]) -> Result<Self> {
         let mut reader = std::io::Cursor::new(data);
         Ok(TestField(
             reader
-                .read_u32::<LittleEndian>()
+                .read_u32::<BigEndian>()
                 .map_err(|e| CodecError::Wrapped(e.into()))?,
         ))
     }
