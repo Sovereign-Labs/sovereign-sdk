@@ -2,7 +2,7 @@
     "CreateToken": {
       "salt": 11,
       "token_name": "sov-test-token",
-      "initial_balance": 1000,
+      "initial_balance": 1000000,
       "minter_address": "sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6",
       "authorized_minters": ["sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6"]
     }

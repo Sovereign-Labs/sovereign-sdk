@@ -37,10 +37,14 @@ sov-value-setter = { path = "../../module-system/module-implementations/examples
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
-
+glassbench = "0.3"
 
 [dev-dependencies]
 sha2 = { workspace = true }
 reqwest = "0.11"
 tendermint = "0.32"
 tempfile = { workspace = true }
+
+[[bench]]
+name = "rollup"
+harness = false

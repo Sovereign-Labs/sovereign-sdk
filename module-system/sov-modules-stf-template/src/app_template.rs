@@ -181,7 +181,7 @@ where
             let tx_effect = match tx_result {
                 Ok(_) => TxEffect::Successful,
                 Err(e) => {
-                    debug!(
+                    error!(
                         "Tx 0x{} was reverted error: {}",
                         hex::encode(raw_tx_hash),
                         e

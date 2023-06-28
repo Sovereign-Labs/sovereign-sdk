@@ -35,6 +35,7 @@ fn populate_ledger(ledger_db: &mut LedgerDB) {
         header: TestBlockHeader {
             prev_hash: TestHash(sha2::Sha256::digest(b"prev_header")),
         },
+        height: 0
     });
 
     slot.add_batch(BatchReceipt {
