@@ -89,7 +89,7 @@ where
 
             // Execute
             {
-                // TODO: Bug(!), because potential discrepancy with default stf or any other STF
+                // TODO: Bug(!), because potential discrepancy. Should be resolved by https://github.com/Sovereign-Labs/sovereign-sdk/pull/361
                 let sender_address: C::Address = tx.pub_key().to_address();
                 let ctx = C::new(sender_address);
 
