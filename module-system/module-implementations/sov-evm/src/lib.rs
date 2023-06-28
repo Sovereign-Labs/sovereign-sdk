@@ -1,5 +1,4 @@
-use crate::evm::executor::BlockEnv;
-use evm::{db::EvmDb, Address, DbAccount};
+use evm::{db::EvmDb, transaction::BlockEnv, DbAccount, EthAddress};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
@@ -20,7 +19,7 @@ pub struct Evm<C: sov_modules_api::Context> {
     pub(crate) address: C::Address,
 
     #[state]
-    pub(crate) accounts: sov_state::StateMap<Address, DbAccount>,
+    pub(crate) accounts: sov_state::StateMap<EthAddress, DbAccount>,
 
     #[state]
     pub(crate) block_env: sov_state::StateValue<BlockEnv>,

@@ -1,13 +1,13 @@
 use super::{db::EvmDb, db_init::InitEvmDb, executor};
 use crate::{
     evm::{
-        executor::{BlockEnv, EvmTransaction},
         test_helpers::{contract_address, output, test_data_path},
+        transaction::{BlockEnv, EvmTransaction},
         AccountInfo,
     },
     Evm,
 };
-use ethereum_types::U256 as EU256;
+
 use ethers_contract::BaseContract;
 use ethers_core::abi::Abi;
 use revm::{
@@ -76,7 +76,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
         contract_address(result)
     };
 
-    let set_arg = EU256::from(21989);
+    let set_arg = ethereum_types::U256::from(21989);
 
     let mut path = test_data_path();
     path.push("SimpleStorage.abi");
@@ -110,7 +110,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
             executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
 
         let out = output(result);
-        EU256::from(out.as_ref())
+        ethereum_types::U256::from(out.as_ref())
     };
 
     assert_eq!(set_arg, get_res)

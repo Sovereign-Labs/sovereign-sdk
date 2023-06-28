@@ -2,6 +2,7 @@ use crate::{
     evm::{
         db::EvmDb,
         executor::{self},
+        transaction::EvmTransaction,
     },
     Evm,
 };
@@ -17,13 +18,13 @@ use sov_state::WorkingSet;
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct CallMessage {
-    pub tx: executor::EvmTransaction,
+    pub tx: EvmTransaction,
 }
 
 impl<C: sov_modules_api::Context> Evm<C> {
     pub(crate) fn execute_call(
         &self,
-        tx: executor::EvmTransaction,
+        tx: EvmTransaction,
         _context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
