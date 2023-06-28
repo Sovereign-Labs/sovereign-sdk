@@ -3,7 +3,7 @@ use sov_state::Prefix;
 mod conversions;
 pub(crate) mod db;
 mod db_commit;
-mod db_init;
+pub(crate) mod db_init;
 pub(crate) mod executor;
 #[cfg(test)]
 mod tests;

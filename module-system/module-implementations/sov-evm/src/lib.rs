@@ -10,6 +10,9 @@ pub mod genesis;
 #[cfg(feature = "native")]
 pub mod query;
 
+#[cfg(test)]
+mod tests;
+
 #[allow(dead_code)]
 #[derive(ModuleInfo, Clone)]
 pub struct Evm<C: sov_modules_api::Context> {
@@ -44,7 +47,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {
         context: &Self::Context,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
-        Ok(self.execute_txs(msg.tx, context, working_set)?)
+        Ok(self.execute_call(msg.tx, context, working_set)?)
     }
 }
 

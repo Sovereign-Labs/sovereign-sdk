@@ -7,7 +7,7 @@ use crate::{
 };
 use anyhow::Result;
 
-use revm::primitives::CfgEnv;
+use revm::primitives::{CfgEnv, ExecutionResult};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
@@ -22,17 +22,26 @@ pub struct CallMessage {
 }
 
 impl<C: sov_modules_api::Context> Evm<C> {
-    pub(crate) fn execute_txs(
+    pub(crate) fn execute_call(
+        &self,
+        tx: executor::EvmTransaction,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<CallResponse> {
+        self.execute_tx(tx, context, working_set).unwrap();
+        Ok(CallResponse::default())
+    }
+
+    pub(crate) fn execute_tx(
         &self,
         tx: executor::EvmTransaction,
         _context: &C,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse> {
+    ) -> Result<ExecutionResult> {
         let cfg_env = CfgEnv::default();
-        let block_env = self.block_env.get_or_err(working_set)?;
+        let block_env = self.block_env.get(working_set).unwrap_or_default();
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
-        executor::execute_tx(evm_db, block_env, tx, cfg_env).unwrap();
-        Ok(CallResponse::default())
+        Ok(executor::execute_tx(evm_db, block_env, tx, cfg_env).unwrap())
     }
 }
