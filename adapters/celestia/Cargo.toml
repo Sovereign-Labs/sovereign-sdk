@@ -7,6 +7,7 @@ edition = { workspace = true }
 
 [dependencies]
 borsh = { workspace = true, features = ["bytes"] }
+bech32 = { workspace = true }
 prost = "0.11"
 prost-types = "0.11"
 tendermint = "0.32"
@@ -33,6 +34,7 @@ nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "dd375884
 [dev-dependencies]
 postcard = { version = "1", features = ["use-std"] }
 proptest = { version = "1.2" }
+wiremock = "0.5"
 
 [build-dependencies]
 prost-build = { version = "0.11" }

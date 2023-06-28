@@ -60,12 +60,10 @@ validator-funded:
 
 config: check-container-running 
 ifeq ($(shell uname -s),Darwin)
-	@sed -i '' 's/\(pub const SEQUENCER_DA_ADDRESS: \[u8; 47\] = \*\)b"[^"]*";/\1b"$(get_address)";/' ../const-rollup-config/src/lib.rs
 	@sed -i '' 's/^\(celestia_rpc_auth_token = \)"[^"]*"/\1"$(get_auth)"/' rollup_config.toml
 	@sed -i '' 's#^\(celestia_rpc_address = \)"[^"]*"#\1"http://127.0.0.1:$(RPC_PORT)"#' rollup_config.toml
 	@sed -i '' 's#^\(start_height = \)[0-9]*#\1$(START_HEIGHT)#' rollup_config.toml
 else
-	@sed -i 's/\(pub const SEQUENCER_DA_ADDRESS: \[u8; 47\] = \*\)b"[^"]*";/\1b"$(get_address)";/' ../const-rollup-config/src/lib.rs
 	@sed -i 's/^\(celestia_rpc_auth_token = \)"[^"]*"/\1"$(get_auth)"/' rollup_config.toml
 	@sed -i 's#^\(celestia_rpc_address = \)"[^"]*"#\1"http://127.0.0.1:$(RPC_PORT)"#' rollup_config.toml
 	@sed -i 's#^\(start_height = \)[0-9]*#\1$(START_HEIGHT)#' rollup_config.toml
