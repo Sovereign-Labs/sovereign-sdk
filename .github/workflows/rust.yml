@@ -114,3 +114,13 @@ jobs:
         with:
           # When retry is implemented, we can enable it again: https://github.com/codecov/codecov-action/issues/926
           fail_ci_if_error: false
+  demo-rollup-local:
+    runs-on: ubuntu-latest
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+    steps:
+      - uses: actions/checkout@v3
+      - name: start celestia local
+        working-directory: ./examples/demo-rollup
+        run: make start
