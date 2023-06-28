@@ -121,6 +121,10 @@ jobs:
       RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
+      - name: Run sccache-cache
+        uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          version: "v0.4.0"
       - name: start celestia local
         working-directory: ./examples/demo-rollup
         run: make start
