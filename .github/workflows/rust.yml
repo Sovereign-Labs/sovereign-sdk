@@ -128,8 +128,11 @@ jobs:
         working-directory: ./examples/demo-rollup
         run: | 
           cargo run &
+          echo "cargo started in background"
           SECONDS=0; while [ $SECONDS -lt 600 ]; do curl -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_balanceOf","params":["sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6","sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsgscxvf"],"id":1}' http://127.0.0.1:12345; [ $? -ne 0 ] && sleep 5 || break; done
+          echo "curl wait done"
           curl -s -f -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_balanceOf","params":["sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6","sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsgscxvf"],"id":1}' http://127.0.0.1:12345
+          echo "curl final check done"
       - name: submit rollup transaction
         run: make test-create-token
       - name: evaluate result
