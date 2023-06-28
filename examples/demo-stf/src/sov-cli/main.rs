@@ -4,10 +4,10 @@ use clap::Parser;
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_stf_template::RawTx;
-use std::fs;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use std::{fs, vec};
 
 use demo_stf::runtime::cmd_parser;
 
@@ -175,52 +175,66 @@ impl SerializedTx {
     }
 }
 
+fn serialize_call(command: &crate::Commands) -> String {
+    if let crate::Commands::SerializeCall {
+        sender_priv_key_path,
+        module_name,
+        call_data_path,
+        nonce,
+    } = command
+    {
+        let serialized =
+            SerializedTx::new(&sender_priv_key_path, &module_name, &call_data_path, *nonce)
+                .unwrap_or_else(|e| panic!("Call message serialization error: {}", e));
+
+        let raw_contents = hex::encode(
+            serialized.raw.data, // .expect("serialization to vec is infallible"),
+        );
+        raw_contents
+    } else {
+        Default::default()
+    }
+}
+
+fn make_hex_blob(txs: impl Iterator<Item = String>) -> String {
+    // decode the hex string to bytes
+    let mut batch = vec![];
+    for tx in txs {
+        let bytes = hex::decode(tx.as_bytes()).expect("Decoding failed");
+        batch.push(bytes);
+    }
+    hex::encode(batch.try_to_vec().unwrap())
+}
+
 pub fn main() {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::SerializeCall {
-            sender_priv_key_path,
-            module_name,
-            call_data_path,
-            nonce,
+            ref call_data_path, ..
         } => {
-            let serialized =
-                SerializedTx::new(&sender_priv_key_path, &module_name, &call_data_path, nonce)
-                    .unwrap_or_else(|e| panic!("Call message serialization error: {}", e));
-
+            let raw_contents = serialize_call(&cli.command);
             let mut bin_path = PathBuf::from(call_data_path);
             bin_path.set_extension("dat");
 
             let mut file = File::create(bin_path)
                 .unwrap_or_else(|e| panic!("Unable to crate .dat file: {}", e));
-
-            let raw_contents = hex::encode(
-                serialized
-                    .raw
-                    .try_to_vec()
-                    .expect("serialization to vec is infallible"),
-            );
             file.write_all(raw_contents.as_bytes())
                 .unwrap_or_else(|e| panic!("Unable to save .dat file: {}", e));
         }
         Commands::MakeBlob { path_list } => {
-            let mut data_list: Vec<Vec<u8>> = vec![];
-
+            let mut hex_encoded_txs = vec![];
             for path in path_list {
                 let mut f = File::open(path).expect("Unable to open file");
                 let mut hex_string = String::new();
                 f.read_to_string(&mut hex_string)
                     .expect("Unable to read the file");
-
-                // decode the hex string to bytes
-                let bytes = hex::decode(hex_string.trim()).expect("Decoding failed");
-
                 // push it into data_list
-                data_list.push(bytes);
+                hex_encoded_txs.push(hex_string);
             }
-            let blob = data_list.try_to_vec().unwrap();
-            println!("{}", hex::encode(blob))
+
+            let blob = make_hex_blob(hex_encoded_txs.into_iter());
+            println!("{}", blob)
         }
         Commands::Util(util_args) => match util_args.command {
             UtilCommands::DeriveTokenAddress {
@@ -262,6 +276,7 @@ pub fn main() {
 #[cfg(test)]
 mod test {
     use super::*;
+    use borsh::BorshDeserialize;
     use demo_stf::app::{DemoApp, DemoAppRunner};
     use demo_stf::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
     use demo_stf::runner_config::Config;
@@ -299,6 +314,40 @@ mod test {
 
         // The minted amount was 1000 and we transferred 200 and burned 300.
         assert_eq!(balance, Some(500))
+    }
+
+    #[test]
+    fn test_create_token() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let mut test_demo = TestDemo::with_path(tempdir.path().to_path_buf());
+        let test_tx = serialize_call(&Commands::SerializeCall {
+            sender_priv_key_path: make_test_path("token_deployer_private_key.json")
+                .to_str()
+                .unwrap()
+                .into(),
+            module_name: "Bank".into(),
+            call_data_path: make_test_path("create_token.json").to_str().unwrap().into(),
+            nonce: 0,
+        });
+
+        let mut test_data = read_test_data();
+        test_data.data.pop();
+        test_data.data.pop();
+
+        let batch = Batch {
+            txs: test_data.data.clone(),
+        };
+
+        println!("batch: {}", hex::encode(batch.try_to_vec().unwrap()));
+
+        let blob = make_hex_blob(vec![test_tx].into_iter());
+        println!("generated: {}", &blob);
+
+        // let mut blob = hex::decode(blob.as_bytes()).expect("hex is valid"):
+        let blob = hex::decode(blob.as_bytes()).unwrap();
+
+        let batch = Batch::deserialize(&mut &blob[..]).expect("must be valid blob");
+        execute_txs(&mut test_demo.demo, test_demo.config, batch.txs);
     }
 
     // Test helpers
@@ -395,8 +444,9 @@ mod test {
         )
         .inner;
         assert!(
-            matches!(apply_blob_outcome, SequencerOutcome::Rewarded(0),),
-            "Sequencer execution should have succeeded but failed "
+            matches!(apply_blob_outcome, SequencerOutcome::Rewarded(0)),
+            "Sequencer execution should have succeeded but failed {:?}",
+            apply_blob_outcome
         );
         StateTransitionFunction::<MockZkvm>::end_slot(demo);
     }
