@@ -184,13 +184,10 @@ fn serialize_call(command: &crate::Commands) -> String {
     } = command
     {
         let serialized =
-            SerializedTx::new(&sender_priv_key_path, &module_name, &call_data_path, *nonce)
+            SerializedTx::new(&sender_priv_key_path, module_name, &call_data_path, *nonce)
                 .unwrap_or_else(|e| panic!("Call message serialization error: {}", e));
 
-        let raw_contents = hex::encode(
-            serialized.raw.data, // .expect("serialization to vec is infallible"),
-        );
-        raw_contents
+        hex::encode(serialized.raw.data)
     } else {
         Default::default()
     }
@@ -443,10 +440,10 @@ mod test {
             None,
         )
         .inner;
-        assert!(
-            matches!(apply_blob_outcome, SequencerOutcome::Rewarded(0)),
-            "Sequencer execution should have succeeded but failed {:?}",
-            apply_blob_outcome
+        assert_eq!(
+            SequencerOutcome::Rewarded(0),
+            apply_blob_outcome,
+            "Sequencer execution should have succeeded but failed",
         );
         StateTransitionFunction::<MockZkvm>::end_slot(demo);
     }

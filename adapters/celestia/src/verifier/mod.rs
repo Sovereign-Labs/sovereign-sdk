@@ -236,8 +236,7 @@ impl da::DaVerifier for CelestiaVerifier {
                 let blob_ref = blob.clone();
 
                 let mut blob_iter = blob_ref.data();
-                let mut blob_data = Vec::with_capacity(blob_iter.remaining());
-                blob_data.resize(blob_iter.remaining(), 0);
+                let mut blob_data = vec![0; blob_iter.remaining()];
                 blob_iter.copy_to_slice(blob_data.as_mut_slice());
                 let tx_data = tx.data().acc();
 
