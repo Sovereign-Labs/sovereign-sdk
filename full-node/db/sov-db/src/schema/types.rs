@@ -18,6 +18,7 @@ use sov_rollup_interface::{
     Clone, PartialEq, PartialOrd, Eq, Ord, Debug, Default, BorshDeserialize, BorshSerialize,
 )]
 pub struct DbBytes(Arc<Vec<u8>>);
+
 impl DbBytes {
     pub fn new(contents: Vec<u8>) -> Self {
         Self(Arc::new(contents))
@@ -58,6 +59,7 @@ pub struct StoredSlot {
     pub extra_data: DbBytes,
     pub batches: std::ops::Range<BatchNumber>,
 }
+
 /// The on-disk format for a batch. Stores the hash and identifies the range of transactions
 /// included in the batch
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
