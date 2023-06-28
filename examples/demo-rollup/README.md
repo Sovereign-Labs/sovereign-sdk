@@ -74,15 +74,16 @@ circumstances.
 
 ## Getting Started
 
-## Setting up SDK to run locally
-
+## Setting up the SDK to run with a local DA layer instance
+In this example, we will spin up a local Celestia instance as our DA layer. To be able to do that:
 * Install docker https://www.docker.com
-* switch to the `demo-rollup` directory
-* Start the celestia services locally (the details of what the Makefile does are explained in the next section)
+* Switch to the `demo-rollup` directory
+* Start the celestia services locally
 ```
 make clean
 make start
 ```
+* Details/Internals of the Makefile are [here](#Makefile)
 * The above command should also configure your local setup so you should see some changes stashed
 ```
 $ git status
@@ -118,37 +119,6 @@ make test-create-token
 2023-06-07T10:05:20.493991Z  INFO sov_demo_rollup: Received 1 blobs
 2023-06-07T10:05:20.496571Z  INFO sov_demo_rollup: receipts: BatchReceipt { batch_hash: [44, 38, 61, 124, 123, 92, 9, 196, 200, 211, 52, 149, 33, 172, 120, 239, 180, 106, 72, 9, 161, 68, 8, 87, 127, 190, 201, 94, 9, 30, 108, 188], tx_receipts: [TransactionReceipt { tx_hash: [160, 103, 81, 53, 69, 140, 72, 198, 215, 190, 38, 242, 70, 204, 226, 217, 216, 22, 210, 142, 110, 221, 222, 171, 26, 40, 158, 236, 110, 107, 160, 170], body_to_save: None, events: [], receipt: Successful }], inner: Rewarded(0) }
 ```
-### Makefile
-* The `Makefile` under `demo-rollup` automates a number of things for convenience
-  * Pull a docker container that runs a single instance of a celestia full node for a local setup
-  * The docker container is built with celestia 0.7.1 at present and is compatible with Jupiter (sovereign's celestia adapter)
-  * `make clean`
-    * Stops any running containers with the name `sov-celestia-local` and also removes them
-    * Removes `demo-data` (or the configured path of the rollup database from rollup_config.toml)
-  * `make start`
-    * Pulls the `sov-celestia-local:genesis-v0.7.1` docker image
-    * Performs a number of checks to ensure container is not already running
-    * Starts the container with the name `sov-celestia-local`
-    * Exposes the RPC port `26658` (as configured in the Makefile)
-    * Waits until the container is started
-      * It polls the running service inside the container for a specific RPC call, so there would be some errors printed while the container is starting up. This is ok
-    * Creates a key inside the docker container using `celestia-appd` that is bundled inside the container - the key is named `sequencer-da-address`
-    * The `sequencer-da-address` key is then funded with `10000000utia` configured by the `AMOUNT` variable in the Makefile
-    * The validator itself runs with the key name `validator` and is also accessible inside the container but this shouldn't be necessary
-    * Sets up the config
-      * `examples/const-rollup-config/src/lib.rs` is modified by the `make` command so that `pub const SEQUENCER_DA_ADDRESS` is set to the address of the key ``sov-celestia-local` that was created and funded in the previous steps
-      * `examples/demo-rollup/rollup_config.toml` is modified -
-        * `start_height` is set to `1` since this is a fresh start
-        * `celestia_rpc_auth_token` is set to the auth token retrieved by running the container bundled `celestia-appd`
-          * `/celestia bridge auth admin --node.store /bridge` is the command that is run inside the container to get the token
-        * `celestia_rpc_address` is set to point to `127.0.0.1` and the `RPC_PORT` configured in the Makefile (default 26658)
-        * The config is stashed and the changes are visible once you do a `git status` after running `make start`
-  * For submitting transactions, we use `make submit-txn SERIALIZED_BLOB_PATH=....`
-    * This makes use of `celestia-appd tx blob PayForBlobs` inside the docker container to submit the blob to the full node
-    * `--from ` is set to `sequencer-da-address` whose address has been updated at `examples/const-rollup-config/src/lib.rs`
-    * The namespace of celestia that the blob needs to be submitted to is obtained by using `sov-cli util print-namespace` which reads the namespace from `examples/const-rollup-config/src/lib.rs`
-    * The content of the blob is read directly from the file passed in via the command line using `SERIALIZED_BLOB_PATH`
-    * `BLOB_TXN_FEE` is set to `300utia` and would likely not need to be modified
 
 ### Submitting transactions
 * In order to create transactions, we need to use the `sov-cli` binary
@@ -309,7 +279,6 @@ user@machine sovereign % cd examples/demo-rollup
 user@machine demo-rollup % SERIALIZED_BLOB_PATH=../demo-stf/src/sov-cli/test_data/celestia_blob make submit-txn
 ```
 
-
 ### Verify the supply of the new token created
 
 ```
@@ -317,11 +286,42 @@ $ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method"
 {"jsonrpc":"2.0","result":{"amount":1000},"id":1}
 ```
 
+### Makefile
+* The `Makefile` under `demo-rollup` automates a number of things for convenience
+  * Pull a docker container that runs a single instance of a celestia full node for a local setup
+  * The docker container is built with celestia 0.7.1 at present and is compatible with Jupiter (sovereign's celestia adapter)
+  * `make clean`
+    * Stops any running containers with the name `sov-celestia-local` and also removes them
+    * Removes `demo-data` (or the configured path of the rollup database from rollup_config.toml)
+  * `make start`
+    * Pulls the `sov-celestia-local:genesis-v0.7.1` docker image
+    * Performs a number of checks to ensure container is not already running
+    * Starts the container with the name `sov-celestia-local`
+    * Exposes the RPC port `26658` (as configured in the Makefile)
+    * Waits until the container is started
+      * It polls the running service inside the container for a specific RPC call, so there will be some errors printed while the container is starting up. This is ok
+    * Creates a key inside the docker container using `celestia-appd` that is bundled inside the container - the key is named `sequencer-da-address`
+    * The `sequencer-da-address` key is then funded with `10000000utia` configured by the `AMOUNT` variable in the Makefile
+    * The validator itself runs with the key name `validator` and is also accessible inside the container but this shouldn't be necessary
+    * Sets up the config
+      * `examples/const-rollup-config/src/lib.rs` is modified by the `make` command so that `pub const SEQUENCER_DA_ADDRESS` is set to the address of the key ``sov-celestia-local` that was created and funded in the previous steps
+      * `examples/demo-rollup/rollup_config.toml` is modified -
+        * `start_height` is set to `1` since this is a fresh start
+        * `celestia_rpc_auth_token` is set to the auth token retrieved by running the container bundled `celestia-appd`
+          * `/celestia bridge auth admin --node.store /bridge` is the command that is run inside the container to get the token
+        * `celestia_rpc_address` is set to point to `127.0.0.1` and the `RPC_PORT` configured in the Makefile (default 26658)
+        * The config is stashed and the changes are visible once you do a `git status` after running `make start`
+  * For submitting transactions, we use `make submit-txn SERIALIZED_BLOB_PATH=....`
+    * This makes use of `celestia-appd tx blob PayForBlobs` inside the docker container to submit the blob to the full node
+    * `--from ` is set to `sequencer-da-address` whose address has been updated at `examples/const-rollup-config/src/lib.rs`
+    * The namespace of celestia that the blob needs to be submitted to is obtained by using `sov-cli util print-namespace` which reads the namespace from `examples/const-rollup-config/src/lib.rs`
+    * The content of the blob is read directly from the file passed in via the command line using `SERIALIZED_BLOB_PATH`
+    * `BLOB_TXN_FEE` is set to `300utia` and would likely not need to be modified
+
+
 ### Remote setup
-The above setup runs celestia node locally to avoid any external network dependencies and to speed up development. The sovereign SDK can also be configured to 
-connect to the celestia testnet using a celestia light node running on your machine. T
-here are instructions on how to do this at [Remote Setup](remote_setup.md) the remote setup has a dependency on the versions of the testnet, the light client as well as the adapters use to connect to the light client.
-Currently, the remote setup doesn't work due to breaking changes but the general process is still the same if developers wish to try different versions for the nodes
+The above setup runs celestia node locally to avoid any external network dependencies and to speed up development. The Sovereign SDK can also be configured to connect to the celestia testnet using a celestia light node running on your machine.
+At present, the remote setup is not functional because the Celestia testnet version that our Celestia adapter supports has been sunsetted. We are collaborating with the Celestia team to update the adapter
 
 ## Interacting with your Node via RPC
 
