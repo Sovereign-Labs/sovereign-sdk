@@ -1,3 +1,4 @@
+use crate::evm::executor::BlockEnv;
 use evm::{db::EvmDb, Address, DbAccount};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
@@ -17,6 +18,9 @@ pub struct Evm<C: sov_modules_api::Context> {
 
     #[state]
     accounts: sov_state::StateMap<Address, DbAccount>,
+
+    #[state]
+    block_env: sov_state::StateValue<BlockEnv>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {
@@ -36,11 +40,11 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {
 
     fn call(
         &self,
-        _msg: Self::CallMessage,
-        _context: &Self::Context,
-        _working_set: &mut WorkingSet<C::Storage>,
+        msg: Self::CallMessage,
+        context: &Self::Context,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
-        todo!()
+        Ok(self.execute_txs(msg.tx, context, working_set)?)
     }
 }
 

@@ -1,4 +1,10 @@
-use crate::{evm::AccountInfo, Evm};
+use crate::{
+    evm::{
+        executor::{BlockEnv, EvmTransaction},
+        AccountInfo,
+    },
+    Evm,
+};
 
 use super::{db::EvmDb, db_init::InitEvmDb, executor};
 use bytes::Bytes;
@@ -7,9 +13,7 @@ use ethers_contract::BaseContract;
 use ethers_core::abi::Abi;
 use revm::{
     db::CacheDB,
-    primitives::{
-        BlockEnv, CfgEnv, Env, ExecutionResult, Output, TransactTo, TxEnv, B160, KECCAK_EMPTY, U256,
-    },
+    primitives::{CfgEnv, ExecutionResult, Output, B160, KECCAK_EMPTY, U256},
     Database, DatabaseCommit,
 };
 use sov_state::{ProverStorage, WorkingSet};
@@ -88,21 +92,16 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
         path.push("SimpleStorage.bin");
 
         let contract_data = std::fs::read_to_string(path).unwrap();
-        let contract_data = Bytes::from(hex::decode(contract_data).unwrap());
+        let contract_data = hex::decode(contract_data).unwrap();
 
-        let tx_env = TxEnv {
-            transact_to: TransactTo::create(),
+        let tx = EvmTransaction {
+            to: None,
             data: contract_data,
             ..Default::default()
         };
 
-        let env = Env {
-            cfg: CfgEnv::default(),
-            block: BlockEnv::default(),
-            tx: tx_env,
-        };
-
-        let result = executor::execute_tx(&mut evm_db, env).unwrap();
+        let result =
+            executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
         contract_address(result)
     };
 
@@ -116,37 +115,28 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
     {
         let call_data = contract.encode("set", set_arg).unwrap();
 
-        let tx_env = TxEnv {
-            transact_to: TransactTo::Call(contract_address),
-            data: Bytes::from(hex::decode(hex::encode(&call_data)).unwrap()),
+        let tx = EvmTransaction {
+            to: Some(*contract_address.as_fixed_bytes()),
+            data: hex::decode(hex::encode(&call_data)).unwrap(),
+            nonce: 1,
             ..Default::default()
         };
 
-        let env = Env {
-            cfg: CfgEnv::default(),
-            block: BlockEnv::default(),
-            tx: tx_env,
-        };
-
-        executor::execute_tx(&mut evm_db, env).unwrap();
+        executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
     }
 
     let get_res = {
         let call_data = contract.encode("get", ()).unwrap();
 
-        let tx_env = TxEnv {
-            transact_to: TransactTo::Call(contract_address),
-            data: Bytes::from(hex::decode(hex::encode(&call_data)).unwrap()),
+        let tx = EvmTransaction {
+            to: Some(*contract_address.as_fixed_bytes()),
+            data: hex::decode(hex::encode(&call_data)).unwrap(),
+            nonce: 2,
             ..Default::default()
         };
 
-        let env = Env {
-            cfg: CfgEnv::default(),
-            block: BlockEnv::default(),
-            tx: tx_env,
-        };
-
-        let result = executor::execute_tx(&mut evm_db, env).unwrap();
+        let result =
+            executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
 
         let out = output(result);
         EU256::from(out.as_ref())

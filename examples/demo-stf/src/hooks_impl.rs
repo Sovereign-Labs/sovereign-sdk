@@ -8,6 +8,26 @@ use sov_modules_stf_template::SequencerOutcome;
 use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_state::WorkingSet;
 
+trait RuntimeHooks {
+    type Context: Context;
+
+    fn get_account_for_pub_key(
+        &self,
+        pub_key: &<Self::Context as Spec>::PublicKey,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> anyhow::Result<<Self::Context as Spec>::Address>;
+
+    fn inc_nonce_for_pub_key(
+        &self,
+        pub_key: &<Self::Context as Spec>::PublicKey,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> anyhow::Result<()>;
+
+    fn lock_sequencer_funds(&self, blob: &mut impl BlobTransactionTrait) -> anyhow::Result<()>;
+
+    fn reward_sequencer(&self, result: SequencerOutcome) -> anyhow::Result<()>;
+}
+
 impl<C: Context> TxHooks for Runtime<C> {
     type Context = C;
 

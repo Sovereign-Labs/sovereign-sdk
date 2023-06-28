@@ -1,8 +1,11 @@
 use bytes::Bytes;
 
+use super::executor::{BlockEnv, EvmTransaction};
 use super::AccountInfo;
-use revm::primitives::{AccountInfo as ReVmAccountInfo, U256};
-use revm::primitives::{Bytecode, B256};
+use revm::primitives::{
+    AccountInfo as ReVmAccountInfo, CreateScheme, TransactTo, TxEnv, B160, U256,
+};
+use revm::primitives::{BlockEnv as ReBlockEnv, Bytecode, B256};
 
 impl From<AccountInfo> for ReVmAccountInfo {
     fn from(info: AccountInfo) -> Self {
@@ -22,6 +25,58 @@ impl From<ReVmAccountInfo> for AccountInfo {
             code_hash: info.code_hash.to_fixed_bytes(),
             code: info.code.unwrap_or_default().bytes().to_vec(),
             nonce: info.nonce,
+        }
+    }
+}
+
+impl From<BlockEnv> for ReBlockEnv {
+    fn from(block_env: BlockEnv) -> Self {
+        Self {
+            number: U256::from_le_bytes(block_env.number),
+            coinbase: B160::from_slice(&block_env.coinbase),
+            timestamp: U256::from_le_bytes(block_env.timestamp),
+            // TODO:
+            difficulty: U256::ZERO,
+            prevrandao: block_env.prevrandao.map(|r| B256::from_slice(&r)),
+            basefee: U256::from_le_bytes(block_env.basefee),
+            gas_limit: U256::from_le_bytes(block_env.gas_limit),
+        }
+    }
+}
+
+impl From<EvmTransaction> for TxEnv {
+    fn from(tx: EvmTransaction) -> Self {
+        let to = match tx.to {
+            Some(addr) => TransactTo::Call(B160::from_slice(&addr)),
+            None => TransactTo::Create(CreateScheme::Create),
+        };
+
+        let access_list = tx
+            .access_lists
+            .into_iter()
+            .map(|item| {
+                (
+                    B160::from_slice(&item.address),
+                    item.storage_keys
+                        .into_iter()
+                        .map(U256::from_le_bytes)
+                        .collect(),
+                )
+            })
+            .collect();
+
+        Self {
+            caller: B160::from_slice(&tx.caller),
+            data: Bytes::from(tx.data),
+            gas_limit: tx.gas_limit,
+            gas_price: tx.gas_price.map(U256::from_le_bytes).unwrap_or_default(),
+            gas_priority_fee: tx.max_priority_fee_per_gas.map(U256::from_le_bytes),
+            transact_to: to,
+            value: U256::from_le_bytes(tx.value),
+            nonce: Some(tx.nonce),
+            //TODO
+            chain_id: None,
+            access_list,
         }
     }
 }
