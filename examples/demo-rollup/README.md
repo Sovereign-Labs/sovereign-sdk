@@ -145,7 +145,7 @@ $ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method"
 {"jsonrpc":"2.0","result":{"amount":5000},"id":1}
 ```
 
-- params: should be the token address created in step 6
+- params: should be the token address created in step 5
 
 ## Interacting with your Node via RPC
 
