@@ -126,8 +126,9 @@ jobs:
         run: make start
       - name: start sovereign demo-rollup
         working-directory: ./examples/demo-rollup
-        run: cargo run &
-
+        run: |
+          cargo build
+          ../../target/debug/sov-demo-rollup &
       - name: wait for service to be up
         run: |
           SECONDS=0
@@ -136,7 +137,6 @@ jobs:
             echo "Curl failed or server not ready yet, sleeping for 5 seconds..."
             sleep 5
           done
-
       - name: submit rollup transaction
         run: make test-create-token
       - name: evaluate result
