@@ -93,7 +93,7 @@ $ git status
 ```
 * Start the demo-rollup in a different tab
 ```
-$ cargo +nightly run
+$ cargo run
 ```
 * You should see the demo-rollup app consuming blocks from the docker container's celestia node
 ```
