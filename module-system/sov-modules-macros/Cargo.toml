@@ -21,9 +21,9 @@ path = "tests/all_tests.rs"
 
 [dev-dependencies]
 trybuild = "1.0"
-sov-modules-api = { path = "../sov-modules-api", version = "0.1" }
+sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
 jsonrpsee = { workspace = true, features = ["macros", "http-client", "server"] }
-sov-state = { path = "../sov-state", version = "0.1" }
+sov-state = { path = "../sov-state", version = "0.1", default-features = false }
 tempfile = { workspace = true }
 
 [dependencies]
