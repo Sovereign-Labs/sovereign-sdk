@@ -17,16 +17,15 @@ jobs:
   check:
     runs-on: ubuntu-latest
     name: check
+    timeout-minutes: 60
     env:
       RUSTFLAGS: -D warnings
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: "v0.4.0"
+      - uses: Swatinem/rust-cache@v2
+      - uses: mozilla-actions/sccache-action@v0.0.3
       - name: Run lint
         run: |
           if ! make lint ; then
@@ -39,16 +38,15 @@ jobs:
   check-demo-prover:
     runs-on: ubuntu-latest
     name: check demo prover
+    timeout-minutes: 90
     env:
       RUSTFLAGS: -D warnings
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: "v0.4.0"
+      - uses: Swatinem/rust-cache@v2
+      - uses: mozilla-actions/sccache-action@v0.0.3
       - name: Run cargo check
         run: cd examples/demo-prover && cargo check
       - name: Run cargo fmt check
@@ -63,14 +61,15 @@ jobs:
   hack:
     runs-on: ubuntu-latest
     name: features
+    timeout-minutes: 60
     env:
       RUSTFLAGS: -D warnings
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.3
+      - uses: Swatinem/rust-cache@v2
+      - uses: mozilla-actions/sccache-action@v0.0.3
       - name: cargo install cargo-hack
         uses: taiki-e/install-action@cargo-hack
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
@@ -78,19 +77,19 @@ jobs:
         run: make check-features
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.3
-        with:
-          version: "v0.4.0"
+      - uses: Swatinem/rust-cache@v2
+      - uses: mozilla-actions/sccache-action@v0.0.3
       - name: Run cargo test
         run: cargo test
   coverage:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     env:
       SCCACHE_GHA_ENABLED: "true"
       RUSTC_WRAPPER: "sccache"
@@ -100,8 +99,8 @@ jobs:
           submodules: true
       - name: add llvm component
         run: rustup component add llvm-tools-preview
-      - name: Run sccache-cache
-        uses: mozilla-actions/sccache-action@v0.0.3
+      - uses: Swatinem/rust-cache@v2
+      - uses: mozilla-actions/sccache-action@v0.0.3
       - name: cargo install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: cargo generate-lockfile

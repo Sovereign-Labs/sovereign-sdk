@@ -1,8 +1,8 @@
-use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::Context;
 use sov_modules_macros::rpc_gen;
 use sov_modules_macros::ModuleInfo;
-use sov_state::{ProverStorage, WorkingSet};
+use sov_state::{WorkingSet, ZkStorage};
 
 #[derive(ModuleInfo)]
 pub struct TestStruct<C: ::sov_modules_api::Context> {
@@ -33,7 +33,7 @@ impl<C: sov_modules_api::Context> TestStruct<C> {
     }
 }
 
-pub struct TestRuntime<C: sov_modules_api::Context> {
+pub struct TestRuntime<C: Context> {
     test_struct: TestStruct<C>,
 }
 
@@ -43,29 +43,30 @@ struct RpcStorage<C: Context> {
     pub storage: C::Storage,
 }
 
-impl TestStructRpcImpl<DefaultContext> for RpcStorage<DefaultContext> {
+impl TestStructRpcImpl<ZkDefaultContext> for RpcStorage<ZkDefaultContext> {
     fn get_working_set(
         &self,
-    ) -> ::sov_state::WorkingSet<<DefaultContext as ::sov_modules_api::Spec>::Storage> {
+    ) -> ::sov_state::WorkingSet<<ZkDefaultContext as ::sov_modules_api::Spec>::Storage> {
         ::sov_state::WorkingSet::new(self.storage.clone())
     }
 }
 
 fn main() {
-    let tmpdir = tempfile::tempdir().unwrap();
-    let native_storage = ProverStorage::with_path(tmpdir.path()).unwrap();
-    let r: RpcStorage<DefaultContext> = RpcStorage {
-        storage: native_storage.clone(),
+    let storage = ZkStorage::new([1u8; 32]);
+    let r: RpcStorage<ZkDefaultContext> = RpcStorage {
+        storage: storage.clone(),
     };
     {
         let result =
-            <RpcStorage<DefaultContext> as TestStructRpcServer<DefaultContext>>::first_method(&r);
+            <RpcStorage<ZkDefaultContext> as TestStructRpcServer<ZkDefaultContext>>::first_method(
+                &r,
+            );
         assert_eq!(result.unwrap(), 11);
     }
 
     {
         let result =
-            <RpcStorage<DefaultContext> as TestStructRpcServer<DefaultContext>>::second_method(
+            <RpcStorage<ZkDefaultContext> as TestStructRpcServer<ZkDefaultContext>>::second_method(
                 &r, 22,
             );
         assert_eq!(result.unwrap(), 22);
@@ -73,7 +74,7 @@ fn main() {
 
     {
         let result =
-            <RpcStorage<DefaultContext> as TestStructRpcServer<DefaultContext>>::third_method(
+            <RpcStorage<ZkDefaultContext> as TestStructRpcServer<ZkDefaultContext>>::third_method(
                 &r, 33,
             );
         assert_eq!(result.unwrap(), 33);
@@ -81,7 +82,7 @@ fn main() {
 
     {
         let result =
-            <RpcStorage<DefaultContext> as TestStructRpcServer<DefaultContext>>::fourth_method(
+            <RpcStorage<ZkDefaultContext> as TestStructRpcServer<ZkDefaultContext>>::fourth_method(
                 &r, 44,
             );
         assert_eq!(result.unwrap(), 44);
@@ -89,7 +90,7 @@ fn main() {
 
     {
         let result =
-            <RpcStorage<DefaultContext> as TestStructRpcServer<DefaultContext>>::health(&r);
+            <RpcStorage<ZkDefaultContext> as TestStructRpcServer<ZkDefaultContext>>::health(&r);
         assert_eq!(result.unwrap(), ());
     }
 
