@@ -1,24 +1,26 @@
-mod config;
-mod ledger_rpc;
+use std::env;
+use std::net::SocketAddr;
+use std::sync::Arc;
 
-#[cfg(test)]
-mod test_rpc;
-
-use crate::config::RollupConfig;
 use anyhow::Context;
+use jsonrpsee::core::server::rpc_module::Methods;
+use tracing::Level;
+use tracing::{debug, info};
+
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{DefaultContext, DemoBatchReceipt, DemoTxReceipt};
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runner_config::from_toml_path;
+use demo_stf::runtime::get_rpc_methods;
 use demo_stf::runtime::GenesisConfig;
-use jsonrpsee::core::server::rpc_module::Methods;
 use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::RollupParams;
 use jupiter::verifier::{CelestiaVerifier, ChainValidityCondition};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
+use sov_modules_api::RpcRunner;
 use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::{DaService, SlotData};
@@ -26,17 +28,17 @@ use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::traits::CanonicalHash;
 use sov_rollup_interface::zk::traits::ValidityConditionChecker;
-use sov_state::Storage;
-use std::env;
-use std::net::SocketAddr;
-use std::sync::Arc;
-use tracing::Level;
-use tracing::{debug, info};
-
 // RPC related imports
 use sov_sequencer::get_sequencer_rpc;
-use demo_stf::runtime::get_rpc_methods;
-use sov_modules_api::RpcRunner;
+use sov_state::Storage;
+
+use crate::config::RollupConfig;
+
+mod config;
+mod ledger_rpc;
+
+#[cfg(test)]
+mod test_rpc;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 // You can change this constant to point your rollup at a different namespace
