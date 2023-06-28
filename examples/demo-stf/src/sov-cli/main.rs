@@ -195,8 +195,13 @@ pub fn main() {
             let mut file = File::create(bin_path)
                 .unwrap_or_else(|e| panic!("Unable to crate .dat file: {}", e));
 
-            let raw_contents = hex::encode(serialized.raw.data).as_bytes().to_vec();
-            file.write_all(&raw_contents)
+            let raw_contents = hex::encode(
+                serialized
+                    .raw
+                    .try_to_vec()
+                    .expect("serialization to vec is infallible"),
+            );
+            file.write_all(raw_contents.as_bytes())
                 .unwrap_or_else(|e| panic!("Unable to save .dat file: {}", e));
         }
         Commands::MakeBlob { path_list } => {

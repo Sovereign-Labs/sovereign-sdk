@@ -98,8 +98,11 @@ build-sov-cli:
 test-serialize-create-token: check-container-running build-sov-cli
 	$(SOV_CLI_REL_PATH) serialize-call ../demo-stf/src/sov-cli/test_data/minter_private_key.json Bank ../demo-stf/src/sov-cli/test_data/create_token.json 0
 
-test-create-token: test-serialize-create-token
-	$(MAKE) submit-txn SERIALIZED_BLOB_PATH=../demo-stf/src/sov-cli/test_data/create_token.dat
+test-build-blob-from-create-token: test-serialize-create-token
+	$(SOV_CLI_REL_PATH) make-blob ../demo-stf/src/sov-cli/test_data/create_token.dat > ../demo-stf/src/sov-cli/test_data/test_blob.dat
+
+test-create-token: test-build-blob-from-create-token
+	$(MAKE) submit-txn SERIALIZED_BLOB_PATH=../demo-stf/src/sov-cli/test_data/test_blob.dat
 
 clean-rollup-db:
 	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' rollup_config.toml | tr -d '[:space:]"\n'))
@@ -109,4 +112,3 @@ clean-rollup-db:
         fi
 	@echo removing rollup database "${path}"
 	rm -rf "${path}"
-
