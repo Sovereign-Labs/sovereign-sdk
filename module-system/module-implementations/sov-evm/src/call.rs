@@ -6,7 +6,6 @@ use crate::{
     Evm,
 };
 use anyhow::Result;
-
 use revm::primitives::CfgEnv;
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
