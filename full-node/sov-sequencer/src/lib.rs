@@ -13,6 +13,7 @@ pub struct Sequencer<B: BatchBuilder, T: DaService> {
 }
 
 impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> Sequencer<B, T> {
+    /// Creates new Sequencer from BatchBuilder and DaService
     pub fn new(batch_builder: B, da_service: Arc<T>) -> Self {
         Self {
             batch_builder: Mutex::new(batch_builder),
