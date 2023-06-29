@@ -1,4 +1,4 @@
-use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::Context;
 use sov_modules_macros::ModuleInfo;
 use sov_state::StateMap;
@@ -39,7 +39,7 @@ mod second_test_module {
 }
 
 fn main() {
-    type C = DefaultContext;
+    type C = ZkDefaultContext;
     let second_test_struct =
         <second_test_module::SecondTestStruct<C> as std::default::Default>::default();
 

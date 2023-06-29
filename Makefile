@@ -10,7 +10,7 @@ clean: ## Cleans compiled
 	@cargo clean
 
 test: ## Runs test suite with output from tests printed
-	@cargo test -- --nocapture
+	@cargo test -- --nocapture -Zunstable-options --report-time
 
 install-dev-tools:  ## Installs all necessary cargo helpers
 	cargo install cargo-llvm-cov

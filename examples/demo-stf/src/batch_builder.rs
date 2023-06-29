@@ -89,6 +89,7 @@ where
 
             // Execute
             {
+                // TODO: Bug(!), because potential discrepancy. Should be resolved by https://github.com/Sovereign-Labs/sovereign-sdk/issues/434
                 let sender_address: C::Address = tx.pub_key().to_address();
                 let ctx = C::new(sender_address);
 

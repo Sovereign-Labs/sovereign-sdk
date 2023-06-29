@@ -1,18 +1,19 @@
-use jsonrpsee::RpcModule;
-// use serde::de::DeserializeOwned;
-// use serde::Serialize;
-use anyhow::anyhow;
-use sov_rollup_interface::services::batch_builder::BatchBuilder;
-use sov_rollup_interface::services::da::DaService;
 use std::sync::{Arc, Mutex};
 
+use anyhow::anyhow;
+use jsonrpsee::RpcModule;
+
+use sov_rollup_interface::services::batch_builder::BatchBuilder;
+use sov_rollup_interface::services::da::DaService;
+
 /// Single data structure that manages mempool and batch producing.
-pub struct TxsRpcHandler<B: BatchBuilder, T: DaService> {
+pub struct Sequencer<B: BatchBuilder, T: DaService> {
     batch_builder: Mutex<B>,
     da_service: Arc<T>,
 }
 
-impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> TxsRpcHandler<B, T> {
+impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> Sequencer<B, T> {
+    /// Creates new Sequencer from BatchBuilder and DaService
     pub fn new(batch_builder: B, da_service: Arc<T>) -> Self {
         Self {
             batch_builder: Mutex::new(batch_builder),
@@ -20,7 +21,7 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> TxsRpcHandler<B,
         }
     }
 
-    async fn submit_batch(&self) -> Result<(), anyhow::Error> {
+    async fn submit_batch(&self) -> anyhow::Result<()> {
         // Need to release lock before await, so Future is `Send`.
         // But potentially it can create blobs that sent out of order.
         // Can be improved with atomics, so new batch is only created after previous was submitted.
@@ -37,50 +38,76 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> TxsRpcHandler<B,
             Err(e) => Err(anyhow!("failed to submit batch: {:?}", e)),
         }
     }
+
+    fn submit_transaction(&self, tx: Vec<u8>) -> anyhow::Result<()> {
+        let mut batch_builder = self
+            .batch_builder
+            .lock()
+            .map_err(|e| anyhow!("failed to lock mempool: {}", e.to_string()))?;
+        batch_builder.accept_tx(tx)?;
+        Ok(())
+    }
 }
 
 fn register_txs_rpc_methods<B, D>(
-    rpc: &mut RpcModule<TxsRpcHandler<B, D>>,
+    rpc: &mut RpcModule<Sequencer<B, D>>,
 ) -> Result<(), jsonrpsee::core::Error>
 where
-    // R: Serialize + DeserializeOwned,
-    // T: Serialize + DeserializeOwned,
     B: BatchBuilder + Send + Sync + 'static,
     D: DaService + Send + Sync + 'static,
 {
-    rpc.register_async_method("batchBuilder_submit", |_, batch_builder| async move {
+    rpc.register_async_method("sequencer_publishBatch", |_, batch_builder| async move {
         batch_builder
             .submit_batch()
             .await
             .map_err(|e| jsonrpsee::core::Error::Custom(e.to_string()))
     })?;
+    rpc.register_method("sequencer_acceptTx", move |params, sequencer| {
+        let tx: SubmitTransaction = params.one()?;
+        let response = match sequencer.submit_transaction(tx.body) {
+            Ok(()) => SubmitTransactionResponse::Registered,
+            Err(e) => SubmitTransactionResponse::Failed(e.to_string()),
+        };
+        Ok(response)
+    })?;
+
     Ok(())
 }
 
-pub fn get_txs_rpc<B, D>(batch_builder: B, da_service: Arc<D>) -> RpcModule<TxsRpcHandler<B, D>>
+pub fn get_sequencer_rpc<B, D>(batch_builder: B, da_service: Arc<D>) -> RpcModule<Sequencer<B, D>>
 where
-    // R: Serialize + DeserializeOwned,
-    // T: Serialize + DeserializeOwned,
     B: BatchBuilder + Send + Sync + 'static,
     D: DaService + Send + Sync + 'static,
 {
-    let txs_handler = TxsRpcHandler::new(batch_builder, da_service);
-    let mut rpc = RpcModule::new(txs_handler);
-    register_txs_rpc_methods::<B, D>(&mut rpc).expect("Failed to register txs RPC methods");
+    let sequencer = Sequencer::new(batch_builder, da_service);
+    let mut rpc = RpcModule::new(sequencer);
+    register_txs_rpc_methods::<B, D>(&mut rpc).expect("Failed to register sequencer RPC methods");
     rpc
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+pub struct SubmitTransaction {
+    body: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum SubmitTransactionResponse {
+    Registered,
+    Failed(String),
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use anyhow::bail;
-    use sov_rollup_interface::da::DaSpec;
-    use sov_rollup_interface::mocks::{
-        MockAddress, TestBlob, TestBlock, TestBlockHeader, TestHash,
-    };
     use std::future::Future;
     use std::pin::Pin;
     use std::sync::Arc;
+
+    use anyhow::bail;
+
+    use sov_rollup_interface::da::DaSpec;
+    use sov_rollup_interface::mocks::{MockDaSpec, TestBlock};
+
+    use super::*;
 
     struct MockDaService {
         submitted: Arc<Mutex<Vec<Vec<u8>>>>,
@@ -100,17 +127,6 @@ mod tests {
         fn get_submitted(&self) -> Vec<Vec<u8>> {
             self.submitted.lock().unwrap().clone()
         }
-    }
-
-    struct MockDaSpec;
-
-    impl DaSpec for MockDaSpec {
-        type SlotHash = TestHash;
-        type BlockHeader = TestBlockHeader;
-        type BlobTransaction = TestBlob<MockAddress>;
-        type InclusionMultiProof = [u8; 32];
-        type CompletenessProof = ();
-        type ChainParams = ();
     }
 
     impl DaService for MockDaService {
@@ -191,19 +207,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_submit_on_empty_mempool() {
-        // test for TxsRpcHandler
         let batch_builder = MockBatchBuilder { mempool: vec![] };
         let da_service = Arc::new(MockDaService::new());
         assert!(da_service.is_empty());
-        let rpc = get_txs_rpc(batch_builder, da_service.clone());
+        let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
         let result: Result<(), jsonrpsee::core::Error> =
-            rpc.call("batchBuilder_submit", [1u64]).await;
+            rpc.call("sequencer_publishBatch", [1u64]).await;
 
         assert!(result.is_err());
         let error = result.err().unwrap();
         assert_eq!(
-            "RPC call failed: ErrorObject { code: ServerError(-32001), message: \"Custom error: Mock mempool is empty\", data: None }", 
+            "RPC call failed: ErrorObject { code: ServerError(-32001), message: \"Custom error: Mock mempool is empty\", data: None }",
             error.to_string());
     }
 
@@ -216,9 +231,9 @@ mod tests {
         };
         let da_service = Arc::new(MockDaService::new());
         assert!(da_service.is_empty());
-        let rpc = get_txs_rpc(batch_builder, da_service.clone());
+        let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
-        let _: () = rpc.call("batchBuilder_submit", [1u64]).await.unwrap();
+        let _: () = rpc.call("sequencer_publishBatch", [1u64]).await.unwrap();
 
         assert!(!da_service.is_empty());
 
@@ -226,5 +241,32 @@ mod tests {
         assert_eq!(1, submitted.len());
         // First bytes of each tx, flattened
         assert_eq!(vec![tx1[0], tx2[0]], submitted[0]);
+    }
+
+    #[tokio::test]
+    async fn test_accept_tx() {
+        let batch_builder = MockBatchBuilder { mempool: vec![] };
+        let da_service = Arc::new(MockDaService::new());
+
+        let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
+        assert!(da_service.is_empty());
+
+        let tx: Vec<u8> = vec![1, 2, 3, 4, 5];
+        let request = SubmitTransaction { body: tx.clone() };
+        let result: SubmitTransactionResponse =
+            rpc.call("sequencer_acceptTx", [request]).await.unwrap();
+        assert_eq!(SubmitTransactionResponse::Registered, result);
+
+        // Check that it got passed to DA service
+        assert!(da_service.is_empty());
+
+        let _: () = rpc.call("sequencer_publishBatch", [1u64]).await.unwrap();
+
+        assert!(!da_service.is_empty());
+
+        let submitted = da_service.get_submitted();
+        assert_eq!(1, submitted.len());
+        // First bytes of each tx, flattened
+        assert_eq!(vec![tx[0]], submitted[0]);
     }
 }

@@ -51,7 +51,7 @@ impl<Vm: Zkvm> BorshDeserialize for StoredCodeCommitment<Vm> {
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[derive(ModuleInfo)]
-pub struct ProverIncentives<C: sov_modules_api::Context, Vm: Zkvm> {
+pub struct ProverIncentives<C: Context, Vm: Zkvm> {
     /// Address of the module.
     #[address]
     pub address: C::Address,
@@ -68,7 +68,7 @@ pub struct ProverIncentives<C: sov_modules_api::Context, Vm: Zkvm> {
     #[state]
     pub bonded_provers: sov_state::StateMap<C::Address, u64>,
 
-    /// The minimum bond for a prover to be eligble for onchain verification
+    /// The minimum bond for a prover to be eligible for onchain verification
     #[state]
     pub minimum_bond: sov_state::StateValue<u64>,
 
@@ -77,7 +77,7 @@ pub struct ProverIncentives<C: sov_modules_api::Context, Vm: Zkvm> {
     pub(crate) bank: sov_bank::Bank<C>,
 }
 
-impl<C: sov_modules_api::Context, Vm: Zkvm> sov_modules_api::Module for ProverIncentives<C, Vm> {
+impl<C: Context, Vm: Zkvm> sov_modules_api::Module for ProverIncentives<C, Vm> {
     type Context = C;
 
     type Config = ProverIncentivesConfig<C, Vm>;

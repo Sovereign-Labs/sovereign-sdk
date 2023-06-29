@@ -40,8 +40,9 @@ pub mod test {
                 None,
             );
 
-            assert!(
-                matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded(0),),
+            assert_eq!(
+                SequencerOutcome::Rewarded(0),
+                apply_blob_outcome.inner,
                 "Sequencer execution should have succeeded but failed "
             );
 
@@ -97,9 +98,10 @@ pub mod test {
             None,
         );
 
-        assert!(
-            matches!(apply_blob_outcome.inner, SequencerOutcome::Rewarded(0),),
-            "Sequencer execution should have succeeded but failed "
+        assert_eq!(
+            SequencerOutcome::Rewarded(0),
+            apply_blob_outcome.inner,
+            "Sequencer execution should have succeeded but failed"
         );
 
         assert!(has_tx_events(&apply_blob_outcome),);
@@ -151,9 +153,10 @@ pub mod test {
                 None,
             )
             .inner;
-            assert!(
-                matches!(apply_blob_outcome, SequencerOutcome::Rewarded(0),),
-                "Sequencer execution should have succeeded but failed "
+            assert_eq!(
+                SequencerOutcome::Rewarded(0),
+                apply_blob_outcome,
+                "Sequencer execution should have succeeded but failed",
             );
         }
 
@@ -197,15 +200,16 @@ pub mod test {
 
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
-        let some_sequencer: [u8; 32] = [101; 32];
+        let some_sequencer: [u8; 32] = [121; 32];
         let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
             &mut demo,
             &mut new_test_blob(Batch { txs }, &some_sequencer),
             None,
         );
 
-        assert!(
-            matches!(apply_blob_outcome.inner, SequencerOutcome::Ignored),
+        assert_eq!(
+            SequencerOutcome::Ignored,
+            apply_blob_outcome.inner,
             "Batch should have been skipped due to unknown sequencer"
         );
 
