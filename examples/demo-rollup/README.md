@@ -242,7 +242,7 @@ For our test, we'll use the test private key located at `examples/demo-stf/src/s
 ```
 $ ./target/debug/sov-cli serialize-call ./examples/demo-stf/src/sov-cli/test_data/minter_private_key.json Bank ./examples/demo-stf/src/sov-cli/test_data/create_token.json 1
 ```
-Once the above command executes successfuly, there should be a file named `./examples/demo-stf/src/sov-cli/test_data/create_token.dat`:
+Once the above command executes successfully, there should be a file named `./examples/demo-stf/src/sov-cli/test_data/create_token.dat`:
 ```
 $ cat ./examples/demo-stf/src/sov-cli/test_data/create_token.dat
 7cb06da843cb98a223cdd4aee61ea4533f99104fe03144720d75800580d9a665be112c73b8d0b02b8de73f678d2432e93f613071e6fd04cc96b6ab5e6952bf007b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe66800000001000b000000000000000e000000736f762d746573742d746f6b656ee803000000000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba759801000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba75980100000000000000
@@ -260,26 +260,16 @@ We only have one transaction, so we can use that transaction to create the seria
 $ ./target/debug/sov-cli make-blob ./examples/demo-stf/src/sov-cli/test_data/create_token.dat 
 01000000d40000007cb06da843cb98a223cdd4aee61ea4533f99104fe03144720d75800580d9a665be112c73b8d0b02b8de73f678d2432e93f613071e6fd04cc96b6ab5e6952bf007b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe66800000001000b000000000000000e000000736f762d746573742d746f6b656ee803000000000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba759801000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba75980100000000000000
 ```
-4. Lets create the serialized blob and redirect the output to a file so that we can use it later:
+4. Let's create the serialized blob and redirect the output to a file so that we can use it later:
 ```
-$ ./target/debug/sov-cli make-blob ./examples/demo-stf/src/sov-cli/test_data/create_token.dat > ./examples/demo-stf/src/sov-cli/test_data/celestia_blob
+$ ./target/debug/sov-cli make-blob ./examples/demo-stf/src/sov-cli/test_data/create_token.dat > ./examples/demo-stf/src/sov-cli/test_data/tx_blob
 ```
-
-5. To submit the blob, let's start the DA layer instance and the rollup from scratch (since the test transaction we submitted as part of the sanity check has the same nonce, and would cause an error as a result) :
+5. Now that we have a transaction blob, let's switch back to the `examples/demo-rollup` folder and utilize the Makefile to submit the transaction:
 ```
 $ cd examples/demo-rollup
-$ make clean
-$ make start
+$ SERIALIZED_BLOB_PATH=../demo-stf/src/sov-cli/test_data/tx_blob make submit-txn
 ```
-6. Again, start the demo-rollup in a different tab:
-```
-$ cargo +nightly run
-```
-7. Submit the transaction:
-```
-$ SERIALIZED_BLOB_PATH=../demo-stf/src/sov-cli/test_data/celestia_blob make submit-txn
-```
-Here the `make submit-txn` command locates the container the Celestia instance is running, and runs the Celestia-specific command to submit the transaction.
+Here the `make submit-txn` command locates the docker container the Celestia instance is running in, and runs the Celestia-specific command to submit the transaction.
 
 
 ### Verify the supply of the new token created
