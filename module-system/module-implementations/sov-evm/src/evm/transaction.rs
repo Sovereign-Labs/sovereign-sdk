@@ -3,7 +3,6 @@ use super::{Bytes32, EthAddress};
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub(crate) struct BlockEnv {
     pub(crate) number: Bytes32,
-    /// Coinbase or miner or address that created and signed the block.
     pub(crate) coinbase: EthAddress,
     pub(crate) timestamp: Bytes32,
     /// Prevrandao is used after Paris (aka TheMerge) instead of the difficulty value.

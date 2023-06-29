@@ -6,7 +6,6 @@ use revm::{
 };
 use std::convert::Infallible;
 
-#[allow(dead_code)]
 pub(crate) fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
     db: DB,
     block_env: BlockEnv,
