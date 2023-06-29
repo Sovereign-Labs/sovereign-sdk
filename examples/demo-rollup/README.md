@@ -221,7 +221,7 @@ Here's an example of a JSON representing the above call:
 ```
 The JSON above is the contents of the file `demo-stf/src/sov-cli/test_data/create_token.json`. We'll use this transaction as our example for the rest of the tutorial. In order to serialize the transaction JSON to submit to our local Celestia node, we need to perform 2 operations:
 - Serialize the JSON representation of the transaction.
-- Bundle serialized transaction files into a blob (since Celestia accepts blobs which can contain multiple transactions).
+- Bundle serialized transaction files into a blob (since DA layers accept blobs which can contain multiple transactions).
 
 To serialize transactions, `sov-cli` has a  `serialize-call` subcommand, which has the following structure:
 ```
