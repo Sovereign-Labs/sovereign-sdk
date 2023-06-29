@@ -1,7 +1,7 @@
 // Copyright (c) Aptos
 // SPDX-License-Identifier: Apache-2.0
 
-use byteorder::{LittleEndian, ReadBytesExt};
+use byteorder::{BigEndian, ReadBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use sov_rollup_interface::{
     db::{errors::CodecError, ColumnFamilyName, KeyDecoder, KeyEncoder, Result, ValueCodec},
@@ -24,14 +24,14 @@ pub(crate) struct TestField(u32);
 
 impl TestField {
     fn to_bytes(&self) -> Vec<u8> {
-        self.0.to_le_bytes().to_vec()
+        self.0.to_be_bytes().to_vec()
     }
 
     fn from_bytes(data: &[u8]) -> Result<Self> {
         let mut reader = std::io::Cursor::new(data);
         Ok(TestField(
             reader
-                .read_u32::<LittleEndian>()
+                .read_u32::<BigEndian>()
                 .map_err(|e| CodecError::Wrapped(e.into()))?,
         ))
     }
@@ -146,13 +146,17 @@ impl std::ops::Deref for TestDB {
 fn test_schema_put_get() {
     let db = TestDB::new();
 
-    db.put::<TestSchema1>(&TestField(0), &TestField(0)).unwrap();
-    db.put::<TestSchema1>(&TestField(1), &TestField(1)).unwrap();
-    db.put::<TestSchema1>(&TestField(2), &TestField(2)).unwrap();
-    db.put::<TestSchema2>(&TestField(2), &TestField(3)).unwrap();
-    db.put::<TestSchema2>(&TestField(3), &TestField(4)).unwrap();
-    db.put::<TestSchema2>(&TestField(4), &TestField(5)).unwrap();
+    // Let's put more than 256 items in each to test RocksDB's lexicographic
+    // ordering.
+    for i in 0..300 {
+        db.put::<TestSchema1>(&TestField(i), &TestField(i)).unwrap();
+    }
+    for i in 100..400 {
+        db.put::<TestSchema2>(&TestField(i), &TestField(i + 1))
+            .unwrap();
+    }
 
+    // `.get()`.
     assert_eq!(
         db.get::<TestSchema1>(&TestField(0)).unwrap(),
         Some(TestField(0)),
@@ -162,24 +166,32 @@ fn test_schema_put_get() {
         Some(TestField(1)),
     );
     assert_eq!(
-        db.get::<TestSchema1>(&TestField(2)).unwrap(),
-        Some(TestField(2)),
+        db.get::<TestSchema1>(&TestField(299)).unwrap(),
+        Some(TestField(299)),
     );
-    assert_eq!(db.get::<TestSchema1>(&TestField(3)).unwrap(), None);
+    assert_eq!(
+        db.get::<TestSchema2>(&TestField(102)).unwrap(),
+        Some(TestField(103)),
+    );
+    assert_eq!(
+        db.get::<TestSchema2>(&TestField(203)).unwrap(),
+        Some(TestField(204)),
+    );
+    assert_eq!(
+        db.get::<TestSchema2>(&TestField(399)).unwrap(),
+        Some(TestField(400)),
+    );
 
-    assert_eq!(db.get::<TestSchema2>(&TestField(1)).unwrap(), None);
+    // `collect_values()`.
     assert_eq!(
-        db.get::<TestSchema2>(&TestField(2)).unwrap(),
-        Some(TestField(3)),
+        collect_values::<TestSchema2>(&db),
+        gen_expected_values(&(100..400).map(|i| (i, i + 1)).collect::<Vec<_>>()),
     );
-    assert_eq!(
-        db.get::<TestSchema2>(&TestField(3)).unwrap(),
-        Some(TestField(4)),
-    );
-    assert_eq!(
-        db.get::<TestSchema2>(&TestField(4)).unwrap(),
-        Some(TestField(5)),
-    );
+
+    // Nonexistent keys.
+    assert_eq!(db.get::<TestSchema1>(&TestField(300)).unwrap(), None);
+    assert_eq!(db.get::<TestSchema2>(&TestField(99)).unwrap(), None);
+    assert_eq!(db.get::<TestSchema2>(&TestField(400)).unwrap(), None);
 }
 
 fn collect_values<S: Schema>(db: &TestDB) -> Vec<(S::Key, S::Value)> {
