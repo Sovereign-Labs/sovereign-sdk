@@ -265,7 +265,7 @@ $ ./target/debug/sov-cli make-blob ./examples/demo-stf/src/sov-cli/test_data/cre
 $ ./target/debug/sov-cli make-blob ./examples/demo-stf/src/sov-cli/test_data/create_token.dat > ./examples/demo-stf/src/sov-cli/test_data/celestia_blob
 ```
 
-5. To submit the transaction, we'll restart the DA layer instance and the rollup from scratch since the test transaction we submitted (as part of the sanity check) has the same nonce, token fields etc.:
+5. To submit the blob, we'll start the DA layer instance and the rollup from scratch since the test transaction we submitted (as part of the sanity check) has the same nonce, token fields etc.:
 ```
 $ cd examples/demo-rollup
 $ make clean
