@@ -90,13 +90,6 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u
 
         queries_test_runner(test_queries, rpc_config).await;
 
-        // By closing the `TempDir` explicitly we can check that it has
-        // been deleted successfully. If we don't close it explicitly,
-        // the directory will still be deleted when `tmp_dir` goes out
-        // of scope, but we won't know whether deleting the directory
-        // succeeded.
-        tmpdir.close().unwrap();
-
         tx_end.send("drop server").unwrap();
     });
 }
@@ -204,7 +197,7 @@ fn test_get_head() {
 }
 
 #[test]
-fn test_get_transactions() {
+fn test_get_transactions_offset_first_batch() {
     // Tests for different types of argument
     let payload = jsonrpc_req!("ledger_getTransactions", [[{"batch_id": 1, "offset": 0}]]);
     let expected = jsonrpc_result!([{"hash":"0x709b55bd3da0f5a838125bd0ee20c5bfdd7caba173912d4281cae816b79a201b","event_range":{"start":1,"end":1},"body":[116,120,49,32,98,111,100,121],"custom_receipt":0}]);
@@ -293,9 +286,8 @@ fn batch_receipt_without_hasher() -> impl Strategy<Value = BatchReceipt<u32, u32
 
 prop_compose! {
     fn arb_batches_and_slot_hash(max_batches : usize)
-    (slot_hash in proptest::array::uniform32(0_u8..), batches in proptest::collection::vec(batch_receipt_without_hasher(), 1..max_batches)) ->
-     (Vec<BatchReceipt<u32, u32>>, [u8;32]){
-
+     (slot_hash in proptest::array::uniform32(0_u8..), batches in proptest::collection::vec(batch_receipt_without_hasher(), 1..max_batches)) ->
+       (Vec<BatchReceipt<u32, u32>>, [u8;32]) {
         (batches, slot_hash)
     }
 }
