@@ -21,14 +21,13 @@ use super::types::{
     StoredTransaction, TxNumber,
 };
 
-use anyhow::Context;
 use borsh::{maybestd, BorshDeserialize, BorshSerialize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use jmt::{
     storage::{Node, NodeKey},
     Version,
 };
-use sov_rollup_interface::db::errors::CodecError;
+use sov_rollup_interface::db::{errors::CodecError, SeekKeyEncoder};
 use sov_rollup_interface::{
     db::{KeyDecoder, KeyEncoder, ValueCodec},
     stf::{Event, EventKey},
@@ -154,20 +153,39 @@ macro_rules! define_table_with_default_codec {
 /// your key type is a `u64_wrapper!`. Borsh serializes integers as
 /// little-endian, but RocksDB uses lexigographic ordering which is only
 /// compatible with big-endian, so that's what we do here.
-macro_rules! define_table_with_u64_wrapper_keys {
+macro_rules! define_table_with_seek_key_codec {
     ($(#[$docs:meta])+ ($table_name:ident) $key:ty => $value:ty) => {
         define_table_without_codec!($(#[$docs])+ ( $table_name ) $key => $value);
 
         impl ::sov_rollup_interface::db::KeyEncoder<$table_name> for $key {
             fn encode_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_rollup_interface::db::errors::CodecError> {
-                Ok(self.0.to_be_bytes().to_vec())
+                use ::anyhow::Context;
+                use ::bincode::Options;
+
+                let bincode_options = ::bincode::options()
+                    .with_fixint_encoding()
+                    .with_big_endian();
+
+                bincode_options.serialize(self).context("Failed to serialize key").map_err(Into::into)
             }
         }
 
         impl ::sov_rollup_interface::db::KeyDecoder<$table_name> for $key {
             fn decode_key(data: &[u8]) -> ::std::result::Result<Self, ::sov_rollup_interface::db::errors::CodecError> {
-                let be_bytes = data.try_into().context("Invalid key length (8 bytes expected)")?;
-                Ok(Self(u64::from_be_bytes(be_bytes)))
+                use ::anyhow::Context;
+                use ::bincode::Options;
+
+                let bincode_options = ::bincode::options()
+                    .with_fixint_encoding()
+                    .with_big_endian();
+
+                bincode_options.deserialize_from(&mut &data[..]).context("Failed to deserialize key").map_err(Into::into)
+            }
+        }
+
+        impl ::sov_rollup_interface::db::SeekKeyEncoder<$table_name> for $key {
+            fn encode_seek_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_rollup_interface::db::errors::CodecError> {
+                <Self as ::sov_rollup_interface::db::KeyEncoder<$table_name>>::encode_key(self)
             }
         }
 
@@ -176,7 +194,7 @@ macro_rules! define_table_with_u64_wrapper_keys {
 }
 
 // fn deser(target: &mut &[u8]) -> Result<Self, DeserializationError>;
-define_table_with_default_codec!(
+define_table_with_seek_key_codec!(
     /// The primary source for slot data
     (SlotByNumber) SlotNumber => StoredSlot
 );
@@ -186,7 +204,7 @@ define_table_with_default_codec!(
     (SlotByHash) DbHash => SlotNumber
 );
 
-define_table_with_u64_wrapper_keys!(
+define_table_with_seek_key_codec!(
     /// The primary source for batch data
     (BatchByNumber) BatchNumber => StoredBatch
 );
@@ -196,7 +214,7 @@ define_table_with_default_codec!(
     (BatchByHash) DbHash => BatchNumber
 );
 
-define_table_with_u64_wrapper_keys!(
+define_table_with_seek_key_codec!(
     /// The primary source for transaction data
     (TxByNumber) TxNumber => StoredTransaction
 );
@@ -206,7 +224,7 @@ define_table_with_default_codec!(
     (TxByHash) DbHash => TxNumber
 );
 
-define_table_with_default_codec!(
+define_table_with_seek_key_codec!(
     /// The primary store for event data
     (EventByNumber) EventNumber => Event
 );
@@ -259,6 +277,12 @@ impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> KeyEncoder<JmtValues> for (T
         out.write_u64::<BigEndian>(self.1)
             .expect("serialization to vec is infallible");
         Ok(out)
+    }
+}
+
+impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> SeekKeyEncoder<JmtValues> for (T, Version) {
+    fn encode_seek_key(&self) -> sov_rollup_interface::db::Result<Vec<u8>> {
+        self.encode_key()
     }
 }
 
