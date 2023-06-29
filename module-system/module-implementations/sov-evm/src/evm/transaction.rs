@@ -4,8 +4,7 @@ use super::{Bytes32, EthAddress};
 pub(crate) struct BlockEnv {
     pub(crate) number: Bytes32,
     /// Coinbase or miner or address that created and signed the block.
-    /// Address where we are going to send gas spend
-    pub(crate) coinbase: [u8; 20],
+    pub(crate) coinbase: EthAddress,
     pub(crate) timestamp: Bytes32,
     /// Prevrandao is used after Paris (aka TheMerge) instead of the difficulty value.
     pub(crate) prevrandao: Option<Bytes32>,
