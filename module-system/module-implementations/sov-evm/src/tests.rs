@@ -4,7 +4,7 @@ use crate::{
         db_init::InitEvmDb,
         test_helpers::{make_contract_from_abi, test_data_path},
         transaction::EvmTransaction,
-        AccountInfo,
+        AccountInfo, EthAddress,
     },
     Evm,
 };
@@ -17,7 +17,7 @@ use sov_state::{ProverStorage, WorkingSet};
 
 type C = DefaultContext;
 
-fn create_messages(contract_addr: [u8; 20], set_arg: ethereum_types::U256) -> Vec<CallMessage> {
+fn create_messages(contract_addr: EthAddress, set_arg: ethereum_types::U256) -> Vec<CallMessage> {
     let mut transactions = Vec::default();
 
     // Contract creation.
