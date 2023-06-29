@@ -76,7 +76,7 @@ circumstances.
 
 ### Setting up the SDK to run with a local DA layer instance
 1. Install docker https://www.docker.com.
-2. Switch to the `demo-rollup` directory.
+2. Switch to the `examples/demo-rollup` directory.
 3. Start the DA layer instance.
 
 
@@ -96,7 +96,7 @@ $ git status
 ```
 4. Start the demo-rollup in a different tab:
 ```
-$ cargo run
+$ cargo +nightly run
 ```
 You should see the demo-rollup app consuming blocks from the docker container's Celestia node:
 ```
@@ -127,7 +127,7 @@ The `make test-create-token` command above was useful to test if everything is r
 
 1. In order to create transactions, we need to use the `sov-cli` binary, so lets build it:
 ```
-$ cd examples/demo-stf
+$ cd ../demo-stf
 $ cargo build --bin sov-cli
 $ cd ../..
 $ ./target/debug/sov-cli -h
@@ -146,7 +146,7 @@ Options:
   -V, --version  Print version
 
 ```
-Each transaction that we want to submit is member of the `CallMessage` enum defined as part of creating a module. For example, lets consider the `Bank` module's `CallMessage`:
+Each transaction that we want to submit is a member of the `CallMessage` enum defined as part of creating a module. For example, lets consider the `Bank` module's `CallMessage`:
 ```rust
 pub enum CallMessage<C: sov_modules_api::Context> {
     /// Creates a new token with the specified name and initial balance.
@@ -247,7 +247,7 @@ Once the above command executes successfuly, there should be a file named `./exa
 $ cat ./examples/demo-stf/src/sov-cli/test_data/create_token.dat
 7cb06da843cb98a223cdd4aee61ea4533f99104fe03144720d75800580d9a665be112c73b8d0b02b8de73f678d2432e93f613071e6fd04cc96b6ab5e6952bf007b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe66800000001000b000000000000000e000000736f762d746573742d746f6b656ee803000000000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba759801000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba75980100000000000000
 ```
-The above is the hex representation of the serialized transaction. There is another subcommand for `sov-cli` that can bundle serialized transaction files into a blob:
+The above is the hex representation of the serialized transaction. There is another subcommand for `sov-cli` called `make-blob` that can bundle serialized transaction files into a blob:
 ```
 $ ./target/debug/sov-cli make-blob -h
 Usage: sov-cli make-blob [PATH_LIST]...
@@ -265,20 +265,18 @@ $ ./target/debug/sov-cli make-blob ./examples/demo-stf/src/sov-cli/test_data/cre
 $ ./target/debug/sov-cli make-blob ./examples/demo-stf/src/sov-cli/test_data/create_token.dat > ./examples/demo-stf/src/sov-cli/test_data/celestia_blob
 ```
 
-5. To submit the blob, we'll start the DA layer instance and the rollup from scratch since the test transaction we submitted (as part of the sanity check) has the same nonce, token fields etc.:
+5. To submit the blob, let's start the DA layer instance and the rollup from scratch (since the test transaction we submitted as part of the sanity check has the same nonce, and would cause an error as a result) :
 ```
 $ cd examples/demo-rollup
 $ make clean
 $ make start
 ```
-6. Start the demo-rollup:
+6. Again, start the demo-rollup in a different tab:
 ```
-$ cd examples/demo-rollup
-$ cargo run
+$ cargo +nightly run
 ```
 7. Submit the transaction:
 ```
-$ cd examples/demo-rollup
 $ SERIALIZED_BLOB_PATH=../demo-stf/src/sov-cli/test_data/celestia_blob make submit-txn
 ```
 Here the `make submit-txn` command locates the container the Celestia instance is running, and runs the Celestia-specific command to submit the transaction.
