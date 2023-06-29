@@ -19,11 +19,12 @@ type C = DefaultContext;
 
 fn create_messages(contract_addr: [u8; 20], set_arg: ethereum_types::U256) -> Vec<CallMessage> {
     let mut transactions = Vec::default();
-    let mut path = test_data_path();
-    path.push("SimpleStorage.bin");
 
     // Contract creation.
     {
+        let mut path = test_data_path();
+        path.push("SimpleStorage.bin");
+
         let contract_data = std::fs::read_to_string(path).unwrap();
         let contract_data = hex::decode(contract_data).unwrap();
 
