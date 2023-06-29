@@ -33,7 +33,7 @@ If you're using Celestia as your DA layer, you can follow the instructions at th
 of this document to set up a local full node, or connect to
 a remote node. Whichever option you pick, simply place the URL and authentication token
 in the `rollup_config.toml` file and it will be
-automatically picked up by the node implementation. For this tutorial, the makefile below that starts a local Celestia instance already handles this step for you.
+automatically picked up by the node implementation. For this tutorial, the Makefile below (which also helps start a local Celestia instance) handles this step for you.
 
 ### Step 2: Initialize the State Transition Function
 
