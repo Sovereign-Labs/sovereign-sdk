@@ -13,6 +13,7 @@ use sov_rollup_interface::{da::DaSpec, services::da::DaService};
 use subxt::OnlineClient;
 use tracing::info;
 
+#[derive(Debug, Clone)]
 pub struct DaProvider {
     pub node_client: OnlineClient<AvailConfig>,
     pub light_client_url: String,

@@ -1,6 +1,10 @@
 mod config;
 mod ledger_rpc;
 
+#[cfg(test)]
+mod test_rpc;
+mod txs_rpc;
+
 use crate::config::RollupConfig;
 use anyhow::Context;
 use demo_stf::app::{DefaultContext, DemoBatchReceipt, DemoTxReceipt};
@@ -10,20 +14,24 @@ use demo_stf::runner_config::from_toml_path;
 use demo_stf::runtime::GenesisConfig;
 use jsonrpsee::core::server::rpc_module::Methods;
 use presence::service::DaProvider as AvailDaProvider;
-use risc0_adapter::host::Risc0Host;
+use risc0_adapter::host::Risc0Verifier;
+use sov_rollup_interface::crypto::NoOpHasher;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::da::{BlobTransactionTrait, DaVerifier};
 use sov_rollup_interface::services::da::{DaService, SlotData};
-use sov_rollup_interface::stf::{StateTransitionFunction, StateTransitionRunner};
+use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
+use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_state::Storage;
 use std::env;
+use std::sync::Arc;
 use std::net::SocketAddr;
 use tracing::Level;
 use tracing::{debug, info};
 
 // RPC related imports
-use demo_stf::app::get_rpc_methods;
+use crate::txs_rpc::get_txs_rpc;
+use demo_stf::runtime::get_rpc_methods;
 use sov_modules_api::RpcRunner;
-use sov_state::Storage;
 
 pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
     LedgerDB::with_path(path).expect("Ledger DB failed to open")
@@ -63,6 +71,8 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
     )
 }
 
+//TODO: Add validity checker?
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
@@ -85,51 +95,62 @@ async fn main() -> Result<(), anyhow::Error> {
     // Initialize the ledger database, which stores blocks, transactions, events, etc.
     let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
 
+    let node_client = presence::build_client(rollup_config.da.node_client_url.to_string(), false)
+    .await
+    .unwrap();
+    let light_client_url = rollup_config.da.light_client_url.to_string();
+    // Initialize the Avail service using the DaService interface
+    let da_service = Arc::new(AvailDaProvider {
+        node_client,
+        light_client_url,
+    });
+
     // Our state transition function implements the StateTransitionRunner interface, so we use that to intitialize the STF
-    let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
+    let mut demo_runner = NativeAppRunner::<Risc0Verifier>::new(rollup_config.runner.clone());
 
     // Our state transition also implements the RpcRunner interface, so we use that to initialize the RPC server.
-    let storj = demo_runner.get_storage();
-    let is_storage_empty = storj.is_empty();
-    let mut methods = get_rpc_methods(storj);
+    let storage = demo_runner.get_storage();
+    let is_storage_empty = storage.is_empty();
+    let mut methods = get_rpc_methods(storage);
     let ledger_rpc_module =
         ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db.clone());
     methods
         .merge(ledger_rpc_module)
         .expect("Failed to merge rpc modules");
 
+    let batch_builder = demo_runner.take_batch_builder().unwrap();
+
+    let txs_rpc = get_txs_rpc(batch_builder, da_service.clone());
+
+    methods.merge(txs_rpc).expect("Failed to merge Txs RPC modules");
+
     let _handle = tokio::spawn(async move {
         start_rpc_server(methods, address).await;
     });
-
-    let node_client = presence::build_client(rollup_config.da.node_client_url.to_string(), false)
-        .await
-        .unwrap();
-    let light_client_url = rollup_config.da.light_client_url.to_string();
-    // Initialize the Avail service using the DaService interface
-    let da_service = AvailDaProvider {
-        node_client,
-        light_client_url,
-    };
+    
     // For demonstration,  we also intitalize the DaVerifier interface using the DaVerifier interface
     // Running the verifier is only *necessary* during proof generation not normal execution
     let da_verifier = presence::verifier::Verifier {};
 
     let demo = demo_runner.inner_mut();
-    // Check if the rollup has previously been initialized
-    if is_storage_empty {
-        info!("No history detected. Initializing chain...");
-        demo.init_chain(get_genesis_config());
-        info!("Chain initialization is done.");
-    } else {
-        debug!("Chain is already initialized. Skipping initialization.");
-    }
+    let mut prev_state_root = {
+        // Check if the rollup has previously been initialized
+        if is_storage_empty {
+            info!("No history detected. Initializing chain...");
+            demo.init_chain(get_genesis_config());
+            info!("Chain initialization is done.");
+        } else {
+            panic!("Already initialized");
+            info!("Chain already initialised.");
+            debug!("Chain is already initialized. Skipping initialization.");
+        }
 
-    // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
-    // This will be removed shortly.
-    demo.begin_slot(Default::default());
-    let (prev_state_root, _) = demo.end_slot();
-    let mut prev_state_root = prev_state_root.0;
+        // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
+        // This will be removed shortly.
+        demo.begin_slot(Default::default());
+        let (prev_state_root, _) = demo.end_slot();
+        prev_state_root.0
+    };
 
     // Start the main rollup loop
     let item_numbers = ledger_db.get_next_items_numbers();
@@ -151,15 +172,15 @@ async fn main() -> Result<(), anyhow::Error> {
         // The inclusion and completeness proof in the case is not verified by the adapter, but the light client is trusted to have 
         // verified it already.
         let (blob_txs, inclusion_proof, completeness_proof) =
-            da_service.extract_relevant_txs_with_proof(filtered_block.clone());
+            da_service.extract_relevant_txs_with_proof(&filtered_block);
         assert!(da_verifier
-            .verify_relevant_tx_list(&header, &blob_txs, inclusion_proof, completeness_proof)
+            .verify_relevant_tx_list::<NoOpHasher>(&header, &blob_txs, inclusion_proof, completeness_proof)
             .is_ok());
         info!("Received {} blobs", blob_txs.len());
 
         demo.begin_slot(Default::default());
         let mut data_to_commit = SlotCommit::new(filtered_block);
-        for blob in blob_txs.clone() {
+        for blob in &mut blob_txs.clone() {
             info!("sender: {}", hex::encode(blob.sender()));
             let receipts = demo.apply_blob(blob, None);
             info!("er: {:?}", receipts);
