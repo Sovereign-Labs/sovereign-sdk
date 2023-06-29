@@ -32,7 +32,6 @@ demo-simple-stf = { path = "../demo-simple-stf" }
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-db = { path = "../../full-node/db/sov-db" }
 risc0-adapter = { path = "../../adapters/risc0" }
-sov-default-stf = { path = "../../module-system/sov-default-stf" }
 
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", default-features = false }
 sov-election = { path = "../../module-system/module-implementations/examples/sov-election", default-features = false }

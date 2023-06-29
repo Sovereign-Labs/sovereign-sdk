@@ -108,7 +108,7 @@ impl DaService for DaProvider {
 
     type FilteredBlock = AvailBlock;
 
-    type Future<T> = Pin<Box<dyn Future<Output = Result<T, Self::Error>>>>;
+    type Future<T> = Pin<Box<dyn Future<Output = Result<T, Self::Error>> + Send>>;
 
     type Error = anyhow::Error;
 
@@ -140,8 +140,8 @@ impl DaService for DaProvider {
             let header = AvailHeader::new(header, hash);
             let transactions = appdata
                 .extrinsics
-                .into_iter()
-                .map(AvailBlobTransaction)
+                .iter()
+                .map(AvailBlobTransaction::new)
                 .collect();
             Ok(AvailBlock {
                 header,
@@ -157,28 +157,27 @@ impl DaService for DaProvider {
     }
 
     // Extract the blob transactions relevant to a particular rollup from a block.
-    // NOTE: The avail light client is expected to be run in app specific mode, and hence the 
+    // NOTE: The avail light client is expected to be run in app specific mode, and hence the
     // transactions in the block are already filtered and retrieved by light client.
     fn extract_relevant_txs(
         &self,
-        block: Self::FilteredBlock,
+        block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
-        block.transactions
+        block.transactions.clone()
     }
 
-    // Extract the list blob transactions relevant to a particular rollup from a block, along with inclusion and
-    // completeness proofs for that set of transactions. The output of this method will be passed to the verifier.
-    // NOTE: The light client here is trusted to have completed DA sampling and verification of inclusion and soundness.
-    // Hence only the block transactions relevant is returned.
-    fn extract_relevant_txs_with_proof(
+    // Extract the inclusion and completenss proof for filtered block provided.
+    // The output of this method will be passed to the verifier.
+    // NOTE: The light client here has already completed DA sampling and verification of inclusion and soundness.
+    fn get_extraction_proof(
         &self,
-        block: Self::FilteredBlock,
+        _block: &Self::FilteredBlock,
+        _blobs: &[<Self::Spec as DaSpec>::BlobTransaction],
     ) -> (
-        Vec<<Self::Spec as DaSpec>::BlobTransaction>,
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,
     ) {
-        (block.transactions, (), ())
+        ((), ())
     }
 
     fn new(
