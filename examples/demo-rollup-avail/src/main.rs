@@ -140,8 +140,6 @@ async fn main() -> Result<(), anyhow::Error> {
             demo.init_chain(get_genesis_config());
             info!("Chain initialization is done.");
         } else {
-            panic!("Already initialized");
-            info!("Chain already initialised.");
             debug!("Chain is already initialized. Skipping initialization.");
         }
 
