@@ -9,7 +9,7 @@ use std::fmt::Debug;
 use crate::{AttesterIncentives, UnbondingInfo};
 
 /// This enumeration represents the available call messages for interacting with the `ExampleModule` module.
-#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
+#[derive(BorshDeserialize, BorshSerialize, Debug)]
 // TODO: allow call messages to borrow data
 //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/274
 pub enum CallMessage<C: Context> {
@@ -119,14 +119,14 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
         if let Some(old_balance) = self.bonded_attesters.get(context.sender(), working_set) {
             let unbonding_info = UnbondingInfo {
                 amount: old_balance,
-                unbonding_initiated_height: context.block_height(),
+                unbonding_initiated_height: self.chain_state.slot_height(working_set),
             };
 
             // Update our internal tracking of the total bonded amount for the sender.
             self.bonded_attesters.set(context.sender(), &0, working_set);
             // Update our internal tracking of the total bonded amount for the sender.
             self.unbonding_attesters
-                .set(context.sender(), &0, working_set);
+                .set(context.sender(), &unbonding_info, working_set);
 
             // Emit the unbonding event
             working_set.add_event(
@@ -139,7 +139,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
     }
 
     /// Try to process a zk proof, if the prover is bonded.
-    pub(crate) fn process_proof(
+    pub(crate) fn process_challenge(
         &self,
         proof: &[u8],
         context: &C,

@@ -42,14 +42,13 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-impl<C: Context, RT, Syncer, Vm: Zkvm> StateTransitionFunction<Vm>
-    for AppTemplate<C, RT, Syncer, Vm>
+impl<C: Context, RT, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, RT, Vm>
 where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
         + TxHooks<Context = C>
-        + ApplyBlobHooks<Context = C, BlobResult = SenderOutcome>,
-    Syncer: DispatchCall<Context = C> + SyncHooks<Context = C>,
+        + ApplyBlobHooks<Context = C, BlobResult = SenderOutcome>
+        + SyncHooks<Context = C>,
 {
     type StateRoot = jmt::RootHash;
 
@@ -115,7 +114,7 @@ where
             .expect("Working_set was initialized in begin_slot")
             .to_revertable();
 
-        let address = match self.syncer.pre_blob_hook(blob, &mut batch_workspace) {
+        let address = match self.runtime.pre_blob_hook(blob, &mut batch_workspace) {
             Ok(address) => address,
             Err(e) => {
                 info!("Sync pre-blob hook rejected: {:?}", e);
@@ -131,12 +130,12 @@ where
         data.read_to_end(&mut contiguous_data)
             .expect("Reading from blob should succeed");
 
-        let decoded = Syncer::decode_call(&contiguous_data);
+        let decoded = RT::decode_call(&contiguous_data);
         match decoded {
             Ok(call) => {
                 // TODO: do something with this result
                 let _ =
-                    self.syncer
+                    self.runtime
                         .dispatch_call(call, &mut batch_workspace, &Context::new(address));
             }
             Err(e) => {

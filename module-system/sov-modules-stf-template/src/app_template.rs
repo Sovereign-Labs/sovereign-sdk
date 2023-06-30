@@ -19,10 +19,9 @@ use tracing::{debug, error};
 
 type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
 
-pub struct AppTemplate<C: Context, RT, Syncer, Vm> {
+pub struct AppTemplate<C: Context, RT, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
-    pub syncer: Syncer,
     pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
 }
@@ -54,25 +53,23 @@ impl From<ApplyBatchError> for BatchReceipt<SenderOutcome, TxEffect> {
     }
 }
 
-impl<C: Context, RT, Syncer, Vm> AppTemplate<C, RT, Syncer, Vm>
+impl<C: Context, RT, Vm> AppTemplate<C, RT, Vm>
 where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
         + TxHooks<Context = C>
         + ApplyBlobHooks<Context = C, BlobResult = SenderOutcome>,
-    Syncer: DispatchCall<Context = C> + SyncHooks<Context = C>,
 {
-    pub fn new(storage: C::Storage, runtime: RT, syncer: Syncer) -> Self {
+    pub fn new(storage: C::Storage, runtime: RT) -> Self {
         Self {
             runtime,
-            syncer,
             current_storage: storage,
             checkpoint: None,
             phantom_vm: PhantomData,
         }
     }
 
-    pub(crate) fn apply_tx_blob(
+    pub fn apply_tx_blob(
         &mut self,
         blob: &mut impl BlobTransactionTrait,
     ) -> ApplyBatchResult<BatchReceipt<SenderOutcome, TxEffect>> {
