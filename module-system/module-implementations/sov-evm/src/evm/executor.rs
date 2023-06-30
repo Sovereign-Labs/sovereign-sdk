@@ -1,14 +1,13 @@
-use super::db::EvmDb;
-use std::convert::Infallible;
-
 use revm::{
     self,
     primitives::{EVMError, ExecutionResult, TxEnv},
+    Database, DatabaseCommit,
 };
+use std::convert::Infallible;
 
 #[allow(dead_code)]
-pub(crate) fn execute_tx(
-    db: EvmDb,
+pub(crate) fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
+    db: DB,
     tx_env: TxEnv,
 ) -> Result<ExecutionResult, EVMError<Infallible>> {
     let mut evm = revm::new();

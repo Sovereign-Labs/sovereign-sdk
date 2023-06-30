@@ -1,4 +1,4 @@
-use crate::da::BlockHashTrait;
+use crate::da::{BlockHashTrait, DaSpec};
 use crate::{
     da::{BlobTransactionTrait, CountedBufReader},
     services::da::SlotData,
@@ -239,4 +239,15 @@ impl SlotData for TestBlock {
     fn header(&self) -> &Self::BlockHeader {
         &self.header
     }
+}
+
+pub struct MockDaSpec;
+
+impl DaSpec for MockDaSpec {
+    type SlotHash = TestHash;
+    type BlockHeader = TestBlockHeader;
+    type BlobTransaction = TestBlob<MockAddress>;
+    type InclusionMultiProof = [u8; 32];
+    type CompletenessProof = ();
+    type ChainParams = ();
 }

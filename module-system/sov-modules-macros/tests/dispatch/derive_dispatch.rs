@@ -2,9 +2,9 @@ mod modules;
 use modules::{first_test_module, second_test_module};
 use sov_modules_api::Address;
 use sov_modules_api::ModuleInfo;
-use sov_modules_api::{default_context::DefaultContext, Context, Genesis};
+use sov_modules_api::{default_context::ZkDefaultContext, Context, Genesis};
 use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
-use sov_state::ProverStorage;
+use sov_state::ZkStorage;
 
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
@@ -15,15 +15,14 @@ struct Runtime<C: Context> {
 
 fn main() {
     use sov_modules_api::DispatchCall;
-    type RT = Runtime<DefaultContext>;
+    type RT = Runtime<ZkDefaultContext>;
     let runtime = &mut RT::default();
 
-    let tmpdir = tempfile::tempdir().unwrap();
-    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
+    let storage = ZkStorage::new([1u8; 32]);
     let mut working_set = &mut sov_state::WorkingSet::new(storage);
     let config = GenesisConfig::new((), ());
     runtime.genesis(&config, working_set).unwrap();
-    let context = DefaultContext::new(Address::try_from([0; 32].as_ref()).unwrap());
+    let context = ZkDefaultContext::new(Address::try_from([0; 32].as_ref()).unwrap());
 
     let value = 11;
     {

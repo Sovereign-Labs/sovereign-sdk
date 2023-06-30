@@ -1,15 +1,19 @@
-use super::{db::EvmDb, executor};
+use crate::{evm::AccountInfo, Evm};
+
+use super::{db::EvmDb, db_init::InitEvmDb, executor};
 use bytes::Bytes;
 use ethereum_types::U256 as EU256;
 use ethers_contract::BaseContract;
 use ethers_core::abi::Abi;
 use revm::{
     db::CacheDB,
-    primitives::{
-        AccountInfo, ExecutionResult, Output, TransactTo, TxEnv, B160, KECCAK_EMPTY, U256,
-    },
+    primitives::{ExecutionResult, Output, TransactTo, TxEnv, B160, KECCAK_EMPTY, U256},
+    Database, DatabaseCommit,
 };
-use std::{path::PathBuf, str::FromStr};
+use sov_state::{ProverStorage, WorkingSet};
+use std::{convert::Infallible, path::PathBuf};
+
+type C = sov_modules_api::default_context::DefaultContext;
 
 fn output(result: ExecutionResult) -> Bytes {
     match result {
@@ -46,17 +50,34 @@ fn make_contract_from_abi(path: PathBuf) -> BaseContract {
 }
 
 #[test]
-fn simple_contract_execution() {
-    let caller = B160::from_str("0x1000000000000000000000000000000000000000").unwrap();
-    let mut db = CacheDB::default();
+fn simple_contract_execution_sov_state() {
+    let tmpdir = tempfile::tempdir().unwrap();
+    let mut working_set: WorkingSet<<C as sov_modules_api::Spec>::Storage> =
+        WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
 
-    db.insert_account_info(
+    let evm = Evm::<C>::default();
+    let evm_db: EvmDb<'_, C> = evm.get_db(&mut working_set);
+
+    simple_contract_execution(evm_db);
+}
+
+#[test]
+fn simple_contract_execution_in_memory_state() {
+    let db = CacheDB::default();
+    simple_contract_execution(db);
+}
+
+fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit + InitEvmDb>(
+    mut evm_db: DB,
+) {
+    let caller: [u8; 20] = [11; 20];
+    evm_db.insert_account_info(
         caller,
         AccountInfo {
+            balance: U256::from(1000000000).to_le_bytes(),
+            code_hash: KECCAK_EMPTY.to_fixed_bytes(),
+            code: vec![],
             nonce: 1,
-            balance: U256::from(1000000000),
-            code: None,
-            code_hash: KECCAK_EMPTY,
         },
     );
 
@@ -73,7 +94,7 @@ fn simple_contract_execution() {
             ..Default::default()
         };
 
-        let result = executor::execute_tx(EvmDb { db: &mut db }, tx_env).unwrap();
+        let result = executor::execute_tx(&mut evm_db, tx_env).unwrap();
         contract_address(result)
     };
 
@@ -93,7 +114,7 @@ fn simple_contract_execution() {
             ..Default::default()
         };
 
-        executor::execute_tx(EvmDb { db: &mut db }, tx_env).unwrap();
+        executor::execute_tx(&mut evm_db, tx_env).unwrap();
     }
 
     let get_res = {
@@ -105,7 +126,7 @@ fn simple_contract_execution() {
             ..Default::default()
         };
 
-        let result = executor::execute_tx(EvmDb { db: &mut db }, tx_env).unwrap();
+        let result = executor::execute_tx(&mut evm_db, tx_env).unwrap();
 
         let out = output(result);
         EU256::from(out.as_ref())
