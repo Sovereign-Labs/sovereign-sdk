@@ -91,7 +91,7 @@ fn generate_create(start_nonce: u64) -> Vec<u8> {
 
 
 impl RngDaService {
-    fn new() -> Self {
+    pub fn new() -> Self {
         RngDaService {
             submitted: Arc::new(Mutex::new(Vec::new())),
         }

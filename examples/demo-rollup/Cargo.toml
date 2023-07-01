@@ -19,6 +19,7 @@ tracing = { workspace = true }
 hex = { workspace = true }
 bytes = { workspace = true }
 futures = "0.3"
+cargo-profiler = "0.1.6"
 
 # Crates which only this package depends on 
 tokio = { version = "1", features = ["full"] }
@@ -38,6 +39,7 @@ sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["n
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
 glassbench = "0.3"
+flame = "0.2.2"
 
 [dev-dependencies]
 sha2 = { workspace = true }
