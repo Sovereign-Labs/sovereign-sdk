@@ -424,7 +424,7 @@ proptest!(
                 }).collect();
 
                 let full_txs = curr_batch.tx_receipts.iter().enumerate().map(|(tx_id, tx)|
-                   full_tx_json(curr_tx_num + tx_id, &tx, &tx_id_to_event_range)
+                   full_tx_json(curr_tx_num + tx_id, tx, &tx_id_to_event_range)
                 ).collect::<Vec<_>>();
 
                 test_helper(
