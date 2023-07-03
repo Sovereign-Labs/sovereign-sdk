@@ -88,7 +88,7 @@ jobs:
         with:
           version: "v0.4.0"
       - name: Run cargo test
-        run: cargo test || find -type f -iname '*.proptest-regressions' -exec cat {} +
+        run: cargo test
   coverage:
     runs-on: ubuntu-latest
     env:
