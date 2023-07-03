@@ -2,6 +2,9 @@ use crate::{da::BlobTransactionTrait, zk::traits::Zkvm};
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
+#[cfg(any(test, feature = "fuzzing"))]
+pub mod fuzzing;
+
 /// The configuration of a full node of the rollup which creates zk proofs.
 pub struct ProverConfig;
 /// The configuration used to initialize the "Verifier" of the state transition function
@@ -43,7 +46,7 @@ pub struct TransactionReceipt<R> {
 pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
     /// The canonical hash of this batch
     pub batch_hash: [u8; 32],
-    /// The receipt of each transaction in the batch
+
     pub tx_receipts: Vec<TransactionReceipt<TxReceiptContents>>,
     /// Any additional structured data to be saved in the database and served over RPC
     pub inner: BatchReceiptContents,
@@ -108,6 +111,7 @@ pub trait StateTransitionFunction<Vm: Zkvm> {
 
 /// A key-value pair representing a change to the rollup state
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 pub struct Event {
     key: EventKey,
     value: EventValue,
@@ -143,7 +147,21 @@ impl Event {
     Serialize,
     Deserialize,
 )]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 pub struct EventKey(Vec<u8>);
 
+impl EventKey {
+    pub fn inner(&self) -> &Vec<u8> {
+        &self.0
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 pub struct EventValue(Vec<u8>);
+
+impl EventValue {
+    pub fn inner(&self) -> &Vec<u8> {
+        &self.0
+    }
+}

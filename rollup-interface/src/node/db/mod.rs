@@ -56,18 +56,6 @@ pub trait SeekKeyEncoder<S: Schema + ?Sized>: Sized {
     fn encode_seek_key(&self) -> Result<Vec<u8>>;
 }
 
-/// All keys can automatically be used as seek keys.
-impl<S, K> SeekKeyEncoder<S> for K
-where
-    S: Schema,
-    K: KeyEncoder<S>,
-{
-    /// Delegates to [`KeyCodec::encode_key`].
-    fn encode_seek_key(&self) -> Result<Vec<u8>> {
-        <K as KeyEncoder<S>>::encode_key(self)
-    }
-}
-
 #[macro_export]
 macro_rules! define_schema {
     ($schema_type:ident, $key_type:ty, $value_type:ty, $cf_name:expr) => {

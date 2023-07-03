@@ -48,11 +48,22 @@ pub struct ItemNumbers {
     pub event_number: u64,
 }
 
+#[derive(Debug)]
 pub struct SlotCommit<S: SlotData, B, T> {
     slot_data: S,
     batch_receipts: Vec<BatchReceipt<B, T>>,
     num_txs: usize,
     num_events: usize,
+}
+
+impl<S: SlotData, B, T> SlotCommit<S, B, T> {
+    pub fn slot_data(&self) -> &S {
+        &self.slot_data
+    }
+
+    pub fn batch_receipts(&self) -> &[BatchReceipt<B, T>] {
+        &self.batch_receipts
+    }
 }
 
 impl<S: SlotData, B, T> SlotCommit<S, B, T> {
