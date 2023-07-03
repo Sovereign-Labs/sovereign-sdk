@@ -28,11 +28,19 @@ borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
+#ethers = { version = "2.0.7", default-features = false }
+
 [dev-dependencies]
 ethereum-types = "0.14.1"
 ethers-contract = "2.0.7"
 ethers-core = "2.0.7"
+ethers-signers = { version = "2.0.7", default-features = false }
+ethers-providers = { version = "2.0.7"}
+ethers-middleware = { version = "2.0.7"}
+
 primitive-types = "0.12.1"
+
+tokio = { version = "1", features = ["full"] }
 
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
 tempfile = { workspace = true }
