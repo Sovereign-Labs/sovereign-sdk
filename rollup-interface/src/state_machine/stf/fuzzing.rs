@@ -10,7 +10,8 @@ use proptest::{
 
 use super::{BatchReceipt, Event, TransactionReceipt};
 
-/// An object-safe hashing trait, which is blanket implemented for all SimpleHashers
+/// An object-safe hashing trait, which is blanket implemented for all
+/// [`SimpleHasher`]s.
 pub trait FuzzHasher {
     /// Hash the provided data
     fn hash(&self, data: &[u8]) -> [u8; 32];
