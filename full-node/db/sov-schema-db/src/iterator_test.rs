@@ -54,6 +54,12 @@ impl KeyDecoder<TestSchema> for TestKey {
     }
 }
 
+impl SeekKeyEncoder<TestSchema> for TestKey {
+    fn encode_seek_key(&self) -> sov_rollup_interface::db::Result<Vec<u8>> {
+        self.encode_key()
+    }
+}
+
 impl ValueCodec<TestSchema> for TestValue {
     fn encode_value(&self) -> Result<Vec<u8>, CodecError> {
         Ok(self.0.to_be_bytes().to_vec())
