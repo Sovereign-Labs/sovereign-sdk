@@ -1,31 +1,27 @@
-use std::env;
-use std::sync::Arc;
 use anyhow::Context;
 use demo_stf::app::NativeAppRunner;
 use demo_stf::runner_config::from_toml_path;
+use std::env;
+use std::sync::Arc;
 
 use sov_demo_rollup::config::RollupConfig;
 use sov_demo_rollup::rng_xfers::RngDaService;
 
-use jupiter::verifier::address::CelestiaAddress;
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_rollup_interface::mocks::{TestBlob, TestBlock, TestBlockHeader, TestHash};
+use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader, TestHash};
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 
-use std::fs;
-use std::io;
-use tracing::Level;
-use tracing_subscriber::fmt::format;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
-use sov_rollup_interface::services::da::{DaService, SlotData};
-use sov_rollup_interface::stf::StateTransitionFunction;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::stf::StateTransitionFunction;
+use std::fs;
+use std::io;
 
-use criterion::{Criterion, criterion_group, criterion_main};
+use criterion::{criterion_group, criterion_main, Criterion};
 use std::time::Duration;
-use std::fs::File;
 
 fn remove_dir_if_exists<P: AsRef<std::path::Path>>(path: P) -> io::Result<()> {
     if path.as_ref().exists() {
@@ -35,24 +31,24 @@ fn remove_dir_if_exists<P: AsRef<std::path::Path>>(path: P) -> io::Result<()> {
     }
 }
 
-fn rollup_bench(c: &mut Criterion) {
+fn rollup_bench(_bench: &mut Criterion) {
     let start_height: u64 = 0u64;
     let mut end_height: u64 = 100u64;
-    let mut num_txns = 10000;
-    if let Ok(val) = env::var("TXNS_PER_BLOCK") {
-        num_txns = val.parse().unwrap();
-    }
     if let Ok(val) = env::var("BLOCKS") {
         end_height = val.parse().unwrap();
     }
 
-    let mut c = Criterion::default().sample_size(10).measurement_time(Duration::from_secs(20));
-    let rollup_config_path =  "benches/rollup_config.toml".to_string();
-    let rollup_config: RollupConfig =
-        from_toml_path(&rollup_config_path).context("Failed to read rollup configuration").unwrap();
+    let mut c = Criterion::default()
+        .sample_size(10)
+        .measurement_time(Duration::from_secs(20));
+    let rollup_config_path = "benches/rollup_config.toml".to_string();
+    let rollup_config: RollupConfig = from_toml_path(&rollup_config_path)
+        .context("Failed to read rollup configuration")
+        .unwrap();
 
     remove_dir_if_exists(&rollup_config.runner.storage.path).unwrap();
-    let ledger_db = LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
+    let ledger_db =
+        LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
 
     let da_service = Arc::new(RngDaService::new());
 
@@ -88,7 +84,7 @@ fn rollup_bench(c: &mut Criterion) {
                 header: TestBlockHeader {
                     prev_hash: TestHash([0u8; 32]),
                 },
-                height
+                height,
             }
         } else {
             TestBlock {
@@ -96,19 +92,18 @@ fn rollup_bench(c: &mut Criterion) {
                 header: TestBlockHeader {
                     prev_hash: TestHash([0u8; 32]),
                 },
-                height
+                height,
             }
         };
         blocks.push(filtered_block.clone());
 
-        let mut blob_txs = da_service.extract_relevant_txs(&filtered_block);
+        let blob_txs = da_service.extract_relevant_txs(&filtered_block);
         blobs.push(blob_txs.clone());
     }
 
     let mut height = 0u64;
-    c.bench_function(
-        "rollup main loop",
-        |b| b.iter(|| {
+    c.bench_function("rollup main loop", |b| {
+        b.iter(|| {
             let filtered_block = &blocks[height as usize];
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
@@ -123,9 +118,8 @@ fn rollup_bench(c: &mut Criterion) {
 
             ledger_db.commit_slot(data_to_commit).unwrap();
             height += 1;
-        }
-        )
-    );
+        })
+    });
 }
 
 criterion_group!(benches, rollup_bench);
