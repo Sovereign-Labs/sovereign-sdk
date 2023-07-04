@@ -1,18 +1,15 @@
-use evm::{db::EvmDb, transaction::BlockEnv, DbAccount, EthAddress};
-use sov_modules_api::Error;
-use sov_modules_macros::ModuleInfo;
-use sov_state::WorkingSet;
-
 pub mod call;
 mod evm;
 pub mod genesis;
 #[cfg(feature = "native")]
 pub mod query;
-
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod tx_tests;
+
+use evm::{db::EvmDb, transaction::BlockEnv, DbAccount, EthAddress};
+use sov_modules_api::Error;
+use sov_modules_macros::ModuleInfo;
+use sov_state::WorkingSet;
 
 #[allow(dead_code)]
 #[derive(ModuleInfo, Clone)]
