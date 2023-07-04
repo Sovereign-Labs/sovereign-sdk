@@ -1,16 +1,16 @@
 // Copyright (c) Aptos
 // SPDX-License-Identifier: Apache-2.0
 
-use crate::{
-    define_schema,
-    interface::{errors::CodecError, ColumnFamilyName, KeyDecoder, KeyEncoder, Result, ValueCodec},
-};
 use byteorder::{BigEndian, ReadBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use std::path::Path;
-
-use crate::{Schema, SchemaBatch, DB};
 use tempfile::TempDir;
+
+use sov_schema_db::{
+    define_schema,
+    interface::{errors::CodecError, ColumnFamilyName, KeyDecoder, KeyEncoder, Result, ValueCodec},
+};
+use sov_schema_db::{Schema, SchemaBatch, DB};
 
 // Creating two schemas that share exactly the same structure but are stored in different column
 // families. Also note that the key and value are of the same type `TestField`. By implementing

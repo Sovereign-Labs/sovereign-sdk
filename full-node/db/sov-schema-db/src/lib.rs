@@ -32,11 +32,6 @@ pub use crate::interface::Schema;
 use crate::interface::{ColumnFamilyName, KeyCodec, ValueCodec};
 pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 
-#[cfg(test)]
-mod db_test;
-#[cfg(test)]
-mod iterator_test;
-
 #[derive(Debug)]
 enum WriteOp {
     Value { key: Vec<u8>, value: Vec<u8> },
