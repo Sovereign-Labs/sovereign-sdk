@@ -86,6 +86,7 @@ async fn send_tx_test() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = SignerMiddleware::new_with_provider_chain(provider, key).await?;
 
+    // Create contract
     let contract_address = {
         let from_addr = anvil.addresses()[0];
 
@@ -108,6 +109,7 @@ async fn send_tx_test() -> Result<(), Box<dyn std::error::Error>> {
         receipt.unwrap().contract_address.unwrap()
     };
 
+    // Call contract
     let set_arg = ethereum_types::U256::from(923);
     {
         let from = anvil.addresses()[0];
@@ -130,6 +132,7 @@ async fn send_tx_test() -> Result<(), Box<dyn std::error::Error>> {
             .await;
     }
 
+    // Query contract
     {
         let from = anvil.addresses()[0];
 
