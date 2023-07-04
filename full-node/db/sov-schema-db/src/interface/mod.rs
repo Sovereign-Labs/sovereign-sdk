@@ -62,11 +62,11 @@ macro_rules! define_schema {
         #[derive(Debug)]
         pub(crate) struct $schema_type;
 
-        impl $crate::db::Schema for $schema_type {
+        impl $crate::interface::Schema for $schema_type {
             type Key = $key_type;
             type Value = $value_type;
 
-            const COLUMN_FAMILY_NAME: $crate::db::ColumnFamilyName = $cf_name;
+            const COLUMN_FAMILY_NAME: $crate::interface::ColumnFamilyName = $cf_name;
         }
     };
 }

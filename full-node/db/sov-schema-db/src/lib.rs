@@ -13,6 +13,10 @@
 //! [`define_schema!`] macro to define the schema name, the types of key and value, and name of the
 //! column family.
 
+pub mod interface;
+pub mod iterator;
+mod metrics;
+
 use anyhow::{format_err, Result};
 use iterator::{ScanDirection, SchemaIterator};
 use metrics::{
@@ -24,12 +28,9 @@ use rocksdb::{ColumnFamilyDescriptor, ReadOptions};
 use std::{collections::HashMap, path::Path, sync::Mutex};
 use tracing::info;
 
+pub use crate::interface::Schema;
+use crate::interface::{ColumnFamilyName, KeyCodec, ValueCodec};
 pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
-pub use sov_rollup_interface::db::Schema;
-use sov_rollup_interface::db::{ColumnFamilyName, KeyCodec, ValueCodec};
-
-pub mod iterator;
-mod metrics;
 
 #[cfg(test)]
 mod db_test;

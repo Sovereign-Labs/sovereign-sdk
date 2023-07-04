@@ -22,6 +22,7 @@ once_cell = { workspace = true }
 prometheus = { workspace = true }
 rocksdb = { workspace = true }
 tracing = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 byteorder = { workspace = true }
