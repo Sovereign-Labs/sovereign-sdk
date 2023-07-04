@@ -1,4 +1,4 @@
-use evm::{db::EvmDb, Address, DbAccount};
+use evm::{db::EvmDb, transaction::BlockEnv, DbAccount, EthAddress};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
@@ -9,6 +9,9 @@ pub mod genesis;
 #[cfg(feature = "native")]
 pub mod query;
 
+#[cfg(test)]
+mod tests;
+
 #[allow(dead_code)]
 #[derive(ModuleInfo, Clone)]
 pub struct Evm<C: sov_modules_api::Context> {
@@ -16,7 +19,10 @@ pub struct Evm<C: sov_modules_api::Context> {
     pub(crate) address: C::Address,
 
     #[state]
-    accounts: sov_state::StateMap<Address, DbAccount>,
+    pub(crate) accounts: sov_state::StateMap<EthAddress, DbAccount>,
+
+    #[state]
+    pub(crate) block_env: sov_state::StateValue<BlockEnv>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {
@@ -36,16 +42,15 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {
 
     fn call(
         &self,
-        _msg: Self::CallMessage,
-        _context: &Self::Context,
-        _working_set: &mut WorkingSet<C::Storage>,
+        msg: Self::CallMessage,
+        context: &Self::Context,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
-        todo!()
+        Ok(self.execute_call(msg.tx, context, working_set)?)
     }
 }
 
 impl<C: sov_modules_api::Context> Evm<C> {
-    #[allow(dead_code)]
     pub(crate) fn get_db<'a>(&self, working_set: &'a mut WorkingSet<C::Storage>) -> EvmDb<'a, C> {
         EvmDb::new(self.accounts.clone(), working_set)
     }

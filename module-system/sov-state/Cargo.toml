@@ -12,7 +12,6 @@ readme = "README.md"
 resolver = "2"
 
 [dependencies]
-
 anyhow = { workspace = true }
 borsh = { workspace = true }
 serde = { workspace = true }

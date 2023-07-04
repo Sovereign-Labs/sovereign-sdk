@@ -27,7 +27,7 @@ use jmt::{
     storage::{Node, NodeKey},
     Version,
 };
-use sov_rollup_interface::db::errors::CodecError;
+use sov_rollup_interface::db::{errors::CodecError, SeekKeyEncoder};
 use sov_rollup_interface::{
     db::{KeyDecoder, KeyEncoder, ValueCodec},
     stf::{Event, EventKey},
@@ -56,7 +56,7 @@ pub const LEDGER_TABLES: &[&str] = &[
 /// ```ignore
 /// define_table_without_codec!(
 ///  /// A table storing keys and value
-///  (MyTable) MyKey | MyValue
+///  (MyTable) MyKey => MyValue
 /// )
 ///
 /// // This impl must be written by hand
@@ -98,6 +98,27 @@ macro_rules! define_table_without_codec {
     };
 }
 
+macro_rules! impl_borsh_value_codec {
+    ($table_name:ident, $value:ty) => {
+        impl ::sov_rollup_interface::db::ValueCodec<$table_name> for $value {
+            fn encode_value(
+                &self,
+            ) -> ::std::result::Result<
+                ::sov_rollup_interface::maybestd::vec::Vec<u8>,
+                ::sov_rollup_interface::db::errors::CodecError,
+            > {
+                ::borsh::BorshSerialize::try_to_vec(self).map_err(Into::into)
+            }
+
+            fn decode_value(
+                data: &[u8],
+            ) -> ::std::result::Result<Self, ::sov_rollup_interface::db::errors::CodecError> {
+                ::borsh::BorshDeserialize::deserialize_reader(&mut &data[..]).map_err(Into::into)
+            }
+        }
+    };
+}
+
 /// Macro to define a table that implements [`sov_rollup_interface::db::Schema`].
 /// Automatically generates KeyCodec<...> and ValueCodec<...> implementations
 /// using the Encode and Decode traits from sov_rollup_interface
@@ -105,7 +126,7 @@ macro_rules! define_table_without_codec {
 /// ```ignore
 /// define_table_with_default_codec!(
 ///  /// A table storing keys and value
-///  (MyTable) MyKey | MyValue
+///  (MyTable) MyKey => MyValue
 /// )
 /// ```
 macro_rules! define_table_with_default_codec {
@@ -114,30 +135,67 @@ macro_rules! define_table_with_default_codec {
 
         impl ::sov_rollup_interface::db::KeyEncoder<$table_name> for $key {
             fn encode_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_rollup_interface::db::errors::CodecError> {
-                <Self as ::borsh::BorshSerialize>::try_to_vec(self).map_err(|e| e.into())
+                ::borsh::BorshSerialize::try_to_vec(self).map_err(Into::into)
             }
         }
 
         impl ::sov_rollup_interface::db::KeyDecoder<$table_name> for $key {
             fn decode_key(data: &[u8]) -> ::std::result::Result<Self, ::sov_rollup_interface::db::errors::CodecError> {
-                <Self as ::borsh::BorshDeserialize>::deserialize_reader(&mut &data[..]).map_err(|e| e.into())
+                ::borsh::BorshDeserialize::deserialize_reader(&mut &data[..]).map_err(Into::into)
             }
         }
 
-        impl ::sov_rollup_interface::db::ValueCodec<$table_name> for $value {
-            fn encode_value(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_rollup_interface::db::errors::CodecError> {
-                <Self as ::borsh::BorshSerialize>::try_to_vec(self).map_err(|e| e.into())
-            }
+        impl_borsh_value_codec!($table_name, $value);
+    };
+}
 
-            fn decode_value(data: &[u8]) -> ::std::result::Result<Self, ::sov_rollup_interface::db::errors::CodecError> {
-                <Self as ::borsh::BorshDeserialize>::deserialize_reader(&mut &data[..]).map_err(|e| e.into())
+/// Macro similar to [`define_table_with_default_codec`], but to be used when
+/// your key type should be [`SeekKeyEncoder`]. Borsh serializes integers as
+/// little-endian, but RocksDB uses lexigographic ordering which is only
+/// compatible with big-endian, so we use [`bincode`] with the big-endian option
+/// here.
+macro_rules! define_table_with_seek_key_codec {
+    ($(#[$docs:meta])+ ($table_name:ident) $key:ty => $value:ty) => {
+        define_table_without_codec!($(#[$docs])+ ( $table_name ) $key => $value);
+
+        impl ::sov_rollup_interface::db::KeyEncoder<$table_name> for $key {
+            fn encode_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_rollup_interface::db::errors::CodecError> {
+                use ::anyhow::Context;
+                use ::bincode::Options;
+
+                let bincode_options = ::bincode::options()
+                    .with_fixint_encoding()
+                    .with_big_endian();
+
+                bincode_options.serialize(self).context("Failed to serialize key").map_err(Into::into)
             }
         }
+
+        impl ::sov_rollup_interface::db::KeyDecoder<$table_name> for $key {
+            fn decode_key(data: &[u8]) -> ::std::result::Result<Self, ::sov_rollup_interface::db::errors::CodecError> {
+                use ::anyhow::Context;
+                use ::bincode::Options;
+
+                let bincode_options = ::bincode::options()
+                    .with_fixint_encoding()
+                    .with_big_endian();
+
+                bincode_options.deserialize_from(&mut &data[..]).context("Failed to deserialize key").map_err(Into::into)
+            }
+        }
+
+        impl ::sov_rollup_interface::db::SeekKeyEncoder<$table_name> for $key {
+            fn encode_seek_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_rollup_interface::db::errors::CodecError> {
+                <Self as ::sov_rollup_interface::db::KeyEncoder<$table_name>>::encode_key(self)
+            }
+        }
+
+        impl_borsh_value_codec!($table_name, $value);
     };
 }
 
 // fn deser(target: &mut &[u8]) -> Result<Self, DeserializationError>;
-define_table_with_default_codec!(
+define_table_with_seek_key_codec!(
     /// The primary source for slot data
     (SlotByNumber) SlotNumber => StoredSlot
 );
@@ -147,7 +205,7 @@ define_table_with_default_codec!(
     (SlotByHash) DbHash => SlotNumber
 );
 
-define_table_with_default_codec!(
+define_table_with_seek_key_codec!(
     /// The primary source for batch data
     (BatchByNumber) BatchNumber => StoredBatch
 );
@@ -157,7 +215,7 @@ define_table_with_default_codec!(
     (BatchByHash) DbHash => BatchNumber
 );
 
-define_table_with_default_codec!(
+define_table_with_seek_key_codec!(
     /// The primary source for transaction data
     (TxByNumber) TxNumber => StoredTransaction
 );
@@ -167,7 +225,7 @@ define_table_with_default_codec!(
     (TxByHash) DbHash => TxNumber
 );
 
-define_table_with_default_codec!(
+define_table_with_seek_key_codec!(
     /// The primary store for event data
     (EventByNumber) EventNumber => Event
 );
@@ -220,6 +278,12 @@ impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> KeyEncoder<JmtValues> for (T
         out.write_u64::<BigEndian>(self.1)
             .expect("serialization to vec is infallible");
         Ok(out)
+    }
+}
+
+impl<T: AsRef<[u8]> + PartialEq + core::fmt::Debug> SeekKeyEncoder<JmtValues> for (T, Version) {
+    fn encode_seek_key(&self) -> sov_rollup_interface::db::Result<Vec<u8>> {
+        self.encode_key()
     }
 }
 
