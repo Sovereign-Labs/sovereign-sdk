@@ -23,8 +23,9 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 
+use criterion::{Criterion, criterion_group, criterion_main};
+use std::time::Duration;
 use std::fs::File;
-
 
 fn remove_dir_if_exists<P: AsRef<std::path::Path>>(path: P) -> io::Result<()> {
     if path.as_ref().exists() {
@@ -34,17 +35,18 @@ fn remove_dir_if_exists<P: AsRef<std::path::Path>>(path: P) -> io::Result<()> {
     }
 }
 
-const START_HEIGHT: u64 = 0u64;
-const END_HEIGHT: u64 = 100u64;
+fn rollup_bench(c: &mut Criterion) {
+    let start_height: u64 = 0u64;
+    let mut end_height: u64 = 100u64;
+    let mut num_txns = 10000;
+    if let Ok(val) = env::var("TXNS_PER_BLOCK") {
+        num_txns = val.parse().unwrap();
+    }
+    if let Ok(val) = env::var("BLOCKS") {
+        end_height = val.parse().unwrap();
+    }
 
-fn main() {
-    let subscriber = tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .finish();
-    tracing::subscriber::set_global_default(subscriber)
-        .map_err(|_err| eprintln!("Unable to set global default subscriber"))
-        .expect("Cannot fail to set subscriber");
-
+    let mut c = Criterion::default().sample_size(10).measurement_time(Duration::from_secs(20));
     let rollup_config_path =  "benches/rollup_config.toml".to_string();
     let rollup_config: RollupConfig =
         from_toml_path(&rollup_config_path).context("Failed to read rollup configuration").unwrap();
@@ -76,7 +78,7 @@ fn main() {
     // data generation
     let mut blobs = vec![];
     let mut blocks = vec![];
-    for height in START_HEIGHT..END_HEIGHT {
+    for height in start_height..end_height {
         let num_bytes = height.to_le_bytes();
         let mut barray = [0u8; 32];
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
@@ -102,26 +104,29 @@ fn main() {
         let mut blob_txs = da_service.extract_relevant_txs(&filtered_block);
         blobs.push(blob_txs.clone());
     }
-    cargo_profiler::start().unwrap();
-    for height in START_HEIGHT..END_HEIGHT {
-        let num_bytes = height.to_le_bytes();
-        let mut barray = [0u8; 32];
-        barray[..num_bytes.len()].copy_from_slice(&num_bytes);
-        let filtered_block = &blocks[height as usize];
 
-        let mut data_to_commit = SlotCommit::new(filtered_block.clone());
-        demo.begin_slot(Default::default());
+    let mut height = 0u64;
+    c.bench_function(
+        "rollup main loop",
+        |b| b.iter(|| {
+            let filtered_block = &blocks[height as usize];
 
-        for blob in &mut blobs[height as usize] {
-            let receipts = demo.apply_blob(blob, None);
-            data_to_commit.add_batch(receipts);
+            let mut data_to_commit = SlotCommit::new(filtered_block.clone());
+            demo.begin_slot(Default::default());
+
+            for blob in &mut blobs[height as usize] {
+                let receipts = demo.apply_blob(blob, None);
+                // println!("{:?}", receipts);
+                data_to_commit.add_batch(receipts);
+            }
+            let (_next_state_root, _witness) = demo.end_slot();
+
+            ledger_db.commit_slot(data_to_commit).unwrap();
+            height += 1;
         }
-        let (_next_state_root, _witness) = demo.end_slot();
-
-        ledger_db.commit_slot(data_to_commit).unwrap();
-    }
-    cargo_profiler::stop().unwrap();
-
-    // f::dump_html(&mut File::create("demo-rollup.html").unwrap()).unwrap();
-
+        )
+    );
 }
+
+criterion_group!(benches, rollup_bench);
+criterion_main!(benches);

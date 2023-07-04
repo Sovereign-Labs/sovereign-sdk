@@ -1,30 +1,26 @@
-mod config;
-mod ledger_rpc;
-mod rng_xfers;
+use std::env;
+use std::net::SocketAddr;
+use std::sync::Arc;
 
-#[cfg(test)]
-mod test_rpc;
-mod txs_rpc;
-
-use borsh::{BorshSerialize, BorshDeserialize};
-use std::fs;
-
-use crate::config::RollupConfig;
-use std::time::{Duration, Instant};
 use anyhow::Context;
+use jsonrpsee::core::server::rpc_module::Methods;
+use tracing::Level;
+use tracing::{debug, info};
+
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{DefaultContext, DemoBatchReceipt, DemoTxReceipt};
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runner_config::from_toml_path;
+use demo_stf::runtime::get_rpc_methods;
 use demo_stf::runtime::GenesisConfig;
-use jsonrpsee::core::server::rpc_module::Methods;
 use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::RollupParams;
 use jupiter::verifier::{CelestiaVerifier, ChainValidityCondition};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
+use sov_modules_api::RpcRunner;
 use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::services::da::{DaService, SlotData};
@@ -32,23 +28,17 @@ use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::traits::CanonicalHash;
 use sov_rollup_interface::zk::traits::ValidityConditionChecker;
-use sov_state::Storage;
-use std::env;
-use std::fs::File;
-use std::io::Write;
-use std::net::SocketAddr;
-use std::path::PathBuf;
-use std::sync::Arc;
-use tracing::Level;
-use tracing::{debug, info};
-
 // RPC related imports
-use crate::txs_rpc::get_txs_rpc;
-use demo_stf::runtime::get_rpc_methods;
-use jupiter::verifier::address::CelestiaAddress;
-use sov_modules_api::RpcRunner;
-use sov_rollup_interface::mocks::TestBlob;
-use crate::rng_xfers::RngDaService;
+use sov_sequencer::get_sequencer_rpc;
+use sov_state::Storage;
+
+use crate::config::RollupConfig;
+
+mod config;
+mod ledger_rpc;
+
+#[cfg(test)]
+mod test_rpc;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 // You can change this constant to point your rollup at a different namespace
@@ -104,27 +94,6 @@ impl ValidityConditionChecker<ChainValidityCondition> for CelestiaChainChecker {
     }
 }
 
-fn write_blobs_big_file(v: Vec<u8>) {
-    let mut bin_path = PathBuf::from("all_blobs");
-    bin_path.set_extension("dat");
-
-    let mut file = File::create(bin_path)
-        .unwrap_or_else(|e| panic!("Unable to crate .dat file: {}", e));
-
-    file.write_all(&v)
-        .unwrap_or_else(|e| panic!("Unable to save .dat file: {}", e));
-}
-
-fn read_blobs_big_file() -> Vec<TestBlob<CelestiaAddress>> {
-    let mut bin_path = PathBuf::from("all_blobs");
-    bin_path.set_extension("dat");
-
-    let data = fs::read(&bin_path)
-        .unwrap_or_else(|e| panic!("Failed to read .dat file: {}", e));
-    let blobs = Vec::<TestBlob::<CelestiaAddress>>::try_from_slice(&data).unwrap();
-    blobs
-}
-
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
@@ -147,7 +116,13 @@ async fn main() -> Result<(), anyhow::Error> {
     // Initialize the ledger database, which stores blocks, transactions, events, etc.
     let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
 
-    let da_service = Arc::new(RngDaService::new((),()));
+    // Initialize the Celestia service using the DaService interface
+    let da_service = Arc::new(CelestiaService::new(
+        rollup_config.da.clone(),
+        RollupParams {
+            namespace: ROLLUP_NAMESPACE,
+        },
+    ));
 
     // Our state transition function implements the StateTransitionRunner interface,
     // so we use that to initialize the STF
@@ -166,7 +141,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let batch_builder = demo_runner.take_batch_builder().unwrap();
 
-    let r = get_txs_rpc(batch_builder, da_service.clone());
+    let r = get_sequencer_rpc(batch_builder, da_service.clone());
 
     methods.merge(r).expect("Failed to merge Txs RPC modules");
 
@@ -203,19 +178,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let last_slot_processed_before_shutdown = item_numbers.slot_number - 1;
     let start_height = rollup_config.start_height + last_slot_processed_before_shutdown;
 
-
-    // let mut bench_blobs = read_blobs_big_file().into_iter();
-    // let mut store_vec = vec![];
-    let start = Instant::now();
-    let mut get_finalized_at_time = Duration::new(0,0);
-    let mut extract_relevant_txs_time = Duration::new(0,0);
-    let mut begin_slot_time = Duration::new(0,0);
-    let mut apply_blob_time = Duration::new(0,0);
-    let mut end_slot_time = Duration::new(0,0);
-    let mut commit_slot_time = Duration::new(0,0);
-    let mut add_batch_time = Duration::new(0,0);
-    let mut data_to_commit_time = Duration::new(0,0);
-    for height in 0..100 {
+    for height in start_height.. {
         info!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
@@ -223,90 +186,49 @@ async fn main() -> Result<(), anyhow::Error> {
         );
 
         // Fetch the relevant subset of the next Celestia block
-        let now = Instant::now();
         let filtered_block = da_service.get_finalized_at(height).await?;
         let header = filtered_block.header();
-        get_finalized_at_time+= now.elapsed();
 
         // For the demo, we create and verify a proof that the data has been extracted from Celestia correctly.
         // In a production implementation, this logic would only run on the prover node - regular full nodes could
         // simply download the data from Celestia without extracting and checking a merkle proof here,
-
-        // IMP
-
-        let now = Instant::now();
         let mut blob_txs = da_service.extract_relevant_txs(&filtered_block);
-        extract_relevant_txs_time += now.elapsed();
 
-        // read file
-        // let blob_txs = bench_blobs.next();
-        // if let None = blob_txs {
-        //     break
-        // }
-        // let mut blob_txs = vec![blob_txs.unwrap()];
-
-        // store_vec.extend_from_slice(&blob_txs);
         info!("Received {} blobs", blob_txs.len());
 
-        let now = Instant::now();
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
-        data_to_commit_time+=now.elapsed();
-        let now = Instant::now();
         demo.begin_slot(Default::default());
-        begin_slot_time+=now.elapsed();
         for blob in &mut blob_txs {
-            let now = Instant::now();
             let receipts = demo.apply_blob(blob, None);
-            apply_blob_time+=now.elapsed();
             info!("receipts: {:?}", receipts);
-            let now = Instant::now();
             data_to_commit.add_batch(receipts);
-            add_batch_time+=now.elapsed();
         }
-        let now = Instant::now();
         let (next_state_root, _witness) = demo.end_slot();
-        end_slot_time+=now.elapsed();
 
+        let (inclusion_proof, completeness_proof) =
+            da_service.get_extraction_proof(&filtered_block, &blob_txs);
 
+        let validity_condition = da_verifier
+            .verify_relevant_tx_list::<NoOpHasher>(
+                header,
+                &blob_txs,
+                inclusion_proof,
+                completeness_proof,
+            )
+            .expect("Failed to verify relevant tx list but prover is honest");
 
-        //////////////////////////////////////////////////////////
-        // let (inclusion_proof, completeness_proof) =
-        //     da_service.get_extraction_proof(&filtered_block, &blob_txs);
-        //
-        // let validity_condition = da_verifier
-        //     .verify_relevant_tx_list::<NoOpHasher>(
-        //         header,
-        //         &blob_txs,
-        //         inclusion_proof,
-        //         completeness_proof,
-        //     )
-        //     .expect("Failed to verify relevant tx list but prover is honest");
-        //
-        // // For demonstration purposes, we also show how you would check the extra validity condition
-        // // imposed by celestia (that the Celestia block processed be the next one from the canonical chain).
-        // // In a real rollup, this check would only be made by light clients.
-        // let mut checker = CelestiaChainChecker {
-        //     current_block_hash: *header.hash().inner(),
-        // };
-        // checker.check(&validity_condition)?;
-        //////////////////////////////////////////////////////////
+        // For demonstration purposes, we also show how you would check the extra validity condition
+        // imposed by celestia (that the Celestia block processed be the next one from the canonical chain).
+        // In a real rollup, this check would only be made by light clients.
+        let mut checker = CelestiaChainChecker {
+            current_block_hash: *header.hash().inner(),
+        };
+        checker.check(&validity_condition)?;
 
         // Store the resulting receipts in the ledger database
-        let now = Instant::now();
         ledger_db.commit_slot(data_to_commit)?;
-        commit_slot_time+=now.elapsed();
         prev_state_root = next_state_root.0;
     }
-    // write_blobs_big_file(store_vec.try_to_vec().unwrap());
-    let duration = start.elapsed();
-    println!("completion time: {:?}",duration);
-    println!("get_finalized_at_time: {:?}",get_finalized_at_time);
-    println!("extract_relevant_txs_time: {:?}",extract_relevant_txs_time);
-    println!("begin_slot_time: {:?}",begin_slot_time);
-    println!("apply_blob_time: {:?}",apply_blob_time);
-    println!("end_slot_time: {:?}",end_slot_time);
-    println!("commit_slot_time: {:?}",commit_slot_time);
-    tokio::signal::ctrl_c().await.unwrap();
-    println!("Shutting down...");
+
     Ok(())
 }

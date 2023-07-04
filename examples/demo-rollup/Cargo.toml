@@ -19,7 +19,8 @@ tracing = { workspace = true }
 hex = { workspace = true }
 bytes = { workspace = true }
 futures = "0.3"
-cargo-profiler = "0.1.6"
+metrics = "0.17.0"
+metrics-exporter-prometheus = "0.5.0"
 
 # Crates which only this package depends on 
 tokio = { version = "1", features = ["full"] }
@@ -38,15 +39,22 @@ sov-value-setter = { path = "../../module-system/module-implementations/examples
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
-glassbench = "0.3"
-flame = "0.2.2"
 
 [dev-dependencies]
 sha2 = { workspace = true }
 reqwest = "0.11"
 tendermint = "0.32"
 tempfile = { workspace = true }
+prometheus = "0.11.0"
+prettytable-rs = "^0.10"
+glassbench = "0.3"
+criterion = "0.5.1"
+clap = "4.3.10"
 
 [[bench]]
-name = "rollup"
+name = "rollup_bench"
+harness = false
+
+[[bench]]
+name = "rollup_coarse_measure"
 harness = false

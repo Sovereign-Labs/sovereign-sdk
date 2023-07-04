@@ -25,6 +25,7 @@ use sov_bank::{Bank, Coins};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_stf_template::RawTx;
+use std::env;
 
 pub struct RngDaService {
     submitted: Arc<Mutex<Vec<Vec<u8>>>>,
@@ -156,7 +157,10 @@ impl DaService for RngDaService {
         &self,
         block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
-        let num_txns = 10000;
+        let mut num_txns = 10000;
+        if let Ok(val) = env::var("TXNS_PER_BLOCK") {
+            num_txns = val.parse().unwrap();
+        }
         let mut data = vec![];
         if block.height == 0 {
             // creating the token
