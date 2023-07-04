@@ -606,6 +606,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
+ "const-rollup-config",
  "hex",
  "jsonrpsee",
  "serde",
@@ -614,10 +615,10 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-db",
- "sov-default-stf",
  "sov-election",
  "sov-modules-api",
  "sov-modules-macros",
+ "sov-modules-stf-template",
  "sov-rollup-interface",
  "sov-schema-db",
  "sov-sequencer-registry",
@@ -815,13 +816,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e51093e27b0797c359783294ca4f0a911c270184cb10f85783b118614a1501be"
 dependencies = [
  "instant",
-]
-
-[[package]]
-name = "sov-first-read-last-write-cache"
-version = "0.1.0"
-dependencies = [
- "thiserror",
 ]
 
 [[package]]
@@ -1193,6 +1187,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "ics23"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af9e8f569c5cc88e08b8d076dc207e0748aa1f52d4b84910ec919c8f2bed6ea7"
+dependencies = [
+ "anyhow",
+ "bytes",
+ "hex",
+ "pbjson",
+ "prost",
+ "ripemd",
+ "serde",
+ "sha2 0.10.6",
+ "sha3",
+]
+
+[[package]]
 name = "idna"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1293,19 +1304,22 @@ checksum = "453ad9f582a441959e5f0d088b02ce04cfe8d51a8eaf077f12ac6d3e94164ca6"
 
 [[package]]
 name = "jmt"
-version = "0.5.0"
-source = "git+https://github.com/penumbra-zone/jmt.git?rev=3ca60665bee78549b37bab5ec461d108dada874d#3ca60665bee78549b37bab5ec461d108dada874d"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1a302f0defd323b833c9848c20ab40c3156128f50d7bf8eebeed2ef58167258"
 dependencies = [
  "anyhow",
  "borsh",
  "hashbrown 0.13.2",
  "hex",
+ "ics23",
  "itertools",
  "mirai-annotations",
  "num-derive",
  "num-traits",
  "serde",
  "sha2 0.10.6",
+ "thiserror",
  "tracing",
 ]
 
@@ -1457,8 +1471,18 @@ dependencies = [
  "sov-rollup-interface",
  "tendermint",
  "tendermint-proto",
+ "thiserror",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "keccak"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f6d5ed8676d904364de097082f4e7d240b571b67989ced0240f08b7f966f940"
+dependencies = [
+ "cpufeatures",
 ]
 
 [[package]]
@@ -1861,6 +1885,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f746c4065a8fa3fe23974dd82f15431cc8d40779821001404d10d2e79ca7d79"
 
 [[package]]
+name = "pbjson"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "048f9ac93c1eab514f9470c4bc8d97ca2a0a236b84f45cc19d69a59fc11467f6"
+dependencies = [
+ "base64 0.13.1",
+ "serde",
+]
+
+[[package]]
 name = "pbkdf2"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2238,6 +2272,15 @@ dependencies = [
  "untrusted",
  "web-sys",
  "winapi",
+]
+
+[[package]]
+name = "ripemd"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd124222d17ad93a644ed9d011a40f4fb64aa54275c08cc216524a9ea82fb09f"
+dependencies = [
+ "digest 0.10.7",
 ]
 
 [[package]]
@@ -2702,6 +2745,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha3"
+version = "0.10.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
+dependencies = [
+ "digest 0.10.7",
+ "keccak",
+]
+
+[[package]]
 name = "sharded-slab"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2785,6 +2838,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "hex",
+ "jsonrpsee",
  "serde",
  "serde_json",
  "sov-modules-api",
@@ -2824,21 +2878,6 @@ dependencies = [
  "serde",
  "sov-rollup-interface",
  "sov-schema-db",
-]
-
-[[package]]
-name = "sov-default-stf"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "hex",
- "jmt",
- "serde",
- "sov-modules-api",
- "sov-rollup-interface",
- "sov-state",
- "tracing",
 ]
 
 [[package]]
@@ -2884,6 +2923,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-first-read-last-write-cache"
+version = "0.1.0"
+dependencies = [
+ "thiserror",
+]
+
+[[package]]
 name = "sov-modules-api"
 version = "0.1.0"
 dependencies = [
@@ -2896,6 +2942,7 @@ dependencies = [
  "jmt",
  "rand 0.7.3",
  "serde",
+ "serde_json",
  "sha2 0.10.6",
  "sov-rollup-interface",
  "sov-state",
@@ -2917,6 +2964,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-modules-stf-template"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "hex",
+ "jmt",
+ "serde",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "sov-state",
+ "tracing",
+]
+
+[[package]]
 name = "sov-rollup-interface"
 version = "0.1.0"
 dependencies = [
@@ -2924,7 +2986,10 @@ dependencies = [
  "borsh",
  "bytes",
  "hex",
+ "jmt",
  "serde",
+ "sha2 0.10.6",
+ "tendermint",
  "thiserror",
 ]
 
@@ -2933,11 +2998,8 @@ name = "sov-schema-db"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "byteorder",
- "hex",
  "once_cell",
  "prometheus",
- "rand 0.8.5",
  "rocksdb",
  "sov-rollup-interface",
  "tracing",
@@ -2950,6 +3012,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "hex",
+ "jsonrpsee",
  "serde",
  "serde_json",
  "sov-bank",
@@ -2966,12 +3029,12 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
- "sov-first-read-last-write-cache",
  "hex",
  "jmt",
  "serde",
  "sha2 0.10.6",
  "sov-db",
+ "sov-first-read-last-write-cache",
  "sov-rollup-interface",
  "thiserror",
  "tracing",
