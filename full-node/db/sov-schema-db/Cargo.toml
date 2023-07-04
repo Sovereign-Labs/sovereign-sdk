@@ -13,15 +13,13 @@ rust-version = { workspace = true }
 readme = "README.md"
 
 [dependencies]
-# Dependencies maintained by sovereign labs
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
-
 # External dependencies 
 anyhow = { workspace = true }
 once_cell = { workspace = true }
 prometheus = { workspace = true }
 rocksdb = { workspace = true }
 tracing = { workspace = true }
+thiserror = { workspace = true }
 
 [dev-dependencies]
 byteorder = { workspace = true }

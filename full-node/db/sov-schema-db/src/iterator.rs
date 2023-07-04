@@ -1,8 +1,7 @@
 use anyhow::Result;
 use std::marker::PhantomData;
 
-use sov_rollup_interface::db::{KeyDecoder, Schema, SeekKeyEncoder, ValueCodec};
-
+use crate::interface::{KeyDecoder, Schema, SeekKeyEncoder, ValueCodec};
 use crate::metrics::{SCHEMADB_ITER_BYTES, SCHEMADB_ITER_LATENCY_SECONDS};
 
 pub enum ScanDirection {
