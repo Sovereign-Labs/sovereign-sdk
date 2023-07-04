@@ -13,9 +13,8 @@ use ethers_core::{
 use ethers_middleware::SignerMiddleware;
 use ethers_providers::{maybe, Middleware, MiddlewareError, PendingTransaction, Provider};
 use ethers_signers::{LocalWallet, Signer};
-//let key = Wallet::<SigningKey>::new(&mut rand::thread_rng());
 
-//send_raw_transaction
+use crate::evm::test_helpers::{make_contract_from_abi, test_data_path};
 
 #[tokio::test]
 async fn tx_test() -> Result<(), Box<dyn std::error::Error>> {
@@ -59,12 +58,145 @@ async fn tx_test() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+fn delpoy_data() -> Bytes {
+    let mut path = test_data_path();
+    path.push("SimpleStorage.bin");
+
+    let contract_data = std::fs::read_to_string(path).unwrap();
+    let contract_data = hex::decode(contract_data).unwrap();
+
+    Bytes::from(contract_data)
+}
+
+fn update_contract(set_arg: ethereum_types::U256) -> Bytes {
+    let mut path = test_data_path();
+    path.push("SimpleStorage.abi");
+
+    let contract = make_contract_from_abi(path);
+
+    contract.encode("set", set_arg).unwrap()
+}
+
+fn get_data() -> Bytes {
+    let mut path = test_data_path();
+    path.push("SimpleStorage.abi");
+
+    let contract = make_contract_from_abi(path);
+    contract.encode("get", ()).unwrap()
+}
+
+#[tokio::test]
+async fn send_raw_tx() {
+    let chain_id: u64 = 1;
+
+    let anvil = Anvil::new().chain_id(chain_id).spawn();
+
+    let provider = Provider::try_from(anvil.endpoint()).unwrap();
+    let key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+        .parse::<LocalWallet>()
+        .unwrap()
+        .with_chain_id(chain_id);
+
+    let client = SignerMiddleware::new_with_provider_chain(provider, key)
+        .await
+        .unwrap();
+
+    let contract_address = {
+        let from = anvil.addresses()[0];
+
+        let request = Eip1559TransactionRequest::new()
+            .from(from)
+            .chain_id(chain_id)
+            .nonce(0u64)
+            .max_priority_fee_per_gas(413047990155u64)
+            .max_fee_per_gas(768658734568u64)
+            .gas(18415600u64)
+            .data(delpoy_data());
+
+        let typed_transaction = TypedTransaction::Eip1559(request);
+
+        println!("==");
+        let receipt = client
+            .send_transaction(typed_transaction, None)
+            .await
+            .unwrap()
+            .await
+            .unwrap()
+            .unwrap();
+        println!("==");
+        receipt.contract_address.unwrap()
+    };
+    println!("contract_address {:?}", contract_address);
+
+    let set_arg = ethereum_types::U256::from(923);
+    {
+        let from = anvil.addresses()[0];
+        let request = Eip1559TransactionRequest::new()
+            .from(from)
+            .to(contract_address)
+            .chain_id(chain_id)
+            .nonce(1u64)
+            .max_priority_fee_per_gas(413047990155u64)
+            .max_fee_per_gas(768658734568u64)
+            .gas(18415600u64)
+            .data(update_contract(set_arg));
+
+        let typed_transaction = TypedTransaction::Eip1559(request);
+
+        println!("==");
+        let receipt = client
+            .send_transaction(typed_transaction, None)
+            .await
+            .unwrap()
+            .await
+            .unwrap()
+            .unwrap();
+
+        println!("receipt {:?}", receipt);
+
+        println!();
+        let received = client
+            .get_transaction(receipt.transaction_hash)
+            .await
+            .unwrap()
+            .unwrap();
+
+        println!("received {:?}", received);
+    }
+
+    println!();
+    {
+        let from = anvil.addresses()[0];
+
+        let request = Eip1559TransactionRequest::new()
+            .from(from)
+            .to(contract_address)
+            .chain_id(chain_id)
+            // .nonce(1u64)
+            // .max_priority_fee_per_gas(413047990155u64)
+            // .max_fee_per_gas(768658734568u64)
+            // .gas(18415600u64)
+            .data(get_data());
+
+        let typed_transaction = TypedTransaction::Eip1559(request);
+
+        let res = client.call(&typed_transaction, None).await.unwrap();
+
+        let a: [u8; 32] = res.to_vec().try_into().unwrap();
+        let x = ethereum_types::U256::from(a);
+        println!("Res {:?} {:?}", res, x);
+
+        assert_eq!(set_arg, x)
+    }
+}
+
+/*
 #[tokio::test]
 async fn handles_tx_from_field() {
     let anvil = Anvil::new().spawn();
 
     let provider = Provider::try_from(anvil.endpoint()).unwrap();
-    let key = "dcf2cbdd171a21c480aa7f53d77f31bb102282b3ff099c78e3118b37348c72f7"
+    let key = "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
         .parse::<LocalWallet>()
         .unwrap()
         .with_chain_id(1u32);
@@ -92,7 +224,6 @@ async fn handles_tx_from_field() {
     println!("");
     println!("TX {:?}", get);
 
-    /*
     //provider.send_raw_transaction(tx)
 
     let client = SignerMiddleware::new_with_provider_chain(provider, key)
@@ -100,7 +231,7 @@ async fn handles_tx_from_field() {
         .unwrap();
 
     let request = TransactionRequest::new();
-
+    /*
     // signing a TransactionRequest with a from field of None should yield
     // a signed transaction from the signer address
     let request_from_none = request.clone();
@@ -134,7 +265,9 @@ async fn handles_tx_from_field() {
         .unwrap();
     let tx = client.get_transaction(hash).await.unwrap().unwrap();
     assert_eq!(tx.from, acc);*/*/
-}
+}*/
+
+//call_past_state
 
 //ethers-rs/ethers-middleware/src
 
