@@ -47,7 +47,7 @@ async fn tx_rlp_encoding_test() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[tokio::test]
-async fn send_tx_test() -> Result<(), Box<dyn std::error::Error>> {
+async fn send_tx_test_to_eth_node() -> Result<(), Box<dyn std::error::Error>> {
     let chain_id: u64 = 1;
     let anvil = Anvil::new().chain_id(chain_id).spawn();
 
@@ -68,9 +68,8 @@ async fn send_tx_test() -> Result<(), Box<dyn std::error::Error>> {
             .from(from_addr)
             .chain_id(chain_id)
             .nonce(0u64)
-            .max_priority_fee_per_gas(413047990155u64)
-            .max_fee_per_gas(768658734568u64)
-            .gas(18415600u64)
+            .max_priority_fee_per_gas(100u64)
+            .gas(9000000u64)
             .data(contract.byte_code());
 
         let typed_transaction = TypedTransaction::Eip1559(request);
@@ -84,7 +83,7 @@ async fn send_tx_test() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Call contract
-    let set_arg = ethereum_types::U256::from(923);
+    let set_arg = 923;
     {
         let from = anvil.addresses()[0];
         let request = Eip1559TransactionRequest::new()
@@ -92,9 +91,8 @@ async fn send_tx_test() -> Result<(), Box<dyn std::error::Error>> {
             .to(contract_address)
             .chain_id(chain_id)
             .nonce(1u64)
-            .max_priority_fee_per_gas(413047990155u64)
-            .max_fee_per_gas(768658734568u64)
-            .gas(18415600u64)
+            .max_priority_fee_per_gas(100u64)
+            .gas(9000000u64)
             .data(contract.set_call_data(set_arg));
 
         let typed_transaction = TypedTransaction::Eip1559(request);
@@ -123,7 +121,7 @@ async fn send_tx_test() -> Result<(), Box<dyn std::error::Error>> {
         let resp_array: [u8; 32] = response.to_vec().try_into().unwrap();
         let get_arg = ethereum_types::U256::from(resp_array);
 
-        assert_eq!(set_arg, get_arg)
+        assert_eq!(set_arg, get_arg.as_u32())
     }
 
     Ok(())

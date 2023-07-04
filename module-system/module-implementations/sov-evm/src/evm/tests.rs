@@ -63,7 +63,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
         contract_address(result)
     };
 
-    let set_arg = ethereum_types::U256::from(21989);
+    let set_arg = 21989;
 
     {
         let call_data = contract.set_call_data(set_arg);
@@ -95,5 +95,5 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
         ethereum_types::U256::from(out.as_ref())
     };
 
-    assert_eq!(set_arg, get_res)
+    assert_eq!(set_arg, get_res.as_u32())
 }

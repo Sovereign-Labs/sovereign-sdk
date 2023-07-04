@@ -15,7 +15,7 @@ use sov_state::{ProverStorage, WorkingSet};
 
 type C = DefaultContext;
 
-fn create_messages(contract_addr: EthAddress, set_arg: ethereum_types::U256) -> Vec<CallMessage> {
+fn create_messages(contract_addr: EthAddress, set_arg: u32) -> Vec<CallMessage> {
     let mut transactions = Vec::default();
     let contract = SimpleStorageContract::new();
 
@@ -75,7 +75,7 @@ fn evm_test() {
         .try_into()
         .unwrap();
 
-    let set_arg = ethereum_types::U256::from(999);
+    let set_arg = 999;
 
     for tx in create_messages(contract_addr, set_arg) {
         evm.call(tx, &sender_context, working_set).unwrap();
@@ -85,8 +85,5 @@ fn evm_test() {
     let storage_key = &[0; 32];
     let storage_value = db_account.storage.get(storage_key, working_set).unwrap();
 
-    assert_eq!(
-        set_arg,
-        ethereum_types::U256::from_little_endian(&storage_value)
-    )
+    assert_eq!(set_arg.to_le_bytes(), storage_value[0..4])
 }

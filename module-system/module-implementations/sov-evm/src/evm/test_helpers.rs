@@ -69,7 +69,8 @@ impl SimpleStorageContract {
         self.bytecode.clone()
     }
 
-    pub(crate) fn set_call_data(&self, set_arg: ethereum_types::U256) -> Bytes {
+    pub(crate) fn set_call_data(&self, set_arg: u32) -> Bytes {
+        let set_arg = ethereum_types::U256::from(set_arg);
         self.base_contract.encode("set", set_arg).unwrap()
     }
 
