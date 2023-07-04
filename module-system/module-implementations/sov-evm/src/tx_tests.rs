@@ -1,4 +1,4 @@
-use crate::evm::test_helpers::{make_contract_from_abi, test_data_path};
+use crate::evm::test_helpers::SimpleStorageContract;
 use ethers_core::{
     abi::Address,
     types::{transaction::eip2718::TypedTransaction, Bytes, Eip1559TransactionRequest},
@@ -46,33 +46,6 @@ async fn tx_rlp_encoding_test() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn delpoy_data() -> Bytes {
-    let mut path = test_data_path();
-    path.push("SimpleStorage.bin");
-
-    let contract_data = std::fs::read_to_string(path).unwrap();
-    let contract_data = hex::decode(contract_data).unwrap();
-
-    Bytes::from(contract_data)
-}
-
-fn update_contract(set_arg: ethereum_types::U256) -> Bytes {
-    let mut path = test_data_path();
-    path.push("SimpleStorage.abi");
-
-    let contract = make_contract_from_abi(path);
-
-    contract.encode("set", set_arg).unwrap()
-}
-
-fn get_data() -> Bytes {
-    let mut path = test_data_path();
-    path.push("SimpleStorage.abi");
-
-    let contract = make_contract_from_abi(path);
-    contract.encode("get", ()).unwrap()
-}
-
 #[tokio::test]
 async fn send_tx_test() -> Result<(), Box<dyn std::error::Error>> {
     let chain_id: u64 = 1;
@@ -86,6 +59,7 @@ async fn send_tx_test() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = SignerMiddleware::new_with_provider_chain(provider, key).await?;
 
+    let contract = SimpleStorageContract::new();
     // Create contract
     let contract_address = {
         let from_addr = anvil.addresses()[0];
@@ -97,7 +71,7 @@ async fn send_tx_test() -> Result<(), Box<dyn std::error::Error>> {
             .max_priority_fee_per_gas(413047990155u64)
             .max_fee_per_gas(768658734568u64)
             .gas(18415600u64)
-            .data(delpoy_data());
+            .data(contract.byte_code());
 
         let typed_transaction = TypedTransaction::Eip1559(request);
 
@@ -121,7 +95,7 @@ async fn send_tx_test() -> Result<(), Box<dyn std::error::Error>> {
             .max_priority_fee_per_gas(413047990155u64)
             .max_fee_per_gas(768658734568u64)
             .gas(18415600u64)
-            .data(update_contract(set_arg));
+            .data(contract.set_call_data(set_arg));
 
         let typed_transaction = TypedTransaction::Eip1559(request);
 
@@ -140,7 +114,7 @@ async fn send_tx_test() -> Result<(), Box<dyn std::error::Error>> {
             .from(from)
             .to(contract_address)
             .chain_id(chain_id)
-            .data(get_data());
+            .data(contract.get_call_data());
 
         let tx = TypedTransaction::Eip1559(request);
 

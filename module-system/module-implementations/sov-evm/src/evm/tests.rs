@@ -1,30 +1,21 @@
 use super::{db::EvmDb, db_init::InitEvmDb, executor};
 use crate::{
     evm::{
-        test_helpers::{contract_address, output, test_data_path},
+        test_helpers::{contract_address, output, SimpleStorageContract},
         transaction::{BlockEnv, EvmTransaction},
         AccountInfo,
     },
     Evm,
 };
-
-use ethers_contract::BaseContract;
-use ethers_core::abi::Abi;
 use revm::{
     db::CacheDB,
     primitives::{CfgEnv, KECCAK_EMPTY, U256},
     Database, DatabaseCommit,
 };
 use sov_state::{ProverStorage, WorkingSet};
-use std::{convert::Infallible, path::PathBuf};
+use std::convert::Infallible;
 
 type C = sov_modules_api::default_context::DefaultContext;
-
-fn make_contract_from_abi(path: PathBuf) -> BaseContract {
-    let abi_json = std::fs::read_to_string(path).unwrap();
-    let abi: Abi = serde_json::from_str(&abi_json).unwrap();
-    BaseContract::from(abi)
-}
 
 #[test]
 fn simple_contract_execution_sov_state() {
@@ -58,16 +49,12 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
         },
     );
 
+    let contract = SimpleStorageContract::new();
+
     let contract_address = {
-        let mut path = test_data_path();
-        path.push("SimpleStorage.bin");
-
-        let contract_data = std::fs::read_to_string(path).unwrap();
-        let contract_data = hex::decode(contract_data).unwrap();
-
         let tx = EvmTransaction {
             to: None,
-            data: contract_data,
+            data: contract.byte_code().to_vec(),
             ..Default::default()
         };
 
@@ -78,13 +65,8 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
 
     let set_arg = ethereum_types::U256::from(21989);
 
-    let mut path = test_data_path();
-    path.push("SimpleStorage.abi");
-
-    let contract = make_contract_from_abi(path);
-
     {
-        let call_data = contract.encode("set", set_arg).unwrap();
+        let call_data = contract.set_call_data(set_arg);
 
         let tx = EvmTransaction {
             to: Some(*contract_address.as_fixed_bytes()),
@@ -97,7 +79,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
     }
 
     let get_res = {
-        let call_data = contract.encode("get", ()).unwrap();
+        let call_data = contract.get_call_data();
 
         let tx = EvmTransaction {
             to: Some(*contract_address.as_fixed_bytes()),
