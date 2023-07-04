@@ -4,11 +4,12 @@
 // licensed under APACHE 2.0 only.
 use std::fmt::Debug;
 
-// use crate::services::da::SlotData;
-
 use self::errors::CodecError;
 pub mod errors;
 
+/// Crate users are expected to know [column
+/// family](https://github.com/EighteenZi/rocksdb_wiki/blob/master/Column-Families.md)
+/// names beforehand, so they can be `static`.
 pub type ColumnFamilyName = &'static str;
 
 /// This trait defines a schema: an association of a column family name, the key type and the value
@@ -24,6 +25,7 @@ pub trait Schema: Debug + Send + Sync + 'static + Sized {
     /// Type of the value.
     type Value: ValueCodec<Self>;
 }
+
 pub type Result<T, E = CodecError> = core::result::Result<T, E>;
 
 /// This trait defines a type that can serve as a [`Schema::Key`].
