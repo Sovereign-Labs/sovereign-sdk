@@ -4,8 +4,7 @@
 // licensed under APACHE 2.0 only.
 use std::fmt::Debug;
 
-use self::errors::CodecError;
-pub mod errors;
+use crate::CodecError;
 
 /// Crate users are expected to know [column
 /// family](https://github.com/EighteenZi/rocksdb_wiki/blob/master/Column-Families.md)

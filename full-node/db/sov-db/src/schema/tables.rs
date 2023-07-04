@@ -28,9 +28,8 @@ use jmt::{
     Version,
 };
 use sov_rollup_interface::stf::{Event, EventKey};
-use sov_schema_db::interface::{
-    errors::CodecError, KeyDecoder, KeyEncoder, SeekKeyEncoder, ValueCodec,
-};
+use sov_schema_db::interface::{KeyDecoder, KeyEncoder, SeekKeyEncoder, ValueCodec};
+use sov_schema_db::CodecError;
 
 pub const STATE_TABLES: &[&str] = &[
     KeyHashToKey::table_name(),
@@ -104,14 +103,14 @@ macro_rules! impl_borsh_value_codec {
                 &self,
             ) -> ::std::result::Result<
                 ::sov_rollup_interface::maybestd::vec::Vec<u8>,
-                ::sov_schema_db::interface::errors::CodecError,
+                ::sov_schema_db::CodecError,
             > {
                 ::borsh::BorshSerialize::try_to_vec(self).map_err(Into::into)
             }
 
             fn decode_value(
                 data: &[u8],
-            ) -> ::std::result::Result<Self, ::sov_schema_db::interface::errors::CodecError> {
+            ) -> ::std::result::Result<Self, ::sov_schema_db::CodecError> {
                 ::borsh::BorshDeserialize::deserialize_reader(&mut &data[..]).map_err(Into::into)
             }
         }
@@ -133,13 +132,13 @@ macro_rules! define_table_with_default_codec {
         define_table_without_codec!($(#[$docs])+ ( $table_name ) $key => $value);
 
         impl ::sov_schema_db::interface::KeyEncoder<$table_name> for $key {
-            fn encode_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_schema_db::interface::errors::CodecError> {
+            fn encode_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_schema_db::CodecError> {
                 ::borsh::BorshSerialize::try_to_vec(self).map_err(Into::into)
             }
         }
 
         impl ::sov_schema_db::interface::KeyDecoder<$table_name> for $key {
-            fn decode_key(data: &[u8]) -> ::std::result::Result<Self, ::sov_schema_db::interface::errors::CodecError> {
+            fn decode_key(data: &[u8]) -> ::std::result::Result<Self, ::sov_schema_db::CodecError> {
                 ::borsh::BorshDeserialize::deserialize_reader(&mut &data[..]).map_err(Into::into)
             }
         }
@@ -158,7 +157,7 @@ macro_rules! define_table_with_seek_key_codec {
         define_table_without_codec!($(#[$docs])+ ( $table_name ) $key => $value);
 
         impl ::sov_schema_db::interface::KeyEncoder<$table_name> for $key {
-            fn encode_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_schema_db::interface::errors::CodecError> {
+            fn encode_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_schema_db::CodecError> {
                 use ::anyhow::Context;
                 use ::bincode::Options;
 
@@ -171,7 +170,7 @@ macro_rules! define_table_with_seek_key_codec {
         }
 
         impl ::sov_schema_db::interface::KeyDecoder<$table_name> for $key {
-            fn decode_key(data: &[u8]) -> ::std::result::Result<Self, ::sov_schema_db::interface::errors::CodecError> {
+            fn decode_key(data: &[u8]) -> ::std::result::Result<Self, ::sov_schema_db::CodecError> {
                 use ::anyhow::Context;
                 use ::bincode::Options;
 
@@ -184,7 +183,7 @@ macro_rules! define_table_with_seek_key_codec {
         }
 
         impl ::sov_schema_db::interface::SeekKeyEncoder<$table_name> for $key {
-            fn encode_seek_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_schema_db::interface::errors::CodecError> {
+            fn encode_seek_key(&self) -> ::std::result::Result<::sov_rollup_interface::maybestd::vec::Vec<u8>, ::sov_schema_db::CodecError> {
                 <Self as ::sov_schema_db::interface::KeyEncoder<$table_name>>::encode_key(self)
             }
         }

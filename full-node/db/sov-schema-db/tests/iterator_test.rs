@@ -7,7 +7,8 @@ use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 
 use sov_schema_db::{
     define_schema,
-    interface::{errors::CodecError, KeyDecoder, KeyEncoder, SeekKeyEncoder, ValueCodec},
+    interface::{KeyDecoder, KeyEncoder, SeekKeyEncoder, ValueCodec},
+    CodecError,
 };
 use sov_schema_db::{iterator::SchemaIterator, Schema, DB};
 
