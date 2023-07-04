@@ -99,6 +99,7 @@ impl<B: Buf> CountedBufReader<B> {
     }
 
     /// Getter: returns a reference to an accumulator of the blob data read by the rollup
+    /// TODO: Return enum that explicitly indicates state of reader
     pub fn acc(&self) -> &Vec<u8> {
         &self.reading_acc
     }
