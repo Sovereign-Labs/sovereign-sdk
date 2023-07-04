@@ -32,6 +32,7 @@ jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], 
 
 [dev-dependencies]
 ethereum-types = "0.14.1"
+
 ethers-contract = "2.0.7"
 ethers-core = "2.0.7"
 ethers-signers = { version = "2.0.7", default-features = false }
