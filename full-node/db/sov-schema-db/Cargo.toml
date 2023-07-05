@@ -1,10 +1,10 @@
 [package]
 name = "sov-schema-db"
 description = "A low level interface transforming RocksDB into a type-oriented data store"
-version = { workspace = true }
 license = "Apache-2.0" # This license is inherited from Aptos 
 
 # Workspace inherited keys
+version = { workspace = true }
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }

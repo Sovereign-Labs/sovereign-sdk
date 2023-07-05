@@ -8,7 +8,7 @@ use tempfile::TempDir;
 
 use sov_schema_db::{
     define_schema,
-    interface::{ColumnFamilyName, KeyDecoder, KeyEncoder, Result, ValueCodec},
+    schema::{ColumnFamilyName, KeyDecoder, KeyEncoder, Result, ValueCodec},
     CodecError,
 };
 use sov_schema_db::{Schema, SchemaBatch, DB};
