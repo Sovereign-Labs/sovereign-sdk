@@ -210,6 +210,7 @@ impl BlockHeaderTrait for TestBlockHeader {
 pub struct TestBlock {
     pub curr_hash: [u8; 32],
     pub header: TestBlockHeader,
+    pub height: u64,
 }
 
 impl SlotData for TestBlock {

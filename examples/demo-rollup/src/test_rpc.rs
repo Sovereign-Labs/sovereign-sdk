@@ -114,6 +114,7 @@ fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value)
         header: TestBlockHeader {
             prev_hash: TestHash(sha2::Sha256::digest(b"prev_header")),
         },
+        height: 0,
     })];
 
     let batches = vec![
@@ -316,6 +317,7 @@ prop_compose! {
                 header: TestBlockHeader {
                     prev_hash,
                 },
+                height: 0
             });
 
             total_num_batches += batches.len();
