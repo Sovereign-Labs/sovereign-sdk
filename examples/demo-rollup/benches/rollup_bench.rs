@@ -40,7 +40,8 @@ fn rollup_bench(_bench: &mut Criterion) {
 
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
     rollup_config.runner.storage.path = PathBuf::from(temp_dir.path());
-    let ledger_db = LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
+    let ledger_db =
+        LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
 
     let da_service = Arc::new(RngDaService::new());
 

@@ -91,7 +91,9 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut timer_output = true;
     let mut prometheus_output = false;
     if let Ok(val) = env::var("TXNS_PER_BLOCK") {
-        num_txns = val.parse().expect("TXNS_PER_BLOCK var should be a +ve number");
+        num_txns = val
+            .parse()
+            .expect("TXNS_PER_BLOCK var should be a +ve number");
     }
     if let Ok(val) = env::var("BLOCKS") {
         end_height = val.parse().expect("BLOCKS var should be a +ve number");
@@ -111,7 +113,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
     rollup_config.runner.storage.path = PathBuf::from(temp_dir.path());
-    let ledger_db = LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
+    let ledger_db =
+        LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
 
     let da_service = Arc::new(RngDaService::new());
 

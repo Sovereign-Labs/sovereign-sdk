@@ -145,7 +145,9 @@ impl DaService for RngDaService {
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
         let mut num_txns = 10000;
         if let Ok(val) = env::var("TXNS_PER_BLOCK") {
-            num_txns = val.parse().expect("TXNS_PER_BLOCK var should be a +ve number");
+            num_txns = val
+                .parse()
+                .expect("TXNS_PER_BLOCK var should be a +ve number");
         }
 
         let data = if block.height == 0 {
