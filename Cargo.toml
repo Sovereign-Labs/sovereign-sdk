@@ -71,3 +71,4 @@ clap = { version = "4.2.7", features = ["derive"] }
 toml = "0.7.3"
 jsonrpsee = "0.16.2"
 tempfile = "3.5"
+tokio = { version = "1", features = ["full"] }
