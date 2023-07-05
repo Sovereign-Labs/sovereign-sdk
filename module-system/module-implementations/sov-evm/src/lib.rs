@@ -15,10 +15,13 @@ pub use experimental::Evm;
 
 #[cfg(feature = "experimental")]
 mod experimental {
-    use super::evm::{db::EvmDb, transaction::BlockEnv, DbAccount, EthAddress};
     use sov_modules_api::Error;
     use sov_modules_macros::ModuleInfo;
     use sov_state::WorkingSet;
+
+    use super::evm::db::EvmDb;
+    use super::evm::transaction::BlockEnv;
+    use super::evm::{DbAccount, EthAddress};
 
     #[allow(dead_code)]
     #[derive(ModuleInfo, Clone)]

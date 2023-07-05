@@ -1,9 +1,10 @@
-use serde::de::DeserializeOwned;
-pub use sov_modules_api::default_context::DefaultContext;
-pub use sov_state::config::Config as StorageConfig;
 use std::fs::File;
 use std::io::Read;
 use std::path::Path;
+
+use serde::de::DeserializeOwned;
+pub use sov_modules_api::default_context::DefaultContext;
+pub use sov_state::config::Config as StorageConfig;
 
 pub fn from_toml_path<P: AsRef<Path>, R: DeserializeOwned>(path: P) -> anyhow::Result<R> {
     let mut contents = String::new();
@@ -24,10 +25,12 @@ pub struct Config {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use std::io::Write;
     use std::path::PathBuf;
+
     use tempfile::{tempdir, NamedTempFile};
+
+    use super::*;
 
     fn create_config_from(content: &str) -> NamedTempFile {
         let mut config_file = NamedTempFile::new().unwrap();

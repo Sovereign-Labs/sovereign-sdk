@@ -1,26 +1,21 @@
-use crate::genesis_config::create_demo_config;
-use crate::tests::new_test_blob;
-use crate::{
-    genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
-    runtime::Runtime,
-    tests::{data_generation::simulate_da_with_bad_serialization, has_tx_events},
-};
 use borsh::BorshSerialize;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use sov_accounts::query::Response;
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{
-    default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, PublicKey,
-};
-use sov_modules_stf_template::RawTx;
-use sov_modules_stf_template::{Batch, SequencerOutcome, SlashingReason};
-use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
+use sov_modules_api::PublicKey;
+use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, SlashingReason};
+use sov_rollup_interface::mocks::MockZkvm;
+use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::{ProverStorage, WorkingSet};
 
-use super::{
-    create_new_demo,
-    data_generation::{simulate_da_with_bad_sig, simulate_da_with_revert_msg},
-};
+use super::create_new_demo;
+use super::data_generation::{simulate_da_with_bad_sig, simulate_da_with_revert_msg};
+use crate::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
+use crate::runtime::Runtime;
+use crate::tests::data_generation::simulate_da_with_bad_serialization;
+use crate::tests::{has_tx_events, new_test_blob};
 
 const SEQUENCER_BALANCE_DELTA: u64 = 1;
 const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + SEQUENCER_BALANCE_DELTA;

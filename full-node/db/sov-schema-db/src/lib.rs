@@ -18,23 +18,25 @@ mod iterator;
 mod metrics;
 pub mod schema;
 
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::Mutex;
+
 use anyhow::{format_err, Result};
 use iterator::ScanDirection;
+pub use iterator::{SchemaIterator, SeekKeyEncoder};
 use metrics::{
     SCHEMADB_BATCH_COMMIT_BYTES, SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS,
     SCHEMADB_BATCH_PUT_LATENCY_SECONDS, SCHEMADB_DELETES, SCHEMADB_GET_BYTES,
     SCHEMADB_GET_LATENCY_SECONDS, SCHEMADB_PUT_BYTES,
 };
+pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use rocksdb::{ColumnFamilyDescriptor, ReadOptions};
-use std::{collections::HashMap, path::Path, sync::Mutex};
 use thiserror::Error;
 use tracing::info;
 
-use crate::schema::{ColumnFamilyName, KeyCodec, ValueCodec};
-
 pub use crate::schema::Schema;
-pub use iterator::{SchemaIterator, SeekKeyEncoder};
-pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
+use crate::schema::{ColumnFamilyName, KeyCodec, ValueCodec};
 
 /// This DB is a schematized RocksDB wrapper where all data passed in and out are typed according to
 /// [`Schema`]s.

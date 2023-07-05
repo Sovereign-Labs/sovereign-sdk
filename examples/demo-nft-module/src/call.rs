@@ -1,7 +1,8 @@
-use crate::NonFungibleToken;
 use anyhow::{bail, Result};
 use sov_modules_api::{CallResponse, Context};
 use sov_state::WorkingSet;
+
+use crate::NonFungibleToken;
 
 #[cfg_attr(
     feature = "native",

@@ -1,7 +1,3 @@
-use crate::batch_builder::FiFoStrictBatchBuilder;
-#[cfg(feature = "native")]
-use crate::runner_config::Config;
-use crate::runtime::Runtime;
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
 pub use sov_modules_api::default_context::ZkDefaultContext;
@@ -12,10 +8,8 @@ use sov_modules_api::Context;
 use sov_modules_api::RpcRunner;
 #[cfg(feature = "native")]
 use sov_modules_api::Spec;
-use sov_modules_stf_template::AppTemplate;
 pub use sov_modules_stf_template::Batch;
-use sov_modules_stf_template::SequencerOutcome;
-use sov_modules_stf_template::TxEffect;
+use sov_modules_stf_template::{AppTemplate, SequencerOutcome, TxEffect};
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::ProverConfig;
@@ -23,8 +17,12 @@ use sov_rollup_interface::stf::ZkConfig;
 use sov_rollup_interface::zk::traits::Zkvm;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
-use sov_state::Storage;
-use sov_state::ZkStorage;
+use sov_state::{Storage, ZkStorage};
+
+use crate::batch_builder::FiFoStrictBatchBuilder;
+#[cfg(feature = "native")]
+use crate::runner_config::Config;
+use crate::runtime::Runtime;
 
 pub struct DemoAppRunner<C: Context, Vm: Zkvm> {
     pub stf: DemoApp<C, Vm>,

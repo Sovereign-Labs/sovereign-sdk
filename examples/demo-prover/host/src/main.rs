@@ -1,9 +1,10 @@
+use std::env;
+
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
 use demo_stf::genesis_config::create_demo_genesis_config;
-use demo_stf::runner_config::from_toml_path;
-use demo_stf::runner_config::Config as RunnerConfig;
+use demo_stf::runner_config::{from_toml_path, Config as RunnerConfig};
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
 use jupiter::verifier::RollupParams;
@@ -16,8 +17,6 @@ use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::traits::ZkvmHost;
 use sov_state::Storage;
-use std::env;
-
 use tracing::{info, Level};
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

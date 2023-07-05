@@ -1,9 +1,10 @@
-use borsh::{BorshDeserialize, BorshSerialize};
 use std::io::Write;
 use std::marker::PhantomData;
 
-use crate::{Prefix, Storage, WorkingSet};
+use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
+
+use crate::{Prefix, Storage, WorkingSet};
 
 // SingletonKey is very similar to the unit type `()` i.e. it has only one value.
 #[derive(Debug, BorshDeserialize)]

@@ -1,6 +1,7 @@
-use crate::common::StructFieldExtractor;
 use quote::{format_ident, quote};
 use syn::{DeriveInput, Path, PathArguments, Type};
+
+use crate::common::StructFieldExtractor;
 
 pub(crate) struct CliParserMacro {
     field_extractor: StructFieldExtractor,

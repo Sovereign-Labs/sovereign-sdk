@@ -1,7 +1,8 @@
-use super::ProverIncentives;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::zk::traits::Zkvm;
 use sov_state::WorkingSet;
+
+use super::ProverIncentives;
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub struct Response {

@@ -1,7 +1,8 @@
+use std::fmt::{Display, Formatter};
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::traits::AddressTrait;
-use std::fmt::{Display, Formatter};
 
 #[derive(Debug, PartialEq, Clone, Eq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 pub struct CelestiaAddress(pub Vec<u8>);

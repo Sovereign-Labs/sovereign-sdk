@@ -1,6 +1,7 @@
-use crate::SequencerRegistry;
 use anyhow::Result;
 use sov_state::WorkingSet;
+
+use crate::SequencerRegistry;
 
 impl<C: sov_modules_api::Context> SequencerRegistry<C> {
     pub(crate) fn init_module(

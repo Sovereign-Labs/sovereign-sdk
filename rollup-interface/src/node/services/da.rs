@@ -5,7 +5,6 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::da::DaSpec;
-
 use crate::traits::BlockHeaderTrait;
 
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer

@@ -1,8 +1,8 @@
-use crate::{
-    default_signature::{private_key::DefaultPrivateKey, DefaultPublicKey, DefaultSignature},
-    Signature,
-};
 use borsh::{BorshDeserialize, BorshSerialize};
+
+use crate::default_signature::private_key::DefaultPrivateKey;
+use crate::default_signature::{DefaultPublicKey, DefaultSignature};
+use crate::Signature;
 
 #[test]
 fn test_account_bech32m_display() {

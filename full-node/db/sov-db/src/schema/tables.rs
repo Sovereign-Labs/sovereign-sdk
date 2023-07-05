@@ -16,20 +16,18 @@
 //! - (EventKey, TxNumber) -> EventNumber
 //! - EventNumber -> (EventKey, EventValue)
 
+use borsh::{maybestd, BorshDeserialize, BorshSerialize};
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use jmt::storage::{Node, NodeKey};
+use jmt::Version;
+use sov_rollup_interface::stf::{Event, EventKey};
+use sov_schema_db::schema::{KeyDecoder, KeyEncoder, ValueCodec};
+use sov_schema_db::{CodecError, SeekKeyEncoder};
+
 use super::types::{
     BatchNumber, DbHash, EventNumber, JmtValue, SlotNumber, StateKey, StoredBatch, StoredSlot,
     StoredTransaction, TxNumber,
 };
-
-use borsh::{maybestd, BorshDeserialize, BorshSerialize};
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use jmt::{
-    storage::{Node, NodeKey},
-    Version,
-};
-use sov_rollup_interface::stf::{Event, EventKey};
-use sov_schema_db::schema::{KeyDecoder, KeyEncoder, ValueCodec};
-use sov_schema_db::{CodecError, SeekKeyEncoder};
 
 pub const STATE_TABLES: &[&str] = &[
     KeyHashToKey::table_name(),

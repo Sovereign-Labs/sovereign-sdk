@@ -1,15 +1,12 @@
-use crate::{
-    evm::{
-        db::EvmDb,
-        executor::{self},
-        transaction::EvmTransaction,
-    },
-    Evm,
-};
 use anyhow::Result;
 use revm::primitives::CfgEnv;
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
+
+use crate::evm::db::EvmDb;
+use crate::evm::executor::{self};
+use crate::evm::transaction::EvmTransaction;
+use crate::Evm;
 
 #[cfg_attr(
     feature = "native",

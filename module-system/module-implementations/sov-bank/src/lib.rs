@@ -6,12 +6,11 @@ pub mod query;
 mod token;
 
 pub use create_token::create_token_address;
-use token::Token;
-pub use token::{Amount, Coins};
-
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
+use token::Token;
+pub use token::{Amount, Coins};
 
 pub struct TokenConfig<C: sov_modules_api::Context> {
     pub token_name: String,

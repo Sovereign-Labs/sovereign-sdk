@@ -1,13 +1,15 @@
+use core::fmt::Debug;
+use std::cmp::min;
+use std::io::Read;
+
+use borsh::{BorshDeserialize, BorshSerialize};
+use bytes::Buf;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+
 use crate::crypto::SimpleHasher;
 use crate::traits::{AddressTrait, BlockHeaderTrait};
 use crate::zk::traits::ValidityCondition;
-use borsh::{BorshDeserialize, BorshSerialize};
-use bytes::Buf;
-use core::fmt::Debug;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
-use std::cmp::min;
-use std::io::Read;
 
 /// A specification for the types used by a DA layer.
 pub trait DaSpec {

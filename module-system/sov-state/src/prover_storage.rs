@@ -1,17 +1,19 @@
+use std::fs;
 use std::marker::PhantomData;
-use std::{fs, path::Path, sync::Arc};
+use std::path::Path;
+use std::sync::Arc;
 
-use crate::config::Config;
-use crate::witness::Witness;
-use crate::{
-    internal_cache::OrderedReadsAndWrites,
-    storage::{StorageKey, StorageValue},
-    tree_db::TreeReadLogger,
-    MerkleProofSpec, Storage,
-};
-use jmt::{storage::TreeWriter, JellyfishMerkleTree, KeyHash};
+use jmt::storage::TreeWriter;
+use jmt::{JellyfishMerkleTree, KeyHash};
 use sov_db::state_db::StateDB;
 use sov_rollup_interface::crypto::SimpleHasher;
+
+use crate::config::Config;
+use crate::internal_cache::OrderedReadsAndWrites;
+use crate::storage::{StorageKey, StorageValue};
+use crate::tree_db::TreeReadLogger;
+use crate::witness::Witness;
+use crate::{MerkleProofSpec, Storage};
 
 pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,
@@ -149,9 +151,8 @@ pub fn delete_storage(path: impl AsRef<Path>) {
 mod test {
     use jmt::Version;
 
-    use crate::{DefaultStorageSpec, WorkingSet};
-
     use super::*;
+    use crate::{DefaultStorageSpec, WorkingSet};
 
     #[derive(Clone)]
     struct TestCase {

@@ -1,20 +1,18 @@
-use anyhow::Context;
-use borsh::BorshSerialize;
-use clap::Parser;
-use const_rollup_config::ROLLUP_NAMESPACE_RAW;
-use sov_modules_api::transaction::Transaction;
-use sov_modules_stf_template::RawTx;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::{fs, vec};
 
+use anyhow::Context;
+use borsh::BorshSerialize;
+use clap::Parser;
+use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 use demo_stf::runtime::cmd_parser;
-
-use sov_modules_api::{
-    default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
-    AddressBech32, PublicKey, Spec,
-};
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_modules_api::transaction::Transaction;
+use sov_modules_api::{AddressBech32, PublicKey, Spec};
+use sov_modules_stf_template::RawTx;
 
 type C = DefaultContext;
 type Address = <C as Spec>::Address;
@@ -272,7 +270,6 @@ pub fn main() {
 
 #[cfg(test)]
 mod test {
-    use super::*;
     use borsh::BorshDeserialize;
     use demo_stf::app::{DemoApp, DemoAppRunner};
     use demo_stf::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
@@ -280,10 +277,12 @@ mod test {
     use demo_stf::runtime::GenesisConfig;
     use sov_modules_api::Address;
     use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome};
+    use sov_rollup_interface::mocks::MockZkvm;
     use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
-
-    use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
+    use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::WorkingSet;
+
+    use super::*;
 
     type TestBlob = sov_rollup_interface::mocks::TestBlob<Address>;
 

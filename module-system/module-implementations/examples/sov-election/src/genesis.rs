@@ -1,6 +1,7 @@
-use super::Election;
 use anyhow::Result;
 use sov_state::WorkingSet;
+
+use super::Election;
 
 impl<C: sov_modules_api::Context> Election<C> {
     pub(crate) fn init_module(

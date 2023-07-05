@@ -1,6 +1,8 @@
-use crate::{token::Token, Bank};
 use anyhow::{bail, Result};
 use sov_state::WorkingSet;
+
+use crate::token::Token;
+use crate::Bank;
 
 pub const SALT: u64 = 0;
 pub const DEPLOYER: [u8; 32] = [0; 32];
