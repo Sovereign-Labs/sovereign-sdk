@@ -75,8 +75,9 @@ async fn main() -> Result<(), anyhow::Error> {
     let (prev_state_root, _) = demo.end_slot();
     let mut prev_state_root = prev_state_root.0;
 
-    for height in rollup_config.start_height..=rollup_config.start_height + 30 {
+    for height in rollup_config.start_height.. {
         let mut host = Risc0Host::new(ROLLUP_ELF);
+        host.write_to_guest(prev_state_root);
         info!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
@@ -88,10 +89,8 @@ async fn main() -> Result<(), anyhow::Error> {
         let (blob_txs, inclusion_proof, completeness_proof) =
             da_service.extract_relevant_txs_with_proof(&filtered_block);
 
-        host.write_to_guest(&blob_txs);
         host.write_to_guest(&inclusion_proof);
         host.write_to_guest(&completeness_proof);
-        host.write_to_guest(prev_state_root);
 
         demo.begin_slot(Default::default());
         if blob_txs.is_empty() {
@@ -109,6 +108,8 @@ async fn main() -> Result<(), anyhow::Error> {
                 hex::encode(receipt.batch_hash)
             );
         }
+        // Write txs only after they been read, so verification can be done properly
+        host.write_to_guest(&blob_txs);
 
         let (next_state_root, witness) = demo.end_slot();
         host.write_to_guest(&witness);

@@ -99,6 +99,7 @@ impl<B: Buf> CountedBufReader<B> {
     }
 
     /// Getter: returns a reference to an accumulator of the blob data read by the rollup
+    /// TODO: Refactor https://github.com/Sovereign-Labs/sovereign-sdk/issues/462
     pub fn acc(&self) -> &Vec<u8> {
         &self.reading_acc
     }
