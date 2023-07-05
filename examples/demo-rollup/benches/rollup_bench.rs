@@ -1,26 +1,23 @@
-use anyhow::Context;
-use demo_stf::app::NativeAppRunner;
-use demo_stf::runner_config::from_toml_path;
 use std::env;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
-use sov_demo_rollup::config::RollupConfig;
-use sov_demo_rollup::rng_xfers::RngDaService;
-
+use anyhow::Context;
+use const_rollup_config::SEQUENCER_DA_ADDRESS;
+use criterion::{criterion_group, criterion_main, Criterion};
+use demo_stf::app::NativeAppRunner;
+use demo_stf::genesis_config::create_demo_genesis_config;
+use demo_stf::runner_config::from_toml_path;
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader, TestHash};
-use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
-
-use const_rollup_config::SEQUENCER_DA_ADDRESS;
-use demo_stf::genesis_config::create_demo_genesis_config;
+use sov_demo_rollup::config::RollupConfig;
+use sov_demo_rollup::rng_xfers::RngDaService;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader, TestHash};
 use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
-
-use criterion::{criterion_group, criterion_main, Criterion};
-use std::time::Duration;
 use tempfile::TempDir;
 
 fn rollup_bench(_bench: &mut Criterion) {

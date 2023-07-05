@@ -1,6 +1,8 @@
-use borsh::ser::BorshSerialize;
-use sov_rollup_interface::services::da::DaService;
+use std::env;
+use std::future::Future;
+use std::pin::Pin;
 
+use borsh::ser::BorshSerialize;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::runtime::Runtime;
 use jupiter::verifier::address::CelestiaAddress;
@@ -12,9 +14,7 @@ use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Address, AddressBech32, PublicKey, Spec};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::mocks::{TestBlob, TestBlock, TestBlockHeader, TestHash};
-use std::env;
-use std::future::Future;
-use std::pin::Pin;
+use sov_rollup_interface::services::da::DaService;
 
 pub struct RngDaService;
 
