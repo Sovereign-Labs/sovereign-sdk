@@ -2,7 +2,7 @@
 Native benchmarks refer to the performance of the rollup SDK in native mode - this does not involve proving
 ## Methodology
 * We use the Bank module's Transfer call as the main transaction for running this benchmark. So what we're measuring is the number of value transfers can be done per second. 
-* We do not connect to the DA layer since that will be the bottleneck if we do. We pre-populate 100 blocks (configurable via env var BLOCKS) with 1 blob each containing 10,000 transactions each (configurable via env var TXNS_PER_BLOCK). 
+* We do not connect to the DA layer since that will be the bottleneck if we do. We pre-populate 10 blocks (configurable via env var BLOCKS) with 1 blob each containing 10,000 transactions each (configurable via env var TXNS_PER_BLOCK). 
 * The first block only contains a "CreateToken" transaction. Subsequent blocks contain "Transfer" transactions.
 * All token transfers are initiated from the created token's mint address
 
@@ -58,5 +58,7 @@ The Makefile is located in the demo-rollup/benches folder and supports the follo
 * **make basic** - supports the coarse grained timers (getting the TPS) using rollup_coarse_measure.rs
 * **make prometheus** - runs rollup_coarse_measure.rs but instead of aggregating std::time directly and printing in a table, it outputs a json containing histogram metrics populated by the script
 * **make flamegraph** - runs `cargo flamegraph`. On mac this requires `sudo` permissions. The script ensures some cleanup and to err on the side of caution, it deletes the `sovereign/target` folder since new artifacts can be owned by root
+
+The Makefile supports setting number of blocks and transactions per block using BLOCKS and TXNS_PER_BLOCK env vars. Defaults are 100 blocks and 10,000 transactions per block when using the Makefile
 
 ![Flamgraph](flamegraph_sample.svg)
