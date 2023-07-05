@@ -27,4 +27,8 @@ flamegraph:
 	@echo "Running basic benchmark with $(BLOCKS) blocks and $(TXNS_PER_BLOCK) transactions per block"
 	@echo "Method: Coarse Timers"
 	@echo "Output: Flamegraph"
-	@cd .. && sudo BLOCKS=$(BLOCKS) TXNS_PER_BLOCK=$(TXNS_PER_BLOCK) cargo flamegraph -o benches/flamegraph.svg --bench rollup_coarse_measure && sudo rm -rf benches/demo_data
+	@echo "WARNING: Flamegraph requires sudo. The Makefile does cleanup, but there is a unforeseen risk of files being owned by root after the script is done. The Makefile also does full cleanup so subsequent builds with default user will be from scratch."
+	@read -p "Proceed (y/n): " REPLY; if [ $$REPLY = "y" ]; then \
+		cd .. && sudo BLOCKS=$(BLOCKS) TXNS_PER_BLOCK=$(TXNS_PER_BLOCK) cargo flamegraph -o benches/flamegraph.svg --bench rollup_coarse_measure && sudo rm -rf benches/demo_data ; \
+		sudo rm -rf ../../../target ; \
+	fi
