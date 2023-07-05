@@ -1,9 +1,6 @@
 use borsh::ser::BorshSerialize;
-use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_rollup_interface::services::da::DaService;
-use std::sync::{Arc, Mutex};
 
-use anyhow::bail;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::runtime::Runtime;
 use jupiter::verifier::address::CelestiaAddress;
@@ -19,9 +16,7 @@ use std::env;
 use std::future::Future;
 use std::pin::Pin;
 
-pub struct RngDaService {
-    submitted: Arc<Mutex<Vec<Vec<u8>>>>,
-}
+pub struct RngDaService;
 
 fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
     let sender_address =
@@ -82,9 +77,7 @@ fn generate_create(start_nonce: u64) -> Vec<u8> {
 
 impl RngDaService {
     pub fn new() -> Self {
-        RngDaService {
-            submitted: Arc::new(Mutex::new(Vec::new())),
-        }
+        RngDaService
     }
 }
 
@@ -136,7 +129,7 @@ impl DaService for RngDaService {
     }
 
     fn get_block_at(&self, _height: u64) -> Self::Future<Self::FilteredBlock> {
-        todo!()
+        unimplemented!()
     }
 
     fn extract_relevant_txs(
@@ -172,41 +165,10 @@ impl DaService for RngDaService {
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,
     ) {
-        todo!()
+        unimplemented!()
     }
 
-    fn send_transaction(&self, blob: &[u8]) -> Self::Future<()> {
-        self.submitted.lock().unwrap().push(blob.to_vec());
-        Box::pin(async move { Ok(()) })
-    }
-}
-
-struct MockBatchBuilder {
-    mempool: Vec<Vec<u8>>,
-}
-
-/// It only takes the first byte of the tx, when submits it.
-/// This allows to show effect of batch builder
-impl BatchBuilder for MockBatchBuilder {
-    fn accept_tx(&mut self, tx: Vec<u8>) -> anyhow::Result<()> {
-        self.mempool.push(tx);
-        Ok(())
-    }
-
-    fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
-        if self.mempool.is_empty() {
-            bail!("Mock mempool is empty");
-        }
-        let txs = std::mem::take(&mut self.mempool)
-            .into_iter()
-            .filter_map(|tx| {
-                if !tx.is_empty() {
-                    Some(vec![tx[0]])
-                } else {
-                    None
-                }
-            })
-            .collect();
-        Ok(txs)
+    fn send_transaction(&self, _blob: &[u8]) -> Self::Future<()> {
+        unimplemented!()
     }
 }
