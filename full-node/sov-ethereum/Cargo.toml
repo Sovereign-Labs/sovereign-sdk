@@ -1,0 +1,24 @@
+[package]
+name = "sov-ethereum"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+resolver = "2"
+
+
+[dependencies]
+anyhow = { workspace = true }
+jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+serde = { workspace = true, features = ["derive"] }
+sov-rollup-interface = { path = "../../rollup-interface" }
+ethers = {version = "2.0.7"}
+
+
+[dev-dependencies]
+sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
+tokio = { workspace = true }

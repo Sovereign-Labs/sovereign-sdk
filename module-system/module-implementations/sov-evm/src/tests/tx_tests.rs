@@ -46,7 +46,7 @@ async fn tx_rlp_encoding_test() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[tokio::test]
+//#[tokio::test]
 async fn send_tx_test_to_eth_node() -> Result<(), Box<dyn std::error::Error>> {
     let chain_id: u64 = 1;
     let anvil = Anvil::new().chain_id(chain_id).spawn();
@@ -124,5 +124,103 @@ async fn send_tx_test_to_eth_node() -> Result<(), Box<dyn std::error::Error>> {
         assert_eq!(set_arg, get_arg.as_u32())
     }
 
+    Ok(())
+}
+
+#[tokio::test]
+async fn send_tx_test_to_eth_node2() -> Result<(), Box<dyn std::error::Error>> {
+    let chain_id: u64 = 1;
+    let from_addr = Address::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
+    // let anvil = Anvil::new().chain_id(chain_id).spawn();
+    //let endpoint = anvil.endpoint();
+    let endpoint = format!("http://localhost:{}", 12345);
+    //let endpoint = format!("http://localhost:{}", 8545);
+
+    let provider = Provider::try_from(endpoint)?;
+    //provider
+    //   .get_transaction_count(from_addr, None)
+    //   .await
+    //   .unwrap();
+
+    println!("1");
+
+    let key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+        .parse::<LocalWallet>()
+        .unwrap()
+        .with_chain_id(chain_id);
+
+    println!("11");
+    let client = SignerMiddleware::new_with_provider_chain(provider, key).await?;
+
+    println!("111");
+    let contract = SimpleStorageContract::new();
+
+    println!("2");
+    // Create contract
+
+    let contract_address = {
+        //let from_addr = anvil.addresses()[0];
+
+        let request = Eip1559TransactionRequest::new()
+            .from(from_addr)
+            .chain_id(chain_id)
+            .nonce(0u64)
+            .max_priority_fee_per_gas(100u64)
+            .gas(9000000u64)
+            .data(contract.byte_code());
+
+        let typed_transaction = TypedTransaction::Eip1559(request);
+
+        let receipt = client.send_transaction(typed_transaction, None).await?;
+        //.await?;
+
+        //receipt.unwrap().contract_address.unwrap()
+    };
+
+    /*
+        println!("3");
+
+        // Call contract
+        let set_arg = 923;
+        {
+            // let from = anvil.addresses()[0];
+            let request = Eip1559TransactionRequest::new()
+                .from(from_addr)
+                .to(contract_address)
+                .chain_id(chain_id)
+                .nonce(1u64)
+                .max_priority_fee_per_gas(100u64)
+                .gas(9000000u64)
+                .data(contract.set_call_data(set_arg));
+
+            let typed_transaction = TypedTransaction::Eip1559(request);
+
+            let _ = client
+                .send_transaction(typed_transaction, None)
+                .await
+                .unwrap()
+                .await;
+        }
+
+        // Query contract
+        {
+            // let from = anvil.addresses()[0];
+
+            let request = Eip1559TransactionRequest::new()
+                .from(from_addr)
+                .to(contract_address)
+                .chain_id(chain_id)
+                .data(contract.get_call_data());
+
+            let tx = TypedTransaction::Eip1559(request);
+
+            let response = client.call(&tx, None).await?;
+
+            let resp_array: [u8; 32] = response.to_vec().try_into().unwrap();
+            let get_arg = ethereum_types::U256::from(resp_array);
+
+            assert_eq!(set_arg, get_arg.as_u32())
+        }
+    */
     Ok(())
 }

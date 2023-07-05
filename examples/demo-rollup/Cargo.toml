@@ -28,6 +28,7 @@ jupiter = { path = "../../adapters/celestia" }
 demo-stf = { path = "../demo-stf", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-db = { path = "../../full-node/db/sov-db" }
+sov-ethereum = { path = "../../full-node/sov-ethereum" }
 sov-sequencer = { path = "../../full-node/sov-sequencer" }
 risc0-adapter = { path = "../../adapters/risc0" }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }

@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use jsonrpsee::core::server::rpc_module::Methods;
+use sov_ethereum::get_ethereum_rpc;
 use tracing::Level;
 use tracing::{debug, info};
 
@@ -142,12 +143,14 @@ async fn main() -> Result<(), anyhow::Error> {
     let batch_builder = demo_runner.take_batch_builder().unwrap();
 
     let r = get_sequencer_rpc(batch_builder, da_service.clone());
-
     methods.merge(r).expect("Failed to merge Txs RPC modules");
 
-    let _handle = tokio::spawn(async move {
-        start_rpc_server(methods, address).await;
-    });
+    let ethereum_rpc = get_ethereum_rpc();
+    methods.merge(ethereum_rpc).unwrap();
+
+    // let _handle = tokio::spawn(async move {
+    start_rpc_server(methods, address).await;
+    // });
 
     // For demonstration, we also initialize the DaVerifier interface.
     // Running the verifier is only *necessary* during proof generation not normal execution

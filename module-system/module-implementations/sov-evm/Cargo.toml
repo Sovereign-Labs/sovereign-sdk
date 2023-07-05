@@ -47,7 +47,7 @@ tempfile = { workspace = true }
 bytes = { workspace = true }
 
 [features]
-default = ["native"]
+default = ["native", "experimental"]
 serde = ["dep:serde", "dep:serde_json"]
 native = ["serde", "sov-state/native", "dep:jsonrpsee", "sov-modules-api/native"]
 experimental = []
