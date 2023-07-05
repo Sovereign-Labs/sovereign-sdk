@@ -4,17 +4,12 @@ mod tx_verifier;
 
 pub use app_template::AppTemplate;
 pub use batch::Batch;
-pub use tx_verifier::RawTx;
-
-use sov_modules_api::{
-    hooks::{ApplyBlobHooks, TxHooks},
-    Context, DispatchCall, Genesis, Spec,
-};
-use sov_rollup_interface::stf::BatchReceipt;
-use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
+use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
+use sov_rollup_interface::stf::{BatchReceipt, StateTransitionFunction};
 use sov_rollup_interface::zk::traits::Zkvm;
-use sov_state::StateCheckpoint;
-use sov_state::Storage;
+use sov_state::{StateCheckpoint, Storage};
+pub use tx_verifier::RawTx;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TxEffect {

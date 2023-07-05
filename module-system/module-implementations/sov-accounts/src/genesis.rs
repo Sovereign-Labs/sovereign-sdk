@@ -1,7 +1,8 @@
-use crate::{Account, Accounts};
 use anyhow::{bail, Result};
 use sov_modules_api::PublicKey;
 use sov_state::WorkingSet;
+
+use crate::{Account, Accounts};
 
 impl<C: sov_modules_api::Context> Accounts<C> {
     pub(crate) fn init_module(

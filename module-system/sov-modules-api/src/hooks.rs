@@ -1,6 +1,8 @@
-use crate::{transaction::Transaction, Context, Spec};
 use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_state::WorkingSet;
+
+use crate::transaction::Transaction;
+use crate::{Context, Spec};
 
 /// Hooks that execute within the `StateTransitionFunction::apply_blob` function for each processed transaction.
 pub trait TxHooks {

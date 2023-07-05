@@ -1,31 +1,31 @@
+use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
-use std::{cell::RefCell, ops::Range};
+use std::ops::Range;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespacedHash;
-use prost::{bytes::Buf, Message};
+use prost::bytes::Buf;
+use prost::Message;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::CountedBufReader;
 use sov_rollup_interface::traits::{
     AddressTrait as Address, BlockHeaderTrait as BlockHeader, CanonicalHash,
 };
 pub use tendermint::block::Header as TendermintHeader;
-use tendermint::{crypto::default::Sha256, merkle::simple_hash_from_byte_vectors, Hash};
+use tendermint::crypto::default::Sha256;
+use tendermint::merkle::simple_hash_from_byte_vectors;
+use tendermint::Hash;
+pub use tendermint_proto::v0_34 as celestia_tm_version;
 use tendermint_proto::Protobuf;
 use tracing::debug;
 
-pub use tendermint_proto::v0_34 as celestia_tm_version;
-
 const NAMESPACED_HASH_LEN: usize = 48;
 
-use crate::shares::BlobIterator;
-use crate::{
-    pfb::{BlobTx, MsgPayForBlobs, Tx},
-    shares::{read_varint, BlobRefIterator, NamespaceGroup},
-    utils::BoxError,
-    verifier::PFB_NAMESPACE,
-    verifier::{address::CelestiaAddress, TmHash},
-};
+use crate::pfb::{BlobTx, MsgPayForBlobs, Tx};
+use crate::shares::{read_varint, BlobIterator, BlobRefIterator, NamespaceGroup};
+use crate::utils::BoxError;
+use crate::verifier::address::CelestiaAddress;
+use crate::verifier::{TmHash, PFB_NAMESPACE};
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct MarshalledDataAvailabilityHeader {

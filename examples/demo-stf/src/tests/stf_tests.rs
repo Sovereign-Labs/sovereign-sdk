@@ -1,18 +1,16 @@
 #[cfg(test)]
 pub mod test {
-    use crate::genesis_config::create_demo_config;
-    use crate::tests::new_test_blob;
-    use crate::{
-        genesis_config::{DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT},
-        runtime::Runtime,
-        tests::{create_new_demo, data_generation::simulate_da, has_tx_events, C},
-    };
-    use sov_modules_api::{
-        default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
-    };
+    use sov_modules_api::default_context::DefaultContext;
+    use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_stf_template::{Batch, SequencerOutcome};
-    use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
+    use sov_rollup_interface::mocks::MockZkvm;
+    use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::{ProverStorage, WorkingSet};
+
+    use crate::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
+    use crate::runtime::Runtime;
+    use crate::tests::data_generation::simulate_da;
+    use crate::tests::{create_new_demo, has_tx_events, new_test_blob, C};
 
     #[test]
     fn test_demo_values_in_db() {

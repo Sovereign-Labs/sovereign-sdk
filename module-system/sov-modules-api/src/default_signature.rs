@@ -1,22 +1,22 @@
-use crate::{SigVerificationError, Signature};
 use borsh::{BorshDeserialize, BorshSerialize};
+use ed25519_dalek::ed25519::signature::Signature as DalekSignatureTrait;
 use ed25519_dalek::{
-    ed25519::signature::Signature as DalekSignatureTrait, PublicKey as DalekPublicKey,
-    Signature as DalekSignature,
+    PublicKey as DalekPublicKey, Signature as DalekSignature, PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH,
 };
-use ed25519_dalek::{PUBLIC_KEY_LENGTH, SIGNATURE_LENGTH};
 use serde::de::Error;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+use crate::{SigVerificationError, Signature};
 
 #[cfg(feature = "native")]
 pub mod private_key {
 
-    use crate::{Address, PublicKey};
-
-    use super::{DefaultPublicKey, DefaultSignature};
     use ed25519_dalek::{Keypair, SignatureError, Signer};
     use rand::rngs::OsRng;
     use thiserror::Error;
+
+    use super::{DefaultPublicKey, DefaultSignature};
+    use crate::{Address, PublicKey};
 
     #[derive(Error, Debug)]
     pub enum DefaultPrivateKeyHexDeserializationError {

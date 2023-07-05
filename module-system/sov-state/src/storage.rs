@@ -1,11 +1,15 @@
-use std::{fmt::Display, sync::Arc};
+use std::fmt::Display;
+use std::sync::Arc;
 
-use crate::witness::Witness;
-use crate::{internal_cache::OrderedReadsAndWrites, utils::AlignedVec, Prefix};
 use borsh::{BorshDeserialize, BorshSerialize};
 use hex;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
+
+use crate::internal_cache::OrderedReadsAndWrites;
+use crate::utils::AlignedVec;
+use crate::witness::Witness;
+use crate::Prefix;
 
 // `Key` type for the `Storage`
 #[derive(Clone, PartialEq, Eq, Debug)]

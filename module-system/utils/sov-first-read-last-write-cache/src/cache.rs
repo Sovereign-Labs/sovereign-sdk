@@ -1,7 +1,10 @@
+use std::collections::hash_map::Entry;
+use std::collections::HashMap;
+
+use thiserror::Error;
+
 use crate::access::{Access, MergeError};
 use crate::{CacheKey, CacheValue};
-use std::collections::{hash_map::Entry, HashMap};
-use thiserror::Error;
 
 #[derive(Error, Debug, Eq, PartialEq)]
 pub enum ReadError {
@@ -160,9 +163,10 @@ fn filter_writes(k: CacheKey, access: Access) -> Option<(CacheKey, Option<CacheV
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
     use crate::utils::test_util::{create_key, create_value};
-    use proptest::prelude::*;
 
     impl ValueExists {
         fn get(self) -> Option<CacheValue> {

@@ -1,5 +1,6 @@
-use crate::CacheValue;
 use thiserror::Error;
+
+use crate::CacheValue;
 
 #[derive(Error, Debug, PartialEq, Eq)]
 pub enum MergeError {

@@ -2,19 +2,18 @@ use std::collections::HashMap;
 
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{Deserialize, Serialize};
-use sov_rollup_interface::{services::da::SlotData, Bytes};
-use tendermint::{crypto::default::Sha256, merkle};
-
 pub use nmt_rs::NamespaceId;
+use serde::{Deserialize, Serialize};
+use sov_rollup_interface::services::da::SlotData;
+use sov_rollup_interface::Bytes;
+use tendermint::crypto::default::Sha256;
+use tendermint::merkle;
 
-use crate::{
-    pfb::MsgPayForBlobs,
-    shares::{NamespaceGroup, Share},
-    utils::BoxError,
-    verifier::PARITY_SHARES_NAMESPACE,
-    CelestiaHeader, TxPosition,
-};
+use crate::pfb::MsgPayForBlobs;
+use crate::shares::{NamespaceGroup, Share};
+use crate::utils::BoxError;
+use crate::verifier::PARITY_SHARES_NAMESPACE;
+use crate::{CelestiaHeader, TxPosition};
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
 pub struct RpcNamespacedShares {
@@ -176,9 +175,9 @@ pub struct StringWrapper {
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct RpcNamespacedSharesResponse(pub Option<Vec<RpcNamespacedShares>>);
 
+use nmt_rs::simple_merkle::proof::Proof;
 use nmt_rs::{
-    simple_merkle::proof::Proof, CelestiaNmt, NamespaceProof, NamespacedHash, NamespacedSha2Hasher,
-    NAMESPACED_HASH_LEN,
+    CelestiaNmt, NamespaceProof, NamespacedHash, NamespacedSha2Hasher, NAMESPACED_HASH_LEN,
 };
 
 impl From<JsonNamespaceProof> for NamespaceProof<NamespacedSha2Hasher> {

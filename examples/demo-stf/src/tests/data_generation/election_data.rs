@@ -1,6 +1,8 @@
-use super::*;
-use sov_modules_api::default_context::DefaultContext;
 use std::rc::Rc;
+
+use sov_modules_api::default_context::DefaultContext;
+
+use super::*;
 
 struct CallGenerator {
     election_admin_nonce: u64,

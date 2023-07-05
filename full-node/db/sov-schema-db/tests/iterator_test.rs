@@ -4,14 +4,8 @@
 use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
-
-use sov_schema_db::{
-    define_schema,
-    interface::{KeyDecoder, KeyEncoder, SeekKeyEncoder, ValueCodec},
-    CodecError,
-};
-use sov_schema_db::{iterator::SchemaIterator, Schema, DB};
-
+use sov_schema_db::schema::{KeyDecoder, KeyEncoder, Schema, ValueCodec};
+use sov_schema_db::{define_schema, CodecError, SchemaIterator, SeekKeyEncoder, DB};
 use tempfile::TempDir;
 
 define_schema!(TestSchema, TestKey, TestValue, "TestCF");
@@ -56,7 +50,7 @@ impl KeyDecoder<TestSchema> for TestKey {
 }
 
 impl SeekKeyEncoder<TestSchema> for TestKey {
-    fn encode_seek_key(&self) -> sov_schema_db::interface::Result<Vec<u8>> {
+    fn encode_seek_key(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
         self.encode_key()
     }
 }

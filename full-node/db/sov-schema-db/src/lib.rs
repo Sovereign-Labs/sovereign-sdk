@@ -2,6 +2,7 @@
 // Adapted from aptos-core/schemadb
 
 #![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 //! This library implements a schematized DB on top of [RocksDB](https://rocksdb.org/). It makes
 //! sure all data passed in and out are structured according to predefined schemas and prevents
@@ -13,83 +14,29 @@
 //! [`define_schema!`] macro to define the schema name, the types of key and value, and name of the
 //! column family.
 
-pub mod interface;
-pub mod iterator;
+mod iterator;
 mod metrics;
+pub mod schema;
+
+use std::collections::HashMap;
+use std::path::Path;
+use std::sync::Mutex;
 
 use anyhow::{format_err, Result};
-use iterator::{ScanDirection, SchemaIterator};
+use iterator::ScanDirection;
+pub use iterator::{SchemaIterator, SeekKeyEncoder};
 use metrics::{
     SCHEMADB_BATCH_COMMIT_BYTES, SCHEMADB_BATCH_COMMIT_LATENCY_SECONDS,
     SCHEMADB_BATCH_PUT_LATENCY_SECONDS, SCHEMADB_DELETES, SCHEMADB_GET_BYTES,
     SCHEMADB_GET_LATENCY_SECONDS, SCHEMADB_PUT_BYTES,
 };
+pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 use rocksdb::{ColumnFamilyDescriptor, ReadOptions};
-use std::{collections::HashMap, path::Path, sync::Mutex};
 use thiserror::Error;
 use tracing::info;
 
-pub use crate::interface::Schema;
-use crate::interface::{ColumnFamilyName, KeyCodec, ValueCodec};
-pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
-
-#[derive(Debug)]
-enum WriteOp {
-    Value { key: Vec<u8>, value: Vec<u8> },
-    Deletion { key: Vec<u8> },
-}
-
-/// `SchemaBatch` holds a collection of updates that can be applied to a DB atomically. The updates
-/// will be applied in the order in which they are added to the `SchemaBatch`.
-#[derive(Debug)]
-pub struct SchemaBatch {
-    rows: Mutex<HashMap<ColumnFamilyName, Vec<WriteOp>>>,
-}
-
-impl Default for SchemaBatch {
-    fn default() -> Self {
-        Self {
-            rows: Mutex::new(HashMap::new()),
-        }
-    }
-}
-
-impl SchemaBatch {
-    /// Creates an empty batch.
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Adds an insert/update operation to the batch.
-    pub fn put<S: Schema>(&self, key: &impl KeyCodec<S>, value: &impl ValueCodec<S>) -> Result<()> {
-        let _timer = SCHEMADB_BATCH_PUT_LATENCY_SECONDS
-            .with_label_values(&["unknown"])
-            .start_timer();
-        let key = key.encode_key()?;
-        let value = value.encode_value()?;
-        self.rows
-            .lock()
-            .expect("Lock must not be poisoned")
-            .entry(S::COLUMN_FAMILY_NAME)
-            .or_insert_with(Vec::new)
-            .push(WriteOp::Value { key, value });
-
-        Ok(())
-    }
-
-    /// Adds a delete operation to the batch.
-    pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> Result<()> {
-        let key = key.encode_key()?;
-        self.rows
-            .lock()
-            .expect("Lock must not be poisoned")
-            .entry(S::COLUMN_FAMILY_NAME)
-            .or_insert_with(Vec::new)
-            .push(WriteOp::Deletion { key });
-
-        Ok(())
-    }
-}
+pub use crate::schema::Schema;
+use crate::schema::{ColumnFamilyName, KeyCodec, ValueCodec};
 
 /// This DB is a schematized RocksDB wrapper where all data passed in and out are typed according to
 /// [`Schema`]s.
@@ -100,7 +47,7 @@ pub struct DB {
 }
 
 impl DB {
-    /// Opens a database backed by rocksdb, using the provided column family names and default
+    /// Opens a database backed by RocksDB, using the provided column family names and default
     /// column family options.
     pub fn open(
         path: impl AsRef<Path>,
@@ -121,7 +68,7 @@ impl DB {
         Ok(db)
     }
 
-    /// Open RocksDB with the provided column family descriptors
+    /// Open RocksDB with the provided column family descriptors.
     pub fn open_cf(
         db_opts: &rocksdb::Options,
         path: impl AsRef<Path>,
@@ -148,7 +95,7 @@ impl DB {
 
     /// Open db in secondary mode. A secondary db is does not support writes, but can be dynamically caught up
     /// to the primary instance by a manual call. See https://github.com/facebook/rocksdb/wiki/Read-only-and-Secondary-instances
-    /// for more details
+    /// for more details.
     pub fn open_cf_as_secondary<P: AsRef<Path>>(
         opts: &rocksdb::Options,
         primary_path: P,
@@ -215,6 +162,7 @@ impl DB {
     pub fn iter_with_opts<S: Schema>(&self, opts: ReadOptions) -> Result<SchemaIterator<S>> {
         self.iter_with_direction::<S>(opts, ScanDirection::Forward)
     }
+
     /// Returns a backward [`SchemaIterator`] on a certain schema with the default read options.
     pub fn rev_iter<S: Schema>(&self) -> Result<SchemaIterator<S>> {
         self.iter_with_direction::<S>(Default::default(), ScanDirection::Backward)
@@ -283,8 +231,8 @@ impl DB {
         Ok(self.inner.flush_cf(self.get_cf_handle(cf_name)?)?)
     }
 
-    /// Returns the current rocksdb property value for the provided column family name
-    /// and property name
+    /// Returns the current RocksDB property value for the provided column family name
+    /// and property name.
     pub fn get_property(&self, cf_name: &str, property_name: &str) -> Result<u64> {
         self.inner
             .property_int_value_cf(self.get_cf_handle(cf_name)?, property_name)?
@@ -304,12 +252,71 @@ impl DB {
     }
 }
 
+#[derive(Debug)]
+enum WriteOp {
+    Value { key: Vec<u8>, value: Vec<u8> },
+    Deletion { key: Vec<u8> },
+}
+
+/// [`SchemaBatch`] holds a collection of updates that can be applied to a DB
+/// ([`Schema`]) atomically. The updates will be applied in the order in which
+/// they are added to the [`SchemaBatch`].
+#[derive(Debug, Default)]
+pub struct SchemaBatch {
+    rows: Mutex<HashMap<ColumnFamilyName, Vec<WriteOp>>>,
+}
+
+impl SchemaBatch {
+    /// Creates an empty batch.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Adds an insert/update operation to the batch.
+    pub fn put<S: Schema>(&self, key: &impl KeyCodec<S>, value: &impl ValueCodec<S>) -> Result<()> {
+        let _timer = SCHEMADB_BATCH_PUT_LATENCY_SECONDS
+            .with_label_values(&["unknown"])
+            .start_timer();
+        let key = key.encode_key()?;
+        let value = value.encode_value()?;
+        self.rows
+            .lock()
+            .expect("Lock must not be poisoned")
+            .entry(S::COLUMN_FAMILY_NAME)
+            .or_insert_with(Vec::new)
+            .push(WriteOp::Value { key, value });
+
+        Ok(())
+    }
+
+    /// Adds a delete operation to the batch.
+    pub fn delete<S: Schema>(&self, key: &impl KeyCodec<S>) -> Result<()> {
+        let key = key.encode_key()?;
+        self.rows
+            .lock()
+            .expect("Lock must not be poisoned")
+            .entry(S::COLUMN_FAMILY_NAME)
+            .or_insert_with(Vec::new)
+            .push(WriteOp::Deletion { key });
+
+        Ok(())
+    }
+}
+
+/// An error that occurred during (de)serialization of a [`Schema`]'s keys or
+/// values.
 #[derive(Error, Debug)]
 pub enum CodecError {
+    /// Unable to deserialize a key because it has a different length than
+    /// expected.
     #[error("Invalid key length. Expected {expected:}, got {got:}")]
+    #[allow(missing_docs)] // The fields' names are self-explanatory.
     InvalidKeyLength { expected: usize, got: usize },
+    /// Some other error occurred when (de)serializing a key or value. Inspect
+    /// the inner [`anyhow::Error`] for more details.
     #[error(transparent)]
     Wrapped(#[from] anyhow::Error),
+    /// I/O error.
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }

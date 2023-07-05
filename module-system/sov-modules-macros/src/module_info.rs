@@ -1,7 +1,7 @@
-use crate::common::parse_generic_params;
-use proc_macro2::{self};
-use proc_macro2::{Ident, Span};
+use proc_macro2::{self, Ident, Span};
 use syn::{DataStruct, DeriveInput, ImplGenerics, PathArguments, TypeGenerics, WhereClause};
+
+use crate::common::parse_generic_params;
 
 #[derive(Clone)]
 struct StructNamedField {

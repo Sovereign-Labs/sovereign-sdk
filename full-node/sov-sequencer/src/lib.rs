@@ -2,7 +2,6 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::anyhow;
 use jsonrpsee::RpcModule;
-
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_rollup_interface::services::da::DaService;
 
@@ -103,7 +102,6 @@ mod tests {
     use std::sync::Arc;
 
     use anyhow::bail;
-
     use sov_rollup_interface::da::DaSpec;
     use sov_rollup_interface::mocks::{MockDaSpec, TestBlock};
 

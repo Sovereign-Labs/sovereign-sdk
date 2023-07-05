@@ -1,16 +1,40 @@
-use anyhow::Result;
+use std::iter::FusedIterator;
 use std::marker::PhantomData;
 
-use crate::interface::{KeyDecoder, Schema, SeekKeyEncoder, ValueCodec};
-use crate::metrics::{SCHEMADB_ITER_BYTES, SCHEMADB_ITER_LATENCY_SECONDS};
+use anyhow::Result;
 
-pub enum ScanDirection {
+use crate::metrics::{SCHEMADB_ITER_BYTES, SCHEMADB_ITER_LATENCY_SECONDS};
+use crate::schema::{KeyDecoder, Schema, ValueCodec};
+
+/// This defines a type that can be used to seek a [`SchemaIterator`], via
+/// interfaces like [`SchemaIterator::seek`]. Mind you, not all
+/// [`KeyEncoder`](crate::schema::KeyEncoder)s shall be [`SeekKeyEncoder`]s, and
+/// vice versa. E.g.:
+///
+/// - Some key types don't use an encoding that results in sensible
+/// seeking behavior under lexicographic ordering (what RocksDB uses by
+/// default), which means you shouldn't implement [`SeekKeyEncoder`] at all.
+/// - Other key types might maintain full lexicographic order, which means the
+/// original key type can also be [`SeekKeyEncoder`].
+/// - Other key types may be composite, and the first field alone may be
+/// a good candidate for [`SeekKeyEncoder`].
+pub trait SeekKeyEncoder<S: Schema + ?Sized>: Sized {
+    /// Converts `self` to bytes which is used to seek the underlying raw
+    /// iterator.
+    ///
+    /// If `self` is also a [`KeyEncoder`](crate::schema::KeyEncoder), then
+    /// [`SeekKeyEncoder::encode_seek_key`] MUST return the same bytes as
+    /// [`KeyEncoder::encode_key`](crate::schema::KeyEncoder::encode_key).
+    fn encode_seek_key(&self) -> crate::schema::Result<Vec<u8>>;
+}
+
+pub(crate) enum ScanDirection {
     Forward,
     Backward,
 }
 
 /// DB Iterator parameterized on [`Schema`] that seeks with [`Schema::Key`] and yields
-/// [`Schema::Key`] and [`Schema::Value`]
+/// [`Schema::Key`] and [`Schema::Value`] pairs.
 pub struct SchemaIterator<'a, S> {
     db_iter: rocksdb::DBRawIterator<'a>,
     direction: ScanDirection,
@@ -95,3 +119,5 @@ where
         self.next_impl().transpose()
     }
 }
+
+impl<'a, S> FusedIterator for SchemaIterator<'a, S> where S: Schema {}

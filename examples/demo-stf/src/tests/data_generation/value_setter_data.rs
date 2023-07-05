@@ -1,7 +1,7 @@
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+
 use super::*;
-use sov_modules_api::{
-    default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
-};
 
 pub struct ValueSetterMessages {
     admin: Rc<DefaultPrivateKey>,

@@ -1,14 +1,15 @@
-use crate::evm::test_helpers::SimpleStorageContract;
-use ethers_core::{
-    abi::Address,
-    types::{transaction::eip2718::TypedTransaction, Bytes, Eip1559TransactionRequest},
-    utils::rlp::Rlp,
-    utils::Anvil,
-};
+use std::str::FromStr;
+
+use ethers_core::abi::Address;
+use ethers_core::types::transaction::eip2718::TypedTransaction;
+use ethers_core::types::{Bytes, Eip1559TransactionRequest};
+use ethers_core::utils::rlp::Rlp;
+use ethers_core::utils::Anvil;
 use ethers_middleware::SignerMiddleware;
 use ethers_providers::{Middleware, Provider};
 use ethers_signers::{LocalWallet, Signer};
-use std::str::FromStr;
+
+use crate::evm::test_helpers::SimpleStorageContract;
 
 #[tokio::test]
 async fn tx_rlp_encoding_test() -> Result<(), Box<dyn std::error::Error>> {

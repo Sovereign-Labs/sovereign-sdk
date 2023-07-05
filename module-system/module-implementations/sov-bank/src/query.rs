@@ -1,6 +1,7 @@
-use crate::{Amount, Bank};
 use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
+
+use crate::{Amount, Bank};
 
 #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct BalanceResponse {

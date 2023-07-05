@@ -1,10 +1,9 @@
-use crate::Accounts;
 use sov_modules_api::hooks::TxHooks;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::Context;
-
-use sov_modules_api::Spec;
+use sov_modules_api::{Context, Spec};
 use sov_state::WorkingSet;
+
+use crate::Accounts;
 
 impl<C: Context> TxHooks for Accounts<C> {
     type Context = C;

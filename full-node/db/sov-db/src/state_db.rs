@@ -1,22 +1,13 @@
-use std::{
-    path::Path,
-    sync::{Arc, Mutex},
-};
+use std::path::Path;
+use std::sync::{Arc, Mutex};
 
-use jmt::{
-    storage::{TreeReader, TreeWriter},
-    KeyHash, Version,
-};
-
+use jmt::storage::{TreeReader, TreeWriter};
+use jmt::{KeyHash, Version};
 use sov_schema_db::DB;
 
-use crate::{
-    rocks_db_config::gen_rocksdb_options,
-    schema::{
-        tables::{JmtNodes, JmtValues, KeyHashToKey, STATE_TABLES},
-        types::StateKey,
-    },
-};
+use crate::rocks_db_config::gen_rocksdb_options;
+use crate::schema::tables::{JmtNodes, JmtValues, KeyHashToKey, STATE_TABLES};
+use crate::schema::types::StateKey;
 
 #[derive(Clone)]
 pub struct StateDB {
@@ -153,10 +144,8 @@ impl TreeWriter for StateDB {
 
 #[cfg(test)]
 mod state_db_tests {
-    use jmt::{
-        storage::{NodeBatch, TreeReader, TreeWriter},
-        KeyHash,
-    };
+    use jmt::storage::{NodeBatch, TreeReader, TreeWriter};
+    use jmt::KeyHash;
 
     use super::StateDB;
 

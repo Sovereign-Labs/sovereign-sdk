@@ -1,17 +1,13 @@
 // Copyright (c) Aptos
 // SPDX-License-Identifier: Apache-2.0
 
+use std::path::Path;
+
 use byteorder::{BigEndian, ReadBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
-use std::path::Path;
+use sov_schema_db::schema::{ColumnFamilyName, KeyDecoder, KeyEncoder, Result, ValueCodec};
+use sov_schema_db::{define_schema, CodecError, Schema, SchemaBatch, DB};
 use tempfile::TempDir;
-
-use sov_schema_db::{
-    define_schema,
-    interface::{ColumnFamilyName, KeyDecoder, KeyEncoder, Result, ValueCodec},
-    CodecError,
-};
-use sov_schema_db::{Schema, SchemaBatch, DB};
 
 // Creating two schemas that share exactly the same structure but are stored in different column
 // families. Also note that the key and value are of the same type `TestField`. By implementing

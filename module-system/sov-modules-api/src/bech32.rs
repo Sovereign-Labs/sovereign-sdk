@@ -1,7 +1,9 @@
-use crate::Address;
+use std::str::FromStr;
+
 use bech32::{Error, FromBase32, ToBase32};
 use derive_more::{Display, Into};
-use std::str::FromStr;
+
+use crate::Address;
 
 pub fn vec_to_bech32m(vec: &[u8], hrp: &str) -> Result<String, Error> {
     let data = vec.to_base32();

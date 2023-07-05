@@ -1,13 +1,12 @@
-use crate::runtime::Runtime;
-use sov_modules_api::{
-    hooks::{ApplyBlobHooks, TxHooks},
-    transaction::Transaction,
-    Context, Spec,
-};
+use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
+use sov_modules_api::transaction::Transaction;
+use sov_modules_api::{Context, Spec};
 use sov_modules_stf_template::SequencerOutcome;
 use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_state::WorkingSet;
 use tracing::info;
+
+use crate::runtime::Runtime;
 
 impl<C: Context> TxHooks for Runtime<C> {
     type Context = C;

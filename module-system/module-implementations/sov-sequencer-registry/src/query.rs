@@ -1,7 +1,8 @@
-use crate::SequencerRegistry;
 use sov_modules_api::Context;
 use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
+
+use crate::SequencerRegistry;
 
 #[cfg_attr(feature = "native", derive(serde::Deserialize, serde::Serialize))]
 #[derive(Debug, Eq, PartialEq)]

@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 use state_db::StateDB;
 
 pub mod ledger_db;
