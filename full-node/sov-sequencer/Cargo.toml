@@ -19,4 +19,4 @@ sov-rollup-interface = { path = "../../rollup-interface" }
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true }

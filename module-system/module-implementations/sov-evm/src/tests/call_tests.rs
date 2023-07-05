@@ -1,9 +1,7 @@
 use crate::{
     call::CallMessage,
     evm::{
-        db_init::InitEvmDb,
-        test_helpers::{make_contract_from_abi, test_data_path},
-        transaction::EvmTransaction,
+        db_init::InitEvmDb, test_helpers::SimpleStorageContract, transaction::EvmTransaction,
         AccountInfo, EthAddress,
     },
     Evm,
@@ -17,21 +15,16 @@ use sov_state::{ProverStorage, WorkingSet};
 
 type C = DefaultContext;
 
-fn create_messages(contract_addr: EthAddress, set_arg: ethereum_types::U256) -> Vec<CallMessage> {
+fn create_messages(contract_addr: EthAddress, set_arg: u32) -> Vec<CallMessage> {
     let mut transactions = Vec::default();
+    let contract = SimpleStorageContract::new();
 
     // Contract creation.
     {
-        let mut path = test_data_path();
-        path.push("SimpleStorage.bin");
-
-        let contract_data = std::fs::read_to_string(path).unwrap();
-        let contract_data = hex::decode(contract_data).unwrap();
-
         transactions.push(CallMessage {
             tx: EvmTransaction {
                 to: None,
-                data: contract_data,
+                data: contract.byte_code().to_vec(),
                 ..Default::default()
             },
         });
@@ -39,16 +32,10 @@ fn create_messages(contract_addr: EthAddress, set_arg: ethereum_types::U256) -> 
 
     // Update contract state.
     {
-        let mut path = test_data_path();
-        path.push("SimpleStorage.abi");
-
-        let contract = make_contract_from_abi(path);
-
-        let call_data = contract.encode("set", set_arg).unwrap();
         transactions.push(CallMessage {
             tx: EvmTransaction {
                 to: Some(contract_addr),
-                data: hex::decode(hex::encode(&call_data)).unwrap(),
+                data: hex::decode(hex::encode(&contract.set_call_data(set_arg))).unwrap(),
                 nonce: 1,
                 ..Default::default()
             },
@@ -88,7 +75,7 @@ fn evm_test() {
         .try_into()
         .unwrap();
 
-    let set_arg = ethereum_types::U256::from(999);
+    let set_arg = 999;
 
     for tx in create_messages(contract_addr, set_arg) {
         evm.call(tx, &sender_context, working_set).unwrap();
@@ -98,8 +85,5 @@ fn evm_test() {
     let storage_key = &[0; 32];
     let storage_value = db_account.storage.get(storage_key, working_set).unwrap();
 
-    assert_eq!(
-        set_arg,
-        ethereum_types::U256::from_little_endian(&storage_value)
-    )
+    assert_eq!(set_arg.to_le_bytes(), storage_value[0..4])
 }

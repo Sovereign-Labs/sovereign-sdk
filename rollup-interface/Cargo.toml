@@ -27,7 +27,6 @@ jmt = { workspace = true }
 sha2 = { workspace = true, optional = true }
 
 anyhow = { workspace = true }
-thiserror = { workspace = true }
 
 # Proptest should be a dev-dependency, but those can't be optional
 proptest = { workspace = true, optional = true }
