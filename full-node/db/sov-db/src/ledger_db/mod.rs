@@ -8,7 +8,7 @@ use sov_rollup_interface::{
     services::da::SlotData,
     stf::{BatchReceipt, Event},
 };
-use sov_schema_db::{interface::SeekKeyEncoder, Schema, SchemaBatch, DB};
+use sov_schema_db::{Schema, SchemaBatch, SeekKeyEncoder, DB};
 
 use crate::{
     rocks_db_config::gen_rocksdb_options,

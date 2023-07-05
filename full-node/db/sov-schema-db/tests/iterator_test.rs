@@ -7,10 +7,9 @@ use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 
 use sov_schema_db::{
     define_schema,
-    interface::{KeyDecoder, KeyEncoder, SeekKeyEncoder, ValueCodec},
-    CodecError,
+    schema::{KeyDecoder, KeyEncoder, Schema, ValueCodec},
+    CodecError, SchemaIterator, SeekKeyEncoder, DB,
 };
-use sov_schema_db::{iterator::SchemaIterator, Schema, DB};
 
 use tempfile::TempDir;
 
@@ -56,7 +55,7 @@ impl KeyDecoder<TestSchema> for TestKey {
 }
 
 impl SeekKeyEncoder<TestSchema> for TestKey {
-    fn encode_seek_key(&self) -> sov_schema_db::interface::Result<Vec<u8>> {
+    fn encode_seek_key(&self) -> sov_schema_db::schema::Result<Vec<u8>> {
         self.encode_key()
     }
 }
