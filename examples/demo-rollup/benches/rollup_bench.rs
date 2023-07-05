@@ -2,6 +2,7 @@ use anyhow::Context;
 use demo_stf::app::NativeAppRunner;
 use demo_stf::runner_config::from_toml_path;
 use std::env;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use sov_demo_rollup::config::RollupConfig;
@@ -20,29 +21,26 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::time::Duration;
-
-mod test_helper;
-
-use test_helper::remove_dir_if_exists;
+use tempfile::TempDir;
 
 fn rollup_bench(_bench: &mut Criterion) {
     let start_height: u64 = 0u64;
     let mut end_height: u64 = 100u64;
     if let Ok(val) = env::var("BLOCKS") {
-        end_height = val.parse().unwrap();
+        end_height = val.parse().expect("BLOCKS var should be a +ve number");
     }
 
     let mut c = Criterion::default()
         .sample_size(10)
         .measurement_time(Duration::from_secs(20));
     let rollup_config_path = "benches/rollup_config.toml".to_string();
-    let rollup_config: RollupConfig = from_toml_path(&rollup_config_path)
+    let mut rollup_config: RollupConfig = from_toml_path(&rollup_config_path)
         .context("Failed to read rollup configuration")
         .unwrap();
 
-    remove_dir_if_exists(&rollup_config.runner.storage.path).unwrap();
-    let ledger_db =
-        LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
+    let temp_dir = TempDir::new().expect("Unable to create temporary directory");
+    rollup_config.runner.storage.path = PathBuf::from(temp_dir.path());
+    let ledger_db = LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
 
     let da_service = Arc::new(RngDaService::new());
 

@@ -2,6 +2,7 @@ use anyhow::Context;
 use demo_stf::app::NativeAppRunner;
 use demo_stf::runner_config::from_toml_path;
 use std::env;
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use sov_demo_rollup::config::RollupConfig;
@@ -18,14 +19,11 @@ use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use std::time::{Duration, Instant};
+use tempfile::TempDir;
 
 use prometheus::Histogram;
 use prometheus::HistogramOpts;
 use prometheus::Registry;
-
-mod test_helper;
-
-use test_helper::remove_dir_if_exists;
 
 #[macro_use]
 extern crate prettytable;
@@ -93,10 +91,10 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut timer_output = true;
     let mut prometheus_output = false;
     if let Ok(val) = env::var("TXNS_PER_BLOCK") {
-        num_txns = val.parse().unwrap();
+        num_txns = val.parse().expect("TXNS_PER_BLOCK var should be a +ve number");
     }
     if let Ok(val) = env::var("BLOCKS") {
-        end_height = val.parse().unwrap();
+        end_height = val.parse().expect("BLOCKS var should be a +ve number");
     }
     if let Ok(_val) = env::var("PROMETHEUS_OUTPUT") {
         prometheus_output = true;
@@ -107,13 +105,13 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     let rollup_config_path = "benches/rollup_config.toml".to_string();
-    let rollup_config: RollupConfig = from_toml_path(&rollup_config_path)
+    let mut rollup_config: RollupConfig = from_toml_path(&rollup_config_path)
         .context("Failed to read rollup configuration")
         .unwrap();
 
-    remove_dir_if_exists(&rollup_config.runner.storage.path).unwrap();
-    let ledger_db =
-        LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
+    let temp_dir = TempDir::new().expect("Unable to create temporary directory");
+    rollup_config.runner.storage.path = PathBuf::from(temp_dir.path());
+    let ledger_db = LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
 
     let da_service = Arc::new(RngDaService::new());
 
