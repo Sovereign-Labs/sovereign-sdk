@@ -1,6 +1,8 @@
-use super::{types::Candidate, Election};
 use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
+
+use super::types::Candidate;
+use super::Election;
 
 #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum GetResultResponse {

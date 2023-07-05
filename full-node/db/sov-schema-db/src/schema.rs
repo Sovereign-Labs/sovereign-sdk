@@ -162,8 +162,10 @@ macro_rules! define_schema {
 
 #[cfg(feature = "fuzzing")]
 pub mod fuzzing {
+    use proptest::collection::vec;
+    use proptest::prelude::*;
+
     use super::{KeyDecoder, KeyEncoder, Schema, ValueCodec};
-    use proptest::{collection::vec, prelude::*};
 
     /// Helper used in tests to assert a (key, value) pair for a certain [`Schema`] is able to convert
     /// to bytes and convert back.

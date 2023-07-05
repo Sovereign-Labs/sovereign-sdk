@@ -4,13 +4,8 @@
 use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
-
-use sov_schema_db::{
-    define_schema,
-    schema::{KeyDecoder, KeyEncoder, Schema, ValueCodec},
-    CodecError, SchemaIterator, SeekKeyEncoder, DB,
-};
-
+use sov_schema_db::schema::{KeyDecoder, KeyEncoder, Schema, ValueCodec};
+use sov_schema_db::{define_schema, CodecError, SchemaIterator, SeekKeyEncoder, DB};
 use tempfile::TempDir;
 
 define_schema!(TestSchema, TestKey, TestValue, "TestCF");

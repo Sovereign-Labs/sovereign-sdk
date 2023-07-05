@@ -1,4 +1,5 @@
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 
 use crate::stf::{Event, EventKey};
 
@@ -220,10 +221,8 @@ mod rpc_hex {
     use std::marker::PhantomData;
 
     use hex::{FromHex, ToHex};
-    use serde::{
-        de::{Error, Visitor},
-        Deserializer, Serializer,
-    };
+    use serde::de::{Error, Visitor};
+    use serde::{Deserializer, Serializer};
 
     /// Serializes `data` as hex string using lowercase characters and prefixing with '0x'.
     ///

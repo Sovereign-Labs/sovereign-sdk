@@ -1,7 +1,6 @@
 use sov_bank::{BankConfig, TokenConfig};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::Hasher;
-use sov_modules_api::{Address, Spec};
+use sov_modules_api::{Address, Hasher, Spec};
 
 pub type C = DefaultContext;
 

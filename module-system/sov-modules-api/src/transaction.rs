@@ -2,11 +2,9 @@
 use crate::default_context::DefaultContext;
 #[cfg(feature = "native")]
 use crate::default_signature::private_key::DefaultPrivateKey;
-use crate::Context;
-use crate::Hasher;
-use crate::Signature;
 #[cfg(feature = "native")]
 use crate::Spec;
+use crate::{Context, Hasher, Signature};
 
 /// A Transaction object that is compatible with the module-system/sov-default-stf.
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]

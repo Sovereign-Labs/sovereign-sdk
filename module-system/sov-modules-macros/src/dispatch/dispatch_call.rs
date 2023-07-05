@@ -1,7 +1,8 @@
+use syn::DeriveInput;
+
 use crate::common::{
     get_serialization_attrs, parse_generic_params, StructDef, StructFieldExtractor, CALL,
 };
-use syn::DeriveInput;
 
 impl<'a> StructDef<'a> {
     fn create_call_enum_legs(&self) -> Vec<proc_macro2::TokenStream> {

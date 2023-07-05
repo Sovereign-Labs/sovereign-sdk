@@ -3,12 +3,11 @@ use std::fmt::Display;
 use base64::STANDARD;
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::{NamespaceId, NAMESPACE_ID_LEN};
-use prost::{
-    bytes::{Buf, BytesMut},
-    encoding::decode_varint,
-    DecodeError,
-};
-use serde::{de::Error, Deserialize, Serialize, Serializer};
+use prost::bytes::{Buf, BytesMut};
+use prost::encoding::decode_varint;
+use prost::DecodeError;
+use serde::de::Error;
+use serde::{Deserialize, Serialize, Serializer};
 use sov_rollup_interface::Bytes;
 use tracing::{error, info};
 
@@ -606,10 +605,11 @@ impl<'a> std::iter::Iterator for NamespaceIterator<'a> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use postcard::{from_bytes, to_allocvec, Result};
     use proptest::collection::vec;
     use proptest::prelude::*;
+
+    use super::*;
 
     #[test]
     fn test_share_start_serialization() {

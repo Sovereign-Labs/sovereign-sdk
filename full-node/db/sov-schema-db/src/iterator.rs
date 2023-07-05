@@ -1,6 +1,7 @@
-use anyhow::Result;
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
+
+use anyhow::Result;
 
 use crate::metrics::{SCHEMADB_ITER_BYTES, SCHEMADB_ITER_LATENCY_SECONDS};
 use crate::schema::{KeyDecoder, Schema, ValueCodec};

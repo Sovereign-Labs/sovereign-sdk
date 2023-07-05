@@ -1,11 +1,10 @@
-use super::{DbAccount, EthAddress};
-
-use revm::{
-    primitives::{AccountInfo as ReVmAccountInfo, Bytecode, B160, B256, U256},
-    Database,
-};
-use sov_state::WorkingSet;
 use std::convert::Infallible;
+
+use revm::primitives::{AccountInfo as ReVmAccountInfo, Bytecode, B160, B256, U256};
+use revm::Database;
+use sov_state::WorkingSet;
+
+use super::{DbAccount, EthAddress};
 
 pub(crate) struct EvmDb<'a, C: sov_modules_api::Context> {
     pub(crate) accounts: sov_state::StateMap<EthAddress, DbAccount>,

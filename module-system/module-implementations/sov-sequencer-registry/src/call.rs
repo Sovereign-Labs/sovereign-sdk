@@ -1,7 +1,8 @@
-use crate::SequencerRegistry;
 use anyhow::{bail, Result};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
+
+use crate::SequencerRegistry;
 
 /// This enumeration represents the available call messages for interacting with the sov-sequencer-registry.
 #[cfg_attr(

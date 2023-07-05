@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
-use sov_rollup_interface::{
-    rpc::{BatchResponse, TxIdentifier, TxResponse},
-    stf::{Event, EventKey, TransactionReceipt},
-};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use sov_rollup_interface::rpc::{BatchResponse, TxIdentifier, TxResponse};
+use sov_rollup_interface::stf::{Event, EventKey, TransactionReceipt};
 
 /// A cheaply cloneable bytes abstraction for use within the trust boundary of the node
 /// (i.e. when interfacing with the database). Serializes and deserializes more efficiently,

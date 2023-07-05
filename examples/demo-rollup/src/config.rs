@@ -18,12 +18,13 @@ pub struct RollupConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use demo_stf::runner_config::{from_toml_path, StorageConfig};
     use std::io::Write;
     use std::path::PathBuf;
+
+    use demo_stf::runner_config::{from_toml_path, StorageConfig};
     use tempfile::NamedTempFile;
+
+    use super::*;
 
     fn create_config_from(content: &str) -> NamedTempFile {
         let mut config_file = NamedTempFile::new().unwrap();

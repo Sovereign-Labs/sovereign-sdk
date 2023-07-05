@@ -1,4 +1,5 @@
-use sov_modules_api::{default_context::DefaultContext, Address, Hasher, Module, Spec};
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::{Address, Hasher, Module, Spec};
 use sov_rollup_interface::mocks::{MockCodeCommitment, MockProof, MockZkvm};
 use sov_state::{ProverStorage, WorkingSet};
 

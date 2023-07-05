@@ -3,21 +3,17 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Context;
-use jsonrpsee::core::server::rpc_module::Methods;
-use tracing::Level;
-use tracing::{debug, info};
-
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::{DefaultContext, DemoBatchReceipt, DemoTxReceipt};
-use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
+use demo_stf::app::{
+    DefaultContext, DefaultPrivateKey, DemoBatchReceipt, DemoTxReceipt, NativeAppRunner,
+};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runner_config::from_toml_path;
-use demo_stf::runtime::get_rpc_methods;
-use demo_stf::runtime::GenesisConfig;
+use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
+use jsonrpsee::core::server::rpc_module::Methods;
 use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
-use jupiter::verifier::RollupParams;
-use jupiter::verifier::{CelestiaVerifier, ChainValidityCondition};
+use jupiter::verifier::{CelestiaVerifier, ChainValidityCondition, RollupParams};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::RpcRunner;
@@ -31,6 +27,7 @@ use sov_rollup_interface::zk::traits::ValidityConditionChecker;
 // RPC related imports
 use sov_sequencer::get_sequencer_rpc;
 use sov_state::Storage;
+use tracing::{debug, info, Level};
 
 use crate::config::RollupConfig;
 

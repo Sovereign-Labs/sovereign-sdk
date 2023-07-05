@@ -1,17 +1,15 @@
-use crate::{
-    call::CallMessage,
-    evm::{
-        db_init::InitEvmDb, test_helpers::SimpleStorageContract, transaction::EvmTransaction,
-        AccountInfo, EthAddress,
-    },
-    Evm,
-};
 use revm::primitives::{KECCAK_EMPTY, U256};
-use sov_modules_api::{
-    default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, Context,
-    Module, PublicKey, Spec,
-};
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_modules_api::{Context, Module, PublicKey, Spec};
 use sov_state::{ProverStorage, WorkingSet};
+
+use crate::call::CallMessage;
+use crate::evm::db_init::InitEvmDb;
+use crate::evm::test_helpers::SimpleStorageContract;
+use crate::evm::transaction::EvmTransaction;
+use crate::evm::{AccountInfo, EthAddress};
+use crate::Evm;
 
 type C = DefaultContext;
 

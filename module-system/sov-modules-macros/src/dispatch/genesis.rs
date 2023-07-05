@@ -1,7 +1,7 @@
-use crate::common::{parse_generic_params, StructFieldExtractor, StructNamedField};
-
 use proc_macro2::Ident;
 use syn::{DeriveInput, TypeGenerics};
+
+use crate::common::{parse_generic_params, StructFieldExtractor, StructNamedField};
 
 pub(crate) struct GenesisMacro {
     field_extractor: StructFieldExtractor,

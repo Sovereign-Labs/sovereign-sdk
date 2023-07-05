@@ -1,6 +1,9 @@
-use crate::{da::BlobTransactionTrait, zk::traits::Zkvm};
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+
+use crate::da::BlobTransactionTrait;
+use crate::zk::traits::Zkvm;
 
 #[cfg(any(test, feature = "fuzzing"))]
 pub mod fuzzing;

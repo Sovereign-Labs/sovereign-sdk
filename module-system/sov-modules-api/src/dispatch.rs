@@ -1,5 +1,6 @@
-use crate::{CallResponse, Context, Error, Spec};
 use sov_state::WorkingSet;
+
+use crate::{CallResponse, Context, Error, Spec};
 
 /// Methods from this trait should be called only once during the rollup deployment.
 pub trait Genesis {

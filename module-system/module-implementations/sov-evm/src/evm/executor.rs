@@ -1,10 +1,9 @@
-use super::transaction::{BlockEnv, EvmTransaction};
-use revm::{
-    self,
-    primitives::{CfgEnv, EVMError, Env, ExecutionResult},
-    Database, DatabaseCommit,
-};
 use std::convert::Infallible;
+
+use revm::primitives::{CfgEnv, EVMError, Env, ExecutionResult};
+use revm::{self, Database, DatabaseCommit};
+
+use super::transaction::{BlockEnv, EvmTransaction};
 
 pub(crate) fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
     db: DB,

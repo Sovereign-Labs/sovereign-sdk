@@ -1,13 +1,10 @@
-use crate::{
-    call,
-    query::{self, Response},
-    AccountConfig, Accounts,
-};
-use sov_modules_api::{
-    default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey,
-    AddressBech32, Context, Module, PublicKey, Spec,
-};
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_modules_api::{AddressBech32, Context, Module, PublicKey, Spec};
 use sov_state::{ProverStorage, WorkingSet};
+
+use crate::query::{self, Response};
+use crate::{call, AccountConfig, Accounts};
 type C = DefaultContext;
 
 #[test]
