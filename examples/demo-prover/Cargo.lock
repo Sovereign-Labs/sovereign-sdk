@@ -2989,8 +2989,6 @@ dependencies = [
  "jmt",
  "serde",
  "sha2 0.10.6",
- "tendermint",
- "thiserror",
 ]
 
 [[package]]
@@ -3001,7 +2999,7 @@ dependencies = [
  "once_cell",
  "prometheus",
  "rocksdb",
- "sov-rollup-interface",
+ "thiserror",
  "tracing",
 ]
 
