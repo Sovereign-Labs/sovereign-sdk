@@ -17,25 +17,20 @@ use demo_stf::genesis_config::create_demo_genesis_config;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use std::fs;
-use std::io;
 use std::time::{Duration, Instant};
 
 use prometheus::Histogram;
 use prometheus::HistogramOpts;
 use prometheus::Registry;
 
+mod test_helper;
+
+use test_helper::remove_dir_if_exists;
+
 #[macro_use]
 extern crate prettytable;
 use prettytable::Table;
 
-fn remove_dir_if_exists<P: AsRef<std::path::Path>>(path: P) -> io::Result<()> {
-    if path.as_ref().exists() {
-        fs::remove_dir_all(&path)
-    } else {
-        Ok(())
-    }
-}
 
 fn print_times(
     total: Duration,

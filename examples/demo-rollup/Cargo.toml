@@ -19,8 +19,6 @@ tracing = { workspace = true }
 hex = { workspace = true }
 bytes = { workspace = true }
 futures = "0.3"
-metrics = "0.17.0"
-metrics-exporter-prometheus = "0.5.0"
 
 # Crates which only this package depends on 
 tokio = { version = "1", features = ["full"] }
@@ -47,12 +45,10 @@ reqwest = "0.11"
 tendermint = "0.32"
 tempfile = { workspace = true }
 proptest = { workspace = true }
+clap = { workspace = true }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }
 prometheus = "0.11.0"
 prettytable-rs = "^0.10"
-glassbench = "0.3"
-criterion = "0.5.1"
-clap = "4.3.10"
 
 [[bench]]
 name = "rollup_bench"

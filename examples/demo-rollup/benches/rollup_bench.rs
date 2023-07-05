@@ -17,19 +17,13 @@ use demo_stf::genesis_config::create_demo_genesis_config;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use std::fs;
-use std::io;
 
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::time::Duration;
 
-fn remove_dir_if_exists<P: AsRef<std::path::Path>>(path: P) -> io::Result<()> {
-    if path.as_ref().exists() {
-        fs::remove_dir_all(&path)
-    } else {
-        Ok(())
-    }
-}
+mod test_helper;
+
+use test_helper::remove_dir_if_exists;
 
 fn rollup_bench(_bench: &mut Criterion) {
     let start_height: u64 = 0u64;

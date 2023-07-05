@@ -1,6 +1,6 @@
 # We define the rollup's genesis to occur at Celestia block number `start_height`. The rollup will ignore
 # any Celestia blocks before this height
-start_height = 1
+start_height = 671431
 
 [da]
 # The JWT used to authenticate with the celestia light client. Instructions for generating this token can be found in the README
