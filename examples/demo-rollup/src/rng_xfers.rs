@@ -28,11 +28,11 @@ fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
         "sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6".to_string();
     let token_name = "sov-test-token";
     let sa = Address::from(
-        AddressBech32::try_from(sender_address.clone())
+        AddressBech32::try_from(sender_address)
             .unwrap_or_else(|_e| panic!("Failed generating transfers")),
     );
     let token_address =
-        sov_bank::create_token_address::<DefaultContext>(&token_name, sa.as_ref(), 11);
+        sov_bank::create_token_address::<DefaultContext>(token_name, sa.as_ref(), 11);
     let mut message_vec = vec![];
     for i in 1..(n + 1) {
         let priv_key = DefaultPrivateKey::generate();
@@ -62,7 +62,7 @@ fn generate_create(start_nonce: u64) -> Vec<u8> {
 
     let pk = DefaultPrivateKey::from_hex("236e80cb222c4ed0431b093b3ac53e6aa7a2273fe1f4351cd354989a823432a27b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe6").unwrap();
     let minter_address = Address::from(
-        AddressBech32::try_from(sender_address.clone())
+        AddressBech32::try_from(sender_address)
             .unwrap_or_else(|_e| panic!("Failed generating token create transaction")),
     );
     let msg: sov_bank::call::CallMessage<DefaultContext> =
@@ -71,7 +71,7 @@ fn generate_create(start_nonce: u64) -> Vec<u8> {
             token_name: "sov-test-token".to_string(),
             initial_balance: 100000000,
             minter_address: minter_address.clone(),
-            authorized_minters: vec![minter_address.clone()],
+            authorized_minters: vec![minter_address],
         };
     let enc_msg = Runtime::<DefaultContext>::encode_bank_call(msg);
     let tx = Transaction::<DefaultContext>::new_signed_tx(&pk, enc_msg, start_nonce);
@@ -85,6 +85,12 @@ impl RngDaService {
         RngDaService {
             submitted: Arc::new(Mutex::new(Vec::new())),
         }
+    }
+}
+
+impl Default for RngDaService {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

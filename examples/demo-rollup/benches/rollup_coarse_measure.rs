@@ -31,7 +31,6 @@ use test_helper::remove_dir_if_exists;
 extern crate prettytable;
 use prettytable::Table;
 
-
 fn print_times(
     total: Duration,
     begin_slot_time: Duration,
@@ -118,7 +117,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let da_service = Arc::new(RngDaService::new());
 
-    let mut demo_runner = NativeAppRunner::<Risc0Verifier>::new(rollup_config.runner.clone());
+    let mut demo_runner = NativeAppRunner::<Risc0Verifier>::new(rollup_config.runner);
 
     let demo = demo_runner.inner_mut();
     let sequencer_private_key = DefaultPrivateKey::generate();
@@ -145,22 +144,12 @@ async fn main() -> Result<(), anyhow::Error> {
         let num_bytes = height.to_le_bytes();
         let mut barray = [0u8; 32];
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
-        let filtered_block = if height == 0 {
-            TestBlock {
-                curr_hash: barray,
-                header: TestBlockHeader {
-                    prev_hash: TestHash([0u8; 32]),
-                },
-                height,
-            }
-        } else {
-            TestBlock {
-                curr_hash: barray,
-                header: TestBlockHeader {
-                    prev_hash: TestHash([0u8; 32]),
-                },
-                height,
-            }
+        let filtered_block = TestBlock {
+            curr_hash: barray,
+            header: TestBlockHeader {
+                prev_hash: TestHash([0u8; 32]),
+            },
+            height,
         };
         blocks.push(filtered_block.clone());
 

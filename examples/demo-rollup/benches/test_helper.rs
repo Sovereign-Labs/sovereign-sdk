@@ -1,5 +1,5 @@
-use std::io;
 use std::fs;
+use std::io;
 
 pub fn remove_dir_if_exists<P: AsRef<std::path::Path>>(path: P) -> io::Result<()> {
     if path.as_ref().exists() {
