@@ -55,8 +55,8 @@ pub fn create_demo_genesis_config<C: Context>(
     };
 
     GenesisConfig::new(
-        sequencer_config,
         bank_config,
+        sequencer_config,
         election_config,
         value_setter_config,
         sov_accounts::AccountConfig { pub_keys: vec![] },
@@ -66,4 +66,18 @@ pub fn create_demo_genesis_config<C: Context>(
 pub fn generate_address<C: Context>(key: &str) -> <C as Spec>::Address {
     let hash = <C as Spec>::Hasher::hash(key.as_bytes());
     <C as Spec>::Address::from(hash)
+}
+
+pub fn create_demo_config(
+    initial_sequencer_balance: u64,
+    value_setter_admin_private_key: &DefaultPrivateKey,
+    election_admin_private_key: &DefaultPrivateKey,
+) -> GenesisConfig<DefaultContext> {
+    create_demo_genesis_config::<DefaultContext>(
+        initial_sequencer_balance,
+        generate_address::<DefaultContext>(DEMO_SEQ_PUB_KEY_STR),
+        DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
+        value_setter_admin_private_key,
+        election_admin_private_key,
+    )
 }

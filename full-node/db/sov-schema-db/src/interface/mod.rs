@@ -4,11 +4,11 @@
 // licensed under APACHE 2.0 only.
 use std::fmt::Debug;
 
-// use crate::services::da::SlotData;
+use crate::CodecError;
 
-use self::errors::CodecError;
-pub mod errors;
-
+/// Crate users are expected to know [column
+/// family](https://github.com/EighteenZi/rocksdb_wiki/blob/master/Column-Families.md)
+/// names beforehand, so they can be `static`.
 pub type ColumnFamilyName = &'static str;
 
 /// This trait defines a schema: an association of a column family name, the key type and the value
@@ -24,6 +24,7 @@ pub trait Schema: Debug + Send + Sync + 'static + Sized {
     /// Type of the value.
     type Value: ValueCodec<Self>;
 }
+
 pub type Result<T, E = CodecError> = core::result::Result<T, E>;
 
 /// This trait defines a type that can serve as a [`Schema::Key`].
@@ -56,29 +57,17 @@ pub trait SeekKeyEncoder<S: Schema + ?Sized>: Sized {
     fn encode_seek_key(&self) -> Result<Vec<u8>>;
 }
 
-/// All keys can automatically be used as seek keys.
-impl<S, K> SeekKeyEncoder<S> for K
-where
-    S: Schema,
-    K: KeyEncoder<S>,
-{
-    /// Delegates to [`KeyCodec::encode_key`].
-    fn encode_seek_key(&self) -> Result<Vec<u8>> {
-        <K as KeyEncoder<S>>::encode_key(self)
-    }
-}
-
 #[macro_export]
 macro_rules! define_schema {
     ($schema_type:ident, $key_type:ty, $value_type:ty, $cf_name:expr) => {
         #[derive(Debug)]
         pub(crate) struct $schema_type;
 
-        impl $crate::db::Schema for $schema_type {
+        impl $crate::interface::Schema for $schema_type {
             type Key = $key_type;
             type Value = $value_type;
 
-            const COLUMN_FAMILY_NAME: $crate::db::ColumnFamilyName = $cf_name;
+            const COLUMN_FAMILY_NAME: $crate::interface::ColumnFamilyName = $cf_name;
         }
     };
 }

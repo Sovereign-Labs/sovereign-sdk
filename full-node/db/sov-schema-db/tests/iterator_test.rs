@@ -5,11 +5,12 @@ use anyhow::Result;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
 
-use crate::{iterator::SchemaIterator, Schema, DB};
-use sov_rollup_interface::{
-    db::{errors::CodecError, KeyDecoder, KeyEncoder, SeekKeyEncoder, ValueCodec},
+use sov_schema_db::{
     define_schema,
+    interface::{KeyDecoder, KeyEncoder, SeekKeyEncoder, ValueCodec},
+    CodecError,
 };
+use sov_schema_db::{iterator::SchemaIterator, Schema, DB};
 
 use tempfile::TempDir;
 
@@ -51,6 +52,12 @@ impl KeyDecoder<TestSchema> for TestKey {
                 .read_u32::<BigEndian>()
                 .map_err(|e| CodecError::Wrapped(e.into()))?,
         ))
+    }
+}
+
+impl SeekKeyEncoder<TestSchema> for TestKey {
+    fn encode_seek_key(&self) -> sov_schema_db::interface::Result<Vec<u8>> {
+        self.encode_key()
     }
 }
 

@@ -1,4 +1,4 @@
-use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::{Context, ModuleInfo};
 use sov_modules_macros::ModuleInfo;
 use sov_state::{StateMap, StateValue};
@@ -25,7 +25,7 @@ mod test_module {
 }
 
 fn main() {
-    type C = DefaultContext;
+    type C = ZkDefaultContext;
     let test_struct = <test_module::TestStruct<C> as std::default::Default>::default();
 
     let prefix1 = test_struct.test_state1.prefix();

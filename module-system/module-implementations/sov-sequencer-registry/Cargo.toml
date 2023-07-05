@@ -14,6 +14,7 @@ resolver = "2"
 
 [dev-dependencies]
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1", features = ["mocks"] }
 tempfile = { workspace = true }
 
 [dependencies]

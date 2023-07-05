@@ -23,7 +23,7 @@ reqwest = { version = "0.11.13", features = ["blocking"], optional = true }
 serde = { workspace = true }
 serde_cbor = "0.11.2"
 serde_json = { workspace = true }
-tokio = { version = "1", features = ["full"], optional = true }
+tokio = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = "0.1.37"
 

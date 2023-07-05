@@ -21,13 +21,14 @@ bytes = { workspace = true }
 futures = "0.3"
 
 # Crates which only this package depends on 
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true }
 tracing-subscriber = "0.3.17"
 
 jupiter = { path = "../../adapters/celestia" }
 demo-stf = { path = "../demo-stf", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-db = { path = "../../full-node/db/sov-db" }
+sov-sequencer = { path = "../../full-node/sov-sequencer" }
 risc0-adapter = { path = "../../adapters/risc0" }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }
 
@@ -44,3 +45,5 @@ sha2 = { workspace = true }
 reqwest = "0.11"
 tendermint = "0.32"
 tempfile = { workspace = true }
+proptest = { workspace = true }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }

@@ -33,6 +33,7 @@ pub(crate) enum ApplyBatchError {
         /// Contains batch hash
         hash: [u8; 32],
         reason: SlashingReason,
+        sequencer_da_address: Vec<u8>,
     },
 }
 
@@ -44,10 +45,17 @@ impl From<ApplyBatchError> for BatchReceipt<SenderOutcome, TxEffect> {
                 tx_receipts: Vec::new(),
                 inner: SenderOutcome::Ignored,
             },
-            ApplyBatchError::Slashed { hash, reason } => BatchReceipt {
+            ApplyBatchError::Slashed {
+                hash,
+                reason,
+                sequencer_da_address,
+            } => BatchReceipt {
                 batch_hash: hash,
                 tx_receipts: Vec::new(),
-                inner: SenderOutcome::Slashed(reason),
+                inner: SequencerOutcome::Slashed {
+                    reason,
+                    sequencer_da_address,
+                },
             },
         }
     }
@@ -102,10 +110,14 @@ where
 
         let (txs, messages) = match self.pre_process_batch(blob.data_mut()) {
             Ok((txs, messages)) => (txs, messages),
-            Err(slashing_reason) => {
+            Err(reason) => {
                 // Explicitly revert on slashing, even though nothing has changed in pre_process.
                 let mut batch_workspace = batch_workspace.revert().to_revertable();
-                let sequencer_outcome = SenderOutcome::Slashed(slashing_reason);
+                let sequencer_da_address = blob.sender().as_ref().to_vec();
+                let sequencer_outcome = SequencerOutcome::Slashed {
+                    reason,
+                    sequencer_da_address: sequencer_da_address.clone(),
+                };
                 match self
                     .runtime
                     .end_blob_hook(sequencer_outcome, &mut batch_workspace)
@@ -122,7 +134,8 @@ where
 
                 return Err(ApplyBatchError::Slashed {
                     hash: blob.hash(),
-                    reason: slashing_reason,
+                    reason,
+                    sequencer_da_address,
                 });
             }
         };
@@ -203,7 +216,7 @@ where
 
         if let Err(e) = self
             .runtime
-            .end_blob_hook(sequencer_outcome, &mut batch_workspace)
+            .end_blob_hook(sequencer_outcome.clone(), &mut batch_workspace)
         {
             // TODO: will be covered in https://github.com/Sovereign-Labs/sovereign-sdk/issues/421
             error!("Failed on `end_blob_hook`: {}", e);

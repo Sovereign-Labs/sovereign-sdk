@@ -13,6 +13,10 @@
 //! [`define_schema!`] macro to define the schema name, the types of key and value, and name of the
 //! column family.
 
+pub mod interface;
+pub mod iterator;
+mod metrics;
+
 use anyhow::{format_err, Result};
 use iterator::{ScanDirection, SchemaIterator};
 use metrics::{
@@ -22,19 +26,12 @@ use metrics::{
 };
 use rocksdb::{ColumnFamilyDescriptor, ReadOptions};
 use std::{collections::HashMap, path::Path, sync::Mutex};
+use thiserror::Error;
 use tracing::info;
 
+pub use crate::interface::Schema;
+use crate::interface::{ColumnFamilyName, KeyCodec, ValueCodec};
 pub use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
-pub use sov_rollup_interface::db::Schema;
-use sov_rollup_interface::db::{ColumnFamilyName, KeyCodec, ValueCodec};
-
-pub mod iterator;
-mod metrics;
-
-#[cfg(test)]
-mod db_test;
-#[cfg(test)]
-mod iterator_test;
 
 #[derive(Debug)]
 enum WriteOp {
@@ -305,6 +302,16 @@ impl DB {
         rocksdb::checkpoint::Checkpoint::new(&self.inner)?.create_checkpoint(path)?;
         Ok(())
     }
+}
+
+#[derive(Error, Debug)]
+pub enum CodecError {
+    #[error("Invalid key length. Expected {expected:}, got {got:}")]
+    InvalidKeyLength { expected: usize, got: usize },
+    #[error(transparent)]
+    Wrapped(#[from] anyhow::Error),
+    #[error(transparent)]
+    Io(#[from] std::io::Error),
 }
 
 /// For now we always use synchronous writes. This makes sure that once the operation returns

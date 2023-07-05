@@ -10,6 +10,7 @@ members = [
     "examples/demo-rollup",
     "examples/demo-nft-module",
     "full-node/db/sov-db",
+    "full-node/sov-sequencer",
     
     "module-system/sov-modules-stf-template",
     "module-system/sov-modules-macros",
@@ -72,3 +73,4 @@ clap = { version = "4.2.7", features = ["derive"] }
 toml = "0.7.3"
 jsonrpsee = "0.16.2"
 tempfile = "3.5"
+tokio = { version = "1", features = ["full"] }
