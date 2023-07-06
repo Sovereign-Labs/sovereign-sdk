@@ -13,7 +13,7 @@ use sov_modules_api::{
     default_context::DefaultContext, default_signature::private_key::DefaultPrivateKey, PublicKey,
 };
 use sov_modules_stf_template::RawTx;
-use sov_modules_stf_template::{Batch, SenderOutcome, SlashingReason};
+use sov_modules_stf_template::{Batch, SequencerOutcome, SlashingReason};
 use sov_rollup_interface::{mocks::MockZkvm, stf::StateTransitionFunction};
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -54,7 +54,7 @@ fn test_tx_revert() {
         );
 
         assert_eq!(
-            SenderOutcome::Rewarded(0),
+            SequencerOutcome::Rewarded(0),
             apply_tx_blob_outcome.inner,
             "Unexpected outcome: Batch execution should have succeeded",
         );
@@ -162,7 +162,7 @@ fn test_nonce_incremented_on_revert() {
         );
 
         assert_eq!(
-            SenderOutcome::Rewarded(0),
+            SequencerOutcome::Rewarded(0),
             apply_tx_blob_outcome.inner,
             "Unexpected outcome: Batch execution should have succeeded",
         );
@@ -224,7 +224,7 @@ fn test_tx_bad_sig() {
                 reason:SlashingReason::StatelessVerificationFailed,
                 sequencer_da_address: DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
             },
-            apply_blob_outcome.inner,
+            apply_tx_blob_outcome.inner,
             "Unexpected outcome: Stateless verification should have failed due to invalid signature"
         );
 
@@ -302,7 +302,7 @@ fn test_tx_bad_serialization() {
                 reason: SlashingReason::InvalidTransactionEncoding ,
                 sequencer_da_address: DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
             },
-            apply_blob_outcome.inner,
+            apply_tx_blob_outcome.inner,
             "Unexpected outcome: Stateless verification should have failed due to invalid signature"
         );
 

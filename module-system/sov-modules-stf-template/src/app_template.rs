@@ -26,6 +26,7 @@ pub struct AppTemplate<C: Context, RT, Vm> {
     phantom_vm: PhantomData<Vm>,
 }
 
+#[derive(Debug)]
 pub enum ApplyBatchError {
     /// Contains batch hash
     Ignored([u8; 32]),

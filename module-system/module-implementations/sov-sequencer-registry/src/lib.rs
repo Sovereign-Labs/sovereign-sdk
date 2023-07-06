@@ -39,12 +39,6 @@ pub struct SequencerRegistry<C: sov_modules_api::Context> {
     pub(crate) coins_to_lock: StateValue<sov_bank::Coins<C>>,
 }
 
-/// Result of applying blob, from sender point of view.
-pub enum SenderOutcome {
-    Completed,
-    Reverted,
-}
-
 /// Result of applying blob, from sequencer point of view.
 pub enum SequencerOutcome {
     Completed,
