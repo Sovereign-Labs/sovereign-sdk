@@ -4,7 +4,7 @@ use sov_modules_api::{
     transaction::Transaction,
     Context, Spec,
 };
-use sov_modules_stf_template::SenderOutcome;
+use sov_modules_stf_template::SequencerOutcome;
 use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_state::WorkingSet;
 use tracing::info;
@@ -31,7 +31,7 @@ impl<C: Context> TxHooks for Runtime<C> {
 
 impl<C: Context> ApplyBlobHooks for Runtime<C> {
     type Context = C;
-    type BlobResult = SenderOutcome;
+    type BlobResult = SequencerOutcome;
 
     fn begin_blob_hook(
         &self,

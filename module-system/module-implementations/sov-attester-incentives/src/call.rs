@@ -119,7 +119,10 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
         if let Some(old_balance) = self.bonded_attesters.get(context.sender(), working_set) {
             let unbonding_info = UnbondingInfo {
                 amount: old_balance,
-                unbonding_initiated_height: self.chain_state.slot_height(working_set),
+                unbonding_initiated_height: self
+                    .light_client_finalized_height
+                    .get(working_set)
+                    .unwrap(),
             };
 
             // Update our internal tracking of the total bonded amount for the sender.
@@ -138,30 +141,30 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
         Ok(CallResponse::default())
     }
 
-    /// Try to process a zk proof, if the prover is bonded.
+    /// Try to process a zk proof, if the challenger is bonded.
     pub(crate) fn process_challenge(
         &self,
         proof: &[u8],
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
-        // Get the prover's old balance.
+        // Get the challenger's old balance.
         // Revert if they aren't bonded
         let old_balance = self
-            .bonded_provers
+            .bonded_challengers
             .get_or_err(context.sender(), working_set)?;
 
-        // Check that the prover has enough balance to process the proof.
-        let minimum_bond = self.minimum_bond.get_or_err(working_set)?;
+        // Check that the challenger has enough balance to process the proof.
+        let minimum_bond = self.minimum_challenger_bond.get_or_err(working_set)?;
 
         anyhow::ensure!(old_balance >= minimum_bond, "Prover is not bonded");
         let code_commitment = self
-            .commitment_of_allowed_verifier_method
+            .commitment_to_allowed_challenge_method
             .get_or_err(working_set)?
             .commitment;
 
-        // Lock the prover's bond amount.
-        self.bonded_provers
+        // Lock the challenger's bond amount.
+        self.bonded_challengers
             .set(context.sender(), &(old_balance - minimum_bond), working_set);
 
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
@@ -171,10 +174,10 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
             // TODO: decide what the proof output is and do something with it
             //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/272
 
-            // Unlock the prover's bond
-            // TODO: reward the prover with newly minted tokens as appropriate based on gas fees.
+            // Unlock the challenger's bond
+            // TODO: reward the challenger with newly minted tokens as appropriate based on gas fees.
             //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/271
-            self.bonded_provers
+            self.bonded_challengers
                 .set(context.sender(), &old_balance, working_set);
 
             working_set.add_event(

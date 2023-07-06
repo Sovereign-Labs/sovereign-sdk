@@ -17,7 +17,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
     ) -> Response {
         Response {
             value: self
-                .bonded_provers
+                .bonded_attesters
                 .get(&address, working_set)
                 .unwrap_or_default(), // self.value.get(working_set),
         }

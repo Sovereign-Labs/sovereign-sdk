@@ -49,9 +49,10 @@ fn setup(
     let module = AttesterIncentives::<C, MockZkvm>::default();
     let config = crate::AttesterIncentivesConfig {
         bonding_token_address: token_address,
-        minimum_bond: BOND_AMOUNT,
-        commitment_of_allowed_verifier_method: MockCodeCommitment([0u8; 32]),
-        initial_provers: vec![(prover_address.clone(), BOND_AMOUNT)],
+        minimum_attester_bond: BOND_AMOUNT,
+        minimum_challenger_bond: BOND_AMOUNT,
+        commitment_to_allowed_challenge_method: MockCodeCommitment([0u8; 32]),
+        initial_attesters: vec![(prover_address.clone(), BOND_AMOUNT)],
     };
 
     module
@@ -85,7 +86,7 @@ fn test_burn_on_invalid_proof() {
             log: &[],
         };
         module
-            .process_proof(proof.encode_to_vec().as_ref(), &context, &mut working_set)
+            .process_challenge(proof.encode_to_vec().as_ref(), &context, &mut working_set)
             .expect("An invalid proof is not an error");
     }
 
@@ -123,7 +124,7 @@ fn test_valid_proof() {
             log: &[],
         };
         module
-            .process_proof(proof.encode_to_vec().as_ref(), &context, &mut working_set)
+            .process_challenge(proof.encode_to_vec().as_ref(), &context, &mut working_set)
             .expect("An invalid proof is not an error");
     }
 
@@ -171,7 +172,7 @@ fn test_unbonding() {
 
     // Unbond the prover
     module
-        .unbond_prover(&context, &mut working_set)
+        .unbond_challenger(&context, &mut working_set)
         .expect("Unbonding should succeed");
 
     // Assert that the prover no longer has bonded tokens
@@ -204,7 +205,7 @@ fn test_prover_not_bonded() {
 
     // Unbond the prover
     module
-        .unbond_prover(&context, &mut working_set)
+        .unbond_challenger(&context, &mut working_set)
         .expect("Unbonding should succeed");
 
     // Assert that the prover no longer has bonded tokens
@@ -224,7 +225,7 @@ fn test_prover_not_bonded() {
         };
         // Assert that processing a valid proof fails
         assert!(module
-            .process_proof(proof.encode_to_vec().as_ref(), &context, &mut working_set)
+            .process_challenge(proof.encode_to_vec().as_ref(), &context, &mut working_set)
             .is_err())
     }
 }

@@ -1,6 +1,6 @@
 use crate::{
     tx_verifier::{verify_txs_stateless, TransactionAndRawHash},
-    Batch, SenderOutcome, SlashingReason, TxEffect,
+    Batch, SequencerOutcome, SlashingReason, TxEffect,
 };
 use borsh::BorshDeserialize;
 use sov_modules_api::{
@@ -26,7 +26,7 @@ pub struct AppTemplate<C: Context, RT, Vm> {
     phantom_vm: PhantomData<Vm>,
 }
 
-pub(crate) enum ApplyBatchError {
+pub enum ApplyBatchError {
     /// Contains batch hash
     Ignored([u8; 32]),
     Slashed {
@@ -37,13 +37,13 @@ pub(crate) enum ApplyBatchError {
     },
 }
 
-impl From<ApplyBatchError> for BatchReceipt<SenderOutcome, TxEffect> {
+impl From<ApplyBatchError> for BatchReceipt<SequencerOutcome, TxEffect> {
     fn from(value: ApplyBatchError) -> Self {
         match value {
             ApplyBatchError::Ignored(hash) => BatchReceipt {
                 batch_hash: hash,
                 tx_receipts: Vec::new(),
-                inner: SenderOutcome::Ignored,
+                inner: SequencerOutcome::Ignored,
             },
             ApplyBatchError::Slashed {
                 hash,
@@ -66,7 +66,7 @@ where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
         + TxHooks<Context = C>
-        + ApplyBlobHooks<Context = C, BlobResult = SenderOutcome>,
+        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
 {
     pub fn new(storage: C::Storage, runtime: RT) -> Self {
         Self {
@@ -80,7 +80,7 @@ where
     pub fn apply_tx_blob(
         &mut self,
         blob: &mut impl BlobTransactionTrait,
-    ) -> ApplyBatchResult<BatchReceipt<SenderOutcome, TxEffect>> {
+    ) -> ApplyBatchResult<BatchReceipt<SequencerOutcome, TxEffect>> {
         debug!(
             "Applying batch from sequencer: 0x{}",
             hex::encode(blob.sender())
@@ -212,7 +212,7 @@ where
         }
 
         // TODO: calculate the amount based of gas and fees
-        let sequencer_outcome = SenderOutcome::Rewarded(0);
+        let sequencer_outcome = SequencerOutcome::Rewarded(0);
 
         if let Err(e) = self
             .runtime

@@ -1,4 +1,3 @@
-use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::{Context, DispatchCall, Spec};
 use sov_rollup_interface::optimistic::{Attestation, Challenge};
 use sov_state::Storage;

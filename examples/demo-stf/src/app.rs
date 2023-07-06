@@ -14,7 +14,7 @@ use sov_modules_api::RpcRunner;
 use sov_modules_api::Spec;
 use sov_modules_stf_template::AppTemplate;
 pub use sov_modules_stf_template::Batch;
-use sov_modules_stf_template::SenderOutcome;
+use sov_modules_stf_template::SequencerOutcome;
 use sov_modules_stf_template::TxEffect;
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 #[cfg(feature = "native")]
@@ -39,7 +39,7 @@ pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
 pub type DemoApp<C, Vm> = AppTemplate<C, Runtime<C>, Vm>;
 
 /// Batch receipt type used by the demo app. We export this type so that it's easily accessible to the full node.
-pub type DemoBatchReceipt = SenderOutcome;
+pub type DemoBatchReceipt = SequencerOutcome;
 /// Tx receipt type used by the demo app. We export this type so that it's easily accessible to the full node.
 pub type DemoTxReceipt = TxEffect;
 

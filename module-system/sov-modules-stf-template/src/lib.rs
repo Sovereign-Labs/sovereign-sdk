@@ -50,7 +50,7 @@ where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
         + TxHooks<Context = C>
-        + ApplyBlobHooks<Context = C, BlobResult = SenderOutcome>
+        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>
         + SyncHooks<Context = C>,
 {
     type StateRoot = jmt::RootHash;
@@ -59,7 +59,7 @@ where
 
     type TxReceiptContents = TxEffect;
 
-    type BatchReceiptContents = SenderOutcome;
+    type BatchReceiptContents = SequencerOutcome;
 
     type Witness = <<C as Spec>::Storage as Storage>::Witness;
 
@@ -105,7 +105,7 @@ where
         (jmt::RootHash(root_hash), witness)
     }
 
-    type SyncReceiptContents = SenderOutcome;
+    type SyncReceiptContents = SequencerOutcome;
 
     fn apply_sync_data_blob(
         &mut self,
@@ -123,7 +123,7 @@ where
                 info!("Sync pre-blob hook rejected: {:?}", e);
                 return SyncReceipt {
                     blob_hash: blob.hash(),
-                    inner: SenderOutcome::Ignored,
+                    inner: SequencerOutcome::Ignored,
                 };
             }
         };
@@ -145,14 +145,17 @@ where
                 info!("Sync data blob decoding failed: {:?}", e);
                 return SyncReceipt {
                     blob_hash: blob.hash(),
-                    inner: SenderOutcome::Slashed(SlashingReason::InvalidBatchEncoding),
+                    inner: SequencerOutcome::Slashed {
+                        reason: SlashingReason::InvalidBatchEncoding,
+                        sequencer_da_address: todo!(),
+                    },
                 };
             }
         };
         // TODO: Make the reward sensible
         SyncReceipt {
             blob_hash: blob.hash(),
-            inner: SenderOutcome::Rewarded(0),
+            inner: SequencerOutcome::Rewarded(0),
         }
     }
 }

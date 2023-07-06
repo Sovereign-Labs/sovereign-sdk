@@ -1,6 +1,6 @@
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::Context;
+use sov_modules_api::{default_context::ZkDefaultContext, hooks::SyncHooks, Context};
 #[cfg(feature = "native")]
 use sov_modules_macros::{cli_parser, expose_rpc};
 use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
@@ -64,4 +64,28 @@ pub struct Runtime<C: Context> {
     pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
+}
+
+impl SyncHooks for Runtime<DefaultContext> {
+    type Context = DefaultContext;
+
+    fn pre_blob_hook(
+        &self,
+        _blob: &mut impl sov_rollup_interface::da::BlobTransactionTrait,
+        _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+    ) -> anyhow::Result<<Self::Context as sov_modules_api::Spec>::Address> {
+        unimplemented!()
+    }
+}
+
+impl SyncHooks for Runtime<ZkDefaultContext> {
+    type Context = ZkDefaultContext;
+
+    fn pre_blob_hook(
+        &self,
+        _blob: &mut impl sov_rollup_interface::da::BlobTransactionTrait,
+        _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+    ) -> anyhow::Result<<Self::Context as sov_modules_api::Spec>::Address> {
+        unimplemented!()
+    }
 }

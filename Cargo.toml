@@ -44,8 +44,7 @@ rust-version = "1.66"
 
 [workspace.dependencies]
 # Dependencies maintained by sovereign
-# jmt = "0.6.0"
-jmt = {path = "../penumbra-jmt/jmt" }
+jmt = {path = "../jmt"}
 
 # External dependencies
 anyhow = "1.0.68"
