@@ -5,11 +5,10 @@ use sov_modules_api::{Context, Module, PublicKey, Spec};
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::call::CallMessage;
-use crate::evm::db_init::InitEvmDb;
 use crate::evm::test_helpers::SimpleStorageContract;
 use crate::evm::transaction::EvmTransaction;
-use crate::evm::{AccountInfo, EthAddress};
-use crate::Evm;
+use crate::evm::EthAddress;
+use crate::{AccountData, Evm, EvmConfig};
 
 type C = DefaultContext;
 
@@ -56,17 +55,18 @@ fn evm_test() {
     let caller = [0; 20];
 
     let evm = Evm::<C>::default();
-    let mut evm_db = evm.get_db(working_set);
 
-    evm_db.insert_account_info(
-        caller,
-        AccountInfo {
-            balance: U256::from(1000000000).to_le_bytes(),
-            code_hash: KECCAK_EMPTY.to_fixed_bytes(),
-            code: vec![],
-            nonce: 0,
-        },
-    );
+    let data = AccountData {
+        address: caller,
+        balance: U256::from(1000000000).to_le_bytes(),
+        code_hash: KECCAK_EMPTY.to_fixed_bytes(),
+        code: vec![],
+        nonce: 0,
+    };
+
+    let config = EvmConfig { data: vec![data] };
+
+    evm.genesis(&config, working_set).unwrap();
 
     let contract_addr = hex::decode("bd770416a3345f91e4b34576cb804a576fa48eb1")
         .unwrap()
