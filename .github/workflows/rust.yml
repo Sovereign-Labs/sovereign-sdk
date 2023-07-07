@@ -161,6 +161,8 @@ jobs:
       # The artifact tends to become quite large with all the dependencies, so
       # we don't include them in the docs.
       - run: cargo doc --no-deps
+      # Set file permissions as needed by actions/upload-pages-artifact@v1
+      - run: chmod -R 0744 target/doc
       - uses: actions/upload-pages-artifact@v1
         with:
           path: target/doc
