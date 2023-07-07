@@ -1,6 +1,5 @@
 use std::env;
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
@@ -12,13 +11,13 @@ use prometheus::{Histogram, HistogramOpts, Registry};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_demo_rollup::config::RollupConfig;
-use sov_demo_rollup::rng_xfers::RngDaService;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader, TestHash};
-use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use tempfile::TempDir;
+
+mod data_gen;
+use data_gen::generate_blocks;
 
 #[macro_use]
 extern crate prettytable;
@@ -111,11 +110,10 @@ async fn main() -> Result<(), anyhow::Error> {
     let ledger_db =
         LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
 
-    let da_service = Arc::new(RngDaService::new());
 
     let mut demo_runner = NativeAppRunner::<Risc0Verifier>::new(rollup_config.runner);
-
     let demo = demo_runner.inner_mut();
+
     let sequencer_private_key = DefaultPrivateKey::generate();
     let demo_genesis_config = create_demo_genesis_config(
         100000000,
@@ -132,26 +130,7 @@ async fn main() -> Result<(), anyhow::Error> {
         prev_state_root.0
     };
 
-    // data generation
-    let mut blobs = vec![];
-    let mut blocks = vec![];
-
-    for height in start_height..end_height {
-        let num_bytes = height.to_le_bytes();
-        let mut barray = [0u8; 32];
-        barray[..num_bytes.len()].copy_from_slice(&num_bytes);
-        let filtered_block = TestBlock {
-            curr_hash: barray,
-            header: TestBlockHeader {
-                prev_hash: TestHash([0u8; 32]),
-            },
-            height,
-        };
-        blocks.push(filtered_block.clone());
-
-        let blob_txs = da_service.extract_relevant_txs(&filtered_block);
-        blobs.push(blob_txs.clone());
-    }
+    let (blocks,mut blobs) = generate_blocks(start_height, end_height);
 
     // rollup processing
     let total = std::time::Instant::now();
