@@ -503,7 +503,7 @@ mod tests {
 
         assert!(result.is_err());
         let error_string = result.err().unwrap().to_string();
-        assert!(error_string.contains("Error returned from celestia node:"));
+        assert!(error_string.contains("Error returned from Celestia node:"));
         assert!(error_string.contains(
             "out of gas in location: ReadFlat; gasWanted: 10, gasUsed: 1000: out of gas"
         ));
