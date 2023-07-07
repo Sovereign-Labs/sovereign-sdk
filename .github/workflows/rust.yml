@@ -154,17 +154,28 @@ jobs:
           done
   cargo-doc-artifact:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
       # The artifact tends to become quite large with all the dependencies, so
       # we don't include them in the docs.
       - run: cargo doc --no-deps
-      - uses: actions/upload-pages-artifact@v1
+      - name: Add index.html
+        # We're inside a Cargo workspace, so there's no index.html by default.
+        # We must redirect to one of the workspace member crates' documentation.
+        # <https://dev.to/deciduously/prepare-your-rust-api-docs-for-github-pages-2n5i>
+        run: echo '<meta http-equiv="refresh" content="0; url=sov_rollup_interface/index.html">' > target/doc/index.html
+      # https://github.com/actions/deploy-pages/issues/188
+      - name: Fix assets' file permissions
+        run: chmod -c -R +rX "target/doc"
+      - name: Upload artifacts
+        uses: actions/upload-pages-artifact@v1
         with:
           path: target/doc
   deploy:
     needs: cargo-doc-artifact
+    timeout-minutes: 5
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
       pages: write # to deploy to Pages
