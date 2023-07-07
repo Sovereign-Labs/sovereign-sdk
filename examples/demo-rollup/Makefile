@@ -96,7 +96,7 @@ build-sov-cli:
 	cd ../demo-stf && cargo build --bin sov-cli
 
 test-serialize-create-token: check-container-running build-sov-cli
-	$(SOV_CLI_REL_PATH) serialize-call ../demo-stf/src/sov-cli/test_data/minter_private_key.json Bank ../demo-stf/src/sov-cli/test_data/create_token.json 0
+	$(SOV_CLI_REL_PATH) serialize-call ../demo-stf/src/sov-cli/test_data/token_deployer_private_key.json Bank ../demo-stf/src/sov-cli/test_data/create_token.json 0
 
 test-build-blob-from-create-token: test-serialize-create-token
 	$(SOV_CLI_REL_PATH) make-blob ../demo-stf/src/sov-cli/test_data/create_token.dat > ../demo-stf/src/sov-cli/test_data/test_blob.dat
