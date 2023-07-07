@@ -161,11 +161,12 @@ jobs:
       # The artifact tends to become quite large with all the dependencies, so
       # we don't include them in the docs.
       - run: cargo doc --no-deps
-      - run: chmod -c -R +rX "target/doc"
-      - name: Prepare artifact
-        shell: sh
-        run: |
-          tar --directory "target/doc" -cvf "$RUNNER_TEMP/artifact.tar" .
+      - name: Add index.html
+        # Got the idea from here:
+        # <https://dev.to/deciduously/prepare-your-rust-api-docs-for-github-pages-2n5i>
+        run: echo "<meta http-equiv=\"refresh\" content=\"0; url=build_wheel\">" > target/doc/index.html
+      - name: Fix assets' file permissions
+        run: chmod -c -R +rX "target/doc"
       - name: Upload artifacts
         uses: actions/upload-pages-artifact@v1
         with:
