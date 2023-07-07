@@ -173,7 +173,7 @@ jobs:
         uses: actions/upload-pages-artifact@v1
         with:
           path: target/doc
-  deploy:
+  deploy-github-pages:
     needs: cargo-doc-artifact
     timeout-minutes: 5
     # No point in deploying if we're not on `main`, as it will just fail.
