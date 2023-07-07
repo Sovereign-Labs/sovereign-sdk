@@ -19,7 +19,7 @@ This is a demo full node running a simple Sovereign SDK rollup on [Celestia](htt
 
 - [What is This?](#what-is-this)
 - [Getting Started](#getting-started)
-  - [Run a loal DA layer instance](#run-a-local-da-layer-instance)
+  - [Run a local DA layer instance](#run-a-local-da-layer-instance)
   - [Start the Rollup Full Node](#start-the-rollup-full-node)
   - [Sanity Check: Creating a Token](#sanity-check-creating-a-token)
   - [How to Submit Transactions](#how-to-submit-transactions)
