@@ -192,36 +192,32 @@ pub enum CallMessage<C: sov_modules_api::Context> {
     },
 }
 ```
-In the above snippet, we can see that `CallMessage`s in `Bank` support five different types of calls. The `sov-cli` has the ability to parse a JSON file that aligns with any of these calls and subsequently serialize them. The structure of the JSON file, which represents the call, closely mirrors that of the Enum member. Consider the `CreateToken` message as an example:
+In the above snippet, we can see that `CallMessage`s in `Bank` support five different types of calls. The `sov-cli` has the ability to parse a JSON file that aligns with any of these calls and subsequently serialize them. The structure of the JSON file, which represents the call, closely mirrors that of the Enum member. Consider the `Transfer` message as an example:
 ```rust
-    CreateToken {
-        /// Random value use to create a unique token address.
-        salt: u64,
-        /// The name of the new token.
-        token_name: String,
-        /// The initial balance of the new token.
-        initial_balance: Amount,
-        /// The address of the account that the new tokens are minted to.
-        minter_address: C::Address,
-        /// Authorized minter list.
-        authorized_minters: Vec<C::Address>,
-    }
+Transfer {
+    /// The address to which the tokens will be transferred.
+    to: C::Address,
+    /// The amount of tokens to transfer.
+    coins: Coins<C>,
+}
 ```
 Here's an example of a JSON representing the above call:
 ```json
 {
-    "CreateToken": {
-      "salt": 11,
-      "token_name": "sov-test-token",
-      "initial_balance": 1000,
-      "minter_address": "sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6",
-      "authorized_minters": ["sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6"]
+  "Transfer":{
+    "to":"sov1zgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfqve8h6h",
+    "coins":{
+      "amount":200,
+      "token_address":"sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"
     }
+  }
 }
 ```
-The JSON above is the contents of the file `demo-stf/src/sov-cli/test_data/create_token.json`. We'll use this transaction as our example for the rest of the tutorial. In order to serialize the transaction JSON to submit to our local Celestia node, we need to perform 2 operations:
+The JSON above is the contents of the file `demo-stf/src/sov-cli/test_data/transfer.json`. We'll use this transaction as our example for the rest of the tutorial. In order to serialize the transaction JSON to submit to our local Celestia node, we need to perform 2 operations:
 - Serialize the JSON representation of the transaction.
 - Bundle serialized transaction files into a blob (since DA layers accept blobs which can contain multiple transactions).
+
+NOTE: We use transfer as an example here because we already created the token as part of the sanity check above using `make test-create-token`
 
 To serialize transactions, `sov-cli` has a  `serialize-call` subcommand, which has the following structure:
 ```
@@ -236,16 +232,16 @@ Arguments:
   <CALL_DATA_PATH>        Path to the json file containing the parameters for a module call
   <NONCE>                 Nonce for the transaction
 ```
-For our test, we'll use the test private key located at `examples/demo-stf/src/sov-cli/test_data/minter_private_key.json`. This private key also corresponds to the address used in the `minter_address` and `authorized_minters` fields of the `create_token.json` file.
+For our test, we'll use the test private key located at `examples/demo-stf/src/sov-cli/test_data/minter_private_key.json`. This private key also corresponds to the address used in the `minter_address` field of the `create_token.json` file. This was the address that `make test-create-token` minted the new tokens to.
 
 2. Lets go ahead and serialize the transaction:
 ```
-$ ./target/debug/sov-cli serialize-call ./examples/demo-stf/src/sov-cli/test_data/minter_private_key.json Bank ./examples/demo-stf/src/sov-cli/test_data/create_token.json 1
+$ ./target/debug/sov-cli serialize-call ./examples/demo-stf/src/sov-cli/test_data/minter_private_key.json Bank ./examples/demo-stf/src/sov-cli/test_data/transfer.json 0
 ```
-Once the above command executes successfully, there should be a file named `./examples/demo-stf/src/sov-cli/test_data/create_token.dat`:
+Once the above command executes successfully, there should be a file named `./examples/demo-stf/src/sov-cli/test_data/transfer.dat`:
 ```
-$ cat ./examples/demo-stf/src/sov-cli/test_data/create_token.dat
-7cb06da843cb98a223cdd4aee61ea4533f99104fe03144720d75800580d9a665be112c73b8d0b02b8de73f678d2432e93f613071e6fd04cc96b6ab5e6952bf007b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe66800000001000b000000000000000e000000736f762d746573742d746f6b656ee803000000000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba759801000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba75980100000000000000
+$ cat ./examples/demo-stf/src/sov-cli/test_data/transfer.dat
+725f40c15bed53b271e23dccbbb61736a55a5dd7cf79a31dec928c664c55d6e00f8afb3273bf7ec3409187a848edfed9991ed3126bdca048361aecc3349a180f7b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe64a00000000011212121212121212121212121212121212121212121212121212121212121212c800000000000000135d23aee8cb15c890831ff36db170157acaac31df9bba6cd40e7329e608eabd0000000000000000
 ```
 The above is the hex representation of the serialized transaction. There is another subcommand for `sov-cli` called `make-blob` that can bundle serialized transaction files into a blob:
 ```
@@ -257,12 +253,12 @@ Arguments:
 ```
 We only have one transaction, so we can use that transaction to create the serialized blob, using the `make-blob` `sov-cli` subcommand:
 ```
-$ ./target/debug/sov-cli make-blob ./examples/demo-stf/src/sov-cli/test_data/create_token.dat 
-01000000d40000007cb06da843cb98a223cdd4aee61ea4533f99104fe03144720d75800580d9a665be112c73b8d0b02b8de73f678d2432e93f613071e6fd04cc96b6ab5e6952bf007b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe66800000001000b000000000000000e000000736f762d746573742d746f6b656ee803000000000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba759801000000a3201954f70ad62230dc3d840a5bf767702c04869e85ab3eee0b962857ba75980100000000000000
+$ ./target/debug/sov-cli make-blob ./examples/demo-stf/src/sov-cli/test_data/transfer.dat 
+01000000b6000000bb5fb10b2732f7bbee3505c5fc0a43f56b02014169b1f80f9493da65843bbb10ce443c9b583964a9e5224baca492474e87664444cdce0364cbc562bd507e40067b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe64a00000000011212121212121212121212121212121212121212121212121212121212121212c800000000000000135d23aee8cb15c890831ff36db170157acaac31df9bba6cd40e7329e608eabd0100000000000000
 ```
 4. Let's create the serialized blob and redirect the output to a file so that we can use it later:
 ```
-$ ./target/debug/sov-cli make-blob ./examples/demo-stf/src/sov-cli/test_data/create_token.dat > ./examples/demo-stf/src/sov-cli/test_data/tx_blob
+$ ./target/debug/sov-cli make-blob ./examples/demo-stf/src/sov-cli/test_data/transfer.dat  > ./examples/demo-stf/src/sov-cli/test_data/tx_blob
 ```
 5. Now that we have a transaction blob, let's switch back to the `examples/demo-rollup` folder and utilize the Makefile to submit the transaction:
 ```
