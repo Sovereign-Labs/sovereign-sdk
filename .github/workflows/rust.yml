@@ -178,3 +178,16 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v2
+  check-demo-rollup-table-of-contents:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+      - run: npm install -g doctoc
+      - name: Update table of contents
+        run: doctoc README.md --github --notitle
+        working-directory: ./examples/demo-rollup
+      - name: Check table of contents
+        # Exit status 0 means no changes were made, so the table of contents is
+        # up to date.
+        run: git diff-files --quiet
