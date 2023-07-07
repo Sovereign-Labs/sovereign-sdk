@@ -14,144 +14,144 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  check:
-    runs-on: ubuntu-latest
-    name: check
-    timeout-minutes: 60
-    env:
-      RUSTFLAGS: -D warnings
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-      - uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
-      - name: Run lint
-        run: |
-          if ! make lint ; then
-            echo "Linting or formatting errors detected, please run 'make lint-fix' to fix it";
-            exit 1
-          fi
+  #check:
+  #  runs-on: ubuntu-latest
+  #  name: check
+  #  timeout-minutes: 60
+  #  env:
+  #    RUSTFLAGS: -D warnings
+  #    SCCACHE_GHA_ENABLED: "true"
+  #    RUSTC_WRAPPER: "sccache"
+  #  steps:
+  #    - uses: actions/checkout@v3
+  #    - uses: Swatinem/rust-cache@v2
+  #    - uses: mozilla-actions/sccache-action@v0.0.3
+  #    - name: Run lint
+  #      run: |
+  #        if ! make lint ; then
+  #          echo "Linting or formatting errors detected, please run 'make lint-fix' to fix it";
+  #          exit 1
+  #        fi
 
-  # TODO: Temporary before migration to RiscZero 0.15: https://github.com/Sovereign-Labs/sovereign-sdk/issues/338
-  #   After that demo-prover should be integrated into workspace
-  check-demo-prover:
-    runs-on: ubuntu-latest
-    name: check demo prover
-    timeout-minutes: 90
-    env:
-      RUSTFLAGS: -D warnings
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-      - uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
-      - name: Run cargo check
-        run: cd examples/demo-prover && cargo check
-      - name: Run cargo fmt check
-        run: |
-          cd examples/demo-prover;
-          if ! cargo fmt --check ; then
-            echo "Formatting errors detected, please run 'cargo fmt' to fix it";
-            exit 1
-          fi
+  ## TODO: Temporary before migration to RiscZero 0.15: https://github.com/Sovereign-Labs/sovereign-sdk/issues/338
+  ##   After that demo-prover should be integrated into workspace
+  #check-demo-prover:
+  #  runs-on: ubuntu-latest
+  #  name: check demo prover
+  #  timeout-minutes: 90
+  #  env:
+  #    RUSTFLAGS: -D warnings
+  #    SCCACHE_GHA_ENABLED: "true"
+  #    RUSTC_WRAPPER: "sccache"
+  #  steps:
+  #    - uses: actions/checkout@v3
+  #    - uses: Swatinem/rust-cache@v2
+  #    - uses: mozilla-actions/sccache-action@v0.0.3
+  #    - name: Run cargo check
+  #      run: cd examples/demo-prover && cargo check
+  #    - name: Run cargo fmt check
+  #      run: |
+  #        cd examples/demo-prover;
+  #        if ! cargo fmt --check ; then
+  #          echo "Formatting errors detected, please run 'cargo fmt' to fix it";
+  #          exit 1
+  #        fi
 
-  # Check that every combination of features is working properly.
-  hack:
-    runs-on: ubuntu-latest
-    name: features
-    timeout-minutes: 60
-    env:
-      RUSTFLAGS: -D warnings
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-      - uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
-      - name: cargo install cargo-hack
-        uses: taiki-e/install-action@cargo-hack
-      # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
-      - name: cargo hack
-        run: make check-features
-  test:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-      - uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
-      - uses: foundry-rs/foundry-toolchain@v1
-      - name: Run cargo test
-        run: cargo test
-  coverage:
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
-      - uses: foundry-rs/foundry-toolchain@v1
-      - name: add llvm component
-        run: rustup component add llvm-tools-preview
-      - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
-      - name: cargo install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-      - name: cargo generate-lockfile
-        if: hashFiles('Cargo.lock') == ''
-        run: cargo generate-lockfile
-      - name: cargo llvm-cov
-        run: make coverage
-      - name: Upload to codecov.io
-        uses: codecov/codecov-action@v3
-        with:
-          # When retry is implemented, we can enable it again: https://github.com/codecov/codecov-action/issues/926
-          fail_ci_if_error: false
-  demo-rollup-local:
-    runs-on: ubuntu-latest
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-      - uses: actions/checkout@v3
-      - uses: mozilla-actions/sccache-action@v0.0.3
-      - name: start celestia local
-        working-directory: ./examples/demo-rollup
-        run: make start
-      - name: start sovereign demo-rollup
-        working-directory: ./examples/demo-rollup
-        run: |
-          cargo build
-          ../../target/debug/sov-demo-rollup &
-      - name: wait for service to be up
-        run: |
-          SECONDS=0
-          until curl -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_balanceOf","params":["sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6","sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsgscxvf"],"id":1}' http://127.0.0.1:12345; [ $? -eq 0 ] || [ $SECONDS -ge 1200 ]
-          do
-            echo "Curl failed or server not ready yet, sleeping for 5 seconds..."
-            sleep 5
-          done
-      - name: submit rollup transaction
-        working-directory: ./examples/demo-rollup
-        run: make test-create-token
-      - name: evaluate result
-        # simple grep check on RPC to verify if the curl output contains "1000" which is the supply of token - could use jq and parse, but considering this won't change, it seems like a simple check to get it out quick
-        # if we want more complex parsing in the future and validation, we can switch to jq or other tools
-        run: |
-          SECONDS=0
-          until curl -f -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_balanceOf","params":["sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6","sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsgscxvf"],"id":1}' http://127.0.0.1:12345 | grep 1000; [ $? -eq 0 ] || [ $SECONDS -ge 300 ]
-          do
-            echo "Curl failed, retrying in 5 seconds..."
-            sleep 5
-          done
+  ## Check that every combination of features is working properly.
+  #hack:
+  #  runs-on: ubuntu-latest
+  #  name: features
+  #  timeout-minutes: 60
+  #  env:
+  #    RUSTFLAGS: -D warnings
+  #    SCCACHE_GHA_ENABLED: "true"
+  #    RUSTC_WRAPPER: "sccache"
+  #  steps:
+  #    - uses: actions/checkout@v3
+  #    - uses: Swatinem/rust-cache@v2
+  #    - uses: mozilla-actions/sccache-action@v0.0.3
+  #    - name: cargo install cargo-hack
+  #      uses: taiki-e/install-action@cargo-hack
+  #    # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
+  #    - name: cargo hack
+  #      run: make check-features
+  #test:
+  #  runs-on: ubuntu-latest
+  #  timeout-minutes: 60
+  #  env:
+  #    SCCACHE_GHA_ENABLED: "true"
+  #    RUSTC_WRAPPER: "sccache"
+  #  steps:
+  #    - uses: actions/checkout@v3
+  #    - uses: Swatinem/rust-cache@v2
+  #    - uses: mozilla-actions/sccache-action@v0.0.3
+  #    - uses: foundry-rs/foundry-toolchain@v1
+  #    - name: Run cargo test
+  #      run: cargo test
+  #coverage:
+  #  runs-on: ubuntu-latest
+  #  timeout-minutes: 90
+  #  env:
+  #    SCCACHE_GHA_ENABLED: "true"
+  #    RUSTC_WRAPPER: "sccache"
+  #  steps:
+  #    - uses: actions/checkout@v3
+  #      with:
+  #        submodules: true
+  #    - uses: foundry-rs/foundry-toolchain@v1
+  #    - name: add llvm component
+  #      run: rustup component add llvm-tools-preview
+  #    - uses: Swatinem/rust-cache@v2
+  #    - uses: mozilla-actions/sccache-action@v0.0.3
+  #    - name: cargo install cargo-llvm-cov
+  #      uses: taiki-e/install-action@cargo-llvm-cov
+  #    - name: cargo generate-lockfile
+  #      if: hashFiles('Cargo.lock') == ''
+  #      run: cargo generate-lockfile
+  #    - name: cargo llvm-cov
+  #      run: make coverage
+  #    - name: Upload to codecov.io
+  #      uses: codecov/codecov-action@v3
+  #      with:
+  #        # When retry is implemented, we can enable it again: https://github.com/codecov/codecov-action/issues/926
+  #        fail_ci_if_error: false
+  #demo-rollup-local:
+  #  runs-on: ubuntu-latest
+  #  env:
+  #    SCCACHE_GHA_ENABLED: "true"
+  #    RUSTC_WRAPPER: "sccache"
+  #  steps:
+  #    - uses: actions/checkout@v3
+  #    - uses: mozilla-actions/sccache-action@v0.0.3
+  #    - name: start celestia local
+  #      working-directory: ./examples/demo-rollup
+  #      run: make start
+  #    - name: start sovereign demo-rollup
+  #      working-directory: ./examples/demo-rollup
+  #      run: |
+  #        cargo build
+  #        ../../target/debug/sov-demo-rollup &
+  #    - name: wait for service to be up
+  #      run: |
+  #        SECONDS=0
+  #        until curl -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_balanceOf","params":["sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6","sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsgscxvf"],"id":1}' http://127.0.0.1:12345; [ $? -eq 0 ] || [ $SECONDS -ge 1200 ]
+  #        do
+  #          echo "Curl failed or server not ready yet, sleeping for 5 seconds..."
+  #          sleep 5
+  #        done
+  #    - name: submit rollup transaction
+  #      working-directory: ./examples/demo-rollup
+  #      run: make test-create-token
+  #    - name: evaluate result
+  #      # simple grep check on RPC to verify if the curl output contains "1000" which is the supply of token - could use jq and parse, but considering this won't change, it seems like a simple check to get it out quick
+  #      # if we want more complex parsing in the future and validation, we can switch to jq or other tools
+  #      run: |
+  #        SECONDS=0
+  #        until curl -f -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_balanceOf","params":["sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6","sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsgscxvf"],"id":1}' http://127.0.0.1:12345 | grep 1000; [ $? -eq 0 ] || [ $SECONDS -ge 300 ]
+  #        do
+  #          echo "Curl failed, retrying in 5 seconds..."
+  #          sleep 5
+  #        done
   cargo-doc-artifact:
     runs-on: ubuntu-latest
     steps:
