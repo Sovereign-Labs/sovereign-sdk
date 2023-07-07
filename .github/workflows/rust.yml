@@ -161,12 +161,20 @@ jobs:
       # The artifact tends to become quite large with all the dependencies, so
       # we don't include them in the docs.
       - run: cargo doc --no-deps
-      - name: Archive artifact
+      - name: Prepare artifact
         shell: sh
         run: |
           tar --directory "target/doc" -cvf "$RUNNER_TEMP/artifact.tar" .
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: github-pages
+          path: ${{ runner.temp }}/artifact.tar
+          retention-days: 1
+          if-no-files-found: error
   deploy:
     needs: cargo-doc-artifact
+    timeout-minutes: 5
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
       pages: write # to deploy to Pages
