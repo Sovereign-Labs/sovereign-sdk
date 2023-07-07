@@ -190,4 +190,4 @@ jobs:
       - name: Check table of contents
         # Exit status 0 means no changes were made, so the table of contents is
         # up to date.
-        run: git diff-files
+        run: git diff --exit-code
