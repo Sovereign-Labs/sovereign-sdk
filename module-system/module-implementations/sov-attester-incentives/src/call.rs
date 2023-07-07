@@ -1,12 +1,15 @@
+use crate::{AttesterIncentives, UnbondingInfo};
 use anyhow::{ensure, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::Coins;
 use sov_modules_api::{CallResponse, Context, Spec};
 use sov_rollup_interface::{optimistic::Attestation, zk::traits::Zkvm};
 use sov_state::{storage::StorageProof, Storage, WorkingSet};
-use std::{cmp::min, fmt::Debug};
-
-use crate::{AttesterIncentives, UnbondingInfo};
+use std::{
+    cmp::min,
+    fmt::{self, Debug},
+};
+use thiserror::Error;
 
 /// This enumeration represents the available call messages for interacting with the `ExampleModule` module.
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
@@ -20,6 +23,16 @@ pub enum CallMessage<C: Context> {
     UnbondChallenger,
     ProcessAttestation(Attestation<StorageProof<<<C as Spec>::Storage as Storage>::Proof>>),
     ProcessChallenge(Vec<u8>),
+}
+
+// Raised when an attester is slashed
+#[derive(Debug, Clone, Error)]
+struct AttesterSlashed;
+
+impl fmt::Display for AttesterSlashed {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Attester slashed")
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,6 +154,14 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
         Ok(CallResponse::default())
     }
 
+    pub(crate) fn finish_unbonding_attester(
+        &self,
+        _context: &C,
+        _working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<sov_modules_api::CallResponse> {
+        todo!()
+    }
+
     /// Try to process an attestation, if the attester is bonded
     pub(crate) fn process_attestation(
         &self,
@@ -148,16 +169,29 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
-        // We first need to check the bonding proof
+        // We have to check that the current bond is still greater than the minimum bond
+        let current_bond = self.bonded_attesters.get(context.sender(), working_set);
+
+        ensure!(current_bond.is_some(), "Attester is not currently bonded");
+
+        let current_bond = current_bond.unwrap();
+
+        let min_bond = self.minimum_attester_bond.get(working_set).unwrap_or(0);
+
+        ensure!(
+            current_bond >= min_bond,
+            "The current bond is not high enough"
+        );
+
+        // We need to check the bonding proof
         // This proof checks that the attester was bonded at the initial root hash
         let (attester_key, bond_opt) = working_set
             .backing()
             .open_proof(attestation.initial_state_root, attestation.proof_of_bond)?;
 
-        // Question: Do we have to check here the initial state root against the storage? I feel that it is already done at the
+        // TODO: Do we have to check here the initial state root against the storage? I feel that it is already done at the
         // previous step right above.
         // We also need to check the block hash somewhere (but where?)
-
         let sender_u8: Vec<u8> = context.sender().as_ref().into();
 
         // We have to check that the storage key is the same as the sender's
@@ -166,6 +200,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
             "The sender key doesn't match the attester key provided in the proof"
         );
 
+        // Maybe we can check directly against the bonded attester set?
         let bond = bond_opt.unwrap_or_default();
         let bond = bond.value();
 
@@ -179,17 +214,39 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
 
         let minimum_bond = self.minimum_attester_bond.get_or_err(working_set)?;
 
-        // We then have to check that the bond is greater than the minimum bond
-        ensure!(bond_u64 >= minimum_bond, "Attester is not bonded");
-
-        working_set.add_event(
-            "processed_valid_attestation",
-            &format!("attester: {:?}", context.sender()),
+        // We then have to check that the bond was greater than the minimum bond
+        ensure!(
+            bond_u64 >= minimum_bond,
+            "Attester is not bonded at the time of the attestation"
         );
 
-        // Then we can optimistically process the transaction
-        // Question: How do we put the attestation on chain?
-        Ok(CallResponse::default())
+        // We have to check that this attester is currently not unbonding:
+        // if so we have to slash it
+        if !self
+            .unbonding_attesters
+            .get(context.sender(), working_set)
+            .is_none()
+        {
+            // The attester is in the unbonding phase, we have to slash him
+            working_set.add_event(
+                "an attester tried to execute an attestation during the unbonding phase",
+                &format!("slashed_attester: {:?}", context.sender()),
+            );
+            // TODO: Should we set it to 0? or should we only remove the minimal bond?
+            self.bonded_attesters
+                .set(context.sender(), &(current_bond - min_bond), working_set);
+
+            Err(AttesterSlashed.into())
+        } else {
+            working_set.add_event(
+                "processed_valid_attestation",
+                &format!("attester: {:?}", context.sender()),
+            );
+
+            // Then we can optimistically process the transaction
+            // TODO: How do we put the attestation on the DA layer?
+            Ok(CallResponse::default())
+        }
     }
 
     /// Try to process a zk proof, if the challenger is bonded.

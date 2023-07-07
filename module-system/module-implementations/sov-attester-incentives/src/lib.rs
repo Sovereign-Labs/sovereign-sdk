@@ -139,7 +139,9 @@ where
             call::CallMessage::BeginAttesterUnbonding => {
                 self.begin_unbonding_attester(context, working_set)
             }
-            call::CallMessage::FinishAttesterUnbonding => todo!(),
+            call::CallMessage::FinishAttesterUnbonding => {
+                self.finish_unbonding_attester(context, working_set)
+            }
             call::CallMessage::BondChallenger(bond_amount) => {
                 self.bond_user_helper(bond_amount, context.sender(), Role::Challenger, working_set)
             }

@@ -1,7 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::{hooks::SlotHooks, Context, Spec};
 use sov_rollup_interface::{da::BlobTransactionTrait, zk::traits::ValidityCondition};
-use sov_state::WorkingSet;
 
 use crate::ChainState;
 
