@@ -136,14 +136,20 @@ where
             call::CallMessage::BondAttester(bond_amount) => {
                 self.bond_user_helper(bond_amount, context.sender(), Role::Attester, working_set)
             }
-            call::CallMessage::BeginAttesterUnbonding => todo!(),
+            call::CallMessage::BeginAttesterUnbonding => {
+                self.begin_unbonding_attester(context, working_set)
+            }
             call::CallMessage::FinishAttesterUnbonding => todo!(),
             call::CallMessage::BondChallenger(bond_amount) => {
                 self.bond_user_helper(bond_amount, context.sender(), Role::Challenger, working_set)
             }
-            call::CallMessage::UnbondChallenger => todo!(),
-            call::CallMessage::ProcessAttestation(_) => todo!(),
-            call::CallMessage::ProcessChallenge(_) => todo!(),
+            call::CallMessage::UnbondChallenger => self.unbond_challenger(context, working_set),
+            call::CallMessage::ProcessAttestation(attestation) => {
+                self.process_attestation(attestation, context, working_set)
+            }
+            call::CallMessage::ProcessChallenge(proof) => {
+                self.process_challenge(&proof, context, working_set)
+            }
         }
         .map_err(|e| e.into())
     }

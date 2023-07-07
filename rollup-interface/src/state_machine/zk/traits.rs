@@ -1,5 +1,6 @@
 use core::fmt::Debug;
 
+use borsh::{BorshDeserialize, BorshSchema, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -38,7 +39,9 @@ pub trait ZkvmGuest: Zkvm {
 }
 
 /// This trait is implemented on the struct/enum which expresses the validity condition
-pub trait ValidityCondition: Serialize + DeserializeOwned {
+pub trait ValidityCondition:
+    Serialize + DeserializeOwned + BorshSerialize + BorshDeserialize
+{
     type Error: Into<anyhow::Error>;
     /// Combine two conditions into one (typically run inside a recursive proof).
     /// Returns an error if the two conditions cannot be combined

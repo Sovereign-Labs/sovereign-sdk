@@ -1,9 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::{hooks::SlotHooks, Context};
-use sov_rollup_interface::{
-    stf::RollupHeaderTrait,
-    zk::traits::{StateTransition, ValidityCondition},
-};
+use sov_modules_api::{hooks::SlotHooks, Context, Spec};
+use sov_rollup_interface::{da::BlobTransactionTrait, zk::traits::ValidityCondition};
 use sov_state::WorkingSet;
 
 use crate::ChainState;
@@ -15,14 +12,14 @@ impl<Ctx: Context, Cond: ValidityCondition + BorshDeserialize + BorshSerialize> 
 
     fn begin_slot_hook(
         &self,
+        blob: &mut impl BlobTransactionTrait,
         state_checkpoint: sov_state::StateCheckpoint<
             <Self::Context as sov_modules_api::Spec>::Storage,
         >,
-        rollup_header: impl RollupHeaderTrait,
-    ) -> WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage> {
+    ) -> anyhow::Result<<Self::Context as Spec>::Storage> {
         let mut working_set = state_checkpoint.to_revertable();
         self.increment_slot_height(&mut working_set);
         // TODO: store state transition
-        working_set
+        Ok(working_set.consume_get_storage())
     }
 }

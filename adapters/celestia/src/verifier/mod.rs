@@ -1,3 +1,4 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::{
@@ -108,7 +109,9 @@ pub struct RollupParams {
     pub namespace: NamespaceId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash, BorshDeserialize, BorshSerialize,
+)]
 /// A validity condition expressing that a chain of DA layer blocks is contiguous and canonical
 pub struct ChainValidityCondition {
     pub prev_hash: [u8; 32],

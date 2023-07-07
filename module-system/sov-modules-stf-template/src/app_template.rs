@@ -4,7 +4,7 @@ use crate::{
 };
 use borsh::BorshDeserialize;
 use sov_modules_api::{
-    hooks::{ApplyBlobHooks, SyncHooks, TxHooks},
+    hooks::{ApplyBlobHooks, TxHooks},
     Context, DispatchCall, Genesis,
 };
 use sov_rollup_interface::{

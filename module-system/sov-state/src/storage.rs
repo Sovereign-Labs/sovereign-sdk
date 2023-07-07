@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
 // `Key` type for the `Storage`
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 pub struct StorageKey {
     key: Arc<Vec<u8>>,
 }
@@ -60,7 +60,9 @@ impl StorageKey {
 }
 
 /// A serialized value suitable for storing. Internally uses an Arc<u8> for cheap cloning.
-#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Default,
+)]
 pub struct StorageValue {
     value: Arc<Vec<u8>>,
 }
@@ -101,6 +103,7 @@ impl StorageValue {
     }
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 /// A proof that a particular storage key has a particular value, or is absent.
 pub struct StorageProof<P> {
     /// The key which is proven

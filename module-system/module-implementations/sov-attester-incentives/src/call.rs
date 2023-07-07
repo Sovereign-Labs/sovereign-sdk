@@ -1,10 +1,10 @@
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::Coins;
 use sov_modules_api::{CallResponse, Context, Spec};
 use sov_rollup_interface::{optimistic::Attestation, zk::traits::Zkvm};
-use sov_state::{Storage, WorkingSet};
-use std::fmt::Debug;
+use sov_state::{storage::StorageProof, Storage, WorkingSet};
+use std::{cmp::min, fmt::Debug};
 
 use crate::{AttesterIncentives, UnbondingInfo};
 
@@ -18,7 +18,7 @@ pub enum CallMessage<C: Context> {
     FinishAttesterUnbonding,
     BondChallenger(u64),
     UnbondChallenger,
-    ProcessAttestation(Attestation<<<C as Spec>::Storage as Storage>::Proof>),
+    ProcessAttestation(Attestation<StorageProof<<<C as Spec>::Storage as Storage>::Proof>>),
     ProcessChallenge(Vec<u8>),
 }
 
@@ -32,7 +32,7 @@ pub(crate) enum Role {
 }
 
 impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
-    /// A helper function for the `bond_prover` call. Also used to bond provers
+    /// A helper function for the `bond_challenger/attester` call. Also used to bond challengers/attesters
     /// during genesis when no context is available.
     pub(super) fn bond_user_helper(
         &self,
@@ -54,7 +54,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
             .transfer_from(user_address, &self.address, coins, working_set)?;
 
         let (balances, event_key) = match role {
-            Role::Attester => (&self.bonded_attesters, "bonded_prover"),
+            Role::Attester => (&self.bonded_attesters, "bonded_attester"),
             Role::Challenger => (&self.bonded_challengers, "bonded_challenger"),
         };
 
@@ -138,6 +138,57 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
             );
         }
 
+        Ok(CallResponse::default())
+    }
+
+    /// Try to process an attestation, if the attester is bonded
+    pub(crate) fn process_attestation(
+        &self,
+        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<sov_modules_api::CallResponse> {
+        // We first need to check the bonding proof
+        // This proof checks that the attester was bonded at the initial root hash
+        let (attester_key, bond_opt) = working_set
+            .backing()
+            .open_proof(attestation.initial_state_root, attestation.proof_of_bond)?;
+
+        // Question: Do we have to check here the initial state root against the storage? I feel that it is already done at the
+        // previous step right above.
+        // We also need to check the block hash somewhere (but where?)
+
+        let sender_u8: Vec<u8> = context.sender().as_ref().into();
+
+        // We have to check that the storage key is the same as the sender's
+        ensure!(
+            *attester_key.as_ref() == sender_u8,
+            "The sender key doesn't match the attester key provided in the proof"
+        );
+
+        let bond = bond_opt.unwrap_or_default();
+        let bond = bond.value();
+
+        ensure!(bond.len() < 8, "The bond is not a 64 bits number");
+
+        let bond_u64 = {
+            let mut bond_slice = [0_u8; 8];
+            bond_slice[..min(bond.len(), 8)].copy_from_slice(bond);
+            u64::from_le_bytes(bond_slice)
+        };
+
+        let minimum_bond = self.minimum_attester_bond.get_or_err(working_set)?;
+
+        // We then have to check that the bond is greater than the minimum bond
+        ensure!(bond_u64 >= minimum_bond, "Attester is not bonded");
+
+        working_set.add_event(
+            "processed_valid_attestation",
+            &format!("attester: {:?}", context.sender()),
+        );
+
+        // Then we can optimistically process the transaction
+        // Question: How do we put the attestation on chain?
         Ok(CallResponse::default())
     }
 
