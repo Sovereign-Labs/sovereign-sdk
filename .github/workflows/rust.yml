@@ -165,7 +165,7 @@ jobs:
         # We're inside a Cargo workspace, so there's no index.html by default.
         # We must redirect to one of the workspace member crates' documentation.
         # <https://dev.to/deciduously/prepare-your-rust-api-docs-for-github-pages-2n5i>
-        run: echo '<meta http-equiv="refresh" content="0; url=build_wheel/sov_rollup_interface/index.html">' > target/doc/index.html
+        run: echo '<meta http-equiv="refresh" content="0; url=sov_rollup_interface/index.html">' > target/doc/index.html
       - name: Fix assets' file permissions
         run: chmod -c -R +rX "target/doc"
       - name: Upload artifacts
