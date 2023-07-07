@@ -108,7 +108,7 @@ fn default_max_response_size() -> u32 {
 }
 
 fn default_request_timeout_ms() -> u64 {
-    10_000
+    30_000
 }
 
 impl DaService for CelestiaService {
@@ -279,9 +279,13 @@ impl DaService for CelestiaService {
                 .request::<CelestiaBasicResponse, _>("state.SubmitPayForBlob", params)
                 .await?;
             if !response.is_success() {
-                anyhow::bail!("Error returned from celestia node: {:?}", response);
+                anyhow::bail!("Error returned from Celestia node: {:?}", response);
             }
-            info!("Result after submitting: {:?}", response);
+            debug!("Response after submitting blob: {:?}", response);
+            info!(
+                "Blob has been submitted to Celestia. tx-hash={}",
+                response.tx_hash,
+            );
             Ok::<(), BoxError>(())
         })
     }
