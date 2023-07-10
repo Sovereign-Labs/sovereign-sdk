@@ -96,7 +96,7 @@ pub struct DaServiceConfig {
     /// The maximum size of a Celestia RPC response, in bytes
     #[serde(default = "default_max_response_size")]
     pub max_celestia_response_body_size: u32,
-    /// The maximum size of a Celestia RPC response, in bytes
+    /// The timeout for a Celestia RPC request, in seconds
     #[serde(default = "default_timeout_seconds")]
     pub celestia_rpc_timeout_seconds: u64,
 }
