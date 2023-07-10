@@ -24,6 +24,7 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> Sequencer<B, T> 
         // Need to release lock before await, so Future is `Send`.
         // But potentially it can create blobs that sent out of order.
         // Can be improved with atomics, so new batch is only created after previous was submitted.
+        tracing::info!("Going to submit batch!");
         let blob = {
             let mut batch_builder = self
                 .batch_builder
@@ -31,14 +32,15 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> Sequencer<B, T> 
                 .map_err(|e| anyhow!("failed to lock mempool: {}", e.to_string()))?;
             batch_builder.get_next_blob()?
         };
-        let blob: Vec<u8> = blob.into_iter().flatten().collect();
+        let blob: Vec<u8> = borsh::to_vec(&blob)?;
         match self.da_service.send_transaction(&blob).await {
             Ok(_) => Ok(()),
             Err(e) => Err(anyhow!("failed to submit batch: {:?}", e)),
         }
     }
 
-    fn submit_transaction(&self, tx: Vec<u8>) -> anyhow::Result<()> {
+    fn accept_tx(&self, tx: Vec<u8>) -> anyhow::Result<()> {
+        tracing::info!("Accepting tx: 0x{}", hex::encode(&tx));
         let mut batch_builder = self
             .batch_builder
             .lock()
@@ -63,7 +65,7 @@ where
     })?;
     rpc.register_method("sequencer_acceptTx", move |params, sequencer| {
         let tx: SubmitTransaction = params.one()?;
-        let response = match sequencer.submit_transaction(tx.body) {
+        let response = match sequencer.accept_tx(tx.body) {
             Ok(()) => SubmitTransactionResponse::Registered,
             Err(e) => SubmitTransactionResponse::Failed(e.to_string()),
         };
@@ -87,6 +89,12 @@ where
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct SubmitTransaction {
     body: Vec<u8>,
+}
+
+impl SubmitTransaction {
+    pub fn new(body: Vec<u8>) -> Self {
+        SubmitTransaction { body }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -238,7 +246,9 @@ mod tests {
         let submitted = da_service.get_submitted();
         assert_eq!(1, submitted.len());
         // First bytes of each tx, flattened
-        assert_eq!(vec![tx1[0], tx2[0]], submitted[0]);
+        let blob: Vec<Vec<u8>> = vec![vec![tx1[0]], vec![tx2[0]]];
+        let expected: Vec<u8> = borsh::to_vec(&blob).unwrap();
+        assert_eq!(expected, submitted[0]);
     }
 
     #[tokio::test]
@@ -265,6 +275,12 @@ mod tests {
         let submitted = da_service.get_submitted();
         assert_eq!(1, submitted.len());
         // First bytes of each tx, flattened
-        assert_eq!(vec![tx[0]], submitted[0]);
+        let blob: Vec<Vec<u8>> = vec![vec![tx[0]]];
+        let expected: Vec<u8> = borsh::to_vec(&blob).unwrap();
+        assert_eq!(expected, submitted[0]);
     }
+
+    #[tokio::test]
+    #[ignore = "TBD"]
+    async fn test_full_flow() {}
 }
