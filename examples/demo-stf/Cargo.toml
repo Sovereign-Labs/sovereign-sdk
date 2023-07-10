@@ -1,9 +1,9 @@
 [package]
 name = "demo-stf"
-version = { workspace = true } 
-edition = { workspace = true } 
+version = { workspace = true }
+edition = { workspace = true }
 resolver = "2"
-authors = { workspace = true } 
+authors = { workspace = true }
 homepage = "sovereign.xyz"
 publish = false
 
@@ -15,7 +15,7 @@ required-features = ["native"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = { workspace = true}
+anyhow = { workspace = true }
 borsh = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
@@ -23,6 +23,7 @@ sha2 = { workspace = true }
 clap = { workspace = true, optional = true }
 toml = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"], optional = true }
+tokio = { workspace = true, optional = true }
 hex = { workspace = true }
 tracing = { workspace = true }
 
@@ -40,6 +41,7 @@ sov-modules-macros = { path = "../../module-system/sov-modules-macros" }
 sov-schema-db = { path = "../../full-node/db/sov-schema-db", optional = true }
 sov-db = { path = "../../full-node/db/sov-db", optional = true }
 const-rollup-config = { path = "../const-rollup-config" }
+sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
@@ -49,17 +51,19 @@ rand = "0.8"
 [features]
 default = ["native"]
 native = [
-	"dep:sov-db",
-	"dep:sov-schema-db",
-	"sov-bank/native",
-	"sov-accounts/native",
-	"sov-election/native",
-	"sov-sequencer-registry/native",
-	"sov-value-setter/native",
-	"sov-modules-api/native",
-	"sov-rollup-interface/mocks",
-	"clap",
-	"serde_json",
-	"jsonrpsee",
-	"toml"]
+    "dep:sov-db",
+    "dep:sov-schema-db",
+    "sov-bank/native",
+    "sov-accounts/native",
+    "sov-election/native",
+    "sov-sequencer-registry/native",
+    "sov-value-setter/native",
+    "sov-modules-api/native",
+    "sov-rollup-interface/mocks",
+    "sov-sequencer",
+    "clap",
+    "serde_json",
+    "jsonrpsee",
+    "tokio",
+    "toml"]
 verifier = []

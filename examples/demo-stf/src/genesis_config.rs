@@ -35,7 +35,7 @@ pub fn create_demo_genesis_config<C: Context>(
         sov_bank::genesis::SALT,
     );
 
-    let sequencer_config = sov_sequencer_registry::SequencerConfig {
+    let sequencer_registry_config = sov_sequencer_registry::SequencerConfig {
         seq_rollup_address: sequencer_address,
         seq_da_address: sequencer_da_address,
         coins_to_lock: sov_bank::Coins {
@@ -54,7 +54,7 @@ pub fn create_demo_genesis_config<C: Context>(
 
     GenesisConfig::new(
         bank_config,
-        sequencer_config,
+        sequencer_registry_config,
         election_config,
         value_setter_config,
         sov_accounts::AccountConfig { pub_keys: vec![] },

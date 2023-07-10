@@ -18,12 +18,16 @@ pub enum TxEffect {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+// TODO: Should be generic for Address for pretty printing https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
 pub enum SequencerOutcome {
     /// Sequencer receives reward amount in defined token and can withdraw its deposit
     Rewarded(u64),
     /// Sequencer loses its deposit and receives no reward
     Slashed {
         reason: SlashingReason,
+        // Keep this comment for so it doesn't need to investigate serde issue again.
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
+        // #[serde(bound(deserialize = ""))]
         sequencer_da_address: Vec<u8>,
     },
     /// Batch was ignored, sequencer deposit left untouched.
