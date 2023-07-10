@@ -25,15 +25,14 @@ tokio = { workspace = true }
 tracing-subscriber = "0.3.17"
 
 jupiter = { path = "../../adapters/celestia" }
-demo-stf = { path = "../demo-stf", features = ["native", "experimental"] }
+demo-stf = { path = "../demo-stf", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-db = { path = "../../full-node/db/sov-db" }
-sov-ethereum = { path = "../../full-node/sov-ethereum" }
+sov-ethereum = { path = "../../full-node/sov-ethereum", optional = true }
 sov-sequencer = { path = "../../full-node/sov-sequencer" }
 risc0-adapter = { path = "../../adapters/risc0" }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }
 
-sov-evm = { path = "../../module-system/module-implementations/sov-evm", default-features = false, features = ["experimental"] }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", default-features = false }
 sov-election = { path = "../../module-system/module-implementations/examples/sov-election", default-features = false }
 sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", default-features = false }

@@ -18,7 +18,7 @@ serde = { workspace = true, features = ["derive"] }
 sov-rollup-interface = { path = "../../rollup-interface" }
 ethers = {version = "2.0.7"}
 
-sov-evm = { path = "../../module-system/module-implementations/sov-evm", default-features = false, features = ["experimental"] }
+sov-evm = { path = "../../module-system/module-implementations/sov-evm", default-features = false }
 demo-stf = { path = "../../examples/demo-stf", features = ["native", "experimental"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", default-features = false }
 const-rollup-config = { path = "../../examples/const-rollup-config" }
