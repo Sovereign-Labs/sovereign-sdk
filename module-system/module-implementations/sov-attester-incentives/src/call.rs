@@ -25,7 +25,7 @@ pub enum CallMessage<C: Context> {
     ProcessChallenge(Vec<u8>),
 }
 
-// Raised when an attester is slashed
+/// Error raised while processessing the attester incentives
 #[derive(Debug, Clone, Error)]
 enum AttesterIncentiveErrors {
     AttesterSlashed,
@@ -205,6 +205,12 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
         self.unbonding_attesters
             .remove(context.sender(), working_set);
 
+        // We add an event for the successful withdrawal
+        working_set.add_event(
+            "attester_unbonding_successful",
+            &format!("unbonded_attester: {:?}", context.sender()),
+        );
+
         Ok(CallResponse::default())
     }
 
@@ -275,7 +281,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
         {
             // The attester is in the unbonding phase, we have to slash him
             working_set.add_event(
-                "an attester tried to execute an attestation during the unbonding phase",
+                "attester_slashed",
                 &format!("slashed_attester: {:?}", context.sender()),
             );
             // TODO: Should we set it to 0? or should we only remove the minimal bond?
