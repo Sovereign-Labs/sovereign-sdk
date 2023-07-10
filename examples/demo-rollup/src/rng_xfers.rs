@@ -151,7 +151,7 @@ impl DaService for RngDaService {
             generate_transfers(num_txns, (block.height - 1) * (num_txns as u64))
         };
 
-        let address = CelestiaAddress(SEQUENCER_DA_ADDRESS.to_vec());
+        let address = CelestiaAddress::try_from(&SEQUENCER_DA_ADDRESS[..]).unwrap();
         let blob = TestBlob::new(data, address, [0u8; 32]);
 
         vec![blob]

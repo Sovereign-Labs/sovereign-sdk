@@ -50,6 +50,8 @@ async fn start_rpc_server(methods: impl Into<Methods>, address: SocketAddr) {
         .build([address].as_ref())
         .await
         .unwrap();
+
+    info!("Starting RPC server at {} ", server.local_addr().unwrap());
     let _server_handle = server.start(methods).unwrap();
     futures::future::pending::<()>().await;
 }
@@ -196,9 +198,23 @@ async fn main() -> Result<(), anyhow::Error> {
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
         demo.begin_slot(Default::default());
         for blob in &mut blob_txs {
-            let receipts = demo.apply_blob(blob, None);
-            info!("receipts: {:?}", receipts);
-            data_to_commit.add_batch(receipts);
+            let batch_receipt = demo.apply_blob(blob, None);
+            info!(
+                "batch 0x{} has been applied with {} txs, sequencer outcome {:?}",
+                hex::encode(batch_receipt.batch_hash),
+                batch_receipt.tx_receipts.len(),
+                batch_receipt.inner
+            );
+            for (i, tx_receipt) in batch_receipt.tx_receipts.iter().enumerate() {
+                info!(
+                    "tx #{} hash: 0x{} result {:?}",
+                    i,
+                    hex::encode(tx_receipt.tx_hash),
+                    tx_receipt.receipt
+                );
+            }
+
+            data_to_commit.add_batch(batch_receipt);
         }
         let (next_state_root, _witness) = demo.end_slot();
 

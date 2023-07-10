@@ -256,9 +256,11 @@ where
         match Batch::deserialize_reader(blob_data) {
             Ok(batch) => Ok(batch),
             Err(e) => {
+                let data_so_far = blob_data.acc();
                 error!(
-                    "Unable to deserialize batch provided by the sequencer {}",
-                    e
+                    "Unable to deserialize batch provided by the sequencer {}: 0x{}",
+                    e,
+                    hex::encode(data_so_far),
                 );
                 Err(SlashingReason::InvalidBatchEncoding)
             }
