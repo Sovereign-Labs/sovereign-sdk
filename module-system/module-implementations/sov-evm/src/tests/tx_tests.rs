@@ -79,6 +79,7 @@ impl TestClient {
         }
     }
 
+    #[allow(dead_code)]
     async fn new_demo_rollup_client(
         chain_id: u64,
         key: Wallet<SigningKey>,
