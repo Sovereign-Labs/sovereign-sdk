@@ -1,27 +1,24 @@
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::{
-    crypto::SimpleHasher,
-    da::{self, BlobTransactionTrait, BlockHashTrait as BlockHash, CountedBufReader, DaSpec},
-    traits::{BlockHeaderTrait, CanonicalHash},
-    zk::traits::ValidityCondition,
-    Buf,
+use sov_rollup_interface::crypto::SimpleHasher;
+use sov_rollup_interface::da::{
+    self, BlobTransactionTrait, BlockHashTrait as BlockHash, CountedBufReader, DaSpec,
 };
+use sov_rollup_interface::traits::{BlockHeaderTrait, CanonicalHash};
+use sov_rollup_interface::zk::traits::ValidityCondition;
+use sov_rollup_interface::Buf;
 use thiserror::Error;
 
 pub mod address;
 pub mod proofs;
 
-use crate::{
-    pfb_from_iter,
-    share_commit::recreate_commitment,
-    shares::{read_varint, BlobIterator, NamespaceGroup, Share},
-    types::ValidationError,
-    BlobWithSender, CelestiaHeader, DataAvailabilityHeader,
-};
 use proofs::*;
 
 use self::address::CelestiaAddress;
+use crate::share_commit::recreate_commitment;
+use crate::shares::{read_varint, BlobIterator, NamespaceGroup, Share};
+use crate::types::ValidationError;
+use crate::{pfb_from_iter, BlobWithSender, CelestiaHeader, DataAvailabilityHeader};
 
 pub struct CelestiaVerifier {
     pub rollup_namespace: NamespaceId,

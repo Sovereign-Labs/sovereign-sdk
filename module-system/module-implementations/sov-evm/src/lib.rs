@@ -4,21 +4,50 @@ pub mod call;
 pub mod evm;
 #[cfg(feature = "experimental")]
 pub mod genesis;
-#[cfg(feature = "experimental")]
 #[cfg(feature = "native")]
+#[cfg(feature = "experimental")]
 pub mod query;
 #[cfg(feature = "experimental")]
 #[cfg(test)]
 mod tests;
 #[cfg(feature = "experimental")]
-pub use experimental::Evm;
+pub use experimental::{AccountData, Evm, EvmConfig};
 
 #[cfg(feature = "experimental")]
 mod experimental {
-    use super::evm::{db::EvmDb, transaction::BlockEnv, DbAccount, EthAddress};
+    use revm::primitives::{KECCAK_EMPTY, U256};
     use sov_modules_api::Error;
     use sov_modules_macros::ModuleInfo;
     use sov_state::WorkingSet;
+
+    use super::evm::db::EvmDb;
+    use super::evm::transaction::BlockEnv;
+    use super::evm::{DbAccount, EthAddress};
+    use crate::evm::Bytes32;
+
+    #[derive(Clone)]
+    pub struct AccountData {
+        pub address: EthAddress,
+        pub balance: Bytes32,
+        pub code_hash: Bytes32,
+        pub code: Vec<u8>,
+        pub nonce: u64,
+    }
+
+    impl AccountData {
+        pub fn empty_code() -> [u8; 32] {
+            KECCAK_EMPTY.to_fixed_bytes()
+        }
+
+        pub fn balance(balance: u64) -> Bytes32 {
+            U256::from(balance).to_le_bytes()
+        }
+    }
+
+    #[derive(Clone)]
+    pub struct EvmConfig {
+        pub data: Vec<AccountData>,
+    }
 
     #[allow(dead_code)]
     #[derive(ModuleInfo, Clone)]
@@ -36,16 +65,16 @@ mod experimental {
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {
         type Context = C;
 
-        type Config = ();
+        type Config = EvmConfig;
 
         type CallMessage = super::call::CallMessage;
 
         fn genesis(
             &self,
-            _config: &Self::Config,
-            _working_set: &mut WorkingSet<C::Storage>,
+            config: &Self::Config,
+            working_set: &mut WorkingSet<C::Storage>,
         ) -> Result<(), Error> {
-            todo!()
+            Ok(self.init_module(config, working_set)?)
         }
 
         fn call(

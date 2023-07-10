@@ -14,9 +14,9 @@ mod serde_address;
 mod tests;
 pub mod transaction;
 
-pub use crate::bech32::AddressBech32;
-use borsh::{BorshDeserialize, BorshSerialize};
 use core::fmt::{self, Debug, Display};
+
+use borsh::{BorshDeserialize, BorshSerialize};
 pub use dispatch::{DispatchCall, Genesis};
 pub use error::Error;
 pub use prefix::Prefix;
@@ -26,6 +26,8 @@ pub use sov_rollup_interface::crypto::SimpleHasher as Hasher;
 pub use sov_rollup_interface::traits::AddressTrait;
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
+
+pub use crate::bech32::AddressBech32;
 
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {

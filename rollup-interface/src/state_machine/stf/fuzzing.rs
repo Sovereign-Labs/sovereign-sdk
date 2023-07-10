@@ -1,11 +1,9 @@
 //! Implements fuzzing strategies for structs in the stf module
 
-use super::super::crypto::SimpleHasher;
-use proptest::{
-    prelude::{any, Arbitrary},
-    strategy::{BoxedStrategy, Strategy},
-};
+use proptest::prelude::{any, Arbitrary};
+use proptest::strategy::{BoxedStrategy, Strategy};
 
+use super::super::crypto::SimpleHasher;
 use super::{BatchReceipt, Event, TransactionReceipt};
 
 pub trait MerkleHasher {

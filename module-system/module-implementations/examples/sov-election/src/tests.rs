@@ -1,14 +1,13 @@
-use crate::ElectionConfig;
-
-use super::{call::CallMessage, query::GetResultResponse, types::Candidate, Election};
-use sov_modules_api::Address;
-
-use sov_modules_api::{
-    default_context::{DefaultContext, ZkDefaultContext},
-    default_signature::private_key::DefaultPrivateKey,
-    Context, Module, PublicKey,
-};
+use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
+use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_modules_api::{Address, Context, Module, PublicKey};
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
+
+use super::call::CallMessage;
+use super::query::GetResultResponse;
+use super::types::Candidate;
+use super::Election;
+use crate::ElectionConfig;
 
 #[test]
 fn test_election() {

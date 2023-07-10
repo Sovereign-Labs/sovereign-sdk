@@ -1,10 +1,9 @@
-use sha2::Digest;
-use sov_rollup_interface::{
-    da::BlobTransactionTrait,
-    stf::{BatchReceipt, StateTransitionFunction},
-    zk::traits::Zkvm,
-};
 use std::io::Read;
+
+use sha2::Digest;
+use sov_rollup_interface::da::BlobTransactionTrait;
+use sov_rollup_interface::stf::{BatchReceipt, StateTransitionFunction};
+use sov_rollup_interface::zk::traits::Zkvm;
 
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
 

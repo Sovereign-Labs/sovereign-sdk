@@ -1,11 +1,13 @@
-use crate::runtime::Runtime;
+use std::rc::Rc;
+
 use borsh::BorshSerialize;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::PublicKey;
 use sov_modules_stf_template::RawTx;
-use std::rc::Rc;
+
+use crate::runtime::Runtime;
 
 mod election_data;
 mod value_setter_data;

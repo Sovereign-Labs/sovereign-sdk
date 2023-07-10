@@ -1,16 +1,17 @@
 #[cfg(feature = "native")]
-pub use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::Context;
-#[cfg(feature = "native")]
-use sov_modules_macros::{cli_parser, expose_rpc};
-use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
-
-#[cfg(feature = "native")]
 use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
 use sov_bank::query::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
 use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
+#[cfg(feature = "native")]
+#[cfg(feature = "experimental")]
+use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
+pub use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::Context;
+#[cfg(feature = "native")]
+use sov_modules_macros::{cli_parser, expose_rpc};
+use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
 #[cfg(feature = "native")]
 use sov_sequencer_registry::query::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 #[cfg(feature = "native")]
@@ -64,4 +65,6 @@ pub struct Runtime<C: Context> {
     pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
+    #[cfg(feature = "experimental")]
+    pub evm: sov_evm::Evm<C>,
 }

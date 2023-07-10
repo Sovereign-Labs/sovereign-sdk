@@ -1,11 +1,14 @@
+use std::path::Path;
+
 use borsh::BorshSerialize;
-use sov_modules_api::{default_context::DefaultContext, Address};
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::Address;
 use sov_modules_stf_template::{AppTemplate, Batch, SequencerOutcome, TxEffect};
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_state::ProverStorage;
-use std::path::Path;
 
-use crate::{app::DemoApp, runtime::Runtime};
+use crate::app::DemoApp;
+use crate::runtime::Runtime;
 
 mod data_generation;
 mod stf_tests;

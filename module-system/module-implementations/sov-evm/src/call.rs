@@ -1,15 +1,12 @@
-use crate::{
-    evm::{
-        db::EvmDb,
-        executor::{self},
-        transaction::EvmTransaction,
-    },
-    Evm,
-};
 use anyhow::Result;
 use revm::primitives::CfgEnv;
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
+
+use crate::evm::db::EvmDb;
+use crate::evm::executor::{self};
+use crate::evm::transaction::EvmTransaction;
+use crate::Evm;
 
 #[cfg_attr(
     feature = "native",
@@ -33,7 +30,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
         // It is ok to use the unwrap here because the error type is `Infallible`.
-        executor::execute_tx(evm_db, block_env, tx, cfg_env).unwrap();
+        let _res = executor::execute_tx(evm_db, block_env, tx, cfg_env).unwrap();
         Ok(CallResponse::default())
     }
 }

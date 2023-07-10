@@ -1,13 +1,11 @@
 use bytes::Bytes;
-
-use super::{
-    transaction::{AccessListItem, BlockEnv, EvmTransaction},
-    AccountInfo,
-};
 use revm::primitives::{
     AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, Bytecode, CreateScheme, TransactTo,
     TxEnv, B160, B256, U256,
 };
+
+use super::transaction::{AccessListItem, BlockEnv, EvmTransaction};
+use super::AccountInfo;
 
 impl From<AccountInfo> for ReVmAccountInfo {
     fn from(info: AccountInfo) -> Self {

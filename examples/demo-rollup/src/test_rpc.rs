@@ -1,19 +1,22 @@
-use proptest::{prelude::any_with, prop_compose, proptest, strategy::Strategy};
-use reqwest::header::CONTENT_TYPE;
-use serde_json::json;
-use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_rollup_interface::{services::da::SlotData, stf::fuzzing::BatchReceiptStrategyArgs};
 use std::collections::HashMap;
 use std::net::SocketAddr;
 
+use proptest::prelude::any_with;
+use proptest::strategy::Strategy;
+use proptest::{prop_compose, proptest};
+use reqwest::header::CONTENT_TYPE;
+use serde_json::json;
+use sov_db::ledger_db::{LedgerDB, SlotCommit};
 #[cfg(test)]
 use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader, TestHash};
-
+use sov_rollup_interface::services::da::SlotData;
+use sov_rollup_interface::stf::fuzzing::BatchReceiptStrategyArgs;
 use sov_rollup_interface::stf::{BatchReceipt, Event, TransactionReceipt};
 use tendermint::crypto::Sha256;
 use tokio::sync::oneshot;
 
-use crate::{config::RpcConfig, ledger_rpc};
+use crate::config::RpcConfig;
+use crate::ledger_rpc;
 
 struct TestExpect {
     payload: serde_json::Value,
@@ -111,6 +114,7 @@ fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value)
         header: TestBlockHeader {
             prev_hash: TestHash(sha2::Sha256::digest(b"prev_header")),
         },
+        height: 0,
     })];
 
     let batches = vec![
@@ -313,6 +317,7 @@ prop_compose! {
                 header: TestBlockHeader {
                     prev_hash,
                 },
+                height: 0
             });
 
             total_num_batches += batches.len();

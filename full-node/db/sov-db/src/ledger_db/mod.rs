@@ -1,27 +1,19 @@
-use std::{
-    path::Path,
-    sync::{Arc, Mutex},
-};
+use std::path::Path;
+use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
-use sov_rollup_interface::{
-    services::da::SlotData,
-    stf::{BatchReceipt, Event},
-};
-use sov_schema_db::{interface::SeekKeyEncoder, Schema, SchemaBatch, DB};
+use sov_rollup_interface::services::da::SlotData;
+use sov_rollup_interface::stf::{BatchReceipt, Event};
+use sov_schema_db::{Schema, SchemaBatch, SeekKeyEncoder, DB};
 
-use crate::{
-    rocks_db_config::gen_rocksdb_options,
-    schema::{
-        tables::{
-            BatchByHash, BatchByNumber, EventByKey, EventByNumber, SlotByHash, SlotByNumber,
-            TxByHash, TxByNumber, LEDGER_TABLES,
-        },
-        types::{
-            split_tx_for_storage, BatchNumber, EventNumber, SlotNumber, StoredBatch, StoredSlot,
-            StoredTransaction, TxNumber,
-        },
-    },
+use crate::rocks_db_config::gen_rocksdb_options;
+use crate::schema::tables::{
+    BatchByHash, BatchByNumber, EventByKey, EventByNumber, SlotByHash, SlotByNumber, TxByHash,
+    TxByNumber, LEDGER_TABLES,
+};
+use crate::schema::types::{
+    split_tx_for_storage, BatchNumber, EventNumber, SlotNumber, StoredBatch, StoredSlot,
+    StoredTransaction, TxNumber,
 };
 
 mod rpc;

@@ -1,6 +1,7 @@
-use super::ValueSetter;
 use anyhow::Result;
 use sov_state::WorkingSet;
+
+use super::ValueSetter;
 
 impl<C: sov_modules_api::Context> ValueSetter<C> {
     /// Initializes module with the `admin` role.

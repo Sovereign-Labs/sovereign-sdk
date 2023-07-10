@@ -1,5 +1,6 @@
-use super::ExampleModule;
 use sov_state::WorkingSet;
+
+use super::ExampleModule;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq)]
 pub struct Response {

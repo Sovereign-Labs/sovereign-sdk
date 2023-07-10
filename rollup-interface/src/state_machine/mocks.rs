@@ -1,18 +1,16 @@
-use crate::da::{BlockHashTrait, DaSpec};
-use crate::{
-    da::{BlobTransactionTrait, CountedBufReader},
-    services::da::SlotData,
-    traits::{AddressTrait, BlockHeaderTrait, CanonicalHash},
-    zk::traits::{Matches, Zkvm},
-};
-use anyhow::{ensure, Error};
-use borsh::{BorshDeserialize, BorshSerialize};
-use sha2::Digest;
-
-use bytes::Bytes;
-use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::io::Write;
+
+use anyhow::{ensure, Error};
+use borsh::{BorshDeserialize, BorshSerialize};
+use bytes::Bytes;
+use serde::{Deserialize, Serialize};
+use sha2::Digest;
+
+use crate::da::{BlobTransactionTrait, BlockHashTrait, CountedBufReader, DaSpec};
+use crate::services::da::SlotData;
+use crate::traits::{AddressTrait, BlockHeaderTrait, CanonicalHash};
+use crate::zk::traits::{Matches, Zkvm};
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct MockCodeCommitment(pub [u8; 32]);
@@ -212,6 +210,7 @@ impl BlockHeaderTrait for TestBlockHeader {
 pub struct TestBlock {
     pub curr_hash: [u8; 32],
     pub header: TestBlockHeader,
+    pub height: u64,
 }
 
 impl SlotData for TestBlock {

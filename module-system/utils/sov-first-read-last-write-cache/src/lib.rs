@@ -5,8 +5,10 @@ pub mod cache;
 mod access;
 mod utils;
 
+use std::fmt::Display;
+use std::sync::Arc;
+
 pub use access::MergeError;
-use std::{fmt::Display, sync::Arc};
 
 #[derive(Error, Debug, Eq, PartialEq, Clone, Hash, PartialOrd, Ord)]
 pub struct CacheKey {

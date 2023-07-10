@@ -152,4 +152,55 @@ jobs:
             echo "Curl failed, retrying in 5 seconds..."
             sleep 5
           done
-
+  cargo-doc-artifact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
+      # The artifact tends to become quite large with all the dependencies, so
+      # we don't include them in the docs.
+      - run: cargo doc --no-deps
+      - name: Add index.html
+        # We're inside a Cargo workspace, so there's no index.html by default.
+        # We must redirect to one of the workspace member crates' documentation.
+        # <https://dev.to/deciduously/prepare-your-rust-api-docs-for-github-pages-2n5i>
+        run: echo '<meta http-equiv="refresh" content="0; url=sov_rollup_interface/index.html">' > target/doc/index.html
+      # https://github.com/actions/deploy-pages/issues/188
+      - name: Fix assets' file permissions
+        run: chmod -c -R +rX "target/doc"
+      - name: Upload artifacts
+        uses: actions/upload-pages-artifact@v1
+        with:
+          path: target/doc
+  deploy-github-pages:
+    needs: cargo-doc-artifact
+    timeout-minutes: 5
+    # No point in deploying if we're not on `main`, as it will just fail.
+    if: github.ref == 'refs/heads/main'
+    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
+    permissions:
+      pages: write # to deploy to Pages
+      id-token: write # to verify the deployment originates from an appropriate source
+    # Deploy to the github-pages environment
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v2
+  check-demo-rollup-table-of-contents:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+      - run: npm install -g doctoc
+      - name: Update table of contents
+        run: doctoc README.md --github --notitle
+        working-directory: ./examples/demo-rollup
+      - name: Check table of contents
+        # Exit status 0 means no changes were made, so the table of contents is
+        # up to date.
+        run: git diff --exit-code

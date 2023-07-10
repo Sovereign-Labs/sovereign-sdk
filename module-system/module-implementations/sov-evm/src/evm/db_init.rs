@@ -1,9 +1,11 @@
-use super::{db::EvmDb, AccountInfo, DbAccount, EthAddress};
 #[cfg(test)]
 use revm::{
     db::{CacheDB, EmptyDB},
     primitives::B160,
 };
+
+use super::db::EvmDb;
+use super::{AccountInfo, DbAccount, EthAddress};
 
 /// Initializes database with a predefined account.
 pub(crate) trait InitEvmDb {
