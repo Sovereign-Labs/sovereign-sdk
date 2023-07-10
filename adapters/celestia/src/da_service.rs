@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::str::FromStr;
-use std::time::Duration;
 
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::params::ArrayParams;
@@ -97,6 +96,9 @@ pub struct DaServiceConfig {
     /// The maximum size of a Celestia RPC response, in bytes
     #[serde(default = "default_max_response_size")]
     pub max_celestia_response_body_size: u32,
+    /// The timeout for a Celestia RPC request, in seconds
+    #[serde(default = "default_request_timeout_seconds")]
+    pub celestia_rpc_timeout_seconds: u64,
 }
 
 fn default_rpc_addr() -> String {
@@ -107,8 +109,8 @@ fn default_max_response_size() -> u32 {
     1024 * 1024 * 100 // 100 MB
 }
 
-fn default_request_timeout_ms() -> u64 {
-    30_000
+const fn default_request_timeout_seconds() -> u64 {
+    60
 }
 
 impl DaService for CelestiaService {
@@ -134,9 +136,10 @@ impl DaService for CelestiaService {
 
             jsonrpsee::http_client::HttpClientBuilder::default()
                 .set_headers(headers)
-                // TODO: Should be replaced with config option https://github.com/Sovereign-Labs/sovereign-sdk/issues/478
-                .request_timeout(Duration::from_millis(default_request_timeout_ms()))
-                .max_request_body_size(config.max_celestia_response_body_size)
+                .max_request_body_size(config.max_celestia_response_body_size) // 100 MB
+                .request_timeout(std::time::Duration::from_secs(
+                    config.celestia_rpc_timeout_seconds,
+                ))
                 .build(&config.celestia_rpc_address)
         }
         .expect("Client initialization is valid");
@@ -341,7 +344,8 @@ mod tests {
     use wiremock::matchers::{bearer_token, body_json, method, path};
     use wiremock::{Mock, MockServer, Request, ResponseTemplate};
 
-    use crate::da_service::{default_request_timeout_ms, CelestiaService, DaServiceConfig};
+    use super::default_request_timeout_seconds;
+    use crate::da_service::{CelestiaService, DaServiceConfig};
     use crate::parse_pfb_namespace;
     use crate::shares::{NamespaceGroup, Share};
     use crate::verifier::RollupParams;
@@ -383,14 +387,18 @@ mod tests {
     }
 
     // Last return value is namespace
-    async fn setup_service() -> (MockServer, DaServiceConfig, CelestiaService, [u8; 8]) {
+    async fn setup_service(
+        timeout_sec: Option<u64>,
+    ) -> (MockServer, DaServiceConfig, CelestiaService, [u8; 8]) {
         // Start a background HTTP server on a random local port
         let mock_server = MockServer::start().await;
 
+        let timeout_sec = timeout_sec.unwrap_or_else(default_request_timeout_seconds);
         let config = DaServiceConfig {
             celestia_rpc_auth_token: "RPC_TOKEN".to_string(),
             celestia_rpc_address: mock_server.uri(),
             max_celestia_response_body_size: 120_000,
+            celestia_rpc_timeout_seconds: timeout_sec,
         };
         let namespace = [9u8; 8];
         let da_service = CelestiaService::new(
@@ -413,7 +421,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_submit_blob_correct() -> anyhow::Result<()> {
-        let (mock_server, config, da_service, namespace) = setup_service().await;
+        let (mock_server, config, da_service, namespace) = setup_service(None).await;
 
         let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
 
@@ -469,7 +477,7 @@ mod tests {
     #[tokio::test]
     async fn test_submit_blob_application_level_error() -> anyhow::Result<()> {
         // Our calculation of gas is off and gas limit exceeded, for example
-        let (mock_server, _config, da_service, _namespace) = setup_service().await;
+        let (mock_server, _config, da_service, _namespace) = setup_service(None).await;
 
         let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
 
@@ -512,7 +520,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
-        let (mock_server, _config, da_service, _namespace) = setup_service().await;
+        let (mock_server, _config, da_service, _namespace) = setup_service(None).await;
 
         let error_response = ResponseTemplate::new(500).set_body_bytes("Internal Error".as_bytes());
 
@@ -542,7 +550,8 @@ mod tests {
     // https://github.com/Sovereign-Labs/sovereign-sdk/issues/478 is implemented
     // Slower request timeout can be set
     async fn test_submit_blob_response_timeout() -> anyhow::Result<()> {
-        let (mock_server, _config, da_service, _namespace) = setup_service().await;
+        let timeout = 1;
+        let (mock_server, _config, da_service, _namespace) = setup_service(Some(timeout)).await;
 
         let response_json = json!({
             "jsonrpc": "2.0",
@@ -563,7 +572,7 @@ mod tests {
 
         let error_response = ResponseTemplate::new(200)
             .append_header("Content-Type", "application/json")
-            .set_delay(Duration::from_millis(default_request_timeout_ms() + 100))
+            .set_delay(Duration::from_secs(timeout) + Duration::from_millis(100))
             .set_body_json(response_json);
 
         let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];

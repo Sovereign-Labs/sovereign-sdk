@@ -56,6 +56,7 @@ mod tests {
                 celestia_rpc_auth_token: "SECRET_RPC_TOKEN".to_string(),
                 celestia_rpc_address: "http://localhost:11111/".into(),
                 max_celestia_response_body_size: 980,
+                celestia_rpc_timeout_seconds: 60,
             },
             runner: RunnerConfig {
                 storage: StorageConfig {
