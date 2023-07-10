@@ -18,12 +18,11 @@ use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::RpcRunner;
 use sov_rollup_interface::crypto::NoOpHasher;
-use sov_rollup_interface::da::DaVerifier;
+use sov_rollup_interface::da::{BlockHeaderTrait, DaVerifier};
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::traits::CanonicalHash;
-use sov_rollup_interface::zk::traits::ValidityConditionChecker;
+use sov_rollup_interface::zk::ValidityConditionChecker;
 // RPC related imports
 use sov_sequencer::get_sequencer_rpc;
 use sov_state::Storage;

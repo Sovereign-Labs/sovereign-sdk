@@ -7,10 +7,8 @@ use nmt_rs::NamespacedHash;
 use prost::bytes::Buf;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::da::CountedBufReader;
-use sov_rollup_interface::traits::{
-    AddressTrait as Address, BlockHeaderTrait as BlockHeader, CanonicalHash,
-};
+use sov_rollup_interface::da::{BlockHeaderTrait as BlockHeader, CountedBufReader};
+use sov_rollup_interface::AddressTrait;
 pub use tendermint::block::Header as TendermintHeader;
 use tendermint::crypto::default::Sha256;
 use tendermint::merkle::simple_hash_from_byte_vectors;
@@ -248,14 +246,6 @@ impl CelestiaHeader {
     }
 }
 
-impl CanonicalHash for CelestiaHeader {
-    type Output = TmHash;
-
-    fn hash(&self) -> Self::Output {
-        TmHash(self.header.hash())
-    }
-}
-
 #[derive(PartialEq, Clone, Debug, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 pub struct BlobWithSender {
     pub blob: CountedBufReader<BlobIterator>,
@@ -282,6 +272,10 @@ impl BlockHeader for CelestiaHeader {
             .hash;
         *cached_hash = Some(TmHash(hash));
         TmHash(hash)
+    }
+
+    fn hash(&self) -> Self::Hash {
+        TmHash(self.header.hash())
     }
 }
 
@@ -341,7 +335,7 @@ impl Display for H160 {
     }
 }
 
-impl Address for H160 {}
+impl AddressTrait for H160 {}
 
 pub fn parse_pfb_namespace(
     group: NamespaceGroup,

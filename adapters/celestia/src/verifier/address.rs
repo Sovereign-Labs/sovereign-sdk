@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::traits::AddressTrait;
+use sov_rollup_interface::AddressTrait;
 
 const HRP: &str = "celestia";
 

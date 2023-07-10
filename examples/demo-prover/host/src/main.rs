@@ -15,7 +15,7 @@ use sov_modules_api::RpcRunner;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::traits::ZkvmHost;
+use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::Storage;
 use tracing::{info, Level};
 

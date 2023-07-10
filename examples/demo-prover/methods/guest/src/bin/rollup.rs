@@ -14,7 +14,7 @@ use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::{StateTransitionFunction, ZkConfig};
-use sov_rollup_interface::zk::traits::{StateTransition, ZkvmGuest};
+use sov_rollup_interface::zk::{StateTransition, ZkvmGuest};
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
