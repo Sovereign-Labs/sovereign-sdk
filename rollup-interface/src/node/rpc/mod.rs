@@ -48,7 +48,7 @@ pub struct TxIdAndKey {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum BatchIdentifier {
-    /// The hash of the batch, as computed by the DA layer.
+    /// The hex-encoded hash of the batch, as computed by the DA layer.
     Hash(#[serde(with = "rpc_hex")] [u8; 32]),
     /// An offset into a particular slot (i.e. the 3rd batch in slot 5).
     SlotIdAndOffset(SlotIdAndOffset),
@@ -62,7 +62,7 @@ pub enum BatchIdentifier {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum TxIdentifier {
-    /// The hash of the transaction.
+    /// The hex encoded hash of the transaction.
     Hash(#[serde(with = "rpc_hex")] [u8; 32]),
     /// An offset into a particular batch (i.e. the 3rd transaction in batch 5).
     BatchIdAndOffset(BatchIdAndOffset),
@@ -100,7 +100,7 @@ pub enum EventGroupIdentifier {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SlotIdentifier {
-    /// The hash of the slot (i.e. the da layer's block hash).
+    /// The hex encoded hash of the slot (i.e. the da layer's block hash).
     Hash(#[serde(with = "rpc_hex")] [u8; 32]),
     /// The monotonically increasing number of the slot, ordered by the DA layer but starting from 0
     /// at the *rollup's* genesis.
@@ -132,12 +132,12 @@ impl Default for QueryMode {
 /// The body of a response to a JSON-RPC request for a particular slot.
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct SlotResponse<B, Tx> {
-    /// The slot number
+    /// The slot number.
     pub number: u64,
-    /// The hex encoded slot hash
+    /// The hex encoded slot hash.
     #[serde(with = "rpc_hex")]
     pub hash: [u8; 32],
-    /// The range of batches in this slot
+    /// The range of batches in this slot.
     pub batch_range: std::ops::Range<u64>,
     /// The batches in this slot, if the [`QueryMode`] of the request is not `Compact`
     #[serde(skip_serializing_if = "Option::is_none")]
