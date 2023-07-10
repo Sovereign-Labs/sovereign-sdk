@@ -96,6 +96,9 @@ pub struct DaServiceConfig {
     /// The maximum size of a Celestia RPC response, in bytes
     #[serde(default = "default_max_response_size")]
     pub max_celestia_response_body_size: u32,
+    /// The maximum size of a Celestia RPC response, in bytes
+    #[serde(default = "default_timeout_seconds")]
+    pub celestia_rpc_timeout_seconds: u64,
 }
 
 fn default_rpc_addr() -> String {
@@ -104,6 +107,10 @@ fn default_rpc_addr() -> String {
 
 fn default_max_response_size() -> u32 {
     1024 * 1024 * 100 // 100 MB
+}
+
+const fn default_timeout_seconds() -> u64 {
+    60
 }
 
 impl DaService for CelestiaService {
@@ -129,6 +136,9 @@ impl DaService for CelestiaService {
             jsonrpsee::http_client::HttpClientBuilder::default()
                 .set_headers(headers)
                 .max_request_body_size(config.max_celestia_response_body_size) // 100 MB
+                .request_timeout(std::time::Duration::from_secs(
+                    config.celestia_rpc_timeout_seconds,
+                ))
                 .build(&config.celestia_rpc_address)
         }
         .expect("Client initialization is valid");
