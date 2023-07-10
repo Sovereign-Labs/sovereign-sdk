@@ -214,13 +214,11 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
         Ok(CallResponse::default())
     }
 
-    /// Try to process an attestation, if the attester is bonded
-    pub(crate) fn process_attestation(
+    fn check_current_bond_against_min_bond(
         &self,
-        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse> {
+    ) -> Result<()> {
         // We have to check that the current bond is still greater than the minimum bond
         let current_bond = self.bonded_attesters.get(context.sender(), working_set);
 
@@ -234,8 +232,15 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
             current_bond >= min_bond,
             "The current bond is not high enough"
         );
+        Ok(())
+    }
 
-        // We need to check the bonding proof
+    fn check_bonding_proof(
+        &self,
+        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<()> {
         // This proof checks that the attester was bonded at the initial root hash
         let (attester_key, bond_opt) = working_set
             .backing()
@@ -272,6 +277,22 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
             "Attester is not bonded at the time of the attestation"
         );
 
+        Ok(())
+    }
+
+    /// Try to process an attestation, if the attester is bonded
+    pub(crate) fn process_attestation(
+        &self,
+        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<sov_modules_api::CallResponse> {
+        // We have to check that the current bond is still greater than the minimum bond
+        self.check_current_bond_against_min_bond(context, working_set)?;
+
+        // We need to check the bonding proof
+        self.check_bonding_proof(attestation, context, working_set)?;
+
         // We have to check that this attester is currently not unbonding:
         // if so we have to slash it
         if !self
@@ -285,8 +306,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
                 &format!("slashed_attester: {:?}", context.sender()),
             );
             // TODO: Should we set it to 0? or should we only remove the minimal bond?
-            self.bonded_attesters
-                .set(context.sender(), &(current_bond - min_bond), working_set);
+            self.bonded_attesters.set(context.sender(), &0, working_set);
 
             Err(AttesterIncentiveErrors::AttesterSlashed.into())
         } else {
