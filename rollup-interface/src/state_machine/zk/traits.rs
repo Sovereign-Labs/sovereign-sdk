@@ -1,3 +1,11 @@
+//! Defines the traits that must be implemented by zkVMs. A ZKVM like Risc0 consists of two components,
+//! a "guest" and a "host". The guest is the zkVM program itself, and the host is the physical machine on
+//! which the zkVM is running. Both the guest and the host are required to implement the [`Zkvm`] trait, in
+//! addition to the specialized [`ZkvmGuest`] and [`ZkvmHost`] trait which is appropriate to that environment.
+//!
+//! For a detailed example showing how to implement these traits, see the
+//! [risc0 adapter](https://github.com/Sovereign-Labs/sovereign-sdk/tree/main/adapters/risc0)
+//! maintained by the Sovereign Labs team.
 use core::fmt::Debug;
 
 use serde::de::DeserializeOwned;
@@ -14,11 +22,14 @@ pub trait ZkvmHost: Zkvm {
 /// A Zk proof system capable of proving and verifying arbitrary Rust code
 /// Must support recursive proofs.
 pub trait Zkvm {
+    /// A commitment to the zkVM program which is being proven
     type CodeCommitment: Matches<Self::CodeCommitment>
         + Clone
         + Debug
         + Serialize
         + DeserializeOwned;
+
+    /// The error type which is returned when a proof fails to verify
     type Error: Debug;
 
     /// Interpret a sequence of a bytes as a proof and attempt to verify it against the code commitment.
