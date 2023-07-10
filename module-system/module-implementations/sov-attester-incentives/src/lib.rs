@@ -68,6 +68,12 @@ pub struct AttesterIncentives<C: sov_modules_api::Context, Vm: Zkvm> {
     #[address]
     pub address: C::Address,
 
+    /// The amount of time it takes to a light client to be confident
+    /// that an attested state transition won't be challenged. Measured in
+    /// number of blocks.
+    #[state]
+    pub rollup_finality_period: sov_state::StateValue<u64>,
+
     /// The address of the token used for bonding provers
     #[state]
     pub bonding_token_address: sov_state::StateValue<C::Address>,

@@ -27,11 +27,19 @@ pub enum CallMessage<C: Context> {
 
 // Raised when an attester is slashed
 #[derive(Debug, Clone, Error)]
-struct AttesterSlashed;
+enum AttesterIncentiveErrors {
+    AttesterSlashed,
+    AttesterNotUnbonding,
+}
 
-impl fmt::Display for AttesterSlashed {
+impl fmt::Display for AttesterIncentiveErrors {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Attester slashed")
+        let error_msg = match self {
+            Self::AttesterSlashed => "Attester slashed",
+            Self::AttesterNotUnbonding => "Attester not unbonding",
+        };
+
+        write!(f, "{error_msg}")
     }
 }
 
@@ -154,12 +162,50 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
         Ok(CallResponse::default())
     }
 
+    /// Second phase of the two phase unbonding, we finish unbonding the attester
+    /// by checking that at the rollup finality period has expired.
     pub(crate) fn finish_unbonding_attester(
         &self,
-        _context: &C,
-        _working_set: &mut WorkingSet<C::Storage>,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
-        todo!()
+        // Check that the finality period has expired
+        let unbonding_info = self
+            .unbonding_attesters
+            .get(context.sender(), working_set)
+            .ok_or(AttesterIncentiveErrors::AttesterNotUnbonding)?;
+        let finality_period = self
+            .rollup_finality_period
+            .get(working_set)
+            .unwrap_or_default();
+
+        // Panic if we cannot get the finalized height
+        let finalized_height = self.light_client_finalized_height.get(working_set).unwrap();
+
+        ensure!(
+            unbonding_info.unbonding_initiated_height + finality_period < finalized_height,
+            "The finality period has not expired yet"
+        );
+
+        // We can start the transfer
+        let coins = Coins {
+            token_address: self
+                .bonding_token_address
+                .get(working_set)
+                .expect("Bonding token address must be set"),
+            amount: unbonding_info.amount,
+        };
+
+        // Try to unbond the entire balance
+        // If the unbonding fails, no state is changed
+        self.bank
+            .transfer_from(&self.address, context.sender(), coins, working_set)?;
+
+        // We can safely remove the attester from the unbonding set once we've transfered the bond
+        self.unbonding_attesters
+            .remove(context.sender(), working_set);
+
+        Ok(CallResponse::default())
     }
 
     /// Try to process an attestation, if the attester is bonded
@@ -236,7 +282,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
             self.bonded_attesters
                 .set(context.sender(), &(current_bond - min_bond), working_set);
 
-            Err(AttesterSlashed.into())
+            Err(AttesterIncentiveErrors::AttesterSlashed.into())
         } else {
             working_set.add_event(
                 "processed_valid_attestation",
