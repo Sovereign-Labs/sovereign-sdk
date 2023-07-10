@@ -44,7 +44,7 @@ const-rollup-config = { path = "../const-rollup-config" }
 sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
 
 # Only enable the evm on "experimental" feature
-sov-evm = { path = "../../module-system/module-implementations/sov-evm", default-features = false, features=["experimental"], optional = true }
+sov-evm = { path = "../../module-system/module-implementations/sov-evm", default-features = false, optional = true}
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
@@ -60,7 +60,6 @@ native = [
     "dep:sov-db",
     "dep:sov-schema-db",
     "sov-bank/native",
-    "sov-evm/native",
     "sov-accounts/native",
     "sov-election/native",
     "sov-sequencer-registry/native",

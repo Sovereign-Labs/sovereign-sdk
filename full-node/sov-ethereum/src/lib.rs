@@ -17,8 +17,7 @@ use sov_modules_api::transaction::Transaction;
 const GAS_PER_BYTE: usize = 120;
 
 pub fn get_ethereum_rpc(config: DaServiceConfig) -> RpcModule<Ethereum> {
-    let e = Ethereum { config };
-    let mut rpc = RpcModule::new(e);
+    let mut rpc = RpcModule::new(Ethereum { config });
     register_rpc_methods(&mut rpc).expect("Failed to register sequencer RPC methods");
     rpc
 }
