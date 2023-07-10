@@ -10,7 +10,7 @@ pub mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::{Context, Error};
 use sov_modules_macros::ModuleInfo;
-use sov_rollup_interface::zk::traits::Zkvm;
+use sov_rollup_interface::zk::Zkvm;
 use sov_state::WorkingSet;
 
 pub struct ProverIncentivesConfig<C: Context, Vm: Zkvm> {

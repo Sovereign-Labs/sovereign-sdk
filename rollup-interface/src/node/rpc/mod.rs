@@ -1,3 +1,5 @@
+//! The rpc module defines types and traits for querying chain history
+//! via an RPC interface.
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 

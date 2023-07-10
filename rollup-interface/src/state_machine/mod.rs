@@ -6,7 +6,25 @@ pub mod stf;
 pub mod zk;
 
 pub use bytes::{Buf, BufMut, Bytes, BytesMut};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 
 #[cfg(feature = "mocks")]
 pub mod mocks;
-pub mod traits;
+
+/// A marker trait for addresses.
+pub trait AddressTrait:
+    PartialEq
+    + core::fmt::Debug
+    + Clone
+    + AsRef<[u8]>
+    + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+    + Eq
+    + Serialize
+    + DeserializeOwned
+    + From<[u8; 32]>
+    + Send
+    + Sync
+    + core::fmt::Display
+{
+}

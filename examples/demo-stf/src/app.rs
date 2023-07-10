@@ -14,7 +14,7 @@ use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::ProverConfig;
 use sov_rollup_interface::stf::ZkConfig;
-use sov_rollup_interface::zk::traits::Zkvm;
+use sov_rollup_interface::zk::Zkvm;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
 use sov_state::{Storage, ZkStorage};
