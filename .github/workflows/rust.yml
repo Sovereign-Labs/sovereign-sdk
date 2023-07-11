@@ -86,6 +86,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: mozilla-actions/sccache-action@v0.0.3
       - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.0.0
       - name: Run cargo test
         run: cargo test
   coverage:
