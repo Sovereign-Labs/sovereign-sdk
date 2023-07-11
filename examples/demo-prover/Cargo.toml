@@ -12,8 +12,8 @@ jsonrpsee = "0.16.2"
 serde = { version = "1.0.137", features = ["derive", "rc"] }
 serde_json = { version = "1.0" }
 sha2 = "0.10.6"
-risc0-zkvm = { version = "0.14" }
-risc0-build = { version = "0.14" }
+risc0-zkvm = { version = "0.16" }
+risc0-build = { version = "0.16" }
 tokio = { version = "1", features = ["full"] }
 
 # Always optimize; building and running the guest takes much longer without optimization.
