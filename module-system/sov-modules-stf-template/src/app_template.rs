@@ -7,17 +7,10 @@ use sov_modules_api::{
     hooks::{ApplyBlobHooks, TxHooks},
     Context, DispatchCall, Genesis,
 };
-use sov_rollup_interface::{
-    da::{BlobTransactionTrait, CountedBufReader},
-    stf::{BatchReceipt, TransactionReceipt},
-    traits::BatchTrait,
-    Buf,
-};
+use sov_rollup_interface::{da::CountedBufReader, stf::BatchReceipt, traits::BatchTrait, Buf};
 use sov_state::StateCheckpoint;
 use std::marker::PhantomData;
 use tracing::{debug, error};
-
-type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
 
 pub struct AppTemplate<C: Context, RT, Vm> {
     pub current_storage: C::Storage,

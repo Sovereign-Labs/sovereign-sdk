@@ -199,7 +199,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
         demo.begin_slot(Default::default());
         for blob in &mut blob_txs {
-            let receipts = demo.apply_tx_blob(blob).unwrap();
+            let receipts = demo.apply_tx_blob(blob, None);
             info!("receipts: {:?}", receipts);
             data_to_commit.add_batch(receipts);
         }

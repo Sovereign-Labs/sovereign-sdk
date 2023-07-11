@@ -1,6 +1,5 @@
 pub mod app_template;
 mod batch;
-pub mod sync_strategies;
 mod tx_verifier;
 
 pub use app_template::AppTemplate;
@@ -283,7 +282,7 @@ where
         match decoded {
             Ok(call) => {
                 // TODO: do something with this result
-                let res =
+                let _ =
                     self.runtime
                         .dispatch_call(call, &mut batch_workspace, &Context::new(address));
             }

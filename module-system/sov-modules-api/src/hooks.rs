@@ -1,5 +1,5 @@
 use crate::{transaction::Transaction, Context, Spec};
-use sov_rollup_interface::{da::BlobTransactionTrait, zk::traits::StateTransition};
+use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_state::{StateCheckpoint, WorkingSet};
 
 /// Hooks that execute within the `StateTransitionFunction::apply_tx_blob` function for each processed transaction.
@@ -66,6 +66,7 @@ pub trait SlotHooks {
     ) -> anyhow::Result<()>;
 }
 
+/// Hooks that execute within the `StateTransitionFunction::apply_sync_blob` function for each processed transaction.
 pub trait SyncHooks {
     type Context: Context;
 
