@@ -2,23 +2,23 @@ pub mod app_template;
 mod batch;
 mod tx_verifier;
 
-pub use app_template::AppTemplate;
-pub use batch::Batch;
-use tracing::{debug, error, log::info};
-pub use tx_verifier::RawTx;
-
-use sov_modules_api::{
-    hooks::{ApplyBlobHooks, SyncHooks, TxHooks},
-    Context, DispatchCall, Genesis, Spec,
-};
-use sov_rollup_interface::stf::{BatchReceipt, SyncReceipt};
-use sov_rollup_interface::stf::{StateTransitionFunction, TransactionReceipt};
-use sov_rollup_interface::zk::traits::Zkvm;
-use sov_state::StateCheckpoint;
-use sov_state::Storage;
 use std::io::Read;
 
-use crate::{app_template::ApplyBatchError, tx_verifier::TransactionAndRawHash};
+pub use app_template::AppTemplate;
+pub use batch::Batch;
+use sov_modules_api::hooks::{ApplyBlobHooks, SyncHooks, TxHooks};
+use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
+use sov_rollup_interface::stf::{
+    BatchReceipt, StateTransitionFunction, SyncReceipt, TransactionReceipt,
+};
+use sov_rollup_interface::zk::Zkvm;
+use sov_state::{StateCheckpoint, Storage};
+use tracing::log::info;
+use tracing::{debug, error};
+pub use tx_verifier::RawTx;
+
+use crate::app_template::ApplyBatchError;
+use crate::tx_verifier::TransactionAndRawHash;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TxEffect {
@@ -27,12 +27,16 @@ pub enum TxEffect {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+// TODO: Should be generic for Address for pretty printing https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
 pub enum SequencerOutcome {
     /// Sequencer receives reward amount in defined token and can withdraw its deposit
     Rewarded(u64),
     /// Sequencer loses its deposit and receives no reward
     Slashed {
         reason: SlashingReason,
+        // Keep this comment for so it doesn't need to investigate serde issue again.
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
+        // #[serde(bound(deserialize = ""))]
         sequencer_da_address: Vec<u8>,
     },
     /// Batch was ignored, sequencer deposit left untouched.

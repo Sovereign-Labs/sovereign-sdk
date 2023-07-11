@@ -621,9 +621,11 @@ dependencies = [
  "sov-modules-stf-template",
  "sov-rollup-interface",
  "sov-schema-db",
+ "sov-sequencer",
  "sov-sequencer-registry",
  "sov-state",
  "sov-value-setter",
+ "tokio",
  "toml 0.7.4",
  "tracing",
 ]
@@ -1455,6 +1457,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "base64 0.13.1",
+ "bech32",
  "borsh",
  "hex",
  "hex-literal",
@@ -2989,8 +2992,6 @@ dependencies = [
  "jmt",
  "serde",
  "sha2 0.10.6",
- "tendermint",
- "thiserror",
 ]
 
 [[package]]
@@ -3001,6 +3002,19 @@ dependencies = [
  "once_cell",
  "prometheus",
  "rocksdb",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "sov-sequencer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "hex",
+ "jsonrpsee",
+ "serde",
  "sov-rollup-interface",
  "tracing",
 ]

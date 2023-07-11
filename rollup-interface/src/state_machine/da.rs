@@ -1,13 +1,17 @@
-use crate::crypto::SimpleHasher;
-use crate::traits::{AddressTrait, BlockHeaderTrait};
-use crate::zk::traits::ValidityCondition;
-use borsh::{BorshDeserialize, BorshSerialize};
-use bytes::Buf;
+//! Defines traits and types used by the rollup to verify claims about the
+//! DA layer.
 use core::fmt::Debug;
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::io::Read;
+
+use borsh::{BorshDeserialize, BorshSerialize};
+use bytes::Buf;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+
+use crate::crypto::SimpleHasher;
+use crate::zk::ValidityCondition;
+use crate::AddressTrait;
 
 /// A specification for the types used by a DA layer.
 pub trait DaSpec {
@@ -98,11 +102,13 @@ impl<B: Buf> CountedBufReader<B> {
         self.counter
     }
 
-    /// Getter: returns a reference to an accumulator of the blob data read by the rollup so far
+    /// Getter: returns a reference to an accumulator of the blob data read by the rollup
+    /// TODO: Refactor https://github.com/Sovereign-Labs/sovereign-sdk/issues/462
     pub fn acc(&self) -> &Vec<u8> {
         &self.reading_acc
     }
 
+    /// Contains the total length of the data (length already read + length remaining)
     pub fn total_len(&self) -> usize {
         self.inner.remaining() + self.counter
     }
@@ -128,7 +134,10 @@ impl<B: Buf> Read for CountedBufReader<B> {
 
 /// A transaction on a data availability layer, including the address of the sender.
 pub trait BlobTransactionTrait: Serialize + DeserializeOwned {
+    /// The type of the raw data of the blob. For example, the "calldata" of an Ethereum rollup transaction
     type Data: Buf;
+
+    /// The type used to represent addresses on the DA layer.
     type Address: AddressTrait;
 
     /// Returns the address (on the DA layer) of the entity which submitted the blob transaction
@@ -150,3 +159,14 @@ pub trait BlobTransactionTrait: Serialize + DeserializeOwned {
 
 /// Trait with collection of trait bounds for a block hash.
 pub trait BlockHashTrait: Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync {}
+
+/// A block header, typically used in the context of an underlying DA blockchain.
+pub trait BlockHeaderTrait: PartialEq + Debug + Clone {
+    /// Each block header must have a unique canonical hash.
+    type Hash: Clone;
+    /// Each block header must contain the hash of the previous block.
+    fn prev_hash(&self) -> Self::Hash;
+
+    /// Hash the type to get the digest.
+    fn hash(&self) -> Self::Hash;
+}

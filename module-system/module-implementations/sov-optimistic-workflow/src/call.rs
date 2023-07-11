@@ -1,15 +1,17 @@
-use crate::{AttesterIncentives, UnbondingInfo};
+use std::cmp::min;
+use std::fmt::{self, Debug};
+
 use anyhow::{ensure, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::Coins;
 use sov_modules_api::{CallResponse, Context, Spec};
-use sov_rollup_interface::{optimistic::Attestation, zk::traits::Zkvm};
-use sov_state::{storage::StorageProof, Storage, WorkingSet};
-use std::{
-    cmp::min,
-    fmt::{self, Debug},
-};
+use sov_rollup_interface::optimistic::Attestation;
+use sov_rollup_interface::zk::Zkvm;
+use sov_state::storage::StorageProof;
+use sov_state::{Storage, WorkingSet};
 use thiserror::Error;
+
+use crate::{AttesterIncentives, UnbondingInfo};
 
 /// This enumeration represents the available call messages for interacting with the `ExampleModule` module.
 #[derive(BorshDeserialize, BorshSerialize, Debug)]

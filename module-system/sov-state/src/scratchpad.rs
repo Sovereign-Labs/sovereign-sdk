@@ -1,13 +1,13 @@
-use borsh::{BorshDeserialize, BorshSerialize};
-use sov_rollup_interface::stf::Event;
-use std::{collections::HashMap, fmt::Debug};
+use std::collections::HashMap;
+use std::fmt::Debug;
 
-use crate::{
-    internal_cache::{OrderedReadsAndWrites, StorageInternalCache},
-    storage::{StorageKey, StorageValue},
-    Prefix, Storage,
-};
+use borsh::{BorshDeserialize, BorshSerialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
+use sov_rollup_interface::stf::Event;
+
+use crate::internal_cache::{OrderedReadsAndWrites, StorageInternalCache};
+use crate::storage::{StorageKey, StorageValue};
+use crate::{Prefix, Storage};
 
 /// A working set accumulates reads and writes on top of the underlying DB,
 /// automating witness creation.

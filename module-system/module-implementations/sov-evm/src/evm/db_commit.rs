@@ -1,8 +1,8 @@
-use super::{db::EvmDb, DbAccount};
-use revm::{
-    primitives::{Account, HashMap, B160},
-    DatabaseCommit,
-};
+use revm::primitives::{Account, HashMap, B160};
+use revm::DatabaseCommit;
+
+use super::db::EvmDb;
+use super::DbAccount;
 
 impl<'a, C: sov_modules_api::Context> DatabaseCommit for EvmDb<'a, C> {
     fn commit(&mut self, changes: HashMap<B160, Account>) {

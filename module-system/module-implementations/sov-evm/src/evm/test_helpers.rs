@@ -1,7 +1,9 @@
-use ethers_contract::BaseContract;
-use ethers_core::{abi::Abi, types::Bytes};
-use revm::primitives::{ExecutionResult, Output, B160};
 use std::path::PathBuf;
+
+use ethers_contract::BaseContract;
+use ethers_core::abi::Abi;
+use ethers_core::types::Bytes;
+use revm::primitives::{ExecutionResult, Output, B160};
 
 pub(crate) fn output(result: ExecutionResult) -> bytes::Bytes {
     match result {

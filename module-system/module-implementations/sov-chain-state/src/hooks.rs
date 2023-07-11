@@ -1,8 +1,10 @@
 use core::fmt;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::{hooks::SlotHooks, Context, Spec};
-use sov_rollup_interface::{da::BlobTransactionTrait, zk::traits::ValidityCondition};
+use sov_modules_api::hooks::SlotHooks;
+use sov_modules_api::{Context, Spec};
+use sov_rollup_interface::da::BlobTransactionTrait;
+use sov_rollup_interface::zk::ValidityCondition;
 use thiserror::Error;
 
 use crate::{ChainState, StateTransitionId};

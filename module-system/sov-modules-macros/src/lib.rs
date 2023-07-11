@@ -8,9 +8,9 @@ mod rpc;
 
 use cli_parser::CliParserMacro;
 use default_runtime::DefaultRuntimeMacro;
-use dispatch::{
-    dispatch_call::DispatchCallMacro, genesis::GenesisMacro, message_codec::MessageCodec,
-};
+use dispatch::dispatch_call::DispatchCallMacro;
+use dispatch::genesis::GenesisMacro;
+use dispatch::message_codec::MessageCodec;
 use proc_macro::TokenStream;
 use rpc::ExposeRpcMacro;
 use syn::parse_macro_input;

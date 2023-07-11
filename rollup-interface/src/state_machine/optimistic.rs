@@ -2,7 +2,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
-use crate::zk::traits::StateTransition;
+use crate::zk::StateTransition;
 
 /// An attestation that a particular DA layer block transitioned the rollup state to some value
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
@@ -29,4 +29,5 @@ pub struct ChallengeContents<Address, VC> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, Serialize, Deserialize)]
+/// This struct contains the challenge as a raw blob
 pub struct Challenge<'a>(&'a [u8]);

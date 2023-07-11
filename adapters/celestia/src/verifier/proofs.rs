@@ -2,9 +2,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::{NamespaceId, NamespaceProof, NamespacedSha2Hasher};
 use serde::{Deserialize, Serialize};
 
-use crate::types::FilteredCelestiaBlock;
-
 use super::CelestiaSpec;
+use crate::types::FilteredCelestiaBlock;
 
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
 pub struct EtxProof {

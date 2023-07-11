@@ -1,8 +1,7 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Hasher, Module, Spec};
-use sov_state::WorkingSet;
-
 use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
+use sov_state::WorkingSet;
 
 pub type C = DefaultContext;
 

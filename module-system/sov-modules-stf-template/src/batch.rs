@@ -1,25 +1,20 @@
-use crate::tx_verifier::RawTx;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::traits::{BatchTrait, TransactionTrait};
+
+// use sov_rollup_interface::traits::TransactionTrait;
+use crate::tx_verifier::RawTx;
 
 #[derive(Debug, PartialEq, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct Batch {
     pub txs: Vec<RawTx>,
 }
 
-impl BatchTrait for Batch {
-    type Transaction = RawTx;
-
-    fn transactions(&self) -> &[Self::Transaction] {
+impl Batch {
+    pub fn transactions(&self) -> &[RawTx] {
         &self.txs
     }
 
-    fn take_transactions(self) -> Vec<Self::Transaction> {
+    pub fn take_transactions(self) -> Vec<RawTx> {
         self.txs
     }
-}
-
-impl TransactionTrait for RawTx {
-    type Hash = [u8; 32];
 }

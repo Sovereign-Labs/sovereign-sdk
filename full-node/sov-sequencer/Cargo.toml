@@ -13,8 +13,12 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
+borsh = { workspace = true }
+hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
 serde = { workspace = true, features = ["derive"] }
+tracing = { workspace = true }
+
 sov-rollup-interface = { path = "../../rollup-interface" }
 
 [dev-dependencies]

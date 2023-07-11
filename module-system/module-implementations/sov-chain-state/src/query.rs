@@ -1,6 +1,7 @@
-use super::ChainState;
-use sov_rollup_interface::zk::traits::ValidityCondition;
+use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::WorkingSet;
+
+use super::ChainState;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq)]
 pub struct Response {

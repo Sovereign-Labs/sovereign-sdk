@@ -1,19 +1,17 @@
-use super::{db::EvmDb, db_init::InitEvmDb, executor};
-use crate::{
-    evm::{
-        test_helpers::{contract_address, output, SimpleStorageContract},
-        transaction::{BlockEnv, EvmTransaction},
-        AccountInfo,
-    },
-    Evm,
-};
-use revm::{
-    db::CacheDB,
-    primitives::{CfgEnv, KECCAK_EMPTY, U256},
-    Database, DatabaseCommit,
-};
-use sov_state::{ProverStorage, WorkingSet};
 use std::convert::Infallible;
+
+use revm::db::CacheDB;
+use revm::primitives::{CfgEnv, KECCAK_EMPTY, U256};
+use revm::{Database, DatabaseCommit};
+use sov_state::{ProverStorage, WorkingSet};
+
+use super::db::EvmDb;
+use super::db_init::InitEvmDb;
+use super::executor;
+use crate::evm::test_helpers::{contract_address, output, SimpleStorageContract};
+use crate::evm::transaction::{BlockEnv, EvmTransaction};
+use crate::evm::AccountInfo;
+use crate::Evm;
 
 type C = sov_modules_api::default_context::DefaultContext;
 

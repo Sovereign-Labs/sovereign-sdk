@@ -1,6 +1,8 @@
+//! This module defines the traits that are used by the full node to
+//! instantiate and run the state transition function.
 use crate::services::batch_builder::BatchBuilder;
 use crate::stf::{StateTransitionConfig, StateTransitionFunction};
-use crate::zk::traits::Zkvm;
+use crate::zk::Zkvm;
 
 /// A StateTransitionRunner (STR) is responsible for running the state transition function. For any particular function,
 /// you might have a few different STRs, each with different runtime configs. For example, you might have a STR which takes
@@ -25,11 +27,16 @@ pub trait StateTransitionRunner<T: StateTransitionConfig, Vm: Zkvm> {
     /// The parameters of the state transition function which are set at runtime. For example,
     /// the runtime config might contain path to a data directory.
     type RuntimeConfig;
+
+    /// The inner [`StateTransitionFunction`] which is being run.
     type Inner: StateTransitionFunction<Vm>;
+
+    /// The [`BatchBuilder`] accepts transactions from the mempool and returns bundles of transactions
+    /// on request from the full node.
     type BatchBuilder: BatchBuilder;
 
     // TODO: decide if `new` also requires <Self as StateTransitionFunction>::ChainParams as an argument
-    /// Create a state transition runner
+    /// Creates a [`StateTransitionRunner`] from the given runtime config.
     fn new(runtime_config: Self::RuntimeConfig) -> Self;
 
     /// Return a reference to the inner STF implementation
@@ -39,7 +46,7 @@ pub trait StateTransitionRunner<T: StateTransitionConfig, Vm: Zkvm> {
     fn inner_mut(&mut self) -> &mut Self::Inner;
 
     /// Gives batch builder, after it has been initialized and configured
-    /// Can be only called once
+    /// Can be only called once.
     fn take_batch_builder(&mut self) -> Option<Self::BatchBuilder>;
 
     // /// Report if the state transition function has been initialized.

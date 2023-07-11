@@ -1,6 +1,7 @@
-use crate::shares::{self, Share};
+use tendermint::crypto::default::Sha256;
+use tendermint::merkle::simple_hash_from_byte_vectors;
 
-use tendermint::{crypto::default::Sha256, merkle::simple_hash_from_byte_vectors};
+use crate::shares::{self, Share};
 
 // /// Calculates the size of the smallest square that could be used to commit
 // /// to this message, following Celestia's "non-interactive default rules"

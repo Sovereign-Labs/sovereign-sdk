@@ -1,9 +1,10 @@
 use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_rollup_interface::zk::traits::Zkvm;
+use sov_rollup_interface::zk::Zkvm;
 use sov_state::{Storage, WorkingSet};
 
-use crate::{call::Role, AttesterIncentives};
+use crate::call::Role;
+use crate::AttesterIncentives;
 
 impl<C, Vm: Zkvm, S, P> AttesterIncentives<C, Vm>
 where

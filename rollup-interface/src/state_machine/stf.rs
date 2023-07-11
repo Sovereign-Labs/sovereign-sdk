@@ -1,6 +1,14 @@
-use crate::{da::BlobTransactionTrait, zk::traits::Zkvm};
+//! This module is the core of the Sovereign SDK. It defines the traits and types that
+//! allow the SDK to run the "business logic" of any application generically.
+//!
+//! The most important trait in this module is the [`StateTransitionFunction`], which defines the
+//! main event loop of the rollup.
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+
+use crate::da::BlobTransactionTrait;
+use crate::zk::Zkvm;
 
 #[cfg(any(test, feature = "fuzzing"))]
 pub mod fuzzing;
@@ -13,6 +21,8 @@ pub struct ZkConfig;
 /// The configuration of a standard full node of the rollup which does not create zk proofs
 pub struct StandardConfig;
 
+/// A special marker trait which allows us to define different rollup configurations. There are
+/// only 3 possible instantiations of this trait: [`ProverConfig`], [`ZkConfig`], and [`StandardConfig`].
 pub trait StateTransitionConfig: sealed::Sealed {}
 impl StateTransitionConfig for ProverConfig {}
 impl StateTransitionConfig for ZkConfig {}
@@ -28,6 +38,9 @@ mod sealed {
     impl Sealed for StandardConfig {}
 }
 
+/// A receipt for a single transaction. These receipts are stored in the rollup's database
+/// and may be queried via RPC. Receipts are generic over a type `R` which the rollup can use to
+/// store additional data, such as the status code of the transaction or the amout of gas used.s
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// A receipt showing the result of a transaction
 pub struct TransactionReceipt<R> {
@@ -43,12 +56,16 @@ pub struct TransactionReceipt<R> {
     pub receipt: R,
 }
 
+/// A receipt for a batch of transactions. These receipts are stored in the rollup's database
+/// and may be queried via RPC. Batch receipts are generic over a type `BatchReceiptContents` which the rollup
+/// can use to store arbitrary typed data, like the gas used by the batch. They are also generic over a type `TxReceiptContents`,
+/// since they contain a vectors of [`TransactionReceipt`]s.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 /// A receipt giving the outcome of a batch of transactions
 pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
     /// The canonical hash of this batch
     pub batch_hash: [u8; 32],
-
+    /// The receipts of all the transactions in this batch.
     pub tx_receipts: Vec<TransactionReceipt<TxReceiptContents>>,
     /// Any additional structured data to be saved in the database and served over RPC
     pub inner: BatchReceiptContents,
@@ -138,6 +155,7 @@ pub struct Event {
 }
 
 impl Event {
+    /// Create a new event with the given key and value
     pub fn new(key: &str, value: &str) -> Self {
         Self {
             key: EventKey(key.as_bytes().to_vec()),
@@ -145,15 +163,18 @@ impl Event {
         }
     }
 
+    /// Get the event key
     pub fn key(&self) -> &EventKey {
         &self.key
     }
 
+    /// Get the event value
     pub fn value(&self) -> &EventValue {
         &self.value
     }
 }
 
+/// The key of an event. This is a wrapper around a `Vec<u8>`.
 #[derive(
     Debug,
     Clone,
@@ -171,16 +192,19 @@ impl Event {
 pub struct EventKey(Vec<u8>);
 
 impl EventKey {
+    /// Return the inner bytes of the event key.
     pub fn inner(&self) -> &Vec<u8> {
         &self.0
     }
 }
 
+/// The value of an event. This is a wrapper around a `Vec<u8>`.
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 pub struct EventValue(Vec<u8>);
 
 impl EventValue {
+    /// Return the inner bytes of the event value.
     pub fn inner(&self) -> &Vec<u8> {
         &self.0
     }

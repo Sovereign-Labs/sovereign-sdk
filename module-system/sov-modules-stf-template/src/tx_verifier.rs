@@ -1,7 +1,9 @@
+use std::io::Cursor;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sov_modules_api::{transaction::Transaction, Context, Hasher, Spec};
-use std::io::Cursor;
+use sov_modules_api::transaction::Transaction;
+use sov_modules_api::{Context, Hasher, Spec};
 use tracing::debug;
 
 type RawTxHash = [u8; 32];

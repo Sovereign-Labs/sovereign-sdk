@@ -1,14 +1,14 @@
-/// Creates config for a rollup with some default settings, the config is used in demos and tests.
-use crate::runtime::GenesisConfig;
 use sov_election::ElectionConfig;
+#[cfg(feature = "experimental")]
+use sov_evm::{AccountData, EvmConfig};
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::Context;
-use sov_modules_api::Hasher;
-use sov_modules_api::PublicKey;
-use sov_modules_api::Spec;
+use sov_modules_api::{Context, Hasher, PublicKey, Spec};
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
+
+/// Creates config for a rollup with some default settings, the config is used in demos and tests.
+use crate::runtime::GenesisConfig;
 
 pub const DEMO_SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 pub const LOCKED_AMOUNT: u64 = 200;
@@ -37,7 +37,7 @@ pub fn create_demo_genesis_config<C: Context>(
         sov_bank::genesis::SALT,
     );
 
-    let sequencer_config = sov_sequencer_registry::SequencerConfig {
+    let sequencer_registry_config = sov_sequencer_registry::SequencerConfig {
         seq_rollup_address: sequencer_address,
         seq_da_address: sequencer_da_address,
         coins_to_lock: sov_bank::Coins {
@@ -54,12 +54,28 @@ pub fn create_demo_genesis_config<C: Context>(
         admin: election_admin_private_key.pub_key().to_address(),
     };
 
+    #[cfg(feature = "experimental")]
+    let genesis_evm_address = hex::decode("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
+        .unwrap()
+        .try_into()
+        .expect("EVM module initialized with invalid address");
+
     GenesisConfig::new(
         bank_config,
-        sequencer_config,
+        sequencer_registry_config,
         election_config,
         value_setter_config,
         sov_accounts::AccountConfig { pub_keys: vec![] },
+        #[cfg(feature = "experimental")]
+        EvmConfig {
+            data: vec![AccountData {
+                address: genesis_evm_address,
+                balance: AccountData::balance(1000000000),
+                code_hash: AccountData::empty_code(),
+                code: vec![],
+                nonce: 0,
+            }],
+        },
     )
 }
 

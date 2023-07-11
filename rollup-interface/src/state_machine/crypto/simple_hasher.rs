@@ -2,6 +2,7 @@ pub use jmt::SimpleHasher;
 
 /// A SimpleHasher implementation which always returns the digest [0;32]
 pub struct NoOpHasher;
+
 impl SimpleHasher for NoOpHasher {
     fn new() -> Self {
         Self
