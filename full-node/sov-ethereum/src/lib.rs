@@ -100,11 +100,17 @@ fn register_rpc_methods(rpc: &mut RpcModule<Ethereum>) -> Result<(), jsonrpsee::
                 value: tx_request.value.unwrap().into(),
                 nonce: tx_request.nonce.unwrap().as_u64(),
                 access_lists: vec![],
+                // todo remove it
+                hash: tx_hash.into(),
             };
 
             // todo set nonce
             let raw = make_raw_tx(evm_tx, 0).unwrap();
             ethereum.send_tx_to_da(raw).await?;
+
+            println!();
+            println!("=== tx hash {:?}", tx_hash);
+            println!();
 
             Ok(tx_hash)
         },

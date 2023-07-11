@@ -23,7 +23,7 @@ mod experimental {
     use super::evm::db::EvmDb;
     use super::evm::transaction::BlockEnv;
     use super::evm::{DbAccount, EthAddress};
-    use crate::evm::Bytes32;
+    use crate::evm::{Bytes32, EvmTransaction};
 
     #[derive(Clone)]
     pub struct AccountData {
@@ -60,6 +60,9 @@ mod experimental {
 
         #[state]
         pub(crate) block_env: sov_state::StateValue<BlockEnv>,
+
+        #[state]
+        pub(crate) transactions: sov_state::StateMap<[u8; 32], EvmTransaction>,
     }
 
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {

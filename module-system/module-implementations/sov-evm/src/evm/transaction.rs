@@ -52,6 +52,8 @@ pub struct EvmTransaction {
     pub value: Bytes32,
     pub nonce: u64,
     pub access_lists: Vec<AccessListItem>,
+    // todo remove it
+    pub hash: [u8; 32],
 }
 
 impl Default for EvmTransaction {
@@ -66,6 +68,7 @@ impl Default for EvmTransaction {
             value: Default::default(),
             nonce: Default::default(),
             access_lists: Default::default(),
+            hash: Default::default(),
         }
     }
 }
