@@ -118,6 +118,7 @@ fn main() -> Result<(), anyhow::Error> {
 
         println!("Starting proving...");
         let receipt = host.run().expect("Prover should run successfully");
+        println!("cycles: {}",host.cycles());
         println!("Start verifying..");
         receipt.verify(&ROLLUP_ID).expect("Receipt should be valid");
 

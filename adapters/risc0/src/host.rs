@@ -28,6 +28,10 @@ impl<'a> Risc0Host<'a> {
     pub fn run(&mut self) -> anyhow::Result<Receipt> {
         self.prover.borrow_mut().run()
     }
+
+    pub fn cycles(&mut self) -> usize {
+        self.prover.borrow_mut().cycles
+    }
 }
 
 impl<'a> ZkvmHost for Risc0Host<'a> {
