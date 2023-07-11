@@ -16,6 +16,8 @@ use jupiter::types::NamespaceId;
 use jupiter::verifier::{CelestiaVerifier, ChainValidityCondition, RollupParams};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
+#[cfg(feature = "experimental")]
+use sov_ethereum::get_ethereum_rpc;
 use sov_modules_api::RpcRunner;
 use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaVerifier};
@@ -140,8 +142,12 @@ async fn main() -> Result<(), anyhow::Error> {
     let batch_builder = demo_runner.take_batch_builder().unwrap();
 
     let r = get_sequencer_rpc(batch_builder, da_service.clone());
-
     methods.merge(r).expect("Failed to merge Txs RPC modules");
+
+    #[cfg(feature = "experimental")]
+    let ethereum_rpc = get_ethereum_rpc(rollup_config.da.clone());
+    #[cfg(feature = "experimental")]
+    methods.merge(ethereum_rpc).unwrap();
 
     let _handle = tokio::spawn(async move {
         start_rpc_server(methods, address).await;

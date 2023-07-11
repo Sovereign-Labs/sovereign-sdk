@@ -4,8 +4,8 @@ pub mod call;
 pub mod evm;
 #[cfg(feature = "experimental")]
 pub mod genesis;
-#[cfg(feature = "experimental")]
 #[cfg(feature = "native")]
+#[cfg(feature = "experimental")]
 pub mod query;
 #[cfg(feature = "experimental")]
 #[cfg(test)]
@@ -15,6 +15,7 @@ pub use experimental::{AccountData, Evm, EvmConfig};
 
 #[cfg(feature = "experimental")]
 mod experimental {
+    use revm::primitives::{KECCAK_EMPTY, U256};
     use sov_modules_api::Error;
     use sov_modules_macros::ModuleInfo;
     use sov_state::WorkingSet;
@@ -31,6 +32,16 @@ mod experimental {
         pub code_hash: Bytes32,
         pub code: Vec<u8>,
         pub nonce: u64,
+    }
+
+    impl AccountData {
+        pub fn empty_code() -> [u8; 32] {
+            KECCAK_EMPTY.to_fixed_bytes()
+        }
+
+        pub fn balance(balance: u64) -> Bytes32 {
+            U256::from(balance).to_le_bytes()
+        }
     }
 
     #[derive(Clone)]
