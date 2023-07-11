@@ -181,6 +181,5 @@ async fn send_tx_test_to_eth() -> Result<(), Box<dyn std::error::Error>> {
 
     let test_client = TestClient::new_anvil_client(chain_id, key, from_addr, contract).await;
     //let test_client = TestClient::new_demo_rollup_client(chain_id, key, from_addr, contract).await;
-
     test_client.execute().await
 }
