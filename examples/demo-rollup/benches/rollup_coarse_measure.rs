@@ -15,9 +15,7 @@ use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use tempfile::TempDir;
-
-mod data_gen;
-use data_gen::generate_blocks;
+use sov_demo_rollup::data_gen::generate_blocks;
 
 #[macro_use]
 extern crate prettytable;

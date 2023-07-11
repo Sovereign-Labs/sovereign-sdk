@@ -1,6 +1,6 @@
 use std::sync::Arc;
 use jupiter::verifier::address::CelestiaAddress;
-use sov_demo_rollup::rng_xfers::RngDaService;
+use crate::rng_xfers::RngDaService;
 use sov_rollup_interface::mocks::{TestBlob, TestBlock, TestBlockHeader, TestHash};
 use sov_rollup_interface::services::da::DaService;
 

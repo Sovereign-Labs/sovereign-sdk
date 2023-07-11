@@ -15,6 +15,7 @@ sha2 = "0.10.6"
 risc0-zkvm = { version = "0.14" }
 risc0-build = { version = "0.14" }
 tokio = { version = "1", features = ["full"] }
+tempfile = "3.6.0"
 
 # Always optimize; building and running the guest takes much longer without optimization.
 [profile.dev]

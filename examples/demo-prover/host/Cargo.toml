@@ -26,3 +26,12 @@ sov-modules-api = { path = "../../../module-system/sov-modules-api", features = 
 sov-state = { path = "../../../module-system/sov-state", features = ["native"] }
 
 methods = { path = "../methods" }
+
+[dev-dependencies]
+sov-demo-rollup = {path = "../../demo-rollup"}
+tempfile = { workspace = true }
+
+[[bench]]
+name = "prover_bench"
+harness = false
+
