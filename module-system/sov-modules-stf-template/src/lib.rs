@@ -142,12 +142,13 @@ where
                         .dispatch_call(call, &mut batch_workspace, &Context::new(address));
             }
             Err(e) => {
+                let sequencer_da_address: Vec<u8> = blob.sender().as_ref().to_vec();
                 info!("Sync data blob decoding failed: {:?}", e);
                 return SyncReceipt {
                     blob_hash: blob.hash(),
                     inner: SequencerOutcome::Slashed {
                         reason: SlashingReason::InvalidBatchEncoding,
-                        sequencer_da_address: todo!(),
+                        sequencer_da_address,
                     },
                 };
             }

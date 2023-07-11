@@ -117,6 +117,8 @@ pub trait StateTransitionFunction<Vm: Zkvm> {
         misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents>;
 
+    /// Similar to apply data blob, except that we are working with sequencers that post attestations/challengers - hence in the sync
+    /// namespace. This function should rely heavily on the `sov-optimistic-workflow` module
     fn apply_sync_data_blob(
         &mut self,
         blob: &mut impl BlobTransactionTrait,
