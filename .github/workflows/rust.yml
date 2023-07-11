@@ -87,7 +87,7 @@ jobs:
       - uses: mozilla-actions/sccache-action@v0.0.3
       - uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: 1.0.0
+          version: v1.0.0
       - name: Run cargo test
         run: cargo test
   coverage:
