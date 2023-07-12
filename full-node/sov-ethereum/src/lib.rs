@@ -1,8 +1,5 @@
 #[cfg(feature = "experimental")]
-pub mod experimental;
-
-#[cfg(feature = "experimental")]
-mod experimental {
+pub mod experimental {
     use borsh::ser::BorshSerialize;
     use const_rollup_config::ROLLUP_NAMESPACE_RAW;
     use demo_stf::app::DefaultPrivateKey;
