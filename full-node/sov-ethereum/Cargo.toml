@@ -19,7 +19,7 @@ sov-rollup-interface = { path = "../../rollup-interface" }
 ethers = {version = "2.0.7"}
 
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", default-features = false }
-demo-stf = { path = "../../examples/demo-stf", features = ["native", "experimental"] }
+demo-stf = { path = "../../examples/demo-stf", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", default-features = false }
 const-rollup-config = { path = "../../examples/const-rollup-config" }
 jupiter = { path = "../../adapters/celestia", features = ["native"] }
@@ -34,7 +34,7 @@ tokio = { workspace = true }
 
 
 [features]
-default = ["native", "experimental"]
+default = ["native"]
 experimental =["demo-stf/experimental", "sov-evm/experimental"]
 
 native = ["demo-stf/native", "sov-evm/native"]
