@@ -1,8 +1,8 @@
 use helpers::{generate_address, C};
 use sov_bank::call::CallMessage;
 use sov_bank::query::TotalSupplyResponse;
-use sov_bank::{create_token_address, Bank, BankConfig, Coins};
-use sov_modules_api::{Address, Context, Module};
+use sov_bank::{get_token_address, Bank, BankConfig, Coins};
+use sov_modules_api::{Address, Context, Error, Module};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 mod helpers;
@@ -23,13 +23,13 @@ fn freeze_token() {
     let salt = 0;
     let token_name = "Token1".to_owned();
     let initial_balance = 100;
-    let token_address = create_token_address::<C>(&token_name, minter_address.as_ref(), salt);
+    let token_address = get_token_address::<C>(&token_name, minter_address.as_ref(), salt);
 
     // ---
     // Deploying token
     let mint_message = CallMessage::CreateToken {
         salt,
-        token_name,
+        token_name: token_name.clone(),
         initial_balance,
         minter_address: minter_address.clone(),
         authorized_minters: vec![minter_address.clone()],
@@ -61,20 +61,20 @@ fn freeze_token() {
     assert!(freeze.is_err());
 
     assert_eq!(
-        "Token is already frozen".to_string(),
+        format!("Token {} is already frozen", token_name),
         freeze.err().unwrap().to_string()
     );
 
     // create a second token
-    let token_name = "Token2".to_owned();
+    let token_name_2 = "Token2".to_owned();
     let initial_balance = 100;
-    let token_address_2 = create_token_address::<C>(&token_name, minter_address.as_ref(), salt);
+    let token_address_2 = get_token_address::<C>(&token_name_2, minter_address.as_ref(), salt);
 
     // ---
     // Deploying second token
     let mint_message = CallMessage::CreateToken {
         salt,
-        token_name,
+        token_name: token_name_2.clone(),
         initial_balance,
         minter_address: minter_address.clone(),
         authorized_minters: vec![minter_address.clone()],
@@ -95,8 +95,8 @@ fn freeze_token() {
     let freeze = bank.call(freeze_message, &unauthorized_context, &mut working_set);
     assert!(freeze.is_err());
     let unauthorized_minter_msg = format!(
-        "Sender {} is not an authorized minter",
-        unauthorized_address
+        "Sender {} is not an authorized minter of token {}",
+        unauthorized_address, token_name_2,
     );
     assert_eq!(unauthorized_minter_msg, freeze.err().unwrap().to_string());
 
@@ -107,9 +107,9 @@ fn freeze_token() {
     let mint_message = CallMessage::Mint {
         coins: Coins {
             amount: mint_amount,
-            token_address,
+            token_address: token_address.clone(),
         },
-        minter_address: new_holder,
+        minter_address: new_holder.clone(),
     };
 
     let query_total_supply =
@@ -121,9 +121,21 @@ fn freeze_token() {
     let minted = bank.call(mint_message, &minter_context, &mut working_set);
     assert!(minted.is_err());
 
+    let Error::ModuleError(err) = minted.err().unwrap();
+    let mut chain = err.chain();
+
+    let message_1 = chain.next().unwrap().to_string();
+    let message_2 = chain.next().unwrap().to_string();
     assert_eq!(
-        "Attempt to mint frozen token".to_string(),
-        minted.err().unwrap().to_string()
+        format!(
+            "Failed mint coins(token_address={} amount={}) to {} by minter {}",
+            token_address, mint_amount, new_holder, minter_address
+        ),
+        message_1
+    );
+    assert_eq!(
+        format!("Attempt to mint frozen token {}", token_name),
+        message_2
     );
 
     // -----

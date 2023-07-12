@@ -1,8 +1,7 @@
 use helpers::{generate_address, C};
 use sov_bank::call::CallMessage;
-use sov_bank::genesis::{DEPLOYER, SALT};
 use sov_bank::query::TotalSupplyResponse;
-use sov_bank::{create_token_address, Bank, BankConfig, Coins};
+use sov_bank::{get_genesis_token_address, get_token_address, Bank, BankConfig, Coins};
 use sov_modules_api::{Address, Context, Module};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
@@ -28,7 +27,7 @@ fn burn_deployed_tokens() {
     let salt = 0;
     let token_name = "Token1".to_owned();
     let initial_balance = 100;
-    let token_address = create_token_address::<C>(&token_name, minter_address.as_ref(), salt);
+    let token_address = get_token_address::<C>(&token_name, minter_address.as_ref(), salt);
 
     // ---
     // Deploying token
@@ -125,7 +124,7 @@ fn burn_deployed_tokens() {
 
     // ---
     // Try to burn non existing token
-    let token_address = create_token_address::<C>("NotRealToken2", minter_address.as_ref(), salt);
+    let token_address = get_token_address::<C>("NotRealToken2", minter_address.as_ref(), salt);
     let burn_message = CallMessage::Burn {
         coins: Coins {
             amount: 1,
@@ -151,8 +150,10 @@ fn burn_initial_tokens() {
     let bank = Bank::default();
     bank.genesis(&bank_config, &mut working_set).unwrap();
 
-    let token_address =
-        create_token_address::<C>(&bank_config.tokens[0].token_name, &DEPLOYER, SALT);
+    let token_address = get_genesis_token_address::<C>(
+        &bank_config.tokens[0].token_name,
+        bank_config.tokens[0].salt,
+    );
     let sender_address = bank_config.tokens[0].address_and_balances[0].0.clone();
 
     let query_user_balance =

@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
@@ -70,7 +70,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         let (token_address, token) = Token::<C>::create(
             &token_name,
             &[(minter_address, initial_balance)],
-            authorized_minters,
+            &authorized_minters,
             context.sender().as_ref(),
             salt,
             self.tokens.prefix(),
@@ -121,7 +121,16 @@ impl<C: sov_modules_api::Context> Bank<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        token.mint(context.sender(), &minter_address, coins.amount, working_set)?;
+        token
+            .mint(context.sender(), &minter_address, coins.amount, working_set)
+            .with_context(|| {
+                format!(
+                    "Failed mint coins({}) to {} by minter {}",
+                    coins,
+                    minter_address,
+                    context.sender()
+                )
+            })?;
         self.tokens.set(&coins.token_address, &token, working_set);
 
         Ok(CallResponse::default())
@@ -150,7 +159,14 @@ impl<C: sov_modules_api::Context> Bank<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        token.transfer(from, to, coins.amount, working_set)?;
+        token
+            .transfer(from, to, coins.amount, working_set)
+            .with_context(|| {
+                format!(
+                    "Failed transfer from={} to={} of coins({})",
+                    from, to, coins
+                )
+            })?;
         Ok(CallResponse::default())
     }
 }
