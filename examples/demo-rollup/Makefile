@@ -4,11 +4,11 @@ CONTAINER_NAME=sov-celestia-local
 VALIDATOR_ADDRESS=celestia1w7wcupk5gswj25c0khnkey5fwmlndx6t5aarmk
 IMAGE_NAME=dubbelosix/sov-celestia-local:genesis-v0.7.1
 RPC_PORT=26658
-KEY_NAME=sequencer-da-address
+KEY_NAME=validator
 AMOUNT=10000000utia
 START_HEIGHT=1
 BLOB_TXN_FEE=300utia
-TEST_PRIVATE_KEY_PATH=../demo-stf/src/sov-cli/test_data/minter_private_key.json
+TEST_PRIVATE_KEY_PATH=../test-data/keys/minter_private_key.json
 SOV_CLI_REL_PATH=../../target/debug/sov-cli
 
 ifndef SERIALIZED_BLOB_PATH
@@ -60,12 +60,10 @@ validator-funded:
 
 config: check-container-running 
 ifeq ($(shell uname -s),Darwin)
-	@sed -i '' 's/\(pub const SEQUENCER_DA_ADDRESS: \[u8; 47\] = \*\)b"[^"]*";/\1b"$(get_address)";/' ../const-rollup-config/src/lib.rs
 	@sed -i '' 's/^\(celestia_rpc_auth_token = \)"[^"]*"/\1"$(get_auth)"/' rollup_config.toml
 	@sed -i '' 's#^\(celestia_rpc_address = \)"[^"]*"#\1"http://127.0.0.1:$(RPC_PORT)"#' rollup_config.toml
 	@sed -i '' 's#^\(start_height = \)[0-9]*#\1$(START_HEIGHT)#' rollup_config.toml
 else
-	@sed -i 's/\(pub const SEQUENCER_DA_ADDRESS: \[u8; 47\] = \*\)b"[^"]*";/\1b"$(get_address)";/' ../const-rollup-config/src/lib.rs
 	@sed -i 's/^\(celestia_rpc_auth_token = \)"[^"]*"/\1"$(get_auth)"/' rollup_config.toml
 	@sed -i 's#^\(celestia_rpc_address = \)"[^"]*"#\1"http://127.0.0.1:$(RPC_PORT)"#' rollup_config.toml
 	@sed -i 's#^\(start_height = \)[0-9]*#\1$(START_HEIGHT)#' rollup_config.toml
@@ -96,13 +94,13 @@ build-sov-cli:
 	cd ../demo-stf && cargo build --bin sov-cli
 
 test-serialize-create-token: check-container-running build-sov-cli
-	$(SOV_CLI_REL_PATH) serialize-call ../demo-stf/src/sov-cli/test_data/minter_private_key.json Bank ../demo-stf/src/sov-cli/test_data/create_token.json 0
+	$(SOV_CLI_REL_PATH) serialize-call ../test-data/keys/token_deployer_private_key.json Bank ../test-data/requests/create_token.json 0
 
 test-build-blob-from-create-token: test-serialize-create-token
-	$(SOV_CLI_REL_PATH) make-blob ../demo-stf/src/sov-cli/test_data/create_token.dat > ../demo-stf/src/sov-cli/test_data/test_blob.dat
+	$(SOV_CLI_REL_PATH) make-blob ../test-data/requests/create_token.dat > ../test-data/requests/test_blob.dat
 
 test-create-token: test-build-blob-from-create-token
-	$(MAKE) submit-txn SERIALIZED_BLOB_PATH=../demo-stf/src/sov-cli/test_data/test_blob.dat
+	$(MAKE) submit-txn SERIALIZED_BLOB_PATH=../test-data/requests/test_blob.dat
 
 clean-rollup-db:
 	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' rollup_config.toml | tr -d '[:space:]"\n'))

@@ -15,17 +15,20 @@ pub mod config;
 #[cfg(test)]
 mod state_tests;
 
-pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
+use std::fmt::Display;
+use std::str;
+
 pub use map::StateMap;
 #[cfg(feature = "native")]
 pub use prover_storage::{delete_storage, ProverStorage};
 pub use scratchpad::*;
 pub use sov_first_read_last_write_cache::cache::CacheLog;
-use std::{fmt::Display, str};
 pub use storage::Storage;
 use utils::AlignedVec;
 pub use value::StateValue;
 pub use zk_storage::ZkStorage;
+
+pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 
 // A prefix prepended to each key before insertion and retrieval from the storage.
 // All the collection types in this crate are backed by the same storage instance, this means that insertions of the same key

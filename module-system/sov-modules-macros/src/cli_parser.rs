@@ -1,9 +1,10 @@
-use crate::common::StructFieldExtractor;
 use quote::{format_ident, quote};
 use syn::spanned::Spanned;
 use syn::{
     Data, DataEnum, DeriveInput, Fields, Ident, Lit, Meta, MetaNameValue, Path, PathArguments, Type,
 };
+
+use crate::common::StructFieldExtractor;
 
 pub(crate) struct CliParserMacro {
     field_extractor: StructFieldExtractor,

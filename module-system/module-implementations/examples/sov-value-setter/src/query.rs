@@ -1,6 +1,7 @@
-use super::ValueSetter;
 use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
+
+use super::ValueSetter;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq)]
 pub struct Response {

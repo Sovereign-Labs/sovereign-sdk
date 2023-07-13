@@ -1,7 +1,8 @@
-use crate::{Account, Accounts};
 use sov_modules_api::AddressBech32;
 use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
+
+use crate::{Account, Accounts};
 
 #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum Response {

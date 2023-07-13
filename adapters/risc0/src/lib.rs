@@ -1,6 +1,6 @@
 use risc0_zkvm::sha::Digest;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::traits::Matches;
+use sov_rollup_interface::zk::Matches;
 
 pub mod guest;
 #[cfg(feature = "native")]

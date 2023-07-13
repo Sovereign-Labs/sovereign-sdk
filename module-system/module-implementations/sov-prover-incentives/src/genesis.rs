@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sov_rollup_interface::zk::traits::Zkvm;
+use sov_rollup_interface::zk::Zkvm;
 use sov_state::WorkingSet;
 
 use crate::ProverIncentives;

@@ -1,21 +1,16 @@
-use crate::{
-    tx_verifier::{verify_txs_stateless, TransactionAndRawHash},
-    Batch, SequencerOutcome, SlashingReason, TxEffect,
-};
-use borsh::BorshDeserialize;
-use sov_modules_api::{
-    hooks::{ApplyBlobHooks, TxHooks},
-    Context, DispatchCall, Genesis,
-};
-use sov_rollup_interface::{
-    da::{BlobTransactionTrait, CountedBufReader},
-    stf::{BatchReceipt, TransactionReceipt},
-    traits::BatchTrait,
-    Buf,
-};
-use sov_state::StateCheckpoint;
 use std::marker::PhantomData;
+
+use borsh::BorshDeserialize;
+use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
+use sov_modules_api::{Context, DispatchCall, Genesis};
+use sov_rollup_interface::da::{BlobTransactionTrait, CountedBufReader};
+use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
+use sov_rollup_interface::Buf;
+use sov_state::StateCheckpoint;
 use tracing::{debug, error};
+
+use crate::tx_verifier::{verify_txs_stateless, TransactionAndRawHash};
+use crate::{Batch, SequencerOutcome, SlashingReason, TxEffect};
 
 type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
 
@@ -181,7 +176,7 @@ where
             let tx_effect = match tx_result {
                 Ok(_) => TxEffect::Successful,
                 Err(e) => {
-                    debug!(
+                    error!(
                         "Tx 0x{} was reverted error: {}",
                         hex::encode(raw_tx_hash),
                         e

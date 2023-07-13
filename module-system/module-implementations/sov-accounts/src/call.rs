@@ -1,11 +1,10 @@
-use crate::Accounts;
 use anyhow::{ensure, Result};
-use sov_modules_api::CallResponse;
-use sov_modules_api::Signature;
-use sov_state::WorkingSet;
-
+use sov_modules_api::{CallResponse, Signature};
 #[cfg(feature = "native")]
 use sov_modules_macros::CustomParser;
+use sov_state::WorkingSet;
+
+use crate::Accounts;
 
 pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 

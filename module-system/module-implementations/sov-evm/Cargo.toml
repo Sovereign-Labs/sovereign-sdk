@@ -27,18 +27,30 @@ thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
+tracing = { workspace = true }
+
+# TODO: move these dependencies to the workspace when the EVM module is no longer in the experimental stage
+ethereum-types = "0.14.1"
+ethers-core = "2.0.7"
+ethers-contract = "2.0.7"
+ethers-middleware = { version = "2.0.7"}
+ethers-providers = { version = "2.0.7"}
+ethers-signers = { version = "2.0.7", default-features = false }
+
+anvil-core  = { workspace = true }
+ethers = { workspace = true }
 
 [dev-dependencies]
-ethereum-types = "0.14.1"
-ethers-contract = "2.0.7"
-ethers-core = "2.0.7"
+anvil  = { workspace = true }
 primitive-types = "0.12.1"
-
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+tokio = { workspace = true }
 tempfile = { workspace = true }
 bytes = { workspace = true }
+
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
 
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
 native = ["serde", "sov-state/native", "dep:jsonrpsee", "sov-modules-api/native"]
+experimental = ["native"]

@@ -4,17 +4,12 @@ mod tx_verifier;
 
 pub use app_template::AppTemplate;
 pub use batch::Batch;
+use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
+use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
+use sov_rollup_interface::stf::{BatchReceipt, StateTransitionFunction};
+use sov_rollup_interface::zk::Zkvm;
+use sov_state::{StateCheckpoint, Storage};
 pub use tx_verifier::RawTx;
-
-use sov_modules_api::{
-    hooks::{ApplyBlobHooks, TxHooks},
-    Context, DispatchCall, Genesis, Spec,
-};
-use sov_rollup_interface::stf::BatchReceipt;
-use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::traits::Zkvm;
-use sov_state::StateCheckpoint;
-use sov_state::Storage;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TxEffect {
@@ -23,12 +18,16 @@ pub enum TxEffect {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+// TODO: Should be generic for Address for pretty printing https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
 pub enum SequencerOutcome {
     /// Sequencer receives reward amount in defined token and can withdraw its deposit
     Rewarded(u64),
     /// Sequencer loses its deposit and receives no reward
     Slashed {
         reason: SlashingReason,
+        // Keep this comment for so it doesn't need to investigate serde issue again.
+        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
+        // #[serde(bound(deserialize = ""))]
         sequencer_da_address: Vec<u8>,
     },
     /// Batch was ignored, sequencer deposit left untouched.

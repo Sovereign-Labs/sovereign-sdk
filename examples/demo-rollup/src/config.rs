@@ -18,12 +18,13 @@ pub struct RollupConfig {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
-    use demo_stf::runner_config::{from_toml_path, StorageConfig};
     use std::io::Write;
     use std::path::PathBuf;
+
+    use demo_stf::runner_config::{from_toml_path, StorageConfig};
     use tempfile::NamedTempFile;
+
+    use super::*;
 
     fn create_config_from(content: &str) -> NamedTempFile {
         let mut config_file = NamedTempFile::new().unwrap();
@@ -55,6 +56,7 @@ mod tests {
                 celestia_rpc_auth_token: "SECRET_RPC_TOKEN".to_string(),
                 celestia_rpc_address: "http://localhost:11111/".into(),
                 max_celestia_response_body_size: 980,
+                celestia_rpc_timeout_seconds: 60,
             },
             runner: RunnerConfig {
                 storage: StorageConfig {

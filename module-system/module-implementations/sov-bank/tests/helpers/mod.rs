@@ -1,7 +1,6 @@
 use sov_bank::{BankConfig, TokenConfig};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::Hasher;
-use sov_modules_api::{Address, Spec};
+use sov_modules_api::{Address, Hasher, Spec};
 
 pub type C = DefaultContext;
 
@@ -26,6 +25,8 @@ pub fn create_bank_config_with_token(
     let token_config = TokenConfig {
         token_name: "InitialToken".to_owned(),
         address_and_balances,
+        authorized_minters: vec![],
+        salt: 5,
     };
 
     BankConfig {

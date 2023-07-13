@@ -21,13 +21,14 @@ bytes = { workspace = true }
 futures = "0.3"
 
 # Crates which only this package depends on 
-tokio = { version = "1", features = ["full"] }
+tokio = { workspace = true }
 tracing-subscriber = "0.3.17"
 
 jupiter = { path = "../../adapters/celestia" }
 demo-stf = { path = "../demo-stf", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-db = { path = "../../full-node/db/sov-db" }
+sov-ethereum = { path = "../../full-node/sov-ethereum", optional = true }
 sov-sequencer = { path = "../../full-node/sov-sequencer" }
 risc0-adapter = { path = "../../adapters/risc0" }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }
@@ -39,9 +40,25 @@ sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["n
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
 
-
 [dev-dependencies]
 sha2 = { workspace = true }
 reqwest = "0.11"
 tendermint = "0.32"
 tempfile = { workspace = true }
+proptest = { workspace = true }
+clap = { workspace = true }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }
+prometheus = "0.11.0"
+prettytable-rs = "^0.10"
+criterion = "0.5.1"
+
+[features]
+experimental = ["sov-ethereum/experimental"]
+
+[[bench]]
+name = "rollup_bench"
+harness = false
+
+[[bench]]
+name = "rollup_coarse_measure"
+harness = false

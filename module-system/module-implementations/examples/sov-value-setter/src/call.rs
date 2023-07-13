@@ -1,7 +1,8 @@
+use std::fmt::Debug;
+
 use anyhow::Result;
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
-use std::fmt::Debug;
 use thiserror::Error;
 
 use super::ValueSetter;

@@ -1,14 +1,13 @@
-use std::{marker::PhantomData, sync::Arc};
+use std::marker::PhantomData;
+use std::sync::Arc;
 
-use crate::witness::{TreeWitnessReader, Witness};
 use jmt::{JellyfishMerkleTree, KeyHash, Version};
 use sov_rollup_interface::crypto::SimpleHasher;
 
-use crate::{
-    internal_cache::OrderedReadsAndWrites,
-    storage::{StorageKey, StorageValue},
-    MerkleProofSpec, Storage,
-};
+use crate::internal_cache::OrderedReadsAndWrites;
+use crate::storage::{StorageKey, StorageValue};
+use crate::witness::{TreeWitnessReader, Witness};
+use crate::{MerkleProofSpec, Storage};
 
 pub struct ZkStorage<S: MerkleProofSpec> {
     prev_state_root: [u8; 32],

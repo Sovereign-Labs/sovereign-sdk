@@ -1,18 +1,16 @@
 use serde::de::DeserializeOwned;
-use sov_rollup_interface::{
-    rpc::{
-        BatchIdAndOffset, BatchIdentifier, BatchResponse, EventIdentifier, ItemOrHash,
-        LedgerRpcProvider, QueryMode, SlotIdAndOffset, SlotIdentifier, SlotResponse, TxIdAndOffset,
-        TxIdentifier, TxResponse,
-    },
-    stf::Event,
+use sov_rollup_interface::rpc::{
+    BatchIdAndOffset, BatchIdentifier, BatchResponse, EventIdentifier, ItemOrHash,
+    LedgerRpcProvider, QueryMode, SlotIdAndOffset, SlotIdentifier, SlotResponse, TxIdAndOffset,
+    TxIdentifier, TxResponse,
 };
+use sov_rollup_interface::stf::Event;
 
-use crate::schema::{
-    tables::{
-        BatchByHash, BatchByNumber, EventByNumber, SlotByHash, SlotByNumber, TxByHash, TxByNumber,
-    },
-    types::{BatchNumber, EventNumber, SlotNumber, StoredBatch, StoredSlot, TxNumber},
+use crate::schema::tables::{
+    BatchByHash, BatchByNumber, EventByNumber, SlotByHash, SlotByNumber, TxByHash, TxByNumber,
+};
+use crate::schema::types::{
+    BatchNumber, EventNumber, SlotNumber, StoredBatch, StoredSlot, TxNumber,
 };
 
 /// The maximum number of slots that can be requested in a single RPC range query

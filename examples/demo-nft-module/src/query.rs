@@ -1,6 +1,7 @@
-use crate::NonFungibleToken;
 use sov_modules_api::Context;
 use sov_state::WorkingSet;
+
+use crate::NonFungibleToken;
 
 #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct OwnerResponse<C: Context> {

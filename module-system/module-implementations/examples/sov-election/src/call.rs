@@ -1,14 +1,11 @@
-use super::{
-    types::{Candidate, Voter},
-    Election,
-};
 use anyhow::{anyhow, bail, ensure, Result};
-
 use sov_modules_api::{CallResponse, Context};
-use sov_state::WorkingSet;
-
 #[cfg(feature = "native")]
 use sov_modules_macros::CustomParser;
+use sov_state::WorkingSet;
+
+use super::types::{Candidate, Voter};
+use super::Election;
 
 /// Call actions supported byte the module.
 #[cfg_attr(

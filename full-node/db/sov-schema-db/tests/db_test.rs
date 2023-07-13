@@ -1,15 +1,12 @@
 // Copyright (c) Aptos
 // SPDX-License-Identifier: Apache-2.0
 
-use byteorder::{BigEndian, ReadBytesExt};
-use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
-use sov_rollup_interface::{
-    db::{errors::CodecError, ColumnFamilyName, KeyDecoder, KeyEncoder, Result, ValueCodec},
-    define_schema,
-};
 use std::path::Path;
 
-use crate::{Schema, SchemaBatch, DB};
+use byteorder::{BigEndian, ReadBytesExt};
+use rocksdb::DEFAULT_COLUMN_FAMILY_NAME;
+use sov_schema_db::schema::{ColumnFamilyName, KeyDecoder, KeyEncoder, Result, ValueCodec};
+use sov_schema_db::{define_schema, CodecError, Schema, SchemaBatch, DB};
 use tempfile::TempDir;
 
 // Creating two schemas that share exactly the same structure but are stored in different column

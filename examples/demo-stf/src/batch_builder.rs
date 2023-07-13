@@ -1,11 +1,12 @@
+use std::collections::VecDeque;
+use std::io::Cursor;
+
 use anyhow::bail;
 use borsh::BorshDeserialize;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, DispatchCall, PublicKey};
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_state::WorkingSet;
-use std::collections::VecDeque;
-use std::io::Cursor;
 use tracing::warn;
 
 /// BatchBuilder that creates batches of transactions in the order they were submitted
@@ -132,7 +133,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use borsh::BorshSerialize;
     use rand::Rng;
     use sov_modules_api::default_context::DefaultContext;
@@ -146,6 +146,8 @@ mod tests {
     use sov_value_setter::call::CallMessage;
     use sov_value_setter::ValueSetterConfig;
     use tempfile::TempDir;
+
+    use super::*;
 
     const MAX_TX_POOL_SIZE: usize = 20;
     type C = DefaultContext;

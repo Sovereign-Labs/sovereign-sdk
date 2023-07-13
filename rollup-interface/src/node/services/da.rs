@@ -1,12 +1,11 @@
+//! The da module defines traits used by the full node to interact with the DA layer.
 use std::fmt;
 use std::future::Future;
 
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::da::DaSpec;
-
-use crate::traits::BlockHeaderTrait;
+use crate::da::{BlockHeaderTrait, DaSpec};
 
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer
 /// It is *not* part of the logic that is zk-proven.
@@ -48,6 +47,8 @@ pub trait DaService {
         block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction>;
 
+    /// Generate a proof that the relevant blob transactions have been extracted correctly from the DA layer
+    /// block.
     fn get_extraction_proof(
         &self,
         block: &Self::FilteredBlock,
@@ -84,8 +85,19 @@ pub trait DaService {
     fn send_transaction(&self, blob: &[u8]) -> Self::Future<()>;
 }
 
+/// `SlotData` is the subset of a DA layer block which is stored in the rollup's database.
+/// At the very least, the rollup needs access to the hashes and headers of all DA layer blocks, but rollups
+/// may choose to partial (or full) block data as well.
 pub trait SlotData: Serialize + DeserializeOwned + PartialEq + core::fmt::Debug + Clone {
+    /// The header type for a DA layer block as viewed by the rollup. This need not be identical
+    /// to the underlying rollup's header type, but it must be sufficient to reconstruct the block hash.
+    ///
+    /// For example, most fields of the a Tendermint-based DA chain like Celestia are irrelevant to the rollup.
+    /// For these fields, we only ever store their *serialized* representation in memory or on disk. Only a few special
+    /// fields like `data_root` are stored in decoded form in the `CelestiaHeader` struct.
     type BlockHeader: BlockHeaderTrait;
+    /// The canonical hash of the DA layer block.
     fn hash(&self) -> [u8; 32];
+    /// The header of the DA layer block.
     fn header(&self) -> &Self::BlockHeader;
 }

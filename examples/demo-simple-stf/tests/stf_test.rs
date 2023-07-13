@@ -1,12 +1,10 @@
-use demo_simple_stf::{ApplyBlobResult, CheckHashPreimageStf};
-use sov_rollup_interface::{
-    mocks::{MockZkvm, TestBlob},
-    stf::StateTransitionFunction,
-};
-
-use sov_rollup_interface::traits::AddressTrait;
 use std::fmt::Display;
 use std::str::FromStr;
+
+use demo_simple_stf::{ApplyBlobResult, CheckHashPreimageStf};
+use sov_rollup_interface::mocks::{MockZkvm, TestBlob};
+use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_rollup_interface::AddressTrait;
 
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DaAddress {

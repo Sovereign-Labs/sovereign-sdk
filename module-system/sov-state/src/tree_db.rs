@@ -1,7 +1,9 @@
-use crate::witness::Witness;
 use borsh::BorshSerialize;
-use jmt::{storage::TreeReader, OwnedValue};
+use jmt::storage::TreeReader;
+use jmt::OwnedValue;
 use sov_db::state_db::StateDB;
+
+use crate::witness::Witness;
 
 pub struct TreeReadLogger<'a, W> {
     state_db: StateDB,

@@ -1,5 +1,6 @@
 use jsonrpsee::RpcModule;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::de::DeserializeOwned;
+use serde::Serialize;
 use sov_db::ledger_db::LedgerDB;
 use sov_rollup_interface::rpc::{
     BatchIdentifier, EventIdentifier, LedgerRpcProvider, SlotIdentifier, TxIdentifier,

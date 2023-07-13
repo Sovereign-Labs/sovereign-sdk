@@ -1,7 +1,8 @@
-use crate::NonFungibleToken;
 use anyhow::{bail, Result};
 use sov_modules_api::Context;
 use sov_state::WorkingSet;
+
+use crate::NonFungibleToken;
 
 impl<C: Context> NonFungibleToken<C> {
     pub(crate) fn init_module(

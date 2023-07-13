@@ -1,8 +1,9 @@
+use std::sync::atomic::AtomicUsize;
+use std::sync::Mutex;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use jmt::storage::TreeReader;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::AtomicUsize;
-use std::sync::Mutex;
 
 // TODO: Refactor witness trait so it only require Serialize / Deserialize
 //   https://github.com/Sovereign-Labs/sovereign-sdk/issues/263

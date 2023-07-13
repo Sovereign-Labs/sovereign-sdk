@@ -1,7 +1,8 @@
-use crate::common::{parse_generic_params, StructDef, StructFieldExtractor, CALL};
 use proc_macro2::TokenStream;
 use quote::format_ident;
 use syn::DeriveInput;
+
+use crate::common::{parse_generic_params, StructDef, StructFieldExtractor, CALL};
 
 impl<'a> StructDef<'a> {
     fn create_message_codec(&self) -> TokenStream {

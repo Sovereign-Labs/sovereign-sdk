@@ -3,34 +3,32 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Context;
-use jsonrpsee::core::server::rpc_module::Methods;
-use tracing::Level;
-use tracing::{debug, info};
-
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::{DefaultContext, DemoBatchReceipt, DemoTxReceipt};
-use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
+use demo_stf::app::{
+    DefaultContext, DefaultPrivateKey, DemoBatchReceipt, DemoTxReceipt, NativeAppRunner,
+};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runner_config::from_toml_path;
-use demo_stf::runtime::get_rpc_methods;
-use demo_stf::runtime::GenesisConfig;
+use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
+use jsonrpsee::core::server::rpc_module::Methods;
 use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
-use jupiter::verifier::RollupParams;
-use jupiter::verifier::{CelestiaVerifier, ChainValidityCondition};
+use jupiter::verifier::{CelestiaVerifier, ChainValidityCondition, RollupParams};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
+#[cfg(feature = "experimental")]
+use sov_ethereum::get_ethereum_rpc;
 use sov_modules_api::RpcRunner;
 use sov_rollup_interface::crypto::NoOpHasher;
-use sov_rollup_interface::da::DaVerifier;
+use sov_rollup_interface::da::{BlockHeaderTrait, DaVerifier};
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::traits::CanonicalHash;
-use sov_rollup_interface::zk::traits::ValidityConditionChecker;
+use sov_rollup_interface::zk::ValidityConditionChecker;
 // RPC related imports
 use sov_sequencer::get_sequencer_rpc;
 use sov_state::Storage;
+use tracing::{debug, info, Level};
 
 use crate::config::RollupConfig;
 
@@ -53,8 +51,17 @@ async fn start_rpc_server(methods: impl Into<Methods>, address: SocketAddr) {
         .build([address].as_ref())
         .await
         .unwrap();
+
+    info!("Starting RPC server at {} ", server.local_addr().unwrap());
     let _server_handle = server.start(methods).unwrap();
     futures::future::pending::<()>().await;
+}
+
+// TODO: Remove this when sov-cli is in its own crate.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct HexKey {
+    hex_priv_key: String,
+    address: String,
 }
 
 /// Configure our rollup with a centralized sequencer using the SEQUENCER_DA_ADDRESS
@@ -68,7 +75,16 @@ async fn start_rpc_server(methods: impl Into<Methods>, address: SocketAddr) {
 /// const SEQUENCER_DA_ADDRESS: [u8;47] = *b"celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208"
 /// ```
 pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
-    let sequencer_private_key = DefaultPrivateKey::generate();
+    let hex_key: HexKey = serde_json::from_slice(include_bytes!(
+        "../../test-data/keys/token_deployer_private_key.json"
+    ))
+    .expect("Broken key data file");
+    let sequencer_private_key = DefaultPrivateKey::from_hex(&hex_key.hex_priv_key).unwrap();
+    assert_eq!(
+        sequencer_private_key.default_address().to_string(),
+        hex_key.address,
+        "Inconsistent key data",
+    );
     create_demo_genesis_config(
         100000000,
         sequencer_private_key.default_address(),
@@ -142,8 +158,12 @@ async fn main() -> Result<(), anyhow::Error> {
     let batch_builder = demo_runner.take_batch_builder().unwrap();
 
     let r = get_sequencer_rpc(batch_builder, da_service.clone());
-
     methods.merge(r).expect("Failed to merge Txs RPC modules");
+
+    #[cfg(feature = "experimental")]
+    let ethereum_rpc = get_ethereum_rpc(rollup_config.da.clone());
+    #[cfg(feature = "experimental")]
+    methods.merge(ethereum_rpc).unwrap();
 
     let _handle = tokio::spawn(async move {
         start_rpc_server(methods, address).await;
@@ -192,26 +212,42 @@ async fn main() -> Result<(), anyhow::Error> {
         // For the demo, we create and verify a proof that the data has been extracted from Celestia correctly.
         // In a production implementation, this logic would only run on the prover node - regular full nodes could
         // simply download the data from Celestia without extracting and checking a merkle proof here,
-        let mut blob_txs = da_service.extract_relevant_txs(&filtered_block);
+        let mut blobs = da_service.extract_relevant_txs(&filtered_block);
 
-        info!("Received {} blobs", blob_txs.len());
+        info!("Received {} blobs at height {}", blobs.len(), height);
 
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
         demo.begin_slot(Default::default());
-        for blob in &mut blob_txs {
-            let receipts = demo.apply_blob(blob, None);
-            info!("receipts: {:?}", receipts);
-            data_to_commit.add_batch(receipts);
+        for (blob_idx, blob) in blobs.iter_mut().enumerate() {
+            let batch_receipt = demo.apply_blob(blob, None);
+            info!(
+                "blob #{} at height {} with blob_hash 0x{} has been applied with #{} transactions, sequencer outcome {:?}",
+                blob_idx,
+                height,
+                hex::encode(batch_receipt.batch_hash),
+                batch_receipt.tx_receipts.len(),
+                batch_receipt.inner
+            );
+            for (i, tx_receipt) in batch_receipt.tx_receipts.iter().enumerate() {
+                info!(
+                    "tx #{} hash: 0x{} result {:?}",
+                    i,
+                    hex::encode(tx_receipt.tx_hash),
+                    tx_receipt.receipt
+                );
+            }
+
+            data_to_commit.add_batch(batch_receipt);
         }
         let (next_state_root, _witness) = demo.end_slot();
 
         let (inclusion_proof, completeness_proof) =
-            da_service.get_extraction_proof(&filtered_block, &blob_txs);
+            da_service.get_extraction_proof(&filtered_block, &blobs);
 
         let validity_condition = da_verifier
             .verify_relevant_tx_list::<NoOpHasher>(
                 header,
-                &blob_txs,
+                &blobs,
                 inclusion_proof,
                 completeness_proof,
             )

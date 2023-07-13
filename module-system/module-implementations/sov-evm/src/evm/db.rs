@@ -1,19 +1,19 @@
-use super::{Address, DbAccount};
-use revm::{
-    primitives::{AccountInfo as ReVmAccountInfo, Bytecode, B160, B256, U256},
-    Database,
-};
-use sov_state::WorkingSet;
 use std::convert::Infallible;
 
+use revm::primitives::{AccountInfo as ReVmAccountInfo, Bytecode, B160, B256, U256};
+use revm::Database;
+use sov_state::WorkingSet;
+
+use super::{DbAccount, EthAddress};
+
 pub(crate) struct EvmDb<'a, C: sov_modules_api::Context> {
-    pub(crate) accounts: sov_state::StateMap<Address, DbAccount>,
+    pub(crate) accounts: sov_state::StateMap<EthAddress, DbAccount>,
     pub(crate) working_set: &'a mut WorkingSet<C::Storage>,
 }
 
 impl<'a, C: sov_modules_api::Context> EvmDb<'a, C> {
     pub(crate) fn new(
-        accounts: sov_state::StateMap<Address, DbAccount>,
+        accounts: sov_state::StateMap<EthAddress, DbAccount>,
         working_set: &'a mut WorkingSet<C::Storage>,
     ) -> Self {
         Self {

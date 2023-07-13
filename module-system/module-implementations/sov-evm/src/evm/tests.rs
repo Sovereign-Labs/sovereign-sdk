@@ -1,53 +1,19 @@
-use crate::{evm::AccountInfo, Evm};
+use std::convert::Infallible;
 
-use super::{db::EvmDb, db_init::InitEvmDb, executor};
-use bytes::Bytes;
-use ethereum_types::U256 as EU256;
-use ethers_contract::BaseContract;
-use ethers_core::abi::Abi;
-use revm::{
-    db::CacheDB,
-    primitives::{ExecutionResult, Output, TransactTo, TxEnv, B160, KECCAK_EMPTY, U256},
-    Database, DatabaseCommit,
-};
+use revm::db::CacheDB;
+use revm::primitives::{CfgEnv, KECCAK_EMPTY, U256};
+use revm::{Database, DatabaseCommit};
 use sov_state::{ProverStorage, WorkingSet};
-use std::{convert::Infallible, path::PathBuf};
+
+use super::db::EvmDb;
+use super::db_init::InitEvmDb;
+use super::executor;
+use crate::evm::test_helpers::{contract_address, output, SimpleStorageContract};
+use crate::evm::transaction::{BlockEnv, EvmTransaction};
+use crate::evm::AccountInfo;
+use crate::Evm;
 
 type C = sov_modules_api::default_context::DefaultContext;
-
-fn output(result: ExecutionResult) -> Bytes {
-    match result {
-        ExecutionResult::Success { output, .. } => match output {
-            Output::Call(out) => out,
-            Output::Create(out, _) => out,
-        },
-        _ => panic!("Expected successful ExecutionResult"),
-    }
-}
-
-fn contract_address(result: ExecutionResult) -> B160 {
-    match result {
-        ExecutionResult::Success {
-            output: Output::Create(_, Some(addr)),
-            ..
-        } => addr,
-        _ => panic!("Expected successful contract creation"),
-    }
-}
-
-fn test_data_path() -> PathBuf {
-    let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    path.push("src");
-    path.push("evm");
-    path.push("test_data");
-    path
-}
-
-fn make_contract_from_abi(path: PathBuf) -> BaseContract {
-    let abi_json = std::fs::read_to_string(path).unwrap();
-    let abi: Abi = serde_json::from_str(&abi_json).unwrap();
-    BaseContract::from(abi)
-}
 
 #[test]
 fn simple_contract_execution_sov_state() {
@@ -81,56 +47,51 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
         },
     );
 
+    let contract = SimpleStorageContract::new();
+
     let contract_address = {
-        let mut path = test_data_path();
-        path.push("SimpleStorage.bin");
-
-        let contract_data = std::fs::read_to_string(path).unwrap();
-        let contract_data = Bytes::from(hex::decode(contract_data).unwrap());
-
-        let tx_env = TxEnv {
-            transact_to: TransactTo::create(),
-            data: contract_data,
+        let tx = EvmTransaction {
+            to: None,
+            data: contract.byte_code().to_vec(),
             ..Default::default()
         };
 
-        let result = executor::execute_tx(&mut evm_db, tx_env).unwrap();
+        let result =
+            executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
         contract_address(result)
     };
 
-    let set_arg = EU256::from(21989);
-
-    let mut path = test_data_path();
-    path.push("SimpleStorage.abi");
-
-    let contract = make_contract_from_abi(path);
+    let set_arg = 21989;
 
     {
-        let call_data = contract.encode("set", set_arg).unwrap();
+        let call_data = contract.set_call_data(set_arg);
 
-        let tx_env = TxEnv {
-            transact_to: TransactTo::Call(contract_address),
-            data: Bytes::from(hex::decode(hex::encode(&call_data)).unwrap()),
+        let tx = EvmTransaction {
+            to: Some(*contract_address.as_fixed_bytes()),
+            data: hex::decode(hex::encode(&call_data)).unwrap(),
+            nonce: 1,
             ..Default::default()
         };
 
-        executor::execute_tx(&mut evm_db, tx_env).unwrap();
+        executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
     }
 
     let get_res = {
-        let call_data = contract.encode("get", ()).unwrap();
+        let call_data = contract.get_call_data();
 
-        let tx_env = TxEnv {
-            transact_to: TransactTo::Call(contract_address),
-            data: Bytes::from(hex::decode(hex::encode(&call_data)).unwrap()),
+        let tx = EvmTransaction {
+            to: Some(*contract_address.as_fixed_bytes()),
+            data: hex::decode(hex::encode(&call_data)).unwrap(),
+            nonce: 2,
             ..Default::default()
         };
 
-        let result = executor::execute_tx(&mut evm_db, tx_env).unwrap();
+        let result =
+            executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
 
         let out = output(result);
-        EU256::from(out.as_ref())
+        ethereum_types::U256::from(out.as_ref())
     };
 
-    assert_eq!(set_arg, get_res)
+    assert_eq!(set_arg, get_res.as_u32())
 }
