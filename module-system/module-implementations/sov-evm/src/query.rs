@@ -1,50 +1,11 @@
+use anvil_core::eth::transaction::EthTransactionRequest;
 use ethereum_types::{Address, H256, U256, U64};
-use ethers_core::types::transaction::eip2930::AccessListItem;
-use ethers_core::types::{
-    Block, BlockId, Bytes, FeeHistory, Transaction, TransactionReceipt, TxHash,
-};
+use ethers_core::types::{Block, BlockId, FeeHistory, Transaction, TransactionReceipt, TxHash};
 use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
 use tracing::info;
 
 use crate::Evm;
-
-#[derive(Clone, Debug, PartialEq, Eq, Default, Hash)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
-#[cfg_attr(feature = "serde", serde(rename_all = "camelCase"))]
-pub struct EthTransactionRequest {
-    /// from address
-    pub from: Option<Address>,
-    /// to address
-    pub to: Option<Address>,
-    /// legacy, gas Price
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub gas_price: Option<U256>,
-    /// max base fee per gas sender is willing to pay
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub max_fee_per_gas: Option<U256>,
-    /// miner tip
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub max_priority_fee_per_gas: Option<U256>,
-    /// gas
-    pub gas: Option<U256>,
-    /// value of th tx in wei
-    pub value: Option<U256>,
-    /// Any additional data sent
-    pub data: Option<Bytes>,
-    /// Transaction nonce
-    pub nonce: Option<U256>,
-    /// chain id
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub chain_id: Option<U64>,
-    /// warm storage access pre-payment
-    #[cfg_attr(feature = "serde", serde(default))]
-    pub access_list: Option<Vec<AccessListItem>>,
-    /// EIP-2718 type
-    #[cfg_attr(feature = "serde", serde(rename = "type"))]
-    pub transaction_type: Option<U256>,
-}
 
 #[rpc_gen(client, server, namespace = "eth")]
 impl<C: sov_modules_api::Context> Evm<C> {
@@ -99,10 +60,12 @@ impl<C: sov_modules_api::Context> Evm<C> {
     #[rpc_method(name = "getTransactionByHash")]
     pub fn get_transaction_by_hash(
         &self,
-        _hash: H256,
-        _working_set: &mut WorkingSet<C::Storage>,
+        hash: H256,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Option<Transaction> {
-        unimplemented!("eth_blockNumber not implemented")
+        info!("evm module: eth_getTransactionByHash");
+        let evm_transaction = self.transactions.get(&hash.into(), working_set);
+        evm_transaction.map(|tx| tx.into())
     }
 
     #[rpc_method(name = "getTransactionReceipt")]

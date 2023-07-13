@@ -11,7 +11,7 @@ pub(crate) mod test_helpers;
 mod tests;
 pub(crate) mod transaction;
 
-pub(crate) type EthAddress = [u8; 20];
+pub type EthAddress = [u8; 20];
 pub(crate) type Bytes32 = [u8; 32];
 
 pub use transaction::EvmTransaction;
