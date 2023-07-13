@@ -2,6 +2,11 @@ use std::env;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use jupiter::types::FilteredCelestiaBlock;
+use borsh::de::BorshDeserialize;
+use std::fs::read_to_string;
+use std::path::PathBuf;
+
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{
@@ -177,7 +182,16 @@ async fn main() -> Result<(), anyhow::Error> {
     let last_slot_processed_before_shutdown = item_numbers.slot_number - 1;
     let start_height = rollup_config.start_height + last_slot_processed_before_shutdown;
 
-    for height in start_height.. {
+    let hex_data = read_to_string("blocks.hex").expect("Failed to read data");
+    let borshed_blocks: Vec<FilteredCelestiaBlock> = hex_data
+        .lines()
+        .map(|line| {
+            let bytes = hex::decode(line).expect("Failed to decode hex data");
+            FilteredCelestiaBlock::try_from_slice(&bytes).expect("Failed to deserialize data")
+        })
+        .collect();
+
+    for height in start_height..8 {
         info!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
@@ -185,7 +199,7 @@ async fn main() -> Result<(), anyhow::Error> {
         );
 
         // Fetch the relevant subset of the next Celestia block
-        let filtered_block = da_service.get_finalized_at(height).await?;
+        let filtered_block = &borshed_blocks[height as usize];
         let header = filtered_block.header();
 
         // For the demo, we create and verify a proof that the data has been extracted from Celestia correctly.

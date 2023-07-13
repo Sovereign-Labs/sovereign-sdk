@@ -4,6 +4,7 @@ use borsh::de::BorshDeserialize;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 use tempfile::TempDir;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
@@ -116,9 +117,11 @@ fn main() -> Result<(), anyhow::Error> {
         let (next_state_root, witness) = demo.end_slot();
         host.write_to_guest(&witness);
 
-        println!("Starting proving...");
+        println!("Started proving block {height}");
+        let now = Instant::now();
         let receipt = host.run().expect("Prover should run successfully");
-        println!("cycles: {}",host.cycles());
+        println!("prover time: {:?}",now.elapsed());
+        println!("prover cycles: {}",host.cycles());
         println!("Start verifying..");
         receipt.verify(&ROLLUP_ID).expect("Receipt should be valid");
 
