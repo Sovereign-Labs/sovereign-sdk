@@ -33,7 +33,7 @@ fn burn_deployed_tokens() {
     // Deploying token
     let mint_message = CallMessage::CreateToken {
         salt,
-        token_name: token_name.clone(),
+        token_name,
         initial_balance,
         minter_address: minter_address.clone(),
         authorized_minters: vec![minter_address.clone()],
