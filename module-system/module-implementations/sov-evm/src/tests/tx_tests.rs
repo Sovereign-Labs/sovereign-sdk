@@ -1,12 +1,11 @@
 use std::str::FromStr;
 
-use anvil::{spawn, NodeConfig};
+use anvil::NodeConfig;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
 use ethers_core::types::{Bytes, Eip1559TransactionRequest};
 use ethers_core::utils::rlp::Rlp;
-use ethers_core::utils::{Anvil, AnvilInstance};
 use ethers_middleware::SignerMiddleware;
 use ethers_providers::{Http, Middleware, Provider};
 use ethers_signers::{LocalWallet, Signer, Wallet};
@@ -56,7 +55,6 @@ struct TestClient {
     from_addr: Address,
     contract: SimpleStorageContract,
     client: SignerMiddleware<Provider<Http>, Wallet<SigningKey>>,
-    _anvil: Option<AnvilInstance>,
 }
 
 impl TestClient {
@@ -87,7 +85,6 @@ impl TestClient {
             from_addr,
             contract,
             client,
-            _anvil: None, //Some(anvil),
         }
     }
 
@@ -110,7 +107,6 @@ impl TestClient {
             from_addr,
             contract,
             client,
-            _anvil: None,
         }
     }
 
