@@ -62,7 +62,7 @@ mod experimental {
         pub(crate) block_env: sov_state::StateValue<BlockEnv>,
 
         #[state]
-        pub(crate) transactions: sov_state::StateMap<[u8; 32], EvmTransaction>,
+        pub(crate) transactions: sov_state::StateMap<Bytes32, EvmTransaction>,
     }
 
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {
