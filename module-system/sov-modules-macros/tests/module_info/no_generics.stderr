@@ -1,0 +1,7 @@
+error: The `ModuleInfo` macro requires `[address]` attribute.
+ --> tests/module_info/missing_address.rs:7:10
+  |
+3 | #[derive(ModuleInfo)]
+  |          ^^^^^^^^^^
+  |
+  = note: the `ModuleInfo` trait can only be derived on types that are generic over `C: sov_modules_api::Context` (in Nightly builds, run with -Z macro-backtrace for more info)

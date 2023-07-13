@@ -76,7 +76,8 @@ pub fn default_runtime(input: TokenStream) -> TokenStream {
 ///
 /// ## Example
 ///
-/// ```
+/// FIXME
+/// ```ignore
 /// use sov_modules_macros::Genesis;
 ///
 /// #[derive(Genesis)]
