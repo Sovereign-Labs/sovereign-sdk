@@ -105,8 +105,20 @@ impl<C: sov_modules_api::Context> Bank<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        token.burn(context.sender(), coins.amount, working_set)?;
+        let context_logger = || {
+            format!(
+                "Failed burn coins({}) by sender {}",
+                coins,
+                context.sender()
+            )
+        };
+        let mut token = self
+            .tokens
+            .get_or_err(&coins.token_address, working_set)
+            .with_context(context_logger)?;
+        token
+            .burn(context.sender(), coins.amount, working_set)
+            .with_context(context_logger)?;
         token.total_supply -= coins.amount;
         self.tokens.set(&coins.token_address, &token, working_set);
 
@@ -120,17 +132,21 @@ impl<C: sov_modules_api::Context> Bank<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
+        let context_logger = || {
+            format!(
+                "Failed mint coins({}) to {} by minter {}",
+                coins,
+                minter_address,
+                context.sender()
+            )
+        };
+        let mut token = self
+            .tokens
+            .get_or_err(&coins.token_address, working_set)
+            .with_context(context_logger)?;
         token
             .mint(context.sender(), &minter_address, coins.amount, working_set)
-            .with_context(|| {
-                format!(
-                    "Failed mint coins({}) to {} by minter {}",
-                    coins,
-                    minter_address,
-                    context.sender()
-                )
-            })?;
+            .with_context(context_logger)?;
         self.tokens.set(&coins.token_address, &token, working_set);
 
         Ok(CallResponse::default())
@@ -142,8 +158,20 @@ impl<C: sov_modules_api::Context> Bank<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let mut token = self.tokens.get_or_err(&token_address, working_set)?;
-        token.freeze(context.sender())?;
+        let context_logger = || {
+            format!(
+                "Failed freeze token_address={} by sender {}",
+                token_address,
+                context.sender()
+            )
+        };
+        let mut token = self
+            .tokens
+            .get_or_err(&token_address, working_set)
+            .with_context(context_logger)?;
+        token
+            .freeze(context.sender())
+            .with_context(context_logger)?;
         self.tokens.set(&token_address, &token, working_set);
 
         Ok(CallResponse::default())
@@ -158,15 +186,19 @@ impl<C: sov_modules_api::Context> Bank<C> {
         coins: Coins<C>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let token = self.tokens.get_or_err(&coins.token_address, working_set)?;
+        let context_logger = || {
+            format!(
+                "Failed transfer from={} to={} of coins({})",
+                from, to, coins
+            )
+        };
+        let token = self
+            .tokens
+            .get_or_err(&coins.token_address, working_set)
+            .with_context(context_logger)?;
         token
             .transfer(from, to, coins.amount, working_set)
-            .with_context(|| {
-                format!(
-                    "Failed transfer from={} to={} of coins({})",
-                    from, to, coins
-                )
-            })?;
+            .with_context(context_logger)?;
         Ok(CallResponse::default())
     }
 }

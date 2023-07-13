@@ -59,11 +59,19 @@ fn freeze_token() {
 
     let freeze = bank.call(freeze_message, &minter_context, &mut working_set);
     assert!(freeze.is_err());
-
+    let Error::ModuleError(err) = freeze.err().unwrap();
+    let mut chain = err.chain();
+    let message_1 = chain.next().unwrap().to_string();
+    let message_2 = chain.next().unwrap().to_string();
+    assert!(chain.next().is_none());
     assert_eq!(
-        format!("Token {} is already frozen", token_name),
-        freeze.err().unwrap().to_string()
+        format!(
+            "Failed freeze token_address={} by sender {}",
+            token_address, minter_address
+        ),
+        message_1
     );
+    assert_eq!(format!("Token {} is already frozen", token_name), message_2);
 
     // create a second token
     let token_name_2 = "Token2".to_owned();
@@ -94,13 +102,26 @@ fn freeze_token() {
 
     let freeze = bank.call(freeze_message, &unauthorized_context, &mut working_set);
     assert!(freeze.is_err());
-    let unauthorized_minter_msg = format!(
-        "Sender {} is not an authorized minter of token {}",
-        unauthorized_address, token_name_2,
+    let Error::ModuleError(err) = freeze.err().unwrap();
+    let mut chain = err.chain();
+    let message_1 = chain.next().unwrap().to_string();
+    let message_2 = chain.next().unwrap().to_string();
+    assert!(chain.next().is_none());
+    assert_eq!(
+        format!(
+            "Failed freeze token_address={} by sender {}",
+            token_address_2, unauthorized_address
+        ),
+        message_1
     );
-    assert_eq!(unauthorized_minter_msg, freeze.err().unwrap().to_string());
+    assert_eq!(
+        format!(
+            "Sender {} is not an authorized minter of token {}",
+            unauthorized_address, token_name_2
+        ),
+        message_2
+    );
 
-    // -----
     // Try to mint a frozen token
     let mint_amount = 10;
     let new_holder = generate_address("new_holder");
@@ -123,9 +144,9 @@ fn freeze_token() {
 
     let Error::ModuleError(err) = minted.err().unwrap();
     let mut chain = err.chain();
-
     let message_1 = chain.next().unwrap().to_string();
     let message_2 = chain.next().unwrap().to_string();
+    assert!(chain.next().is_none());
     assert_eq!(
         format!(
             "Failed mint coins(token_address={} amount={}) to {} by minter {}",

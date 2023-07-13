@@ -120,7 +120,7 @@ fn transfer_initial_token() {
 
     // Non existent token
     {
-        let salt = 0;
+        let salt = 13;
         let token_name = "NonExistingToken".to_owned();
         let token_address = get_token_address::<C>(&token_name, sender_address.as_ref(), salt);
 
@@ -128,16 +128,26 @@ fn transfer_initial_token() {
             to: receiver_address.clone(),
             coins: Coins {
                 amount: 1,
-                token_address,
+                token_address: token_address.clone(),
             },
         };
 
         let result = bank.call(transfer_message, &sender_context, &mut working_set);
         assert!(result.is_err());
-        let error = result.err().unwrap();
-        assert!(error
-            .to_string()
-            .contains("Value not found for prefix: \"sov_bank/Bank/tokens/\" and: storage key"))
+        let Error::ModuleError(err) = result.err().unwrap();
+        let mut chain = err.chain();
+        let message_1 = chain.next().unwrap().to_string();
+        let message_2 = chain.next().unwrap().to_string();
+        assert!(chain.next().is_none());
+        assert_eq!(
+            format!(
+                "Failed transfer from={} to={} of coins(token_address={} amount={})",
+                sender_address, receiver_address, token_address, 1,
+            ),
+            message_1
+        );
+        assert!(message_2
+            .starts_with("Value not found for prefix: \"sov_bank/Bank/tokens/\" and: storage key"));
     }
 
     // Sender does not exist
@@ -160,7 +170,6 @@ fn transfer_initial_token() {
         };
 
         let result = bank.call(transfer_message, &unknown_sender_context, &mut working_set);
-        assert!(result.is_err());
         assert!(result.is_err());
         let Error::ModuleError(err) = result.err().unwrap();
         let mut chain = err.chain();
