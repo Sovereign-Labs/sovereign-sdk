@@ -77,5 +77,5 @@ tokio = { version = "1", features = ["full"] }
 ethers = { git = "https://github.com/gakonst/ethers-rs", default-features = false }
 anvil  = { git = "https://github.com/foundry-rs/foundry", version = "0.1.0" }
 #anvil = { path = "../foundry/anvil" }
-anvil-core = { git = "https://github.com/foundry-rs/foundry", version = "0.1.0" }
+anvil-core = { git = "https://github.com/foundry-rs/foundry", features = ["fastrlp", "serde"], version = "0.1.0" }
 #anvil-core = { path = "../foundry/anvil/core", features = ["fastrlp", "serde", "impersonated-tx"] }
