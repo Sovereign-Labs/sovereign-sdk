@@ -1,5 +1,6 @@
 use std::str::FromStr;
 
+use anvil::{spawn, NodeConfig};
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
@@ -11,6 +12,8 @@ use ethers_providers::{Http, Middleware, Provider};
 use ethers_signers::{LocalWallet, Signer, Wallet};
 
 use crate::evm::test_helpers::SimpleStorageContract;
+
+const MAX_FEE_PER_GAS: u64 = 1000000001;
 
 #[tokio::test]
 async fn tx_rlp_encoding_test() -> Result<(), Box<dyn std::error::Error>> {
@@ -30,7 +33,7 @@ async fn tx_rlp_encoding_test() -> Result<(), Box<dyn std::error::Error>> {
         .max_fee_per_gas(768658734568u64)
         .gas(184156u64)
         .to(to_addr)
-        .value(200000000000000000u64)
+        .value(2000000000000u64)
         .data(data);
 
     let tx = TypedTransaction::Eip1559(tx_request);
@@ -63,8 +66,17 @@ impl TestClient {
         from_addr: Address,
         contract: SimpleStorageContract,
     ) -> Self {
-        let anvil = Anvil::new().chain_id(chain_id).spawn();
-        let provider = Provider::try_from(anvil.endpoint()).unwrap();
+        let config = NodeConfig {
+            chain_id: Some(chain_id),
+            ..Default::default()
+        };
+
+        let (_api, handle) = anvil::spawn(config).await;
+
+        let provider = Provider::try_from(handle.http_endpoint()).unwrap();
+
+        // let endpoint = format!("http://localhost:{}", 8545);
+        // let provider = Provider::try_from(endpoint).unwrap();
 
         let client = SignerMiddleware::new_with_provider_chain(provider, key)
             .await
@@ -75,7 +87,7 @@ impl TestClient {
             from_addr,
             contract,
             client,
-            _anvil: Some(anvil),
+            _anvil: None, //Some(anvil),
         }
     }
 
@@ -109,8 +121,9 @@ impl TestClient {
                 .from(self.from_addr)
                 .chain_id(self.chain_id)
                 .nonce(0u64)
-                .max_priority_fee_per_gas(100u64)
-                .gas(9000000u64)
+                .max_priority_fee_per_gas(10u64)
+                .max_fee_per_gas(MAX_FEE_PER_GAS)
+                .gas(900000u64)
                 .data(self.contract.byte_code());
 
             let typed_transaction = TypedTransaction::Eip1559(request);
@@ -132,8 +145,9 @@ impl TestClient {
                 .to(contract_address)
                 .chain_id(self.chain_id)
                 .nonce(1u64)
-                .max_priority_fee_per_gas(100u64)
-                .gas(9000000u64)
+                .max_priority_fee_per_gas(10u64)
+                .max_fee_per_gas(MAX_FEE_PER_GAS)
+                .gas(900000u64)
                 .data(self.contract.set_call_data(set_arg));
 
             let typed_transaction = TypedTransaction::Eip1559(request);
@@ -163,6 +177,7 @@ impl TestClient {
 
             assert_eq!(set_arg, get_arg.as_u32())
         }
+
         Ok(())
     }
 }
@@ -179,7 +194,7 @@ async fn send_tx_test_to_eth() -> Result<(), Box<dyn std::error::Error>> {
 
     let from_addr = Address::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
 
-    //let test_client = TestClient::new_anvil_client(chain_id, key, from_addr, contract).await;
-    let test_client = TestClient::new_demo_rollup_client(chain_id, key, from_addr, contract).await;
+    let test_client = TestClient::new_anvil_client(chain_id, key, from_addr, contract).await;
+    //let test_client = TestClient::new_demo_rollup_client(chain_id, key, from_addr, contract).await;
     test_client.execute().await
 }

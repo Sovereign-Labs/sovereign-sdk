@@ -43,15 +43,20 @@ pub struct AccessListItem {
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct EvmTransaction {
-    pub caller: [u8; 20],
+    pub sender: EthAddress,
     pub data: Vec<u8>,
     pub gas_limit: u64,
-    pub gas_price: Option<Bytes32>,
-    pub max_priority_fee_per_gas: Option<Bytes32>,
+    pub gas_price: Bytes32,
+    pub max_priority_fee_per_gas: Bytes32,
+    pub max_fee_per_gas: Bytes32,
     pub to: Option<[u8; 20]>,
     pub value: Bytes32,
     pub nonce: u64,
     pub access_lists: Vec<AccessListItem>,
+    pub chain_id: u64,
+    pub odd_y_parity: bool,
+    pub r: [u8; 32],
+    pub s: [u8; 32],
     // todo remove it
     pub hash: [u8; 32],
 }
@@ -59,16 +64,21 @@ pub struct EvmTransaction {
 impl Default for EvmTransaction {
     fn default() -> Self {
         Self {
-            caller: Default::default(),
+            sender: Default::default(),
             data: Default::default(),
             gas_limit: u64::MAX,
             gas_price: Default::default(),
             max_priority_fee_per_gas: Default::default(),
+            max_fee_per_gas: Default::default(),
             to: Default::default(),
             value: Default::default(),
             nonce: Default::default(),
             access_lists: Default::default(),
+            chain_id: 1,
             hash: Default::default(),
+            odd_y_parity: Default::default(),
+            r: Default::default(),
+            s: Default::default(),
         }
     }
 }
