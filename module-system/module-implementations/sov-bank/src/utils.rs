@@ -1,7 +1,9 @@
 use sov_modules_api::Hasher;
 
+use crate::genesis::DEPLOYER;
+
 /// Derives token address from `token_name`, `sender` and `salt`.
-pub fn create_token_address<C: sov_modules_api::Context>(
+pub fn get_token_address<C: sov_modules_api::Context>(
     token_name: &str,
     sender: &[u8],
     salt: u64,
@@ -13,4 +15,11 @@ pub fn create_token_address<C: sov_modules_api::Context>(
 
     let hash = hasher.finalize();
     C::Address::from(hash)
+}
+
+pub fn get_genesis_token_address<C: sov_modules_api::Context>(
+    token_name: &str,
+    salt: u64,
+) -> C::Address {
+    get_token_address::<C>(token_name, &DEPLOYER, salt)
 }

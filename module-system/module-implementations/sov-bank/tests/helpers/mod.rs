@@ -25,6 +25,8 @@ pub fn create_bank_config_with_token(
     let token_config = TokenConfig {
         token_name: "InitialToken".to_owned(),
         address_and_balances,
+        authorized_minters: vec![],
+        salt: 5,
     };
 
     BankConfig {

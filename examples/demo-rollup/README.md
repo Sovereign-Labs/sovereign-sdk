@@ -85,7 +85,6 @@ understand how to build your own state transition function, check out at the doc
     $ git status
     ..
     ..
-    	modified:   ../const-rollup-config/src/lib.rs
     	modified:   rollup_config.toml
     ```
 
@@ -120,9 +119,11 @@ $ make test-create-token
 ...wait a few seconds and you will see the transaction receipt in the output of the demo-rollup full node:
 
 ```
-2023-06-07T10:05:10.431888Z  INFO jupiter::da_service: Fetching header at height=18...
-2023-06-07T10:05:20.493991Z  INFO sov_demo_rollup: Received 1 blobs
-2023-06-07T10:05:20.496571Z  INFO sov_demo_rollup: receipts: BatchReceipt { batch_hash: [44, 38, 61, 124, 123, 92, 9, 196, 200, 211, 52, 149, 33, 172, 120, 239, 180, 106, 72, 9, 161, 68, 8, 87, 127, 190, 201, 94, 9, 30, 108, 188], tx_receipts: [TransactionReceipt { tx_hash: [160, 103, 81, 53, 69, 140, 72, 198, 215, 190, 38, 242, 70, 204, 226, 217, 216, 22, 210, 142, 110, 221, 222, 171, 26, 40, 158, 236, 110, 107, 160, 170], body_to_save: None, events: [], receipt: Successful }], inner: Rewarded(0) }
+2023-07-12T15:04:52.291073Z  INFO jupiter::da_service: Fetching header at height=31...
+2023-07-12T15:05:02.304393Z  INFO sov_demo_rollup: Received 1 blobs at height 31
+2023-07-12T15:05:02.305257Z  INFO sov_demo_rollup: blob #0 at height 31 with blob_hash 0x4876c2258b57104356efa4630d3d9f901ccfda5dde426ba8aef81d4a3e357c79 has been applied with #1 transactions, sequencer outcome Rewarded(0)
+2023-07-12T15:05:02.305280Z  INFO sov_demo_rollup: tx #0 hash: 0x1e1892f77cf42c0abd2ca2acdd87eabb9aa65ec7497efea4ff9f5f33575f881a result Successful
+2023-07-12T15:05:02.310714Z  INFO sov_demo_rollup: Requesting data for height 32 and prev_state_root 0xae87adb5291d3e645c09ff74dfe3580a25ef0b893b67f09eb58ae70c1bf135c2
 ```
 
 ### How to Submit Transactions
@@ -226,7 +227,7 @@ Here's an example of a JSON representing the above call:
 
 #### 2. Serialize the Call
 
-The JSON above is the contents of the file `demo-stf/src/sov-cli/test_data/transfer.json`. We'll use this transaction as our example for the rest of the tutorial. In order to serialize the transaction JSON to submit to our local Celestia node, we need to perform 2 operations:
+The JSON above is the contents of the file `examples/test-data/requests/transfer.json`. We'll use this transaction as our example for the rest of the tutorial. In order to serialize the transaction JSON to submit to our local Celestia node, we need to perform 2 operations:
 - Serialize the JSON representation of the transaction.
 - Bundle serialized transaction files into a blob (since DA layers accept blobs which can contain multiple transactions).
 
@@ -246,18 +247,18 @@ Arguments:
   <CALL_DATA_PATH>        Path to the json file containing the parameters for a module call
   <NONCE>                 Nonce for the transaction
 ```
-For our test, we'll use the test private key located at `examples/demo-stf/src/sov-cli/test_data/minter_private_key.json`. This private key also corresponds to the address used in the `minter_address` field of the `create_token.json` file. This was the address that `make test-create-token` minted the new tokens to.
+For our test, we'll use the test private key located at `examples/test-data/keys/minter_private_key.json`. This private key also corresponds to the address used in the `minter_address` field of the `create_token.json` file. This was the address that `make test-create-token` minted the new tokens to.
 
 Let's go ahead and serialize the transaction:
 
 ```
-$ ./target/debug/sov-cli serialize-call ./examples/demo-stf/src/sov-cli/test_data/minter_private_key.json Bank ./examples/demo-stf/src/sov-cli/test_data/transfer.json 0
+$ ./target/debug/sov-cli serialize-call ./examples/test-data/keys/minter_private_key.json Bank ./examples/test-data/requests/transfer.json 0
 ```
-Once the above command executes successfully, there will be a file named `./examples/demo-stf/src/sov-cli/test_data/transfer.dat`:
+Once the above command executes successfully, there will be a file named `./examples/test-data/requests/transfer.dat`:
 
 ```
-$ cat ./examples/demo-stf/src/sov-cli/test_data/transfer.dat
-725f40c15bed53b271e23dccbbb61736a55a5dd7cf79a31dec928c664c55d6e00f8afb3273bf7ec3409187a848edfed9991ed3126bdca048361aecc3349a180f7b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe64a00000000011212121212121212121212121212121212121212121212121212121212121212c800000000000000135d23aee8cb15c890831ff36db170157acaac31df9bba6cd40e7329e608eabd0000000000000000
+$ cat ./examples/test-data/requests/transfer.dat
+5ef848746e8d2b9c27ee46210e185dc9f3b690d5cef42a13fb9c336bd40c798210bf7af613997f7af57c9681a242f5fe4121a1539ba4f5f32f14c49f978b990a7b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe64a0000000001fea6ac5b8751120fb62fff67b54d2eac66aef307c7dde1d394dea1e09e43dd44c800000000000000135d23aee8cb15c890831ff36db170157acaac31df9bba6cd40e7329e608eabd0000000000000000
 ```
 The above is the hex representation of the serialized transaction.
 
@@ -273,21 +274,21 @@ Arguments:
   [PATH_LIST]...  List of serialized transactions
 ```
 
-Use the command below to store the serialized blob in `./examples/demo-stf/src/sov-cli/test_data/tx_blob`:
+Use the command below to store the serialized blob in `./examples/test-data/requests/tx_blob`:
 
 ```
-$ ./target/debug/sov-cli make-blob ./examples/demo-stf/src/sov-cli/test_data/transfer.dat > ./examples/demo-stf/src/sov-cli/test_data/tx_blob
-$ cat ./examples/demo-stf/src/sov-cli/test_data/tx_blob
-01000000b6000000bb5fb10b2732f7bbee3505c5fc0a43f56b02014169b1f80f9493da65843bbb10ce443c9b583964a9e5224baca492474e87664444cdce0364cbc562bd507e40067b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe64a00000000011212121212121212121212121212121212121212121212121212121212121212c800000000000000135d23aee8cb15c890831ff36db170157acaac31df9bba6cd40e7329e608eabd0100000000000000
+$ ./target/debug/sov-cli make-blob ./examples/test-data/requests/transfer.dat > ./examples/test-data/requests/tx_blob
+$ cat ./examples/test-data/requests/tx_blob
+01000000b60000005ef848746e8d2b9c27ee46210e185dc9f3b690d5cef42a13fb9c336bd40c798210bf7af613997f7af57c9681a242f5fe4121a1539ba4f5f32f14c49f978b990a7b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe64a0000000001fea6ac5b8751120fb62fff67b54d2eac66aef307c7dde1d394dea1e09e43dd44c800000000000000135d23aee8cb15c890831ff36db170157acaac31df9bba6cd40e7329e608eabd0000000000000000
 ```
 
 #### 4. Submit the Transaction
 
-You now have a blob with one serialized transaction in `./examples/demo-stf/src/sov-cli/test_data/tx_blob`. Switch back to the `examples/demo-rollup` directory and use the Makefile to submit it:
+You now have a blob with one serialized transaction in `./examples/test-data/requests/tx_blob`. Switch back to the `examples/demo-rollup` directory and use the Makefile to submit it:
 
 ```
 $ cd examples/demo-rollup
-$ SERIALIZED_BLOB_PATH=../demo-stf/src/sov-cli/test_data/tx_blob make submit-txn
+$ SERIALIZED_BLOB_PATH=../test-data/requests/tx_blob make submit-txn
 ```
 
 Here the `make submit-txn` command locates the Docker container the Celestia instance is running in, and runs the Celestia-specific command to submit the transaction.

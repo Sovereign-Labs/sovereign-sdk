@@ -1,5 +1,5 @@
 use sov_bank::call::CallMessage;
-use sov_bank::{create_token_address, Bank};
+use sov_bank::{get_token_address, Bank};
 use sov_modules_api::{Context, Module};
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -21,7 +21,7 @@ fn initial_and_deployed_token() {
     let initial_balance = 500;
     let token_name = "Token1".to_owned();
     let salt = 1;
-    let token_address = create_token_address::<C>(&token_name, sender_address.as_ref(), salt);
+    let token_address = get_token_address::<C>(&token_name, sender_address.as_ref(), salt);
     let create_token_message = CallMessage::CreateToken::<C> {
         salt,
         token_name,

@@ -1,4 +1,4 @@
-use sov_modules_api::{Context, Module};
+use sov_modules_api::{Context, Error, Module, ModuleInfo};
 use sov_sequencer_registry::call::CallMessage;
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -107,10 +107,34 @@ fn test_registration_not_enough_funds() {
         response.is_err(),
         "insufficient funds registration should fail"
     );
-    let expected_error_message = format!("Insufficient funds for {}", sequencer_address);
-    let actual_error_message = response.err().unwrap().to_string();
+    let Error::ModuleError(err) = response.err().unwrap();
+    let mut chain = err.chain();
+    let message_1 = chain.next().unwrap().to_string();
+    let message_2 = chain.next().unwrap().to_string();
+    let message_3 = chain.next().unwrap().to_string();
+    assert!(chain.next().is_none());
 
-    assert_eq!(expected_error_message, actual_error_message);
+    assert_eq!(
+        format!(
+            "Failed transfer from={} to={} of coins(token_address={} amount={})",
+            sequencer_address,
+            test_sequencer.registry.address(),
+            test_sequencer.sequencer_config.coins_to_lock.token_address,
+            LOCKED_AMOUNT,
+        ),
+        message_1
+    );
+    assert_eq!(
+        format!(
+            "Incorrect balance on={} for token=InitialToken",
+            sequencer_address
+        ),
+        message_2,
+    );
+    assert_eq!(
+        format!("Insufficient funds for {}", sequencer_address),
+        message_3,
+    );
 }
 
 #[test]
