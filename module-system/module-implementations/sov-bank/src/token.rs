@@ -1,6 +1,7 @@
 use std::collections::HashSet;
+use std::fmt::Formatter;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use sov_state::{Prefix, WorkingSet};
 
 use crate::call::prefix_from_address_with_parent;
@@ -16,6 +17,17 @@ pub type Amount = u64;
 pub struct Coins<C: sov_modules_api::Context> {
     pub amount: Amount,
     pub token_address: C::Address,
+}
+
+impl<C: sov_modules_api::Context> std::fmt::Display for Coins<C> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        // implement Display for Coins
+        write!(
+            f,
+            "token_address={} amount={}",
+            self.token_address, self.amount
+        )
+    }
 }
 
 /// This struct represents a token in the sov-bank module.
@@ -47,7 +59,9 @@ impl<C: sov_modules_api::Context> Token<C> {
         if from == to {
             return Ok(());
         }
-        let from_balance = self.check_balance(from, amount, working_set)?;
+        let from_balance = self
+            .check_balance(from, amount, working_set)
+            .with_context(|| format!("Incorrect balance on={} for token={}", from, self.name))?;
 
         // We can't overflow here because the sum must be smaller or eq to `total_supply` which is u64.
         let to_balance = self.balances.get(to, working_set).unwrap_or_default() + amount;
@@ -75,7 +89,7 @@ impl<C: sov_modules_api::Context> Token<C> {
     /// If the vector is empty when the function is called, this means the token is already frozen
     pub(crate) fn freeze(&mut self, sender: &C::Address) -> Result<()> {
         if self.authorized_minters.is_empty() {
-            bail!("Token is already frozen")
+            bail!("Token {} is already frozen", self.name)
         }
         self.is_authorized_minter(sender)?;
         self.authorized_minters = vec![];
@@ -90,7 +104,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
         if self.authorized_minters.is_empty() {
-            bail!("Attempt to mint frozen token")
+            bail!("Attempt to mint frozen token {}", self.name)
         }
         self.is_authorized_minter(sender)?;
         let to_balance: Amount = self
@@ -99,7 +113,7 @@ impl<C: sov_modules_api::Context> Token<C> {
             .unwrap_or_default()
             .checked_add(amount)
             .ok_or(anyhow::Error::msg(
-                "Account Balance overflow in the mint method of bank module",
+                "Account balance overflow in the mint method of bank module",
             ))?;
 
         self.balances.set(minter_address, &to_balance, working_set);
@@ -114,7 +128,11 @@ impl<C: sov_modules_api::Context> Token<C> {
 
     fn is_authorized_minter(&self, sender: &C::Address) -> Result<()> {
         if !self.authorized_minters.contains(sender) {
-            bail!("Sender {} is not an authorized minter", sender)
+            bail!(
+                "Sender {} is not an authorized minter of token {}",
+                sender,
+                self.name
+            )
         }
         Ok(())
     }
@@ -138,13 +156,13 @@ impl<C: sov_modules_api::Context> Token<C> {
     pub(crate) fn create(
         token_name: &str,
         address_and_balances: &[(C::Address, u64)],
-        authorized_minters: Vec<C::Address>,
+        authorized_minters: &[C::Address],
         sender: &[u8],
         salt: u64,
         parent_prefix: &Prefix,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(C::Address, Self)> {
-        let token_address = super::create_token_address::<C>(token_name, sender, salt);
+        let token_address = super::get_token_address::<C>(token_name, sender, salt);
         let token_prefix = prefix_from_address_with_parent::<C>(parent_prefix, &token_address);
         let balances = sov_state::StateMap::new(token_prefix);
 

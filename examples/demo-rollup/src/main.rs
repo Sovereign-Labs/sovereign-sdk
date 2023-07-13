@@ -57,6 +57,13 @@ async fn start_rpc_server(methods: impl Into<Methods>, address: SocketAddr) {
     futures::future::pending::<()>().await;
 }
 
+// TODO: Remove this when sov-cli is in its own crate.
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct HexKey {
+    hex_priv_key: String,
+    address: String,
+}
+
 /// Configure our rollup with a centralized sequencer using the SEQUENCER_DA_ADDRESS
 /// address constant. Since the centralize sequencer's address is consensus critical,
 /// it has to be hardcoded as a constant, rather than read from the config at runtime.
@@ -68,7 +75,16 @@ async fn start_rpc_server(methods: impl Into<Methods>, address: SocketAddr) {
 /// const SEQUENCER_DA_ADDRESS: [u8;47] = *b"celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208"
 /// ```
 pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
-    let sequencer_private_key = DefaultPrivateKey::generate();
+    let hex_key: HexKey = serde_json::from_slice(include_bytes!(
+        "../../test-data/keys/token_deployer_private_key.json"
+    ))
+    .expect("Broken key data file");
+    let sequencer_private_key = DefaultPrivateKey::from_hex(&hex_key.hex_priv_key).unwrap();
+    assert_eq!(
+        sequencer_private_key.default_address().to_string(),
+        hex_key.address,
+        "Inconsistent key data",
+    );
     create_demo_genesis_config(
         100000000,
         sequencer_private_key.default_address(),
@@ -196,16 +212,18 @@ async fn main() -> Result<(), anyhow::Error> {
         // For the demo, we create and verify a proof that the data has been extracted from Celestia correctly.
         // In a production implementation, this logic would only run on the prover node - regular full nodes could
         // simply download the data from Celestia without extracting and checking a merkle proof here,
-        let mut blob_txs = da_service.extract_relevant_txs(&filtered_block);
+        let mut blobs = da_service.extract_relevant_txs(&filtered_block);
 
-        info!("Received {} blobs", blob_txs.len());
+        info!("Received {} blobs at height {}", blobs.len(), height);
 
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
         demo.begin_slot(Default::default());
-        for blob in &mut blob_txs {
+        for (blob_idx, blob) in blobs.iter_mut().enumerate() {
             let batch_receipt = demo.apply_blob(blob, None);
             info!(
-                "batch 0x{} has been applied with {} txs, sequencer outcome {:?}",
+                "blob #{} at height {} with blob_hash 0x{} has been applied with #{} transactions, sequencer outcome {:?}",
+                blob_idx,
+                height,
                 hex::encode(batch_receipt.batch_hash),
                 batch_receipt.tx_receipts.len(),
                 batch_receipt.inner
@@ -224,12 +242,12 @@ async fn main() -> Result<(), anyhow::Error> {
         let (next_state_root, _witness) = demo.end_slot();
 
         let (inclusion_proof, completeness_proof) =
-            da_service.get_extraction_proof(&filtered_block, &blob_txs);
+            da_service.get_extraction_proof(&filtered_block, &blobs);
 
         let validity_condition = da_verifier
             .verify_relevant_tx_list::<NoOpHasher>(
                 header,
-                &blob_txs,
+                &blobs,
                 inclusion_proof,
                 completeness_proof,
             )

@@ -21,6 +21,8 @@ fn create_bank_config() -> (sov_bank::BankConfig<C>, <C as Spec>::Address) {
     let token_config = sov_bank::TokenConfig {
         token_name: "InitialToken".to_owned(),
         address_and_balances: vec![(prover_address.clone(), BOND_AMOUNT * 5)],
+        authorized_minters: vec![prover_address.clone()],
+        salt: 2,
     };
 
     (
@@ -40,10 +42,9 @@ fn setup(
     bank.genesis(&bank_config, working_set)
         .expect("bank genesis must succeed");
 
-    let token_address = sov_bank::create_token_address::<C>(
+    let token_address = sov_bank::get_genesis_token_address::<C>(
         &bank_config.tokens[0].token_name,
-        &sov_bank::genesis::DEPLOYER,
-        sov_bank::genesis::SALT,
+        bank_config.tokens[0].salt,
     );
 
     // initialize prover incentives

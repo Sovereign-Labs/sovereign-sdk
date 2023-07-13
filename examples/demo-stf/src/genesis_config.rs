@@ -11,7 +11,7 @@ use sov_value_setter::ValueSetterConfig;
 use crate::runtime::GenesisConfig;
 
 pub const DEMO_SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
-pub const LOCKED_AMOUNT: u64 = 200;
+pub const LOCKED_AMOUNT: u64 = 50;
 pub const DEMO_SEQ_PUB_KEY_STR: &str = "seq_pub_key";
 pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
 
@@ -25,16 +25,17 @@ pub fn create_demo_genesis_config<C: Context>(
     let token_config: sov_bank::TokenConfig<C> = sov_bank::TokenConfig {
         token_name: DEMO_TOKEN_NAME.to_owned(),
         address_and_balances: vec![(sequencer_address.clone(), initial_sequencer_balance)],
+        authorized_minters: vec![sequencer_address.clone()],
+        salt: 0,
     };
 
     let bank_config = sov_bank::BankConfig {
         tokens: vec![token_config],
     };
 
-    let token_address = sov_bank::create_token_address::<C>(
+    let token_address = sov_bank::get_genesis_token_address::<C>(
         &bank_config.tokens[0].token_name,
-        &sov_bank::genesis::DEPLOYER,
-        sov_bank::genesis::SALT,
+        bank_config.tokens[0].salt,
     );
 
     let sequencer_registry_config = sov_sequencer_registry::SequencerConfig {
