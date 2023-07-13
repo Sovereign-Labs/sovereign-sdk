@@ -283,7 +283,10 @@ impl NamespaceGroup {
             return Err(ShareParsingError::ErrInvalidBase64);
         }
         let mut output: Bytes = decoded.into();
-        if output.len() % SHARE_SIZE != 0 {
+        if output.is_empty() {
+            error!("Empty input");
+            return Err(ShareParsingError::ErrWrongLength);
+        } else if output.len() % SHARE_SIZE != 0 {
             error!(
                 "Wrong length: Expected a multiple of 512, got: {}",
                 output.len()
