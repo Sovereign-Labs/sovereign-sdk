@@ -1,11 +1,11 @@
 ![](./assets/banner.jpg)
 
 <div align="center">
-  <a href="https://github.com/Sovereign-Labs/sovereign-sdk/blob/main/LICENSE">
+  <a href="https://github.com/Sovereign-Labs/sovereign-sdk/blob/stable/LICENSE">
     <img alt="License: Apache-2.0" src="https://img.shields.io/github/license/Sovereign-Labs/sovereign-sdk.svg" />
   </a>
   <a href="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk" > 
-      <img alt="Coverage" src="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk/branch/main/graph/badge.svg"/> 
+      <img alt="Coverage" src="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk/branch/stable/graph/badge.svg"/> 
   </a>
    <a href="https://discord.gg/kbykCcPrcA" > 
       <img alt="Discord" src="https://img.shields.io/discord/1050059327626555462?label=discord"/> 
