@@ -136,12 +136,7 @@ pub trait Spec {
         + Sync
         + Into<AddressBech32>
         + From<AddressBech32>
-        + FromStr<Err = Self::AddressFromStrError>;
-
-    /// The error type that results when an attempt to parse an `Address` from a string fails.
-    #[cfg(feature = "native")]
-    type AddressFromStrError: Into<Box<(dyn std::error::Error + Send + std::marker::Sync + 'static)>>
-        + Into<anyhow::Error> = anyhow::Error;
+        + FromStr<Err = anyhow::Error>;
 
     /// The Address type used on the rollup. Typically calculated as the hash of a public key.
     #[cfg(not(feature = "native"))]
@@ -162,12 +157,7 @@ pub trait Spec {
         + for<'a> Deserialize<'a>
         + Send
         + Sync
-        + FromStr<Err = Self::PubKeyFromStrError>;
-
-    /// The error type that results when an attempt to parse a `PublicKey` from a string fails.
-    #[cfg(feature = "native")]
-    type PubKeyFromStrError: Into<Box<(dyn std::error::Error + Send + std::marker::Sync + 'static)>>
-        + Into<anyhow::Error> = anyhow::Error;
+        + FromStr<Err = anyhow::Error>;
 
     #[cfg(not(feature = "native"))]
     type PublicKey: borsh::BorshDeserialize
@@ -192,7 +182,7 @@ pub trait Spec {
         + Signature<PublicKey = Self::PublicKey>
         + Send
         + Sync
-        + FromStr<Err = Self::SignatureFromStrError>;
+        + FromStr<Err = anyhow::Error>;
 
     /// The digital signature scheme used by the rollup
     #[cfg(not(feature = "native"))]
@@ -204,11 +194,6 @@ pub trait Spec {
         + Signature<PublicKey = Self::PublicKey>
         + Send
         + Sync;
-
-    /// The error type that results when an attempt to parse a `Signature` from a string fails.
-    #[cfg(feature = "native")]
-    type SignatureFromStrError: Into<Box<(dyn std::error::Error + Send + std::marker::Sync + 'static)>>
-        + Into<anyhow::Error> = anyhow::Error;
 
     /// A structure containing the non-deterministic inputs from the prover to the zk-circuit
     type Witness: Witness;

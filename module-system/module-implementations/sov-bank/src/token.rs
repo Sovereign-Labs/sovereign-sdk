@@ -29,13 +29,13 @@ pub enum CoinsFromStrError {
     /// The amount could not be parsed as a u64.
     #[error("Could not parse {input} as a valid amount: {err}")]
     InvalidAmount { input: String, err: ParseIntError },
-    /// The input string was malformed, so the `amount` substring could not be extracted. 
+    /// The input string was malformed, so the `amount` substring could not be extracted.
     #[error("No amount was provided. Make sure that your input is in the format: amount,token_address. Example: 100,sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6")]
     NoAmountProvided,
     /// The token address could not be parsed as a valid address.
     #[error("Could not parse {input} as a valid address: {err}")]
     InvalidTokenAddress { input: String, err: anyhow::Error },
-    /// The input string was malformed, so the `token_address` substring could not be extracted. 
+    /// The input string was malformed, so the `token_address` substring could not be extracted.
     #[error("No token address was provided. Make sure that your input is in the format: amount,token_address. Example: 100,sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6")]
     NoTokenAddressProvided,
 }
