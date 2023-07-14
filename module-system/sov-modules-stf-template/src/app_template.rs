@@ -103,6 +103,8 @@ where
         // TODO: don't ignore these events: https://github.com/Sovereign-Labs/sovereign/issues/350
         let _ = batch_workspace.take_events();
 
+        asdfjasd;lkfjasd;flkjads;flkjasdfl;kasjdf
+
         let (txs, messages) = match self.pre_process_batch(blob.data_mut()) {
             Ok((txs, messages)) => (txs, messages),
             Err(reason) => {
