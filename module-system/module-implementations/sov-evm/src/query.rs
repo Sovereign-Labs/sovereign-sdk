@@ -71,10 +71,13 @@ impl<C: sov_modules_api::Context> Evm<C> {
     #[rpc_method(name = "getTransactionReceipt")]
     pub fn get_transaction_receipt(
         &self,
-        _hash: H256,
-        _working_set: &mut WorkingSet<C::Storage>,
+        hash: H256,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Option<TransactionReceipt> {
-        unimplemented!("eth_getTransactionReceipt not implemented")
+        info!("evm module: eth_getTransactionReceipt");
+
+        let receipt = self.receipts.get(&hash.into(), working_set);
+        receipt.map(|r| r.into())
     }
 
     #[rpc_method(name = "getTransactionCount")]
