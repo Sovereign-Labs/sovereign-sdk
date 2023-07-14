@@ -9,9 +9,15 @@ cargo-fuzz = true
 
 [dependencies]
 libfuzzer-sys = "0.4"
+serde_json = "1"
+tempfile = "3"
 
 # Sovereign-maintained dependencies.
 jupiter = { path = "../adapters/celestia" }
+sov-modules-api = { path = "../module-system/sov-modules-api" }
+sov-accounts = { path = "../module-system/module-implementations/sov-accounts" }
+sov-bank = { path = "../module-system/module-implementations/sov-bank" }
+sov-state = { path = "../module-system/sov-state" }
 
 # Prevent this from interfering with workspaces.
 [workspace]
@@ -21,7 +27,55 @@ members = ["."]
 debug = 1
 
 [[bin]]
-name = "fuzz_namespace_group_from_b64"
-path = "fuzz_targets/fuzz_namespace_group_from_b64.rs"
+name = "namespace_group_from_b64"
+path = "fuzz_targets/namespace_group_from_b64.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "parse_address"
+path = "fuzz_targets/parse_address.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "address_bech_32_parse_serde"
+path = "fuzz_targets/address_bech_32_parse_serde.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "address_bech_32_try_from_bytes"
+path = "fuzz_targets/address_bech_32_try_from_bytes.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "share_deserialize"
+path = "fuzz_targets/share_deserialize.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "bank_call"
+path = "fuzz_targets/bank_call.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "accounts_call"
+path = "fuzz_targets/accounts_call.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "bank_parse_call_message"
+path = "fuzz_targets/bank_parse_call_message.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "accounts_parse_call_message"
+path = "fuzz_targets/accounts_parse_call_message.rs"
 test = false
 doc = false
