@@ -24,7 +24,7 @@ use crate::batch_builder::FiFoStrictBatchBuilder;
 use crate::runner_config::Config;
 use crate::runtime::Runtime;
 
-pub struct DemoAppRunner<C: Context + 'static, Vm: Zkvm> {
+pub struct DemoAppRunner<C: Context, Vm: Zkvm> {
     pub stf: DemoApp<C, Vm>,
     pub batch_builder: Option<FiFoStrictBatchBuilder<Runtime<C>, C>>,
 }

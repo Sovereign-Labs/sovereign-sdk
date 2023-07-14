@@ -108,7 +108,7 @@ pub struct MockAddress {
     addr: [u8; 32],
 }
 
-impl FromStr for MockAddress {
+impl core::str::FromStr for MockAddress {
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {

@@ -55,17 +55,6 @@ impl FromStr for CelestiaAddress {
     }
 }
 
-impl FromStr for CelestiaAddress {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Remove the "0x" prefix, if it exists.
-        let s = s.strip_prefix("0x").unwrap_or(s);
-        let bytes = hex::decode(s)?;
-        Ok(CelestiaAddress(bytes))
-    }
-}
-
 impl AddressTrait for CelestiaAddress {}
 
 #[cfg(test)]

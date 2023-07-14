@@ -1,7 +1,7 @@
 use anyhow::{ensure, Result};
 use sov_modules_api::{CallResponse, Signature};
 #[cfg(feature = "native")]
-use sov_modules_macros::CustomParser;
+use sov_modules_macros::CliWalletArg;
 use sov_state::WorkingSet;
 
 use crate::Accounts;
@@ -13,7 +13,7 @@ pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
     derive(serde::Serialize),
     derive(serde::Deserialize)
 )]
-#[cfg_attr(feature = "native", derive(CustomParser), module_name = "Accounts")]
+#[cfg_attr(feature = "native", derive(CliWalletArg), module_name = "Accounts")]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: sov_modules_api::Context> {
     // Updates a PublicKey for the corresponding Account.

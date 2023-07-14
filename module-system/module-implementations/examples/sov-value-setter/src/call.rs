@@ -2,13 +2,12 @@ use std::fmt::Debug;
 
 use anyhow::Result;
 use sov_modules_api::CallResponse;
+#[cfg(feature = "native")]
+use sov_modules_macros::CliWalletArg;
 use sov_state::WorkingSet;
 use thiserror::Error;
 
 use super::ValueSetter;
-
-#[cfg(feature = "native")]
-use sov_modules_macros::CustomParser;
 
 /// This enumeration represents the available call messages for interacting with the `sov-value-setter` module.
 #[cfg_attr(
@@ -16,7 +15,7 @@ use sov_modules_macros::CustomParser;
     derive(serde::Serialize),
     derive(serde::Deserialize)
 )]
-#[cfg_attr(feature = "native", derive(CustomParser), module_name = "ValueSetter")]
+#[cfg_attr(feature = "native", derive(CliWalletArg), module_name = "ValueSetter")]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage {
     /// value to set

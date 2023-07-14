@@ -1,14 +1,17 @@
 use anyhow::{bail, Context, Result};
 use sov_modules_api::CallResponse;
 #[cfg(feature = "native")]
-use sov_modules_macros::CustomParser;
+use sov_modules_macros::CliWalletArg;
 use sov_state::WorkingSet;
 
 use crate::{Amount, Bank, Coins, Token};
 
 /// This enumeration represents the available call messages for interacting with the sov-bank module.
-#[cfg_attr(feature = "native", derive(serde::Serialize, serde::Deserialize))]
-#[cfg_attr(feature = "native", derive(CustomParser), module_name = "Bank")]
+#[cfg_attr(
+    feature = "native",
+    derive(serde::Serialize, serde::Deserialize, CliWalletArg),
+    module_name = "Bank"
+)]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: sov_modules_api::Context> {
     /// Creates a new token with the specified name and initial balance.

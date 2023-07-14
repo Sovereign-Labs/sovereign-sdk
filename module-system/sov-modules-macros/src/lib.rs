@@ -13,7 +13,7 @@ use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
 use proc_macro::TokenStream;
 use rpc::ExposeRpcMacro;
-use syn::parse_macro_input;
+use syn::{parse_macro_input, DeriveInput};
 
 /// Derives the `sov-modules-api::ModuleInfo` implementation for the underlying type.
 ///
@@ -206,10 +206,18 @@ pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
     handle_macro_error(cli_parser.cli_macro(input, context_type, skip_fields))
 }
 
-#[proc_macro_derive(CustomParser, attributes(module_name))]
+/// Allows the underlying enum to be used as an argument in the sov-cli wallet.
+///
+/// Under the hood, this macro generates an enum with unnamed fields
+#[proc_macro_derive(CliWalletArg, attributes(module_name))]
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input);
-    handle_macro_error(derive_clap_custom_enum(input))
+    let input: DeriveInput = parse_macro_input!(input);
+    match input.data {
+        syn::Data::Struct(_) => todo!(),
+        syn::Data::Enum(_) => handle_macro_error(derive_clap_custom_enum(input)),
+        syn::Data::Union(_) => todo!(),
+        // ;
+    }
 }
 
 #[proc_macro_attribute]

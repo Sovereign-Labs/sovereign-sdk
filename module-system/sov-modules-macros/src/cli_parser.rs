@@ -186,6 +186,9 @@ impl CliParserMacro {
     }
 }
 
+/// Derive [`clap::Parser`] for an enum with unnamed fields.
+///
+/// Under the hood, this is done by generating an identical enum with dummy field names, then deriving [`clap::Parser`] for that enum.
 pub fn derive_clap_custom_enum(ast: DeriveInput) -> Result<proc_macro::TokenStream, syn::Error> {
     let enum_name = &ast.ident;
     let generics = &ast.generics;

@@ -1,8 +1,11 @@
+use core::str::FromStr;
 use std::collections::HashSet;
 use std::fmt::Formatter;
+use std::num::ParseIntError;
 
 use anyhow::{bail, Context, Result};
 use sov_state::{Prefix, WorkingSet};
+use thiserror::Error;
 
 use crate::call::prefix_from_address_with_parent;
 
@@ -20,29 +23,47 @@ pub struct Coins<C: sov_modules_api::Context> {
     pub token_address: C::Address,
 }
 
-// pub fn parse_amount(s: &str) -> Result<Amount, anyhow::Error> {
-//     match s.parse::<u64>() {
-//         Ok(val) => Ok(val),
-//         Err(e) => Err(anyhow::Error::new(e)),
-//     }
-// }
+/// The errors that might arise when parsing a `Coins` struct from a string.
+#[derive(Debug, Error)]
+pub enum CoinsFromStrError {
+    /// The amount could not be parsed as a u64.
+    #[error("Could not parse {input} as a valid amount: {err}")]
+    InvalidAmount { input: String, err: ParseIntError },
+    /// The input string was malformed, so the `amount` substring could not be extracted. 
+    #[error("No amount was provided. Make sure that your input is in the format: amount,token_address. Example: 100,sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6")]
+    NoAmountProvided,
+    /// The token address could not be parsed as a valid address.
+    #[error("Could not parse {input} as a valid address: {err}")]
+    InvalidTokenAddress { input: String, err: anyhow::Error },
+    /// The input string was malformed, so the `token_address` substring could not be extracted. 
+    #[error("No token address was provided. Make sure that your input is in the format: amount,token_address. Example: 100,sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6")]
+    NoTokenAddressProvided,
+}
 
-impl<C: Context> FromStr for Coins<C>
-where
-    C::Address: FromStr<Err = anyhow::Error>,
-{
-    type Err = anyhow::Error;
+impl<C: sov_modules_api::Context> FromStr for Coins<C> {
+    type Err = CoinsFromStrError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut parts = s.splitn(2, ',');
 
-        let amount_str = parts.next().ok_or(anyhow::Error::msg("Missing amount"))?;
+        let amount_str = parts.next().ok_or(CoinsFromStrError::NoAmountProvided)?;
         let token_address_str = parts
             .next()
-            .ok_or(anyhow::Error::msg("Missing token address"))?;
+            .ok_or(CoinsFromStrError::NoTokenAddressProvided)?;
 
-        let amount = amount_str.parse::<Amount>().map_err(anyhow::Error::new)?;
-        let token_address = C::Address::from_str(token_address_str)?;
+        let amount =
+            amount_str
+                .parse::<Amount>()
+                .map_err(|err| CoinsFromStrError::InvalidAmount {
+                    input: amount_str.into(),
+                    err,
+                })?;
+        let token_address = C::Address::from_str(token_address_str).map_err(|err| {
+            CoinsFromStrError::InvalidTokenAddress {
+                input: token_address_str.into(),
+                err: err.into(),
+            }
+        })?;
 
         Ok(Self {
             amount,

@@ -1,5 +1,6 @@
 use anyhow::{bail, Result};
 use sov_modules_api::CallResponse;
+use sov_modules_macros::CliWalletArg;
 use sov_state::WorkingSet;
 
 use crate::SequencerRegistry;
@@ -9,6 +10,11 @@ use crate::SequencerRegistry;
     feature = "native",
     derive(serde::Serialize),
     derive(serde::Deserialize)
+)]
+#[cfg_attr(
+    feature = "native",
+    derive(CliWalletArg),
+    module_name = "SequencerRegistry"
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage {

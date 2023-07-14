@@ -11,17 +11,10 @@ use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
 use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
-#[cfg(feature = "native")]
-pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Context;
 #[cfg(feature = "native")]
 use sov_modules_macros::{cli_parser, expose_rpc};
-#[cfg(feature = "native")]
-use sov_modules_macros::{cli_parser, expose_rpc};
-use sov_modules_macros::{
-    DefaultRuntime, DefaultRuntime, DispatchCall, DispatchCall, Genesis, Genesis, MessageCodec,
-    MessageCodec,
-};
+use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
 #[cfg(feature = "native")]
 use sov_sequencer_registry::query::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 #[cfg(feature = "native")]
@@ -65,7 +58,7 @@ use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 #[cfg(not(feature = "experimental"))]
 #[cfg_attr(
     feature = "native",
-    cli_parser(DefaultContext, "sequencer"),
+    cli_parser(DefaultContext),
     expose_rpc(DefaultContext)
 )]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
