@@ -59,7 +59,7 @@ pub trait ZkvmGuest: Zkvm {
 
 /// This trait is implemented on the struct/enum which expresses the validity condition
 pub trait ValidityCondition:
-    Serialize + DeserializeOwned + BorshDeserialize + BorshSerialize
+    Serialize + DeserializeOwned + BorshDeserialize + BorshSerialize + Debug
 {
     /// The error type returned when two [`ValidityCondition`]s cannot be combined.
     type Error: Into<anyhow::Error>;
@@ -92,7 +92,9 @@ pub struct StateTransition<C, Address> {
 }
 
 /// This trait expresses that a type can check a validity condition.
-pub trait ValidityConditionChecker<Condition: ValidityCondition> {
+pub trait ValidityConditionChecker<Condition: ValidityCondition>:
+    BorshDeserialize + BorshSerialize + Debug
+{
     /// The error type returned when a [`ValidityCondition`] is invalid.
     type Error: Into<anyhow::Error>;
     /// Check a validity condition

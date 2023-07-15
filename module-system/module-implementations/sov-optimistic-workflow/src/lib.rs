@@ -11,7 +11,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use call::Role;
 use sov_modules_api::{Context, Error};
 use sov_modules_macros::ModuleInfo;
-use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
+use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker, Zkvm};
 use sov_state::{Storage, WorkingSet};
 
 pub struct AttesterIncentivesConfig<C: Context, Vm: Zkvm> {
@@ -63,7 +63,12 @@ pub struct UnbondingInfo {
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[derive(ModuleInfo)]
-pub struct AttesterIncentives<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition> {
+pub struct AttesterIncentives<
+    C: sov_modules_api::Context,
+    Vm: Zkvm,
+    Cond: ValidityCondition,
+    Checker: ValidityConditionChecker<Cond>,
+> {
     /// Address of the module.
     #[address]
     pub address: C::Address,
@@ -81,6 +86,9 @@ pub struct AttesterIncentives<C: sov_modules_api::Context, Vm: Zkvm, Cond: Valid
     /// The code commitment to be used for verifying proofs
     #[state]
     pub commitment_to_allowed_challenge_method: sov_state::StateValue<StoredCodeCommitment<Vm>>,
+
+    #[state]
+    pub validity_cond_checker: sov_state::StateValue<Checker>,
 
     /// The set of bonded attesters and their bonded amount.
     /// We don't need an unbonding set anymore because the
@@ -102,10 +110,10 @@ pub struct AttesterIncentives<C: sov_modules_api::Context, Vm: Zkvm, Cond: Valid
     pub maximum_attested_height: sov_state::StateValue<u64>,
 
     /// Challengers now challenge a transition and not a specific attestation
-    /// Mapping from an initial root hash to the associated reward value.
+    /// Mapping from a transition number to the associated reward value.
     /// This mapping is populated when the attestations are processed by the rollup
     #[state]
-    pub bad_transition_pool: sov_state::StateMap<[u8; 32], u64>,
+    pub bad_transition_pool: sov_state::StateMap<u64, u64>,
 
     /// The set of bonded challengers and their bonded amount.
     #[state]
@@ -132,13 +140,15 @@ pub struct AttesterIncentives<C: sov_modules_api::Context, Vm: Zkvm, Cond: Valid
     pub(crate) chain_state: sov_chain_state::ChainState<C, Cond>,
 }
 
-impl<C, Vm, S, P, Cond> sov_modules_api::Module for AttesterIncentives<C, Vm, Cond>
+impl<C, Vm, S, P, Cond, Checker> sov_modules_api::Module
+    for AttesterIncentives<C, Vm, Cond, Checker>
 where
     C: sov_modules_api::Context<Storage = S>,
     Vm: Zkvm,
     S: Storage<Proof = P>,
     P: BorshDeserialize + BorshSerialize,
     Cond: ValidityCondition,
+    Checker: ValidityConditionChecker<Cond>,
 {
     type Context = C;
 
@@ -177,8 +187,8 @@ where
             call::CallMessage::ProcessAttestation(attestation) => {
                 self.process_attestation(attestation, context, working_set)
             }
-            call::CallMessage::ProcessChallenge(proof, initial_hash) => {
-                self.process_challenge(&proof, initial_hash, context, working_set)
+            call::CallMessage::ProcessChallenge(proof, transition) => {
+                self.process_challenge(&proof, transition, context, working_set)
             }
         }
         .map_err(|e| e.into())

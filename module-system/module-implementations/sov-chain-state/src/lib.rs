@@ -11,23 +11,34 @@ pub mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
-use sov_rollup_interface::zk::ValidityCondition;
+use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
 use sov_state::WorkingSet;
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]
-pub struct StateTransitionId<Cond> {
+pub struct StateTransitionId<Cond: ValidityCondition> {
     da_block_hash: [u8; 32],
     post_state_root: [u8; 32],
     validity_condition: Cond,
 }
 
-impl<Cond> StateTransitionId<Cond> {
+impl<Cond: ValidityCondition> StateTransitionId<Cond> {
     pub fn compare_tx_hashes(&self, da_block_hash: [u8; 32], post_state_root: [u8; 32]) -> bool {
         self.da_block_hash == da_block_hash && self.post_state_root == post_state_root
     }
 
     pub fn post_state_root(&self) -> [u8; 32] {
         self.post_state_root
+    }
+
+    pub fn da_block_hash(&self) -> [u8; 32] {
+        self.da_block_hash
+    }
+
+    pub fn validity_condition_check<Checker: ValidityConditionChecker<Cond>>(
+        &self,
+        checker: &mut Checker,
+    ) -> Result<(), <Checker as ValidityConditionChecker<Cond>>::Error> {
+        checker.check(&self.validity_condition)
     }
 }
 

@@ -5,12 +5,13 @@ use std::fmt::{self, Debug};
 use anyhow::{ensure, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::Coins;
-use sov_chain_state::StateTransitionId;
 use sov_modules_api::{CallResponse, Context, Spec};
 use sov_rollup_interface::optimistic::Attestation;
-use sov_rollup_interface::zk::{StateTransition, ValidityCondition, Zkvm};
+use sov_rollup_interface::zk::{
+    StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
+};
 use sov_state::storage::StorageProof;
-use sov_state::{StateMap, Storage, WorkingSet};
+use sov_state::{Storage, WorkingSet};
 use thiserror::Error;
 
 use crate::AttesterIncentives;
@@ -19,27 +20,29 @@ use crate::AttesterIncentives;
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
 // TODO: allow call messages to borrow data
 //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/274
-pub enum CallMessage<C: Context> {
+
+pub enum CallMessage<C>
+where
+    C: Context,
+{
     BondAttester(u64),
     UnbondAttester,
     BondChallenger(u64),
     UnbondChallenger,
     ProcessAttestation(Attestation<StorageProof<<<C as Spec>::Storage as Storage>::Proof>>),
-    ProcessChallenge(Vec<u8>, [u8; 32]),
+    ProcessChallenge(Vec<u8>, u64),
 }
 
 /// Error raised while processessing the attester incentives
 #[derive(Debug, Clone, Error)]
 enum AttesterIncentiveErrors {
     AttesterSlashed,
-    AttesterNotUnbonding,
 }
 
 impl fmt::Display for AttesterIncentiveErrors {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let error_msg = match self {
             Self::AttesterSlashed => "Attester slashed",
-            Self::AttesterNotUnbonding => "Attester not unbonding",
         };
 
         write!(f, "{error_msg}")
@@ -55,12 +58,16 @@ pub(crate) enum Role {
     Challenger,
 }
 
-impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
-    AttesterIncentives<C, Vm, Cond>
+impl<
+        C: sov_modules_api::Context,
+        Vm: Zkvm,
+        Cond: ValidityCondition,
+        Checker: ValidityConditionChecker<Cond> + BorshDeserialize + BorshSerialize,
+    > AttesterIncentives<C, Vm, Cond, Checker>
 {
     /// A helper function that simply slashes an attester and returns a reward value
     fn slash_attester_helper(
-        &mut self,
+        &self,
         attester: &C::Address,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> u64 {
@@ -78,7 +85,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
     }
 
     fn slash_burn_reward(
-        &mut self,
+        &self,
         attester: &C::Address,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
@@ -87,7 +94,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
     }
 
     fn reward_sender(
-        &mut self,
+        &self,
         amount: u64,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
@@ -109,23 +116,20 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
 
     /// A helper function that is used to slash an attester, and put the associated attestation in the slashed pool
     fn slash_and_invalidate_attestation(
-        &mut self,
+        &self,
         attester: &C::Address,
-        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        transition_nb: u64,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
         let reward = self.slash_attester_helper(attester, working_set);
 
         let curr_reward_value = self
             .bad_transition_pool
-            .get(&attestation.initial_state_root, working_set)
+            .get(&transition_nb, working_set)
             .unwrap_or_default();
 
-        self.bad_transition_pool.set(
-            &attestation.initial_state_root,
-            &(curr_reward_value + reward),
-            working_set,
-        );
+        self.bad_transition_pool
+            .set(&transition_nb, &(curr_reward_value + reward), working_set);
 
         Err(AttesterIncentiveErrors::AttesterSlashed.into())
     }
@@ -179,7 +183,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
         let bonded_set = match role {
-            Role::Challenger => self.bonded_challengers,
+            Role::Challenger => &self.bonded_challengers,
             Role::Attester => {
                 // We have to ensure that the last block attested occurred 24 hours ago
                 // to let the attester unbond
@@ -195,7 +199,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
                         "Cannot unbond the attester: finality has not completed yet"
                     );
 
-                    self.bonded_attesters
+                    &self.bonded_attesters
                 } else {
                     return Ok(CallResponse::default());
                 }
@@ -207,6 +211,13 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
             // Transfer the bond amount from the sender to the module's address.
             // On failure, no state is changed
             self.reward_sender(old_balance, context, working_set)?;
+
+            // Borrow once again, since the previous operation was mutable
+            let bonded_set = if role == Role::Attester {
+                &self.bonded_attesters
+            } else {
+                &self.bonded_challengers
+            };
 
             // Update our internal tracking of the total bonded amount for the sender.
             bonded_set.remove(context.sender(), working_set);
@@ -223,14 +234,15 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
 
     fn check_bonding_proof(
         &self,
-        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
         // This proof checks that the attester was bonded at the initial root hash
-        let (attester_key, bond_opt) = working_set
-            .backing()
-            .open_proof(attestation.initial_state_root, attestation.proof_of_bond)?;
+        let (attester_key, bond_opt) = working_set.backing().open_proof(
+            attestation.initial_state_root,
+            attestation.proof_of_bond.clone(),
+        )?;
 
         let sender_u8: Vec<u8> = context.sender().as_ref().into();
 
@@ -264,31 +276,32 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
     }
 
     fn check_transition(
-        &mut self,
+        &self,
         max_attested_height: u64,
-        transitions: &StateMap<u64, StateTransitionId<Cond>>,
         attester: &C::Address,
-        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
-        let curr_tx = transitions.get_or_err(&max_attested_height, working_set)?;
+        let curr_tx = self
+            .chain_state
+            .historical_transitions
+            .get_or_err(&max_attested_height, working_set)?;
         // We first need to compare the initial block hash to the previous post state root
         if !curr_tx.compare_tx_hashes(attestation.da_block_hash, attestation.post_state_root) {
             // It is the right attestation, we have to compare the initial block hash to the
             // previous post state root
             // Slash the attester
-            self.slash_and_invalidate_attestation(attester, attestation, working_set);
+            self.slash_and_invalidate_attestation(attester, max_attested_height, working_set)?;
         }
 
         Ok(CallResponse::default())
     }
 
     fn check_initial_hash(
-        &mut self,
+        &self,
         max_attested_height: u64,
-        transitions: &StateMap<u64, StateTransitionId<Cond>>,
         attester: &C::Address,
-        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
         // Genesis state
@@ -304,18 +317,13 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
             }
         // Normal state
         } else {
-            if let Some(curr_tx) = transitions.get(&max_attested_height, working_set) {
-                // We need to check that the transition is legit, if it is,
-                // then we can perform the height checks
-                if !(transitions.get(&(max_attested_height-1), working_set).unwrap().post_state_root()
+            // We need to check that the transition is legit, if it is,
+            // then we can perform the height checks
+            if !(self.chain_state.historical_transitions.get(&(max_attested_height-1), working_set).unwrap().post_state_root()
                  /* Always defined, due to loop invariant */
                             == attestation.initial_state_root)
-                {
-                    // The initial root hashes don't match, just slash the attester
-                    return self.slash_burn_reward(attester, working_set);
-                }
-            } else {
-                // We only need to slash the attester. We don't put the transaction in the pool
+            {
+                // The initial root hashes don't match, just slash the attester
                 return self.slash_burn_reward(attester, working_set);
             }
         }
@@ -330,46 +338,39 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
         // We first need to check the bonding proof (because we can't slash the attester if he's not bonded)
-        self.check_bonding_proof(attestation, context, working_set)?;
+        self.check_bonding_proof(&attestation, context, working_set)?;
 
-        let transitions: StateMap<u64, StateTransitionId<_>> =
-            self.chain_state.historical_transitions;
         // We suppose that these values are always defined, otherwise we panic
         let old_max_attested_height = self.maximum_attested_height.get_or_err(working_set)?;
         let current_finalized_height =
             self.light_client_finalized_height.get_or_err(working_set)?;
         let finality = self.rollup_finality_period.get_or_err(working_set)?;
-        let minimum_bond = self.minimum_attester_bond.get_or_err(working_set)?;
+
+        let min_height = if current_finalized_height > finality {
+            current_finalized_height - finality
+        } else {
+            0
+        };
 
         // Update the max_attested_height in case the blocks have already been finalized
-        self.maximum_attested_height.set(
-            max(&old_max_attested_height, {
-                if current_finalized_height > finality {
-                    &(current_finalized_height - finality)
-                } else {
-                    &0
-                }
-            }),
-            working_set,
-        );
+        self.maximum_attested_height
+            .set(max(&old_max_attested_height, &min_height), working_set);
 
         let max_attested_height = self.maximum_attested_height.get(working_set).unwrap();
 
         // First compare the initial hashes
         self.check_initial_hash(
             max_attested_height,
-            &transitions,
             context.sender(),
-            attestation,
+            &attestation,
             working_set,
         )?;
 
         // Then compare the transition
         self.check_transition(
             max_attested_height,
-            &transitions,
             context.sender(),
-            attestation,
+            &attestation,
             working_set,
         )?;
 
@@ -389,17 +390,40 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
         Ok(CallResponse::default())
     }
 
-    fn check_challenge_outputs_against_attestation(
-        self,
+    fn check_challenge_outputs_against_transition(
+        &self,
         public_outputs: StateTransition<Cond, C::Address>,
-        initial_hash: [u8; 32],
+        transition_num: u64,
+        condition_checker: &mut impl ValidityConditionChecker<Cond>,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
+        let transition = self
+            .chain_state
+            .historical_transitions
+            .get_or_err(&transition_num, working_set)?;
+        let initial_hash = {
+            if transition_num == 0 {
+                self.chain_state.genesis_hash.get_or_err(working_set)?
+            } else {
+                self.chain_state
+                    .historical_transitions
+                    .get_or_err(&(transition_num - 1), working_set)?
+                    .post_state_root()
+            }
+        };
+
         ensure!(
             public_outputs.initial_state_root == initial_hash,
             "Not the same initial root"
         );
-        ensure!(public_outputs.slot_hash == attestation.da_block_hash);
-        ensure!(public_outputs.validity_condition.check().is_ok());
+        ensure!(public_outputs.slot_hash == transition.da_block_hash());
+        // TODO: Should we compare the validity conditions of the public outputs with the ones of the recorded transition?
+        ensure!(
+            condition_checker
+                .check(&public_outputs.validity_condition)
+                .is_ok(),
+            "Unable to verify the validity conditions"
+        );
         Ok(())
     }
 
@@ -407,7 +431,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
     pub(crate) fn process_challenge(
         &self,
         proof: &[u8],
-        initial_hash: [u8; 32],
+        transition_num: u64,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
@@ -429,7 +453,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
         // Find the faulty attestation pool and get the associated reward
         let attestation_reward: u64 = self
             .bad_transition_pool
-            .get_or_err(&initial_hash, working_set)?;
+            .get_or_err(&transition_num, working_set)?;
 
         let public_outputs_opt: Result<StateTransition<Cond, C::Address>> =
             Vm::verify_and_extract_output::<Cond, C::Address>(proof, &code_commitment)
@@ -438,18 +462,26 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
         match public_outputs_opt {
             Ok(public_output) => {
+                // We get the validity condition checker from the state
+                let mut validity_checker = self.validity_cond_checker.get_or_err(working_set)?;
+
                 // We have to perform the checks to ensure that the challenge is valid while the attestation isn't.
-                self.check_challenge_outputs_against_attestation(public_output, initial_hash);
+                self.check_challenge_outputs_against_transition(
+                    public_output,
+                    transition_num,
+                    &mut validity_checker,
+                    working_set,
+                )?;
 
                 // Reward the challenger with half of the attestation reward (avoid DOS)
-                self.reward_sender(attestation_reward / 2, context, working_set);
+                self.reward_sender(attestation_reward / 2, context, working_set)?;
 
                 working_set.add_event(
                     "processed_valid_proof",
                     &format!("challenger: {:?}", context.sender()),
                 );
             }
-            Err(err) => {
+            Err(_err) => {
                 // Slash the challenger
                 self.bonded_challengers
                     .remove(context.sender(), working_set);

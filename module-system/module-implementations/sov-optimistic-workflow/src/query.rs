@@ -1,6 +1,6 @@
-use borsh::BorshSerialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
+use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker, Zkvm};
 use sov_state::WorkingSet;
 
 use super::AttesterIncentives;
@@ -10,8 +10,12 @@ pub struct Response {
     pub value: u64,
 }
 
-impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
-    AttesterIncentives<C, Vm, Cond>
+impl<
+        C: sov_modules_api::Context,
+        Vm: Zkvm,
+        Cond: ValidityCondition,
+        Checker: ValidityConditionChecker<Cond> + BorshDeserialize + BorshSerialize,
+    > AttesterIncentives<C, Vm, Cond, Checker>
 {
     /// Queries the state of the module.
     pub fn get_bond_amount(

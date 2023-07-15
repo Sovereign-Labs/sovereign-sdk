@@ -149,7 +149,7 @@ impl Display for MockAddress {
 
 impl AddressTrait for MockAddress {}
 
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Copy)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone, Copy)]
 /// A mock validity condition that always evaluate to true
 pub struct MockValidityCond {
     phantom: PhantomData<bool>,

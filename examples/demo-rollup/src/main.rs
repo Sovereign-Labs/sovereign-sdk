@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Context;
+use borsh::{BorshDeserialize, BorshSerialize};
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{
     DefaultContext, DefaultPrivateKey, DemoBatchReceipt, DemoTxReceipt, NativeAppRunner,
@@ -78,6 +79,7 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
     )
 }
 
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct CelestiaChainChecker {
     current_block_hash: [u8; 32],
 }
