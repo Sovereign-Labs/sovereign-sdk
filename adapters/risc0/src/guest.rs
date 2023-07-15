@@ -40,4 +40,11 @@ impl Zkvm for Risc0Guest {
         // Implement this method once risc0 supports recursion
         todo!()
     }
+
+    fn verify_and_extract_output<'a, C: sov_rollup_interface::zk::ValidityCondition>(
+        serialized_proof: &'a [u8],
+        code_commitment: &Self::CodeCommitment,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<C>, Self::Error> {
+        todo!()
+    }
 }

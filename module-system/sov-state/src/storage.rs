@@ -127,7 +127,12 @@ pub trait Storage: Clone {
     type RuntimeConfig;
 
     /// A cryptographic proof that a particular key has a particular value, or is absent.
-    type Proof: Serialize + DeserializeOwned + core::fmt::Debug + Clone;
+    type Proof: Serialize
+        + DeserializeOwned
+        + core::fmt::Debug
+        + Clone
+        + BorshSerialize
+        + BorshDeserialize;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error>;
 

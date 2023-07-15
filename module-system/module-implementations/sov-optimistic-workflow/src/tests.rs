@@ -1,5 +1,10 @@
-use sov_modules_api::{default_context::DefaultContext, Address, Hasher, Module, Spec};
+use borsh::BorshSerialize;
+use jmt::proof::SparseMerkleProof;
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::{Address, Hasher, Module, Spec};
 use sov_rollup_interface::mocks::{MockCodeCommitment, MockProof, MockZkvm};
+use sov_rollup_interface::optimistic::Attestation;
+use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::AttesterIncentives;
@@ -30,9 +35,9 @@ fn create_bank_config() -> (sov_bank::BankConfig<C>, <C as Spec>::Address) {
     )
 }
 
-fn setup(
+fn setup<P: BorshSerialize>(
     working_set: &mut WorkingSet<<C as Spec>::Storage>,
-) -> (AttesterIncentives<C, MockZkvm>, Address) {
+) -> (AttesterIncentives<C, MockZkvm, P>, Address) {
     // Initialize bank
     let (bank_config, prover_address) = create_bank_config();
     let bank = sov_bank::Bank::<C>::default();
@@ -46,7 +51,7 @@ fn setup(
     );
 
     // initialize prover incentives
-    let module = AttesterIncentives::<C, MockZkvm>::default();
+    let module = AttesterIncentives::<C, MockZkvm, P>::default();
     let config = crate::AttesterIncentivesConfig {
         bonding_token_address: token_address,
         minimum_attester_bond: BOND_AMOUNT,
@@ -80,13 +85,24 @@ fn test_burn_on_invalid_proof() {
         let context = DefaultContext {
             sender: prover_address.clone(),
         };
+        let attestation = Attestation {
+            initial_state_root: [0; 32],
+            da_block_hash: [0; 32],
+            post_state_root: [0; 32],
+            proof_of_bond: todo!(),
+        };
         let proof = MockProof {
             program_id: MOCK_CODE_COMMITMENT,
             is_valid: false,
             log: &[],
         };
         module
-            .process_challenge(proof.encode_to_vec().as_ref(), &context, &mut working_set)
+            .process_challenge(
+                proof.encode_to_vec().as_ref(),
+                &context,
+                &attestation,
+                &mut working_set,
+            )
             .expect("An invalid proof is not an error");
     }
 
@@ -123,8 +139,19 @@ fn test_valid_proof() {
             is_valid: true,
             log: &[],
         };
+        let attestation = Attestation {
+            initial_state_root: [0; 32],
+            da_block_hash: [0; 32],
+            post_state_root: [0; 32],
+            proof_of_bond: todo!(),
+        };
         module
-            .process_challenge(proof.encode_to_vec().as_ref(), &context, &mut working_set)
+            .process_challenge(
+                proof.encode_to_vec().as_ref(),
+                attestation,
+                &context,
+                &mut working_set,
+            )
             .expect("An invalid proof is not an error");
     }
 
@@ -172,7 +199,7 @@ fn test_unbonding() {
 
     // Unbond the prover
     module
-        .unbond_challenger(&context, &mut working_set)
+        .unbond_user_helper(&context, &mut working_set)
         .expect("Unbonding should succeed");
 
     // Assert that the prover no longer has bonded tokens
@@ -205,7 +232,7 @@ fn test_prover_not_bonded() {
 
     // Unbond the prover
     module
-        .unbond_challenger(&context, &mut working_set)
+        .unbond_user_helper(&context, &mut working_set)
         .expect("Unbonding should succeed");
 
     // Assert that the prover no longer has bonded tokens
@@ -223,9 +250,20 @@ fn test_prover_not_bonded() {
             is_valid: true,
             log: &[],
         };
+        let attestation = Attestation {
+            initial_state_root: [0; 32],
+            da_block_hash: [0; 32],
+            post_state_root: [0; 32],
+            proof_of_bond: todo!(),
+        };
         // Assert that processing a valid proof fails
         assert!(module
-            .process_challenge(proof.encode_to_vec().as_ref(), &context, &mut working_set)
+            .process_challenge(
+                proof.encode_to_vec().as_ref(),
+                attestation,
+                &context,
+                &mut working_set
+            )
             .is_err())
     }
 }

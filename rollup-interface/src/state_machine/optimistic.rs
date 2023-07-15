@@ -5,8 +5,10 @@ use serde::{Deserialize, Serialize};
 use crate::zk::StateTransition;
 
 /// An attestation that a particular DA layer block transitioned the rollup state to some value
-#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
-pub struct Attestation<StateProof> {
+#[derive(
+    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Default,
+)]
+pub struct Attestation<StateProof: BorshSerialize> {
     /// The alleged state root before applying the contents of the da block
     pub initial_state_root: [u8; 32],
     /// The hash of the block in which the transition occurred

@@ -48,6 +48,13 @@ impl<'prover> Zkvm for Risc0Host<'prover> {
     ) -> Result<&'a [u8], Self::Error> {
         verify_from_slice(serialized_proof, code_commitment)
     }
+
+    fn verify_and_extract_output<'a, C: sov_rollup_interface::zk::ValidityCondition>(
+        serialized_proof: &'a [u8],
+        code_commitment: &Self::CodeCommitment,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<C>, Self::Error> {
+        todo!()
+    }
 }
 
 pub struct Risc0Verifier;
@@ -62,6 +69,13 @@ impl Zkvm for Risc0Verifier {
         code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error> {
         verify_from_slice(serialized_proof, code_commitment)
+    }
+
+    fn verify_and_extract_output<'a, C: sov_rollup_interface::zk::ValidityCondition>(
+        serialized_proof: &'a [u8],
+        code_commitment: &Self::CodeCommitment,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<C>, Self::Error> {
+        todo!()
     }
 }
 

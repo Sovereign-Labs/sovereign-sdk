@@ -1,3 +1,4 @@
+use borsh::BorshSerialize;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::zk::Zkvm;
 use sov_state::WorkingSet;
@@ -9,7 +10,7 @@ pub struct Response {
     pub value: u64,
 }
 
-impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
+impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentives<C, Vm, P> {
     /// Queries the state of the module.
     pub fn get_bond_amount(
         &self,

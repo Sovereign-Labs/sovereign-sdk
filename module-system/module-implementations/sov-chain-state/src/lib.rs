@@ -21,6 +21,16 @@ pub struct StateTransitionId<Cond> {
     validity_condition: Cond,
 }
 
+impl StateTransitionId<Cond> {
+    pub fn compare_tx_hashes(&self, da_block_hash: [u8; 32], post_state_root: [u8; 32]) -> bool {
+        self.da_block_hash == da_block_hash && self.post_state_root == post_state_root
+    }
+
+    pub fn post_state_root(&self) -> [u8; 32] {
+        self.post_state_root
+    }
+}
+
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]
 pub struct TransitionInProgress<Cond> {
     da_block_hash: [u8; 32],
@@ -46,8 +56,13 @@ pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
     #[state]
     pub historical_transitions: sov_state::StateMap<u64, StateTransitionId<Cond>>,
 
+    /// The transition that is currently processed
     #[state]
     pub in_progress_transition: sov_state::StateValue<TransitionInProgress<Cond>>,
+
+    /// The initial state hash
+    #[state]
+    pub genesis_hash: sov_state::StateValue<[u8; 32]>,
 }
 
 impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Module

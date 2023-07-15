@@ -1,12 +1,14 @@
 use std::cmp::min;
 use std::fmt::{self, Debug};
+use std::option;
 
-use anyhow::{ensure, Result};
+use anyhow::{ensure, Ok, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::Coins;
+use sov_chain_state::StateTransitionId;
 use sov_modules_api::{CallResponse, Context, Spec};
 use sov_rollup_interface::optimistic::Attestation;
-use sov_rollup_interface::zk::Zkvm;
+use sov_rollup_interface::zk::{StateTransition, ValidityCondition, Zkvm};
 use sov_state::storage::StorageProof;
 use sov_state::{Storage, WorkingSet};
 use thiserror::Error;
@@ -19,12 +21,14 @@ use crate::{AttesterIncentives, UnbondingInfo};
 //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/274
 pub enum CallMessage<C: Context> {
     BondAttester(u64),
-    BeginAttesterUnbonding,
-    FinishAttesterUnbonding,
+    UnbondAttester,
     BondChallenger(u64),
     UnbondChallenger,
     ProcessAttestation(Attestation<StorageProof<<<C as Spec>::Storage as Storage>::Proof>>),
-    ProcessChallenge(Vec<u8>),
+    ProcessChallenge(
+        Vec<u8>,
+        Attestation<StorageProof<<<C as Spec>::Storage as Storage>::Proof>>,
+    ),
 }
 
 /// Error raised while processessing the attester incentives
@@ -54,7 +58,58 @@ pub(crate) enum Role {
     Challenger,
 }
 
-impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
+impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentives<C, Vm, P> {
+    /// A helper function that simply slashes an attester and returns a reward value
+    fn slash_attester_helper(
+        &mut self,
+        attester: &C::Address,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> u64 {
+        // We have to deplete the attester's bonded account, it amounts to removing the attester from the bonded set
+        let reward = self
+            .bonded_attesters
+            .get(attester, working_set)
+            .unwrap_or_default();
+        self.bonded_attesters.remove(attester, working_set);
+
+        // We raise an event
+        working_set.add_event("slashed_attester", &format!("address {attester:?}"));
+
+        reward
+    }
+
+    fn slash_burn_reward(
+        &mut self,
+        attester: &C::Address,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<sov_modules_api::CallResponse> {
+        self.slash_attester_helper(attester, working_set);
+        Err(AttesterIncentiveErrors::AttesterSlashed)
+    }
+
+    /// A helper function that is used to slash an attester, and put the associated attestation in the slashed pool
+    fn slash_and_invalidate_attestation(
+        &mut self,
+        attester: &C::Address,
+        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<sov_modules_api::CallResponse> {
+        let reward = self.slash_attester_helper(attester, working_set);
+
+        let curr_reward_value = self
+            .bad_transition_pool
+            .get(&attestation.initial_state_root, working_set)
+            .unwrap_or_default();
+
+        self.bad_transition_pool.set(
+            &attestation.initial_state_root,
+            &(curr_reward_value + reward),
+            working_set,
+        );
+
+        Err(AttesterIncentiveErrors::AttesterSlashed)
+    }
+
     /// A helper function for the `bond_challenger/attester` call. Also used to bond challengers/attesters
     /// during genesis when no context is available.
     pub(super) fn bond_user_helper(
@@ -97,13 +152,38 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
     }
 
     /// Try to unbond the requested amount of coins with context.sender() as the beneficiary.
-    pub(crate) fn unbond_challenger(
+    pub(crate) fn unbond_user_helper(
         &self,
         context: &C,
+        role: Role,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
-        // Get the challenger's old balance.
-        if let Some(old_balance) = self.bonded_challengers.get(context.sender(), working_set) {
+        let bonded_set = match role {
+            Role::Challenger => self.bonded_challengers,
+            Role::Attester => {
+                // We have to ensure that the last block attested occurred 24 hours ago
+                // to let the attester unbond
+                if let Some(last_attested_block) =
+                    self.last_attested_block.get(context.sender(), working_set)
+                {
+                    // These two constants should always be set beforehand, hence we can panic if they're not set
+                    let curr_height = self.light_client_finalized_height.get(working_set).unwrap();
+                    let finality_period = self.rollup_finality_period.get(working_set).unwrap();
+
+                    ensure!(
+                        last_attested_block + finality_period < curr_height,
+                        "Cannot unbond the attester: finality has not completed yet"
+                    );
+
+                    self.bonded_attesters
+                } else {
+                    return Ok(CallResponse::default());
+                }
+            }
+        };
+
+        // Get the user's old balance.
+        if let Some(old_balance) = bonded_set.get(context.sender(), working_set) {
             // Transfer the bond amount from the sender to the module's address.
             // On failure, no state is changed
             let coins = Coins {
@@ -119,99 +199,14 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
                 .transfer_from(&self.address, context.sender(), coins, working_set)?;
 
             // Update our internal tracking of the total bonded amount for the sender.
-            self.bonded_challengers
-                .set(context.sender(), &0, working_set);
+            bonded_set.remove(context.sender(), working_set);
 
             // Emit the unbonding event
             working_set.add_event(
-                "unbonded_challenger",
-                &format!("amount_withdrawn: {old_balance:?}"),
+                "unbonded_user",
+                &format!("role: {role:?}, amount_withdrawn: {old_balance:?}"),
             );
         }
-
-        Ok(CallResponse::default())
-    }
-
-    /// Try to unbond the requested amount of coins with context.sender() as the beneficiary.
-    pub(crate) fn begin_unbonding_attester(
-        &self,
-        context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse> {
-        // Get the attester's old balance.
-        if let Some(old_balance) = self.bonded_attesters.get(context.sender(), working_set) {
-            let unbonding_info = UnbondingInfo {
-                amount: old_balance,
-                unbonding_initiated_height: self
-                    .light_client_finalized_height
-                    .get(working_set)
-                    .unwrap(),
-            };
-
-            // Update our internal tracking of the total bonded amount for the sender.
-            self.bonded_attesters.set(context.sender(), &0, working_set);
-            // Update our internal tracking of the total bonded amount for the sender.
-            self.unbonding_attesters
-                .set(context.sender(), &unbonding_info, working_set);
-
-            // Emit the unbonding event
-            working_set.add_event(
-                "unbonded_challenger",
-                &format!("amount_withdrawn: {old_balance:?}"),
-            );
-        }
-
-        Ok(CallResponse::default())
-    }
-
-    /// Second phase of the two phase unbonding, we finish unbonding the attester
-    /// by checking that at the rollup finality period has expired.
-    pub(crate) fn finish_unbonding_attester(
-        &self,
-        context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse> {
-        // Check that the finality period has expired
-        let unbonding_info = self
-            .unbonding_attesters
-            .get(context.sender(), working_set)
-            .ok_or(AttesterIncentiveErrors::AttesterNotUnbonding)?;
-        let finality_period = self
-            .rollup_finality_period
-            .get(working_set)
-            .unwrap_or_default();
-
-        // Panic if we cannot get the finalized height
-        let finalized_height = self.light_client_finalized_height.get(working_set).unwrap();
-
-        ensure!(
-            unbonding_info.unbonding_initiated_height + finality_period < finalized_height,
-            "The finality period has not expired yet"
-        );
-
-        // We can start the transfer
-        let coins = Coins {
-            token_address: self
-                .bonding_token_address
-                .get(working_set)
-                .expect("Bonding token address must be set"),
-            amount: unbonding_info.amount,
-        };
-
-        // Try to unbond the entire balance
-        // If the unbonding fails, no state is changed
-        self.bank
-            .transfer_from(&self.address, context.sender(), coins, working_set)?;
-
-        // We can safely remove the attester from the unbonding set once we've transfered the bond
-        self.unbonding_attesters
-            .remove(context.sender(), working_set);
-
-        // We add an event for the successful withdrawal
-        working_set.add_event(
-            "attester_unbonding_successful",
-            &format!("unbonded_attester: {:?}", context.sender()),
-        );
 
         Ok(CallResponse::default())
     }
@@ -248,9 +243,6 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
             .backing()
             .open_proof(attestation.initial_state_root, attestation.proof_of_bond)?;
 
-        // TODO: Do we have to check here the initial state root against the storage? I feel that it is already done at the
-        // previous step right above.
-        // We also need to check the block hash somewhere (but where?)
         let sender_u8: Vec<u8> = context.sender().as_ref().into();
 
         // We have to check that the storage key is the same as the sender's
@@ -282,6 +274,54 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
         Ok(())
     }
 
+    fn check_transition(self, max_attested_height: u64) -> Result<sov_modules_api::CallResponse> {
+        let transitions = self.chain_state.historical_transitions;
+        let curr_tx = transitions.get(&max_attested_height, working_set);
+        // We first need to compare the initial block hash to the previous post state root
+        if !curr_tx.compare_tx_hashes(attestation.da_block_hash, attestation.post_state_root) {
+            // It is the right attestation, we have to compare the initial block hash to the
+            // previous post state root
+            // Slash the attester
+            self.slash_and_invalidate_attestation(context.sender(), attestation, working_set)
+        }
+
+        Ok(CallResponse::default())
+    }
+
+    fn check_initial_hash(
+        &mut self,
+        max_attested_height: u64,
+    ) -> Result<sov_modules_api::CallResponse> {
+        // Genesis state
+        if max_attested_height == 0 {
+            // We can assume that the genesis hash is always set, otherwise we need to panic.
+            // We don't need to prove that the attester was bonded, simply need to check that the current bond is higher than the
+            // minimal bond and that the attester is not unbonding
+            if (!self.chain_state.genesis_hash.get(working_set).unwrap()
+                == attestation.initial_state_root)
+            {
+                // Slash the attester, and burn the fees
+                self.slash_attester(attester, working_set)
+            }
+        // Normal state
+        } else {
+            if let Some(curr_tx) = transitions.get(&max_attested_height, working_set) {
+                // We need to check that the transition is legit, if it is,
+                // then we can perform the height checks
+                if (!transitions.get(&(max_attested_height-1), working_set).unwrap() /* Always defined, due to loop invariant */
+                            == attestation.initial_state_root)
+                {
+                    // The initial root hashes don't match, just slash the attester
+                    self.slash_attester(attester, working_set)
+                }
+            } else {
+                // We only need to slash the attester. We don't put the transaction in the pool
+                self.slash_attester(attester, working_set)
+            }
+        }
+        Ok(CallResponse::default())
+    }
+
     /// Try to process an attestation, if the attester is bonded
     pub(crate) fn process_attestation(
         &self,
@@ -289,11 +329,25 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
+        // We first need to check the bonding proof (because we can't slash the attester if he's not bonded)
+        self.check_bonding_proof(attestation, context, working_set)?;
+
+        // We suppose that the maximum attested height is defined, otherwise we panic
+        let max_attested_height = self.maximum_attested_height.get(working_set).unwrap();
+
+        // First compare the initial hashes
+        self.check_initial_hash(max_attested_height)?;
+
+        // Then compare the transition
+        self.check_transition(max_attested_height)?;
+
+        // Check that the current height is less than initial height + time to finalize
+        // If not, slash the attester: he's trying to attest a block that is too far away in time
+
+        // Check that the initial root hash is valid against the chain state
+
         // We have to check that the current bond is still greater than the minimum bond
         self.check_current_bond_against_min_bond(context, working_set)?;
-
-        // We need to check the bonding proof
-        self.check_bonding_proof(attestation, context, working_set)?;
 
         // We have to check that this attester is currently not unbonding:
         // if so we have to slash it
@@ -323,10 +377,29 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
         }
     }
 
+    fn check_challenge_outputs_against_attestation<Cond>(
+        self,
+        public_outputs: StateTransition<Cond>,
+        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+    ) -> Result<()> {
+        ensure!(
+            public_outputs.initial_state_root == attestation.initial_state_root,
+            "Not the same initial root"
+        );
+        ensure!(
+            public_outputs.final_state_root != attestation.post_state_root,
+            "Same final root"
+        );
+        ensure!(public_outputs.block_hash == attestation.da_block_hash);
+        ensure!(public_outputs.validity_condition.check().is_ok());
+        Ok(())
+    }
+
     /// Try to process a zk proof, if the challenger is bonded.
-    pub(crate) fn process_challenge(
+    pub(crate) fn process_challenge<Cond: ValidityCondition>(
         &self,
         proof: &[u8],
+        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
@@ -349,28 +422,42 @@ impl<C: sov_modules_api::Context, Vm: Zkvm> AttesterIncentives<C, Vm> {
         self.bonded_challengers
             .set(context.sender(), &(old_balance - minimum_bond), working_set);
 
+        // Find the attestation and the associated attester
+        let faulty_attester: <C as Spec>::Address =
+            self.attestations.get(&attestation, working_set).ok_or()?;
+
+        let public_outputs_opt: Result<StateTransition<Cond>> =
+            Vm::verify_and_extract_output::<Cond>(proof, &code_commitment)
+                .map_err(|e| anyhow::format_err!("{:?}", e));
+
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
-        if let Ok(_public_outputs) =
-            Vm::verify(proof, &code_commitment).map_err(|e| anyhow::format_err!("{:?}", e))
-        {
-            // TODO: decide what the proof output is and do something with it
-            //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/272
+        match public_outputs_opt {
+            Ok(public_output) => {
+                // TODO: decide what the proof output is and do something with it
+                //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/272
 
-            // Unlock the challenger's bond
-            // TODO: reward the challenger with newly minted tokens as appropriate based on gas fees.
-            //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/271
-            self.bonded_challengers
-                .set(context.sender(), &old_balance, working_set);
+                // We have to perform the checks to ensure that the challenge is valid while the attestation isn't.
+                self.check_challenge_outputs_against_attestation::<Cond>(
+                    public_output,
+                    attestation,
+                );
 
-            working_set.add_event(
-                "processed_valid_proof",
-                &format!("prover: {:?}", context.sender()),
-            );
-        } else {
-            working_set.add_event(
-                "processed_invalid_proof",
-                &format!("slashed_prover: {:?}", context.sender()),
-            );
+                // Unlock the challenger bond, then reward the challenger with the tokens from the
+                // faulty attester
+                self.bonded_challengers
+                    .set(context.sender(), &old_balance, working_set);
+
+                working_set.add_event(
+                    "processed_valid_proof",
+                    &format!("challenger: {:?}", context.sender()),
+                );
+            }
+            Err(err) => {
+                working_set.add_event(
+                    "processed_invalid_proof",
+                    &format!("challenger: {:?}", context.sender()),
+                );
+            }
         }
 
         Ok(CallResponse::default())

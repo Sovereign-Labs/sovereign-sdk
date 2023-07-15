@@ -39,6 +39,13 @@ pub trait Zkvm {
         serialized_proof: &'a [u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error>;
+
+    /// Same as the function right above, except that instead of returning the output as a serialized array,
+    /// it returns a state transition structure.
+    fn verify_and_extract_output<'a, C: ValidityCondition>(
+        serialized_proof: &'a [u8],
+        code_commitment: &Self::CodeCommitment,
+    ) -> Result<StateTransition<C>, Self::Error>;
 }
 
 /// A trait which is accessible from within a zkVM program.
@@ -71,6 +78,12 @@ pub struct StateTransition<C> {
     pub initial_state_root: [u8; 32],
     /// The state of the rollup after the transition
     pub final_state_root: [u8; 32],
+    /// The block hash of the state transition
+    pub slot_hash: [u8; 32],
+
+    /// Rewarded address
+    pub rewarded_address: <C as Spec>::Address,
+
     /// An additional validity condition for the state transition which needs
     /// to be checked outside of the zkVM circuit. This typically corresponds to
     /// some claim about the DA layer history, such as (X) is a valid block on the DA layer

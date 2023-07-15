@@ -11,7 +11,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use call::Role;
 use sov_modules_api::{Context, Error};
 use sov_modules_macros::ModuleInfo;
-use sov_rollup_interface::zk::Zkvm;
+use sov_rollup_interface::optimistic::Attestation;
+use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 use sov_state::{Storage, WorkingSet};
 
 pub struct AttesterIncentivesConfig<C: Context, Vm: Zkvm> {
@@ -63,7 +64,12 @@ pub struct UnbondingInfo {
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[derive(ModuleInfo)]
-pub struct AttesterIncentives<C: sov_modules_api::Context, Vm: Zkvm> {
+pub struct AttesterIncentives<
+    C: sov_modules_api::Context,
+    Vm: Zkvm,
+    P: BorshSerialize,
+    Cond: ValidityCondition,
+> {
     /// Address of the module.
     #[address]
     pub address: C::Address,
@@ -83,12 +89,32 @@ pub struct AttesterIncentives<C: sov_modules_api::Context, Vm: Zkvm> {
     pub commitment_to_allowed_challenge_method: sov_state::StateValue<StoredCodeCommitment<Vm>>,
 
     /// The set of bonded attesters and their bonded amount.
+    /// We don't need an unbonding set anymore because the
+    /// attesters can only unbond if their last attestation
+    /// was posted more than 24 hours ago.
     #[state]
     pub bonded_attesters: sov_state::StateMap<C::Address, u64>,
 
-    /// The set of unbonding attesters and their bonded amount.
+    /// The last attested block for each attester. If an attester
+    /// posted an attestation less than 24 hours ago, he can't unbond.
+    /// This saves us from doing a two-phase unbonding and maintains the
+    /// following invariant: "to check the validity of an attestation,
+    /// we only need to check that the attester was bonded at the time"
     #[state]
-    pub unbonding_attesters: sov_state::StateMap<C::Address, UnbondingInfo>,
+    pub last_attested_block: sov_state::StateMap<C::Address, u64>,
+
+    /// The current maximum attestation height
+    #[state]
+    pub maximum_attested_height: sov_state::StateValue<u64>,
+
+    /// TODO: if an attester has an attestation with a valid initial root but invalid post root
+    /// we slash them and keep the bond so that people can challenge them
+
+    /// Challengers now challenge a transition and not a specific attestation
+    /// Mapping from an initial root hash to the associated reward value.
+    /// This mapping is populated when the attestations are processed by the rollup
+    #[state]
+    pub bad_transition_pool: sov_state::StateMap<[u8; 32], u64>,
 
     /// The set of bonded challengers and their bonded amount.
     #[state]
@@ -109,9 +135,13 @@ pub struct AttesterIncentives<C: sov_modules_api::Context, Vm: Zkvm> {
     /// Reference to the Bank module.
     #[module]
     pub(crate) bank: sov_bank::Bank<C>,
+
+    /// Reference to the chain state module, used to check the initial hashes of the state transition.
+    #[module]
+    pub(crate) chain_state: sov_chain_state::ChainState<C, Cond>,
 }
 
-impl<C, Vm: Zkvm, S, P> sov_modules_api::Module for AttesterIncentives<C, Vm>
+impl<C, Vm: Zkvm, S, P> sov_modules_api::Module for AttesterIncentives<C, Vm, P>
 where
     C: sov_modules_api::Context<Storage = S>,
     S: Storage<Proof = P>,
@@ -142,21 +172,20 @@ where
             call::CallMessage::BondAttester(bond_amount) => {
                 self.bond_user_helper(bond_amount, context.sender(), Role::Attester, working_set)
             }
-            call::CallMessage::BeginAttesterUnbonding => {
-                self.begin_unbonding_attester(context, working_set)
-            }
-            call::CallMessage::FinishAttesterUnbonding => {
-                self.finish_unbonding_attester(context, working_set)
+            call::CallMessage::UnbondAttester => {
+                self.unbond_user_helper(context, Role::Attester, working_set)
             }
             call::CallMessage::BondChallenger(bond_amount) => {
                 self.bond_user_helper(bond_amount, context.sender(), Role::Challenger, working_set)
             }
-            call::CallMessage::UnbondChallenger => self.unbond_challenger(context, working_set),
+            call::CallMessage::UnbondChallenger => {
+                self.unbond_user_helper(context, Role::Challenger, working_set)
+            }
             call::CallMessage::ProcessAttestation(attestation) => {
                 self.process_attestation(attestation, context, working_set)
             }
-            call::CallMessage::ProcessChallenge(proof) => {
-                self.process_challenge(&proof, context, working_set)
+            call::CallMessage::ProcessChallenge(proof, attestation) => {
+                self.process_challenge(&proof, attestation, context, working_set)
             }
         }
         .map_err(|e| e.into())

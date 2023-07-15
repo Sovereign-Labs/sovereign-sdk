@@ -6,7 +6,7 @@ use sov_state::{Storage, WorkingSet};
 use crate::call::Role;
 use crate::AttesterIncentives;
 
-impl<C, Vm: Zkvm, S, P> AttesterIncentives<C, Vm>
+impl<C, Vm: Zkvm, S, P> AttesterIncentives<C, Vm, P>
 where
     C: sov_modules_api::Context<Storage = S>,
     S: Storage<Proof = P>,

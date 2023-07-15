@@ -85,6 +85,13 @@ impl Zkvm for MockZkvm {
         anyhow::ensure!(proof.is_valid, "Proof is not valid");
         Ok(proof.log)
     }
+
+    fn verify_and_extract_output<'a, C>(
+        _serialized_proof: &'a [u8],
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<crate::zk::StateTransition<C>, Self::Error> {
+        todo!()
+    }
 }
 
 #[test]
