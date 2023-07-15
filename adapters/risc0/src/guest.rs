@@ -1,6 +1,7 @@
 #[cfg(target_os = "zkvm")]
 use risc0_zkvm::guest::env;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
+use sov_rollup_interface::AddressTrait;
 
 use crate::Risc0MethodId;
 
@@ -41,10 +42,14 @@ impl Zkvm for Risc0Guest {
         todo!()
     }
 
-    fn verify_and_extract_output<'a, C: sov_rollup_interface::zk::ValidityCondition>(
+    fn verify_and_extract_output<
+        'a,
+        C: sov_rollup_interface::zk::ValidityCondition,
+        Add: AddressTrait,
+    >(
         serialized_proof: &'a [u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<C>, Self::Error> {
+    ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
         todo!()
     }
 }

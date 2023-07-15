@@ -27,7 +27,7 @@ pub struct ChallengeContents<Address, VC> {
     /// The rollup address of the originator of this challenge
     pub challenger_address: Address,
     /// The state transition that was proven
-    pub state_transition: StateTransition<VC>,
+    pub state_transition: StateTransition<VC, Address>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, Serialize, Deserialize)]

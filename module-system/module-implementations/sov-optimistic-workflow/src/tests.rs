@@ -35,9 +35,9 @@ fn create_bank_config() -> (sov_bank::BankConfig<C>, <C as Spec>::Address) {
     )
 }
 
-fn setup<P: BorshSerialize>(
+fn setup<P: BorshSerialize, Cond: ValidityCondition>(
     working_set: &mut WorkingSet<<C as Spec>::Storage>,
-) -> (AttesterIncentives<C, MockZkvm, P>, Address) {
+) -> (AttesterIncentives<C, MockZkvm, Cond>, Address) {
     // Initialize bank
     let (bank_config, prover_address) = create_bank_config();
     let bank = sov_bank::Bank::<C>::default();
@@ -199,7 +199,7 @@ fn test_unbonding() {
 
     // Unbond the prover
     module
-        .unbond_user_helper(&context, &mut working_set)
+        .unbond_user_helper(&context, crate::call::Role::Challenger, &mut working_set)
         .expect("Unbonding should succeed");
 
     // Assert that the prover no longer has bonded tokens
@@ -232,7 +232,7 @@ fn test_prover_not_bonded() {
 
     // Unbond the prover
     module
-        .unbond_user_helper(&context, &mut working_set)
+        .unbond_user_helper(&context, crate::call::Role::Challenger, &mut working_set)
         .expect("Unbonding should succeed");
 
     // Assert that the prover no longer has bonded tokens

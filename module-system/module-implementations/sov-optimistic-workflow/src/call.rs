@@ -1,19 +1,20 @@
-use std::cmp::min;
+use core::result::Result::Ok;
+use std::cmp::{max, min};
 use std::fmt::{self, Debug};
-use std::option;
 
-use anyhow::{ensure, Ok, Result};
+use anyhow::{ensure, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::Coins;
 use sov_chain_state::StateTransitionId;
 use sov_modules_api::{CallResponse, Context, Spec};
 use sov_rollup_interface::optimistic::Attestation;
 use sov_rollup_interface::zk::{StateTransition, ValidityCondition, Zkvm};
+use sov_rollup_interface::AddressTrait;
 use sov_state::storage::StorageProof;
-use sov_state::{Storage, WorkingSet};
+use sov_state::{StateMap, Storage, WorkingSet};
 use thiserror::Error;
 
-use crate::{AttesterIncentives, UnbondingInfo};
+use crate::AttesterIncentives;
 
 /// This enumeration represents the available call messages for interacting with the `ExampleModule` module.
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
@@ -55,7 +56,9 @@ pub(crate) enum Role {
     Challenger,
 }
 
-impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentives<C, Vm, P> {
+impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition, Add: AddressTrait>
+    AttesterIncentives<C, Vm, Cond>
+{
     /// A helper function that simply slashes an attester and returns a reward value
     fn slash_attester_helper(
         &mut self,
@@ -81,10 +84,15 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
         self.slash_attester_helper(attester, working_set);
-        Err(AttesterIncentiveErrors::AttesterSlashed)
+        Err(AttesterIncentiveErrors::AttesterSlashed.into())
     }
 
-    fn reward_sender(&mut self, amount: u64, context: &C) -> Result<CallResponse> {
+    fn reward_sender(
+        &mut self,
+        amount: u64,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<CallResponse> {
         let coins = Coins {
             token_address: self
                 .bonding_token_address
@@ -120,7 +128,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
             working_set,
         );
 
-        Err(AttesterIncentiveErrors::AttesterSlashed)
+        Err(AttesterIncentiveErrors::AttesterSlashed.into())
     }
 
     /// A helper function for the `bond_challenger/attester` call. Also used to bond challengers/attesters
@@ -199,7 +207,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
         if let Some(old_balance) = bonded_set.get(context.sender(), working_set) {
             // Transfer the bond amount from the sender to the module's address.
             // On failure, no state is changed
-            self.reward_sender(old_balance, context)?;
+            self.reward_sender(old_balance, context, working_set)?;
 
             // Update our internal tracking of the total bonded amount for the sender.
             bonded_set.remove(context.sender(), working_set);
@@ -256,15 +264,21 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
         Ok(())
     }
 
-    fn check_transition(self, max_attested_height: u64) -> Result<sov_modules_api::CallResponse> {
-        let transitions = self.chain_state.historical_transitions;
-        let curr_tx = transitions.get(&max_attested_height, working_set);
+    fn check_transition(
+        &mut self,
+        max_attested_height: u64,
+        transitions: &StateMap<u64, StateTransitionId<Cond>>,
+        attester: &C::Address,
+        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<sov_modules_api::CallResponse> {
+        let curr_tx = transitions.get_or_err(&max_attested_height, working_set)?;
         // We first need to compare the initial block hash to the previous post state root
         if !curr_tx.compare_tx_hashes(attestation.da_block_hash, attestation.post_state_root) {
             // It is the right attestation, we have to compare the initial block hash to the
             // previous post state root
             // Slash the attester
-            self.slash_and_invalidate_attestation(context.sender(), attestation, working_set)
+            self.slash_and_invalidate_attestation(attester, attestation, working_set);
         }
 
         Ok(CallResponse::default())
@@ -273,32 +287,37 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
     fn check_initial_hash(
         &mut self,
         max_attested_height: u64,
+        transitions: &StateMap<u64, StateTransitionId<Cond>>,
+        attester: &C::Address,
+        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
         // Genesis state
         if max_attested_height == 0 {
             // We can assume that the genesis hash is always set, otherwise we need to panic.
             // We don't need to prove that the attester was bonded, simply need to check that the current bond is higher than the
             // minimal bond and that the attester is not unbonding
-            if (!self.chain_state.genesis_hash.get(working_set).unwrap()
+            if !(self.chain_state.genesis_hash.get(working_set).unwrap()
                 == attestation.initial_state_root)
             {
                 // Slash the attester, and burn the fees
-                self.slash_attester(attester, working_set)
+                return self.slash_burn_reward(attester, working_set);
             }
         // Normal state
         } else {
             if let Some(curr_tx) = transitions.get(&max_attested_height, working_set) {
                 // We need to check that the transition is legit, if it is,
                 // then we can perform the height checks
-                if (!transitions.get(&(max_attested_height-1), working_set).unwrap() /* Always defined, due to loop invariant */
+                if !(transitions.get(&(max_attested_height-1), working_set).unwrap().post_state_root()
+                 /* Always defined, due to loop invariant */
                             == attestation.initial_state_root)
                 {
                     // The initial root hashes don't match, just slash the attester
-                    self.slash_attester(attester, working_set)
+                    return self.slash_burn_reward(attester, working_set);
                 }
             } else {
                 // We only need to slash the attester. We don't put the transaction in the pool
-                self.slash_attester(attester, working_set)
+                return self.slash_burn_reward(attester, working_set);
             }
         }
         Ok(CallResponse::default())
@@ -314,6 +333,8 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
         // We first need to check the bonding proof (because we can't slash the attester if he's not bonded)
         self.check_bonding_proof(attestation, context, working_set)?;
 
+        let transitions: StateMap<u64, StateTransitionId<_>> =
+            self.chain_state.historical_transitions;
         // We suppose that these values are always defined, otherwise we panic
         let old_max_attested_height = self.maximum_attested_height.get_or_err(working_set)?;
         let current_finalized_height =
@@ -323,11 +344,11 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
 
         // Update the max_attested_height in case the blocks have already been finalized
         self.maximum_attested_height.set(
-            max(old_max_attested_height, {
+            max(&old_max_attested_height, {
                 if current_finalized_height > finality {
-                    current_finalized_height - finality
+                    &(current_finalized_height - finality)
                 } else {
-                    0
+                    &0
                 }
             }),
             working_set,
@@ -336,10 +357,22 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
         let max_attested_height = self.maximum_attested_height.get(working_set).unwrap();
 
         // First compare the initial hashes
-        self.check_initial_hash(max_attested_height)?;
+        self.check_initial_hash(
+            max_attested_height,
+            &transitions,
+            context.sender(),
+            attestation,
+            working_set,
+        )?;
 
         // Then compare the transition
-        self.check_transition(max_attested_height)?;
+        self.check_transition(
+            max_attested_height,
+            &transitions,
+            context.sender(),
+            attestation,
+            working_set,
+        )?;
 
         working_set.add_event(
             "processed_valid_attestation",
@@ -350,32 +383,29 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
         self.reward_sender(
             self.minimum_attester_bond.get(working_set).unwrap(),
             context,
+            working_set,
         )?;
 
         // Then we can optimistically process the transaction
         Ok(CallResponse::default())
     }
 
-    fn check_challenge_outputs_against_attestation<Cond>(
+    fn check_challenge_outputs_against_attestation(
         self,
-        public_outputs: StateTransition<Cond>,
-        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        public_outputs: StateTransition<Cond, Add>,
+        initial_hash: [u8; 32],
     ) -> Result<()> {
         ensure!(
-            public_outputs.initial_state_root == attestation.initial_state_root,
+            public_outputs.initial_state_root == initial_hash,
             "Not the same initial root"
         );
-        ensure!(
-            public_outputs.final_state_root != attestation.post_state_root,
-            "Same final root"
-        );
-        ensure!(public_outputs.block_hash == attestation.da_block_hash);
+        ensure!(public_outputs.slot_hash == attestation.da_block_hash);
         ensure!(public_outputs.validity_condition.check().is_ok());
         Ok(())
     }
 
     /// Try to process a zk proof, if the challenger is bonded.
-    pub(crate) fn process_challenge<Cond: ValidityCondition>(
+    pub(crate) fn process_challenge(
         &self,
         proof: &[u8],
         initial_hash: [u8; 32],
@@ -402,21 +432,21 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
             .bad_transition_pool
             .get_or_err(&initial_hash, working_set)?;
 
-        let public_outputs_opt: Result<StateTransition<Cond>> =
-            Vm::verify_and_extract_output::<Cond>(proof, &code_commitment)
+        let public_outputs_opt: Result<StateTransition<Cond, Add>> =
+            Vm::verify_and_extract_output::<Cond, Add>(proof, &code_commitment)
                 .map_err(|e| anyhow::format_err!("{:?}", e));
 
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
         match public_outputs_opt {
             Ok(public_output) => {
                 // We have to perform the checks to ensure that the challenge is valid while the attestation isn't.
-                self.check_challenge_outputs_against_attestation::<Cond>(
+                self.check_challenge_outputs_against_attestation::<Add>(
                     public_output,
-                    attestation,
+                    initial_hash,
                 );
 
                 // Reward the challenger with half of the attestation reward (avoid DOS)
-                self.reward_sender(attestation_reward / 2, context);
+                self.reward_sender(attestation_reward / 2, context, working_set);
 
                 working_set.add_event(
                     "processed_valid_proof",

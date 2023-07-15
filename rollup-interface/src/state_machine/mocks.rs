@@ -86,10 +86,10 @@ impl Zkvm for MockZkvm {
         Ok(proof.log)
     }
 
-    fn verify_and_extract_output<'a, C>(
+    fn verify_and_extract_output<'a, C, Add: AddressTrait>(
         _serialized_proof: &'a [u8],
         _code_commitment: &Self::CodeCommitment,
-    ) -> Result<crate::zk::StateTransition<C>, Self::Error> {
+    ) -> Result<crate::zk::StateTransition<C, Add>, Self::Error> {
         todo!()
     }
 }

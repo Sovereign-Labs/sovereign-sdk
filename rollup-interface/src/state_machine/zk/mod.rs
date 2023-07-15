@@ -13,6 +13,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::crypto::SimpleHasher;
+use crate::AddressTrait;
 
 /// A trait implemented by the prover ("host") of a zkVM program.
 pub trait ZkvmHost: Zkvm {
@@ -42,10 +43,10 @@ pub trait Zkvm {
 
     /// Same as the function right above, except that instead of returning the output as a serialized array,
     /// it returns a state transition structure.
-    fn verify_and_extract_output<'a, C: ValidityCondition>(
+    fn verify_and_extract_output<'a, C: ValidityCondition, Add: AddressTrait>(
         serialized_proof: &'a [u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<StateTransition<C>, Self::Error>;
+    ) -> Result<StateTransition<C, Add>, Self::Error>;
 }
 
 /// A trait which is accessible from within a zkVM program.
@@ -73,7 +74,7 @@ pub trait ValidityCondition:
 ///
 /// The period of time covered by a state transition proof may be a single slot, or a range of slots on the DA layer.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
-pub struct StateTransition<C> {
+pub struct StateTransition<C, Address> {
     /// The state of the rollup before the transition
     pub initial_state_root: [u8; 32],
     /// The state of the rollup after the transition
@@ -82,7 +83,7 @@ pub struct StateTransition<C> {
     pub slot_hash: [u8; 32],
 
     /// Rewarded address
-    pub rewarded_address: <C as Spec>::Address,
+    pub rewarded_address: Address,
 
     /// An additional validity condition for the state transition which needs
     /// to be checked outside of the zkVM circuit. This typically corresponds to

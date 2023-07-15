@@ -21,7 +21,7 @@ pub struct StateTransitionId<Cond> {
     validity_condition: Cond,
 }
 
-impl StateTransitionId<Cond> {
+impl<Cond> StateTransitionId<Cond> {
     pub fn compare_tx_hashes(&self, da_block_hash: [u8; 32], post_state_root: [u8; 32]) -> bool {
         self.da_block_hash == da_block_hash && self.post_state_root == post_state_root
     }

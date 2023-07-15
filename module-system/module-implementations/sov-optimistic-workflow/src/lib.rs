@@ -11,7 +11,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use call::Role;
 use sov_modules_api::{Context, Error};
 use sov_modules_macros::ModuleInfo;
-use sov_rollup_interface::optimistic::Attestation;
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 use sov_state::{Storage, WorkingSet};
 
@@ -64,12 +63,7 @@ pub struct UnbondingInfo {
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[derive(ModuleInfo)]
-pub struct AttesterIncentives<
-    C: sov_modules_api::Context,
-    Vm: Zkvm,
-    P: BorshSerialize,
-    Cond: ValidityCondition,
-> {
+pub struct AttesterIncentives<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition> {
     /// Address of the module.
     #[address]
     pub address: C::Address,
@@ -141,11 +135,13 @@ pub struct AttesterIncentives<
     pub(crate) chain_state: sov_chain_state::ChainState<C, Cond>,
 }
 
-impl<C, Vm: Zkvm, S, P> sov_modules_api::Module for AttesterIncentives<C, Vm, P>
+impl<C, Vm, S, P, Cond> sov_modules_api::Module for AttesterIncentives<C, Vm, Cond>
 where
     C: sov_modules_api::Context<Storage = S>,
+    Vm: Zkvm,
     S: Storage<Proof = P>,
     P: BorshDeserialize + BorshSerialize,
+    Cond: ValidityCondition,
 {
     type Context = C;
 

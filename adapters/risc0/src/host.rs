@@ -7,6 +7,7 @@ use risc0_zkvm::serde::to_vec;
 use risc0_zkvm::sha::Impl;
 use risc0_zkvm::{Prover, Receipt};
 use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
+use sov_rollup_interface::AddressTrait;
 
 use crate::Risc0MethodId;
 
@@ -49,10 +50,14 @@ impl<'prover> Zkvm for Risc0Host<'prover> {
         verify_from_slice(serialized_proof, code_commitment)
     }
 
-    fn verify_and_extract_output<'a, C: sov_rollup_interface::zk::ValidityCondition>(
+    fn verify_and_extract_output<
+        'a,
+        C: sov_rollup_interface::zk::ValidityCondition,
+        Add: AddressTrait,
+    >(
         serialized_proof: &'a [u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<C>, Self::Error> {
+    ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
         todo!()
     }
 }
@@ -71,10 +76,14 @@ impl Zkvm for Risc0Verifier {
         verify_from_slice(serialized_proof, code_commitment)
     }
 
-    fn verify_and_extract_output<'a, C: sov_rollup_interface::zk::ValidityCondition>(
+    fn verify_and_extract_output<
+        'a,
+        C: sov_rollup_interface::zk::ValidityCondition,
+        Add: AddressTrait,
+    >(
         serialized_proof: &'a [u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<C>, Self::Error> {
+    ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
         todo!()
     }
 }
