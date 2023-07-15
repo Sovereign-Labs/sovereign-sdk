@@ -184,8 +184,8 @@ where
             call::CallMessage::ProcessAttestation(attestation) => {
                 self.process_attestation(attestation, context, working_set)
             }
-            call::CallMessage::ProcessChallenge(proof, attestation) => {
-                self.process_challenge(&proof, attestation, context, working_set)
+            call::CallMessage::ProcessChallenge(proof, initial_hash) => {
+                self.process_challenge(&proof, initial_hash, context, working_set)
             }
         }
         .map_err(|e| e.into())

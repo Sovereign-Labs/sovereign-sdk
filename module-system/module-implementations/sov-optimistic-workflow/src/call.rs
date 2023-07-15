@@ -25,10 +25,7 @@ pub enum CallMessage<C: Context> {
     BondChallenger(u64),
     UnbondChallenger,
     ProcessAttestation(Attestation<StorageProof<<<C as Spec>::Storage as Storage>::Proof>>),
-    ProcessChallenge(
-        Vec<u8>,
-        Attestation<StorageProof<<<C as Spec>::Storage as Storage>::Proof>>,
-    ),
+    ProcessChallenge(Vec<u8>, [u8; 32]),
 }
 
 /// Error raised while processessing the attester incentives
@@ -85,6 +82,22 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
     ) -> Result<sov_modules_api::CallResponse> {
         self.slash_attester_helper(attester, working_set);
         Err(AttesterIncentiveErrors::AttesterSlashed)
+    }
+
+    fn reward_sender(&mut self, amount: u64, context: &C) -> Result<CallResponse> {
+        let coins = Coins {
+            token_address: self
+                .bonding_token_address
+                .get(working_set)
+                .expect("Bonding token address must be set"),
+            amount,
+        };
+        // Try to unbond the entire balance
+        // If the unbonding fails, no state is changed
+        self.bank
+            .transfer_from(&self.address, context.sender(), coins, working_set)?;
+
+        Ok(CallResponse::default())
     }
 
     /// A helper function that is used to slash an attester, and put the associated attestation in the slashed pool
@@ -186,17 +199,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
         if let Some(old_balance) = bonded_set.get(context.sender(), working_set) {
             // Transfer the bond amount from the sender to the module's address.
             // On failure, no state is changed
-            let coins = Coins {
-                token_address: self
-                    .bonding_token_address
-                    .get(working_set)
-                    .expect("Bonding token address must be set"),
-                amount: old_balance,
-            };
-            // Try to unbond the entire balance
-            // If the unbonding fails, no state is changed
-            self.bank
-                .transfer_from(&self.address, context.sender(), coins, working_set)?;
+            self.reward_sender(old_balance, context)?;
 
             // Update our internal tracking of the total bonded amount for the sender.
             bonded_set.remove(context.sender(), working_set);
@@ -209,27 +212,6 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
         }
 
         Ok(CallResponse::default())
-    }
-
-    fn check_current_bond_against_min_bond(
-        &self,
-        context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<()> {
-        // We have to check that the current bond is still greater than the minimum bond
-        let current_bond = self.bonded_attesters.get(context.sender(), working_set);
-
-        ensure!(current_bond.is_some(), "Attester is not currently bonded");
-
-        let current_bond = current_bond.unwrap();
-
-        let min_bond = self.minimum_attester_bond.get(working_set).unwrap_or(0);
-
-        ensure!(
-            current_bond >= min_bond,
-            "The current bond is not high enough"
-        );
-        Ok(())
     }
 
     fn check_bonding_proof(
@@ -332,7 +314,25 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
         // We first need to check the bonding proof (because we can't slash the attester if he's not bonded)
         self.check_bonding_proof(attestation, context, working_set)?;
 
-        // We suppose that the maximum attested height is defined, otherwise we panic
+        // We suppose that these values are always defined, otherwise we panic
+        let old_max_attested_height = self.maximum_attested_height.get_or_err(working_set)?;
+        let current_finalized_height =
+            self.light_client_finalized_height.get_or_err(working_set)?;
+        let finality = self.rollup_finality_period.get_or_err(working_set)?;
+        let minimum_bond = self.minimum_attester_bond.get_or_err(working_set)?;
+
+        // Update the max_attested_height in case the blocks have already been finalized
+        self.maximum_attested_height.set(
+            max(old_max_attested_height, {
+                if current_finalized_height > finality {
+                    current_finalized_height - finality
+                } else {
+                    0
+                }
+            }),
+            working_set,
+        );
+
         let max_attested_height = self.maximum_attested_height.get(working_set).unwrap();
 
         // First compare the initial hashes
@@ -341,40 +341,19 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
         // Then compare the transition
         self.check_transition(max_attested_height)?;
 
-        // Check that the current height is less than initial height + time to finalize
-        // If not, slash the attester: he's trying to attest a block that is too far away in time
+        working_set.add_event(
+            "processed_valid_attestation",
+            &format!("attester: {:?}", context.sender()),
+        );
 
-        // Check that the initial root hash is valid against the chain state
+        // Reward the sender
+        self.reward_sender(
+            self.minimum_attester_bond.get(working_set).unwrap(),
+            context,
+        )?;
 
-        // We have to check that the current bond is still greater than the minimum bond
-        self.check_current_bond_against_min_bond(context, working_set)?;
-
-        // We have to check that this attester is currently not unbonding:
-        // if so we have to slash it
-        if !self
-            .unbonding_attesters
-            .get(context.sender(), working_set)
-            .is_none()
-        {
-            // The attester is in the unbonding phase, we have to slash him
-            working_set.add_event(
-                "attester_slashed",
-                &format!("slashed_attester: {:?}", context.sender()),
-            );
-            // TODO: Should we set it to 0? or should we only remove the minimal bond?
-            self.bonded_attesters.set(context.sender(), &0, working_set);
-
-            Err(AttesterIncentiveErrors::AttesterSlashed.into())
-        } else {
-            working_set.add_event(
-                "processed_valid_attestation",
-                &format!("attester: {:?}", context.sender()),
-            );
-
-            // Then we can optimistically process the transaction
-            // TODO: How do we put the attestation on the DA layer?
-            Ok(CallResponse::default())
-        }
+        // Then we can optimistically process the transaction
+        Ok(CallResponse::default())
     }
 
     fn check_challenge_outputs_against_attestation<Cond>(
@@ -399,7 +378,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
     pub(crate) fn process_challenge<Cond: ValidityCondition>(
         &self,
         proof: &[u8],
-        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        initial_hash: [u8; 32],
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
