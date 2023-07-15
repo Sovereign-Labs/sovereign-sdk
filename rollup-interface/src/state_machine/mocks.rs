@@ -12,7 +12,7 @@ use sha2::Digest;
 
 use crate::da::{BlobTransactionTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
 use crate::services::da::SlotData;
-use crate::zk::{Matches, ValidityCondition, Zkvm};
+use crate::zk::{Matches, ValidityCondition, ValidityConditionChecker, Zkvm};
 use crate::AddressTrait;
 
 /// A mock commitment to a particular zkVM program.
@@ -152,7 +152,7 @@ impl AddressTrait for MockAddress {}
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone, Copy)]
 /// A mock validity condition that always evaluate to true
 pub struct MockValidityCond {
-    phantom: PhantomData<bool>,
+    phantom: PhantomData<u8>,
 }
 
 impl ValidityCondition for MockValidityCond {
@@ -160,6 +160,20 @@ impl ValidityCondition for MockValidityCond {
 
     fn combine<H: jmt::SimpleHasher>(&self, _rhs: Self) -> Result<Self, Self::Error> {
         Ok(*self)
+    }
+}
+
+#[derive(Debug, BorshDeserialize, BorshSerialize)]
+/// A mock validity condition checker that always evaluate to true
+pub struct MockValidityCondChecker<MockValidityCond> {
+    phantom: PhantomData<MockValidityCond>,
+}
+
+impl ValidityConditionChecker<MockValidityCond> for MockValidityCondChecker<MockValidityCond> {
+    type Error = Error;
+
+    fn check(&mut self, _condition: &MockValidityCond) -> Result<(), Self::Error> {
+        Ok(())
     }
 }
 
