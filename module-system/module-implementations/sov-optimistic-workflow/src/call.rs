@@ -9,7 +9,6 @@ use sov_chain_state::StateTransitionId;
 use sov_modules_api::{CallResponse, Context, Spec};
 use sov_rollup_interface::optimistic::Attestation;
 use sov_rollup_interface::zk::{StateTransition, ValidityCondition, Zkvm};
-use sov_rollup_interface::AddressTrait;
 use sov_state::storage::StorageProof;
 use sov_state::{StateMap, Storage, WorkingSet};
 use thiserror::Error;
@@ -56,7 +55,7 @@ pub(crate) enum Role {
     Challenger,
 }
 
-impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition, Add: AddressTrait>
+impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition>
     AttesterIncentives<C, Vm, Cond>
 {
     /// A helper function that simply slashes an attester and returns a reward value
@@ -392,7 +391,7 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition, Add: Addres
 
     fn check_challenge_outputs_against_attestation(
         self,
-        public_outputs: StateTransition<Cond, Add>,
+        public_outputs: StateTransition<Cond, C::Address>,
         initial_hash: [u8; 32],
     ) -> Result<()> {
         ensure!(
@@ -432,18 +431,15 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, Cond: ValidityCondition, Add: Addres
             .bad_transition_pool
             .get_or_err(&initial_hash, working_set)?;
 
-        let public_outputs_opt: Result<StateTransition<Cond, Add>> =
-            Vm::verify_and_extract_output::<Cond, Add>(proof, &code_commitment)
+        let public_outputs_opt: Result<StateTransition<Cond, C::Address>> =
+            Vm::verify_and_extract_output::<Cond, C::Address>(proof, &code_commitment)
                 .map_err(|e| anyhow::format_err!("{:?}", e));
 
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
         match public_outputs_opt {
             Ok(public_output) => {
                 // We have to perform the checks to ensure that the challenge is valid while the attestation isn't.
-                self.check_challenge_outputs_against_attestation::<Add>(
-                    public_output,
-                    initial_hash,
-                );
+                self.check_challenge_outputs_against_attestation(public_output, initial_hash);
 
                 // Reward the challenger with half of the attestation reward (avoid DOS)
                 self.reward_sender(attestation_reward / 2, context, working_set);

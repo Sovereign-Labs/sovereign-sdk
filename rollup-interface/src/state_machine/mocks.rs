@@ -2,6 +2,7 @@
 //! for testing, fuzzing, and benchmarking.
 use std::fmt::Display;
 use std::io::Write;
+use std::marker::PhantomData;
 
 use anyhow::{ensure, Error};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -11,7 +12,7 @@ use sha2::Digest;
 
 use crate::da::{BlobTransactionTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
 use crate::services::da::SlotData;
-use crate::zk::{Matches, Zkvm};
+use crate::zk::{Matches, ValidityCondition, Zkvm};
 use crate::AddressTrait;
 
 /// A mock commitment to a particular zkVM program.
@@ -147,6 +148,20 @@ impl Display for MockAddress {
 }
 
 impl AddressTrait for MockAddress {}
+
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Copy)]
+/// A mock validity condition that always evaluate to true
+pub struct MockValidityCond {
+    phantom: PhantomData<bool>,
+}
+
+impl ValidityCondition for MockValidityCond {
+    type Error = Error;
+
+    fn combine<H: jmt::SimpleHasher>(&self, _rhs: Self) -> Result<Self, Self::Error> {
+        Ok(*self)
+    }
+}
 
 #[derive(
     Debug,

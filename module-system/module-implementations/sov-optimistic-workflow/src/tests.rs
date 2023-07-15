@@ -1,8 +1,9 @@
 use borsh::BorshSerialize;
 use jmt::proof::SparseMerkleProof;
+use jmt::{JellyfishMerkleTree, Sha256Jmt};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Hasher, Module, Spec};
-use sov_rollup_interface::mocks::{MockCodeCommitment, MockProof, MockZkvm};
+use sov_rollup_interface::mocks::{MockCodeCommitment, MockProof, MockValidityCond, MockZkvm};
 use sov_rollup_interface::optimistic::Attestation;
 use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::{ProverStorage, WorkingSet};
@@ -35,7 +36,7 @@ fn create_bank_config() -> (sov_bank::BankConfig<C>, <C as Spec>::Address) {
     )
 }
 
-fn setup<P: BorshSerialize, Cond: ValidityCondition>(
+fn setup<Cond: ValidityCondition>(
     working_set: &mut WorkingSet<<C as Spec>::Storage>,
 ) -> (AttesterIncentives<C, MockZkvm, Cond>, Address) {
     // Initialize bank
@@ -51,7 +52,7 @@ fn setup<P: BorshSerialize, Cond: ValidityCondition>(
     );
 
     // initialize prover incentives
-    let module = AttesterIncentives::<C, MockZkvm, P>::default();
+    let module = AttesterIncentives::<C, MockZkvm, Cond>::default();
     let config = crate::AttesterIncentivesConfig {
         bonding_token_address: token_address,
         minimum_attester_bond: BOND_AMOUNT,
@@ -70,7 +71,7 @@ fn setup<P: BorshSerialize, Cond: ValidityCondition>(
 fn test_burn_on_invalid_proof() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, prover_address) = setup(&mut working_set);
+    let (module, prover_address) = setup::<MockValidityCond>(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
     assert_eq!(
@@ -99,8 +100,8 @@ fn test_burn_on_invalid_proof() {
         module
             .process_challenge(
                 proof.encode_to_vec().as_ref(),
+                attestation.initial_state_root,
                 &context,
-                &attestation,
                 &mut working_set,
             )
             .expect("An invalid proof is not an error");
@@ -119,7 +120,7 @@ fn test_burn_on_invalid_proof() {
 fn test_valid_proof() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, prover_address) = setup(&mut working_set);
+    let (module, prover_address) = setup::<MockValidityCond>(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
     assert_eq!(
@@ -148,7 +149,7 @@ fn test_valid_proof() {
         module
             .process_challenge(
                 proof.encode_to_vec().as_ref(),
-                attestation,
+                attestation.initial_state_root,
                 &context,
                 &mut working_set,
             )
@@ -168,7 +169,7 @@ fn test_valid_proof() {
 fn test_unbonding() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, prover_address) = setup(&mut working_set);
+    let (module, prover_address) = setup::<MockValidityCond>(&mut working_set);
     let context = DefaultContext {
         sender: prover_address.clone(),
     };
@@ -225,7 +226,7 @@ fn test_unbonding() {
 fn test_prover_not_bonded() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, prover_address) = setup(&mut working_set);
+    let (module, prover_address) = setup::<MockValidityCond>(&mut working_set);
     let context = DefaultContext {
         sender: prover_address.clone(),
     };
@@ -260,7 +261,7 @@ fn test_prover_not_bonded() {
         assert!(module
             .process_challenge(
                 proof.encode_to_vec().as_ref(),
-                attestation,
+                attestation.initial_state_root,
                 &context,
                 &mut working_set
             )

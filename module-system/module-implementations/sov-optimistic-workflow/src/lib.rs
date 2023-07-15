@@ -101,9 +101,6 @@ pub struct AttesterIncentives<C: sov_modules_api::Context, Vm: Zkvm, Cond: Valid
     #[state]
     pub maximum_attested_height: sov_state::StateValue<u64>,
 
-    /// TODO: if an attester has an attestation with a valid initial root but invalid post root
-    /// we slash them and keep the bond so that people can challenge them
-
     /// Challengers now challenge a transition and not a specific attestation
     /// Mapping from an initial root hash to the associated reward value.
     /// This mapping is populated when the attestations are processed by the rollup
