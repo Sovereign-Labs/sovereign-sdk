@@ -397,13 +397,10 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
             .get_or_err(working_set)?
             .commitment;
 
-        // Lock the challenger's bond amount.
-        self.bonded_challengers
-            .set(context.sender(), &(old_balance - minimum_bond), working_set);
-
-        // Find the attestation and the associated attester
-        let faulty_attester: <C as Spec>::Address =
-            self.attestations.get(&attestation, working_set).ok_or()?;
+        // Find the faulty attestation pool and get the associated reward
+        let attestation_reward: u64 = self
+            .bad_transition_pool
+            .get_or_err(&initial_hash, working_set)?;
 
         let public_outputs_opt: Result<StateTransition<Cond>> =
             Vm::verify_and_extract_output::<Cond>(proof, &code_commitment)
@@ -412,19 +409,14 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
         match public_outputs_opt {
             Ok(public_output) => {
-                // TODO: decide what the proof output is and do something with it
-                //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/272
-
                 // We have to perform the checks to ensure that the challenge is valid while the attestation isn't.
                 self.check_challenge_outputs_against_attestation::<Cond>(
                     public_output,
                     attestation,
                 );
 
-                // Unlock the challenger bond, then reward the challenger with the tokens from the
-                // faulty attester
-                self.bonded_challengers
-                    .set(context.sender(), &old_balance, working_set);
+                // Reward the challenger with half of the attestation reward (avoid DOS)
+                self.reward_sender(attestation_reward / 2, context);
 
                 working_set.add_event(
                     "processed_valid_proof",
@@ -432,6 +424,10 @@ impl<C: sov_modules_api::Context, Vm: Zkvm, P: BorshSerialize> AttesterIncentive
                 );
             }
             Err(err) => {
+                // Slash the challenger
+                self.bonded_challengers
+                    .remove(context.sender(), working_set);
+
                 working_set.add_event(
                     "processed_invalid_proof",
                     &format!("challenger: {:?}", context.sender()),
