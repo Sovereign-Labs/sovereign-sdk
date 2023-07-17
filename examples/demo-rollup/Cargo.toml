@@ -10,6 +10,7 @@ resolver = "2"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = { workspace = true }
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["bytes"] }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }

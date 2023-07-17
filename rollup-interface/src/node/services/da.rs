@@ -1,7 +1,7 @@
 //! The da module defines traits used by the full node to interact with the DA layer.
 use std::fmt;
-use std::future::Future;
 
+use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -12,6 +12,7 @@ use crate::da::{BlockHeaderTrait, DaSpec};
 ///
 /// The DaService has two responsibilities - fetching data from the DA layer, transforming the
 /// data into a representation that can be efficiently verified in circuit.
+#[async_trait]
 pub trait DaService {
     /// A handle to the types used by the DA layer.
     type RuntimeConfig: DeserializeOwned;
@@ -22,23 +23,23 @@ pub trait DaService {
     /// A DA layer block, possibly excluding some irrelevant information.
     type FilteredBlock: SlotData<BlockHeader = <Self::Spec as DaSpec>::BlockHeader>;
 
-    /// The output of an async call. Used in place of a dependency on async_trait.
-    type Future<T>: Future<Output = Result<T, Self::Error>> + Send;
-
     /// The error type for fallible methods.
     type Error: fmt::Debug + Send + Sync;
 
     /// Create a new instance of the DaService
-    fn new(config: Self::RuntimeConfig, chain_params: <Self::Spec as DaSpec>::ChainParams) -> Self;
+    async fn new(
+        config: Self::RuntimeConfig,
+        chain_params: <Self::Spec as DaSpec>::ChainParams,
+    ) -> Self;
 
     /// Retrieve the data for the given height, waiting for it to be
     /// finalized if necessary. The block, once returned, must not be reverted
     /// without a consensus violation.
-    fn get_finalized_at(&self, height: u64) -> Self::Future<Self::FilteredBlock>;
+    async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error>;
 
     /// Fetch the block at the given height, waiting for one to be mined if necessary.
     /// The returned block may not be final, and can be reverted without a consensus violation
-    fn get_block_at(&self, height: u64) -> Self::Future<Self::FilteredBlock>;
+    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error>;
 
     /// Extract the relevant transactions from a block. For example, this method might return
     /// all of the blob transactions in rollup's namespace on Celestia.
@@ -82,7 +83,7 @@ pub trait DaService {
     /// Send a transaction directly to the DA layer.
     /// blob is the serialized and signed transaction.
     /// Returns nothing if the transaction was successfully sent.
-    fn send_transaction(&self, blob: &[u8]) -> Self::Future<()>;
+    async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error>;
 }
 
 /// `SlotData` is the subset of a DA layer block which is stored in the rollup's database.

@@ -1,7 +1,6 @@
 use std::env;
-use std::future::Future;
-use std::pin::Pin;
 
+use async_trait::async_trait;
 use borsh::ser::BorshSerialize;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::runtime::Runtime;
@@ -97,21 +96,21 @@ impl DaSpec for RngDaSpec {
     type ChainParams = ();
 }
 
+#[async_trait]
 impl DaService for RngDaService {
     type RuntimeConfig = ();
     type Spec = RngDaSpec;
     type FilteredBlock = TestBlock;
-    type Future<T> = Pin<Box<dyn Future<Output = Result<T, Self::Error>> + Send>>;
     type Error = anyhow::Error;
 
-    fn new(
+    async fn new(
         _config: Self::RuntimeConfig,
         _chain_params: <Self::Spec as DaSpec>::ChainParams,
     ) -> Self {
         RngDaService::new()
     }
 
-    fn get_finalized_at(&self, height: u64) -> Self::Future<Self::FilteredBlock> {
+    async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let num_bytes = height.to_le_bytes();
         let mut barray = [0u8; 32];
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
@@ -124,10 +123,10 @@ impl DaService for RngDaService {
             height,
         };
 
-        Box::pin(async move { Ok(block) })
+        Ok(block)
     }
 
-    fn get_block_at(&self, _height: u64) -> Self::Future<Self::FilteredBlock> {
+    async fn get_block_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         unimplemented!()
     }
 
@@ -167,7 +166,7 @@ impl DaService for RngDaService {
         unimplemented!()
     }
 
-    fn send_transaction(&self, _blob: &[u8]) -> Self::Future<()> {
+    async fn send_transaction(&self, _blob: &[u8]) -> Result<(), Self::Error> {
         unimplemented!()
     }
 }
