@@ -105,8 +105,6 @@ pub enum SubmitTransactionResponse {
 
 #[cfg(test)]
 mod tests {
-    use std::future::Future;
-    use std::pin::Pin;
     use std::sync::Arc;
 
     use anyhow::bail;
@@ -141,7 +139,6 @@ mod tests {
         type RuntimeConfig = ();
         type Spec = MockDaSpec;
         type FilteredBlock = TestBlock;
-        type Future<T> = Pin<Box<dyn Future<Output = Result<T, Self::Error>> + Send>>;
         type Error = anyhow::Error;
 
         fn new(
@@ -177,9 +174,9 @@ mod tests {
             todo!()
         }
 
-        fn send_transaction(&self, blob: &[u8]) -> Self::Future<()> {
+        async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
             self.submitted.lock().unwrap().push(blob.to_vec());
-            Box::pin(async move { Ok(()) })
+            Ok(())
         }
     }
 

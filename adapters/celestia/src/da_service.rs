@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use std::future::Future;
-use std::pin::Pin;
 use std::str::FromStr;
 
 use async_trait::async_trait;
@@ -121,8 +119,6 @@ impl DaService for CelestiaService {
     type Spec = CelestiaSpec;
 
     type FilteredBlock = FilteredCelestiaBlock;
-
-    type Future<T> = Pin<Box<dyn Future<Output = Result<T, Self::Error>> + Send>>;
 
     type Error = BoxError;
 
@@ -259,7 +255,7 @@ impl DaService for CelestiaService {
         (etx_proofs.0, rollup_row_proofs.0)
     }
 
-    fn send_transaction(&self, blob: &[u8]) -> <Self as DaService>::Future<()> {
+    async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
         // https://node-rpc-docs.celestia.org/
         let client = self.client.clone();
         info!("Sending {} bytes of raw data to Celestia.", blob.len());
@@ -269,26 +265,24 @@ impl DaService for CelestiaService {
         // We factor extra share to be occupied for namespace, which is pessimistic
         let gas_limit = get_gas_limit_for_bytes(blob.len());
 
-        Box::pin(async move {
-            let mut params = ArrayParams::new();
-            params.insert(namespace)?;
-            params.insert(blob)?;
-            params.insert(fee.to_string())?;
-            params.insert(gas_limit)?;
-            // Note, we only deserialize what we can use, other fields might be left over
-            let response = client
-                .request::<CelestiaBasicResponse, _>("state.SubmitPayForBlob", params)
-                .await?;
-            if !response.is_success() {
-                anyhow::bail!("Error returned from Celestia node: {:?}", response);
-            }
-            debug!("Response after submitting blob: {:?}", response);
-            info!(
-                "Blob has been submitted to Celestia. tx-hash={}",
-                response.tx_hash,
-            );
-            Ok::<(), BoxError>(())
-        })
+        let mut params = ArrayParams::new();
+        params.insert(namespace)?;
+        params.insert(blob)?;
+        params.insert(fee.to_string())?;
+        params.insert(gas_limit)?;
+        // Note, we only deserialize what we can use, other fields might be left over
+        let response = client
+            .request::<CelestiaBasicResponse, _>("state.SubmitPayForBlob", params)
+            .await?;
+        if !response.is_success() {
+            anyhow::bail!("Error returned from Celestia node: {:?}", response);
+        }
+        debug!("Response after submitting blob: {:?}", response);
+        info!(
+            "Blob has been submitted to Celestia. tx-hash={}",
+            response.tx_hash,
+        );
+        Ok::<(), BoxError>(())
     }
 }
 

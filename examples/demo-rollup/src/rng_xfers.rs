@@ -1,6 +1,4 @@
 use std::env;
-use std::future::Future;
-use std::pin::Pin;
 
 use async_trait::async_trait;
 use borsh::ser::BorshSerialize;
@@ -103,7 +101,6 @@ impl DaService for RngDaService {
     type RuntimeConfig = ();
     type Spec = RngDaSpec;
     type FilteredBlock = TestBlock;
-    type Future<T> = Pin<Box<dyn Future<Output = Result<T, Self::Error>> + Send>>;
     type Error = anyhow::Error;
 
     fn new(
@@ -169,7 +166,7 @@ impl DaService for RngDaService {
         unimplemented!()
     }
 
-    fn send_transaction(&self, _blob: &[u8]) -> Self::Future<()> {
+    async fn send_transaction(&self, _blob: &[u8]) -> Result<(), Self::Error> {
         unimplemented!()
     }
 }

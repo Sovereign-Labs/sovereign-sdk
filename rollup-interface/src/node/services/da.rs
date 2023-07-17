@@ -1,6 +1,5 @@
 //! The da module defines traits used by the full node to interact with the DA layer.
 use std::fmt;
-use std::future::Future;
 
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
@@ -23,9 +22,6 @@ pub trait DaService {
 
     /// A DA layer block, possibly excluding some irrelevant information.
     type FilteredBlock: SlotData<BlockHeader = <Self::Spec as DaSpec>::BlockHeader>;
-
-    /// The output of an async call. Used in place of a dependency on async_trait.
-    type Future<T>: Future<Output = Result<T, Self::Error>> + Send;
 
     /// The error type for fallible methods.
     type Error: fmt::Debug + Send + Sync;
@@ -84,7 +80,7 @@ pub trait DaService {
     /// Send a transaction directly to the DA layer.
     /// blob is the serialized and signed transaction.
     /// Returns nothing if the transaction was successfully sent.
-    fn send_transaction(&self, blob: &[u8]) -> Self::Future<()>;
+    async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error>;
 }
 
 /// `SlotData` is the subset of a DA layer block which is stored in the rollup's database.
