@@ -74,6 +74,6 @@ jsonrpsee = "0.16.2"
 tempfile = "3.5"
 tokio = { version = "1", features = ["full"] }
 
-ethers = { git = "https://github.com/gakonst/ethers-rs", default-features = false }
+ethers = { git = "https://github.com/gakonst/ethers-rs", default-features = false, version = "2.0.7" }
 anvil  = { git = "https://github.com/foundry-rs/foundry", rev = "7170f7223a0fd2c6980d1c36d359e38b580d3e02" }
 anvil-core = { git = "https://github.com/foundry-rs/foundry", features = ["fastrlp", "serde"], rev = "7170f7223a0fd2c6980d1c36d359e38b580d3e02" }
