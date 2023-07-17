@@ -53,7 +53,6 @@ prettytable-rs = "^0.10"
 criterion = "0.5.1"
 
 [features]
-default = []
 experimental = ["sov-ethereum/experimental"]
 
 [[bench]]
