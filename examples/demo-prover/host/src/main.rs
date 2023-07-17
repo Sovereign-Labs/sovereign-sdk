@@ -50,7 +50,8 @@ async fn main() -> Result<(), anyhow::Error> {
         RollupParams {
             namespace: ROLLUP_NAMESPACE,
         },
-    ).await;
+    )
+    .await;
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
