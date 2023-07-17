@@ -2,6 +2,7 @@
 use std::fmt;
 use std::future::Future;
 
+use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
@@ -12,6 +13,7 @@ use crate::da::{BlockHeaderTrait, DaSpec};
 ///
 /// The DaService has two responsibilities - fetching data from the DA layer, transforming the
 /// data into a representation that can be efficiently verified in circuit.
+#[async_trait]
 pub trait DaService {
     /// A handle to the types used by the DA layer.
     type RuntimeConfig: DeserializeOwned;
@@ -34,11 +36,11 @@ pub trait DaService {
     /// Retrieve the data for the given height, waiting for it to be
     /// finalized if necessary. The block, once returned, must not be reverted
     /// without a consensus violation.
-    fn get_finalized_at(&self, height: u64) -> Self::Future<Self::FilteredBlock>;
+    async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error>;
 
     /// Fetch the block at the given height, waiting for one to be mined if necessary.
     /// The returned block may not be final, and can be reverted without a consensus violation
-    fn get_block_at(&self, height: u64) -> Self::Future<Self::FilteredBlock>;
+    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error>;
 
     /// Extract the relevant transactions from a block. For example, this method might return
     /// all of the blob transactions in rollup's namespace on Celestia.
