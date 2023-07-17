@@ -81,6 +81,7 @@ ethers-providers = { git = "https://github.com/gakonst/ethers-rs", default-featu
 ethers-signers = { git = "https://github.com/gakonst/ethers-rs", default-features = false, version = "2.0.7" }
 ethers-middleware = { git = "https://github.com/gakonst/ethers-rs", default-features = false, version = "2.0.7" }
 
+# todo https://github.com/Sovereign-Labs/sovereign-sdk/issues/498
 anvil  = { git = "https://github.com/bkolad/foundry", rev = "62c83ec085f2b74b17ee92ba92b7dd4aeee38726" }
 anvil-core = { git = "https://github.com/bkolad/foundry", features = ["fastrlp", "serde"], rev = "62c83ec085f2b74b17ee92ba92b7dd4aeee38726" }
 
