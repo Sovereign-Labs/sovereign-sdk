@@ -15,7 +15,7 @@ pub enum ApplyBlobResult {
     Success,
 }
 
-impl<VM: Zkvm> StateTransitionFunction<VM> for CheckHashPreimageStf {
+impl<Vm: Zkvm, B: BlobTransactionTrait> StateTransitionFunction<Vm, B> for CheckHashPreimageStf {
     // Since our rollup is stateless, we don't need to consider the StateRoot.
     type StateRoot = ();
 
@@ -49,7 +49,7 @@ impl<VM: Zkvm> StateTransitionFunction<VM> for CheckHashPreimageStf {
     // The core logic of our rollup.
     fn apply_blob(
         &mut self,
-        blob: &mut impl BlobTransactionTrait,
+        blob: &mut B,
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
         let blob_data = blob.data_mut();

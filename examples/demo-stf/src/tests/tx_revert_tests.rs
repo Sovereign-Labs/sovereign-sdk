@@ -15,7 +15,7 @@ use super::data_generation::{simulate_da_with_bad_sig, simulate_da_with_revert_m
 use crate::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
 use crate::runtime::Runtime;
 use crate::tests::data_generation::simulate_da_with_bad_serialization;
-use crate::tests::{has_tx_events, new_test_blob};
+use crate::tests::{has_tx_events, new_test_blob, TestBlob};
 
 const SEQUENCER_BALANCE_DELTA: u64 = 1;
 const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + SEQUENCER_BALANCE_DELTA;
@@ -37,12 +37,12 @@ fn test_tx_revert() {
     {
         let mut demo = create_new_demo(path);
 
-        StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
-        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
+        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
+        StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(&mut demo, Default::default());
 
         let txs = simulate_da_with_revert_msg(election_admin_private_key);
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_blob_outcome = StateTransitionFunction::<MockZkvm, TestBlob>::apply_blob(
             &mut demo,
             &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
@@ -57,7 +57,7 @@ fn test_tx_revert() {
         // Some events were observed
         assert!(has_tx_events(&apply_blob_outcome), "No events were taken");
 
-        StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
+        StateTransitionFunction::<MockZkvm, TestBlob>::end_slot(&mut demo);
     }
 
     // Checks
@@ -108,8 +108,8 @@ fn test_nonce_incremented_on_revert() {
 
     {
         let mut demo = create_new_demo(path);
-        StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
-        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
+        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
+        StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(&mut demo, Default::default());
 
         let set_candidates_message = Runtime::<DefaultContext>::encode_election_call(
             sov_election::call::CallMessage::SetCandidates {
@@ -147,7 +147,7 @@ fn test_nonce_incremented_on_revert() {
             })
             .collect();
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_blob_outcome = StateTransitionFunction::<MockZkvm, TestBlob>::apply_blob(
             &mut demo,
             &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
@@ -158,7 +158,7 @@ fn test_nonce_incremented_on_revert() {
             apply_blob_outcome.inner,
             "Unexpected outcome: Batch execution should have succeeded",
         );
-        StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
+        StateTransitionFunction::<MockZkvm, TestBlob>::end_slot(&mut demo);
     }
 
     {
@@ -200,12 +200,12 @@ fn test_tx_bad_sig() {
     {
         let mut demo = create_new_demo(path);
 
-        StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
-        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
+        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
+        StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(&mut demo, Default::default());
 
         let txs = simulate_da_with_bad_sig(election_admin_private_key);
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_blob_outcome = StateTransitionFunction::<MockZkvm, TestBlob>::apply_blob(
             &mut demo,
             &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
@@ -223,7 +223,7 @@ fn test_tx_bad_sig() {
         // The batch receipt contains no events.
         assert!(!has_tx_events(&apply_blob_outcome));
 
-        StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
+        StateTransitionFunction::<MockZkvm, TestBlob>::end_slot(&mut demo);
     }
 
     {
@@ -256,10 +256,9 @@ fn test_tx_bad_serialization() {
         &election_admin_private_key,
     );
     let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address.clone();
-
     let sequencer_balance_before = {
         let mut demo = create_new_demo(path);
-        StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
+        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
         let mut working_set = WorkingSet::new(demo.current_storage);
         let coins = demo
             .runtime
@@ -279,11 +278,11 @@ fn test_tx_bad_serialization() {
 
     {
         let mut demo = create_new_demo(path);
-        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
+        StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(&mut demo, Default::default());
 
         let txs = simulate_da_with_bad_serialization(election_admin_private_key);
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_blob_outcome = StateTransitionFunction::<MockZkvm, TestBlob>::apply_blob(
             &mut demo,
             &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
@@ -300,7 +299,7 @@ fn test_tx_bad_serialization() {
 
         // The batch receipt contains no events.
         assert!(!has_tx_events(&apply_blob_outcome));
-        StateTransitionFunction::<MockZkvm>::end_slot(&mut demo);
+        StateTransitionFunction::<MockZkvm, TestBlob>::end_slot(&mut demo);
     }
 
     {

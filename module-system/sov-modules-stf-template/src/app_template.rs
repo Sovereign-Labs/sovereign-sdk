@@ -14,11 +14,12 @@ use crate::{Batch, SequencerOutcome, SlashingReason, TxEffect};
 
 type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
 
-pub struct AppTemplate<C: Context, RT, Vm> {
+pub struct AppTemplate<C: Context, RT, Vm, B> {
     pub current_storage: C::Storage,
     pub runtime: RT,
     pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
+    phantom_blob: PhantomData<B>,
 }
 
 pub(crate) enum ApplyBatchError {
@@ -56,7 +57,7 @@ impl From<ApplyBatchError> for BatchReceipt<SequencerOutcome, TxEffect> {
     }
 }
 
-impl<C: Context, RT, Vm> AppTemplate<C, RT, Vm>
+impl<C: Context, RT, Vm, B: BlobTransactionTrait> AppTemplate<C, RT, Vm, B>
 where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
@@ -69,12 +70,13 @@ where
             current_storage: storage,
             checkpoint: None,
             phantom_vm: PhantomData,
+            phantom_blob: PhantomData,
         }
     }
 
     pub(crate) fn apply_blob(
         &mut self,
-        blob: &mut impl BlobTransactionTrait,
+        blob: &mut B,
     ) -> ApplyBatchResult<BatchReceipt<SequencerOutcome, TxEffect>> {
         debug!(
             "Applying batch from sequencer: 0x{}",
