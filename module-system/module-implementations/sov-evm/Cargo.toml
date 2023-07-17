@@ -31,11 +31,11 @@ tracing = { workspace = true }
 
 # TODO: move these dependencies to the workspace when the EVM module is no longer in the experimental stage
 ethereum-types = "0.14.1"
-ethers-core = "2.0.7"
-ethers-contract = "2.0.7"
-ethers-middleware = { version = "2.0.7"}
-ethers-providers = { version = "2.0.7"}
-ethers-signers = { version = "2.0.7", default-features = false }
+ethers-core = { workspace = true }
+ethers-contract = { workspace = true }
+ethers-middleware = { workspace = true }
+ethers-providers = { workspace = true }
+ethers-signers = { workspace = true }
 
 anvil-core  = { workspace = true }
 ethers = { workspace = true }
