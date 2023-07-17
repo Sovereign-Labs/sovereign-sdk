@@ -205,7 +205,7 @@ fn test_unbonding() {
 
     // Unbond the prover
     module
-        .unbond_user_helper(&context, crate::call::Role::Challenger, &mut working_set)
+        .unbond_challenger(&context, &mut working_set)
         .expect("Unbonding should succeed");
 
     // Assert that the prover no longer has bonded tokens
@@ -239,7 +239,7 @@ fn test_prover_not_bonded() {
 
     // Unbond the prover
     module
-        .unbond_user_helper(&context, crate::call::Role::Challenger, &mut working_set)
+        .unbond_challenger(&context, &mut working_set)
         .expect("Unbonding should succeed");
 
     // Assert that the prover no longer has bonded tokens

@@ -26,7 +26,8 @@ where
     C: Context,
 {
     BondAttester(u64),
-    UnbondAttester,
+    BeginUnbondingAttester,
+    EndUnbondingAttester,
     BondChallenger(u64),
     UnbondChallenger,
     ProcessAttestation(Attestation<StorageProof<<<C as Spec>::Storage as Storage>::Proof>>),
@@ -176,57 +177,93 @@ impl<
     }
 
     /// Try to unbond the requested amount of coins with context.sender() as the beneficiary.
-    pub(crate) fn unbond_user_helper(
+    pub(crate) fn unbond_challenger(
         &self,
         context: &C,
-        role: Role,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
-        let bonded_set = match role {
-            Role::Challenger => &self.bonded_challengers,
-            Role::Attester => {
-                // We have to ensure that the last block attested occurred 24 hours ago
-                // to let the attester unbond
-                if let Some(last_attested_block) =
-                    self.last_attested_block.get(context.sender(), working_set)
-                {
-                    // These two constants should always be set beforehand, hence we can panic if they're not set
-                    let curr_height = self.light_client_finalized_height.get(working_set).unwrap();
-                    let finality_period = self.rollup_finality_period.get(working_set).unwrap();
-
-                    ensure!(
-                        last_attested_block + finality_period < curr_height,
-                        "Cannot unbond the attester: finality has not completed yet"
-                    );
-
-                    &self.bonded_attesters
-                } else {
-                    return Ok(CallResponse::default());
-                }
-            }
-        };
-
         // Get the user's old balance.
-        if let Some(old_balance) = bonded_set.get(context.sender(), working_set) {
+        if let Some(old_balance) = self.bonded_challengers.get(context.sender(), working_set) {
             // Transfer the bond amount from the sender to the module's address.
             // On failure, no state is changed
             self.reward_sender(old_balance, context, working_set)?;
 
-            // Borrow once again, since the previous operation was mutable
-            let bonded_set = if role == Role::Attester {
-                &self.bonded_attesters
-            } else {
-                &self.bonded_challengers
-            };
-
             // Update our internal tracking of the total bonded amount for the sender.
-            bonded_set.remove(context.sender(), working_set);
+            self.bonded_challengers
+                .remove(context.sender(), working_set);
 
             // Emit the unbonding event
             working_set.add_event(
-                "unbonded_user",
-                &format!("role: {role:?}, amount_withdrawn: {old_balance:?}"),
+                "unbonded_challenger",
+                &format!("amount_withdrawn: {old_balance:?}"),
             );
+        }
+
+        Ok(CallResponse::default())
+    }
+
+    /// The attester starts the first phase of the two phase unbonding. We put the current max
+    /// finalized height with the attester address in the set of unbonding attesters iff the attester
+    /// is already present in the unbonding set
+    pub(crate) fn begin_unbond_attester(
+        &self,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<sov_modules_api::CallResponse> {
+        // First get the bonded attester
+        ensure!(
+            self.bonded_attesters
+                .get_or_err(context.sender(), working_set)
+                .is_ok(),
+            "Error, the sender is not an existing attester"
+        );
+
+        // Then add the bonded attester to the unbonding set, with the current finalized height
+        let finalized_height = self.light_client_finalized_height.get_or_err(working_set)?;
+        self.unbonding_attesters
+            .set(context.sender(), &finalized_height, working_set);
+
+        Ok(CallResponse::default())
+    }
+
+    pub(crate) fn end_unbond_attester(
+        &self,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<sov_modules_api::CallResponse> {
+        // We have to ensure that the attester is unbonding, and that the unbonding transaction
+        // occurred at least `finality_period` blocks ago to let the attester unbond
+        if let Ok(begin_unbond_height) = self
+            .unbonding_attesters
+            .get_or_err(context.sender(), working_set)
+        {
+            // These two constants should always be set beforehand, hence we can panic if they're not set
+            let curr_height = self.light_client_finalized_height.get(working_set).unwrap();
+            let finality_period = self.rollup_finality_period.get(working_set).unwrap();
+
+            ensure!(
+                begin_unbond_height + finality_period < curr_height,
+                "Cannot unbond the attester: finality has not completed yet"
+            );
+
+            // Get the user's old balance.
+            if let Some(old_balance) = self.bonded_challengers.get(context.sender(), working_set) {
+                // Transfer the bond amount from the sender to the module's address.
+                // On failure, no state is changed
+                self.reward_sender(old_balance, context, working_set)?;
+
+                // Update our internal tracking of the total bonded amount for the sender.
+                self.bonded_challengers
+                    .remove(context.sender(), working_set);
+                self.unbonding_attesters
+                    .remove(context.sender(), working_set);
+
+                // Emit the unbonding event
+                working_set.add_event(
+                    "unbonded_challenger",
+                    &format!("amount_withdrawn: {old_balance:?}"),
+                );
+            }
         }
 
         Ok(CallResponse::default())
@@ -373,6 +410,19 @@ impl<
             &attestation,
             working_set,
         )?;
+
+        // Then we can check that the attester is not unbonding, otherwise we slash the attester
+        if self
+            .unbonding_attesters
+            .get(context.sender(), working_set)
+            .is_some()
+        {
+            return self.slash_and_invalidate_attestation(
+                context.sender(),
+                max_attested_height,
+                working_set,
+            );
+        }
 
         working_set.add_event(
             "processed_valid_attestation",

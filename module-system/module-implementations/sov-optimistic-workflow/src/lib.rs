@@ -91,19 +91,12 @@ pub struct AttesterIncentives<
     pub validity_cond_checker: sov_state::StateValue<Checker>,
 
     /// The set of bonded attesters and their bonded amount.
-    /// We don't need an unbonding set anymore because the
-    /// attesters can only unbond if their last attestation
-    /// was posted more than 24 hours ago.
     #[state]
     pub bonded_attesters: sov_state::StateMap<C::Address, u64>,
 
-    /// The last attested block for each attester. If an attester
-    /// posted an attestation less than 24 hours ago, he can't unbond.
-    /// This saves us from doing a two-phase unbonding and maintains the
-    /// following invariant: "to check the validity of an attestation,
-    /// we only need to check that the attester was bonded at the time"
+    /// The set of unbonding attesters, and the height of the chain where they started the unbonding.
     #[state]
-    pub last_attested_block: sov_state::StateMap<C::Address, u64>,
+    pub unbonding_attesters: sov_state::StateMap<C::Address, u64>,
 
     /// The current maximum attestation height
     #[state]
@@ -175,15 +168,16 @@ where
             call::CallMessage::BondAttester(bond_amount) => {
                 self.bond_user_helper(bond_amount, context.sender(), Role::Attester, working_set)
             }
-            call::CallMessage::UnbondAttester => {
-                self.unbond_user_helper(context, Role::Attester, working_set)
+            call::CallMessage::BeginUnbondingAttester => {
+                self.begin_unbond_attester(context, working_set)
+            }
+            call::CallMessage::EndUnbondingAttester => {
+                self.end_unbond_attester(context, working_set)
             }
             call::CallMessage::BondChallenger(bond_amount) => {
                 self.bond_user_helper(bond_amount, context.sender(), Role::Challenger, working_set)
             }
-            call::CallMessage::UnbondChallenger => {
-                self.unbond_user_helper(context, Role::Challenger, working_set)
-            }
+            call::CallMessage::UnbondChallenger => self.unbond_challenger(context, working_set),
             call::CallMessage::ProcessAttestation(attestation) => {
                 self.process_attestation(attestation, context, working_set)
             }
