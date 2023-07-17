@@ -74,15 +74,14 @@ jsonrpsee = "0.16.2"
 tempfile = "3.5"
 tokio = { version = "1", features = ["full"] }
 
-ethers = { git = "https://github.com/gakonst/ethers-rs", default-features = false, version = "2.0.7" }
-ethers-core = { git = "https://github.com/gakonst/ethers-rs", default-features = false, version = "2.0.7" }
-ethers-contract = { git = "https://github.com/gakonst/ethers-rs", default-features = false, version = "2.0.7" }
-ethers-providers = { git = "https://github.com/gakonst/ethers-rs", default-features = false, version = "2.0.7" }
-ethers-signers = { git = "https://github.com/gakonst/ethers-rs", default-features = false, version = "2.0.7" }
-ethers-middleware = { git = "https://github.com/gakonst/ethers-rs", default-features = false, version = "2.0.7" }
+ethers = "2.0.8"
+ethers-core = "2.0.8"
+ethers-contract = "2.0.8"
+ethers-providers = "2.0.8"
+ethers-signers = { version = "2.0.8", default-features = false }
+ethers-middleware = "2.0.8"
 
 # todo https://github.com/Sovereign-Labs/sovereign-sdk/issues/498
-anvil  = { git = "https://github.com/bkolad/foundry", rev = "62c83ec085f2b74b17ee92ba92b7dd4aeee38726" }
-anvil-core = { git = "https://github.com/bkolad/foundry", features = ["fastrlp", "serde"], rev = "62c83ec085f2b74b17ee92ba92b7dd4aeee38726" }
-
+anvil = { git = "https://github.com/foundry-rs/foundry", rev = "684d394db587bef427475a660c72013e97ef71d2" }
+anvil-core = { git = "https://github.com/foundry-rs/foundry", features = ["fastrlp", "serde"], rev = "684d394db587bef427475a660c72013e97ef71d2" }
 
