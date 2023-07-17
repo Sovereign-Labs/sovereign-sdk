@@ -8,6 +8,7 @@ use demo_stf::runner_config::{from_toml_path, Config as RunnerConfig};
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
 use jupiter::verifier::RollupParams;
+use jupiter::BlobWithSender;
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::Risc0Host;
 use serde::Deserialize;
@@ -54,7 +55,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
+    let mut demo_runner =
+        NativeAppRunner::<Risc0Host, BlobWithSender>::new(rollup_config.runner.clone());
     let is_storage_empty = demo_runner.get_storage().is_empty();
     let demo = demo_runner.inner_mut();
 
