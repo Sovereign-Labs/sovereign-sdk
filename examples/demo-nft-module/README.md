@@ -41,8 +41,8 @@ Here are defining basic dependencies in `Cargo.toml` that module needs to get st
 ```toml
 [dependencies]
 anyhow = { anyhow = "1.0.62" }
-sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main", default-features = false }
-sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main" }
+sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", default-features = false }
+sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable" }
 ```
 
 ### Establishing the Root Module Structure
@@ -121,9 +121,9 @@ Before we start implementing the `Module` trait, there are several preparatory s
     serde = { version = "1", features = ["derive"] }
     serde_json = "1"
 
-     sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main", default-features = false }
-     sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main" }
-     sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main", default-features = false }
+     sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", default-features = false }
+     sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable" }
+     sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", default-features = false }
 
      [features]
      default = ["native"]
@@ -371,7 +371,7 @@ Temporary storage is needed for testing, so we enable the `temp` feature of `sov
 
 ```toml
 [dev-dependencies]
-sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main", features = ["temp"] }
+sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", features = ["temp"] }
 ```
 
 Here is some boilerplate for NFT module integration tests:
