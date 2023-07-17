@@ -75,6 +75,5 @@ tempfile = "3.5"
 tokio = { version = "1", features = ["full"] }
 
 ethers = { git = "https://github.com/gakonst/ethers-rs", default-features = false }
-anvil  = { git = "https://github.com/foundry-rs/foundry", version = "0.1.0" }
-anvil-core = { git = "https://github.com/foundry-rs/foundry", features = ["fastrlp", "serde"], version = "0.1.0" }
-
+anvil  = { git = "https://github.com/foundry-rs/foundry", rev = "ed8b709c8fed1aaec4e7de4e3c95553ef09de034" }
+anvil-core = { git = "https://github.com/foundry-rs/foundry", features = ["fastrlp", "serde"], rev = "ed8b709c8fed1aaec4e7de4e3c95553ef09de034" }
