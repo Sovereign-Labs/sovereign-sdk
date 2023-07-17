@@ -81,7 +81,7 @@ ethers-providers = { git = "https://github.com/gakonst/ethers-rs", default-featu
 ethers-signers = { git = "https://github.com/gakonst/ethers-rs", default-features = false, version = "2.0.7" }
 ethers-middleware = { git = "https://github.com/gakonst/ethers-rs", default-features = false, version = "2.0.7" }
 
-anvil  = { git = "https://github.com/bkolad/foundry", rev = "7e61d99a70e438a8625edaded640fa832f073b6e" }
-anvil-core = { git = "https://github.com/bkolad/foundry", features = ["fastrlp", "serde"], rev = "7e61d99a70e438a8625edaded640fa832f073b6e" }
+anvil  = { git = "https://github.com/bkolad/foundry", rev = "62c83ec085f2b74b17ee92ba92b7dd4aeee38726" }
+anvil-core = { git = "https://github.com/bkolad/foundry", features = ["fastrlp", "serde"], rev = "62c83ec085f2b74b17ee92ba92b7dd4aeee38726" }
 
 
