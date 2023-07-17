@@ -174,8 +174,8 @@ jobs:
   deploy-github-pages:
     needs: cargo-doc-artifact
     timeout-minutes: 5
-    # No point in deploying if we're not on `"stable"`, as it will just fail.
-    if: github.ref == 'refs/heads/"stable"'
+    # No point in deploying if we're not on `stable`, as it will just fail.
+    if: github.ref == 'refs/heads/stable'
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
       pages: write # to deploy to Pages
