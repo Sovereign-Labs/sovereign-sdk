@@ -122,7 +122,7 @@ impl DaService for CelestiaService {
 
     type Error = BoxError;
 
-    fn new(config: Self::RuntimeConfig, chain_params: RollupParams) -> Self {
+    async fn new(config: Self::RuntimeConfig, chain_params: RollupParams) -> Self {
         let client = {
             let mut headers = HeaderMap::new();
             headers.insert(
@@ -398,7 +398,8 @@ mod tests {
             RollupParams {
                 namespace: NamespaceId(namespace),
             },
-        );
+        )
+        .await;
 
         (mock_server, config, da_service, namespace)
     }

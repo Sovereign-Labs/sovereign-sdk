@@ -103,7 +103,7 @@ impl DaService for RngDaService {
     type FilteredBlock = TestBlock;
     type Error = anyhow::Error;
 
-    fn new(
+    async fn new(
         _config: Self::RuntimeConfig,
         _chain_params: <Self::Spec as DaSpec>::ChainParams,
     ) -> Self {

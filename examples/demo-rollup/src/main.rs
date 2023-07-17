@@ -133,12 +133,15 @@ async fn main() -> Result<(), anyhow::Error> {
     let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
 
     // Initialize the Celestia service using the DaService interface
-    let da_service = Arc::new(CelestiaService::new(
-        rollup_config.da.clone(),
-        RollupParams {
-            namespace: ROLLUP_NAMESPACE,
-        },
-    ));
+    let da_service = Arc::new(
+        CelestiaService::new(
+            rollup_config.da.clone(),
+            RollupParams {
+                namespace: ROLLUP_NAMESPACE,
+            },
+        )
+        .await,
+    );
 
     // Our state transition function implements the StateTransitionRunner interface,
     // so we use that to initialize the STF

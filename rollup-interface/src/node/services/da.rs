@@ -27,7 +27,10 @@ pub trait DaService {
     type Error: fmt::Debug + Send + Sync;
 
     /// Create a new instance of the DaService
-    fn new(config: Self::RuntimeConfig, chain_params: <Self::Spec as DaSpec>::ChainParams) -> Self;
+    async fn new(
+        config: Self::RuntimeConfig,
+        chain_params: <Self::Spec as DaSpec>::ChainParams,
+    ) -> Self;
 
     /// Retrieve the data for the given height, waiting for it to be
     /// finalized if necessary. The block, once returned, must not be reverted
