@@ -38,6 +38,5 @@ proptest = { workspace = true }
 proptest-derive =  { workspace = true }
 
 [features]
-default = []
 fuzzing = ["proptest", "proptest-derive", "sha2"]
 mocks = ["sha2", "bytes/serde"]
