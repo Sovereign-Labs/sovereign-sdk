@@ -235,6 +235,18 @@ pub trait Module {
     }
 }
 
+/// A [`Module`] that has a well-defined and known [JSON
+/// Schema](https://json-schema.org/) for its [`Module::CallMessage`].
+///
+/// This trait is intended to support code generation tools, CLIs, and
+/// documentation. You can derive it with `#[derive(ModuleCallJsonSchema)]`, or
+/// implement it manually if your use case demands more control over the JSON
+/// Schema generation.
+pub trait ModuleCallJsonSchema: Module {
+    /// Returns the JSON schema for [`Module::CallMessage`].
+    fn json_schema() -> String;
+}
+
 /// Every module has to implement this trait.
 pub trait ModuleInfo: Default {
     type Context: Context;

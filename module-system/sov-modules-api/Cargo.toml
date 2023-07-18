@@ -23,6 +23,7 @@ sha2 = { workspace = true }
 bech32 = { workspace = true }
 derive_more = { workspace = true }
 serde_json = { workspace = true }
+schemars = { workspace = true, optional = true, features = [] }
 
 ed25519-dalek = { version = "1.0.1", default-features = false, features = ["alloc", "u64_backend"] }
 rand = { version = "0.7", optional = true }
@@ -33,4 +34,4 @@ serde_json = { workspace = true }
 
 [features]
 default = ["native"]
-native = ["sov-state/native", "rand", "hex", "ed25519-dalek/default"]
+native = ["sov-state/native", "rand", "hex", "schemars", "ed25519-dalek/default"]
