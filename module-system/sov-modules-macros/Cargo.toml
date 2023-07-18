@@ -20,11 +20,14 @@ name = "tests"
 path = "tests/all_tests.rs"
 
 [dev-dependencies]
-trybuild = "1.0"
-sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
+serde_json = "1"
 jsonrpsee = { workspace = true, features = ["macros", "http-client", "server"] }
-sov-state = { path = "../sov-state", version = "0.1", default-features = false }
 tempfile = { workspace = true }
+trybuild = "1.0"
+
+sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
+sov-state = { path = "../sov-state", version = "0.1", default-features = false }
+sov-bank = { path = "../module-implementations/sov-bank", version = "0.1" }
 
 [dependencies]
 anyhow = { workspace = true }
