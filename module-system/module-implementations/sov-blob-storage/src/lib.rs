@@ -1,7 +1,12 @@
+#![deny(missing_docs)]
+
+//! Blob storage module allows to save DA blobs in the state
+
 use sov_modules_api::Module;
 use sov_modules_macros::ModuleInfo;
 use sov_state::{StateValue, WorkingSet};
 
+/// Blob storage contains only address and vector of blobs
 #[derive(ModuleInfo, Clone)]
 pub struct BlobStorage<C: sov_modules_api::Context> {
     /// The address of blob storage module
@@ -16,7 +21,9 @@ pub struct BlobStorage<C: sov_modules_api::Context> {
     pub(crate) blobs: StateValue<Vec<(u64, Vec<u8>)>>,
 }
 
+/// Non standard methods for blob storage
 impl<C: sov_modules_api::Context> BlobStorage<C> {
+    /// Useful to check earliest block number
     pub fn earliest_stored_block_number(
         &self,
         working_set: &mut WorkingSet<C::Storage>,
@@ -26,6 +33,8 @@ impl<C: sov_modules_api::Context> BlobStorage<C> {
             .and_then(|blobs| blobs.get(0).map(|(block_number, _)| *block_number))
     }
 
+    /// Save blob in state together with blob index.
+    /// Note: this method won't sort blobs by block number
     pub fn store_blob(
         &self,
         block_number: u64,
@@ -39,6 +48,8 @@ impl<C: sov_modules_api::Context> BlobStorage<C> {
     }
 }
 
+/// Empty module implementation
+/// TODO: Add query methods for counting blobs.
 impl<C: sov_modules_api::Context> Module for BlobStorage<C> {
     type Context = C;
     type Config = ();
