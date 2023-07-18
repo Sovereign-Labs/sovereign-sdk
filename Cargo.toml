@@ -25,6 +25,7 @@ members = [
     "module-system/module-implementations/sov-bank",
     "module-system/module-implementations/sov-blob-storage",
     "module-system/module-implementations/sov-evm",
+    "module-system/module-implementations/sov-ibc",
     "module-system/module-implementations/sov-prover-incentives",
     "module-system/module-implementations/sov-sequencer-registry",
     "module-system/module-implementations/module-template",

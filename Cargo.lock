@@ -2662,6 +2662,63 @@ dependencies = [
 ]
 
 [[package]]
+name = "ibc"
+version = "0.42.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c08c44b986e0fb3e779adc52bb99b5680fd3997d0f71b7d756711418e5caf4e"
+dependencies = [
+ "bytes",
+ "derive_more",
+ "displaydoc",
+ "ibc-derive",
+ "ibc-proto",
+ "ics23",
+ "num-traits",
+ "primitive-types",
+ "prost",
+ "safe-regex",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "sha2 0.10.7",
+ "subtle-encoding",
+ "tendermint",
+ "tendermint-light-client-verifier",
+ "tendermint-proto",
+ "time",
+ "tracing",
+ "uint",
+]
+
+[[package]]
+name = "ibc-derive"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d85108c4f4eda7e033b9888971fda4355b0ba0403b4057a6e7b0c28c36241134"
+dependencies = [
+ "darling",
+ "proc-macro2 1.0.66",
+ "quote 1.0.32",
+ "syn 2.0.27",
+]
+
+[[package]]
+name = "ibc-proto"
+version = "0.32.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11c352715b36685c2543556a77091fb16af5d26257d5ce9c28e6756c1ccd71aa"
+dependencies = [
+ "base64 0.21.2",
+ "bytes",
+ "flex-error",
+ "ics23",
+ "prost",
+ "serde",
+ "subtle-encoding",
+ "tendermint-proto",
+]
+
+[[package]]
 name = "ics23"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5697,6 +5754,53 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6518fc26bced4d53678a22d6e423e9d8716377def84545fe328236e3af070e7f"
 
 [[package]]
+name = "safe-proc-macro2"
+version = "1.0.36"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "814c536dcd27acf03296c618dab7ad62d28e70abd7ba41d3f34a2ce707a2c666"
+dependencies = [
+ "unicode-xid 0.2.4",
+]
+
+[[package]]
+name = "safe-quote"
+version = "1.0.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77e530f7831f3feafcd5f1aae406ac205dd998436b4007c8e80f03eca78a88f7"
+dependencies = [
+ "safe-proc-macro2",
+]
+
+[[package]]
+name = "safe-regex"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a15289bf322e0673d52756a18194167f2378ec1a15fe884af6e2d2cb934822b0"
+dependencies = [
+ "safe-regex-macro",
+]
+
+[[package]]
+name = "safe-regex-compiler"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fba76fae590a2aa665279deb1f57b5098cbace01a0c5e60e262fcf55f7c51542"
+dependencies = [
+ "safe-proc-macro2",
+ "safe-quote",
+]
+
+[[package]]
+name = "safe-regex-macro"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96c2e96b5c03f158d1b16ba79af515137795f4ad4e8de3f790518aae91f1d127"
+dependencies = [
+ "safe-proc-macro2",
+ "safe-regex-compiler",
+]
+
+[[package]]
 name = "salsa20"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6396,6 +6500,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-ibc"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "ibc",
+ "serde",
+ "serde_json",
+ "sov-bank",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-state",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "sov-module-schemas"
 version = "0.1.0"
 dependencies = [
@@ -6869,6 +6991,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "tendermint-light-client-verifier"
+version = "0.32.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9875dce5c1b08201152eb0860f8fb1dce96c53e37532c310ffc4956d20f90def"
+dependencies = [
+ "derive_more",
+ "flex-error",
+ "serde",
+ "tendermint",
+ "time",
+]
+
+[[package]]
 name = "tendermint-proto"
 version = "0.32.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6944,9 +7079,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.23"
+version = "0.3.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59e399c068f43a5d116fedaf73b203fa4f9c519f17e2b34f63221d3792f81446"
+checksum = "ea9e1b3cf1243ae005d9e74085d4d542f3125458f3a81af210d901dcd7411efd"
 dependencies = [
  "itoa",
  "libc",
@@ -6964,9 +7099,9 @@ checksum = "7300fbefb4dadc1af235a9cef3737cea692a9d97e1b9cbcd4ebdae6f8868e6fb"
 
 [[package]]
 name = "time-macros"
-version = "0.2.10"
+version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "96ba15a897f3c86766b757e5ac7221554c6750054d74d5b28844fce5fb36a6c4"
+checksum = "372950940a5f07bf38dbe211d7283c9e6d7327df53794992d293e534c733d09b"
 dependencies = [
  "time-core",
 ]

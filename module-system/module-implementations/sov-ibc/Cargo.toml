@@ -1,0 +1,35 @@
+[package]
+name = "sov-ibc"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+publish = false
+resolver = "2"
+
+[dependencies]
+anyhow = { workspace = true }
+sov-bank = { path = "../sov-bank", default-features = false }
+sov-modules-api = { path = "../../sov-modules-api", default-features = false }
+sov-modules-macros = { path = "../../sov-modules-macros" }
+sov-state = { path = "../../sov-state", default-features = false }
+sov-rollup-interface = { path = "../../../rollup-interface" }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+thiserror = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+ibc = "0.42"
+
+
+[dev-dependencies]
+sov-modules-api = { path = "../../sov-modules-api" }
+tempfile = { workspace = true }
+
+[features]
+default = ["native"]
+serde = ["dep:serde", "dep:serde_json"]
+native = ["serde", "sov-modules-api/native"]
