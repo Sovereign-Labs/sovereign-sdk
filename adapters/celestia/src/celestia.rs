@@ -31,6 +31,8 @@ pub struct MarshalledDataAvailabilityHeader {
     pub column_roots: Vec<String>,
 }
 
+const GENESIS_PLACEHOLDER_HASH: &[u8; 32] = [255; 32];
+
 /// A partially serialized tendermint header. Only fields which are actually inspected by
 /// Jupiter are included in their raw form. Other fields are pre-encoded as protobufs.
 ///
@@ -265,10 +267,14 @@ impl BlockHeader for CelestiaHeader {
     fn prev_hash(&self) -> Self::Hash {
         self.cached_prev_hash
             .get_or_init(|| {
+                // If the block height is one, then the previous block is genesis - which has no hash.
+                if self.header.height == 1 {
+                    return TmHash(tendermint::Hash::Sha256(*GENESIS_PLACEHOLDER_HASH));
+                }
                 let hash = <tendermint::block::Id as Protobuf<
                     celestia_tm_version::types::BlockId,
                 >>::decode(self.header.last_block_id.as_ref())
-                .expect("must not call prev_hash on block with no predecessor")
+                .expect("all blocks after the first must have a prev_hash")
                 .hash;
 
                 TmHash(hash)

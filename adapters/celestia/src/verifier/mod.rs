@@ -66,9 +66,7 @@ impl TmHash {
     pub fn inner(&self) -> &[u8; 32] {
         match self.0 {
             tendermint::Hash::Sha256(ref h) => h,
-            // Hack: when the hash is None, we return a hash of all 255s as a placeholder.
-            // TODO: add special casing for the genesis block at a higher level
-            tendermint::Hash::None => &[255u8; 32],
+            tendermint::Hash::None => unreachable!("tendermint::Hash::None is not allowed. It should only appear at genesis, in which case we use a placeholder of [255;32]"),
         }
     }
 }
