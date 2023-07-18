@@ -21,6 +21,7 @@ members = [
     "module-system/utils/sov-first-read-last-write-cache",
     "module-system/module-implementations/sov-accounts",
     "module-system/module-implementations/sov-bank",
+    "module-system/module-implementations/sov-blob-storage",
     "module-system/module-implementations/sov-evm",
     "module-system/module-implementations/sov-prover-incentives",
     "module-system/module-implementations/sov-sequencer-registry",
