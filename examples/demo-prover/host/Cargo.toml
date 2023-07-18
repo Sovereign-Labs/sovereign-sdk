@@ -3,6 +3,7 @@ name = "sov-demo-prover-host"
 version = "0.1.0"
 edition = "2021"
 publish = false
+resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
