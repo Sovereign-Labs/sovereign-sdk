@@ -14,6 +14,7 @@ use jsonrpsee::core::server::rpc_module::Methods;
 use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::{CelestiaVerifier, ChainValidityCondition, RollupParams};
+use jupiter::BlobWithSender;
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 #[cfg(feature = "experimental")]
@@ -145,7 +146,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Our state transition function implements the StateTransitionRunner interface,
     // so we use that to initialize the STF
-    let mut demo_runner = NativeAppRunner::<Risc0Verifier>::new(rollup_config.runner.clone());
+    let mut demo_runner =
+        NativeAppRunner::<Risc0Verifier, BlobWithSender>::new(rollup_config.runner.clone());
 
     // Our state transition also implements the RpcRunner interface,
     // so we use that to initialize the RPC server.

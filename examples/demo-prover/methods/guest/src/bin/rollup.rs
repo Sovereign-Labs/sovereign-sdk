@@ -45,9 +45,10 @@ pub fn main() {
     env::write(&"txs read\n");
 
     // Step 2: Apply blobs
-    let mut demo_runner = <ZkAppRunner<Risc0Guest> as StateTransitionRunner<
+    let mut demo_runner = <ZkAppRunner<Risc0Guest, BlobWithSender> as StateTransitionRunner<
         ZkConfig,
         Risc0Guest,
+        BlobWithSender,
     >>::new(prev_state_root_hash);
     let demo = demo_runner.inner_mut();
 
