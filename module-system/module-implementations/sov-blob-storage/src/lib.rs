@@ -2,7 +2,9 @@
 
 //! Blob storage module allows to save DA blobs in the state
 
-use sov_modules_api::Module;
+mod genesis;
+
+use sov_modules_api::{Error, Module, Spec};
 use sov_modules_macros::ModuleInfo;
 use sov_state::{StateValue, WorkingSet};
 
@@ -46,6 +48,35 @@ impl<C: sov_modules_api::Context> BlobStorage<C> {
         self.blobs.set(&blobs, working_set);
         Ok(())
     }
+
+    /// Get all blobs for given block number
+    pub fn get_blobs_for_block_number(
+        &self,
+        block_number: u64,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> anyhow::Result<Vec<Vec<u8>>> {
+        let mut blobs = self.blobs.get_or_err(working_set)?;
+        let mut blobs_for_block = Vec::new();
+
+        let mut i = 0;
+        while i < blobs.len() {
+            if blobs[i].0 == block_number {
+                let (_, blob) = blobs.remove(i);
+                blobs_for_block.push(blob);
+            } else {
+                i += 1;
+            }
+        }
+
+        // When `drain_filter` is stable, use it instead of retain_mut
+        // https://github.com/rust-lang/rust/issues/43244
+        // let blobs_for_block = blobs
+        //     .drain_filter(|(bn, blob)| bn == block_number)
+        //     .collect();
+
+        self.blobs.set(&blobs, working_set);
+        Ok(blobs_for_block)
+    }
 }
 
 /// Empty module implementation
@@ -53,4 +84,12 @@ impl<C: sov_modules_api::Context> BlobStorage<C> {
 impl<C: sov_modules_api::Context> Module for BlobStorage<C> {
     type Context = C;
     type Config = ();
+
+    fn genesis(
+        &self,
+        config: &Self::Config,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> Result<(), Error> {
+        Ok(self.init_module(config, working_set)?)
+    }
 }
