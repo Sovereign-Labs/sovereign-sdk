@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::ops::Range;
-use std::sync::OnceLock;
+use std::sync::{Arc, Mutex};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespacedHash;
@@ -229,7 +229,7 @@ pub struct CelestiaHeader {
     pub header: CompactHeader,
     #[borsh_skip]
     #[serde(skip)]
-    cached_prev_hash: OnceLock<TmHash>,
+    cached_prev_hash: Arc<Mutex<Option<TmHash>>>,
 }
 
 impl PartialEq for CelestiaHeader {
@@ -243,7 +243,7 @@ impl CelestiaHeader {
         Self {
             dah,
             header,
-            cached_prev_hash: OnceLock::new(),
+            cached_prev_hash: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -263,17 +263,19 @@ impl BlockHeader for CelestiaHeader {
     type Hash = TmHash;
 
     fn prev_hash(&self) -> Self::Hash {
-        self.cached_prev_hash
-            .get_or_init(|| {
-                let hash = <tendermint::block::Id as Protobuf<
-                    celestia_tm_version::types::BlockId,
-                >>::decode(self.header.last_block_id.as_ref())
-                .expect("must not call prev_hash on block with no predecessor")
-                .hash;
+        let mut cached_hash = self.cached_prev_hash.lock().unwrap();
+        if let Some(hash) = cached_hash.as_ref() {
+            return hash.clone();
+        }
 
-                TmHash(hash)
-            })
-            .clone()
+        let hash =
+            <tendermint::block::Id as Protobuf<celestia_tm_version::types::BlockId>>::decode(
+                self.header.last_block_id.as_ref(),
+            )
+            .expect("must not call prev_hash on block with no predecessor")
+            .hash;
+        *cached_hash = Some(TmHash(hash));
+        TmHash(hash)
     }
 
     fn hash(&self) -> Self::Hash {
