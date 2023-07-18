@@ -1,6 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::ops::Range;
-use std::sync::{Arc, Mutex};
+use std::sync::OnceLock;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespacedHash;
@@ -229,7 +229,7 @@ pub struct CelestiaHeader {
     pub header: CompactHeader,
     #[borsh_skip]
     #[serde(skip)]
-    cached_prev_hash: Arc<Mutex<Option<TmHash>>>,
+    cached_prev_hash: OnceLock<TmHash>,
 }
 
 impl PartialEq for CelestiaHeader {
@@ -243,7 +243,7 @@ impl CelestiaHeader {
         Self {
             dah,
             header,
-            cached_prev_hash: Arc::new(Mutex::new(None)),
+            cached_prev_hash: OnceLock::new(),
         }
     }
 
@@ -263,8 +263,8 @@ impl BlockHeader for CelestiaHeader {
     type Hash = TmHash;
 
     fn prev_hash(&self) -> Self::Hash {
-        let mut cached_hash = self.cached_prev_hash.lock().unwrap();
-        if let Some(hash) = cached_hash.as_ref() {
+        let cached_hash = self.cached_prev_hash.get();
+        if let Some(hash) = cached_hash {
             return hash.clone();
         }
 
@@ -274,7 +274,7 @@ impl BlockHeader for CelestiaHeader {
             )
             .expect("must not call prev_hash on block with no predecessor")
             .hash;
-        *cached_hash = Some(TmHash(hash));
+        self.cached_prev_hash.set(TmHash(hash));
         TmHash(hash)
     }
 
