@@ -50,7 +50,7 @@ pub trait DaService {
 
     /// Generate a proof that the relevant blob transactions have been extracted correctly from the DA layer
     /// block.
-    fn get_extraction_proof(
+    async fn get_extraction_proof(
         &self,
         block: &Self::FilteredBlock,
         blobs: &[<Self::Spec as DaSpec>::BlobTransaction],
@@ -64,7 +64,7 @@ pub trait DaService {
     /// together with a range proof against the root of the namespaced-merkle-tree, demonstrating that the entire
     /// rollup namespace has been covered.
     #[allow(clippy::type_complexity)]
-    fn extract_relevant_txs_with_proof(
+    async fn extract_relevant_txs_with_proof(
         &self,
         block: &Self::FilteredBlock,
     ) -> (
@@ -74,8 +74,9 @@ pub trait DaService {
     ) {
         let relevant_txs = self.extract_relevant_txs(block);
 
-        let (etx_proofs, rollup_row_proofs) =
-            self.get_extraction_proof(block, relevant_txs.as_slice());
+        let (etx_proofs, rollup_row_proofs) = self
+            .get_extraction_proof(block, relevant_txs.as_slice())
+            .await;
 
         (relevant_txs, etx_proofs, rollup_row_proofs)
     }
@@ -89,7 +90,9 @@ pub trait DaService {
 /// `SlotData` is the subset of a DA layer block which is stored in the rollup's database.
 /// At the very least, the rollup needs access to the hashes and headers of all DA layer blocks, but rollups
 /// may choose to partial (or full) block data as well.
-pub trait SlotData: Serialize + DeserializeOwned + PartialEq + core::fmt::Debug + Clone {
+pub trait SlotData:
+    Serialize + DeserializeOwned + PartialEq + core::fmt::Debug + Clone + Send + Sync
+{
     /// The header type for a DA layer block as viewed by the rollup. This need not be identical
     /// to the underlying rollup's header type, but it must be sufficient to reconstruct the block hash.
     ///

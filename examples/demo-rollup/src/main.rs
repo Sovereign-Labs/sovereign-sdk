@@ -244,8 +244,9 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         let (next_state_root, _witness) = demo.end_slot();
 
-        let (inclusion_proof, completeness_proof) =
-            da_service.get_extraction_proof(&filtered_block, &blobs);
+        let (inclusion_proof, completeness_proof) = da_service
+            .get_extraction_proof(&filtered_block, &blobs)
+            .await;
 
         let validity_condition = da_verifier
             .verify_relevant_tx_list::<NoOpHasher>(

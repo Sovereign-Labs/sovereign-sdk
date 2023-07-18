@@ -1,6 +1,6 @@
-use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::ops::Range;
+use std::sync::{Arc, Mutex};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespacedHash;
@@ -223,13 +223,19 @@ pub struct NamespacedSharesResponse {
     pub height: u64,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct CelestiaHeader {
     pub dah: DataAvailabilityHeader,
     pub header: CompactHeader,
     #[borsh_skip]
     #[serde(skip)]
-    cached_prev_hash: RefCell<Option<TmHash>>,
+    cached_prev_hash: Arc<Mutex<Option<TmHash>>>,
+}
+
+impl PartialEq for CelestiaHeader {
+    fn eq(&self, other: &Self) -> bool {
+        self.dah == other.dah && self.header == other.header
+    }
 }
 
 impl CelestiaHeader {
@@ -237,7 +243,7 @@ impl CelestiaHeader {
         Self {
             dah,
             header,
-            cached_prev_hash: RefCell::new(None),
+            cached_prev_hash: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -257,13 +263,11 @@ impl BlockHeader for CelestiaHeader {
     type Hash = TmHash;
 
     fn prev_hash(&self) -> Self::Hash {
-        // Try to return the cached value
-        if let Some(hash) = self.cached_prev_hash.borrow().as_ref() {
+        let mut cached_hash = self.cached_prev_hash.lock().unwrap();
+        if let Some(hash) = cached_hash.as_ref() {
             return hash.clone();
         }
-        // If we reach this point, we know that the cach is empty - so there can't be any outstanding references to its value.
-        // That means its safe to borrow the cache mutably and populate it.
-        let mut cached_hash = self.cached_prev_hash.borrow_mut();
+
         let hash =
             <tendermint::block::Id as Protobuf<celestia_tm_version::types::BlockId>>::decode(
                 self.header.last_block_id.as_ref(),

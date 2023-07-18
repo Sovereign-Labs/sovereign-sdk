@@ -128,7 +128,7 @@ impl<B: Buf> Read for CountedBufReader<B> {
 }
 
 /// A transaction on a data availability layer, including the address of the sender.
-pub trait BlobTransactionTrait: Serialize + DeserializeOwned {
+pub trait BlobTransactionTrait: Serialize + DeserializeOwned + Send + Sync {
     /// The type of the raw data of the blob. For example, the "calldata" of an Ethereum rollup transaction
     type Data: Buf;
 

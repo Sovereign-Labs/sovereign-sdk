@@ -240,7 +240,7 @@ impl DaService for CelestiaService {
         output
     }
 
-    fn get_extraction_proof(
+    async fn get_extraction_proof(
         &self,
         block: &Self::FilteredBlock,
         blobs: &[<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction],
