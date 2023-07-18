@@ -89,7 +89,8 @@ jobs:
       - name: Run cargo test
         run: cargo test
   coverage:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 90
     env:
       SCCACHE_GHA_ENABLED: "true"
