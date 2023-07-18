@@ -37,6 +37,7 @@ impl AsRef<[u8]> for Address {
 
 impl AddressTrait for Address {}
 
+#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 #[derive(PartialEq, Clone, Eq, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Address {
     addr: [u8; 32],
@@ -122,6 +123,9 @@ pub trait Spec {
     type Address: AddressTrait
         + BorshSerialize
         + BorshDeserialize
+        // Do we always need this, even when the module does not have a JSON
+        // Schema? That feels a bit wrong.
+        + ::schemars::JsonSchema
         + Into<AddressBech32>
         + From<AddressBech32>;
 

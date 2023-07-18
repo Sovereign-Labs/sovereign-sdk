@@ -11,7 +11,9 @@ pub type Amount = u64;
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
-    derive(serde::Deserialize)
+    derive(serde::Deserialize),
+    derive(schemars::JsonSchema),
+    schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "Coins")
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct Coins<C: sov_modules_api::Context> {

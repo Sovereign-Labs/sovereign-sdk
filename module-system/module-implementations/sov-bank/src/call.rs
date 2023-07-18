@@ -8,10 +8,15 @@ use crate::{Amount, Bank, Coins, Token};
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
-    derive(serde::Deserialize)
+    derive(serde::Deserialize),
+    derive(schemars::JsonSchema),
+    schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub enum CallMessage<C: sov_modules_api::Context> {
+pub enum CallMessage<C>
+where
+    C: sov_modules_api::Context,
+{
     /// Creates a new token with the specified name and initial balance.
     CreateToken {
         /// Random value use to create a unique token address.
