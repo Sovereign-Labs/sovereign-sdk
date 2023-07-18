@@ -59,7 +59,7 @@ jobs:
 
   # Check that every combination of features is working properly.
   hack:
-    runs-on: ubuntu-latest
+    runs-on: 8-cores_32GB_Ubuntu
     name: features
     timeout-minutes: 60
     env:
