@@ -155,7 +155,7 @@ impl DaService for RngDaService {
         vec![blob]
     }
 
-    fn get_extraction_proof(
+    async fn get_extraction_proof(
         &self,
         _block: &Self::FilteredBlock,
         _blobs: &[<Self::Spec as DaSpec>::BlobTransaction],
