@@ -263,19 +263,17 @@ impl BlockHeader for CelestiaHeader {
     type Hash = TmHash;
 
     fn prev_hash(&self) -> Self::Hash {
-        let cached_hash = self.cached_prev_hash.get();
-        if let Some(hash) = cached_hash {
-            return hash.clone();
-        }
+        self.cached_prev_hash
+            .get_or_init(|| {
+                let hash = <tendermint::block::Id as Protobuf<
+                    celestia_tm_version::types::BlockId,
+                >>::decode(self.header.last_block_id.as_ref())
+                .expect("must not call prev_hash on block with no predecessor")
+                .hash;
 
-        let hash =
-            <tendermint::block::Id as Protobuf<celestia_tm_version::types::BlockId>>::decode(
-                self.header.last_block_id.as_ref(),
-            )
-            .expect("must not call prev_hash on block with no predecessor")
-            .hash;
-        self.cached_prev_hash.set(TmHash(hash));
-        TmHash(hash)
+                TmHash(hash)
+            })
+            .clone()
     }
 
     fn hash(&self) -> Self::Hash {
