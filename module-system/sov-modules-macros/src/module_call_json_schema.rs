@@ -13,7 +13,7 @@ pub fn derive_module_call_json_schema(
         use ::schemars::JsonSchema;
 
         impl #impl_generics ::sov_modules_api::ModuleCallJsonSchema for #ident #type_generics #where_clause {
-            fn json_schema() -> String {
+            fn json_schema() -> ::std::string::String {
                 let schema = ::schemars::schema_for!(
                     <Self as ::sov_modules_api::Module>::CallMessage
                 );
