@@ -1,4 +1,4 @@
-use proc_macro2::{Ident, TokenStream};
+use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, ToTokens};
 use syn::{DataStruct, GenericParam, Generics, ImplGenerics, Meta, TypeGenerics, WhereClause};
 
@@ -123,9 +123,16 @@ impl<'a> StructDef<'a> {
     }
 }
 
-/// Gets type parameter from `Generics` declaration.
-pub(crate) fn parse_generic_params(generics: &Generics) -> Result<Ident, syn::Error> {
-    let generic_param = match generics.params.first().unwrap() {
+/// Gets the type parameter's identifier from [`syn::Generics`].
+pub(crate) fn get_generics_type_param(
+    generics: &Generics,
+    error_span: Span,
+) -> Result<Ident, syn::Error> {
+    let generic_param = match generics
+        .params
+        .first()
+        .ok_or_else(|| syn::Error::new(error_span, "No generic parameters found"))?
+    {
         GenericParam::Type(ty) => &ty.ident,
         GenericParam::Lifetime(lf) => {
             return Err(syn::Error::new_spanned(
