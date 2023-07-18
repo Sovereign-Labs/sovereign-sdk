@@ -27,13 +27,13 @@ impl<'a> Risc0Host<'a> {
     pub fn run_without_proving(&mut self) -> anyhow::Result<Session> {
         let env = self.env.borrow_mut().build()?;
         let mut executor = LocalExecutor::from_elf(env, self.elf)?;
-        Ok(executor.run()?)
+        executor.run()
     }
 
     /// Run a computation in the zkvm and generate a receipt.
     pub fn run(&mut self) -> anyhow::Result<SessionReceipt> {
         let session = self.run_without_proving()?;
-        Ok(session.prove()?)
+        session.prove()
     }
 }
 
