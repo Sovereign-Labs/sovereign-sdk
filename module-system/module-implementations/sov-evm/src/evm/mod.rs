@@ -1,3 +1,4 @@
+use revm::primitives::{ExecutionResult, Output, B160};
 use sov_state::Prefix;
 
 mod conversions;
@@ -54,5 +55,15 @@ impl DbAccount {
         let mut prefix = parent_prefix.as_aligned_vec().clone().into_inner();
         prefix.extend_from_slice(&address);
         Prefix::new(prefix)
+    }
+}
+
+pub(crate) fn contract_address(result: ExecutionResult) -> Option<B160> {
+    match result {
+        ExecutionResult::Success {
+            output: Output::Create(_, Some(addr)),
+            ..
+        } => Some(addr),
+        _ => None,
     }
 }

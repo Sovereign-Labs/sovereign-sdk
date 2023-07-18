@@ -8,9 +8,9 @@ use sov_state::{ProverStorage, WorkingSet};
 use super::db::EvmDb;
 use super::db_init::InitEvmDb;
 use super::executor;
-use crate::evm::test_helpers::{contract_address, output, SimpleStorageContract};
+use crate::evm::test_helpers::{output, SimpleStorageContract};
 use crate::evm::transaction::{BlockEnv, EvmTransaction};
-use crate::evm::AccountInfo;
+use crate::evm::{contract_address, AccountInfo};
 use crate::Evm;
 
 type C = sov_modules_api::default_context::DefaultContext;
@@ -58,7 +58,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
 
         let result =
             executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
-        contract_address(result)
+        contract_address(result).expect("Expected successful contract creation")
     };
 
     let set_arg = 21989;

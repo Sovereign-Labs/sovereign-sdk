@@ -141,10 +141,10 @@ impl TestClient {
                 .to(contract_address)
                 .chain_id(self.chain_id)
                 .nonce(1u64)
+                .data(self.contract.set_call_data(set_arg))
                 .max_priority_fee_per_gas(10u64)
                 .max_fee_per_gas(MAX_FEE_PER_GAS)
-                .gas(900000u64)
-                .data(self.contract.set_call_data(set_arg));
+                .gas(900000u64);
 
             let typed_transaction = TypedTransaction::Eip1559(request);
 
@@ -162,11 +162,13 @@ impl TestClient {
                 .from(self.from_addr)
                 .to(contract_address)
                 .chain_id(self.chain_id)
-                .data(self.contract.get_call_data());
+                .nonce(2u64)
+                .data(self.contract.get_call_data())
+                .gas(900000u64);
 
-            let tx = TypedTransaction::Eip1559(request);
+            let typed_transaction = TypedTransaction::Eip1559(request);
 
-            let response = self.client.call(&tx, None).await?;
+            let response = self.client.call(&typed_transaction, None).await?;
 
             let resp_array: [u8; 32] = response.to_vec().try_into().unwrap();
             let get_arg = ethereum_types::U256::from(resp_array);
@@ -190,7 +192,7 @@ async fn send_tx_test_to_eth() -> Result<(), Box<dyn std::error::Error>> {
 
     let from_addr = Address::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
 
-    //let test_client = TestClient::new_anvil_client(chain_id, key, from_addr, contract).await;
-    let test_client = TestClient::new_demo_rollup_client(chain_id, key, from_addr, contract).await;
+    let test_client = TestClient::new_anvil_client(chain_id, key, from_addr, contract).await;
+    // let test_client = TestClient::new_demo_rollup_client(chain_id, key, from_addr, contract).await;
     test_client.execute().await
 }
