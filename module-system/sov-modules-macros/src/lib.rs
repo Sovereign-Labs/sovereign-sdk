@@ -3,6 +3,7 @@ mod cli_parser;
 mod common;
 mod default_runtime;
 mod dispatch;
+mod module_call_json_schema;
 mod module_info;
 mod rpc;
 
@@ -11,6 +12,7 @@ use default_runtime::DefaultRuntimeMacro;
 use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
+use module_call_json_schema::derive_module_call_json_schema;
 use proc_macro::TokenStream;
 use rpc::ExposeRpcMacro;
 use syn::parse_macro_input;
@@ -75,6 +77,40 @@ pub fn dispatch_call(input: TokenStream) -> TokenStream {
     let call_macro = DispatchCallMacro::new("Call");
 
     handle_macro_error(call_macro.derive_dispatch_call(input))
+}
+
+/// Derives the [`sov_modules_api::ModuleCallJsonSchema`] trait for the underlying type.
+///
+/// ## Example
+///
+/// ```
+/// use std::marker::PhantomData;
+///
+/// use sov_modules_api::{Context, Module, ModuleInfo, ModuleCallJsonSchema};
+/// use sov_modules_api::default_context::ZkDefaultContext;
+/// use sov_modules_macros::{ModuleInfo, ModuleCallJsonSchema};
+/// use sov_state::StateMap;
+///
+/// #[derive(ModuleInfo, ModuleCallJsonSchema, schemars::JsonSchema)]
+/// struct TestModule<C: Context> {
+///     #[address]
+///     admin: C::Address,
+///
+///     #[state]
+///     pub state_map: StateMap<String, u32>,
+/// }
+///
+/// impl<C: Context> Module for TestModule<C> {
+///     type Context = C;
+///     type Config = PhantomData<C>;
+/// }
+///
+/// println!("JSON Schema: {}", TestModule::<ZkDefaultContext>::json_schema());
+/// ```
+#[proc_macro_derive(ModuleCallJsonSchema)]
+pub fn module_call_json_schema(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+    handle_macro_error(derive_module_call_json_schema(input))
 }
 
 /// Adds encoding functionality to the underlying type.

@@ -28,13 +28,12 @@ tempfile = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
+borsh = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+proc-macro2 = "1.0"
+quote = "1.0"
+schemars = { workspace = true }
+syn = { version = "1.0", features = ["full"] }
+
 sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
-
-
-syn = { version = "1.0", features = ["full"] }
-quote = "1.0"
-proc-macro2 = "1.0"
-borsh = { workspace = true }
-
