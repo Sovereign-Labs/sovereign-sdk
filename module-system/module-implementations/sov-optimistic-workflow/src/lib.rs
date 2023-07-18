@@ -25,6 +25,8 @@ pub struct AttesterIncentivesConfig<C: Context, Vm: Zkvm> {
     pub commitment_to_allowed_challenge_method: Vm::CodeCommitment,
     /// A list of initial provers and their bonded amount.
     pub initial_attesters: Vec<(C::Address, u64)>,
+    /// The finality period of the rollup (constant)
+    pub rollup_finality_period: u64,
 }
 
 /// A wrapper around a code commitment which implements borsh serialization

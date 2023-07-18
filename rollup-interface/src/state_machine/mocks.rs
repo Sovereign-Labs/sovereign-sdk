@@ -7,6 +7,7 @@ use std::marker::PhantomData;
 use anyhow::{ensure, Error};
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Bytes;
+use jmt::SimpleHasher;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
@@ -149,7 +150,7 @@ impl Display for MockAddress {
 
 impl AddressTrait for MockAddress {}
 
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone, Copy, Default)]
 /// A mock validity condition that always evaluate to true
 pub struct MockValidityCond {
     phantom: PhantomData<u8>,
@@ -158,7 +159,7 @@ pub struct MockValidityCond {
 impl ValidityCondition for MockValidityCond {
     type Error = Error;
 
-    fn combine<H: jmt::SimpleHasher>(&self, _rhs: Self) -> Result<Self, Self::Error> {
+    fn combine<H: SimpleHasher>(&self, _rhs: Self) -> Result<Self, Self::Error> {
         Ok(*self)
     }
 }

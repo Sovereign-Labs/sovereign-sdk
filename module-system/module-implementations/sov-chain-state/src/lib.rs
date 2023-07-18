@@ -9,8 +9,11 @@ mod tests;
 pub mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::Error;
+use sov_modules_api::{Error, Hasher};
 use sov_modules_macros::ModuleInfo;
+#[cfg(test)]
+use sov_rollup_interface::crypto::SimpleHasher;
+use sov_rollup_interface::mocks::MockValidityCond;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
 use sov_state::WorkingSet;
 
@@ -19,6 +22,20 @@ pub struct StateTransitionId<Cond: ValidityCondition> {
     da_block_hash: [u8; 32],
     post_state_root: [u8; 32],
     validity_condition: Cond,
+}
+
+impl StateTransitionId<MockValidityCond> {
+    pub fn new(
+        da_block_hash: [u8; 32],
+        post_state_root: [u8; 32],
+        validity_condition: MockValidityCond,
+    ) -> Self {
+        Self {
+            da_block_hash,
+            post_state_root,
+            validity_condition,
+        }
+    }
 }
 
 impl<Cond: ValidityCondition> StateTransitionId<Cond> {

@@ -37,6 +37,9 @@ where
             working_set,
         );
 
+        self.rollup_finality_period
+            .set(&config.rollup_finality_period, working_set);
+
         self.bonding_token_address
             .set(&config.bonding_token_address, working_set);
 

@@ -52,7 +52,7 @@ impl fmt::Display for AttesterIncentiveErrors {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// A role in the attestation process
-pub(crate) enum Role {
+pub enum Role {
     /// A user who attests to new state transitions
     Attester,
     /// A user who challenges attestations
