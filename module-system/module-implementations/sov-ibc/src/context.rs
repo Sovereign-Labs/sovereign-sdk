@@ -20,7 +20,7 @@ use crate::IbcModule;
 
 pub struct IbcExecutionContext<'a, C: sov_modules_api::Context> {
     pub ibc: &'a IbcModule<C>,
-    pub working_set: &'a WorkingSet<C::Storage>,
+    pub working_set: &'a mut WorkingSet<C::Storage>,
 }
 
 impl<'a, C> Router for IbcExecutionContext<'a, C>

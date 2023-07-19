@@ -1,30 +1,39 @@
-use derive_more::From;
+use derive_more::{From, TryInto};
 use ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
 use ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
-use ibc::core::ics02_client::client_state::{ClientStateValidation, ClientStateExecution, ClientStateCommon};
+use ibc::core::ics02_client::client_state::{
+    ClientStateCommon, ClientStateExecution, ClientStateValidation,
+};
 use ibc::core::ics02_client::consensus_state::ConsensusState;
+use ibc::core::ics02_client::error::ClientError;
 use ibc::core::ics02_client::ClientExecutionContext;
-use ibc::core::ValidationContext;
+use ibc::core::ics24_host::path::ClientStatePath;
+use ibc::core::{ContextError, ValidationContext};
+use ibc::Any;
+use ibc_proto::protobuf::Protobuf;
 
 use super::IbcExecutionContext;
 
 // Q: How do we enable users to set the light clients they want?
 #[derive(From, ConsensusState)]
 pub enum AnyConsensusState {
-    Tendermint(TmConsensusState)
+    Tendermint(TmConsensusState),
 }
 
 // Q: How do we enable users to set the light clients they want?
-#[derive(From)]
+#[derive(From, TryInto)]
 pub enum AnyClientState {
-    Tendermint(TmClientState)
+    Tendermint(TmClientState),
 }
 
 // Next 3 trait impls are boilerplate
 // We have a `ClientState` macro, but unfortunately it doesn't currently support
 // the context (`IbcExecutionContext` in this case) to be generic
 impl ClientStateCommon for AnyClientState {
-    fn verify_consensus_state(&self, consensus_state: ibc::Any) -> Result<(), ibc::core::ics02_client::error::ClientError> {
+    fn verify_consensus_state(
+        &self,
+        consensus_state: ibc::Any,
+    ) -> Result<(), ibc::core::ics02_client::error::ClientError> {
         todo!()
     }
 
@@ -36,7 +45,10 @@ impl ClientStateCommon for AnyClientState {
         todo!()
     }
 
-    fn validate_proof_height(&self, proof_height: ibc::Height) -> Result<(), ibc::core::ics02_client::error::ClientError> {
+    fn validate_proof_height(
+        &self,
+        proof_height: ibc::Height,
+    ) -> Result<(), ibc::core::ics02_client::error::ClientError> {
         todo!()
     }
 
@@ -81,8 +93,9 @@ impl ClientStateCommon for AnyClientState {
     }
 }
 
-impl<'a, C> ClientStateExecution<IbcExecutionContext<'a, C>> for AnyClientState where
-    C: sov_modules_api::Context
+impl<'a, C> ClientStateExecution<IbcExecutionContext<'a, C>> for AnyClientState
+where
+    C: sov_modules_api::Context,
 {
     fn initialise(
         &self,
@@ -122,8 +135,9 @@ impl<'a, C> ClientStateExecution<IbcExecutionContext<'a, C>> for AnyClientState 
         todo!()
     }
 }
-impl<'a, C> ClientStateValidation<IbcExecutionContext<'a, C>> for AnyClientState where
-    C: sov_modules_api::Context
+impl<'a, C> ClientStateValidation<IbcExecutionContext<'a, C>> for AnyClientState
+where
+    C: sov_modules_api::Context,
 {
     fn verify_client_message(
         &self,
@@ -156,17 +170,34 @@ where
 
     fn store_client_state(
         &mut self,
-        client_state_path: ibc::core::ics24_host::path::ClientStatePath,
+        client_state_path: ClientStatePath,
         client_state: Self::AnyClientState,
-    ) -> Result<(), ibc::core::ContextError> {
-        todo!()
+    ) -> Result<(), ContextError> {
+        let client_state_bytes = {
+            let tm_client_state: TmClientState = client_state.try_into().map_err(|e: &str| {
+                ContextError::ClientError(ClientError::Other {
+                    description: e.to_string(),
+                })
+            })?;
+
+            <TmClientState as Protobuf<Any>>::encode_vec(&tm_client_state)
+        };
+
+        // FIXME: Not sure if using the store like this results in a proper Merkle proof
+        self.ibc.client_state_store.set(
+            &client_state_path.to_string(),
+            &client_state_bytes,
+            &mut self.working_set,
+        );
+
+        Ok(())
     }
 
     fn store_consensus_state(
         &mut self,
         consensus_state_path: ibc::core::ics24_host::path::ClientConsensusStatePath,
         consensus_state: Self::AnyConsensusState,
-    ) -> Result<(), ibc::core::ContextError> {
+    ) -> Result<(), ContextError> {
         todo!()
     }
 }
