@@ -81,8 +81,9 @@ impl CliParserMacro {
                                     syn::GenericArgument::Type(syn::Type::Path(type_path)) => {
                                         let ident = extract_ident(type_path);
                                         let bounds = generic_bounds
-                                            .get(&ident)
-                                            .expect("This is a bug the sovereign SDK's macro for trait bound extraction! All generic types must have been identified already");
+                                            .get(&type_path)
+                                            .map(|bounds| bounds.clone())
+                                            .unwrap_or_default();
 
                                         // Construct a "type param" with the appropriate bounds. This corresponds to a syntax
                                         // tree like `T: Trait1 + Trait2`

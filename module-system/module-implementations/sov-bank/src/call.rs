@@ -17,10 +17,7 @@ use crate::{Amount, Bank, Coins, Token};
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 // https://github.com/serde-rs/serde/issues/2418
-pub enum CallMessage<C>
-where
-    C: sov_modules_api::Context,
-{
+pub enum CallMessage<C: sov_modules_api::Context> {
     /// Creates a new token with the specified name and initial balance.
     CreateToken {
         /// Random value use to create a unique token address.
