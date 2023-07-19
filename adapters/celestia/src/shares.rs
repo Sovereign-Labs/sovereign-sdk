@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
-use base64::STANDARD;
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::{NamespaceId, NAMESPACE_ID_LEN};
 use prost::bytes::{Buf, BytesMut};
@@ -93,7 +94,8 @@ impl<'de> Deserialize<'de> for Share {
         if share.len() == B64_SHARE_SIZE {
             let mut decoded = BytesMut::with_capacity(SHARE_SIZE);
             unsafe { decoded.set_len(SHARE_SIZE) }
-            base64::decode_config_slice(share, STANDARD, &mut decoded[..])
+            STANDARD
+                .decode_slice(share, &mut decoded[..])
                 .map_err(|_| Error::custom("Invalid base64 encoding"))?;
             share = decoded.freeze()
         }
@@ -278,7 +280,7 @@ impl NamespaceGroup {
     pub fn from_b64(b64: &str) -> Result<Self, ShareParsingError> {
         let mut decoded = Vec::with_capacity((b64.len() + 3) / 4 * 3);
         // unsafe { decoded.set_len((b64.len() / 4 * 3)) }
-        if let Err(err) = base64::decode_config_buf(b64, base64::STANDARD, &mut decoded) {
+        if let Err(err) = STANDARD.decode_slice(b64, &mut decoded) {
             info!("Error decoding NamespaceGroup from base64: {}", err);
             return Err(ShareParsingError::ErrInvalidBase64);
         }
@@ -310,8 +312,9 @@ impl NamespaceGroup {
         }
         let mut shares = Vec::with_capacity(encoded_shares.len());
         for share in encoded_shares {
-            let decoded_vec =
-                base64::decode(share).map_err(|_| ShareParsingError::ErrInvalidBase64)?;
+            let decoded_vec = STANDARD
+                .decode(share)
+                .map_err(|_| ShareParsingError::ErrInvalidBase64)?;
             if decoded_vec.len() != 512 {
                 return Err(ShareParsingError::ErrWrongLength);
             }

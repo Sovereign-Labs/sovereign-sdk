@@ -2,6 +2,8 @@ use std::fmt::{Display, Formatter};
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
+use base64::engine::general_purpose::STANDARD;
+use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespacedHash;
 use prost::bytes::Buf;
@@ -184,14 +186,14 @@ pub struct DataAvailabilityHeader {
 }
 
 // Danger! This method panics if the provided bas64 is longer than a namespaced hash
-fn decode_to_ns_hash(b64: &str) -> Result<NamespacedHash, base64::DecodeError> {
+fn decode_to_ns_hash(b64: &str) -> Result<NamespacedHash, base64::DecodeSliceError> {
     let mut out = [0u8; NAMESPACED_HASH_LEN];
-    base64::decode_config_slice(b64, base64::STANDARD, &mut out)?;
+    STANDARD.decode_slice(b64.as_bytes(), &mut out)?;
     Ok(NamespacedHash(out))
 }
 
 impl TryFrom<MarshalledDataAvailabilityHeader> for DataAvailabilityHeader {
-    type Error = base64::DecodeError;
+    type Error = base64::DecodeSliceError;
 
     fn try_from(value: MarshalledDataAvailabilityHeader) -> Result<Self, Self::Error> {
         let mut row_roots = Vec::with_capacity(value.row_roots.len());
