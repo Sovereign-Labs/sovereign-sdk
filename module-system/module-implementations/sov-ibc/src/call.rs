@@ -54,7 +54,7 @@ impl<C: sov_modules_api::Context> IbcModule<C> {
 
         let mut execution_context = IbcExecutionContext {
             ibc: self,
-            working_set: &working_set,
+            working_set: working_set,
         };
 
         match dispatch(&mut execution_context, domain_msg) {
