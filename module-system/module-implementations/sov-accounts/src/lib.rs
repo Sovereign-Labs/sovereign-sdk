@@ -1,7 +1,7 @@
-pub mod hooks;
-
+#![deny(missing_docs)]
 pub mod call;
 pub mod genesis;
+pub mod hooks;
 #[cfg(feature = "native")]
 pub mod query;
 #[cfg(test)]
