@@ -267,23 +267,8 @@ pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
 
     // Parse attributes
     for attr in attrs {
-        match attr {
-            // syn::NestedMeta::Meta(syn::Meta::Path(path)) => {
-            //     if context_type.is_none() {
-            //         context_type = Some(syn::Type::Path(syn::TypePath { qself: None, path }));
-            //     } else {
-            //         return syn::Error::new_spanned(
-            //             &path,
-            //             "Unexpected multiple type path in the attribute list",
-            //         )
-            //         .to_compile_error()
-            //         .into();
-            //     }
-            // }
-            syn::NestedMeta::Lit(syn::Lit::Str(lit_str)) => {
-                skip_fields = lit_str.value().split(',').map(|s| s.to_string()).collect();
-            }
-            _ => {}
+        if let syn::NestedMeta::Lit(syn::Lit::Str(lit_str)) = attr {
+            skip_fields = lit_str.value().split(',').map(|s| s.to_string()).collect();
         }
     }
 
@@ -308,7 +293,7 @@ pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
     }
 }
 
-/// Causes the annotated module to be excluded from the generated CLI. 
+/// Causes the annotated module to be excluded from the generated CLI.
 /// This annotation is typically used for modules which don't directly accept
 /// on-chain transactions.
 #[proc_macro_attribute]

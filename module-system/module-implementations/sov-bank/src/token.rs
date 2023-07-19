@@ -63,7 +63,7 @@ impl<C: sov_modules_api::Context> FromStr for Coins<C> {
         let token_address = C::Address::from_str(token_address_str).map_err(|err| {
             CoinsFromStrError::InvalidTokenAddress {
                 input: token_address_str.into(),
-                err: err.into(),
+                err,
             }
         })?;
 

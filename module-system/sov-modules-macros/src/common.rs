@@ -4,7 +4,7 @@ use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, ToTokens};
 use syn::punctuated::Punctuated;
 use syn::{
-    parse_quote, DataStruct, GenericParam, Generics, ImplGenerics, Meta, PathSegment, TypeGenerics,
+    DataStruct, GenericParam, Generics, ImplGenerics, Meta, PathSegment, TypeGenerics,
     TypeParamBound, TypePath, WhereClause, WherePredicate,
 };
 
@@ -256,43 +256,38 @@ pub fn extract_generic_type_bounds(
     let mut generics_with_bounds: HashMap<_, _> = Default::default();
     // Collect the inline bounds from each generic param
     for param in generics.params.iter() {
-        match param {
-            GenericParam::Type(ty) => {
-                let path_segment = PathSegment {
-                    ident: ty.ident.clone(),
-                    arguments: syn::PathArguments::None,
-                };
-                let path = syn::Path {
-                    leading_colon: None,
-                    segments: Punctuated::from_iter(vec![path_segment]),
-                };
-                let type_path = syn::TypePath { qself: None, path };
-                generics_with_bounds.insert(type_path, ty.bounds.clone());
-            }
-            _ => {}
+        if let GenericParam::Type(ty) = param {
+            let path_segment = PathSegment {
+                ident: ty.ident.clone(),
+                arguments: syn::PathArguments::None,
+            };
+            let path = syn::Path {
+                leading_colon: None,
+                segments: Punctuated::from_iter(vec![path_segment]),
+            };
+            let type_path = syn::TypePath { qself: None, path };
+            generics_with_bounds.insert(type_path, ty.bounds.clone());
         }
     }
 
     // Iterate over the bounds in the `where_clause` and add them to the map
     if let Some(where_clause) = &generics.where_clause {
         for predicate in &where_clause.predicates {
-            match &predicate {
-                WherePredicate::Type(predicate_type) => {
-                    // If the bounded type is a regular type path, we need to extract the bounds and add them to the map.
-                    // For now, we ignore more exotic bounds `[T; N]: SomeTrait`.
-                    if let syn::Type::Path(type_path) = &predicate_type.bounded_ty {
-                        match generics_with_bounds.entry(type_path.clone()) {
-                            std::collections::hash_map::Entry::Occupied(mut entry) => {
-                                entry.get_mut().extend(predicate_type.bounds.clone())
-                            }
-                            std::collections::hash_map::Entry::Vacant(entry) => {
-                                entry.insert(predicate_type.bounds.clone());
-                            }
+            // We can ignore lifetimes and "Eq" predicates since they don't add any trait bounds
+            // so just match on `Type` predicates
+            if let WherePredicate::Type(predicate_type) = predicate {
+                // If the bounded type is a regular type path, we need to extract the bounds and add them to the map.
+                // For now, we ignore more exotic bounds `[T; N]: SomeTrait`.
+                if let syn::Type::Path(type_path) = &predicate_type.bounded_ty {
+                    match generics_with_bounds.entry(type_path.clone()) {
+                        std::collections::hash_map::Entry::Occupied(mut entry) => {
+                            entry.get_mut().extend(predicate_type.bounds.clone())
+                        }
+                        std::collections::hash_map::Entry::Vacant(entry) => {
+                            entry.insert(predicate_type.bounds.clone());
                         }
                     }
                 }
-                // We can ignore lifetimes and "Eq" predicates since they don't add any trait bounds
-                _ => {}
             }
         }
     }

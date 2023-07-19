@@ -1,10 +1,7 @@
 use quote::{format_ident, quote};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::{
-    Data, DataEnum, DeriveInput, Fields, GenericParam, Ident, Lit, Meta, MetaNameValue, Path,
-    PathArguments, Type,
-};
+use syn::{Data, DataEnum, DeriveInput, Fields, GenericParam, Ident, PathArguments, Type};
 
 use crate::common::{extract_generic_type_bounds, extract_ident, StructFieldExtractor};
 
@@ -77,42 +74,38 @@ impl CliParserMacro {
                             let mut args_with_bounds =
                                 Punctuated::<GenericParam, syn::token::Comma>::new();
                             for generic_arg in &angle_bracketed_data.args {
-                                match generic_arg {
-                                    syn::GenericArgument::Type(syn::Type::Path(type_path)) => {
-                                        let ident = extract_ident(type_path);
-                                        let bounds = generic_bounds
-                                            .get(&type_path)
-                                            .map(|bounds| bounds.clone())
-                                            .unwrap_or_default();
+                                if let syn::GenericArgument::Type(syn::Type::Path(type_path)) =
+                                    generic_arg
+                                {
+                                    let ident = extract_ident(type_path);
+                                    let bounds =
+                                        generic_bounds.get(type_path).cloned().unwrap_or_default();
 
-                                        // Construct a "type param" with the appropriate bounds. This corresponds to a syntax
-                                        // tree like `T: Trait1 + Trait2`
-                                        let generic_type_param_with_bounds = syn::TypeParam {
-                                            attrs: Vec::new(),
-                                            ident: ident.clone(),
-                                            colon_token: Some(syn::token::Colon {
-                                                spans: [type_path.span().clone()],
-                                            }),
-                                            bounds: bounds.clone(),
-                                            eq_token: None,
-                                            default: None,
-                                        };
-                                        args_with_bounds.push(GenericParam::Type(
-                                            generic_type_param_with_bounds,
-                                        ))
-                                    }
-                                    _ => {}
+                                    // Construct a "type param" with the appropriate bounds. This corresponds to a syntax
+                                    // tree like `T: Trait1 + Trait2`
+                                    let generic_type_param_with_bounds = syn::TypeParam {
+                                        attrs: Vec::new(),
+                                        ident: ident.clone(),
+                                        colon_token: Some(syn::token::Colon {
+                                            spans: [type_path.span()],
+                                        }),
+                                        bounds: bounds.clone(),
+                                        eq_token: None,
+                                        default: None,
+                                    };
+                                    args_with_bounds
+                                        .push(GenericParam::Type(generic_type_param_with_bounds))
                                 }
                             }
                             // Construct a `Generics` struct with the generic type parameters and their bounds.
                             // This corresponds to a syntax tree like `<T: Trait1 + Trait2>`
                             syn::Generics {
                                 lt_token: Some(syn::token::Lt {
-                                    spans: [type_path.span().clone()],
+                                    spans: [type_path.span()],
                                 }),
                                 params: args_with_bounds,
                                 gt_token: Some(syn::token::Gt {
-                                    spans: [type_path.span().clone()],
+                                    spans: [type_path.span()],
                                 }),
                                 where_clause: None,
                             }
