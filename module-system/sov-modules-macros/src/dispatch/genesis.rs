@@ -1,7 +1,7 @@
-use proc_macro2::Ident;
+use proc_macro2::{Ident, Span};
 use syn::{DeriveInput, TypeGenerics};
 
-use crate::common::{parse_generic_params, StructFieldExtractor, StructNamedField};
+use crate::common::{get_generics_type_param, StructFieldExtractor, StructNamedField};
 
 pub(crate) struct GenesisMacro {
     field_extractor: StructFieldExtractor,
@@ -28,7 +28,7 @@ impl GenesisMacro {
         let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
-        let generic_param = parse_generic_params(&generics)?;
+        let generic_param = get_generics_type_param(&generics, Span::call_site())?;
         let genesis_config = Self::make_genesis_config(&fields, &type_generics, &generic_param);
         let genesis_fn_body = Self::make_genesis_fn_body(&fields);
 

@@ -189,7 +189,7 @@ pub trait Context: Spec + Clone + Debug + PartialEq {
 }
 ```
 
-Modules are expected to be generic over the `Context` type. This trait gives them a convenient handle to access all of the cryptographic operations
+Modules are expected to be generic over the `Context` type. If a module is generic over multiple type parameters, then the type bound over `Context` is always on the *first* of those type parameters. The `Context` trait gives them a convenient handle to access all of the cryptographic operations
 defined by a `Spec`, while also making it easy for the Module System to pass in authenticated transaction-specific information which
 would not otherwise be available to a module. Currently, a `Context` is only required to contain the `sender` (signer) of the transaction,
 but this trait might be extended in the future.

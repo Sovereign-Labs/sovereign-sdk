@@ -1,7 +1,8 @@
+use proc_macro2::Span;
 use syn::DeriveInput;
 
 use crate::common::{
-    get_serialization_attrs, parse_generic_params, StructDef, StructFieldExtractor, CALL,
+    get_generics_type_param, get_serialization_attrs, StructDef, StructFieldExtractor, CALL,
 };
 
 impl<'a> StructDef<'a> {
@@ -110,7 +111,7 @@ impl DispatchCallMacro {
             ..
         } = input;
 
-        let generic_param = parse_generic_params(&generics)?;
+        let generic_param = get_generics_type_param(&generics, Span::call_site())?;
 
         let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
         let fields = self.field_extractor.get_fields_from_struct(&data)?;

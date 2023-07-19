@@ -37,6 +37,7 @@ impl AsRef<[u8]> for Address {
 
 impl AddressTrait for Address {}
 
+#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 #[derive(PartialEq, Clone, Eq, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Address {
     addr: [u8; 32],
@@ -122,6 +123,9 @@ pub trait Spec {
     type Address: AddressTrait
         + BorshSerialize
         + BorshDeserialize
+        // Do we always need this, even when the module does not have a JSON
+        // Schema? That feels a bit wrong.
+        + ::schemars::JsonSchema
         + Into<AddressBech32>
         + From<AddressBech32>;
 
@@ -233,6 +237,18 @@ pub trait Module {
     ) -> Result<CallResponse, Error> {
         unreachable!()
     }
+}
+
+/// A [`Module`] that has a well-defined and known [JSON
+/// Schema](https://json-schema.org/) for its [`Module::CallMessage`].
+///
+/// This trait is intended to support code generation tools, CLIs, and
+/// documentation. You can derive it with `#[derive(ModuleCallJsonSchema)]`, or
+/// implement it manually if your use case demands more control over the JSON
+/// Schema generation.
+pub trait ModuleCallJsonSchema: Module {
+    /// Returns the JSON schema for [`Module::CallMessage`].
+    fn json_schema() -> String;
 }
 
 /// Every module has to implement this trait.

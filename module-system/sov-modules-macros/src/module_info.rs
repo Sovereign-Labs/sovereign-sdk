@@ -1,7 +1,7 @@
 use proc_macro2::{self, Ident, Span};
 use syn::{DataStruct, DeriveInput, ImplGenerics, PathArguments, TypeGenerics, WhereClause};
 
-use crate::common::parse_generic_params;
+use crate::common::get_generics_type_param;
 
 #[derive(Clone)]
 struct StructNamedField {
@@ -38,7 +38,7 @@ pub(crate) fn derive_module_info(
         ..
     } = input;
 
-    let generic_param = parse_generic_params(&generics)?;
+    let generic_param = get_generics_type_param(&generics, Span::call_site())?;
 
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
     let fields = get_fields_from_struct(&data);
