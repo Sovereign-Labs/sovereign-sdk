@@ -211,7 +211,8 @@ impl CliParserMacro {
             }
 
             pub fn cmd_parser #impl_generics (module_name: &str, call_data: &str) -> anyhow::Result<Vec<u8>>
-            #where_clause {
+            #where_clause
+             {
                 match module_name {
                     #(#match_arms)*
                     _ => panic!("unknown module name"),

@@ -189,6 +189,8 @@ pub trait Spec {
         + Signature<PublicKey = Self::PublicKey>
         + Send
         + Sync
+        + Serialize
+        + DeserializeOwned
         + FromStr<Err = anyhow::Error>;
 
     /// The digital signature scheme used by the rollup

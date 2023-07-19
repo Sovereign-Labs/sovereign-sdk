@@ -192,7 +192,7 @@ impl SerializedTx {
                 call_data_path.as_ref()
             )
         })?;
-        cmd_parser(module_name, &call_data)
+        cmd_parser::<DefaultContext>(module_name, &call_data)
     }
 }
 
@@ -420,7 +420,7 @@ mod test {
     // Test helpers
     struct TestDemo {
         config: GenesisConfig<C>,
-        demo: DemoApp<C, MockZkvm>,
+        demo: DemoApp<C, MockZkvm, TestBlob>,
     }
 
     impl TestDemo {
@@ -440,7 +440,7 @@ mod test {
 
             Self {
                 config: genesis_config,
-                demo: DemoAppRunner::<DefaultContext, MockZkvm>::new(runner_config).stf,
+                demo: DemoAppRunner::<DefaultContext, MockZkvm, TestBlob>::new(runner_config).stf,
             }
         }
     }
@@ -495,11 +495,15 @@ mod test {
         }
     }
 
-    fn execute_txs(demo: &mut DemoApp<C, MockZkvm>, config: GenesisConfig<C>, txs: Vec<RawTx>) {
-        StateTransitionFunction::<MockZkvm>::init_chain(demo, config);
-        StateTransitionFunction::<MockZkvm>::begin_slot(demo, Default::default());
+    fn execute_txs(
+        demo: &mut DemoApp<C, MockZkvm, TestBlob>,
+        config: GenesisConfig<C>,
+        txs: Vec<RawTx>,
+    ) {
+        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(demo, config);
+        StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(demo, Default::default());
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_blob(
+        let apply_blob_outcome = StateTransitionFunction::<MockZkvm, TestBlob>::apply_blob(
             demo,
             &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
             None,
@@ -510,11 +514,11 @@ mod test {
             apply_blob_outcome,
             "Sequencer execution should have succeeded but failed",
         );
-        StateTransitionFunction::<MockZkvm>::end_slot(demo);
+        StateTransitionFunction::<MockZkvm, TestBlob>::end_slot(demo);
     }
 
     fn get_balance(
-        demo: &mut DemoApp<DefaultContext, MockZkvm>,
+        demo: &mut DemoApp<DefaultContext, MockZkvm, TestBlob>,
         token_deployer_address: &Address,
         user_address: Address,
     ) -> Option<u64> {

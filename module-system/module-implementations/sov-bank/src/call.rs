@@ -27,36 +27,44 @@ pub enum CallMessage<C: sov_modules_api::Context> {
         /// The initial balance of the new token.
         initial_balance: Amount,
         /// The address of the account that the new tokens are minted to.
+        #[serde(bound(deserialize = "C::Address: serde::de::DeserializeOwned"))]
         minter_address: C::Address,
         /// Authorized minter list.
+        #[serde(bound(deserialize = "C::Address: serde::de::DeserializeOwned"))]
         authorized_minters: Vec<C::Address>,
     },
 
     /// Transfers a specified amount of tokens to the specified address.
     Transfer {
         /// The address to which the tokens will be transferred.
+        #[serde(bound(deserialize = "C::Address: serde::de::DeserializeOwned"))]
         to: C::Address,
         /// The amount of tokens to transfer.
+        #[serde(bound(deserialize = "Coins<C>: serde::de::DeserializeOwned"))]
         coins: Coins<C>,
     },
 
     /// Burns a specified amount of tokens.
     Burn {
         /// The amount of tokens to burn.
+        #[serde(bound(deserialize = "Coins<C>: serde::de::DeserializeOwned"))]
         coins: Coins<C>,
     },
 
     /// Mints a specified amount of tokens.
     Mint {
         /// The amount of tokens to mint.
+        #[serde(bound(deserialize = "Coins<C>: serde::de::DeserializeOwned"))]
         coins: Coins<C>,
         /// Address to mint tokens to
+        #[serde(bound(deserialize = "C::Address: serde::de::DeserializeOwned"))]
         minter_address: C::Address,
     },
 
     /// Freeze a token so that the supply is frozen
     Freeze {
         /// Address of the token to be frozen
+        #[serde(bound(deserialize = "C::Address: serde::de::DeserializeOwned"))]
         token_address: C::Address,
     },
 }
