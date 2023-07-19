@@ -23,5 +23,6 @@ fn main() -> io::Result<()> {
 fn store_json_schema<M: ModuleCallJsonSchema>(filename: &str) -> io::Result<()> {
     let mut file = File::create(format!("schemas/{}", filename))?;
     file.write_all(M::json_schema().as_bytes())?;
+    file.write_all(b"\n")?;
     Ok(())
 }
