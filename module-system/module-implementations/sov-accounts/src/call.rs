@@ -10,13 +10,13 @@ pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
     feature = "native",
     derive(serde::Serialize),
     derive(serde::Deserialize),
-    derive(schemars::JsonSchema)
+    derive(schemars::JsonSchema),
+    schemars(
+        bound = "C::PublicKey: ::schemars::JsonSchema, C::Signature: ::schemars::JsonSchema",
+        rename = "CallMessage"
+    )
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-#[schemars(
-    bound = "C::PublicKey: ::schemars::JsonSchema, C::Signature: ::schemars::JsonSchema",
-    rename = "CallMessage"
-)]
 pub enum CallMessage<C: sov_modules_api::Context> {
     // Updates a PublicKey for the corresponding Account.
     // The sender must be in possession of the new PublicKey.
