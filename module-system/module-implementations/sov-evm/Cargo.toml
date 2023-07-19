@@ -21,6 +21,7 @@ sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 
 anyhow = { workspace = true }
 bytes = { workspace = true }
+schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
@@ -54,5 +55,5 @@ sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-state/native", "dep:jsonrpsee", "sov-modules-api/native"]
+native = ["serde", "sov-state/native", "dep:jsonrpsee", "dep:schemars", "sov-modules-api/native"]
 experimental = ["native"]
