@@ -24,10 +24,6 @@ pub struct IbcModule<C: sov_modules_api::Context> {
 
     #[state]
     pub store: sov_state::StateMap<String, Vec<u8>>,
-
-    /// Reference to the Bank module.
-    #[module]
-    pub(crate) _bank: sov_bank::Bank<C>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcModule<C> {
@@ -58,5 +54,9 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcModule<C> {
                 Ok(self.create_client(msg, context, working_set)?)
             }
         }
+
+        // Q: Do we have to checkpoint the working set here, given that there were no errors?
+        // Or is this done by the caller?
+        // Similarly for reverting.
     }
 }

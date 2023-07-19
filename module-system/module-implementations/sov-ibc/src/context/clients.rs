@@ -1,3 +1,4 @@
+use derive_more::From;
 use ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
 use ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
 use ibc::core::ics02_client::client_state::{ClientStateValidation, ClientStateExecution, ClientStateCommon};
@@ -8,29 +9,20 @@ use ibc::core::ValidationContext;
 use super::IbcExecutionContext;
 
 // Q: How do we enable users to set the light clients they want?
+#[derive(From, ConsensusState)]
 pub enum AnyConsensusState {
     Tendermint(TmConsensusState)
 }
 
-impl ConsensusState for AnyConsensusState {
-    fn root(&self) -> &ibc::core::ics23_commitment::commitment::CommitmentRoot {
-        todo!()
-    }
-
-    fn timestamp(&self) -> ibc::core::timestamp::Timestamp {
-        todo!()
-    }
-
-    fn encode_vec(&self) -> Result<Vec<u8>, tendermint_proto::Error> {
-        todo!()
-    }
-}
-
 // Q: How do we enable users to set the light clients they want?
+#[derive(From)]
 pub enum AnyClientState {
     Tendermint(TmClientState)
 }
 
+// Next 3 trait impls are boilerplate
+// We have a `ClientState` macro, but unfortunately it doesn't currently support
+// the context (`IbcExecutionContext` in this case) to be generic
 impl ClientStateCommon for AnyClientState {
     fn verify_consensus_state(&self, consensus_state: ibc::Any) -> Result<(), ibc::core::ics02_client::error::ClientError> {
         todo!()
