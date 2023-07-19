@@ -11,6 +11,7 @@ version = { workspace = true }
 readme = "README.md"
 resolver = "2"
 autotests = false
+#metadata
 
 [lib]
 proc-macro = true

@@ -19,7 +19,6 @@ anyhow = { workspace = true }
 borsh = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
-sha2 = { workspace = true }
 clap = { workspace = true, optional = true }
 toml = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"], optional = true }
@@ -38,8 +37,6 @@ sov-state = { path = "../../module-system/sov-state", default-features = false }
 sov-modules-api = { path = "../../module-system/sov-modules-api", default-features = false }
 sov-modules-macros = { path = "../../module-system/sov-modules-macros" }
 # Only enable the db on "native" feature
-sov-schema-db = { path = "../../full-node/db/sov-schema-db", optional = true }
-sov-db = { path = "../../full-node/db/sov-db", optional = true }
 const-rollup-config = { path = "../const-rollup-config" }
 sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
 
@@ -57,8 +54,6 @@ experimental =["sov-evm/experimental"]
 
 
 native = [
-    "dep:sov-db",
-    "dep:sov-schema-db",
     "sov-bank/native",
     "sov-accounts/native",
     "sov-election/native",
