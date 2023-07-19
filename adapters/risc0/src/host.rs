@@ -96,5 +96,4 @@ fn verify_from_slice<'a>(
 pub struct Risc0Proof<'a> {
     pub segment_receipts: Vec<Box<SegmentReceipt>>,
     pub journal: &'a [u8],
-    _phantom: std::marker::PhantomData<&'a ()>,
 }
