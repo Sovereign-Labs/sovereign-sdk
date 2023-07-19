@@ -37,7 +37,6 @@ ethers-middleware = { workspace = true }
 ethers-providers = { workspace = true }
 ethers-signers = { workspace = true }
 
-
 anvil  = { workspace = true }
 anvil-core  = { workspace = true }
 ethers = { workspace = true }
