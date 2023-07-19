@@ -1,6 +1,6 @@
 [package]
 name = "sov-value-setter"
-description = "A Sovereign SDK module for incentivizing provers"
+description = "A Sovereign SDK example module for setting/reading value from state"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
@@ -23,12 +23,11 @@ sov-modules-macros = { path = "../../../sov-modules-macros" }
 sov-state = { path = "../../../sov-state", default-features = false }
 sov-rollup-interface = { path = "../../../../rollup-interface" }
 serde = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
 [features]
 default = ["native"]
-serde = ["dep:serde", "dep:serde_json"]
+serde = ["dep:serde"]
 native = ["serde", "sov-modules-api/native", "dep:jsonrpsee"]
