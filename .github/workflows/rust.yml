@@ -77,7 +77,8 @@ jobs:
       - name: cargo hack
         run: make check-features
   test:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 60
     env:
       SCCACHE_GHA_ENABLED: "true"
