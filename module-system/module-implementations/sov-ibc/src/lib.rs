@@ -1,11 +1,10 @@
+#![allow(unused_variables)]
+#![allow(dead_code)]
+
 pub mod call;
 pub mod genesis;
 
-#[cfg(test)]
-mod tests;
-
-#[cfg(feature = "native")]
-pub mod query;
+mod context;
 
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
@@ -18,21 +17,20 @@ pub struct ExampleModuleConfig {}
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[derive(ModuleInfo)]
-pub struct ExampleModule<C: sov_modules_api::Context> {
+pub struct IbcModule<C: sov_modules_api::Context> {
     /// Address of the module.
     #[address]
     pub address: C::Address,
 
-    /// Some value kept in the state.
     #[state]
-    pub value: sov_state::StateValue<u32>,
+    pub store: sov_state::StateMap<String, Vec<u8>>,
 
     /// Reference to the Bank module.
     #[module]
     pub(crate) _bank: sov_bank::Bank<C>,
 }
 
-impl<C: sov_modules_api::Context> sov_modules_api::Module for ExampleModule<C> {
+impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcModule<C> {
     type Context = C;
 
     type Config = ExampleModuleConfig;
@@ -54,9 +52,10 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ExampleModule<C> {
         context: &Self::Context,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
+        // Note: Here, we would convert into a `MsgEnvelope`, and send to `dispatch()` (i.e. no match statement)
         match msg {
-            call::CallMessage::SetValue(new_value) => {
-                Ok(self.set_value(new_value, context, working_set)?)
+            call::CallMessage::MsgCreateClient(msg) => {
+                Ok(self.create_client(msg, context, working_set)?)
             }
         }
     }
