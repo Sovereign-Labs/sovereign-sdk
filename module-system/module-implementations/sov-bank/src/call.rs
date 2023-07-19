@@ -16,6 +16,7 @@ use crate::{Amount, Bank, Coins, Token};
     schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
+// https://github.com/serde-rs/serde/issues/2418
 pub enum CallMessage<C>
 where
     C: sov_modules_api::Context,

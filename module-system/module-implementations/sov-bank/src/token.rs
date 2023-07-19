@@ -15,7 +15,7 @@ pub type Amount = u64;
     feature = "native",
     derive(serde::Serialize),
     derive(serde::Deserialize),
-    derive(clap::Parser)
+    derive(clap::Parser),
     derive(schemars::JsonSchema),
     schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "Coins")
 )]

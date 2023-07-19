@@ -1,6 +1,12 @@
+use std::collections::HashMap;
+
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, ToTokens};
-use syn::{DataStruct, GenericParam, Generics, ImplGenerics, Meta, TypeGenerics, WhereClause};
+use syn::punctuated::Punctuated;
+use syn::{
+    DataStruct, GenericParam, Generics, ImplGenerics, Meta, TypeGenerics, TypeParamBound,
+    WhereClause, WherePredicate,
+};
 
 #[derive(Clone)]
 pub(crate) struct StructNamedField {
@@ -212,4 +218,107 @@ pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStrea
     }
 
     Ok(serialization_attrs)
+}
+
+// pub struct GenericWithBounds {
+//     pub ident: Ident,
+//     pub bounds: Vec<TypeParamBound>,
+// }
+
+// pub struct GenericTypesWithBounds {
+//     /// A mapping from a generic type's ident to a complete list of its bounds
+//     pub bounds: HashMap<Ident, Punctuated<TypeParamBound, syn::token::Add>>,
+// }
+
+/// Extract a mapping from generic types to their associated trait bounds, including
+/// the ones from the where clause.
+///
+/// For example, given the following struct:
+/// ```rust,ignore
+/// use sov_modules_macros::common::GenericTypesWithBounds;
+/// let test_struct: syn::ItemStruct = syn::parse_quote! {
+///     struct TestStruct<T: SomeTrait> where T: SomeOtherTrait {
+///         field: T
+///     }
+/// };
+/// // We want to extract both the inline bounds, and the bounds from the where clause...
+/// // so that the generics from above definition are equivalent what we would have gotten
+/// // from writing `T: SomeTrait + SomeOtherTrait` inline
+/// let desired_bounds_for_t: syn::TypeParam = syn::parse_quote!(T: SomeTrait + SomeThirdTrait);
+///
+/// // That is exactly what `GenericTypesWithBounds` does
+/// let our_bounds = extract_generic_type_bounds(&test_struct.generics);
+/// assert_eq!(our_bounds.get(T), Some(&desired_bounds_for_t.bounds));
+/// ```
+pub fn extract_generic_type_bounds(
+    generics: &Generics,
+) -> HashMap<Ident, Punctuated<TypeParamBound, syn::token::Add>> {
+    let mut generics_with_bounds: HashMap<_, _> = Default::default();
+    // Collect the inline bounds from each generic param
+    for param in generics.params.iter() {
+        match param {
+            GenericParam::Type(ty) => {
+                generics_with_bounds.insert(ty.ident.clone(), ty.bounds.clone());
+            }
+            _ => {}
+        }
+    }
+
+    // Iterate over the bounds in the `where_clause` and add them to the map
+    if let Some(where_clause) = &generics.where_clause {
+        for predicate in &where_clause.predicates {
+            match &predicate {
+                WherePredicate::Type(predicate_type) => {
+                    // If the bounded type is a regular type path, we need to extract the bounds and add them to the map.
+                    // For now, we ignore more exotic bounds `[T; N]: SomeTrait`.
+                    if let syn::Type::Path(type_path) = &predicate_type.bounded_ty {
+                        // Add the bounds from this type into the map
+                        let ident = extract_ident(type_path);
+                        if let Some(bounds) = generics_with_bounds.get_mut(ident) {
+                            bounds.extend(predicate_type.bounds.iter().cloned())
+                        }
+                    }
+                }
+                // We can ignore lifetimes and "Eq" predicates since they don't add any trait bounds
+                _ => {}
+            }
+        }
+    }
+    generics_with_bounds
+}
+
+/// Extract the type ident from a `TypePath`.
+pub fn extract_ident(type_path: &syn::TypePath) -> &Ident {
+    &type_path
+        .path
+        .segments
+        .last()
+        .expect("Type path must have at least one segment")
+        .ident
+}
+
+#[test]
+fn test_generic_types_with_bounds() {
+    let test_struct: syn::ItemStruct = syn::parse_quote! {
+        struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> where T: SomeThirdTrait {
+            field: (T, U, V)
+        }
+    };
+    let generics = test_struct.generics;
+    let our_bounds = extract_generic_type_bounds(&generics);
+    let expected_bounds_for_t: syn::TypeParam = syn::parse_quote!(T: SomeTrait + SomeThirdTrait);
+    let expected_bounds_for_u: syn::TypeParam = syn::parse_quote!(U: SomeOtherTrait);
+
+    assert_eq!(
+        our_bounds.get(&format_ident!("T")),
+        Some(&expected_bounds_for_t.bounds)
+    );
+    assert_eq!(
+        our_bounds.get(&format_ident!("U")),
+        Some(&expected_bounds_for_u.bounds)
+    );
+    assert_eq!(
+        our_bounds.get(&format_ident!("V")),
+        Some(&syn::punctuated::Punctuated::new())
+    );
 }

@@ -63,20 +63,20 @@ pub fn create_demo_genesis_config<C: Context>(
 
     GenesisConfig::new(
         bank_config,
-        sequencer_registry_config,
-        election_config,
-        value_setter_config,
-        sov_accounts::AccountConfig { pub_keys: vec![] },
-        #[cfg(feature = "experimental")]
-        EvmConfig {
-            data: vec![AccountData {
-                address: genesis_evm_address,
-                balance: AccountData::balance(u64::MAX),
-                code_hash: AccountData::empty_code(),
-                code: vec![],
-                nonce: 0,
-            }],
-        },
+        // sequencer_registry_config,
+        // election_config,
+        // value_setter_config,
+        // sov_accounts::AccountConfig { pub_keys: vec![] },
+        // #[cfg(feature = "experimental")]
+        // EvmConfig {
+        //     data: vec![AccountData {
+        //         address: genesis_evm_address,
+        //         balance: AccountData::balance(u64::MAX),
+        //         code_hash: AccountData::empty_code(),
+        //         code: vec![],
+        //         nonce: 0,
+        //     }],
+        // },
     )
 }
 
