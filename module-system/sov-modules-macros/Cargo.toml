@@ -40,4 +40,3 @@ schemars = { workspace = true }
 syn = { version = "1.0", features = ["full"] }
 
 sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
-sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
