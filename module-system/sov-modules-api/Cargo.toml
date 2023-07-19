@@ -25,7 +25,7 @@ serde_json = { workspace = true }
 schemars = { workspace = true, optional = true, features = [] }
 
 ed25519-dalek = { version = "1.0.1", default-features = false, features = ["alloc", "u64_backend"] }
-rand = { version = "0.7", optional = true }
+rand = { version = "0.8", optional = true }
 hex = { workspace = true, optional = true }
 
 [dev-dependencies]
