@@ -17,6 +17,11 @@ pub struct ExampleModuleConfig {}
 /// - Must derive `ModuleInfo`
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
+/// - Should derive `ModuleCallJsonSchema` if the "native" feature is enabled.
+///   This is optional, and is only used to generate a JSON Schema for your
+///   module's call messages (which is useful to develop clients, CLI tooling
+///   etc.).
+#[cfg_attr(feature = "native", derive(sov_modules_macros::ModuleCallJsonSchema))]
 #[derive(ModuleInfo)]
 pub struct ExampleModule<C: sov_modules_api::Context> {
     /// Address of the module.
