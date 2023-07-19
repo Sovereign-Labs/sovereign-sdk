@@ -1,6 +1,6 @@
 [package]
 name = "sov-election"
-description = "A Sovereign SDK for demonstating election"
+description = "A Sovereign SDK module for demonstrating election"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
