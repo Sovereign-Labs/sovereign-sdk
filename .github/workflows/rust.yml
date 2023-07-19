@@ -2,11 +2,11 @@ name: Rust
 
 on:
   push:
-    branches: ["main"]
+    branches: ["nightly", "stable"]
     paths-ignore:
       - "**.md"
   pull_request:
-    branches: ["main"]
+    branches: ["nightly", "stable"]
     paths-ignore:
       - "**.md"
 
@@ -59,7 +59,8 @@ jobs:
 
   # Check that every combination of features is working properly.
   hack:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
     name: features
     timeout-minutes: 60
     env:
@@ -76,7 +77,8 @@ jobs:
       - name: cargo hack
         run: make check-features
   test:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 60
     env:
       SCCACHE_GHA_ENABLED: "true"
@@ -88,7 +90,8 @@ jobs:
       - name: Run cargo test
         run: cargo test
   coverage:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 90
     env:
       SCCACHE_GHA_ENABLED: "true"
@@ -174,8 +177,8 @@ jobs:
   deploy-github-pages:
     needs: cargo-doc-artifact
     timeout-minutes: 5
-    # No point in deploying if we're not on `main`, as it will just fail.
-    if: github.ref == 'refs/heads/main'
+    # No point in deploying if we're not on `stable`, as it will just fail.
+    if: github.ref == 'refs/heads/stable'
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
       pages: write # to deploy to Pages

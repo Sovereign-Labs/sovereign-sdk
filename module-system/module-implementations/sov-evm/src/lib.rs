@@ -8,10 +8,14 @@ pub mod genesis;
 #[cfg(feature = "experimental")]
 pub mod query;
 #[cfg(feature = "experimental")]
+mod receipt;
+#[cfg(feature = "experimental")]
 #[cfg(test)]
 mod tests;
 #[cfg(feature = "experimental")]
 pub use experimental::{AccountData, Evm, EvmConfig};
+#[cfg(feature = "experimental")]
+pub use receipt::TransactionReceipt;
 
 #[cfg(feature = "experimental")]
 mod experimental {
@@ -24,6 +28,7 @@ mod experimental {
     use super::evm::transaction::BlockEnv;
     use super::evm::{DbAccount, EthAddress};
     use crate::evm::{Bytes32, EvmTransaction};
+    use crate::TransactionReceipt;
 
     #[derive(Clone)]
     pub struct AccountData {
@@ -63,6 +68,9 @@ mod experimental {
 
         #[state]
         pub(crate) transactions: sov_state::StateMap<Bytes32, EvmTransaction>,
+
+        #[state]
+        pub(crate) receipts: sov_state::StateMap<Bytes32, TransactionReceipt>,
     }
 
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {

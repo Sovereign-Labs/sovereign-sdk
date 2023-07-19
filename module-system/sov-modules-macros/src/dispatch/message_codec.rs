@@ -1,8 +1,8 @@
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::format_ident;
 use syn::DeriveInput;
 
-use crate::common::{parse_generic_params, StructDef, StructFieldExtractor, CALL};
+use crate::common::{get_generics_type_param, StructDef, StructFieldExtractor, CALL};
 
 impl<'a> StructDef<'a> {
     fn create_message_codec(&self) -> TokenStream {
@@ -66,7 +66,7 @@ impl MessageCodec {
             ..
         } = input;
 
-        let generic_param = parse_generic_params(&generics)?;
+        let generic_param = get_generics_type_param(&generics, Span::call_site())?;
 
         let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
         let fields = self.field_extractor.get_fields_from_struct(&data)?;

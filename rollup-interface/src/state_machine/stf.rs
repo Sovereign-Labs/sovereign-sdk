@@ -76,7 +76,7 @@ pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
 ///  - block: DA layer block
 ///  - batch: Set of transactions grouped together, or block on L2
 ///  - blob: Non serialised batch
-pub trait StateTransitionFunction<Vm: Zkvm> {
+pub trait StateTransitionFunction<Vm: Zkvm, B: BlobTransactionTrait> {
     /// Root hash of state merkle tree
     type StateRoot;
     /// The initial state of the rollup.
@@ -116,7 +116,7 @@ pub trait StateTransitionFunction<Vm: Zkvm> {
     /// just panic - which means that no proof will be created).
     fn apply_blob(
         &mut self,
-        blob: &mut impl BlobTransactionTrait,
+        blob: &mut B,
         misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents>;
 

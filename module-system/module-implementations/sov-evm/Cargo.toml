@@ -17,13 +17,11 @@ revm = "3.3.0"
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false }
 sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
 sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 
 anyhow = { workspace = true }
 bytes = { workspace = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
-thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
@@ -31,12 +29,14 @@ tracing = { workspace = true }
 
 # TODO: move these dependencies to the workspace when the EVM module is no longer in the experimental stage
 ethereum-types = "0.14.1"
-ethers-core = "2.0.7"
-ethers-contract = "2.0.7"
-ethers-middleware = { version = "2.0.7"}
-ethers-providers = { version = "2.0.7"}
-ethers-signers = { version = "2.0.7", default-features = false }
+ethers-core = { workspace = true }
+ethers-contract = { workspace = true }
+ethers-middleware = { workspace = true }
+ethers-providers = { workspace = true }
+ethers-signers = { workspace = true }
 
+
+anvil  = { workspace = true }
 anvil-core  = { workspace = true }
 ethers = { workspace = true }
 

@@ -1,5 +1,6 @@
 //! This module defines the traits that are used by the full node to
 //! instantiate and run the state transition function.
+use crate::da::BlobTransactionTrait;
 use crate::services::batch_builder::BatchBuilder;
 use crate::stf::{StateTransitionConfig, StateTransitionFunction};
 use crate::zk::Zkvm;
@@ -22,14 +23,14 @@ use crate::zk::Zkvm;
 ///
 /// and a `impl StateTransitionRunner<ZkConfig, Vm> for MyRunner` which instead uses a state root as its runtime config.
 ///
-/// TODO: Why is it called runner? It only creates. Creator, Factory: https://github.com/Sovereign-Labs/sovereign-sdk/issues/447
-pub trait StateTransitionRunner<T: StateTransitionConfig, Vm: Zkvm> {
+/// TODO: Why is it called runner? It only creates. Creator, Factory: <https://github.com/Sovereign-Labs/sovereign-sdk/issues/447>
+pub trait StateTransitionRunner<T: StateTransitionConfig, Vm: Zkvm, B: BlobTransactionTrait> {
     /// The parameters of the state transition function which are set at runtime. For example,
     /// the runtime config might contain path to a data directory.
     type RuntimeConfig;
 
     /// The inner [`StateTransitionFunction`] which is being run.
-    type Inner: StateTransitionFunction<Vm>;
+    type Inner: StateTransitionFunction<Vm, B>;
 
     /// The [`BatchBuilder`] accepts transactions from the mempool and returns bundles of transactions
     /// on request from the full node.

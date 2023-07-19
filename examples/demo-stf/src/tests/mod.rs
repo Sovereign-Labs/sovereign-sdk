@@ -19,7 +19,7 @@ pub type TestBlob = sov_rollup_interface::mocks::TestBlob<Address>;
 
 pub fn create_new_demo(
     path: impl AsRef<Path>,
-) -> DemoApp<DefaultContext, sov_rollup_interface::mocks::MockZkvm> {
+) -> DemoApp<DefaultContext, sov_rollup_interface::mocks::MockZkvm, TestBlob> {
     let runtime = Runtime::default();
     let storage = ProverStorage::with_path(path).unwrap();
     AppTemplate::new(storage, runtime)

@@ -27,9 +27,7 @@ sov-state = { path = "../../sov-state", version = "0.1", default-features = fals
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
-thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
-hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
 [features]

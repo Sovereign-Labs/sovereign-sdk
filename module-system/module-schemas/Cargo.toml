@@ -1,0 +1,16 @@
+[package]
+name = "sov-module-schemas"
+description = "A dummy crate that stores as files the JSON Schemas for all Sovereign modules"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+resolver = "2"
+
+[build-dependencies]
+sov-modules-api = { path = "../sov-modules-api" }
+sov-bank = { path = "../module-implementations/sov-bank" }

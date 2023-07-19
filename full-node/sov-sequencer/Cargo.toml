@@ -22,5 +22,6 @@ tracing = { workspace = true }
 sov-rollup-interface = { path = "../../rollup-interface" }
 
 [dev-dependencies]
+async-trait = { workspace = true }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
 tokio = { workspace = true }

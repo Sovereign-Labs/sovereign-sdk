@@ -127,8 +127,8 @@ pub mod experimental {
 
                 let raw_tx = {
                     let mut nonces = ethereum.nonces.lock().unwrap();
-                    let n = nonces.entry(sender).and_modify(|n| *n += 1).or_insert(0);
-                    make_raw_tx(evm_transaction, *n)?
+                    let nonce = nonces.entry(sender).and_modify(|n| *n += 1).or_insert(0);
+                    make_raw_tx(evm_transaction, *nonce)?
                 };
 
                 ethereum.send_tx_to_da(raw_tx).await?;
@@ -142,8 +142,8 @@ pub mod experimental {
     fn make_raw_tx(evm_tx: EvmTransaction, nonce: u64) -> Result<Vec<u8>, std::io::Error> {
         let tx = CallMessage { tx: evm_tx };
         let message = Runtime::<DefaultContext>::encode_evm_call(tx);
-        // todo don't generate sender here.
-        let sender = DefaultPrivateKey::generate();
+        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/514
+        let sender = DefaultPrivateKey::from_hex("236e80cb222c4ed0431b093b3ac53e6aa7a2273fe1f4351cd354989a823432a27b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe6").unwrap();
         let tx = Transaction::<DefaultContext>::new_signed_tx(&sender, message, nonce);
         tx.try_to_vec()
     }

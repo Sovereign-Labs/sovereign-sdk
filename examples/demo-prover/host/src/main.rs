@@ -8,6 +8,7 @@ use demo_stf::runner_config::{from_toml_path, Config as RunnerConfig};
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
 use jupiter::verifier::RollupParams;
+use jupiter::BlobWithSender;
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::Risc0Host;
 use serde::Deserialize;
@@ -50,11 +51,13 @@ async fn main() -> Result<(), anyhow::Error> {
         RollupParams {
             namespace: ROLLUP_NAMESPACE,
         },
-    );
+    )
+    .await;
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
+    let mut demo_runner =
+        NativeAppRunner::<Risc0Host, BlobWithSender>::new(rollup_config.runner.clone());
     let is_storage_empty = demo_runner.get_storage().is_empty();
     let demo = demo_runner.inner_mut();
 
@@ -85,8 +88,9 @@ async fn main() -> Result<(), anyhow::Error> {
         let filtered_block = da_service.get_finalized_at(height).await?;
         let header_hash = hex::encode(filtered_block.header.header.hash());
         host.write_to_guest(&filtered_block.header);
-        let (blob_txs, inclusion_proof, completeness_proof) =
-            da_service.extract_relevant_txs_with_proof(&filtered_block);
+        let (blob_txs, inclusion_proof, completeness_proof) = da_service
+            .extract_relevant_txs_with_proof(&filtered_block)
+            .await;
 
         host.write_to_guest(&inclusion_proof);
         host.write_to_guest(&completeness_proof);
@@ -116,7 +120,7 @@ async fn main() -> Result<(), anyhow::Error> {
         info!("Starting proving...");
         let receipt = host.run().expect("Prover should run successfully");
         info!("Start verifying..");
-        receipt.verify(&ROLLUP_ID).expect("Receipt should be valid");
+        receipt.verify(ROLLUP_ID).expect("Receipt should be valid");
 
         prev_state_root = next_state_root.0;
         info!("Completed proving and verifying block {height}");

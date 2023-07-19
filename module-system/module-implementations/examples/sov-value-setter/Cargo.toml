@@ -1,6 +1,6 @@
 [package]
 name = "sov-value-setter"
-description = "A Sovereign SDK module for incentivizing provers"
+description = "A Sovereign SDK example module for setting/reading value from state"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }

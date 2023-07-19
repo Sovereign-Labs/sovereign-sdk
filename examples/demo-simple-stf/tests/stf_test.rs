@@ -64,11 +64,15 @@ fn test_stf() {
     let mut test_blob = TestBlob::<DaAddress>::new(preimage, address, [0; 32]);
     let stf = &mut CheckHashPreimageStf {};
 
-    StateTransitionFunction::<MockZkvm>::init_chain(stf, ());
-    StateTransitionFunction::<MockZkvm>::begin_slot(stf, ());
+    StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::init_chain(stf, ());
+    StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::begin_slot(stf, ());
 
-    let receipt = StateTransitionFunction::<MockZkvm>::apply_blob(stf, &mut test_blob, None);
+    let receipt = StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::apply_blob(
+        stf,
+        &mut test_blob,
+        None,
+    );
     assert_eq!(receipt.inner, ApplyBlobResult::Success);
 
-    StateTransitionFunction::<MockZkvm>::end_slot(stf);
+    StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::end_slot(stf);
 }

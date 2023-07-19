@@ -1,8 +1,13 @@
+//! Procedural macros to assist in the creation of Sovereign modules.
+
+#![deny(missing_docs)]
 #![feature(log_syntax)]
+
 mod cli_parser;
 mod common;
 mod default_runtime;
 mod dispatch;
+mod module_call_json_schema;
 mod module_info;
 mod rpc;
 
@@ -11,35 +16,49 @@ use default_runtime::DefaultRuntimeMacro;
 use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
+use module_call_json_schema::derive_module_call_json_schema;
 use proc_macro::TokenStream;
 use rpc::ExposeRpcMacro;
 use syn::{parse_macro_input, DeriveInput};
 
-/// Derives the `sov-modules-api::ModuleInfo` implementation for the underlying type.
+/// Derives the [`sov_modules_api::ModuleInfo`] trait for the underlying `struct`.
 ///
-/// See `sov-modules-api` for definition of `prefix`.
+/// The underlying type must respect the following conditions, or compilation
+/// will fail:
+/// - It must be a named `struct`. Tuple `struct`s, `enum`s, and others are
+/// not supported.
+/// - It must have *exactly one* field with the `#[address]` attribute. This field
+///   represents the **module address**.
+/// - All other fields must have either the `#[state]` or `#[module]` attribute.
+///   - `#[state]` is used for state members.
+///   - `#[module]` is used for module members.
+///
+/// In addition to implementing [`sov_modules_api::ModuleInfo`], this macro will
+/// also generate so-called "prefix" methods. See the [`sov_modules_api`] docs
+/// for more information about prefix methods.
+///
 /// ## Example
 ///
-/// ``` ignore
-///  #[derive(ModuleInfo)]
-///  pub(crate) struct TestModule<C: Context> {
-///     #[state]
-///     pub test_state1: TestState<C::Storage>,
-///
-///     #[state]
-///     pub test_state2: TestState<C::Storage>,
-///  }
 /// ```
-/// allows getting a prefix of a member field like:
-/// ```ignore
-///  let test_struct = <TestModule::<SomeContext> as sov_modules_api::ModuleInfo>::new(some_storage);
-///  let prefix1 = test_struct.test_state1.prefix;
-/// ````
-/// ## Attributes
+/// use sov_modules_macros::ModuleInfo;
+/// use sov_modules_api::{Context, ModuleInfo};
+/// use sov_state::StateMap;
 ///
-///  * `state` - attribute for state members
-///  * `module` - attribute for module members
-///  * `address` - attribute for module address
+/// #[derive(ModuleInfo)]
+/// struct TestModule<C: Context> {
+///     #[address]
+///     admin: C::Address,
+///
+///     #[state]
+///     pub state_map: StateMap<String, u32>,
+/// }
+///
+/// // You can then get the prefix of `state_map` like this:
+/// fn get_prefix<C: Context>(some_storage: C::Storage) {
+///     let test_struct = TestModule::<C>::default();
+///     let prefix1 = test_struct.state_map.prefix();
+/// }
+/// ```
 #[proc_macro_derive(ModuleInfo, attributes(state, module, address))]
 pub fn module_info(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
@@ -59,7 +78,8 @@ pub fn default_runtime(input: TokenStream) -> TokenStream {
     handle_macro_error(default_config_macro.derive_default_runtime(input))
 }
 
-/// Derives the `sov-modules-api::Genesis` implementation for the underlying type.
+/// Derives the [`sov_modules_api::Genesis`] trait for the underlying runtime
+/// `struct`.
 #[proc_macro_derive(Genesis)]
 pub fn genesis(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
@@ -68,13 +88,49 @@ pub fn genesis(input: TokenStream) -> TokenStream {
     handle_macro_error(genesis_macro.derive_genesis(input))
 }
 
-/// Derives the `sov-modules-api::DispatchCall` implementation for the underlying type.
+/// Derives the [`sov_modules_api::DispatchCall`] trait for the underlying type.
 #[proc_macro_derive(DispatchCall, attributes(serialization))]
 pub fn dispatch_call(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let call_macro = DispatchCallMacro::new("Call");
 
     handle_macro_error(call_macro.derive_dispatch_call(input))
+}
+
+/// Derives the [`sov_modules_api::ModuleCallJsonSchema`] trait for the underlying type.
+///
+/// ## Example
+///
+/// ```
+/// use std::marker::PhantomData;
+///
+/// use sov_modules_api::{Context, Module, ModuleInfo, ModuleCallJsonSchema};
+/// use sov_modules_api::default_context::ZkDefaultContext;
+/// use sov_modules_macros::{ModuleInfo, ModuleCallJsonSchema};
+/// use sov_state::StateMap;
+/// use sov_bank::call::CallMessage;
+///
+/// #[derive(ModuleInfo, ModuleCallJsonSchema)]
+/// struct TestModule<C: Context> {
+///     #[address]
+///     admin: C::Address,
+///
+///     #[state]
+///     pub state_map: StateMap<String, u32>,
+/// }
+///
+/// impl<C: Context> Module for TestModule<C> {
+///     type Context = C;
+///     type Config = PhantomData<C>;
+///     type CallMessage = CallMessage<C>;
+/// }
+///
+/// println!("JSON Schema: {}", TestModule::<ZkDefaultContext>::json_schema());
+/// ```
+#[proc_macro_derive(ModuleCallJsonSchema)]
+pub fn module_call_json_schema(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input);
+    handle_macro_error(derive_module_call_json_schema(input))
 }
 
 /// Adds encoding functionality to the underlying type.
@@ -86,7 +142,7 @@ pub fn codec(input: TokenStream) -> TokenStream {
     handle_macro_error(codec_macro.derive_message_codec(input))
 }
 
-/// Derive a `jsonrpsee` implementation for the underlying type. Any code relying on this macro
+/// Derives a [`jsonrpsee`] implementation for the underlying type. Any code relying on this macro
 /// must take jsonrpsee as a dependency with at least the following features enabled: `["macros", "client-core", "server"]`.
 ///
 /// Syntax is identical to `jsonrpsee`'s `#[rpc]` execept that:
@@ -95,41 +151,57 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// 3. `#[method]` is renamed to with `#[rpc_method]` to avoid import confusion and clarify the purpose of the annotation
 ///
 /// ## Example
-///  ```rust,ignore
-///  struct MyModule {};
+/// ```
+/// use sov_modules_macros::{rpc_gen, ModuleInfo};
+/// use sov_modules_api::Context;
 ///
-/// #[rpc_gen(client, server, namespace ="myNamespace")]
-/// impl MyModule {
-///    #[rpc_method(name = "myMethod")]
+/// #[derive(ModuleInfo)]
+/// struct MyModule<C: Context> {
+///     #[address]
+///     addr: C::Address,
+///     // ...
+/// }
+///
+/// #[rpc_gen(client, server, namespace = "myNamespace")]
+/// impl<C: Context> MyModule<C> {
+///     #[rpc_method(name = "myMethod")]
 ///     fn my_method(&self, param: u32) -> u32 {
-///          1
+///         1
 ///     }
 /// }
 /// ```
 ///
 /// This is exactly equivalent to hand-writing
-/// ```rust,ignore
+///
+/// ```
+/// use sov_modules_macros::{rpc_gen, ModuleInfo};
+/// use sov_modules_api::Context;
+/// use sov_state::WorkingSet;
+///
+/// #[derive(ModuleInfo)]
 /// struct MyModule<C: Context> {
-/// ...
+///     #[address]
+///     addr: C::Address,
+///     // ...
 /// };
 ///
-/// impl MyModule {
+/// impl<C: Context> MyModule<C> {
 ///     fn my_method(&self, working_set: &mut WorkingSet<C::Storage>, param: u32) -> u32 {
 ///         1
 ///     }  
 /// }
 ///
-/// #[jsonrpsee::rpc(client, server, namespace ="myNamespace")]
+/// #[jsonrpsee::proc_macros::rpc(client, server, namespace ="myNamespace")]
 /// pub trait MyModuleRpc {
-///    #[jsonrpsee::method(name = "myMethod")]
-///    fn my_method(&self, param: u32) -> Result<u32, jsonrpsee::Error>;
-///    #[method(name = "health")]
-///    fn health() -> Result<(), jsonrpsee::Error> {
-///        Ok(())
-///    }
+///     #[method(name = "myMethod")]
+///     fn my_method(&self, param: u32) -> Result<u32, jsonrpsee::core::Error>;
+///
+///     #[method(name = "health")]
+///     fn health(&self) -> Result<(), jsonrpsee::core::Error> {
+///         Ok(())
+///     }
 /// }
 /// ```
-///
 ///
 /// This proc macro also generates an implementation trait intended to be used by a Runtime struct. This trait
 /// is named `MyModuleRpcImpl`, and allows a Runtime to be converted into a functional RPC server
@@ -169,6 +241,22 @@ pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
     handle_macro_error(expose_macro.generate_rpc(original, input, context_type))
 }
 
+/// Generates a CLI arguments parser for the specified runtime.
+///
+/// ## Examples
+/// ```
+/// use sov_modules_api::Context;
+/// use sov_modules_api::default_context::DefaultContext;
+/// use sov_modules_macros::{DispatchCall, MessageCodec, cli_parser};
+///
+/// #[derive(DispatchCall, MessageCodec)]
+/// #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
+/// #[cli_parser(DefaultContext)]
+/// pub struct Runtime<C: Context> {
+///     pub bank: sov_bank::Bank<C>,
+///     // ...
+/// }
+/// ```
 #[proc_macro_attribute]
 pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
     let attrs = parse_macro_input!(attr as syn::AttributeArgs);
@@ -220,6 +308,9 @@ pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
     }
 }
 
+/// Causes the annotated module to be excluded from the generated CLI. 
+/// This annotation is typically used for modules which don't directly accept
+/// on-chain transactions.
 #[proc_macro_attribute]
 pub fn cli_skip(_attr: TokenStream, item: TokenStream) -> TokenStream {
     item

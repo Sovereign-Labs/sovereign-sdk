@@ -105,11 +105,10 @@ pub enum SubmitTransactionResponse {
 
 #[cfg(test)]
 mod tests {
-    use std::future::Future;
-    use std::pin::Pin;
     use std::sync::Arc;
 
     use anyhow::bail;
+    use async_trait::async_trait;
     use sov_rollup_interface::da::DaSpec;
     use sov_rollup_interface::mocks::{MockDaSpec, TestBlock};
 
@@ -135,25 +134,25 @@ mod tests {
         }
     }
 
+    #[async_trait]
     impl DaService for MockDaService {
         type RuntimeConfig = ();
         type Spec = MockDaSpec;
         type FilteredBlock = TestBlock;
-        type Future<T> = Pin<Box<dyn Future<Output = Result<T, Self::Error>> + Send>>;
         type Error = anyhow::Error;
 
-        fn new(
+        async fn new(
             _config: Self::RuntimeConfig,
             _chain_params: <Self::Spec as DaSpec>::ChainParams,
         ) -> Self {
             MockDaService::new()
         }
 
-        fn get_finalized_at(&self, _height: u64) -> Self::Future<Self::FilteredBlock> {
+        async fn get_finalized_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
             todo!()
         }
 
-        fn get_block_at(&self, _height: u64) -> Self::Future<Self::FilteredBlock> {
+        async fn get_block_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
             todo!()
         }
 
@@ -164,7 +163,7 @@ mod tests {
             todo!()
         }
 
-        fn get_extraction_proof(
+        async fn get_extraction_proof(
             &self,
             _block: &Self::FilteredBlock,
             _blobs: &[<Self::Spec as DaSpec>::BlobTransaction],
@@ -175,9 +174,9 @@ mod tests {
             todo!()
         }
 
-        fn send_transaction(&self, blob: &[u8]) -> Self::Future<()> {
+        async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
             self.submitted.lock().unwrap().push(blob.to_vec());
-            Box::pin(async move { Ok(()) })
+            Ok(())
         }
     }
 

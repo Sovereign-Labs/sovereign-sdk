@@ -1,4 +1,4 @@
-use anvil_core::eth::transaction::EIP1559Transaction;
+use anvil_core::eth::transaction::{EIP1559Transaction, EthTransactionRequest};
 use bytes::Bytes;
 use ethers_core::types::{OtherFields, Transaction};
 use revm::primitives::{
@@ -105,15 +105,15 @@ impl From<EvmTransaction> for Transaction {
             max_priority_fee_per_gas: Some(evm_tx.max_priority_fee_per_gas.into()),
             max_fee_per_gas: Some(evm_tx.max_fee_per_gas.into()),
             chain_id: Some(evm_tx.chain_id.into()),
-            // todo
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
             block_hash: Some([0; 32].into()),
-            // todo
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
             block_number: Some(1.into()),
-            // todo
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
             transaction_index: Some(1.into()),
-            // todo
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
             gas: Default::default(),
-            // todo
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
             other: OtherFields::default(),
         }
     }
@@ -123,7 +123,7 @@ impl From<EIP1559Transaction> for EvmTransaction {
     fn from(transaction: EIP1559Transaction) -> Self {
         let to = transaction.kind.as_call().map(|addr| (*addr).into());
         let tx_hash = transaction.hash();
-        // todo error handling
+        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/515
         let sender = transaction.recover().unwrap();
 
         Self {
@@ -137,14 +137,41 @@ impl From<EIP1559Transaction> for EvmTransaction {
             to,
             value: transaction.value.into(),
             nonce: transaction.nonce.as_u64(),
-            // todo
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
             access_lists: vec![],
             chain_id: transaction.chain_id,
-            // todo remove it
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
             hash: tx_hash.into(),
             odd_y_parity: transaction.odd_y_parity,
             r: transaction.r.into(),
             s: transaction.s.into(),
+        }
+    }
+}
+
+impl From<EthTransactionRequest> for EvmTransaction {
+    fn from(req: EthTransactionRequest) -> Self {
+        Self {
+            sender: req.from.map(|addr| addr.into()).unwrap(),
+            data: req.data.map(|d| d.to_vec()).unwrap_or_default(),
+            gas_limit: req.gas.unwrap_or_default().as_u64(),
+            gas_price: req.gas_price.unwrap_or_default().into(),
+            max_priority_fee_per_gas: req.max_priority_fee_per_gas.unwrap_or_default().into(),
+            max_fee_per_gas: req.max_fee_per_gas.unwrap_or_default().into(),
+            to: req.to.map(|to| to.into()),
+            value: req.value.unwrap_or_default().into(),
+            nonce: req.nonce.unwrap_or_default().as_u64(),
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
+            access_lists: Default::default(),
+            chain_id: req.chain_id.unwrap_or_default().as_u64(),
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/515
+            odd_y_parity: Default::default(),
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/515
+            r: Default::default(),
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/515
+            s: Default::default(),
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
+            hash: Default::default(),
         }
     }
 }
