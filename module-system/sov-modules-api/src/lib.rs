@@ -146,6 +146,7 @@ pub trait Spec {
         + PublicKey
         + Serialize
         + for<'a> Deserialize<'a>
+        + ::schemars::JsonSchema
         + Send
         + Sync;
 
@@ -163,6 +164,16 @@ pub trait Spec {
     type Hasher: Hasher;
 
     /// The digital signature scheme used by the rollup
+    #[cfg(feature = "native")]
+    type Signature: borsh::BorshDeserialize
+        + borsh::BorshSerialize
+        + schemars::JsonSchema
+        + Eq
+        + Clone
+        + Debug
+        + Signature<PublicKey = Self::PublicKey>;
+
+    #[cfg(not(feature = "native"))]
     type Signature: borsh::BorshDeserialize
         + borsh::BorshSerialize
         + Eq
