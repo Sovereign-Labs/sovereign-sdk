@@ -13,6 +13,7 @@ pub struct SequencerConfig<C: sov_modules_api::Context> {
     pub seq_rollup_address: C::Address,
     pub seq_da_address: Vec<u8>,
     pub coins_to_lock: sov_bank::Coins<C>,
+    pub preferred_sequencer: Option<C::Address>,
 }
 
 #[cfg_attr(feature = "native", derive(sov_modules_macros::ModuleCallJsonSchema))]
@@ -31,6 +32,12 @@ pub struct SequencerRegistry<C: sov_modules_api::Context> {
     ///
     #[state]
     pub(crate) allowed_sequencers: StateMap<Vec<u8>, C::Address>,
+
+    /// Optional preferred sequencer
+    /// If set, batches from this sequencer will be processed first in block,
+    /// So this sequencer can guarantee soft confirmation time for transactions
+    #[state]
+    pub(crate) preferred_sequencer: StateValue<C::Address>,
 
     /// Coin's that will be slashed if the sequencer is malicious.
     /// The coins will be transferred from `self.seq_rollup_address` to `self.address`
@@ -108,5 +115,13 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
             .set(&da_address, rollup_address, working_set);
 
         Ok(())
+    }
+
+    /// Return preferred sequencer if it was set
+    pub fn get_preferred_sequencer(
+        &self,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Option<C::Address> {
+        self.preferred_sequencer.get(working_set)
     }
 }
