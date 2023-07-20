@@ -13,4 +13,13 @@ resolver = "2"
 
 [build-dependencies]
 sov-modules-api = { path = "../sov-modules-api" }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
+
+# Modules
+sov-accounts = { path = "../module-implementations/sov-accounts" }
 sov-bank = { path = "../module-implementations/sov-bank" }
+sov-prover-incentives = { path = "../module-implementations/sov-prover-incentives" }
+sov-sequencer-registry = { path = "../module-implementations/sov-sequencer-registry" }
+sov-evm = { path = "../module-implementations/sov-evm", features = ["experimental"] }
+sov-election = { path = "../module-implementations/examples/sov-election" }
+sov-value-setter = { path = "../module-implementations/examples/sov-value-setter" }
