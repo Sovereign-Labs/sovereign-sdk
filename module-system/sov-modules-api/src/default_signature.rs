@@ -1,3 +1,4 @@
+#[cfg(feature = "native")]
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
