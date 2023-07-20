@@ -11,7 +11,7 @@ use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Context;
 #[cfg(feature = "native")]
-use sov_modules_macros::{cli_parser, expose_rpc};
+use sov_modules_macros::{ expose_rpc};
 use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
 #[cfg(feature = "native")]
 use sov_sequencer_registry::query::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
@@ -54,7 +54,7 @@ use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 /// instead of going through the DA layer.
 
 #[cfg(not(feature = "experimental"))]
-#[cfg_attr(feature = "native", cli_parser, expose_rpc(DefaultContext))]
+#[cfg_attr(feature = "native", sov_modules_macros::cli_parser, expose_rpc(DefaultContext))]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
