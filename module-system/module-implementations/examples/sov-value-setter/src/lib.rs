@@ -19,6 +19,7 @@ pub struct ValueSetterConfig<C: sov_modules_api::Context> {
 /// - Must derive `ModuleInfo`
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
+#[cfg_attr(feature = "native", derive(sov_modules_macros::ModuleCallJsonSchema))]
 #[derive(ModuleInfo)]
 pub struct ValueSetter<C: sov_modules_api::Context> {
     /// Address of the module.

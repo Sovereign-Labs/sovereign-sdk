@@ -70,8 +70,13 @@ pub mod private_key {
     }
 }
 
+#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 #[derive(PartialEq, Eq, Clone, Debug)]
 pub struct DefaultPublicKey {
+    #[cfg_attr(
+        feature = "native",
+        schemars(with = "&[u8]", length(equal = "ed25519_dalek::PUBLIC_KEY_LENGTH"))
+    )]
     pub(crate) pub_key: DalekPublicKey,
 }
 
@@ -115,8 +120,13 @@ impl BorshSerialize for DefaultPublicKey {
     }
 }
 
+#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub struct DefaultSignature {
+    #[cfg_attr(
+        feature = "native",
+        schemars(with = "&[u8]", length(equal = "ed25519_dalek::Signature::BYTE_SIZE"))
+    )]
     pub msg_sig: DalekSignature,
 }
 

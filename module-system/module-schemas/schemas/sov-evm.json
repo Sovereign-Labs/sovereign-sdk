@@ -1,0 +1,193 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CallMessage",
+  "type": "object",
+  "required": [
+    "tx"
+  ],
+  "properties": {
+    "tx": {
+      "$ref": "#/definitions/EvmTransaction"
+    }
+  },
+  "definitions": {
+    "AccessListItem": {
+      "type": "object",
+      "required": [
+        "address",
+        "storage_keys"
+      ],
+      "properties": {
+        "address": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 20,
+          "minItems": 20
+        },
+        "storage_keys": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "format": "uint8",
+              "minimum": 0.0
+            },
+            "maxItems": 32,
+            "minItems": 32
+          }
+        }
+      }
+    },
+    "EvmTransaction": {
+      "type": "object",
+      "required": [
+        "access_lists",
+        "chain_id",
+        "data",
+        "gas_limit",
+        "gas_price",
+        "hash",
+        "max_fee_per_gas",
+        "max_priority_fee_per_gas",
+        "nonce",
+        "odd_y_parity",
+        "r",
+        "s",
+        "sender",
+        "value"
+      ],
+      "properties": {
+        "access_lists": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/AccessListItem"
+          }
+        },
+        "chain_id": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        },
+        "gas_limit": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "gas_price": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "hash": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "max_fee_per_gas": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "max_priority_fee_per_gas": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "nonce": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "odd_y_parity": {
+          "type": "boolean"
+        },
+        "r": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "s": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "sender": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 20,
+          "minItems": 20
+        },
+        "to": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 20,
+          "minItems": 20
+        },
+        "value": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        }
+      }
+    }
+  }
+}

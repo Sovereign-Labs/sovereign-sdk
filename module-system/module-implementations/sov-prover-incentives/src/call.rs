@@ -10,6 +10,7 @@ use sov_state::WorkingSet;
 use crate::ProverIncentives;
 
 /// This enumeration represents the available call messages for interacting with the `ExampleModule` module.
+#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 // TODO: allow call messages to borrow data
 //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/274

@@ -13,7 +13,8 @@ use super::ValueSetter;
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
-    derive(serde::Deserialize)
+    derive(serde::Deserialize),
+    derive(schemars::JsonSchema)
 )]
 #[cfg_attr(feature = "native", derive(CliWalletArg), module_name = "ValueSetter")]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]

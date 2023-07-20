@@ -15,17 +15,18 @@ publish = false
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
+clap = { workspace = true, optional = true, features = ["derive"] }
+hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
+schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 
 sov-modules-api = { path = "../../../sov-modules-api", default-features = false }
 sov-modules-macros = { path = "../../../sov-modules-macros" }
 sov-state = { path = "../../../sov-state", default-features = false }
 sov-rollup-interface = { path = "../../../../rollup-interface" }
-serde_json = { workspace = true, optional = true }
-thiserror = { workspace = true }
-hex = { workspace = true }
-clap = { workspace = true, optional = true, features = ["derive"] }
+
 [dev-dependencies]
 sov-modules-api = { path = "../../../sov-modules-api" }
 tempfile = { workspace = true }
@@ -33,4 +34,4 @@ tempfile = { workspace = true }
 [features]
 default = ["native"]
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-modules-api/native", "dep:jsonrpsee", "dep:clap"]
+native = ["serde", "sov-modules-api/native", "dep:jsonrpsee", "dep:schemars", "dep:clap"]

@@ -159,6 +159,7 @@ pub trait Spec {
         + PublicKey
         + Serialize
         + for<'a> Deserialize<'a>
+        + ::schemars::JsonSchema
         + Send
         + Sync
         + FromStr<Err = anyhow::Error>;
@@ -180,13 +181,24 @@ pub trait Spec {
     #[cfg(feature = "native")]
     type Signature: borsh::BorshDeserialize
         + borsh::BorshSerialize
+        + schemars::JsonSchema
+        + Eq
+        + Clone
+        + Debug
+        + Send
+        + Sync
+        + FromStr<Err = anyhow::Error>
+        + Signature<PublicKey = Self::PublicKey>;
+
+    #[cfg(not(feature = "native"))]
+    type Signature: borsh::BorshDeserialize
+        + borsh::BorshSerialize
         + Eq
         + Clone
         + Debug
         + Signature<PublicKey = Self::PublicKey>
         + Send
-        + Sync
-        + FromStr<Err = anyhow::Error>;
+        + Sync;
 
     /// The digital signature scheme used by the rollup
     #[cfg(not(feature = "native"))]
