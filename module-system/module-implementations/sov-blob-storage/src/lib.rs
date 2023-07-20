@@ -2,11 +2,9 @@
 
 //! Blob storage module allows to save DA blobs in the state
 
-mod genesis;
-
-use sov_modules_api::{Error, Module, Spec};
+use sov_modules_api::Module;
 use sov_modules_macros::ModuleInfo;
-use sov_state::{StateValue, WorkingSet};
+use sov_state::{StateMap, WorkingSet};
 
 /// Blob storage contains only address and vector of blobs
 #[derive(ModuleInfo, Clone)]
@@ -17,79 +15,39 @@ pub struct BlobStorage<C: sov_modules_api::Context> {
     pub(crate) address: C::Address,
 
     /// Actual storage of blobs
-    /// stored this way (DA block number, blob)
-    /// TODO: StateVec: https://github.com/Sovereign-Labs/sovereign-sdk/issues/33
+    /// DA block number => vector of blobs
+    /// Caller controls the order of blobs in the vector
     #[state]
-    pub(crate) blobs: StateValue<Vec<(u64, Vec<u8>)>>,
+    pub(crate) blobs: StateMap<u64, Vec<Vec<u8>>>,
 }
 
 /// Non standard methods for blob storage
 impl<C: sov_modules_api::Context> BlobStorage<C> {
-    /// Useful to check earliest block number
-    pub fn earliest_stored_block_number(
+    /// Store blobs for given block number, overwrite if already exists
+    pub fn store_blobs(
         &self,
+        block_number: u64,
+        blobs: Vec<Vec<u8>>,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<u64> {
+    ) {
+        self.blobs.set(&block_number, &blobs, working_set);
+    }
+
+    /// Take all blobs for given block number, return empty vector if not exists
+    /// Returned blobs are removed from the storage
+    pub fn take_blobs_for_block_number(
+        &self,
+        block_number: u64,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Vec<Vec<u8>> {
         self.blobs
-            .get(working_set)
-            .and_then(|blobs| blobs.get(0).map(|(block_number, _)| *block_number))
-    }
-
-    /// Save blob in state together with blob index.
-    /// Note: this method won't sort blobs by block number
-    pub fn store_blob(
-        &self,
-        block_number: u64,
-        blob: Vec<u8>,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> anyhow::Result<()> {
-        let mut blobs = self.blobs.get_or_err(working_set)?;
-        blobs.push((block_number, blob));
-        self.blobs.set(&blobs, working_set);
-        Ok(())
-    }
-
-    /// Get all blobs for given block number
-    pub fn get_blobs_for_block_number(
-        &self,
-        block_number: u64,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> anyhow::Result<Vec<Vec<u8>>> {
-        let mut blobs = self.blobs.get_or_err(working_set)?;
-        let mut blobs_for_block = Vec::new();
-
-        let mut i = 0;
-        while i < blobs.len() {
-            if blobs[i].0 == block_number {
-                let (_, blob) = blobs.remove(i);
-                blobs_for_block.push(blob);
-            } else {
-                i += 1;
-            }
-        }
-
-        // When `drain_filter` is stable, use it instead of retain_mut
-        // https://github.com/rust-lang/rust/issues/43244
-        // let blobs_for_block = blobs
-        //     .drain_filter(|(bn, blob)| bn == block_number)
-        //     .collect();
-
-        self.blobs.set(&blobs, working_set);
-        Ok(blobs_for_block)
+            .remove(&block_number, working_set)
+            .unwrap_or_default()
     }
 }
 
 /// Empty module implementation
-/// TODO: Add query methods for counting blobs.
 impl<C: sov_modules_api::Context> Module for BlobStorage<C> {
     type Context = C;
     type Config = ();
-
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> Result<(), Error> {
-        Ok(self.init_module(config, working_set)?)
-    }
 }
