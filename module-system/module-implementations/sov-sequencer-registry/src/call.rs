@@ -1,5 +1,7 @@
 use anyhow::{bail, Result};
 use sov_modules_api::CallResponse;
+
+#[cfg(feature = "native")]
 use sov_modules_macros::CliWalletArg;
 use sov_state::WorkingSet;
 

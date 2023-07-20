@@ -1,10 +1,13 @@
+#[cfg(feature = "native")]
 use core::str::FromStr;
 use std::collections::HashSet;
 use std::fmt::Formatter;
+#[cfg(feature = "native")]
 use std::num::ParseIntError;
 
 use anyhow::{bail, Context, Result};
 use sov_state::{Prefix, WorkingSet};
+#[cfg(feature = "native")]
 use thiserror::Error;
 
 use crate::call::prefix_from_address_with_parent;
@@ -26,6 +29,7 @@ pub struct Coins<C: sov_modules_api::Context> {
 }
 
 /// The errors that might arise when parsing a `Coins` struct from a string.
+#[cfg(feature = "native")]
 #[derive(Debug, Error)]
 pub enum CoinsFromStrError {
     /// The amount could not be parsed as a u64.
@@ -42,6 +46,7 @@ pub enum CoinsFromStrError {
     NoTokenAddressProvided,
 }
 
+#[cfg(feature = "native")]
 impl<C: sov_modules_api::Context> FromStr for Coins<C> {
     type Err = CoinsFromStrError;
 

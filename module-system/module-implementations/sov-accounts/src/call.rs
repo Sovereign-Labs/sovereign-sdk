@@ -23,9 +23,6 @@ pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 pub enum CallMessage<C: sov_modules_api::Context> {
     // Updates a PublicKey for the corresponding Account.
     // The sender must be in possession of the new PublicKey.
-    #[serde(bound(
-        deserialize = "C::PublicKey: serde::de::DeserializeOwned, C::Signature: serde::de::DeserializeOwned, "
-    ))]
     UpdatePublicKey(C::PublicKey, C::Signature),
 }
 
