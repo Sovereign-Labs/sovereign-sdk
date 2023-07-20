@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use async_trait::async_trait;
-use base64::engine::general_purpose::STANDARD;
+use base64::engine::general_purpose::STANDARD_NO_PAD as B64_ENGINE;
 use base64::Engine;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::params::ArrayParams;
@@ -51,13 +51,13 @@ async fn fetch_needed_shares_by_header(
     let dah = header
         .get("dah")
         .ok_or(BoxError::msg("missing dah in block header"))?;
-    let rollup_namespace_str = STANDARD.encode(rollup_namespace).into();
+    let rollup_namespace_str = B64_ENGINE.encode(rollup_namespace).into();
     let rollup_shares_future = {
         let params: Vec<&serde_json::Value> = vec![dah, &rollup_namespace_str];
         client.request::<RpcNamespacedSharesResponse, _>("share.GetSharesByNamespace", params)
     };
 
-    let etx_namespace_str = STANDARD.encode(PFB_NAMESPACE).into();
+    let etx_namespace_str = B64_ENGINE.encode(PFB_NAMESPACE).into();
     let etx_shares_future = {
         let params: Vec<&serde_json::Value> = vec![dah, &etx_namespace_str];
         client.request::<RpcNamespacedSharesResponse, _>("share.GetSharesByNamespace", params)

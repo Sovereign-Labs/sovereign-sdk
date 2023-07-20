@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
-use base64::engine::general_purpose::STANDARD;
+use base64::engine::general_purpose::STANDARD_NO_PAD as B64_ENGINE;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespacedHash;
@@ -188,7 +188,7 @@ pub struct DataAvailabilityHeader {
 // Danger! This method panics if the provided bas64 is longer than a namespaced hash
 fn decode_to_ns_hash(b64: &str) -> Result<NamespacedHash, base64::DecodeSliceError> {
     let mut out = [0u8; NAMESPACED_HASH_LEN];
-    STANDARD.decode_slice(b64.as_bytes(), &mut out)?;
+    B64_ENGINE.decode_slice(b64.as_bytes(), &mut out)?;
     Ok(NamespacedHash(out))
 }
 

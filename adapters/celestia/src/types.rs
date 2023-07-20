@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::ensure;
-use base64::engine::general_purpose::STANDARD;
+use base64::engine::general_purpose::STANDARD_NO_PAD as B64_ENGINE;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use nmt_rs::NamespaceId;
@@ -201,7 +201,7 @@ impl From<JsonNamespaceProof> for NamespaceProof<NamespacedSha2Hasher> {
 
 fn ns_hash_from_b64(input: &str) -> NamespacedHash {
     let mut output = [0u8; NAMESPACED_HASH_LEN];
-    STANDARD
+    B64_ENGINE
         .decode_slice(input, &mut output[..])
         .expect("must be valid b64");
     NamespacedHash(output)
