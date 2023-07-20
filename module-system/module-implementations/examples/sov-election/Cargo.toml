@@ -16,6 +16,7 @@ publish = false
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
+schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 
 sov-modules-api = { path = "../../../sov-modules-api", default-features = false }
