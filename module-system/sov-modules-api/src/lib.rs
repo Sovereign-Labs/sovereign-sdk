@@ -192,15 +192,6 @@ pub trait Spec {
         + FromStr<Err = anyhow::Error>
         + Signature<PublicKey = Self::PublicKey>;
 
-    #[cfg(not(feature = "native"))]
-    type Signature: borsh::BorshDeserialize
-        + borsh::BorshSerialize
-        + Eq
-        + Clone
-        + Debug
-        + Signature<PublicKey = Self::PublicKey>
-        + Send
-        + Sync;
 
     /// The digital signature scheme used by the rollup
     #[cfg(not(feature = "native"))]
