@@ -22,7 +22,6 @@ pub use dispatch::{DispatchCall, Genesis};
 pub use error::Error;
 pub use prefix::Prefix;
 pub use response::CallResponse;
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 pub use sov_rollup_interface::crypto::SimpleHasher as Hasher;
 pub use sov_rollup_interface::AddressTrait;
@@ -141,8 +140,6 @@ pub trait Spec {
         + ::schemars::JsonSchema
         + Into<AddressBech32>
         + From<AddressBech32>
-        // + Serialize
-        // + DeserializeOwned
         + FromStr<Err = anyhow::Error>;
 
     /// The Address type used on the rollup. Typically calculated as the hash of a public key.
@@ -213,17 +210,6 @@ pub trait Spec {
 /// Context objects also implement the [`Spec`] trait, which specifies the types to be used in this
 /// instance of the state transition function. By making modules generic over a `Context`, developers
 /// can easily update their cryptography to conform to the needs of different zk-proof systems.
-#[cfg(feature = "native")]
-pub trait Context:
-    Spec + Clone + Debug + PartialEq + 'static + Serialize + DeserializeOwned
-{
-    /// Sender of the transaction.
-    fn sender(&self) -> &Self::Address;
-
-    /// Constructor for the Context.
-    fn new(sender: Self::Address) -> Self;
-}
-#[cfg(not(feature = "native"))]
 pub trait Context: Spec + Clone + Debug + PartialEq + 'static {
     /// Sender of the transaction.
     fn sender(&self) -> &Self::Address;
