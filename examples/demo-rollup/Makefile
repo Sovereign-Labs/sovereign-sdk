@@ -94,7 +94,7 @@ build-sov-cli:
 	cd ../demo-stf && cargo build --bin sov-cli
 
 test-generate-create-token-tx: check-container-running build-sov-cli
-	$(SOV_CLI_REL_PATH) generate-transaction ../test-data/keys/token_deployer_private_key.json Bank ../test-data/requests/create_token.json 0
+	$(SOV_CLI_REL_PATH) generate-transaction-from-json ../test-data/keys/token_deployer_private_key.json Bank ../test-data/requests/create_token.json 0
 
 test-build-blob-from-create-token: test-generate-create-token-tx
 	$(SOV_CLI_REL_PATH) make-batch ../test-data/requests/create_token.dat > ../test-data/requests/test_blob.dat

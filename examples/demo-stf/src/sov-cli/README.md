@@ -12,7 +12,7 @@ Main entry point for CLI
 Usage: sov-cli <COMMAND>
 
 Commands:
-  generate-transaction  Generate and serialize a call to a module. This creates a .dat file containing the serialized transaction
+  generate-transaction-from-json  Generate and serialize a call to a module. This creates a .dat file containing the serialized transaction
   util            Utility commands
   help            Print this message or the help of the given subcommand(s)
 ```
@@ -62,7 +62,7 @@ sov1g5htl6zvplygcsjfnt47tk6gmashsj8j9gu5jzg99wtm4ekuazrqaha4nj
 
 ## Generate Transaction
 
-- The `generate-transaction` subcommand is used to generate serialized transactions for a module
+- The `generate-transaction-from-json` subcommand is used to generate serialized transactions for a module
 - The modules that are supported by `sov-cli` are the ones that are part of the `Runtime` struct and the code to create the transaction is generated from the `cli_parser` macro that annotates `Runtime`
 
 ```rust
@@ -78,10 +78,10 @@ pub struct Runtime<C: Context> {
 ```
 
 - From the above code we can see which modules are supported, for an example we will generate transactions for the "Bank" module
-- `generate-transaction` takes 4 parameters
+- `generate-transaction-from-json` takes 4 parameters
 
 ```
-Usage: sov-cli generate-transaction [OPTIONS] <SENDER_PRIV_KEY_PATH> <MODULE_NAME> <CALL_DATA_PATH> <NONCE>
+Usage: sov-cli generate-transaction-from-json [OPTIONS] <SENDER_PRIV_KEY_PATH> <MODULE_NAME> <CALL_DATA_PATH> <NONCE>
 
 Arguments:
   <SENDER_PRIV_KEY_PATH>  Path to the json file containing the private key of the sender
@@ -104,7 +104,7 @@ Options:
 - The complete command for generating the create token transaction is
 
 ```
-demo-stf % cargo run --bin sov-cli generate-transaction my_private_key.json Bank src/sov-cli/test_data/create_token.json 1
+demo-stf % cargo run --bin sov-cli generate-transaction-from-json my_private_key.json Bank src/sov-cli/test_data/create_token.json 1
 ```
 
 - By default the file is formatted in `hex` and contains a blob ready for submission to celestia - the blob only contains a single transactions for now

@@ -7,7 +7,7 @@ use anyhow::Context;
 use borsh::BorshSerialize;
 use clap::Parser;
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
-use demo_stf::runtime::cmd_parser;
+use demo_stf::runtime::{borsh_encode_cli_tx, parse_call_message_json, CliTransactionParser};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::HttpClientBuilder;
 use sov_modules_api::default_context::DefaultContext;
@@ -34,7 +34,7 @@ struct Cli {
 enum Commands {
     /// Serialize a call to a module.
     /// This creates a .dat file containing the serialized transaction
-    GenerateTransaction {
+    GenerateTransactionFromJson {
         /// Path to the json file containing the private key of the sender
         sender_priv_key_path: String,
         /// Name of the module to generate the call.
@@ -73,9 +73,11 @@ enum Commands {
     },
     /// Utility commands
     Util(UtilArgs),
+    /// Generate a transaction from the command line
+    #[clap(subcommand)]
+    GenerateTransaction(CliTransactionParser<DefaultContext>),
 }
 
-/// Arguments for utility commands
 #[derive(Parser)]
 struct UtilArgs {
     #[clap(subcommand)]
@@ -192,12 +194,12 @@ impl SerializedTx {
                 call_data_path.as_ref()
             )
         })?;
-        cmd_parser::<DefaultContext>(module_name, &call_data)
+        parse_call_message_json::<DefaultContext>(module_name, &call_data)
     }
 }
 
 fn serialize_call(command: &Commands) -> Result<String, anyhow::Error> {
-    if let Commands::GenerateTransaction {
+    if let Commands::GenerateTransactionFromJson {
         sender_priv_key_path,
         module_name,
         call_data_path,
@@ -234,7 +236,7 @@ pub async fn main() -> Result<(), anyhow::Error> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::GenerateTransaction {
+        Commands::GenerateTransactionFromJson {
             ref call_data_path, ..
         } => {
             let raw_contents = serialize_call(&cli.command)?;
@@ -332,7 +334,11 @@ pub async fn main() -> Result<(), anyhow::Error> {
                 println!("{}", hex::encode(ROLLUP_NAMESPACE_RAW));
             }
         },
+        Commands::GenerateTransaction(cli_tx) => {
+            println!("{}", hex::encode(borsh_encode_cli_tx(cli_tx)));
+        }
     }
+
     Ok(())
 }
 
@@ -384,7 +390,7 @@ mod test {
     fn test_create_token() {
         let tempdir = tempfile::tempdir().unwrap();
         let mut test_demo = TestDemo::with_path(tempdir.path().to_path_buf());
-        let test_tx = serialize_call(&Commands::GenerateTransaction {
+        let test_tx = serialize_call(&Commands::GenerateTransactionFromJson {
             sender_priv_key_path: make_test_path("keys/token_deployer_private_key.json")
                 .to_str()
                 .unwrap()

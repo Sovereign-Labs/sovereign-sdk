@@ -19,7 +19,6 @@ impl CliParserMacro {
     pub(crate) fn cli_macro(
         &self,
         input: DeriveInput,
-        // context_type: Type,
         skip_fields: Vec<String>,
     ) -> Result<proc_macro::TokenStream, syn::Error> {
         let DeriveInput {
@@ -145,7 +144,7 @@ impl CliParserMacro {
 
                     // Build the `match` arm for the CLI's `clap` parse function
                     parse_match_arms.push(quote! {
-                            ModuleCommands::#module_ident(mod_args) => {
+                            CliTransactionParser::#module_ident(mod_args) => {
                                 let command_as_call_message: <#module_path as ::sov_modules_api::Module>::CallMessage = mod_args.command.into();
                                 #ident::<#context_type>::#encode_function_name(
                                     command_as_call_message
@@ -153,7 +152,7 @@ impl CliParserMacro {
                             },
                          });
 
-                    // Build a constraint requiring that all call messages must support serde deserialization
+                    // Build a constraint requiring that all call messages support serde deserialization
                     let deserialization_constraint = {
                         let type_path: syn::TypePath = syn::parse_quote! {<#module_path as ::sov_modules_api::Module>::CallMessage };
                         let bounds: syn::TypeParamBound =
@@ -218,12 +217,13 @@ impl CliParserMacro {
             // #( #command_types )*
             /// List of utility commands
             #[derive(Parser)]
-            pub enum ModuleCommands #generics {
+            pub enum CliTransactionParser #generics {
                 #( #module_command_arms, )*
             }
             #( #module_args )*
 
-            pub fn module_parse_helper #impl_generics (cmd: ModuleCommands #ty_generics) -> ::std::vec::Vec<u8>
+            /// Borsh encode a transaction parsed from the CLI
+            pub fn borsh_encode_cli_tx #impl_generics (cmd: CliTransactionParser #ty_generics) -> ::std::vec::Vec<u8>
             #where_clause {
                 use ::borsh::BorshSerialize;
                 match cmd {
@@ -232,7 +232,8 @@ impl CliParserMacro {
                 }
             }
 
-            pub fn cmd_parser #impl_generics (module_name: &str, call_data: &str) -> ::anyhow::Result<Vec<u8>>
+            /// Attempts to parse the provided call data as a [`sov_modules_api::Module::CallMessage`] for the given module.
+            pub fn parse_call_message_json #impl_generics (module_name: &str, call_data: &str) -> ::anyhow::Result<Vec<u8>>
             #where_clause_with_deserialize_bounds
              {
                 match module_name {
@@ -241,9 +242,6 @@ impl CliParserMacro {
                 }
             }
         };
-
-        println!("{}", &expanded);
-        eprintln!("{}", &expanded);
 
         Ok(expanded.into())
     }
@@ -412,8 +410,6 @@ pub fn derive_clap_custom_enum(ast: DeriveInput) -> Result<proc_macro::TokenStre
                 type CliStringRepr = #clap_type;
             }
         };
-        // println!("{}", &expanded);
-        // eprintln!("{}", &expanded);
 
         Ok(expanded.into())
     } else {
