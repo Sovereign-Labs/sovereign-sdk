@@ -8,6 +8,7 @@ use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
 use sov_rollup_interface::traits::BatchTrait;
 use sov_rollup_interface::Buf;
 use sov_state::StateCheckpoint;
+use sov_modules_macros::cycle_tracker;
 use tracing::{debug, error};
 
 use crate::tx_verifier::{verify_txs_stateless, TransactionAndRawHash};
@@ -73,10 +74,8 @@ where
         }
     }
 
-    pub(crate) fn apply_blob(
-        &mut self,
-        blob: &mut impl BlobTransactionTrait,
-    ) -> ApplyBatchResult<BatchReceipt<SequencerOutcome, TxEffect>> {
+    #[cycle_tracker]
+    pub(crate) fn apply_blob(&mut self, blob: &mut impl BlobTransactionTrait) -> ApplyBatchResult<BatchReceipt<SequencerOutcome, TxEffect>> {
         debug!(
             "Applying batch from sequencer: 0x{}",
             hex::encode(blob.sender())

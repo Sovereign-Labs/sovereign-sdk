@@ -5,6 +5,7 @@ mod default_runtime;
 mod dispatch;
 mod module_info;
 mod rpc;
+mod utils;
 
 use cli_parser::CliParserMacro;
 use default_runtime::DefaultRuntimeMacro;
@@ -14,6 +15,8 @@ use dispatch::message_codec::MessageCodec;
 use proc_macro::TokenStream;
 use rpc::ExposeRpcMacro;
 use syn::parse_macro_input;
+use syn::ItemFn;
+use utils::cycle_tracker::wrap_function;
 
 /// Derives the `sov-modules-api::ModuleInfo` implementation for the underlying type.
 ///
@@ -176,4 +179,10 @@ pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
     let cli_parser = CliParserMacro::new("Cmd");
 
     handle_macro_error(cli_parser.cli_parser(input, context_type))
+}
+
+#[proc_macro_attribute]
+pub fn cycle_tracker(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemFn);
+    handle_macro_error(wrap_function(input).into())
 }

@@ -24,3 +24,4 @@ hex = { workspace = true }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
 sov-state = { path = "../sov-state", version = "0.1", default-features = false }
 sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
+sov-modules-macros = {path = "../sov-modules-macros"}

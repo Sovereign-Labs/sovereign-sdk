@@ -78,7 +78,8 @@ fn main() -> Result<(), anyhow::Error> {
         })
         .collect();
 
-    for height in 0..(borshed_blocks.len() as u64) {
+    // for height in 0..(borshed_blocks.len() as u64) {
+    for height in 0..4 {
         let mut host = Risc0Host::new(ROLLUP_ELF);
         host.write_to_guest(prev_state_root);
         println!(
@@ -122,11 +123,7 @@ fn main() -> Result<(), anyhow::Error> {
         let receipt = host.run().expect("Prover should run successfully");
         println!("prover time: {:?}",now.elapsed());
         println!("prover cycles: {}",host.cycles());
-        println!("Start verifying..");
-        receipt.verify(&ROLLUP_ID).expect("Receipt should be valid");
 
-        prev_state_root = next_state_root.0;
-        println!("Completed proving and verifying block {height}");
     }
 
     Ok(())

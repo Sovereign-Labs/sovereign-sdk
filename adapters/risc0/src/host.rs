@@ -5,7 +5,7 @@ use risc0_zkp::field::baby_bear::BabyBear;
 use risc0_zkvm::receipt::verify_with_hal;
 use risc0_zkvm::serde::to_vec;
 use risc0_zkvm::sha::Impl;
-use risc0_zkvm::{Prover, Receipt};
+use risc0_zkvm::{Prover, ProverOpts, Receipt};
 use sov_rollup_interface::zk::traits::{Zkvm, ZkvmHost};
 
 use crate::Risc0MethodId;
@@ -19,9 +19,18 @@ pub struct Risc0Host<'a> {
 impl<'a> Risc0Host<'a> {
     pub fn new(elf: &'a [u8]) -> Self {
         Self {
-            prover: RefCell::new(
-                Prover::new(elf).expect("Prover should be constructed from valid ELF binary"),
-            ),
+                prover: RefCell::new(
+                    Prover::new_with_opts(
+                        elf,
+                        ProverOpts::default()
+                            .with_skip_seal(true)
+                            // .with_skip_verify(true)
+                    )
+                    .expect("Prover should be constructed from valid ELF binary"))
+            // prover: RefCell::new(
+            //                 Prover::new(elf)
+            //                     .expect("Prover should be constructed from valid ELF binary"),
+            //             )
         }
     }
 

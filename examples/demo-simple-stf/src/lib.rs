@@ -4,6 +4,7 @@ use sha2::Digest;
 use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_rollup_interface::stf::{BatchReceipt, StateTransitionFunction};
 use sov_rollup_interface::zk::traits::Zkvm;
+use sov_modules_macros::cycle_tracker;
 
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
 
@@ -53,7 +54,6 @@ impl<VM: Zkvm> StateTransitionFunction<VM> for CheckHashPreimageStf {
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
         let blob_data = blob.data_mut();
-
         // Read the data from the blob as a byte vec.
         let mut data = Vec::new();
 
