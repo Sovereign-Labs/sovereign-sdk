@@ -8,7 +8,7 @@ resolver = "2"
 
 [dependencies]
 anyhow = "1.0.68"
-risc0-zkvm = { version = "0.16", default-features = false, features = ["cuda"] }
+risc0-zkvm = { version = "0.16", default-features = false, features = ["std"] }
 borsh = { version = "0.10.3", features = ["bytes"] }
 jupiter = { path = "../../../../adapters/celestia", default-features = false }
 demo-stf = { path = "../../../demo-stf", default-features = false }
