@@ -27,6 +27,8 @@ pub use sov_rollup_interface::crypto::SimpleHasher as Hasher;
 pub use sov_rollup_interface::AddressTrait;
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
+#[cfg(feature = "native")]
+pub use clap;
 
 pub use crate::bech32::AddressBech32;
 

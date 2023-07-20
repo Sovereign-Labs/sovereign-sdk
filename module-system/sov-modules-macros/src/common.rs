@@ -220,16 +220,6 @@ pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStrea
     Ok(serialization_attrs)
 }
 
-// pub struct GenericWithBounds {
-//     pub ident: Ident,
-//     pub bounds: Vec<TypeParamBound>,
-// }
-
-// pub struct GenericTypesWithBounds {
-//     /// A mapping from a generic type's ident to a complete list of its bounds
-//     pub bounds: HashMap<Ident, Punctuated<TypeParamBound, syn::token::Add>>,
-// }
-
 /// Extract a mapping from generic types to their associated trait bounds, including
 /// the ones from the where clause.
 ///

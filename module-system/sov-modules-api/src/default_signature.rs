@@ -194,6 +194,7 @@ fn map_error(_e: ed25519_dalek::SignatureError) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::Other, "Signature error")
 }
 
+#[cfg(feature = "native")]
 impl FromStr for DefaultPublicKey {
     type Err = anyhow::Error;
 
@@ -205,6 +206,7 @@ impl FromStr for DefaultPublicKey {
     }
 }
 
+#[cfg(feature = "native")]
 impl FromStr for DefaultSignature {
     type Err = anyhow::Error;
 
