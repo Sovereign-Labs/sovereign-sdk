@@ -25,6 +25,7 @@ sov-state = { path = "../../sov-state", version = "0.1", default-features = fals
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true }
+serde_json = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["rc"] }
 # TODO: Replace with serde-compatible borsh implementation when it becomes availabile 
 #    see https://github.com/Sovereign-Labs/sovereign-sdk/issues/215
@@ -33,4 +34,4 @@ bincode = "1.3.3"
 
 [features]
 default = ["native"]
-native = ["sov-modules-api/native", "dep:schemars"]
+native = ["sov-modules-api/native", "dep:schemars", "dep:serde_json"]

@@ -18,6 +18,7 @@ borsh = { workspace = true, features = ["rc"] }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 
 sov-modules-api = { path = "../../../sov-modules-api", default-features = false }
 sov-modules-macros = { path = "../../../sov-modules-macros" }
@@ -29,5 +30,5 @@ tempfile = { workspace = true }
 
 [features]
 default = ["native"]
-serde = ["dep:serde"]
+serde = ["dep:serde", "dep:serde_json"]
 native = ["serde", "sov-modules-api/native", "dep:jsonrpsee", "dep:schemars"]
