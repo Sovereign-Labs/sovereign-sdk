@@ -155,7 +155,7 @@ jobs:
           done
   cargo-doc-artifact:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
