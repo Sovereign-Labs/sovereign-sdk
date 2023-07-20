@@ -254,29 +254,6 @@ pub fn derive_clap_custom_enum(ast: DeriveInput) -> Result<proc_macro::TokenStre
     let enum_name = &ast.ident;
     let generics = &ast.generics;
 
-    // // Extract module_name attribute
-    // let module_name = ast
-    //     .attrs
-    //     .iter()
-    //     .find_map(|attr| {
-    //         attr.parse_meta().ok().and_then(|meta| {
-    //             if meta.path().is_ident("module_name") {
-    //                 match meta {
-    //                     Meta::NameValue(MetaNameValue {
-    //                         lit: Lit::Str(lit_str),
-    //                         ..
-    //                     }) => Some(lit_str),
-    //                     _ => None,
-    //                 }
-    //             } else {
-    //                 None
-    //             }
-    //         })
-    //     })
-    //     .ok_or_else(|| syn::Error::new(enum_name.span(), "Expected module_name attribute"))?;
-
-    // let trait_type_ident = syn::Ident::new(&module_name.value(), module_name.span());
-
     if let Data::Enum(DataEnum { variants, .. }) = ast.data.clone() {
         let mut variants_with_fields = vec![];
         let mut convert_cases = vec![];

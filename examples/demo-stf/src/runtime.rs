@@ -66,7 +66,7 @@ pub struct Runtime<C: Context> {
 }
 
 #[cfg(feature = "experimental")]
-#[cfg_attr(feature = "native", expose_rpc(DefaultContext))]
+#[cfg_attr(feature = "native", sov_modules_macros::cli_parser("evm"), expose_rpc(DefaultContext))]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
