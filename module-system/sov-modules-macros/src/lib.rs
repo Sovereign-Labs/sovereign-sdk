@@ -251,7 +251,7 @@ pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// #[derive(DispatchCall, MessageCodec)]
 /// #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-/// #[cli_parser(DefaultContext)]
+/// #[cli_parser]
 /// pub struct Runtime<C: Context> {
 ///     pub bank: sov_bank::Bank<C>,
 ///     // ...

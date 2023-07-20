@@ -120,7 +120,7 @@ impl CliParserMacro {
                         #module_ident(#module_args_ident #field_generic_types)
                     });
                     module_args.push(quote! {
-                        #[derive(Parser)]
+                        #[derive(::clap::Parser)]
                         pub struct #module_args_ident #field_generics_with_bounds {
                             #[clap(subcommand)]
                             /// Commands under #module
@@ -216,7 +216,7 @@ impl CliParserMacro {
             // generate the rest of the code
             // #( #command_types )*
             /// List of utility commands
-            #[derive(Parser)]
+            #[derive(::clap::Parser)]
             pub enum CliTransactionParser #generics {
                 #( #module_command_arms, )*
             }
@@ -393,7 +393,7 @@ pub fn derive_clap_custom_enum(ast: DeriveInput) -> Result<proc_macro::TokenStre
         };
 
         let expanded = quote! {
-            #[derive(clap::Parser)]
+            #[derive(::clap::Parser)]
             pub enum #cli_enum_with_fields_ident #generics {
                 #(#variants_with_fields,)*
             }

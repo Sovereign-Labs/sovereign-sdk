@@ -1,6 +1,4 @@
 #[cfg(feature = "native")]
-use clap::Parser;
-#[cfg(feature = "native")]
 use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
 use sov_bank::query::{BankRpcImpl, BankRpcServer};
