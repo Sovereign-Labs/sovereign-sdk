@@ -304,64 +304,73 @@ pub fn extract_ident(type_path: &syn::TypePath) -> &Ident {
         .ident
 }
 
-#[test]
-fn test_generic_types_with_bounds() {
-    let test_struct: syn::ItemStruct = syn::parse_quote! {
-        struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> where T: SomeThirdTrait {
-            field: (T, U, V)
-        }
-    };
-    let generics = test_struct.generics;
-    let our_bounds = extract_generic_type_bounds(&generics);
-    let expected_bounds_for_t: syn::TypeParam = syn::parse_quote!(T: SomeTrait + SomeThirdTrait);
-    let expected_bounds_for_u: syn::TypeParam = syn::parse_quote!(U: SomeOtherTrait);
+#[cfg(test)]
+mod tests {
+    use syn::parse_quote;
 
-    assert_eq!(
-        our_bounds.get(&parse_quote!(T)),
-        Some(&expected_bounds_for_t.bounds)
-    );
-    assert_eq!(
-        our_bounds.get(&parse_quote!(U)),
-        Some(&expected_bounds_for_u.bounds)
-    );
-    assert_eq!(
-        our_bounds.get(&parse_quote!(V)),
-        Some(&syn::punctuated::Punctuated::new())
-    );
-}
+    use crate::common::extract_generic_type_bounds;
 
-#[test]
-fn test_generic_types_with_associated_type_bounds() {
-    let test_struct: syn::ItemStruct = syn::parse_quote! {
-        struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> where T::Error: Debug {
-            field: (T, U, V)
-        }
-    };
-    let generics = test_struct.generics;
-    let our_bounds = extract_generic_type_bounds(&generics);
-    let expected_bounds_for_t: syn::TypeParam = syn::parse_quote!(T: SomeTrait);
-    let expected_bounds_for_t_error: syn::WherePredicate = syn::parse_quote!(T::Error: Debug);
-    if let syn::WherePredicate::Type(expected_bounds_for_t_error) = expected_bounds_for_t_error {
+    #[test]
+    fn test_generic_types_with_bounds() {
+        let test_struct: syn::ItemStruct = syn::parse_quote! {
+            struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> where T: SomeThirdTrait {
+                field: (T, U, V)
+            }
+        };
+        let generics = test_struct.generics;
+        let our_bounds = extract_generic_type_bounds(&generics);
+        let expected_bounds_for_t: syn::TypeParam =
+            syn::parse_quote!(T: SomeTrait + SomeThirdTrait);
+        let expected_bounds_for_u: syn::TypeParam = syn::parse_quote!(U: SomeOtherTrait);
+
         assert_eq!(
-            our_bounds.get(&parse_quote!(T::Error)),
-            Some(&expected_bounds_for_t_error.bounds)
+            our_bounds.get(&parse_quote!(T)),
+            Some(&expected_bounds_for_t.bounds)
         );
-    } else {
-        unreachable!("Expected a type predicate")
-    };
-    let expected_bounds_for_u: syn::TypeParam = syn::parse_quote!(U: SomeOtherTrait);
+        assert_eq!(
+            our_bounds.get(&parse_quote!(U)),
+            Some(&expected_bounds_for_u.bounds)
+        );
+        assert_eq!(
+            our_bounds.get(&parse_quote!(V)),
+            Some(&syn::punctuated::Punctuated::new())
+        );
+    }
 
-    assert_eq!(
-        our_bounds.get(&parse_quote!(T)),
-        Some(&expected_bounds_for_t.bounds)
-    );
+    #[test]
+    fn test_generic_types_with_associated_type_bounds() {
+        let test_struct: syn::ItemStruct = syn::parse_quote! {
+            struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> where T::Error: Debug {
+                field: (T, U, V)
+            }
+        };
+        let generics = test_struct.generics;
+        let our_bounds = extract_generic_type_bounds(&generics);
+        let expected_bounds_for_t: syn::TypeParam = syn::parse_quote!(T: SomeTrait);
+        let expected_bounds_for_t_error: syn::WherePredicate = syn::parse_quote!(T::Error: Debug);
+        if let syn::WherePredicate::Type(expected_bounds_for_t_error) = expected_bounds_for_t_error
+        {
+            assert_eq!(
+                our_bounds.get(&parse_quote!(T::Error)),
+                Some(&expected_bounds_for_t_error.bounds)
+            );
+        } else {
+            unreachable!("Expected a type predicate")
+        };
+        let expected_bounds_for_u: syn::TypeParam = syn::parse_quote!(U: SomeOtherTrait);
 
-    assert_eq!(
-        our_bounds.get(&parse_quote!(U)),
-        Some(&expected_bounds_for_u.bounds)
-    );
-    assert_eq!(
-        our_bounds.get(&parse_quote!(V)),
-        Some(&syn::punctuated::Punctuated::new())
-    );
+        assert_eq!(
+            our_bounds.get(&parse_quote!(T)),
+            Some(&expected_bounds_for_t.bounds)
+        );
+
+        assert_eq!(
+            our_bounds.get(&parse_quote!(U)),
+            Some(&expected_bounds_for_u.bounds)
+        );
+        assert_eq!(
+            our_bounds.get(&parse_quote!(V)),
+            Some(&syn::punctuated::Punctuated::new())
+        );
+    }
 }

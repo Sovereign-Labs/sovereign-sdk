@@ -57,6 +57,7 @@ impl CliParserMacro {
         let mut module_args = vec![];
         let mut match_arms = vec![];
         let mut parse_match_arms = vec![];
+        let mut deserialize_constraints: Vec<syn::WherePredicate> = vec![];
 
         // Loop over the fields
         for field in &fields {
@@ -124,7 +125,7 @@ impl CliParserMacro {
                         pub struct #module_args_ident #field_generics_with_bounds {
                             #[clap(subcommand)]
                             /// Commands under #module
-                            command: <<#module_path as sov_modules_api::Module>::CallMessage as sov_modules_api::CliWalletArg>::CliStringRepr,
+                            command: <<#module_path as ::sov_modules_api::Module>::CallMessage as ::sov_modules_api::CliWalletArg>::CliStringRepr,
                         }
                     });
 
@@ -142,19 +143,35 @@ impl CliParserMacro {
                         }
                     };
 
+                    // Build the `match` arm for the CLI's `clap` parse function
                     parse_match_arms.push(quote! {
                             ModuleCommands::#module_ident(mod_args) => {
-                                let command_as_call_message: <#module_path as sov_modules_api::Module>::CallMessage = mod_args.command.into();
+                                let command_as_call_message: <#module_path as ::sov_modules_api::Module>::CallMessage = mod_args.command.into();
                                 #ident::<#context_type>::#encode_function_name(
                                     command_as_call_message
                                 )
                             },
                          });
 
+                    // Build a constraint requiring that all call messages must support serde deserialization
+                    let deserialization_constraint = {
+                        let type_path: syn::TypePath = syn::parse_quote! {<#module_path as ::sov_modules_api::Module>::CallMessage };
+                        let bounds: syn::TypeParamBound =
+                            syn::parse_quote! {::serde::de::DeserializeOwned};
+                        syn::WherePredicate::Type(syn::PredicateType {
+                            lifetimes: None,
+                            bounded_ty: syn::Type::Path(type_path),
+                            colon_token: Default::default(),
+                            bounds: vec![bounds].into_iter().collect(),
+                        })
+                    };
+                    deserialize_constraints.push(deserialization_constraint);
+
+                    // Build the `match` arms for the CLI's json parser
                     match_arms.push(quote! {
                             #type_name_string => Ok({
                                 #ident::<#context_type>::#encode_function_name(
-                                    serde_json::from_str::<<#module_path as sov_modules_api::Module>::CallMessage>(&call_data)?
+                                    ::serde_json::from_str::<<#module_path as ::sov_modules_api::Module>::CallMessage>(&call_data)?
                                 )
                             }),
                         });
@@ -177,6 +194,18 @@ impl CliParserMacro {
             .collect();
 
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+        let where_clause_with_deserialize_bounds = match where_clause {
+            Some(where_clause) => {
+                let mut result = where_clause.clone();
+                result
+                    .predicates
+                    .extend(deserialize_constraints.into_iter());
+                result
+            }
+            None => syn::parse_quote! {
+                where #(#deserialize_constraints),*
+            },
+        };
         // Merge and generate the new code
         let expanded = quote! {
             // re-declare the original struct
@@ -194,17 +223,17 @@ impl CliParserMacro {
             }
             #( #module_args )*
 
-            pub fn module_parse_helper #impl_generics (cmd: ModuleCommands #ty_generics) -> Vec<u8>
+            pub fn module_parse_helper #impl_generics (cmd: ModuleCommands #ty_generics) -> ::std::vec::Vec<u8>
             #where_clause {
-                use borsh::BorshSerialize;
+                use ::borsh::BorshSerialize;
                 match cmd {
                     #(#parse_match_arms)*
                     _ => panic!("unknown module name"),
                 }
             }
 
-            pub fn cmd_parser #impl_generics (module_name: &str, call_data: &str) -> anyhow::Result<Vec<u8>>
-            #where_clause
+            pub fn cmd_parser #impl_generics (module_name: &str, call_data: &str) -> ::anyhow::Result<Vec<u8>>
+            #where_clause_with_deserialize_bounds
              {
                 match module_name {
                     #(#match_arms)*

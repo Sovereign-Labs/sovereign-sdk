@@ -56,11 +56,7 @@ use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 /// instead of going through the DA layer.
 
 #[cfg(not(feature = "experimental"))]
-#[cfg_attr(
-    feature = "native",
-    cli_parser(DefaultContext),
-    expose_rpc(DefaultContext)
-)]
+#[cfg_attr(feature = "native", cli_parser, expose_rpc(DefaultContext))]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
@@ -72,11 +68,7 @@ pub struct Runtime<C: Context> {
 }
 
 #[cfg(feature = "experimental")]
-#[cfg_attr(
-    feature = "native",
-    cli_parser(DefaultContext),
-    expose_rpc(DefaultContext)
-)]
+#[cfg_attr(feature = "native", cli_parser, expose_rpc(DefaultContext))]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
