@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use anyhow::ensure;
-use base64::engine::general_purpose::STANDARD_NO_PAD as B64_ENGINE;
+use base64::engine::general_purpose::STANDARD as B64_ENGINE;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use nmt_rs::NamespaceId;

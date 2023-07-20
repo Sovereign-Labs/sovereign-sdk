@@ -1,7 +1,6 @@
 use std::fmt::Display;
 
-use base64::engine::general_purpose::STANDARD_NO_PAD as B64_ENGINE;
-use base64::engine::DecodeEstimate;
+use base64::engine::general_purpose::STANDARD as B64_ENGINE;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::{NamespaceId, NAMESPACE_ID_LEN};
@@ -93,24 +92,11 @@ impl<'de> Deserialize<'de> for Share {
     {
         let mut share = <Bytes as Deserialize>::deserialize(deserializer)?;
         if share.len() == B64_SHARE_SIZE {
-            let mut decoded = BytesMut::with_capacity(SHARE_SIZE);
-            unsafe { decoded.set_len(SHARE_SIZE) }
-            let a = B64_ENGINE
-                .internal_decoded_len_estimate(share.len())
-                .decoded_len_estimate();
-            println!(
-                "INPUT {} OUTPUT SET: {}({}), ESTIMATE: {}",
-                share.len(),
-                SHARE_SIZE,
-                decoded.len(),
-                a
-            );
+            let mut decoded = BytesMut::zeroed(SHARE_SIZE);
+            // TODO: https://github.com/marshallpierce/rust-base64/issues/210
             B64_ENGINE
-                .decode_slice(share, &mut decoded[..])
-                .map_err(|e| {
-                    println!("DECODE SHARE ERROR: {:?}", e);
-                    Error::custom("Invalid base64 encoding")
-                })?;
+                .decode_slice_unchecked(share, &mut decoded[..])
+                .map_err(|_| Error::custom("Invalid base64 encoding"))?;
             share = decoded.freeze()
         }
         if share.len() != SHARE_SIZE {

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::str::FromStr;
 
 use async_trait::async_trait;
-use base64::engine::general_purpose::STANDARD_NO_PAD as B64_ENGINE;
+use base64::engine::general_purpose::STANDARD as B64_ENGINE;
 use base64::Engine;
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::params::ArrayParams;

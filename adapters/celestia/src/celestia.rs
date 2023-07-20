@@ -2,7 +2,7 @@ use std::fmt::{Display, Formatter};
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
-use base64::engine::general_purpose::STANDARD_NO_PAD as B64_ENGINE;
+use base64::engine::general_purpose::STANDARD as B64_ENGINE;
 use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespacedHash;
