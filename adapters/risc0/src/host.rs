@@ -1,39 +1,46 @@
 use std::cell::RefCell;
 
-use risc0_zkp::core::config::HashSuiteSha256;
-use risc0_zkp::field::baby_bear::BabyBear;
-use risc0_zkvm::receipt::verify_with_hal;
+use risc0_zkvm::receipt::Receipt;
 use risc0_zkvm::serde::to_vec;
-use risc0_zkvm::sha::Impl;
-use risc0_zkvm::{Prover, Receipt};
+use risc0_zkvm::{
+    Executor, ExecutorEnvBuilder, LocalExecutor, SegmentReceipt, Session, SessionReceipt,
+};
 use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
 
 use crate::Risc0MethodId;
 
-const CIRCUIT: risc0_circuit_rv32im::CircuitImpl = risc0_circuit_rv32im::CircuitImpl::new();
-
 pub struct Risc0Host<'a> {
-    prover: RefCell<Prover<'a>>,
+    env: RefCell<ExecutorEnvBuilder<'a>>,
+    elf: &'a [u8],
 }
 
 impl<'a> Risc0Host<'a> {
     pub fn new(elf: &'a [u8]) -> Self {
         Self {
-            prover: RefCell::new(
-                Prover::new(elf).expect("Prover should be constructed from valid ELF binary"),
-            ),
+            env: RefCell::new(ExecutorEnvBuilder::default()),
+            elf,
         }
     }
 
-    pub fn run(&mut self) -> anyhow::Result<Receipt> {
-        self.prover.borrow_mut().run()
+    /// Run a computation in the zkvm without generating a receipt.
+    /// This creates the "Session" trace without invoking the heavy cryptoraphic machinery.
+    pub fn run_without_proving(&mut self) -> anyhow::Result<Session> {
+        let env = self.env.borrow_mut().build()?;
+        let mut executor = LocalExecutor::from_elf(env, self.elf)?;
+        executor.run()
+    }
+
+    /// Run a computation in the zkvm and generate a receipt.
+    pub fn run(&mut self) -> anyhow::Result<SessionReceipt> {
+        let session = self.run_without_proving()?;
+        session.prove()
     }
 }
 
 impl<'a> ZkvmHost for Risc0Host<'a> {
     fn write_to_guest<T: serde::Serialize>(&self, item: T) {
         let serialized = to_vec(&item).expect("Serialization to vec is infallible");
-        self.prover.borrow_mut().add_input_u32_slice(&serialized);
+        self.env.borrow_mut().add_input(&serialized);
     }
 }
 
@@ -69,20 +76,24 @@ fn verify_from_slice<'a>(
     serialized_proof: &'a [u8],
     code_commitment: &Risc0MethodId,
 ) -> Result<&'a [u8], anyhow::Error> {
-    let receipt: Risc0Proof<'a> = bincode::deserialize(serialized_proof)?;
-    verify_with_hal(
-        &risc0_zkp::verify::CpuVerifyHal::<BabyBear, HashSuiteSha256<BabyBear, Impl>, _>::new(
-            &CIRCUIT,
-        ),
-        &code_commitment.0,
-        &receipt.seal,
-        receipt.journal,
-    )?;
-    Ok(receipt.journal)
+    let Risc0Proof::<'a> {
+        segment_receipts,
+        journal,
+        ..
+    } = bincode::deserialize(serialized_proof)?;
+
+    let receipts = segment_receipts
+        .into_iter()
+        .map(|r| r as Box<dyn Receipt>)
+        .collect::<Vec<_>>();
+    SessionReceipt::new(receipts, journal.to_vec()).verify(code_commitment.0)?;
+    Ok(journal)
 }
 
+/// A convenience type which contains the same data a Risc0 [`SessionReceipt`] but borrows the journal
+/// data. This allows to avoid one unnecessary copy during proof verification.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Risc0Proof<'a> {
+    pub segment_receipts: Vec<Box<SegmentReceipt>>,
     pub journal: &'a [u8],
-    pub seal: Vec<u32>,
 }

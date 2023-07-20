@@ -1,6 +1,6 @@
 [package]
 name = "sov-election"
-description = "A Sovereign SDK module for incentivizing provers"
+description = "A Sovereign SDK module for demonstrating election"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
@@ -14,17 +14,13 @@ publish = false
 
 [dependencies]
 anyhow = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
+serde = { workspace = true, optional = true }
+
 sov-modules-api = { path = "../../../sov-modules-api", default-features = false }
 sov-modules-macros = { path = "../../../sov-modules-macros" }
 sov-state = { path = "../../../sov-state", default-features = false }
-sov-rollup-interface = { path = "../../../../rollup-interface" }
-schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
-thiserror = { workspace = true }
-borsh = { workspace = true, features = ["rc"] }
-hex = { workspace = true }
-jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
 [dev-dependencies]
 sov-modules-api = { path = "../../../sov-modules-api" }
@@ -32,5 +28,5 @@ tempfile = { workspace = true }
 
 [features]
 default = ["native"]
-serde = ["dep:serde", "dep:serde_json"]
+serde = ["dep:serde"]
 native = ["serde", "sov-modules-api/native", "dep:jsonrpsee", "dep:schemars"]
