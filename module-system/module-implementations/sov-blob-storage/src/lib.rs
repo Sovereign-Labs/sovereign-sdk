@@ -4,6 +4,7 @@
 
 use sov_modules_api::Module;
 use sov_modules_macros::ModuleInfo;
+use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_state::{StateMap, WorkingSet};
 
 /// Blob storage contains only address and vector of blobs
@@ -24,25 +25,33 @@ pub struct BlobStorage<C: sov_modules_api::Context> {
 /// Non standard methods for blob storage
 impl<C: sov_modules_api::Context> BlobStorage<C> {
     /// Store blobs for given block number, overwrite if already exists
-    pub fn store_blobs(
+    pub fn store_blobs<B: BlobTransactionTrait>(
         &self,
         block_number: u64,
-        blobs: Vec<Vec<u8>>,
+        blobs: &[B],
         working_set: &mut WorkingSet<C::Storage>,
-    ) {
-        self.blobs.set(&block_number, &blobs, working_set);
+    ) -> anyhow::Result<()> {
+        let mut raw_blobs: Vec<Vec<u8>> = Vec::with_capacity(blobs.len());
+        for blob in blobs {
+            raw_blobs.push(bincode::serialize(blob)?);
+        }
+        self.blobs.set(&block_number, &raw_blobs, working_set);
+        Ok(())
     }
 
     /// Take all blobs for given block number, return empty vector if not exists
     /// Returned blobs are removed from the storage
-    pub fn take_blobs_for_block_number(
+    pub fn take_blobs_for_block_number<B: BlobTransactionTrait>(
         &self,
         block_number: u64,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Vec<Vec<u8>> {
+    ) -> Vec<B> {
         self.blobs
             .remove(&block_number, working_set)
             .unwrap_or_default()
+            .iter()
+            .map(|b| bincode::deserialize(b).expect("malformed blob was stored previously"))
+            .collect()
     }
 }
 
