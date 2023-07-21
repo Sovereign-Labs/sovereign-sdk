@@ -22,6 +22,7 @@ pub use sov_modules_macros::{
     DispatchCall, Genesis, MessageCodec, ModuleCallJsonSchema, ModuleInfo,
 };
 
+/// Procedural macros to assist with creating new modules.
 #[cfg(feature = "macros")]
 pub mod macros {
     pub use sov_modules_macros::{cli_parser, expose_rpc, rpc_gen, DefaultRuntime, MessageCodec};
