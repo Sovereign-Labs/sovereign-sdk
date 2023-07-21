@@ -69,7 +69,7 @@ where
         + TxHooks<Context = C>
         + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
 {
-    /// AppTemplate constructor.
+    /// [`AppTemplate`] constructor.
     pub fn new(storage: C::Storage, runtime: RT) -> Self {
         Self {
             runtime,
