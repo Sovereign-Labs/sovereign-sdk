@@ -6,6 +6,7 @@ mod token;
 mod utils;
 
 pub use call::CallMessage;
+#[cfg(feature = "native")]
 pub use query::{BalanceResponse, BankRpcImpl, BankRpcServer, TotalSupplyResponse};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;

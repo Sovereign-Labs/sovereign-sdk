@@ -9,6 +9,7 @@ mod tests;
 mod types;
 
 pub use call::CallMessage;
+#[cfg(feature = "native")]
 pub use query::{ElectionRpcImpl, ElectionRpcServer, GetNbOfVotesResponse, GetResultResponse};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;

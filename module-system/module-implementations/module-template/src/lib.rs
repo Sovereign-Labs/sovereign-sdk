@@ -8,6 +8,7 @@ mod tests;
 mod query;
 
 pub use call::CallMessage;
+#[cfg(feature = "native")]
 pub use query::Response;
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;

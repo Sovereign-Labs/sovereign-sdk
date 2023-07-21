@@ -9,6 +9,7 @@ mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use call::CallMessage;
+#[cfg(feature = "native")]
 pub use query::Response;
 use sov_modules_api::{Context, Error};
 use sov_modules_macros::ModuleInfo;

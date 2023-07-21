@@ -8,6 +8,7 @@ mod query;
 mod tests;
 
 pub use call::CallMessage;
+#[cfg(feature = "native")]
 pub use query::{AccountsRpcImpl, AccountsRpcServer, Response};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;

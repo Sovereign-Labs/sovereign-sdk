@@ -5,6 +5,7 @@ mod hooks;
 mod query;
 
 pub use call::CallMessage;
+#[cfg(feature = "native")]
 pub use query::{SequencerAddressResponse, SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 use sov_modules_api::{CallResponse, Error, Spec};
 use sov_modules_macros::ModuleInfo;
