@@ -69,7 +69,7 @@ pub mod test {
             );
             let resp = runtime.value_setter.query_value(&mut working_set);
 
-            assert_eq!(resp, sov_value_setter::query::Response { value: Some(33) });
+            assert_eq!(resp, sov_value_setter::Response { value: Some(33) });
         }
     }
 
@@ -124,7 +124,7 @@ pub mod test {
 
         let resp = runtime.value_setter.query_value(&mut working_set);
 
-        assert_eq!(resp, sov_value_setter::query::Response { value: Some(33) });
+        assert_eq!(resp, sov_value_setter::Response { value: Some(33) });
     }
 
     #[test]
@@ -179,7 +179,7 @@ pub mod test {
 
             let resp = runtime.value_setter.query_value(&mut working_set);
 
-            assert_eq!(resp, sov_value_setter::query::Response { value: None });
+            assert_eq!(resp, sov_value_setter::Response { value: None });
         }
     }
 
