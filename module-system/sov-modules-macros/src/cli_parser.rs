@@ -19,7 +19,6 @@ impl CliParserMacro {
     pub(crate) fn cli_macro(
         &self,
         input: DeriveInput,
-        skip_fields: Vec<String>,
     ) -> Result<proc_macro::TokenStream, syn::Error> {
         let DeriveInput {
             attrs,
@@ -59,10 +58,15 @@ impl CliParserMacro {
         let mut deserialize_constraints: Vec<syn::WherePredicate> = vec![];
 
         // Loop over the fields
-        for field in &fields {
-            if skip_fields.contains(&field.ident.to_string()) {
-                continue;
+        'outer: for field in &fields {
+            // Skip fields with the attribute cli_skip
+            for attr in field.attrs.iter() {
+                if attr.path.is_ident("cli_skip") {
+                    continue 'outer;
+                }
             }
+            println!("Processing {}. Attrs: {:?}", &field.ident, field.attrs);
+
             // For each type path we encounter, we need to extract the generic type parameters for that field
             // and construct a `Generics` struct that contains the bounds for each of those generic type parameters.
             if let syn::Type::Path(type_path) = &field.ty {

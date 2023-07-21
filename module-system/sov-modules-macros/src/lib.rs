@@ -259,24 +259,24 @@ pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
-    let attrs = parse_macro_input!(attr as syn::AttributeArgs);
+    // let attrs = parse_macro_input!(attr as syn::AttributeArgs);
     let input = parse_macro_input!(input);
 
-    // let mut context_type: Option<syn::Type> = None;
-    let mut skip_fields = Vec::new();
+    // // let mut context_type: Option<syn::Type> = None;
+    // let mut skip_fields = Vec::new();
 
-    // Parse attributes
-    for attr in attrs {
-        if let syn::NestedMeta::Lit(syn::Lit::Str(lit_str)) = attr {
-            skip_fields = lit_str.value().split(',').map(|s| s.to_string()).collect();
-        }
-    }
+    // // Parse attributes
+    // for attr in attrs {
+    //     if let syn::NestedMeta::Lit(syn::Lit::Str(lit_str)) = attr {
+    //         skip_fields = lit_str.value().split(',').map(|s| s.to_string()).collect();
+    //     }
+    // }
 
     // let context_type = context_type.expect("No context type provided");
 
     let cli_parser = CliParserMacro::new("Cmd");
 
-    handle_macro_error(cli_parser.cli_macro(input, skip_fields))
+    handle_macro_error(cli_parser.cli_macro(input))
 }
 
 /// Allows the underlying enum to be used as an argument in the sov-cli wallet.
@@ -286,17 +286,12 @@ pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
     let input: DeriveInput = parse_macro_input!(input);
     match input.data {
-        syn::Data::Struct(_) => todo!(),
+        syn::Data::Struct(_) => quote::quote! {
+            #[derive(::clap::Parser)]
+            input
+        }
+        .into(),
         syn::Data::Enum(_) => handle_macro_error(derive_clap_custom_enum(input)),
-        syn::Data::Union(_) => todo!(),
-        // ;
+        syn::Data::Union(_) => panic!("Unions are not supported"),
     }
-}
-
-/// Causes the annotated module to be excluded from the generated CLI.
-/// This annotation is typically used for modules which don't directly accept
-/// on-chain transactions.
-#[proc_macro_attribute]
-pub fn cli_skip(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    item
 }
