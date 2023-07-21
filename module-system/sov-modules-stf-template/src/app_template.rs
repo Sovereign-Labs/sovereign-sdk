@@ -14,7 +14,9 @@ use crate::{Batch, SequencerOutcome, SlashingReason, TxEffect};
 
 type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
 
-/// This is an implementation of the `StateTransitionFunction` that is specifically designed to work with the module-system.
+/// An implementation of the
+/// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
+/// that is specifically designed to work with the module-system.
 pub struct AppTemplate<C: Context, RT, Vm, B> {
     /// State storage used by the rollup.
     pub current_storage: C::Storage,
