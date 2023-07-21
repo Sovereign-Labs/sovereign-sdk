@@ -63,10 +63,10 @@ sov1g5htl6zvplygcsjfnt47tk6gmashsj8j9gu5jzg99wtm4ekuazrqaha4nj
 ## Generate Transaction
 
 - The `generate-transaction-from-json` subcommand is used to generate serialized transactions for a module
-- The modules that are supported by `sov-cli` are the ones that are part of the `Runtime` struct and the code to create the transaction is generated from the `cli_parser` macro that annotates `Runtime`
+- The modules that are supported by `sov-cli` are the ones that are part of the `Runtime` struct and the code to create the transaction is generated from the `derive(CliWallet)` macro that annotates `Runtime`
 
 ```rust
-#[cfg_attr(feature = "native", cli_parser(DefaultContext))]
+#[cfg_attr(feature = "native", derive(CliWallet)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
     pub sequencer: sov_sequencer_registry::Sequencer<C>,

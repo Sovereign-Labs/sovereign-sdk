@@ -21,11 +21,10 @@ impl CliParserMacro {
         input: DeriveInput,
     ) -> Result<proc_macro::TokenStream, syn::Error> {
         let DeriveInput {
-            attrs,
-            vis,
             ident,
             generics,
             data,
+            ..
         } = input;
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
         let generic_bounds = extract_generic_type_bounds(&generics);
@@ -46,7 +45,7 @@ impl CliParserMacro {
             })
             .ok_or(syn::Error::new_spanned(
                 &generics,
-                "a runtime must be generic over a sov_modules_api::Context to derive cli_parser",
+                "a runtime must be generic over a sov_modules_api::Context to derive CliWallet",
             ))?
             .ident
             .clone();
@@ -65,7 +64,6 @@ impl CliParserMacro {
                     continue 'outer;
                 }
             }
-            println!("Processing {}. Attrs: {:?}", &field.ident, field.attrs);
 
             // For each type path we encounter, we need to extract the generic type parameters for that field
             // and construct a `Generics` struct that contains the bounds for each of those generic type parameters.
@@ -182,20 +180,6 @@ impl CliParserMacro {
             }
         }
 
-        // Create tokens for original struct fields
-        let original_struct_fields: Vec<_> = fields
-            .into_iter()
-            .map(|field| {
-                let field_name = field.ident;
-                let field_type = field.ty;
-                let field_vis = field.vis;
-
-                quote! {
-                    #field_vis #field_name: #field_type
-                }
-            })
-            .collect();
-
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
         let where_clause_with_deserialize_bounds = match where_clause {
             Some(where_clause) => {
@@ -211,15 +195,7 @@ impl CliParserMacro {
         };
         // Merge and generate the new code
         let expanded = quote! {
-            // re-declare the original struct
-            #(#attrs)*
-            #vis struct #ident #generics {
-                #(#original_struct_fields),*
-            }
-
-            // generate the rest of the code
-            // #( #command_types )*
-            /// List of utility commands
+            /// A CLI parser for transactions which can be sent to the runtime
             #[derive(::clap::Parser)]
             pub enum CliTransactionParser #generics {
                 #( #module_command_arms, )*

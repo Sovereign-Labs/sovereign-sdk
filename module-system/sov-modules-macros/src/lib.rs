@@ -249,33 +249,17 @@ pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// use sov_modules_api::default_context::DefaultContext;
 /// use sov_modules_macros::{DispatchCall, MessageCodec, cli_parser};
 ///
-/// #[derive(DispatchCall, MessageCodec)]
+/// #[derive(DispatchCall, MessageCodec, CliWallet)]
 /// #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-/// #[cli_parser]
 /// pub struct Runtime<C: Context> {
 ///     pub bank: sov_bank::Bank<C>,
 ///     // ...
 /// }
 /// ```
-#[proc_macro_attribute]
-pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
-    // let attrs = parse_macro_input!(attr as syn::AttributeArgs);
+#[proc_macro_derive(CliWallet)]
+pub fn cli_parser(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
-
-    // // let mut context_type: Option<syn::Type> = None;
-    // let mut skip_fields = Vec::new();
-
-    // // Parse attributes
-    // for attr in attrs {
-    //     if let syn::NestedMeta::Lit(syn::Lit::Str(lit_str)) = attr {
-    //         skip_fields = lit_str.value().split(',').map(|s| s.to_string()).collect();
-    //     }
-    // }
-
-    // let context_type = context_type.expect("No context type provided");
-
     let cli_parser = CliParserMacro::new("Cmd");
-
     handle_macro_error(cli_parser.cli_macro(input))
 }
 
