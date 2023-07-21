@@ -11,9 +11,6 @@ version = { workspace = true }
 readme = "README.md"
 resolver = "2"
 
-[lib]
-doctest = false
-
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true }
