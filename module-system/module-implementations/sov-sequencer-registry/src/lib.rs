@@ -14,7 +14,7 @@ pub struct SequencerConfig<C: sov_modules_api::Context> {
     pub coins_to_lock: sov_bank::Coins<C>,
 }
 
-#[cfg_attr(feature = "native", derive(sov_modules_macros::ModuleCallJsonSchema))]
+#[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo)]
 pub struct SequencerRegistry<C: sov_modules_api::Context> {
     /// The address of the sov_sequencer_registry module

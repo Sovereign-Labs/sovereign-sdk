@@ -54,7 +54,7 @@ mod experimental {
     }
 
     #[allow(dead_code)]
-    #[cfg_attr(feature = "native", derive(sov_modules_macros::ModuleCallJsonSchema))]
+    #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
     #[derive(ModuleInfo, Clone)]
     pub struct Evm<C: sov_modules_api::Context> {
         #[address]

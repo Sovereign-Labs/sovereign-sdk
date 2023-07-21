@@ -151,8 +151,8 @@ pub fn codec(input: TokenStream) -> TokenStream {
 ///
 /// ## Example
 /// ```
-/// use sov_modules_macros::{rpc_gen, ModuleInfo};
-/// use sov_modules_api::Context;
+/// use sov_modules_api::{Context, ModuleInfo};
+/// use sov_modules_api::macros::rpc_gen;
 ///
 /// #[derive(ModuleInfo)]
 /// struct MyModule<C: Context> {
@@ -173,8 +173,8 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// This is exactly equivalent to hand-writing
 ///
 /// ```
-/// use sov_modules_macros::{rpc_gen, ModuleInfo};
-/// use sov_modules_api::Context;
+/// use sov_modules_api::{Context, ModuleInfo};
+/// use sov_modules_api::macros::rpc_gen;
 /// use sov_state::WorkingSet;
 ///
 /// #[derive(ModuleInfo)]

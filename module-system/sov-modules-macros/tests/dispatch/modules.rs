@@ -1,5 +1,4 @@
-use sov_modules_api::{CallResponse, Context, Error, Module};
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
 use sov_state::{StateValue, WorkingSet};
 
 pub mod first_test_module {

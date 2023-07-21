@@ -17,7 +17,7 @@ pub struct ElectionConfig<C: sov_modules_api::Context> {
     pub admin: C::Address,
 }
 
-#[cfg_attr(feature = "native", derive(sov_modules_macros::ModuleCallJsonSchema))]
+#[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo, Clone)]
 pub struct Election<C: sov_modules_api::Context> {
     #[address]
