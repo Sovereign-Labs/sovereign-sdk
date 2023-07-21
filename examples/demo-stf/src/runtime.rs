@@ -3,7 +3,7 @@ use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
 use sov_bank::query::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
-use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
+use sov_election::{ElectionRpcImpl, ElectionRpcServer};
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
 use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
