@@ -400,10 +400,20 @@ impl<
         };
 
         // Update the max_attested_height in case the blocks have already been finalized
+        let new_max_attested_height = max(&old_max_attested_height, &min_height);
         self.maximum_attested_height
-            .set(max(&old_max_attested_height, &min_height), working_set);
+            .set(new_max_attested_height, working_set);
 
         let max_attested_height = self.maximum_attested_height.get(working_set).unwrap();
+
+        // We have to check the following order invariant is respected:
+        // min_height <= bonding_proof.transition_num <= max_attested_height
+        // If this invariant is respected, we can be sure that the attester was bonded at max_attested_height.
+        ensure!(
+            min_height <= attestation.proof_of_bond.transition_num
+                && attestation.proof_of_bond.transition_num <= *new_max_attested_height,
+            "Transition invariant not respected"
+        );
 
         // First compare the initial hashes
         self.check_initial_hash(

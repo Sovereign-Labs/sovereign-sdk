@@ -10,10 +10,10 @@ use crate::zk::StateTransition;
     Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Default,
 )]
 pub struct ProofOfBond<StateProof: BorshSerialize> {
-    /// The actual state proof that the attester was bonded
-    pub proof: StateProof,
     /// The transition number for which the proof of bond applies
     pub transition_num: u64,
+    /// The actual state proof that the attester was bonded
+    pub proof: StateProof,
 }
 
 /// An attestation that a particular DA layer block transitioned the rollup state to some value
