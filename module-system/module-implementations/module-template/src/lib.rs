@@ -7,8 +7,7 @@ mod tests;
 #[cfg(feature = "native")]
 pub mod query;
 
-use sov_modules_api::Error;
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 
 pub struct ExampleModuleConfig {}

@@ -14,8 +14,7 @@ anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 serde = { workspace = true, optional = true }
 
-sov-modules-api = { path = "../../module-system/sov-modules-api", default-features = false }
-sov-modules-macros = { path = "../../module-system/sov-modules-macros" }
+sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["macros"] }
 sov-state = { path = "../../module-system/sov-state", default-features = false }
 
 [dev-dependencies]

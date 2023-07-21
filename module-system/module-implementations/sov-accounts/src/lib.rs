@@ -7,8 +7,7 @@ pub mod query;
 #[cfg(test)]
 mod tests;
 
-use sov_modules_api::Error;
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 
 /// Initial configuration for sov-bank module.

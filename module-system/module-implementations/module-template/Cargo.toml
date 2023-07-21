@@ -14,8 +14,7 @@ resolver = "2"
 [dependencies]
 anyhow = { workspace = true }
 sov-bank = { path = "../sov-bank", default-features = false }
-sov-modules-api = { path = "../../sov-modules-api", default-features = false }
-sov-modules-macros = { path = "../../sov-modules-macros" }
+sov-modules-api = { path = "../../sov-modules-api", features = ["macros"] }
 sov-state = { path = "../../sov-state", default-features = false }
 sov-rollup-interface = { path = "../../../rollup-interface" }
 schemars = { workspace = true, optional = true }

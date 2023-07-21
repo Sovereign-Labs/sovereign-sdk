@@ -8,8 +8,7 @@ mod tests;
 
 mod types;
 
-use sov_modules_api::Error;
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 pub use types::Candidate;
 use types::Voter;

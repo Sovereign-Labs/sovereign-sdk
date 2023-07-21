@@ -31,17 +31,16 @@ sov-rollup-interface = { path = "../../rollup-interface" }
 sov-election = { path = "../../module-system/module-implementations/examples/sov-election", default-features = false }
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry", default-features = false }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", default-features = false }
-sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" } # no features available
+sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }                                              # no features available
 sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", default-features = false }
-sov-accounts = { path = "../../module-system/module-implementations/sov-accounts", default-features = false}
+sov-accounts = { path = "../../module-system/module-implementations/sov-accounts", default-features = false }
 sov-state = { path = "../../module-system/sov-state", default-features = false }
 sov-modules-api = { path = "../../module-system/sov-modules-api", default-features = false }
-sov-modules-macros = { path = "../../module-system/sov-modules-macros" }
 # Only enable the sequencer on "native" feature
 sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
 
 # Only enable the evm on "experimental" feature
-sov-evm = { path = "../../module-system/module-implementations/sov-evm", default-features = false, optional = true}
+sov-evm = { path = "../../module-system/module-implementations/sov-evm", default-features = false, optional = true }
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
@@ -50,7 +49,7 @@ rand = "0.8"
 
 [features]
 default = ["native"]
-experimental =["sov-evm/experimental"]
+experimental = ["sov-evm/experimental"]
 
 
 native = [
@@ -66,5 +65,6 @@ native = [
     "serde_json",
     "jsonrpsee",
     "tokio",
-    "toml"]
+    "toml",
+]
 verifier = []

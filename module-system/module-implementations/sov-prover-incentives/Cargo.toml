@@ -13,14 +13,13 @@ resolver = "2"
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1", features = ["mocks"] }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1", features = ["macros"] }
 tempfile = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
 sov-bank = { path = "../sov-bank", version = "0.1", default-features = false }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false }
-sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1", features = ["macros"] }
 sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 schemars = { workspace = true, optional = true }

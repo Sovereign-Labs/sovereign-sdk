@@ -5,8 +5,7 @@ pub mod query;
 mod token;
 mod utils;
 
-use sov_modules_api::Error;
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 use token::Token;
 pub use token::{Amount, Coins};
@@ -28,7 +27,7 @@ pub struct BankConfig<C: sov_modules_api::Context> {
 /// - Token creation.
 /// - Token transfers.
 /// - Token burn.
-#[cfg_attr(feature = "native", derive(sov_modules_macros::ModuleCallJsonSchema))]
+#[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo, Clone)]
 pub struct Bank<C: sov_modules_api::Context> {
     /// The address of the sov-bank module.

@@ -4,8 +4,7 @@ pub mod hooks;
 #[cfg(feature = "native")]
 pub mod query;
 
-use sov_modules_api::{CallResponse, Error, Spec};
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::{CallResponse, Error, ModuleInfo, Spec};
 use sov_state::{StateMap, StateValue, WorkingSet};
 
 /// Initial configuration for the sov_sequencer_registry module.
