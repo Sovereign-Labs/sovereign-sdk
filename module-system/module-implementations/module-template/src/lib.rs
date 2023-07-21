@@ -1,12 +1,14 @@
-pub mod call;
-pub mod genesis;
+mod call;
+mod genesis;
 
 #[cfg(test)]
 mod tests;
 
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 
+pub use call::CallMessage;
+pub use query::Response;
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
