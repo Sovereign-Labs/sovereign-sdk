@@ -16,7 +16,7 @@ type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
 
 /// This implementation of the `StateTransitionFunction` that is specifically designed to work with the module-system.
 pub struct AppTemplate<C: Context, RT, Vm, B> {
-    /// State storage used by te rollup.
+    /// State storage used by the rollup.
     pub current_storage: C::Storage,
     /// The runtime includes all the modules that the rollup supports.
     pub runtime: RT,
