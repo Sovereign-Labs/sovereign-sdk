@@ -21,7 +21,7 @@ except that the `method` annotation has been renamed to `rpc_method` to clarify 
 
 ```rust
 // This code goes in your module's query.rs file
-use sov_modules_macros::rpc_gen;
+use sov_modules_api::macros::rpc_gen;
 
 #[rpc_gen(client, server, namespace = "bank")]
 impl<C: Context> Bank<C> {
