@@ -14,8 +14,13 @@ use crate::{Batch, SequencerOutcome, SlashingReason, TxEffect};
 
 type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
 
+/// An implementation of the
+/// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
+/// that is specifically designed to work with the module-system.
 pub struct AppTemplate<C: Context, RT, Vm, B> {
+    /// State storage used by the rollup.
     pub current_storage: C::Storage,
+    /// The runtime includes all the modules that the rollup supports.
     pub runtime: RT,
     pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
@@ -23,10 +28,10 @@ pub struct AppTemplate<C: Context, RT, Vm, B> {
 }
 
 pub(crate) enum ApplyBatchError {
-    /// Contains batch hash
+    // Contains batch hash
     Ignored([u8; 32]),
     Slashed {
-        /// Contains batch hash
+        // Contains batch hash
         hash: [u8; 32],
         reason: SlashingReason,
         sequencer_da_address: Vec<u8>,
@@ -64,6 +69,7 @@ where
         + TxHooks<Context = C>
         + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
 {
+    /// [`AppTemplate`] constructor.
     pub fn new(storage: C::Storage, runtime: RT) -> Self {
         Self {
             runtime,
@@ -272,7 +278,7 @@ where
         &self,
         batch: Batch,
     ) -> Result<Vec<TransactionAndRawHash<C>>, SlashingReason> {
-        match verify_txs_stateless(batch.take_transactions()) {
+        match verify_txs_stateless(batch.txs) {
             Ok(txs) => Ok(txs),
             Err(e) => {
                 error!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}\n", e);
