@@ -22,7 +22,7 @@ simplicity, each token represents only an ID and won't hold any metadata.
 ### Structure and dependencies
 
 The Sovereign SDK provides a [module-template](../../module-system/module-implementations/module-template/README.md),
-which is boilerplate that can be customised to easily build modules.
+which is boilerplate that can be customized to easily build modules.
 
 ```
 
@@ -377,8 +377,8 @@ sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branc
 Here is some boilerplate for NFT module integration tests:
 
 ```rust
-use demo_nft_module::call::CallMessage;
-use demo_nft_module::query::OwnerResponse;
+use demo_nft_module::CallMessage;
+use demo_nft_module::OwnerResponse;
 use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
 use serde::de::DeserializeOwned;
 use sov_modules_api::default_context::DefaultContext;
