@@ -1,12 +1,14 @@
 pub mod hooks;
 
-pub mod call;
-pub mod genesis;
+mod call;
+mod genesis;
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 #[cfg(test)]
 mod tests;
 
+pub use call::CallMessage;
+pub use query::{AccountsRpcImpl, AccountsRpcServer, Response};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;

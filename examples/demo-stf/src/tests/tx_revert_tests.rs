@@ -1,6 +1,6 @@
 use borsh::BorshSerialize;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
-use sov_accounts::query::Response;
+use sov_accounts::Response;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
