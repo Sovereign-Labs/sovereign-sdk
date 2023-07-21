@@ -43,8 +43,17 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         Ok(Self::new(config))
     }
 
-    fn get(&self, _key: StorageKey, witness: &S::Witness) -> Option<StorageValue> {
-        witness.get_hint()
+    fn get_with_proof_opt(
+        &self,
+        _key: StorageKey,
+        witness: &Self::Witness,
+        with_proof: bool,
+    ) -> (Option<StorageValue>, Option<Self::Proof>) {
+        if with_proof {
+            unreachable!("Cannot return a proof for the zk-storage")
+        }
+
+        (witness.get_hint(), None)
     }
 
     fn validate_and_commit(

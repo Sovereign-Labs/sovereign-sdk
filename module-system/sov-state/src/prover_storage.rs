@@ -63,10 +63,21 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         Self::with_path(config.path.as_path())
     }
 
-    fn get(&self, key: StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
+    fn get_with_proof_opt(
+        &self,
+        key: StorageKey,
+        witness: &Self::Witness,
+        with_proof: bool,
+    ) -> (Option<StorageValue>, Option<Self::Proof>) {
         let val = self.read_value(key);
         witness.add_hint(val.clone());
-        val
+        (val, {
+            if with_proof {
+                todo!("Not able to get with proof yet")
+            } else {
+                None
+            }
+        })
     }
 
     fn validate_and_commit(

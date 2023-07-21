@@ -1,22 +1,29 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+use sov_modules_api::Spec;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker, Zkvm};
-use sov_state::WorkingSet;
+use sov_state::storage::{StorageKey, StorageProof};
+use sov_state::{Storage, WorkingSet};
 
 use super::AttesterIncentives;
 use crate::call::Role;
 
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
-pub struct Response {
+pub struct BondAmountResponse {
     pub value: u64,
 }
 
-impl<
-        C: sov_modules_api::Context,
-        Vm: Zkvm,
-        Cond: ValidityCondition,
-        Checker: ValidityConditionChecker<Cond> + BorshDeserialize + BorshSerialize,
-    > AttesterIncentives<C, Vm, Cond, Checker>
+pub struct BondProofResponse<P> {
+    pub proof: StorageProof<P>,
+}
+
+// TODO: adapt rpc_gen macro to accept structure definitions having multiple generics
+impl<C, Vm, Cond, Checker> AttesterIncentives<C, Vm, Cond, Checker>
+where
+    C: sov_modules_api::Context,
+    Vm: Zkvm,
+    Cond: ValidityCondition,
+    Checker: ValidityConditionChecker<Cond> + BorshDeserialize + BorshSerialize,
 {
     /// Queries the state of the module.
     pub fn get_bond_amount(
@@ -24,10 +31,10 @@ impl<
         address: C::Address,
         role: Role,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Response {
+    ) -> BondAmountResponse {
         match role {
             Role::Attester => {
-                Response {
+                BondAmountResponse {
                     value: self
                         .bonded_attesters
                         .get(&address, working_set)
@@ -35,13 +42,37 @@ impl<
                 }
             }
             Role::Challenger => {
-                Response {
+                BondAmountResponse {
                     value: self
                         .bonded_challengers
                         .get(&address, working_set)
                         .unwrap_or_default(), // self.value.get(working_set),
                 }
             }
+        }
+    }
+
+    /// Used by attesters to get a proof that they were bonded before starting to produce attestations.
+    /// A bonding proof is valid for `max_finality_period` blocks, the attester can only produce transition
+    /// attestations for this specific amount of time.
+    pub fn get_bond_proof(
+        &self,
+        address: C::Address,
+        witness: &<<C as Spec>::Storage as Storage>::Witness,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> BondProofResponse<<C::Storage as Storage>::Proof> {
+        BondProofResponse {
+            proof: {
+                let (value, proof) = working_set.backing().get_with_proof(
+                    StorageKey::new(self.bonded_attesters.prefix(), &self.address),
+                    witness,
+                );
+                StorageProof {
+                    key: StorageKey::new(self.bonded_attesters.prefix(), &address),
+                    value,
+                    proof,
+                }
+            },
         }
     }
 }

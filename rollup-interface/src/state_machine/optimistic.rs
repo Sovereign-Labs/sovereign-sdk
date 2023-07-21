@@ -4,6 +4,18 @@ use serde::{Deserialize, Serialize};
 
 use crate::zk::StateTransition;
 
+/// A proof that the attester was bonded at the transition num `transition_num`.
+/// For rollups using the `jmt`, this will be a `jmt::SparseMerkleProof`
+#[derive(
+    Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Default,
+)]
+pub struct ProofOfBond<StateProof: BorshSerialize> {
+    /// The actual state proof that the attester was bonded
+    pub proof: StateProof,
+    /// The transition number for which the proof of bond applies
+    pub transition_num: u64,
+}
+
 /// An attestation that a particular DA layer block transitioned the rollup state to some value
 #[derive(
     Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Default,
@@ -15,9 +27,8 @@ pub struct Attestation<StateProof: BorshSerialize> {
     pub da_block_hash: [u8; 32],
     /// The alleged post-state root
     pub post_state_root: [u8; 32],
-    /// A proof that the attester was bonded as of `initial_state_root`.
-    /// For rollups using the `jmt`, this will be a `jmt::SparseMerkleProof`
-    pub proof_of_bond: StateProof,
+    /// A proof that the attester was bonded at some point in time before the attestation is generated
+    pub proof_of_bond: ProofOfBond<StateProof>,
 }
 
 /// The contents of a challenge to an attestation, which are contained as a public output of the proof

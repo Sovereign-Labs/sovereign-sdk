@@ -10,7 +10,7 @@ use sov_rollup_interface::optimistic::Attestation;
 use sov_rollup_interface::zk::{
     StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
 };
-use sov_state::storage::StorageProof;
+use sov_state::storage::{StorageKey, StorageProof, StorageValue};
 use sov_state::{Storage, WorkingSet};
 use thiserror::Error;
 
@@ -269,27 +269,37 @@ impl<
         Ok(CallResponse::default())
     }
 
+    /// The bonding proof is now a proof that an attester was bonded during the last `finality_period` range.
+    /// The proof must refer to a valid state of the rollup. The initial root hash must represent a state between
+    /// the bonding proof one and the current state.
     fn check_bonding_proof(
         &self,
         attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
-        // This proof checks that the attester was bonded at the initial root hash
-        let (attester_key, bond_opt) = working_set.backing().open_proof(
-            attestation.initial_state_root,
-            attestation.proof_of_bond.clone(),
-        )?;
+        let bonding_root = {
+            if attestation.proof_of_bond.transition_num == 0 {
+                self.chain_state.genesis_hash.get_or_err(working_set)?
+            } else {
+                self.chain_state
+                    .historical_transitions
+                    .get_or_err(&(attestation.proof_of_bond.transition_num - 1), working_set)?
+                    .post_state_root()
+            }
+        };
 
-        let sender_u8: Vec<u8> = context.sender().as_ref().into();
+        // This proof checks that the attester was bonded at the given transition num
+        let (attester_key, bond_opt) = working_set
+            .backing()
+            .open_proof(bonding_root, attestation.proof_of_bond.proof.clone())?;
 
         // We have to check that the storage key is the same as the sender's
         ensure!(
-            *attester_key.as_ref() == sender_u8,
+            attester_key == StorageKey::new(self.bonded_attesters.prefix(), context.sender()),
             "The sender key doesn't match the attester key provided in the proof"
         );
 
-        // Maybe we can check directly against the bonded attester set?
         let bond = bond_opt.unwrap_or_default();
         let bond = bond.value();
 

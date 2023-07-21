@@ -1,3 +1,4 @@
+use jmt::proof::SparseMerkleProof;
 use sov_chain_state::StateTransitionId;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Hasher, Module, Spec};
@@ -6,6 +7,7 @@ use sov_rollup_interface::mocks::{
 };
 use sov_rollup_interface::optimistic::Attestation;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
+use sov_state::storage::{StorageKey, StorageProof, StorageValue};
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::AttesterIncentives;
@@ -13,9 +15,11 @@ use crate::AttesterIncentives;
 type C = DefaultContext;
 
 const BOND_AMOUNT: u64 = 1000;
+const INITIAL_BOND_AMOUNT: u64 = 5 * BOND_AMOUNT;
 const MOCK_CODE_COMMITMENT: MockCodeCommitment = MockCodeCommitment([0u8; 32]);
-const DEFAULT_ROLLUP_FINALITY: u64 = 5;
-const DEFAULT_CHAIN_HEIGHT: u64 = 10;
+const DEFAULT_ROLLUP_FINALITY: u64 = 3;
+const DEFAULT_CHAIN_HEIGHT: u64 = 12;
+const DEFAULT_MAX_LIGHT_CLIENT_HEIGHT: u64 = 6;
 
 pub fn generate_address(key: &str) -> <C as Spec>::Address {
     let hash = <C as Spec>::Hasher::hash(key.as_bytes());
@@ -33,8 +37,8 @@ fn create_bank_config() -> (
     let token_config = sov_bank::TokenConfig {
         token_name: "InitialToken".to_owned(),
         address_and_balances: vec![
-            (attester_address.clone(), BOND_AMOUNT * 5),
-            (challenger_address.clone(), BOND_AMOUNT * 5),
+            (attester_address.clone(), INITIAL_BOND_AMOUNT),
+            (challenger_address.clone(), INITIAL_BOND_AMOUNT),
         ],
     };
 
@@ -86,7 +90,7 @@ fn setup<Cond: ValidityCondition, Checker: ValidityConditionChecker<Cond>>(
 }
 
 fn init_chain(
-    module: AttesterIncentives<
+    module: &AttesterIncentives<
         DefaultContext,
         MockZkvm,
         MockValidityCond,
@@ -99,6 +103,11 @@ fn init_chain(
         .chain_state
         .genesis_hash
         .set(&[1_u8; 32], working_set);
+
+    module
+        .chain_state
+        .slot_height
+        .set(&DEFAULT_CHAIN_HEIGHT, working_set);
 
     for i in 0..DEFAULT_CHAIN_HEIGHT {
         let i_u8 = u8::try_from(i).unwrap();
@@ -138,29 +147,36 @@ fn test_burn_on_invalid_attestation() {
         BOND_AMOUNT
     );
 
+    // We have to initialize the chain state
+    init_chain(&module, &mut working_set);
+
+    module
+        .light_client_finalized_height
+        .set(&DEFAULT_MAX_LIGHT_CLIENT_HEIGHT, &mut working_set);
+
     // Process an invalid attestation
     {
         let context = DefaultContext {
             sender: attester_address.clone(),
         };
+
         let attestation = Attestation {
             initial_state_root: [0; 32],
             da_block_hash: [0; 32],
             post_state_root: [0; 32],
-            proof_of_bond: todo!(),
+            proof_of_bond: StorageProof {
+                key: StorageKey::new(module.bonded_attesters.prefix(), &attester_address),
+                value: Some(StorageValue::new(&INITIAL_BOND_AMOUNT)),
+                proof: MockProof {
+                    program_id: MockCodeCommitment([0; 32]),
+                    is_valid: true,
+                    log: &[0; 32],
+                },
+            },
         };
-        let proof = MockProof {
-            program_id: MOCK_CODE_COMMITMENT,
-            is_valid: false,
-            log: &[],
-        };
+
         module
-            .process_challenge(
-                proof.encode_to_vec().as_ref(),
-                todo!(),
-                &context,
-                &mut working_set,
-            )
+            .process_attestation(attestation, &context, &mut working_set)
             .expect("An invalid proof is not an error");
     }
 

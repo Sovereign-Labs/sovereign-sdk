@@ -9,10 +9,8 @@ mod tests;
 pub mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::{Error, Hasher};
+use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
-#[cfg(test)]
-use sov_rollup_interface::crypto::SimpleHasher;
 use sov_rollup_interface::mocks::MockValidityCond;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
 use sov_state::WorkingSet;
