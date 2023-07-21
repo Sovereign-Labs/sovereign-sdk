@@ -25,7 +25,7 @@ pub enum TxEffect {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 // TODO: Should be generic for Address for pretty printing https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
-/// The `SequencerOutcome` enum represents the different outcomes that can occur for a sequencer after batch processing.
+/// Represents the different outcomes that can occur for a sequencer after batch processing.
 pub enum SequencerOutcome {
     /// Sequencer receives reward amount in defined token and can withdraw its deposit
     Rewarded(u64),
