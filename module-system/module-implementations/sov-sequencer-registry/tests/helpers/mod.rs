@@ -38,7 +38,7 @@ impl TestSequencer {
     pub fn query_balance_via_bank(
         &mut self,
         working_set: &mut WorkingSet<<C as Spec>::Storage>,
-    ) -> sov_bank::query::BalanceResponse {
+    ) -> sov_bank::BalanceResponse {
         self.bank.balance_of(
             self.sequencer_config.seq_rollup_address.clone(),
             self.sequencer_config.coins_to_lock.token_address.clone(),
@@ -51,7 +51,7 @@ impl TestSequencer {
         &mut self,
         user_address: <DefaultContext as Spec>::Address,
         working_set: &mut WorkingSet<<C as Spec>::Storage>,
-    ) -> sov_bank::query::BalanceResponse {
+    ) -> sov_bank::BalanceResponse {
         self.bank.balance_of(
             user_address,
             self.sequencer_config.coins_to_lock.token_address.clone(),

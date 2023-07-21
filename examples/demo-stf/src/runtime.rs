@@ -1,7 +1,7 @@
 #[cfg(feature = "native")]
 use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
-use sov_bank::query::{BankRpcImpl, BankRpcServer};
+use sov_bank::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
 use sov_election::{ElectionRpcImpl, ElectionRpcServer};
 #[cfg(feature = "native")]
