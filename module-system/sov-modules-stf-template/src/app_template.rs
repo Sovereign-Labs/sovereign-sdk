@@ -14,11 +14,11 @@ use crate::{Batch, SequencerOutcome, SlashingReason, TxEffect};
 
 type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
 
-/// This implementation of the `StateTransitionFunction` hat is specifically designed to work with the Module System. The `AppTemplate` relies on a set of traits that, when combined, define the logic for transitioning the rollup state.
+/// This implementation of the `StateTransitionFunction` that is specifically designed to work with the module-system.
 pub struct AppTemplate<C: Context, RT, Vm, B> {
     /// State storage used by te rollup.
     pub current_storage: C::Storage,
-    /// Runtime contains all the modules supported by the rollup.
+    /// The runtime includes all the modules that the rollup supports.
     pub runtime: RT,
     pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
