@@ -69,13 +69,13 @@ fn test_tx_revert() {
         // We sent 4 vote messages but one of them is invalid and should be reverted.
         let resp = runtime.election.number_of_votes(&mut working_set);
 
-        assert_eq!(resp, sov_election::query::GetNbOfVotesResponse::Result(3));
+        assert_eq!(resp, sov_election::GetNbOfVotesResponse::Result(3));
 
         let resp = runtime.election.results(&mut working_set);
 
         assert_eq!(
             resp,
-            sov_election::query::GetResultResponse::Result(Some(sov_election::Candidate {
+            sov_election::GetResultResponse::Result(Some(sov_election::Candidate {
                 name: "candidate_2".to_owned(),
                 count: 3
             }))
@@ -112,7 +112,7 @@ fn test_nonce_incremented_on_revert() {
         StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(&mut demo, Default::default());
 
         let set_candidates_message = Runtime::<DefaultContext>::encode_election_call(
-            sov_election::call::CallMessage::SetCandidates {
+            sov_election::CallMessage::SetCandidates {
                 names: vec!["candidate_1".to_owned(), "candidate_2".to_owned()],
             },
         );
@@ -124,7 +124,7 @@ fn test_nonce_incremented_on_revert() {
         );
 
         let add_voter_message = Runtime::<DefaultContext>::encode_election_call(
-            sov_election::call::CallMessage::AddVoter(voter.pub_key().to_address()),
+            sov_election::CallMessage::AddVoter(voter.pub_key().to_address()),
         );
         let add_voter_message = Transaction::<DefaultContext>::new_signed_tx(
             &election_admin_private_key,
@@ -133,9 +133,8 @@ fn test_nonce_incremented_on_revert() {
         );
 
         // There's only 2 candidates
-        let vote_message = Runtime::<DefaultContext>::encode_election_call(
-            sov_election::call::CallMessage::Vote(100),
-        );
+        let vote_message =
+            Runtime::<DefaultContext>::encode_election_call(sov_election::CallMessage::Vote(100));
         let vote_message =
             Transaction::<DefaultContext>::new_signed_tx(&voter, vote_message, original_nonce);
 
@@ -169,7 +168,7 @@ fn test_nonce_incremented_on_revert() {
         // No votes actually recorded, because there was invalid vote
         let resp = runtime.election.number_of_votes(&mut working_set);
 
-        assert_eq!(resp, sov_election::query::GetNbOfVotesResponse::Result(0));
+        assert_eq!(resp, sov_election::GetNbOfVotesResponse::Result(0));
 
         let nonce = match runtime
             .accounts
@@ -235,7 +234,7 @@ fn test_tx_bad_sig() {
 
         assert_eq!(
             resp,
-            sov_election::query::GetResultResponse::Err("Election is not frozen".to_owned())
+            sov_election::GetResultResponse::Err("Election is not frozen".to_owned())
         );
 
         // Sequencer is slashed
@@ -311,7 +310,7 @@ fn test_tx_bad_serialization() {
 
         assert_eq!(
             resp,
-            sov_election::query::GetResultResponse::Err("Election is not frozen".to_owned())
+            sov_election::GetResultResponse::Err("Election is not frozen".to_owned())
         );
 
         // Sequencer is not in list of allowed sequencers

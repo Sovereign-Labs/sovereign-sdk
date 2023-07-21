@@ -8,7 +8,8 @@ mod tests;
 
 mod types;
 
-pub use query::{ElectionRpcImpl, ElectionRpcServer};
+pub use call::CallMessage;
+pub use query::{ElectionRpcImpl, ElectionRpcServer, GetNbOfVotesResponse, GetResultResponse};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
