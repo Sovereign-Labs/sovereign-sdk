@@ -14,6 +14,19 @@ mod serde_address;
 mod tests;
 pub mod transaction;
 
+#[cfg(feature = "macros")]
+extern crate sov_modules_macros;
+
+#[cfg(feature = "macros")]
+pub use sov_modules_macros::{
+    DispatchCall, Genesis, MessageCodec, ModuleCallJsonSchema, ModuleInfo,
+};
+
+#[cfg(feature = "macros")]
+pub mod macros {
+    pub use sov_modules_macros::{cli_parser, expose_rpc, rpc_gen, DefaultRuntime, MessageCodec};
+}
+
 use core::fmt::{self, Debug, Display};
 
 use borsh::{BorshDeserialize, BorshSerialize};
