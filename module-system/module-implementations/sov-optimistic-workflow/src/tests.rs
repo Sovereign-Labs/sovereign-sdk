@@ -160,18 +160,15 @@ fn test_burn_on_invalid_attestation() {
             sender: attester_address.clone(),
         };
 
+        let proof = module.get_bond_proof(attester_address, witness, &mut working_set);
+
         let attestation = Attestation {
             initial_state_root: [0; 32],
             da_block_hash: [0; 32],
             post_state_root: [0; 32],
-            proof_of_bond: StorageProof {
-                key: StorageKey::new(module.bonded_attesters.prefix(), &attester_address),
-                value: Some(StorageValue::new(&INITIAL_BOND_AMOUNT)),
-                proof: MockProof {
-                    program_id: MockCodeCommitment([0; 32]),
-                    is_valid: true,
-                    log: &[0; 32],
-                },
+            proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
+                transition_num: 0,
+                proof,
             },
         };
 

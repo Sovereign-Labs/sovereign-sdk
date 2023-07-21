@@ -63,21 +63,25 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         Self::with_path(config.path.as_path())
     }
 
-    fn get_with_proof_opt(
-        &self,
-        key: StorageKey,
-        witness: &Self::Witness,
-        with_proof: bool,
-    ) -> (Option<StorageValue>, Option<Self::Proof>) {
+    fn get(&self, key: StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
         let val = self.read_value(key);
         witness.add_hint(val.clone());
-        (val, {
-            if with_proof {
-                todo!("Not able to get with proof yet")
-            } else {
-                None
-            }
-        })
+        val
+    }
+
+    fn get_with_proof(
+        &self,
+        key: StorageKey,
+        _witness: &Self::Witness,
+    ) -> (Option<StorageValue>, Self::Proof) {
+        let merkle = JellyfishMerkleTree::<StateDB, S::Hasher>::new(&self.db);
+        let (val_opt, proof) = merkle
+            .get_with_proof(
+                KeyHash::with::<S::Hasher>(key.as_ref()),
+                self.db.get_next_version(),
+            )
+            .unwrap();
+        (val_opt.as_ref().map(|val| StorageValue::new(val)), proof)
     }
 
     fn validate_and_commit(

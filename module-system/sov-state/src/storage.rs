@@ -136,32 +136,17 @@ pub trait Storage: Clone {
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error>;
 
-    /// Helper function for [`get_with_proof_opt`].
     /// Returns the value corresponding to the key or None if key is absent.
-    fn get(&self, key: StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
-        self.get_with_proof_opt(key, witness, false).0
-    }
+    fn get(&self, key: StorageKey, witness: &Self::Witness) -> Option<StorageValue>;
 
-    /// Helper function for [`get_with_proof_opt`].
     /// Returns the value corresponding to the key or None if key is absent and a proof to
     /// get the value. Panics if [`get_with_proof_opt`] returns `None` in place of the proof.
+    #[cfg(feature = "native")]
     fn get_with_proof(
         &self,
         key: StorageKey,
         witness: &Self::Witness,
-    ) -> (Option<StorageValue>, Self::Proof) {
-        let (value, proof) = self.get_with_proof_opt(key, witness, true);
-        (value, proof.unwrap())
-    }
-
-    /// Returns the value corresponding to the key and a proof if `with_proof` is set to true.
-    /// Otherwise, returns `None` in place of the proof.
-    fn get_with_proof_opt(
-        &self,
-        key: StorageKey,
-        witness: &Self::Witness,
-        with_proof: bool,
-    ) -> (Option<StorageValue>, Option<Self::Proof>);
+    ) -> (Option<StorageValue>, Self::Proof);
 
     /// Validate all of the storage accesses in a particular cache log,
     /// returning the new state root after applying all writes

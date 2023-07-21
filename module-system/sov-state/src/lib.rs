@@ -1,15 +1,25 @@
 mod internal_cache;
 mod map;
+
 #[cfg(feature = "native")]
 mod prover_storage;
-mod scratchpad;
-pub mod storage;
+
 #[cfg(feature = "native")]
 mod tree_db;
+
+mod scratchpad;
+
+pub mod storage;
+
 mod utils;
 mod value;
 mod witness;
+
+#[cfg(feature = "zk")]
 mod zk_storage;
+
+#[cfg(feature = "zk")]
+pub use zk_storage::ZkStorage;
 
 pub mod config;
 #[cfg(test)]
@@ -26,7 +36,6 @@ pub use sov_first_read_last_write_cache::cache::CacheLog;
 pub use storage::Storage;
 use utils::AlignedVec;
 pub use value::StateValue;
-pub use zk_storage::ZkStorage;
 
 pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 

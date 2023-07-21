@@ -171,6 +171,7 @@ fn test_state_value_with_delete() {
     }
 }
 
+#[cfg(feature = "zk")]
 #[test]
 fn test_witness_roundtrip() {
     let tempdir = tempfile::tempdir().unwrap();

@@ -10,7 +10,7 @@ use sov_rollup_interface::optimistic::Attestation;
 use sov_rollup_interface::zk::{
     StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
 };
-use sov_state::storage::{StorageKey, StorageProof, StorageValue};
+use sov_state::storage::{StorageKey, StorageProof};
 use sov_state::{Storage, WorkingSet};
 use thiserror::Error;
 
