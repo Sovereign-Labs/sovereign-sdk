@@ -18,6 +18,8 @@ use core::fmt::{self, Debug, Display};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(feature = "native")]
+pub use clap;
 pub use dispatch::{DispatchCall, Genesis};
 pub use error::Error;
 pub use prefix::Prefix;
@@ -27,8 +29,6 @@ pub use sov_rollup_interface::crypto::SimpleHasher as Hasher;
 pub use sov_rollup_interface::AddressTrait;
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
-#[cfg(feature = "native")]
-pub use clap;
 
 pub use crate::bech32::AddressBech32;
 
@@ -191,7 +191,6 @@ pub trait Spec {
         + Sync
         + FromStr<Err = anyhow::Error>
         + Signature<PublicKey = Self::PublicKey>;
-
 
     /// The digital signature scheme used by the rollup
     #[cfg(not(feature = "native"))]
