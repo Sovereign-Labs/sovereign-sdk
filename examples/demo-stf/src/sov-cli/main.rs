@@ -14,7 +14,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{AddressBech32, PublicKey, Spec};
-use sov_modules_stf_template::RawTx;
+pub use sov_modules_stf_template::RawTx;
 use sov_sequencer::SubmitTransaction;
 
 type C = DefaultContext;

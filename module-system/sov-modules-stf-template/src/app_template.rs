@@ -14,8 +14,11 @@ use crate::{Batch, SequencerOutcome, SlashingReason, TxEffect};
 
 type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
 
+/// This implementation of the `StateTransitionFunction` hat is specifically designed to work with the Module System. The `AppTemplate` relies on a set of traits that, when combined, define the logic for transitioning the rollup state.
 pub struct AppTemplate<C: Context, RT, Vm, B> {
+    /// State storage used by te rollup.
     pub current_storage: C::Storage,
+    /// Runtime contains all the modules supported by the rollup.
     pub runtime: RT,
     pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
@@ -23,10 +26,10 @@ pub struct AppTemplate<C: Context, RT, Vm, B> {
 }
 
 pub(crate) enum ApplyBatchError {
-    /// Contains batch hash
+    // Contains batch hash
     Ignored([u8; 32]),
     Slashed {
-        /// Contains batch hash
+        // Contains batch hash
         hash: [u8; 32],
         reason: SlashingReason,
         sequencer_da_address: Vec<u8>,
@@ -64,6 +67,7 @@ where
         + TxHooks<Context = C>
         + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
 {
+    /// AppTemplate constructor.
     pub fn new(storage: C::Storage, runtime: RT) -> Self {
         Self {
             runtime,
@@ -272,7 +276,7 @@ where
         &self,
         batch: Batch,
     ) -> Result<Vec<TransactionAndRawHash<C>>, SlashingReason> {
-        match verify_txs_stateless(batch.take_transactions()) {
+        match verify_txs_stateless(batch.txs) {
             Ok(txs) => Ok(txs),
             Err(e) => {
                 error!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}\n", e);
