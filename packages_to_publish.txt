@@ -11,3 +11,4 @@ sov-accounts
 sov-bank
 sov-sequencer-registry
 sov-prover-incentives
+sov-blob-storage
