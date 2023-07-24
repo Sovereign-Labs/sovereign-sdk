@@ -227,65 +227,6 @@ impl CliParserMacro {
     }
 }
 
-/// Implement [`sov_modules_api::CliWalletArg`] for the annotated struct or enum. Unions are not supported.
-///
-/// Under the hood, this macro generates a new struct or enum which derives the [`clap::Parser`] trait, and then implements the
-/// [`sov_modules_api::CliWalletArg`] trait where the `CliStringRepr` type is the new struct or enum.
-///
-/// As an implementation detail, `clap` requires that all types have named fields - so this macro auto generates an appropriate
-/// `clap`-compatible type from the annotated item. Tor example, the struct `MyStruct(u64, u64)` would be transformed into
-/// `MyStructWithNamedFields { field0: u64, field1: u64 }`.
-///
-/// ## Example
-///
-/// This code..
-/// ```rust
-/// use sov_modules_macros::CliWalletArg;
-/// #[derive(CliWalletArg, Clone)]
-/// pub enum MyEnum {
-///    /// A number
-///    Number(u32),
-///    /// A hash
-///    Hash { hash: [u8; 32] },
-/// }
-/// ```
-///
-/// ...expands into the following code:
-/// ```rust,ignore
-/// // The original enum definition is left in its original place
-/// pub enum MyEnum {
-///    /// A number
-///    Number(u32),
-///    /// A hash
-///    Hash { hash: [u8; 32] },
-/// }
-///
-/// // We generate a new enum with named fields which can derive `clap::Parser`.
-/// // Since this variant is only ever converted back to the original, we
-/// // don't carry over any of the original derives. However, we do preserve
-/// // doc comments from the original version so that `clap` can display them.
-/// #[derive(::clap::Parser)]
-/// pub enum MyEnumWithNamedFields {
-///    /// A number
-///    Number { field0: u32 } ,
-///    /// A hash
-///    Hash { hash: [u8; 32] },
-/// }
-/// // We generate a `From` impl to convert between the types.
-/// impl From<MyEnumWithNamedFields> for MyEnum {
-///    fn from(item: MyEnumWithNamedFields) -> Self {
-///       match item {
-///         Number { field0 } => MyEnum::Number(field0),
-///         Hash { hash } => MyEnum::Hash { hash },
-///       }
-///    }
-/// }
-///
-/// impl sov_modules_api::CliWalletArg for MyEnum {
-///     type CliStringRepr = MyEnumWithNamedFields;
-/// }
-/// ```
-///
 pub fn derive_cli_wallet_arg(ast: DeriveInput) -> Result<proc_macro::TokenStream, syn::Error> {
     let item_name = &ast.ident;
     let generics = &ast.generics;

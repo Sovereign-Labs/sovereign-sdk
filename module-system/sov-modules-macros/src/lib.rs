@@ -247,7 +247,7 @@ pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
 /// ```
 /// use sov_modules_api::Context;
 /// use sov_modules_api::default_context::DefaultContext;
-/// use sov_modules_macros::{DispatchCall, MessageCodec, cli_parser};
+/// use sov_modules_macros::{DispatchCall, MessageCodec, CliWallet};
 ///
 /// #[derive(DispatchCall, MessageCodec, CliWallet)]
 /// #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
@@ -263,9 +263,64 @@ pub fn cli_parser(input: TokenStream) -> TokenStream {
     handle_macro_error(cli_parser.cli_macro(input))
 }
 
-/// Allows the underlying enum to be used as an argument in the sov-cli wallet.
+/// Implement [`sov_modules_api::CliWalletArg`] for the annotated struct or enum. Unions are not supported.
 ///
-/// Under the hood, this macro generates an enum with unnamed fields
+/// Under the hood, this macro generates a new struct or enum which derives the [`clap::Parser`] trait, and then implements the
+/// [`sov_modules_api::CliWalletArg`] trait where the `CliStringRepr` type is the new struct or enum.
+///
+/// As an implementation detail, `clap` requires that all types have named fields - so this macro auto generates an appropriate
+/// `clap`-compatible type from the annotated item. Tor example, the struct `MyStruct(u64, u64)` would be transformed into
+/// `MyStructWithNamedFields { field0: u64, field1: u64 }`.
+///
+/// ## Example
+///
+/// This code..
+/// ```rust
+/// use sov_modules_macros::CliWalletArg;
+/// #[derive(CliWalletArg, Clone)]
+/// pub enum MyEnum {
+///    /// A number
+///    Number(u32),
+///    /// A hash
+///    Hash { hash: String },
+/// }
+/// ```
+///
+/// ...expands into the following code:
+/// ```rust,ignore
+/// // The original enum definition is left in its original place
+/// pub enum MyEnum {
+///    /// A number
+///    Number(u32),
+///    /// A hash
+///    Hash { hash: String },
+/// }
+///
+/// // We generate a new enum with named fields which can derive `clap::Parser`.
+/// // Since this variant is only ever converted back to the original, we
+/// // don't carry over any of the original derives. However, we do preserve
+/// // doc comments from the original version so that `clap` can display them.
+/// #[derive(::clap::Parser)]
+/// pub enum MyEnumWithNamedFields {
+///    /// A number
+///    Number { field0: u32 } ,
+///    /// A hash
+///    Hash { hash: String },
+/// }
+/// // We generate a `From` impl to convert between the types.
+/// impl From<MyEnumWithNamedFields> for MyEnum {
+///    fn from(item: MyEnumWithNamedFields) -> Self {
+///       match item {
+///         Number { field0 } => MyEnum::Number(field0),
+///         Hash { hash } => MyEnum::Hash { hash },
+///       }
+///    }
+/// }
+///
+/// impl sov_modules_api::CliWalletArg for MyEnum {
+///     type CliStringRepr = MyEnumWithNamedFields;
+/// }
+/// ```
 #[proc_macro_derive(CliWalletArg)]
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
     let input: DeriveInput = parse_macro_input!(input);
