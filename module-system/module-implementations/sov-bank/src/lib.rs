@@ -1,10 +1,13 @@
-pub mod call;
-pub mod genesis;
+mod call;
+mod genesis;
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 mod token;
 mod utils;
 
+pub use call::CallMessage;
+#[cfg(feature = "native")]
+pub use query::{BalanceResponse, BankRpcImpl, BankRpcServer, TotalSupplyResponse};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;

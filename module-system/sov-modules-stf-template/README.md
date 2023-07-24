@@ -4,7 +4,7 @@
 
 This crate contains an implementation of a `StateTransitionFunction` called `AppTemplate` that is specifically designed to work with the Module System. The `AppTemplate` relies on a set of traits that, when combined, define the logic for transitioning the rollup state.
 
-```rust
+```rust ignore
 pub struct AppTemplate<C: Context, RT, Vm> {
     pub current_storage: C::Storage,
     pub runtime: RT,
@@ -35,7 +35,7 @@ where
 
 Both the `DispatchCall` and `Genesis` traits can be automatically derived (see `RT` in the above snippet) for any set of modules:
 
-```rust
+```rust ignore
 #[derive(Genesis, DispatchCall, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {

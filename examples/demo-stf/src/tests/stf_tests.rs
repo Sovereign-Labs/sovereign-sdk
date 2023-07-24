@@ -62,14 +62,14 @@ pub mod test {
 
             assert_eq!(
                 resp,
-                sov_election::query::GetResultResponse::Result(Some(sov_election::Candidate {
+                sov_election::GetResultResponse::Result(Some(sov_election::Candidate {
                     name: "candidate_2".to_owned(),
                     count: 3
                 }))
             );
             let resp = runtime.value_setter.query_value(&mut working_set);
 
-            assert_eq!(resp, sov_value_setter::query::Response { value: Some(33) });
+            assert_eq!(resp, sov_value_setter::Response { value: Some(33) });
         }
     }
 
@@ -116,7 +116,7 @@ pub mod test {
 
         assert_eq!(
             resp,
-            sov_election::query::GetResultResponse::Result(Some(sov_election::Candidate {
+            sov_election::GetResultResponse::Result(Some(sov_election::Candidate {
                 name: "candidate_2".to_owned(),
                 count: 3
             }))
@@ -124,7 +124,7 @@ pub mod test {
 
         let resp = runtime.value_setter.query_value(&mut working_set);
 
-        assert_eq!(resp, sov_value_setter::query::Response { value: Some(33) });
+        assert_eq!(resp, sov_value_setter::Response { value: Some(33) });
     }
 
     #[test]
@@ -174,12 +174,12 @@ pub mod test {
 
             assert_eq!(
                 resp,
-                sov_election::query::GetResultResponse::Err("Election is not frozen".to_owned())
+                sov_election::GetResultResponse::Err("Election is not frozen".to_owned())
             );
 
             let resp = runtime.value_setter.query_value(&mut working_set);
 
-            assert_eq!(resp, sov_value_setter::query::Response { value: None });
+            assert_eq!(resp, sov_value_setter::Response { value: None });
         }
     }
 

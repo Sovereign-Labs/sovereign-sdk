@@ -22,7 +22,6 @@ sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-c
 jmt = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
-tracing = { workspace = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }

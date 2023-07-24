@@ -1,13 +1,16 @@
-pub mod call;
-pub mod genesis;
+mod call;
+mod genesis;
 
 #[cfg(test)]
 mod tests;
 
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+pub use call::CallMessage;
+#[cfg(feature = "native")]
+pub use query::Response;
 use sov_modules_api::{Context, Error};
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::zk::Zkvm;
@@ -50,6 +53,7 @@ impl<Vm: Zkvm> BorshDeserialize for StoredCodeCommitment<Vm> {
 /// - Must derive `ModuleInfo`
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
+#[cfg_attr(feature = "native", derive(sov_modules_macros::ModuleCallJsonSchema))]
 #[derive(ModuleInfo)]
 pub struct ProverIncentives<C: Context, Vm: Zkvm> {
     /// Address of the module.
