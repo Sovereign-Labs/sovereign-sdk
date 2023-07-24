@@ -680,7 +680,6 @@ dependencies = [
  "sov-bank",
  "sov-election",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-modules-stf-template",
  "sov-rollup-interface",
  "sov-sequencer",
@@ -3081,10 +3080,10 @@ dependencies = [
  "anyhow",
  "borsh",
  "jsonrpsee",
+ "schemars",
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-state",
 ]
 
@@ -3099,7 +3098,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-state",
 ]
 
@@ -3150,9 +3148,10 @@ dependencies = [
  "anyhow",
  "borsh",
  "jsonrpsee",
+ "schemars",
  "serde",
+ "serde_json",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-state",
 ]
 
@@ -3178,6 +3177,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.7",
+ "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
  "thiserror",
@@ -3193,7 +3193,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "schemars",
- "sov-modules-api",
  "syn 1.0.109",
 ]
 
@@ -3258,10 +3257,11 @@ dependencies = [
  "anyhow",
  "borsh",
  "jsonrpsee",
+ "schemars",
  "serde",
+ "serde_json",
  "sov-bank",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
 ]
@@ -3289,9 +3289,10 @@ dependencies = [
  "anyhow",
  "borsh",
  "jsonrpsee",
+ "schemars",
  "serde",
+ "serde_json",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
  "thiserror",

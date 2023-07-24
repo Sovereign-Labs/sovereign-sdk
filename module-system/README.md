@@ -91,7 +91,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
 ### The `RPC` Macro: The Node-to-User Interface
 
 The third interface that modules expose is an rpc implementation. To generate an RPC implementation, simply annotate your `impl` block
-with the `#[rpc_gen]` macro from `sov_modules_macros`.
+with the `#[rpc_gen]` macro from `sov_modules_api::macros`.
 
 ```rust
 #[rpc_gen(client, server, namespace = "bank")]

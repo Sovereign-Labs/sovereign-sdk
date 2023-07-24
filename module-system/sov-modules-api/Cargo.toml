@@ -15,6 +15,7 @@ resolver = "2"
 anyhow = { workspace = true }
 sov-state = { path = "../sov-state", version = "0.1", default-features = false }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
+sov-modules-macros = { path = "../sov-modules-macros", version = "0.1", optional = true }
 serde = { workspace = true }
 borsh = { workspace = true }
 thiserror = { workspace = true }
@@ -34,5 +35,6 @@ rand = { version = "0.7", optional = true }
 serde_json = { workspace = true }
 
 [features]
-default = ["native"]
-native = ["sov-state/native", "rand", "schemars", "ed25519-dalek/default", "dep:hex", "dep:clap"]
+default = ["native", "macros"]
+native = ["sov-state/native", "rand", "hex", "schemars", "ed25519-dalek/default", "clap"]
+macros = ["sov-modules-macros"]

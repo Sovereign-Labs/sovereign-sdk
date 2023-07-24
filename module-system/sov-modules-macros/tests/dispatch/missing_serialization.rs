@@ -1,4 +1,4 @@
-use sov_modules_macros::DispatchCall;
+use sov_modules_api::DispatchCall;
 
 #[derive(DispatchCall)]
 struct TestStruct {}

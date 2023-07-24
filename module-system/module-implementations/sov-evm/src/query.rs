@@ -4,7 +4,7 @@ use ethereum_types::{Address, H256, U256, U64};
 use ethers::types::Bytes;
 use ethers_core::types::{Block, BlockId, FeeHistory, Transaction, TransactionReceipt, TxHash};
 use revm::primitives::{CfgEnv, ExecutionResult, U256 as EVM_U256};
-use sov_modules_macros::rpc_gen;
+use sov_modules_api::macros::rpc_gen;
 use sov_state::WorkingSet;
 use tracing::info;
 

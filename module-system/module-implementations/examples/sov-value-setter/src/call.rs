@@ -3,7 +3,7 @@ use std::fmt::Debug;
 use anyhow::Result;
 use sov_modules_api::CallResponse;
 #[cfg(feature = "native")]
-use sov_modules_macros::CliWalletArg;
+use sov_modules_api::macros::CliWalletArg;
 use sov_state::WorkingSet;
 use thiserror::Error;
 
@@ -14,9 +14,9 @@ use super::ValueSetter;
     feature = "native",
     derive(serde::Serialize),
     derive(serde::Deserialize),
+    derive(CliWalletArg),
     derive(schemars::JsonSchema)
 )]
-#[cfg_attr(feature = "native", derive(CliWalletArg))]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage {
     /// value to set

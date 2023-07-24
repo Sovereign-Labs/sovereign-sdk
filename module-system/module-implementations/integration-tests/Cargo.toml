@@ -17,8 +17,6 @@ borsh = { workspace = true, features = ["rc"] }
 tempfile = { workspace = true }
 
 sov-modules-api = { path = "../../sov-modules-api" }
-sov-modules-macros = { path = "../../sov-modules-macros" }
 sov-state = { path = "../../sov-state" }
 sov-rollup-interface = { path = "../../../rollup-interface" }
 sov-schema-db = { path = "../../../full-node/db/sov-schema-db" }
-

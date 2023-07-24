@@ -22,8 +22,7 @@ schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 
-sov-modules-api = { path = "../../../sov-modules-api", default-features = false }
-sov-modules-macros = { path = "../../../sov-modules-macros" }
+sov-modules-api = { path = "../../../sov-modules-api", default-features = false, features = ["macros"] }
 sov-state = { path = "../../../sov-state", default-features = false }
 sov-rollup-interface = { path = "../../../../rollup-interface" }
 

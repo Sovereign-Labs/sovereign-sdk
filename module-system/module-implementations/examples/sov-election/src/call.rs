@@ -1,7 +1,5 @@
 use anyhow::{anyhow, bail, ensure, Result};
 use sov_modules_api::{CallResponse, Context};
-#[cfg(feature = "native")]
-use sov_modules_macros::CliWalletArg;
 use sov_state::WorkingSet;
 
 use super::types::{Candidate, Voter};
@@ -13,9 +11,9 @@ use super::Election;
     derive(serde::Serialize),
     derive(serde::Deserialize),
     derive(schemars::JsonSchema),
+    derive(sov_modules_api::macros::CliWalletArg),
     schemars(bound = "C: sov_modules_api::Context", rename = "CallMessage")
 )]
-#[cfg_attr(feature = "native", derive(CliWalletArg))]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: Context> {
     SetCandidates { names: Vec<String> },

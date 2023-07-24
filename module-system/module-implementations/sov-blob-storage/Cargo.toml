@@ -1,6 +1,6 @@
 [package]
-name = "sov-bank"
-description = "A Sovereign SDK managing fungible tokens"
+name = "sov-blob-storage"
+description = "A Sovereign SDK module for holding blobs from Data Availability Layer"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
@@ -9,22 +9,17 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 readme = "README.md"
+
 resolver = "2"
+
 
 [dependencies]
 anyhow = { workspace = true }
-borsh = { workspace = true, features = ["rc"] }
-clap = { workspace = true, optional = true, features = ["derive"] }
-jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
-schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
-
+bincode = { workspace = true }
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false, features = ["macros"] }
+sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
 sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
-thiserror = { workspace = true }
-hex = { workspace = true }
 
 [dev-dependencies]
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
@@ -32,6 +27,4 @@ tempfile = { workspace = true }
 
 [features]
 default = ["native"]
-serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-state/native", "dep:jsonrpsee", "sov-modules-api/native", "dep:clap", "dep:schemars"]
-cli = ["native"]
+native = ["sov-modules-api/native", "sov-state/native"]

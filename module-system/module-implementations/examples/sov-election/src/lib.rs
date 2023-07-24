@@ -1,15 +1,17 @@
-pub mod call;
-pub mod genesis;
+mod call;
+mod genesis;
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 
 #[cfg(test)]
 mod tests;
 
 mod types;
 
-use sov_modules_api::Error;
-use sov_modules_macros::ModuleInfo;
+pub use call::CallMessage;
+#[cfg(feature = "native")]
+pub use query::{ElectionRpcImpl, ElectionRpcServer, GetNbOfVotesResponse, GetResultResponse};
+use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 pub use types::Candidate;
 use types::Voter;
@@ -18,7 +20,7 @@ pub struct ElectionConfig<C: sov_modules_api::Context> {
     pub admin: C::Address,
 }
 
-#[cfg_attr(feature = "native", derive(sov_modules_macros::ModuleCallJsonSchema))]
+#[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo, Clone)]
 pub struct Election<C: sov_modules_api::Context> {
     #[address]

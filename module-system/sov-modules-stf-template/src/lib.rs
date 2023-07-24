@@ -1,4 +1,6 @@
-pub mod app_template;
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
+mod app_template;
 mod batch;
 mod tx_verifier;
 
@@ -12,33 +14,43 @@ use sov_rollup_interface::zk::Zkvm;
 use sov_state::{StateCheckpoint, Storage};
 pub use tx_verifier::RawTx;
 
+/// The receipts of all the transactions in a batch.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TxEffect {
+    /// Batch was reverted.
     Reverted,
+    /// Batch was processed successfully.
     Successful,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 // TODO: Should be generic for Address for pretty printing https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
+/// Represents the different outcomes that can occur for a sequencer after batch processing.
 pub enum SequencerOutcome {
     /// Sequencer receives reward amount in defined token and can withdraw its deposit
     Rewarded(u64),
     /// Sequencer loses its deposit and receives no reward
     Slashed {
+        /// Reason why sequencer was slashed.
         reason: SlashingReason,
         // Keep this comment for so it doesn't need to investigate serde issue again.
         // https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
         // #[serde(bound(deserialize = ""))]
+        /// Sequencer address on DA.
         sequencer_da_address: Vec<u8>,
     },
     /// Batch was ignored, sequencer deposit left untouched.
     Ignored,
 }
 
+/// Reason why sequencer was slashed.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SlashingReason {
+    /// This status indicates problem with batch deserialization.
     InvalidBatchEncoding,
+    /// Stateless verification failed, for example deserialized transactions have invalid signatures.
     StatelessVerificationFailed,
+    /// This status indicates problem with transaction deserialization.
     InvalidTransactionEncoding,
 }
 
