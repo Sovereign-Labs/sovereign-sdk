@@ -24,14 +24,14 @@ impl GenesisMacro {
             generics,
             ..
         } = input;
-
+        
         let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
         let generic_param = get_generics_type_param(&generics, Span::call_site())?;
         let genesis_config = Self::make_genesis_config(&fields, &type_generics, &generic_param);
         let genesis_fn_body = Self::make_genesis_fn_body(&fields);
-
+        
         // Implements the Genesis trait
         Ok(quote::quote! {
             #genesis_config
@@ -41,26 +41,42 @@ impl GenesisMacro {
                 type Config = GenesisConfig #type_generics;
 
                 fn genesis(&self, config: &Self::Config, working_set: &mut sov_state::WorkingSet<<<Self as sov_modules_api::Genesis>::Context as sov_modules_api::Spec>::Storage>) -> core::result::Result<(), sov_modules_api::Error> {
-                    #(#genesis_fn_body)*
+                    #genesis_fn_body
                     Ok(())
                 }
-            }
+            }            
         }
         .into())
     }
 
-    fn make_genesis_fn_body(fields: &[StructNamedField]) -> Vec<proc_macro2::TokenStream> {
-        fields
-            .iter()
-            .map(|field| {
-                let ident = &field.ident;
+    fn make_genesis_fn_body(fields: &[StructNamedField]) -> proc_macro2::TokenStream {
+        let idents = fields.iter().enumerate().map(|(i, field)| {
+           let ident = &field.ident;           
 
-                quote::quote! {
-                    ::sov_modules_api::Genesis::genesis(&self.#ident, &config.#ident, working_set)?;
-                }
-            })
-            .collect()
-    }
+           quote::quote! {
+               (&self.#ident, &#i)
+           }
+       });
+
+        let matches = fields.iter().enumerate().map(|(i, field)| {
+            let ident = &field.ident;
+
+            quote::quote! {
+                #i => ::sov_modules_api::Genesis::genesis(&self.#ident, &config.#ident, working_set),
+            }
+        });
+
+       quote::quote! {
+               let modules: Vec<(&dyn ::sov_modules_api::ModuleInfo<Context = <Self as sov_modules_api::Genesis>::Context>, &usize)> = vec![#(#idents),*];
+               let sorted_modules = ::sov_modules_api::sort_modules_by_dependencies(&modules)?;
+               for module in sorted_modules {
+                    match module {
+                        #(#matches)*
+                        _ => Err(::sov_modules_api::Error::ModuleError(::anyhow::Error::msg(format!("Module not found: {:?}", module)))),
+                    }?
+               }
+       }
+   }
 
     fn make_genesis_config(
         fields: &[StructNamedField],

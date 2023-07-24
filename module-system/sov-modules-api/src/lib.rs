@@ -277,7 +277,7 @@ pub trait RpcRunner {
 }
 
 /// Sorts ModuleInfo objects by their dependencies
-fn sort_modules_by_dependencies<'a, C: Context, T>(
+pub fn sort_modules_by_dependencies<'a, C: Context, T>(
     modules: &'a [(&'a dyn ModuleInfo<Context = C>, &'a T)],
 ) -> Result<Vec<&'a T>, anyhow::Error> {
     fn visit_module<'a, C: Context, T>(
