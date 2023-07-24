@@ -43,7 +43,7 @@ pub struct Accounts<C: sov_modules_api::Context> {
     #[state]
     pub(crate) public_keys: sov_state::StateMap<C::Address, C::PublicKey>,
 
-    /// Mapping from a public ket to a corresponding account.
+    /// Mapping from a public key to a corresponding account.
     #[state]
     pub(crate) accounts: sov_state::StateMap<C::PublicKey, Account<C>>,
 }
