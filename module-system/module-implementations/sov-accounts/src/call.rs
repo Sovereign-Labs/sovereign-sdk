@@ -4,8 +4,10 @@ use sov_state::WorkingSet;
 
 use crate::Accounts;
 
+/// To update the account's public key, the sender must sign this message as proof of possession of the new key.
 pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 
+/// Represents the available call messages for interacting with the sov-accounts module.
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
@@ -18,8 +20,8 @@ pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: sov_modules_api::Context> {
-    // Updates a PublicKey for the corresponding Account.
-    // The sender must be in possession of the new PublicKey.
+    /// Updates a public key for the corresponding Account.
+    /// The sender must be in possession of the new key.
     UpdatePublicKey(C::PublicKey, C::Signature),
 }
 

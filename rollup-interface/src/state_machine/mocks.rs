@@ -103,7 +103,7 @@ fn test_mock_proof_roundtrip() {
 }
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
-#[derive(Debug, PartialEq, Clone, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize)]
 pub struct MockAddress {
     addr: [u8; 32],
 }
@@ -144,6 +144,7 @@ impl AddressTrait for MockAddress {}
 #[derive(
     Debug,
     Clone,
+    PartialEq,
     borsh::BorshDeserialize,
     borsh::BorshSerialize,
     serde::Serialize,

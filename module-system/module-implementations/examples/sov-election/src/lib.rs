@@ -1,13 +1,16 @@
-pub mod call;
-pub mod genesis;
+mod call;
+mod genesis;
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 
 #[cfg(test)]
 mod tests;
 
 mod types;
 
+pub use call::CallMessage;
+#[cfg(feature = "native")]
+pub use query::{ElectionRpcImpl, ElectionRpcServer, GetNbOfVotesResponse, GetResultResponse};
 use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 pub use types::Candidate;

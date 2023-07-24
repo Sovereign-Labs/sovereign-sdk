@@ -1,12 +1,21 @@
+#![allow(missing_docs)]
 use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::AddressBech32;
 use sov_state::WorkingSet;
 
 use crate::{Account, Accounts};
 
+/// This is the response returned from the accounts_getAccount endpoint.
 #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 pub enum Response {
-    AccountExists { addr: AddressBech32, nonce: u64 },
+    /// The account corresponding to the given public key exists.
+    AccountExists {
+        /// The address of the account,
+        addr: AddressBech32,
+        /// The nonce of the account.
+        nonce: u64,
+    },
+    /// The account corresponding to the given public key does not exist.
     AccountEmpty,
 }
 

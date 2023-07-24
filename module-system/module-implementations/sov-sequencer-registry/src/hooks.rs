@@ -29,7 +29,7 @@ impl<C: Context> ApplyBlobHooks for SequencerRegistry<C> {
         match result {
             SequencerOutcome::Completed => (),
             SequencerOutcome::Slashed { sequencer } => {
-                self.allowed_sequencers.delete(&sequencer, working_set);
+                self.delete(sequencer, working_set);
             }
         }
         Ok(())
