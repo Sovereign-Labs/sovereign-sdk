@@ -254,10 +254,7 @@ fn make_fn_address(
     }
 }
 
-fn make_fn_dependencies(
-    modules: Vec<&proc_macro2::Ident>,
-) -> proc_macro2::TokenStream {
-
+fn make_fn_dependencies(modules: Vec<&proc_macro2::Ident>) -> proc_macro2::TokenStream {
     let address_tokens = modules.iter().map(|ident| {
         quote::quote! {
             &self.#ident.address()

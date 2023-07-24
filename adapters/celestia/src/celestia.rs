@@ -341,7 +341,7 @@ impl Display for H160 {
 
 impl std::hash::Hash for H160 {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.as_ref().hash(state);        
+        self.0.as_ref().hash(state);
     }
 }
 

@@ -141,7 +141,7 @@ impl Display for MockAddress {
 
 impl std::hash::Hash for MockAddress {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.addr.hash(state);        
+        self.addr.hash(state);
     }
 }
 
