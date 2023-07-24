@@ -15,6 +15,7 @@ mod tests;
 pub mod transaction;
 
 use core::fmt::{self, Debug, Display};
+use std::collections::{HashMap, HashSet};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use dispatch::{DispatchCall, Genesis};
@@ -26,7 +27,6 @@ pub use sov_rollup_interface::crypto::SimpleHasher as Hasher;
 pub use sov_rollup_interface::AddressTrait;
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
-use std::collections::{HashMap, HashSet};
 
 pub use crate::bech32::AddressBech32;
 
@@ -38,7 +38,7 @@ impl AsRef<[u8]> for Address {
 
 impl std::hash::Hash for Address {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.addr.hash(state);        
+        self.addr.hash(state);
     }
 }
 
@@ -277,41 +277,42 @@ pub trait RpcRunner {
 }
 
 /// Sorts ModuleInfo objects by their dependencies
-pub fn sort_by_dependencies<C: Context>(
-    modules: Vec<&dyn ModuleInfo<Context = C>>,
-) -> Result<Vec<&dyn ModuleInfo<Context = C>>, anyhow::Error> {
-
-    fn visit_module<'a, C: Context>(
-        module: &'a dyn ModuleInfo<Context = C>,
+fn sort_modules_by_dependencies<'a, C: Context, T>(
+    modules: &'a [(&'a dyn ModuleInfo<Context = C>, &'a T)],
+) -> Result<Vec<&'a T>, anyhow::Error> {
+    fn visit_module<'a, C: Context, T>(
+        module_tuple: (&'a (dyn ModuleInfo<Context = C> + 'a), &'a T),
         visited: &mut HashSet<&'a C::Address>,
-        sorted_modules: &mut std::vec::Vec<&'a (dyn ModuleInfo<Context = C> + 'a)>,
-        module_map: &HashMap<&<C as Spec>::Address, &'a (dyn ModuleInfo<Context = C> + 'a)>
+        sorted_modules: &mut Vec<&'a T>,
+        module_map: &HashMap<&'a C::Address, (&'a (dyn ModuleInfo<Context = C> + 'a), &'a T)>,
     ) -> Result<(), anyhow::Error> {
+        let (module, item) = module_tuple;
         let address = module.address();
         if visited.insert(address) {
             for dependency_address in module.dependencies() {
-                let dependency_module = *module_map.get(dependency_address)
-                    .ok_or_else(|| anyhow::Error::msg(format!("Module not found: {:?}", dependency_address)))?;
+                let dependency_module = *module_map.get(dependency_address).ok_or_else(|| {
+                    anyhow::Error::msg(format!("Module not found: {:?}", dependency_address))
+                })?;
                 visit_module(dependency_module, visited, sorted_modules, module_map)?;
             }
-    
-            sorted_modules.push(module);
+
+            sorted_modules.push(item);
         }
-    
+
         Ok(())
     }
 
     let mut module_map = HashMap::new();
 
-    for module in &modules {
-        let address = module.address();        
-        module_map.insert(address, *module);
+    for module in modules {
+        module_map.insert(module.0.address(), *module);
     }
 
-    let mut sorted_modules = Vec::new();
     let mut visited = HashSet::new();
+    let mut sorted_modules = Vec::new();
+
     for module in modules {
-        visit_module(module, &mut visited, &mut sorted_modules, &module_map)?;
+        visit_module(*module, &mut visited, &mut sorted_modules, &module_map)?;
     }
 
     Ok(sorted_modules)
