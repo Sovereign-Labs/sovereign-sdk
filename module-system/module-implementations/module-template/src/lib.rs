@@ -10,8 +10,7 @@ mod query;
 pub use call::CallMessage;
 #[cfg(feature = "native")]
 pub use query::Response;
-use sov_modules_api::Error;
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 
 pub struct ExampleModuleConfig {}
@@ -24,7 +23,7 @@ pub struct ExampleModuleConfig {}
 ///   This is optional, and is only used to generate a JSON Schema for your
 ///   module's call messages (which is useful to develop clients, CLI tooling
 ///   etc.).
-#[cfg_attr(feature = "native", derive(sov_modules_macros::ModuleCallJsonSchema))]
+#[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo)]
 pub struct ExampleModule<C: sov_modules_api::Context> {
     /// Address of the module.

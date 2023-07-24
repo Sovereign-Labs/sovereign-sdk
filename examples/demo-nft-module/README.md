@@ -41,8 +41,7 @@ Here are defining basic dependencies in `Cargo.toml` that module needs to get st
 ```toml
 [dependencies]
 anyhow = { anyhow = "1.0.62" }
-sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", default-features = false }
-sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable" }
+sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", features = ["macros"] }
 ```
 
 ### Establishing the Root Module Structure
@@ -55,8 +54,7 @@ has private state, which it updates in response to input messages.
 NFT module is defined as the following:
 
 ```rust
-use sov_modules_api::Context;
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::{Context, ModuleInfo};
 
 #[derive(ModuleInfo, Clone)]
 pub struct NonFungibleToken<C: Context> {
@@ -121,14 +119,13 @@ Before we start implementing the `Module` trait, there are several preparatory s
     serde = { version = "1", features = ["derive"] }
     serde_json = "1"
 
-     sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", default-features = false }
-     sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable" }
-     sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", default-features = false }
+    sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", default-features = false, features = ["macros"] }
+    sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", default-features = false }
 
-     [features]
-     default = ["native"]
-     serde = ["dep:serde", "dep:serde_json"]
-     native = ["serde", "sov-state/native", "sov-modules-api/native"]
+    [features]
+    default = ["native"]
+    serde = ["dep:serde", "dep:serde_json"]
+    native = ["serde", "sov-state/native", "sov-modules-api/native"]
     ```
 
     This step is necessary to optimize the module for execution in ZK mode, where none of the RPC-related logic is

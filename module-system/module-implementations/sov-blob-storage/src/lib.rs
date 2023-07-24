@@ -2,8 +2,7 @@
 
 //! Blob storage module allows to save DA blobs in the state
 
-use sov_modules_api::Module;
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::{Module, ModuleInfo};
 use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_state::{StateMap, WorkingSet};
 

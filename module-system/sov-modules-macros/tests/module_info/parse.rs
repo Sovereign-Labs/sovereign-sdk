@@ -1,6 +1,5 @@
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::{Context, ModuleInfo};
-use sov_modules_macros::ModuleInfo;
 use sov_state::{StateMap, StateValue};
 
 mod test_module {

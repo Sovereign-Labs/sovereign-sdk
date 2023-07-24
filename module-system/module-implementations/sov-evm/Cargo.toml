@@ -14,8 +14,7 @@ resolver = "2"
 
 [dependencies]
 revm = "3.3.0"
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false }
-sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false, features = ["macros"] }
 sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
 
 anyhow = { workspace = true }
@@ -37,18 +36,18 @@ ethers-providers = { workspace = true }
 ethers-signers = { workspace = true }
 
 
-anvil  = { workspace = true }
-anvil-core  = { workspace = true }
+anvil = { workspace = true }
+anvil-core = { workspace = true }
 ethers = { workspace = true }
 
 [dev-dependencies]
-anvil  = { workspace = true }
+anvil = { workspace = true }
 primitive-types = "0.12.1"
 tokio = { workspace = true }
 tempfile = { workspace = true }
 bytes = { workspace = true }
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1", features = ["macros"] }
 
 [features]
 default = ["native"]

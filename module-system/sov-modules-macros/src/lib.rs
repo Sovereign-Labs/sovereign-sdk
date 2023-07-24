@@ -21,7 +21,7 @@ use proc_macro::TokenStream;
 use rpc::ExposeRpcMacro;
 use syn::parse_macro_input;
 
-/// Derives the [`sov_modules_api::ModuleInfo`] trait for the underlying `struct`.
+/// Derives the [`ModuleInfo`](trait.ModuleInfo.html) trait for the underlying `struct`.
 ///
 /// The underlying type must respect the following conditions, or compilation
 /// will fail:
@@ -33,14 +33,12 @@ use syn::parse_macro_input;
 ///   - `#[state]` is used for state members.
 ///   - `#[module]` is used for module members.
 ///
-/// In addition to implementing [`sov_modules_api::ModuleInfo`], this macro will
-/// also generate so-called "prefix" methods. See the [`sov_modules_api`] docs
-/// for more information about prefix methods.
+/// In addition to implementing [`ModuleInfo`](trait.ModuleInfo.html), this macro will
+/// also generate so-called "prefix" methods.
 ///
 /// ## Example
 ///
 /// ```
-/// use sov_modules_macros::ModuleInfo;
 /// use sov_modules_api::{Context, ModuleInfo};
 /// use sov_state::StateMap;
 ///
@@ -66,7 +64,7 @@ pub fn module_info(input: TokenStream) -> TokenStream {
     handle_macro_error(module_info::derive_module_info(input))
 }
 
-/// Derives the `sov-modules-api::Default` implementation for the underlying type.
+/// Derives a custom [`Default`] implementation for the underlying type.
 /// We decided to implement a custom macro DefaultRuntime that would implement a custom Default
 /// trait for the Runtime because the stdlib implementation of the default trait imposes the generic
 /// arguments to have the Default trait, which is not needed in our case.
@@ -78,7 +76,7 @@ pub fn default_runtime(input: TokenStream) -> TokenStream {
     handle_macro_error(default_config_macro.derive_default_runtime(input))
 }
 
-/// Derives the [`sov_modules_api::Genesis`] trait for the underlying runtime
+/// Derives the [`Genesis`](trait.Genesis.html) trait for the underlying runtime
 /// `struct`.
 #[proc_macro_derive(Genesis)]
 pub fn genesis(input: TokenStream) -> TokenStream {
@@ -88,7 +86,8 @@ pub fn genesis(input: TokenStream) -> TokenStream {
     handle_macro_error(genesis_macro.derive_genesis(input))
 }
 
-/// Derives the [`sov_modules_api::DispatchCall`] trait for the underlying type.
+/// Derives the [`DispatchCall`](trait.DispatchCall.html) trait for the underlying
+/// type.
 #[proc_macro_derive(DispatchCall, attributes(serialization))]
 pub fn dispatch_call(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
@@ -97,7 +96,8 @@ pub fn dispatch_call(input: TokenStream) -> TokenStream {
     handle_macro_error(call_macro.derive_dispatch_call(input))
 }
 
-/// Derives the [`sov_modules_api::ModuleCallJsonSchema`] trait for the underlying type.
+/// Derives the [`ModuleCallJsonSchema`](trait.ModuleCallJsonSchema.html) trait for
+/// the underlying type.
 ///
 /// ## Example
 ///
@@ -106,7 +106,6 @@ pub fn dispatch_call(input: TokenStream) -> TokenStream {
 ///
 /// use sov_modules_api::{Context, Module, ModuleInfo, ModuleCallJsonSchema};
 /// use sov_modules_api::default_context::ZkDefaultContext;
-/// use sov_modules_macros::{ModuleInfo, ModuleCallJsonSchema};
 /// use sov_state::StateMap;
 /// use sov_bank::CallMessage;
 ///
@@ -152,8 +151,8 @@ pub fn codec(input: TokenStream) -> TokenStream {
 ///
 /// ## Example
 /// ```
-/// use sov_modules_macros::{rpc_gen, ModuleInfo};
-/// use sov_modules_api::Context;
+/// use sov_modules_api::{Context, ModuleInfo};
+/// use sov_modules_api::macros::rpc_gen;
 ///
 /// #[derive(ModuleInfo)]
 /// struct MyModule<C: Context> {
@@ -174,8 +173,8 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// This is exactly equivalent to hand-writing
 ///
 /// ```
-/// use sov_modules_macros::{rpc_gen, ModuleInfo};
-/// use sov_modules_api::Context;
+/// use sov_modules_api::{Context, ModuleInfo};
+/// use sov_modules_api::macros::rpc_gen;
 /// use sov_state::WorkingSet;
 ///
 /// #[derive(ModuleInfo)]
@@ -245,9 +244,9 @@ pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// ## Examples
 /// ```
-/// use sov_modules_api::Context;
+/// use sov_modules_api::{Context, DispatchCall};
 /// use sov_modules_api::default_context::DefaultContext;
-/// use sov_modules_macros::{DispatchCall, MessageCodec, cli_parser};
+/// use sov_modules_api::macros::{MessageCodec, cli_parser};
 ///
 /// #[derive(DispatchCall, MessageCodec)]
 /// #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]

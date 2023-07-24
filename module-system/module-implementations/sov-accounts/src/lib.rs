@@ -12,8 +12,7 @@ mod tests;
 pub use call::{CallMessage, UPDATE_ACCOUNT_MSG};
 #[cfg(feature = "native")]
 pub use query::{AccountsRpcImpl, AccountsRpcServer, Response};
-use sov_modules_api::Error;
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 
 /// Initial configuration for sov-accounts module.
@@ -32,7 +31,7 @@ pub struct Account<C: sov_modules_api::Context> {
 }
 
 /// A module responsible for managing accounts on the rollup.
-#[cfg_attr(feature = "native", derive(sov_modules_macros::ModuleCallJsonSchema))]
+#[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo, Clone)]
 pub struct Accounts<C: sov_modules_api::Context> {
     /// The address of the sov-accounts module.

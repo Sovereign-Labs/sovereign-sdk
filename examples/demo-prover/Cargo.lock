@@ -680,7 +680,6 @@ dependencies = [
  "sov-bank",
  "sov-election",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-modules-stf-template",
  "sov-rollup-interface",
  "sov-sequencer",
@@ -3085,7 +3084,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-state",
 ]
 
@@ -3100,7 +3098,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-state",
 ]
 
@@ -3155,7 +3152,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-state",
 ]
 
@@ -3181,6 +3177,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.7",
+ "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
  "thiserror",
@@ -3265,7 +3262,6 @@ dependencies = [
  "serde_json",
  "sov-bank",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
 ]
@@ -3297,7 +3293,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
  "thiserror",
