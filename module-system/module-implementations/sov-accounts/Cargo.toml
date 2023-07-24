@@ -19,7 +19,7 @@ serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", features = ["macros"] }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false, features = ["macros"] }
 sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
 
 

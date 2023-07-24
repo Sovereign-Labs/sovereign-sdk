@@ -14,7 +14,7 @@ resolver = "2"
 
 [dependencies]
 revm = "3.3.0"
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", features = ["macros"] }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false, features = ["macros"] }
 sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
 
 anyhow = { workspace = true }
