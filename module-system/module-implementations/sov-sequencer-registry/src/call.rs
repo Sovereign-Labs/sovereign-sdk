@@ -12,6 +12,7 @@ use crate::SequencerRegistry;
     derive(schemars::JsonSchema)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
+// TODO: Replace with DA address generic, when AddressTrait is split
 pub enum CallMessage {
     Register { da_address: Vec<u8> },
     Exit { da_address: Vec<u8> },
@@ -47,11 +48,21 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
             bail!("Unauthorized exit attempt");
         }
 
-        self.allowed_sequencers.delete(&da_address, working_set);
+        self.delete(da_address, working_set);
 
         self.bank
             .transfer_from(locker, sequencer, coins, working_set)?;
 
         Ok(CallResponse::default())
+    }
+
+    pub(crate) fn delete(&self, da_address: Vec<u8>, working_set: &mut WorkingSet<C::Storage>) {
+        self.allowed_sequencers.delete(&da_address, working_set);
+
+        if let Some(preferred_sequencer) = self.preferred_sequencer.get(working_set) {
+            if da_address == preferred_sequencer {
+                self.preferred_sequencer.delete(working_set);
+            }
+        }
     }
 }

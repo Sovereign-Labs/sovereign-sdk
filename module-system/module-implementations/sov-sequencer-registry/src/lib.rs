@@ -12,10 +12,14 @@ use sov_modules_macros::ModuleInfo;
 use sov_state::{StateMap, StateValue, WorkingSet};
 
 /// Initial configuration for the sov_sequencer_registry module.
+/// TODO: Should we allow multiple sequencers in genesis?
 pub struct SequencerConfig<C: sov_modules_api::Context> {
     pub seq_rollup_address: C::Address,
+    // TODO: Replace with DA address generic, when AddressTrait is split
     pub seq_da_address: Vec<u8>,
     pub coins_to_lock: sov_bank::Coins<C>,
+    // TODO: Replace with DA address generic, when AddressTrait is split
+    pub preferred_sequencer: Option<Vec<u8>>,
 }
 
 #[cfg_attr(feature = "native", derive(sov_modules_macros::ModuleCallJsonSchema))]
@@ -34,6 +38,12 @@ pub struct SequencerRegistry<C: sov_modules_api::Context> {
     ///
     #[state]
     pub(crate) allowed_sequencers: StateMap<Vec<u8>, C::Address>,
+
+    /// Optional preferred sequencer
+    /// If set, batches from this sequencer will be processed first in block,
+    /// So this sequencer can guarantee soft confirmation time for transactions
+    #[state]
+    pub(crate) preferred_sequencer: StateValue<Vec<u8>>,
 
     /// Coin's that will be slashed if the sequencer is malicious.
     /// The coins will be transferred from `self.seq_rollup_address` to `self.address`
@@ -111,5 +121,14 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
             .set(&da_address, rollup_address, working_set);
 
         Ok(())
+    }
+
+    /// Return preferred sequencer if it was set
+    /// TODO: Replace with DA address generic, when AddressTrait is split
+    pub fn get_preferred_sequencer(
+        &self,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Option<Vec<u8>> {
+        self.preferred_sequencer.get(working_set)
     }
 }
