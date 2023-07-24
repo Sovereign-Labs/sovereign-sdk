@@ -2,6 +2,7 @@ use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::Context;
 use sov_modules_macros::ModuleInfo;
 use sov_state::StateMap;
+use sov_modules_api::ModuleInfo;
 
 pub mod first_test_module {
     use super::*;
@@ -70,4 +71,6 @@ fn main() {
         )
         .into()
     );
+
+    assert_eq!(second_test_struct.dependencies(), [second_test_struct.module_in_second_struct_1.address()]);
 }
