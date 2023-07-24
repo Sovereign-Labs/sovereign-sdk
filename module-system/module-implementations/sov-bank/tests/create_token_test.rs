@@ -1,5 +1,4 @@
-use sov_bank::call::CallMessage;
-use sov_bank::{get_token_address, Bank};
+use sov_bank::{get_token_address, Bank, CallMessage};
 use sov_modules_api::{Context, Module};
 use sov_state::{ProverStorage, WorkingSet};
 

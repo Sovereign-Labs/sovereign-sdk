@@ -16,7 +16,7 @@ impl ValueSetterMessages {
 }
 
 impl MessageGenerator for ValueSetterMessages {
-    type Call = sov_value_setter::call::CallMessage;
+    type Call = sov_value_setter::CallMessage;
 
     fn create_messages(&self) -> Vec<(Rc<DefaultPrivateKey>, Self::Call, u64)> {
         let admin = self.admin.clone();
@@ -25,11 +25,11 @@ impl MessageGenerator for ValueSetterMessages {
 
         let new_value = 99;
 
-        let set_value_msg_1: sov_value_setter::call::CallMessage =
-            sov_value_setter::call::CallMessage::SetValue(new_value);
+        let set_value_msg_1: sov_value_setter::CallMessage =
+            sov_value_setter::CallMessage::SetValue(new_value);
 
         let new_value = 33;
-        let set_value_msg_2 = sov_value_setter::call::CallMessage::SetValue(new_value);
+        let set_value_msg_2 = sov_value_setter::CallMessage::SetValue(new_value);
 
         messages.push((admin.clone(), set_value_msg_1, value_setter_admin_nonce));
 

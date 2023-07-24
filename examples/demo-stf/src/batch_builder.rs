@@ -143,8 +143,7 @@ mod tests {
     use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
     use sov_rollup_interface::services::batch_builder::BatchBuilder;
     use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
-    use sov_value_setter::call::CallMessage;
-    use sov_value_setter::ValueSetterConfig;
+    use sov_value_setter::{CallMessage, ValueSetterConfig};
     use tempfile::TempDir;
 
     use super::*;

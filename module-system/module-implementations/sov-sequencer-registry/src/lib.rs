@@ -1,9 +1,12 @@
-pub mod call;
-pub mod genesis;
-pub mod hooks;
+mod call;
+mod genesis;
+mod hooks;
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 
+pub use call::CallMessage;
+#[cfg(feature = "native")]
+pub use query::{SequencerAddressResponse, SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 use sov_modules_api::{CallResponse, Error, Spec};
 use sov_modules_macros::ModuleInfo;
 use sov_state::{StateMap, StateValue, WorkingSet};

@@ -108,7 +108,7 @@ pub fn dispatch_call(input: TokenStream) -> TokenStream {
 /// use sov_modules_api::default_context::ZkDefaultContext;
 /// use sov_modules_macros::{ModuleInfo, ModuleCallJsonSchema};
 /// use sov_state::StateMap;
-/// use sov_bank::call::CallMessage;
+/// use sov_bank::CallMessage;
 ///
 /// #[derive(ModuleInfo, ModuleCallJsonSchema)]
 /// struct TestModule<C: Context> {

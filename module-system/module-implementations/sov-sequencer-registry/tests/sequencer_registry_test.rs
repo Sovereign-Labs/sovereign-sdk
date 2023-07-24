@@ -1,5 +1,5 @@
 use sov_modules_api::{Context, Error, Module, ModuleInfo};
-use sov_sequencer_registry::call::CallMessage;
+use sov_sequencer_registry::CallMessage;
 use sov_state::{ProverStorage, WorkingSet};
 
 mod helpers;
