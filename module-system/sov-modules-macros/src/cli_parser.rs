@@ -410,7 +410,7 @@ fn build_named_fields_with_docs(fields: &Fields) -> Vec<NamedFieldWithDocs> {
             .map(|field| {
                 let ty = &field.ty;
                 NamedFieldWithDocs {
-                    docs: get_doc_attrs(&field),
+                    docs: get_doc_attrs(field),
                     vis: field.vis.clone(),
                     ident: field.ident.clone().expect("Named fields must have names!"),
                     ty: ty.clone(),
