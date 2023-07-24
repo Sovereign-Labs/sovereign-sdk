@@ -55,6 +55,12 @@ impl FromStr for CelestiaAddress {
     }
 }
 
+impl std::hash::Hash for CelestiaAddress {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.hash(state);        
+    }
+}
+
 impl AddressTrait for CelestiaAddress {}
 
 #[cfg(test)]

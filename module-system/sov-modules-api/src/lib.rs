@@ -26,12 +26,19 @@ pub use sov_rollup_interface::crypto::SimpleHasher as Hasher;
 pub use sov_rollup_interface::AddressTrait;
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
+use std::collections::{HashMap, HashSet};
 
 pub use crate::bech32::AddressBech32;
 
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {
         &self.addr
+    }
+}
+
+impl std::hash::Hash for Address {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.addr.hash(state);        
     }
 }
 
@@ -252,11 +259,14 @@ pub trait ModuleCallJsonSchema: Module {
 }
 
 /// Every module has to implement this trait.
-pub trait ModuleInfo: Default {
+pub trait ModuleInfo {
     type Context: Context;
 
     /// Returns address of the module.
     fn address(&self) -> &<Self::Context as Spec>::Address;
+
+    /// Returns addresses of all the other modules this module is dependent on
+    fn dependencies(&self) -> Vec<&<Self::Context as Spec>::Address>;
 }
 
 /// A StateTransitionRunner needs to implement this if
@@ -264,4 +274,45 @@ pub trait ModuleInfo: Default {
 pub trait RpcRunner {
     type Context: Context;
     fn get_storage(&self) -> <Self::Context as Spec>::Storage;
+}
+
+/// Sorts ModuleInfo objects by their dependencies
+pub fn sort_by_dependencies<C: Context>(
+    modules: Vec<&dyn ModuleInfo<Context = C>>,
+) -> Result<Vec<&dyn ModuleInfo<Context = C>>, anyhow::Error> {
+
+    fn visit_module<'a, C: Context>(
+        module: &'a dyn ModuleInfo<Context = C>,
+        visited: &mut HashSet<&'a C::Address>,
+        sorted_modules: &mut std::vec::Vec<&'a (dyn ModuleInfo<Context = C> + 'a)>,
+        module_map: &HashMap<&<C as Spec>::Address, &'a (dyn ModuleInfo<Context = C> + 'a)>
+    ) -> Result<(), anyhow::Error> {
+        let address = module.address();
+        if visited.insert(address) {
+            for dependency_address in module.dependencies() {
+                let dependency_module = *module_map.get(dependency_address)
+                    .ok_or_else(|| anyhow::Error::msg(format!("Module not found: {:?}", dependency_address)))?;
+                visit_module(dependency_module, visited, sorted_modules, module_map)?;
+            }
+    
+            sorted_modules.push(module);
+        }
+    
+        Ok(())
+    }
+
+    let mut module_map = HashMap::new();
+
+    for module in &modules {
+        let address = module.address();        
+        module_map.insert(address, *module);
+    }
+
+    let mut sorted_modules = Vec::new();
+    let mut visited = HashSet::new();
+    for module in modules {
+        visit_module(module, &mut visited, &mut sorted_modules, &module_map)?;
+    }
+
+    Ok(sorted_modules)
 }

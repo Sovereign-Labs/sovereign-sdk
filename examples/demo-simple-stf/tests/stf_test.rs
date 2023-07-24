@@ -43,6 +43,12 @@ impl Display for DaAddress {
     }
 }
 
+impl std::hash::Hash for DaAddress {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.addr.hash(state);        
+    }
+}
+
 #[test]
 fn test_stf() {
     let address = DaAddress { addr: [1; 32] };
