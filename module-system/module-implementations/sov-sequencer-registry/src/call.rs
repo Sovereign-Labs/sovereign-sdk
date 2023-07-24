@@ -13,11 +13,7 @@ use crate::SequencerRegistry;
     derive(serde::Deserialize),
     derive(schemars::JsonSchema)
 )]
-#[cfg_attr(
-    feature = "native",
-    derive(CliWalletArg),
-    module_name = "SequencerRegistry"
-)]
+#[cfg_attr(feature = "native", derive(CliWalletArg))]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage {
     Register { da_address: Vec<u8> },

@@ -11,7 +11,7 @@ mod module_call_json_schema;
 mod module_info;
 mod rpc;
 
-use cli_parser::{derive_clap_custom_enum, CliParserMacro};
+use cli_parser::{derive_cli_wallet_arg, CliParserMacro};
 use default_runtime::DefaultRuntimeMacro;
 use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
@@ -256,7 +256,7 @@ pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
 ///     // ...
 /// }
 /// ```
-#[proc_macro_derive(CliWallet)]
+#[proc_macro_derive(CliWallet, attributes(cli_skip))]
 pub fn cli_parser(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let cli_parser = CliParserMacro::new("Cmd");
@@ -266,16 +266,8 @@ pub fn cli_parser(input: TokenStream) -> TokenStream {
 /// Allows the underlying enum to be used as an argument in the sov-cli wallet.
 ///
 /// Under the hood, this macro generates an enum with unnamed fields
-#[proc_macro_derive(CliWalletArg, attributes(module_name))]
+#[proc_macro_derive(CliWalletArg)]
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
     let input: DeriveInput = parse_macro_input!(input);
-    match input.data {
-        syn::Data::Struct(_) => quote::quote! {
-            #[derive(::clap::Parser)]
-            input
-        }
-        .into(),
-        syn::Data::Enum(_) => handle_macro_error(derive_clap_custom_enum(input)),
-        syn::Data::Union(_) => panic!("Unions are not supported"),
-    }
+    handle_macro_error(derive_cli_wallet_arg(input))
 }

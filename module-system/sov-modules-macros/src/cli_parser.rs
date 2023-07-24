@@ -1,4 +1,4 @@
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, ToTokens};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{Data, DataEnum, DeriveInput, Fields, GenericParam, Ident, PathArguments, Type};
@@ -227,149 +227,264 @@ impl CliParserMacro {
     }
 }
 
-/// Derive [`clap::Parser`] for an enum with unnamed fields.
+/// Implement [`sov_modules_api::CliWalletArg`] for the annotated struct or enum. Unions are not supported.
 ///
-/// Under the hood, this is done by generating an identical enum with dummy field names, then deriving [`clap::Parser`] for that enum.
-pub fn derive_clap_custom_enum(ast: DeriveInput) -> Result<proc_macro::TokenStream, syn::Error> {
-    let enum_name = &ast.ident;
+/// Under the hood, this macro generates a new struct or enum which derives the [`clap::Parser`] trait, and then implements the
+/// [`sov_modules_api::CliWalletArg`] trait where the `CliStringRepr` type is the new struct or enum.
+///
+/// As an implementation detail, `clap` requires that all types have named fields - so this macro auto generates an appropriate
+/// `clap`-compatible type from the annotated item. Tor example, the struct `MyStruct(u64, u64)` would be transformed into
+/// `MyStructWithNamedFields { field0: u64, field1: u64 }`.
+///
+/// ## Example
+///
+/// This code..
+/// ```rust
+/// use sov_modules_macros::CliWalletArg;
+/// #[derive(CliWalletArg, Clone)]
+/// pub enum MyEnum {
+///    /// A number
+///    Number(u32),
+///    /// A hash
+///    Hash { hash: [u8; 32] },
+/// }
+/// ```
+///
+/// ...expands into the following code:
+/// ```rust,ignore
+/// // The original enum definition is left in its original place
+/// pub enum MyEnum {
+///    /// A number
+///    Number(u32),
+///    /// A hash
+///    Hash { hash: [u8; 32] },
+/// }
+///
+/// // We generate a new enum with named fields which can derive `clap::Parser`.
+/// // Since this variant is only ever converted back to the original, we
+/// // don't carry over any of the original derives. However, we do preserve
+/// // doc comments from the original version so that `clap` can display them.
+/// #[derive(::clap::Parser)]
+/// pub enum MyEnumWithNamedFields {
+///    /// A number
+///    Number { field0: u32 } ,
+///    /// A hash
+///    Hash { hash: [u8; 32] },
+/// }
+/// // We generate a `From` impl to convert between the types.
+/// impl From<MyEnumWithNamedFields> for MyEnum {
+///    fn from(item: MyEnumWithNamedFields) -> Self {
+///       match item {
+///         Number { field0 } => MyEnum::Number(field0),
+///         Hash { hash } => MyEnum::Hash { hash },
+///       }
+///    }
+/// }
+///
+/// impl sov_modules_api::CliWalletArg for MyEnum {
+///     type CliStringRepr = MyEnumWithNamedFields;
+/// }
+/// ```
+///
+pub fn derive_cli_wallet_arg(ast: DeriveInput) -> Result<proc_macro::TokenStream, syn::Error> {
+    let item_name = &ast.ident;
     let generics = &ast.generics;
+    let item_with_named_fields_ident = Ident::new(
+        &format!("{}WithNamedFields", item_name),
+        proc_macro2::Span::call_site(),
+    );
+    let is_generic = !generics.params.is_empty();
 
-    if let Data::Enum(DataEnum { variants, .. }) = ast.data.clone() {
-        let mut variants_with_fields = vec![];
-        let mut convert_cases = vec![];
+    let (named_type_defn, conversion_logic) = match &ast.data {
+        // Creating an enum "_WithNamedFields" which is identical to the first enum
+        // except that all fields are named.
+        Data::Enum(DataEnum { variants, .. }) => {
+            // For each variant of the enum, we have to specify two things:
+            //   1. The structure of the "named" version of the variant
+            //   2. How to convert from the "named" version of the variant to the original version
+            let mut variants_with_named_fields = vec![];
+            let mut convert_cases = vec![];
 
-        let cli_enum_with_fields_ident = Ident::new(
-            &format!("{}WithNamedFields", enum_name),
-            proc_macro2::Span::call_site(),
-        );
+            for variant in variants {
+                let variant_name = &variant.ident;
+                let variant_docs = variant
+                    .attrs
+                    .iter()
+                    .filter(|attr| attr.path.is_ident("doc"))
+                    .collect::<Vec<_>>();
 
-        let is_generic = !generics.params.is_empty();
+                let named_variant_fields = build_named_fields_with_docs(&variant.fields);
+                let variant_field_names = named_variant_fields
+                    .iter()
+                    .map(|f| &f.ident)
+                    .collect::<Vec<_>>();
 
-        for variant in variants {
-            let ident = &variant.ident;
-            let doc_attrs_variant = variant
-                .attrs
-                .iter()
-                .filter(|attr| attr.path.is_ident("doc"))
-                .collect::<Vec<_>>();
-
-            match &variant.fields {
-                Fields::Unnamed(unnamed_fields) => {
-                    let named_fields = unnamed_fields
-                        .unnamed
-                        .iter()
-                        .enumerate()
-                        .map(|(i, field)| {
-                            let name = Ident::new(&format!("field{}", i), field.span());
-                            let ty = &field.ty;
-                            let doc_attrs_field = field
-                                .attrs
-                                .iter()
-                                .filter(|attr| attr.path.is_ident("doc"))
-                                .collect::<Vec<_>>();
-                            quote! {
-                                #( #doc_attrs_field )*
-                                #name: #ty
-                            }
-                        })
-                        .collect::<Vec<_>>();
-                    variants_with_fields.push(quote! {
-                        #( #doc_attrs_variant )*
-                        #ident {#(#named_fields),*}
+                match &variant.fields {
+                    Fields::Unnamed(_) => {
+                        variants_with_named_fields.push(quote! {
+                            #( #variant_docs )*
+                            #variant_name {#(#named_variant_fields),* }
+                        });
+                        convert_cases.push(quote! {
+                            #item_with_named_fields_ident::#variant_name {#(#variant_field_names),*} => #item_name::#variant_name(#(#variant_field_names),*),
+                        });
+                    }
+                    Fields::Named(_) => {
+                        variants_with_named_fields.push(quote! {
+                            #( #variant_docs )*
+                            #variant_name {#(#named_variant_fields),* }
+                        });
+                        convert_cases.push(quote! {
+                        #item_with_named_fields_ident::#variant_name {#(#variant_field_names),*} => #item_name::#variant_name {#(#variant_field_names),*},
                     });
-
-                    let fields = unnamed_fields
-                        .unnamed
-                        .iter()
-                        .enumerate()
-                        .map(|(i, _)| {
-                            let name = Ident::new(&format!("field{}", i), unnamed_fields.span());
-                            quote! {#name}
-                        })
-                        .collect::<Vec<_>>();
-
-                    convert_cases.push(quote! {
-                        #cli_enum_with_fields_ident::#ident {#(#fields),*} => #enum_name::#ident(#(#fields),*),
-                    });
-                }
-                Fields::Named(fields_named) => {
-                    let field_tokens = fields_named
-                        .named
-                        .iter()
-                        .map(|field| {
-                            let name = field.ident.as_ref().unwrap();
-                            let ty = &field.ty;
-                            let doc_attrs_field = field
-                                .attrs
-                                .iter()
-                                .filter(|attr| attr.path.is_ident("doc"))
-                                .collect::<Vec<_>>();
-                            quote! {
-                                #( #doc_attrs_field )*
-                                #name: #ty
-                            }
-                        })
-                        .collect::<Vec<_>>();
-
-                    variants_with_fields.push(quote! {
-                        #( #doc_attrs_variant )*
-                        #ident {#(#field_tokens),*}
-                    });
-
-                    let fields = fields_named
-                        .named
-                        .iter()
-                        .map(|field| {
-                            let name = field.ident.as_ref().unwrap();
-                            quote! {#name}
-                        })
-                        .collect::<Vec<_>>();
-
-                    convert_cases.push(quote! {
-                        #cli_enum_with_fields_ident::#ident {#(#fields),*} => #enum_name::#ident {#(#fields),*},
-                    });
-                }
-                Fields::Unit => {
-                    variants_with_fields.push(quote! {
-                        #( #doc_attrs_variant )*
-                        #ident
-                    });
-                    convert_cases.push(quote! {
-                        #cli_enum_with_fields_ident::#ident => #enum_name::#ident,
-                    });
-                }
-            }
-        }
-
-        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-        let clap_type = if is_generic {
-            quote! { #cli_enum_with_fields_ident #ty_generics }
-        } else {
-            quote! { #cli_enum_with_fields_ident }
-        };
-
-        let expanded = quote! {
-            #[derive(::clap::Parser)]
-            pub enum #cli_enum_with_fields_ident #generics {
-                #(#variants_with_fields,)*
-            }
-
-            impl #impl_generics From<#clap_type> for #enum_name #ty_generics #where_clause {
-                fn from(item: #cli_enum_with_fields_ident #ty_generics) -> Self {
-                    match item {
-                        #(#convert_cases)*
+                    }
+                    Fields::Unit => {
+                        variants_with_named_fields.push(quote! {
+                            #( #variant_docs )*
+                            #variant_name
+                        });
+                        convert_cases.push(quote! {
+                            #item_with_named_fields_ident::#variant_name => #item_name::#variant_name,
+                        });
                     }
                 }
             }
 
-            impl #impl_generics sov_modules_api::CliWalletArg for #enum_name #ty_generics #where_clause {
-                type CliStringRepr = #clap_type;
-            }
-        };
+            let enum_defn = quote! {
+                #[derive(::clap::Parser)]
+                pub enum #item_with_named_fields_ident #generics {
+                    #(#variants_with_named_fields,)*
+                }
+            };
 
-        Ok(expanded.into())
+            let from_body = quote! {
+                match item {
+                    #(#convert_cases)*
+                }
+            };
+            (enum_defn, from_body)
+        }
+        Data::Struct(s) => {
+            let named_fields = build_named_fields_with_docs(&s.fields);
+            let field_names = named_fields.iter().map(|f| &f.ident).collect::<Vec<_>>();
+            let conversion_logic = match s.fields {
+                Fields::Named(_) => quote! {{
+                        let #item_with_named_fields_ident { #(#field_names),* } = item;
+                        #item_name{#(#field_names),*}
+                }},
+                Fields::Unnamed(_) => {
+                    quote! {
+                            let #item_with_named_fields_ident { #(#field_names),* } = item;
+                            #item_name(#(#field_names),*)
+                    }
+                }
+                Fields::Unit => quote! { #item_name },
+            };
+
+            let struct_defn = quote! {
+                #[derive(::clap::Parser)]
+                pub struct #item_with_named_fields_ident #generics {
+                    #(#named_fields),*
+                }
+            };
+            (struct_defn, conversion_logic)
+        }
+        Data::Union(_) => {
+            return Err(syn::Error::new_spanned(
+                ast,
+                "Unions are not supported as CLI wallet args",
+            ))
+        }
+    };
+
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
+    let clap_type = if is_generic {
+        quote! { #item_with_named_fields_ident #ty_generics }
     } else {
-        panic!("This derive macro only works with enums");
+        quote! { #item_with_named_fields_ident }
+    };
+
+    let expanded = quote! {
+        // Create a new data type which matches the original, but with all fields named.
+        // This is the type that Clap will parse the CLI args into
+        #named_type_defn
+
+        // Define a `From` implementation which converts from the named fields version to the original version
+        impl #impl_generics From<#clap_type> for #item_name #ty_generics #where_clause {
+            fn from(item: #item_with_named_fields_ident #ty_generics) -> Self {
+                #conversion_logic
+            }
+        }
+
+        // Implement the `CliWalletArg` trait for the original type. This is what allows the original type to be used as a CLI arg.
+        impl #impl_generics sov_modules_api::CliWalletArg for #item_name #ty_generics #where_clause {
+            type CliStringRepr = #clap_type;
+        }
+    };
+    Ok(expanded.into())
+}
+
+/// A struct or enum field with a name and type
+pub struct NamedFieldWithDocs {
+    pub docs: Vec<syn::Attribute>,
+    pub vis: syn::Visibility,
+    pub ident: Ident,
+    pub ty: Type,
+}
+
+impl ToTokens for NamedFieldWithDocs {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let docs = &self.docs;
+        let vis = &self.vis;
+        let ident = &self.ident;
+        let ty = &self.ty;
+        tokens.extend(quote! {
+            #( #docs )*
+            #vis #ident: #ty
+        });
     }
+}
+
+fn build_named_fields_with_docs(fields: &Fields) -> Vec<NamedFieldWithDocs> {
+    match fields {
+        Fields::Unnamed(unnamed_fields) => unnamed_fields
+            .unnamed
+            .iter()
+            .enumerate()
+            .map(|(i, field)| {
+                let ident = Ident::new(&format!("field{}", i), field.span());
+                let ty = &field.ty;
+                NamedFieldWithDocs {
+                    docs: get_doc_attrs(field),
+                    vis: field.vis.clone(),
+                    ident,
+                    ty: ty.clone(),
+                }
+            })
+            .collect::<Vec<_>>(),
+        Fields::Named(fields_named) => fields_named
+            .named
+            .iter()
+            .map(|field| {
+                let ty = &field.ty;
+                NamedFieldWithDocs {
+                    docs: get_doc_attrs(&field),
+                    vis: field.vis.clone(),
+                    ident: field.ident.clone().expect("Named fields must have names!"),
+                    ty: ty.clone(),
+                }
+            })
+            .collect::<Vec<_>>(),
+        Fields::Unit => Vec::new(),
+    }
+}
+
+fn get_doc_attrs(field: &syn::Field) -> Vec<syn::Attribute> {
+    field
+        .attrs
+        .iter()
+        .filter(|attr| attr.path.is_ident("doc"))
+        .cloned()
+        .collect::<Vec<_>>()
 }

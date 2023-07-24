@@ -288,8 +288,8 @@ pub async fn main() -> Result<(), anyhow::Error> {
         Commands::MakeBatch { path_list } => {
             let mut hex_encoded_txs = vec![];
             for path in path_list {
-                let mut file = File::open(&path)
-                    .with_context(|| format!("Unable to create file {}", path))?;
+                let mut file =
+                    File::open(&path).with_context(|| format!("Unable to create file {}", path))?;
                 let mut hex_string = String::new();
                 file.read_to_string(&mut hex_string)
                     .context("Unable to read the file")?;

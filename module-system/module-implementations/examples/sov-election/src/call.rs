@@ -15,7 +15,7 @@ use super::Election;
     derive(schemars::JsonSchema),
     schemars(bound = "C: sov_modules_api::Context", rename = "CallMessage")
 )]
-#[cfg_attr(feature = "native", derive(CliWalletArg), module_name = "Election")]
+#[cfg_attr(feature = "native", derive(CliWalletArg))]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: Context> {
     SetCandidates { names: Vec<String> },
