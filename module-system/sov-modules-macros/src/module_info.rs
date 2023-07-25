@@ -262,8 +262,8 @@ fn make_fn_dependencies(modules: Vec<&proc_macro2::Ident>) -> proc_macro2::Token
     });
 
     quote::quote! {
-        fn dependencies(&self) -> Vec<&<Self::Context as sov_modules_api::Spec>::Address> {
-            vec![#(#address_tokens),*]
+        fn dependencies(&self) -> ::std::vec::Vec<&<Self::Context as sov_modules_api::Spec>::Address> {
+            ::std::vec![#(#address_tokens),*]
         }
     }
 }

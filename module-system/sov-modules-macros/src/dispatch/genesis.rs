@@ -67,7 +67,7 @@ impl GenesisMacro {
         });
 
         quote::quote! {
-                let modules: Vec<(&dyn ::sov_modules_api::ModuleInfo<Context = <Self as sov_modules_api::Genesis>::Context>, &usize)> = vec![#(#idents),*];
+                let modules: ::std::vec::Vec<(&dyn ::sov_modules_api::ModuleInfo<Context = <Self as sov_modules_api::Genesis>::Context>, &usize)> = ::std::vec![#(#idents),*];
                 let sorted_modules = ::sov_modules_api::sort_modules_by_dependencies(&modules)?;
                 for module in sorted_modules {
                      match module {
