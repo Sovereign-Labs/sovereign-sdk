@@ -26,6 +26,8 @@ pub fn nettle_version() -> (u32, u32) {
     nettle::version()
 }
 
+pub struct EcuError(ecu_diagnostics::DiagError);
+
 /// Procedural macros to assist with creating new modules.
 #[cfg(feature = "macros")]
 pub mod macros {

@@ -20,6 +20,7 @@ serde = { workspace = true }
 borsh = { workspace = true }
 thiserror = { workspace = true }
 nettle = "7.3"
+ecu_diagnostics = "0.93"
 sha2 = { workspace = true }
 bech32 = { workspace = true }
 derive_more = { workspace = true }
