@@ -1,7 +1,6 @@
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::{Context, ModuleInfo};
 use sov_state::StateMap;
-use sov_modules_api::ModuleInfo;
 
 pub mod first_test_module {
     use super::*;
