@@ -184,6 +184,11 @@ jobs:
   cargo-doc-artifact:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # We only deploy `cargo doc` to GH pages on `stable`, but let's at least
+    # build it on `nightly` as well to avoid nasty surprises when merging
+    # `nightly` into `stable`. Running it on every PR would be excessive,
+    # though.
+    if: (github.ref == 'refs/heads/stable') || (github.ref == 'refs/heads/nightly')
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
@@ -205,7 +210,6 @@ jobs:
   deploy-github-pages:
     needs: cargo-doc-artifact
     timeout-minutes: 5
-    # No point in deploying if we're not on `stable`, as it will just fail.
     if: github.ref == 'refs/heads/stable'
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
