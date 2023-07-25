@@ -244,9 +244,9 @@ pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// ## Examples
 /// ```
-/// use sov_modules_api::{Context, DispatchCall};
+/// use sov_modules_api::{Context, DispatchCall, MessageCodec};
 /// use sov_modules_api::default_context::DefaultContext;
-/// use sov_modules_api::macros::{MessageCodec, CliWallet};
+/// use sov_modules_api::macros::CliWallet;
 ///
 /// #[derive(DispatchCall, MessageCodec, CliWallet)]
 /// #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
