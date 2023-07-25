@@ -126,15 +126,21 @@ fn test_sorting_modules() {
         module_b: module_b_c,
     };
 
-    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, &i32)> =
-        vec![(&module_b, &2), (&module_c, &3), (&module_a, &1)];
+    let mut modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, i32)> =
+        vec![(&module_b, 2), (&module_c, 3), (&module_a, 1)];
 
-    let sorted_modules = crate::sort_modules_by_dependencies(&modules).unwrap();
+    crate::sort_modules_by_dependencies(&mut modules);
 
-    assert_eq!(sorted_modules, vec![&1, &2, &3]);
+    assert_eq!(
+        modules.into_iter().map(|item| item.1).collect::<Vec<_>>(),
+        vec![1, 2, 3]
+    );
 }
 
 #[test]
+#[should_panic(
+    expected = "The module with address AddressBech32 { value: \"sov1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs259tk3\" is in your dependency tree but was not found in the runtime and could not be initialized. Make sure that all modules are declared in your runtime."
+)]
 fn test_sorting_modules_missing_module() {
     let module_a_b = ModuleA {
         address: Address::from([1; 32]),
@@ -160,12 +166,12 @@ fn test_sorting_modules_missing_module() {
         module_b: module_b_c,
     };
 
-    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, &i32)> =
+    let mut modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, &i32)> =
         vec![(&module_b, &2), (&module_c, &3)];
 
-    let sorted_modules = crate::sort_modules_by_dependencies(&modules);
+    crate::sort_modules_by_dependencies(&mut modules);
 
-    assert!(sorted_modules.is_err());
-    let error_string = sorted_modules.err().unwrap().to_string();
-    assert_eq!(error_string, "Module not found: AddressBech32 { value: \"sov1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs259tk3\" }");
+    // assert!(sorted_modules.is_err());
+    // let error_string = sorted_modules.err().unwrap().to_string();
+    // assert_eq!(error_string, ");
 }

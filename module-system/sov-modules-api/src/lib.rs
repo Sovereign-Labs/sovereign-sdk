@@ -29,7 +29,7 @@ pub mod macros {
 }
 
 use core::fmt::{self, Debug, Display};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use dispatch::{DispatchCall, Genesis};
@@ -302,83 +302,73 @@ pub trait RpcRunner {
 }
 
 /// A module, with an extra item attached to it
-pub struct ModuleWithItem<'a, C: Context, T> {
-    pub module: &'a dyn ModuleInfo<Context = C>,
-    pub item: T,
-}
+pub type ModuleWithItem<'a, C, T> = (&'a dyn ModuleInfo<Context = C>, T);
 
-/// Sorts ModuleInfo objects by their dependencies. Note that this sorting function only defines a partial ordering,
-/// so the exact results will depend on the ordering of the input. This sort only guarantees that if module A depends on
-/// B, then B will appear before A in the output.
+/// Sorts the provided slice of (module, item) tuples in place, ordering the result by the dependencies of the modules.
+/// Note that the module dependency graphonly defines a partial ordering,
+/// so the exact results will depend on the ordering of the input.
 pub fn sort_modules_by_dependencies<'a, C: Context, T>(
     modules: &mut Vec<ModuleWithItem<'a, C, T>>,
 ) {
-    fn visit_module<'a, 'sort, 'visit, C: Context, T>(
-        modules_map: &'visit mut HashMap<&'sort <C as Spec>::Address, ModuleWithItem<'a, C, T>>,
-        next: &ModuleWithItem<'a, C, T>,
+    /// For each address in the list, recursively visit all of its dependencies and place them into the sorted array.
+    fn visit_dependencies<'a, 'sort, 'visit, C: Context, T>(
+        dependencies: Vec<&'a C::Address>,
+        modules_to_visit: &'visit mut HashMap<
+            &'sort <C as Spec>::Address,
+            ModuleWithItem<'a, C, T>,
+        >,
+        all_module_addresses: &'sort HashSet<&'a C::Address>,
         sorted_modules: &mut Vec<ModuleWithItem<'a, C, T>>,
     ) {
-        // let ModuleWithItem { module, item } = module_with_item;
-        for dep in next.module.dependencies() {
-            if let Some(module_with_item) = modules_map.remove(dep) {
-                visit_module(modules_map, &module_with_item, sorted_modules);
+        for dep in dependencies {
+            // Sanity check that the dependency address is valid
+            if !all_module_addresses.contains(dep) {
+                panic!("The module with address {} is in your dependency tree but was not found in the runtime and could not be initialized. Make sure that all modules are declared in your runtime.", dep)
+            }
+            if let Some(module_with_item) = modules_to_visit.remove(dep) {
+                let transitive_dep_addrs = module_with_item.0.dependencies();
+                visit_dependencies(
+                    transitive_dep_addrs,
+                    modules_to_visit,
+                    all_module_addresses,
+                    sorted_modules,
+                );
                 sorted_modules.push(module_with_item)
             }
         }
     }
-
+    let all_module_addresses = modules.iter().map(|m| m.0.address()).collect();
     let mut sorted_modules: Vec<ModuleWithItem<'a, C, T>> = Vec::with_capacity(modules.len());
-    let mut modules_map: HashMap<&C::Address, ModuleWithItem<'a, C, T>> = std::mem::take(modules)
-        .into_iter()
-        .map(|m| (m.module.address(), m))
-        .collect();
+    let mut modules_to_visit: HashMap<&C::Address, ModuleWithItem<'a, C, T>> =
+        std::mem::take(modules)
+            .into_iter()
+            .map(|m| (m.0.address(), m))
+            .collect();
 
-    while !modules_map.is_empty() {
-        let next = modules.iter().next().unwrap();
-        visit_module(&mut modules_map, next, &mut sorted_modules)
+    while !modules_to_visit.is_empty() {
+        // Pick the next available module as a starting point.
+        let (current_address, current_deps) = {
+            let (addr, current_module_ref) = modules_to_visit.iter().next().unwrap();
+            let current_deps = current_module_ref.0.dependencies();
+            (addr.clone(), current_deps)
+        };
+
+        // Recursively place all of its dependencies in the sorted array.
+        visit_dependencies(
+            current_deps,
+            &mut modules_to_visit,
+            &all_module_addresses,
+            &mut sorted_modules,
+        );
+
+        // Place the module in the sorted array.
+        let current_module = modules_to_visit
+            .remove(current_address)
+            .expect("Dependency cycle detected! The module with address {} has itself as a transitive dependency.");
+        sorted_modules.push(current_module);
+
+        // Continue until there are no unvisited modules left.
     }
 
     *modules = sorted_modules;
 }
-
-// /// Sorts ModuleInfo objects by their dependencies
-// pub fn sort_modules_by_dependencies<'a, C: Context, T>(
-//     modules: &mut[ModuleWithItem<'a, C, T>],
-// ) -> Result<Vec<ModuleWithItem<'a, C, T>>, anyhow::Error> {
-//     fn visit_module<'a, C: Context, T>(
-//         module_with_item: &ModuleWithItem<'a, C, T>,
-//         visited: &mut HashSet<&'a C::Address>,
-//         sorted_modules: &mut Vec<&ModuleWithItem<'a, C, T>>,
-//         module_map: &HashMap<&C::Address, &ModuleWithItem<'a, C, T>>,
-//     ) -> Result<(), anyhow::Error> {
-//         // let ModuleWithItem { module, item } = module_with_item;
-//         let address = module_with_item.module.address();
-//         if visited.insert(address) {
-//             for dependency_address in module_with_item.module.dependencies() {
-//                 let dependency_module = module_map.get(dependency_address).ok_or_else(|| {
-//                     anyhow::Error::msg(format!("Module not found: {:?}", dependency_address))
-//                 })?;
-//                 visit_module(dependency_module, visited, sorted_modules, module_map)?;
-//             }
-
-//             sorted_modules.push(module_with_item);
-//         }
-
-//         Ok(())
-//     }
-
-//     let mut module_map = HashMap::new();
-
-//     for module in modules {
-//         module_map.insert(module.module.address(), module);
-//     }
-
-//     let mut visited = HashSet::new();
-//     let mut sorted_modules = Vec::new();
-
-//     for module in modules {
-//         visit_module(module, &mut visited, &mut sorted_modules, &module_map)?;
-//     }
-
-//     Ok(sorted_modules)
-// }
