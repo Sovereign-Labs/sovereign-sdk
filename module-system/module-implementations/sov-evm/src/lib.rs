@@ -20,8 +20,7 @@ pub use receipt::TransactionReceipt;
 #[cfg(feature = "experimental")]
 mod experimental {
     use revm::primitives::{KECCAK_EMPTY, U256};
-    use sov_modules_api::Error;
-    use sov_modules_macros::ModuleInfo;
+    use sov_modules_api::{Error, ModuleInfo};
     use sov_state::WorkingSet;
 
     use super::evm::db::EvmDb;
@@ -55,6 +54,7 @@ mod experimental {
     }
 
     #[allow(dead_code)]
+    #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
     #[derive(ModuleInfo, Clone)]
     pub struct Evm<C: sov_modules_api::Context> {
         #[address]

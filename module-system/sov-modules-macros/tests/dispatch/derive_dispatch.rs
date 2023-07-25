@@ -1,9 +1,8 @@
 mod modules;
 use modules::{first_test_module, second_test_module};
-use sov_modules_api::Address;
-use sov_modules_api::ModuleInfo;
-use sov_modules_api::{default_context::ZkDefaultContext, Context, Genesis};
-use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
+use sov_modules_api::default_context::ZkDefaultContext;
+use sov_modules_api::macros::{DefaultRuntime, MessageCodec};
+use sov_modules_api::{Address, Context, DispatchCall, Genesis, ModuleInfo};
 use sov_state::ZkStorage;
 
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
@@ -14,7 +13,6 @@ struct Runtime<C: Context> {
 }
 
 fn main() {
-    use sov_modules_api::DispatchCall;
     type RT = Runtime<ZkDefaultContext>;
     let runtime = &mut RT::default();
 

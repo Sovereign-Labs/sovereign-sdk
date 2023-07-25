@@ -14,6 +14,20 @@ mod serde_address;
 mod tests;
 pub mod transaction;
 
+#[cfg(feature = "macros")]
+extern crate sov_modules_macros;
+
+#[cfg(feature = "macros")]
+pub use sov_modules_macros::{
+    DispatchCall, Genesis, MessageCodec, ModuleCallJsonSchema, ModuleInfo,
+};
+
+/// Procedural macros to assist with creating new modules.
+#[cfg(feature = "macros")]
+pub mod macros {
+    pub use sov_modules_macros::{cli_parser, expose_rpc, rpc_gen, DefaultRuntime, MessageCodec};
+}
+
 use core::fmt::{self, Debug, Display};
 use std::collections::{HashMap, HashSet};
 
@@ -153,6 +167,7 @@ pub trait Spec {
         + PublicKey
         + Serialize
         + for<'a> Deserialize<'a>
+        + ::schemars::JsonSchema
         + Send
         + Sync;
 
@@ -170,6 +185,16 @@ pub trait Spec {
     type Hasher: Hasher;
 
     /// The digital signature scheme used by the rollup
+    #[cfg(feature = "native")]
+    type Signature: borsh::BorshDeserialize
+        + borsh::BorshSerialize
+        + schemars::JsonSchema
+        + Eq
+        + Clone
+        + Debug
+        + Signature<PublicKey = Self::PublicKey>;
+
+    #[cfg(not(feature = "native"))]
     type Signature: borsh::BorshDeserialize
         + borsh::BorshSerialize
         + Eq

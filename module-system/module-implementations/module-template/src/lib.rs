@@ -1,14 +1,16 @@
-pub mod call;
-pub mod genesis;
+mod call;
+mod genesis;
 
 #[cfg(test)]
 mod tests;
 
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 
-use sov_modules_api::Error;
-use sov_modules_macros::ModuleInfo;
+pub use call::CallMessage;
+#[cfg(feature = "native")]
+pub use query::Response;
+use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 
 pub struct ExampleModuleConfig {}
@@ -17,6 +19,11 @@ pub struct ExampleModuleConfig {}
 /// - Must derive `ModuleInfo`
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
+/// - Should derive `ModuleCallJsonSchema` if the "native" feature is enabled.
+///   This is optional, and is only used to generate a JSON Schema for your
+///   module's call messages (which is useful to develop clients, CLI tooling
+///   etc.).
+#[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo)]
 pub struct ExampleModule<C: sov_modules_api::Context> {
     /// Address of the module.

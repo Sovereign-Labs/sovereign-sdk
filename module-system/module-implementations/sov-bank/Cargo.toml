@@ -13,17 +13,15 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 schemars = { workspace = true, optional = true }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false }
-sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
-thiserror = { workspace = true }
-borsh = { workspace = true, features = ["rc"] }
-hex = { workspace = true }
-jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
+
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false, features = ["macros"] }
+sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
+
 
 [dev-dependencies]
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }

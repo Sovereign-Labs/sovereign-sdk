@@ -1,4 +1,4 @@
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::ModuleInfo;
 use sov_state::StateMap;
 
 #[derive(ModuleInfo)]

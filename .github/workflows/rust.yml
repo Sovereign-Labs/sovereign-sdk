@@ -77,7 +77,8 @@ jobs:
       - name: cargo hack
         run: make check-features
   test:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 60
     env:
       SCCACHE_GHA_ENABLED: "true"
@@ -154,7 +155,7 @@ jobs:
           done
   cargo-doc-artifact:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2

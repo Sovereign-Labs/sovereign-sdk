@@ -138,13 +138,12 @@ mod tests {
     use sov_modules_api::default_context::DefaultContext;
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_api::default_signature::DefaultPublicKey;
+    use sov_modules_api::macros::DefaultRuntime;
     use sov_modules_api::transaction::Transaction;
-    use sov_modules_api::{Context, Genesis};
-    use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
+    use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
     use sov_rollup_interface::services::batch_builder::BatchBuilder;
     use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
-    use sov_value_setter::call::CallMessage;
-    use sov_value_setter::ValueSetterConfig;
+    use sov_value_setter::{CallMessage, ValueSetterConfig};
     use tempfile::TempDir;
 
     use super::*;

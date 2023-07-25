@@ -1,22 +1,22 @@
 #[cfg(feature = "native")]
-use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
+use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
-use sov_bank::query::{BankRpcImpl, BankRpcServer};
+use sov_bank::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
-use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
+use sov_election::{ElectionRpcImpl, ElectionRpcServer};
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
 use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::Context;
+use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
-use sov_modules_macros::{cli_parser, expose_rpc};
-use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
+use sov_modules_api::macros::{cli_parser, expose_rpc};
+use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
 #[cfg(feature = "native")]
-use sov_sequencer_registry::query::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
+use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 #[cfg(feature = "native")]
-use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
+use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
 /// The Rollup entrypoint.
 ///

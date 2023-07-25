@@ -23,7 +23,7 @@ use crate::zk::Zkvm;
 ///
 /// and a `impl StateTransitionRunner<ZkConfig, Vm> for MyRunner` which instead uses a state root as its runtime config.
 ///
-/// TODO: Why is it called runner? It only creates. Creator, Factory: https://github.com/Sovereign-Labs/sovereign-sdk/issues/447
+/// TODO: Why is it called runner? It only creates. Creator, Factory: <https://github.com/Sovereign-Labs/sovereign-sdk/issues/447>
 pub trait StateTransitionRunner<T: StateTransitionConfig, Vm: Zkvm, B: BlobTransactionTrait> {
     /// The parameters of the state transition function which are set at runtime. For example,
     /// the runtime config might contain path to a data directory.
