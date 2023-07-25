@@ -4,6 +4,7 @@ version = { workspace = true }
 edition = { workspace = true }
 resolver = "2"
 authors = { workspace = true }
+license = { workspace = true }
 homepage = "sovereign.xyz"
 publish = false
 
