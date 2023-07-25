@@ -262,13 +262,7 @@ pub trait Module {
     /// Configuration for the genesis method.
     type Config;
 
-    // /// Module defined argument to the call method.
-    // #[cfg(feature = "native")]
-    // type CallMessage: Debug + BorshSerialize + BorshDeserialize + Serialize + DeserializeOwned =
-    //     NonInstantiable;
-
-    // /// Module defined argument to the call method.
-    // #[cfg(not(feature = "native"))]
+    /// Module defined argument to the call method.
     type CallMessage: Debug + BorshSerialize + BorshDeserialize = NonInstantiable;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
@@ -319,10 +313,10 @@ pub trait RpcRunner {
     fn get_storage(&self) -> <Self::Context as Spec>::Storage;
 }
 
-#[cfg(feature = "native")]
 /// This trait is implemented by types that can be used as arguments in the sov-cli wallet.
 /// The recommended way to implement this trait is using the provided derive macro (`#[derive(CliWalletArg)]`).
 /// Currently, this trait is a thin wrapper around [`clap::Parser`]
+#[cfg(feature = "native")]
 pub trait CliWalletArg: From<Self::CliStringRepr> {
     /// The type that is used to represent this type in the CLI. Typically,
     /// this type implements the clap::Subcommand trait.
