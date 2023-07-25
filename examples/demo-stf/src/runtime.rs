@@ -75,6 +75,6 @@ pub struct Runtime<C: Context> {
     pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
-    #[cli_skip]
+    #[cfg_attr(feature = "native", cli_skip)]
     pub evm: sov_evm::Evm<C>,
 }
