@@ -177,7 +177,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v3
-      - uses: actions-rs/toolchain
+      - uses: actions-rs/toolchain@v1
       - run: cargo install cargo-deny
       - run: cargo deny check licenses
   cargo-doc-artifact:
