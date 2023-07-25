@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlockHeaderTrait as BlockHeader, CountedBufReader};
 use sov_rollup_interface::AddressTrait;
 pub use tendermint::block::Header as TendermintHeader;
+use tendermint::block::Height;
 use tendermint::crypto::default::Sha256;
 use tendermint::merkle::simple_hash_from_byte_vectors;
 use tendermint::Hash;
@@ -20,6 +21,8 @@ use tendermint_proto::Protobuf;
 use tracing::debug;
 
 const NAMESPACED_HASH_LEN: usize = 48;
+
+pub const GENESIS_PLACEHOLDER_HASH: &[u8; 32] = &[255; 32];
 
 use crate::pfb::{BlobTx, MsgPayForBlobs, Tx};
 use crate::shares::{read_varint, BlobIterator, BlobRefIterator, NamespaceGroup};
@@ -270,6 +273,20 @@ impl BlockHeader for CelestiaHeader {
             return hash.clone();
         }
 
+        // We special case the block following genesis, since genesis has a `None` hash, which
+        // we don't want to deal with. In this case, we return a specail placeholder for the
+        // block "hash"
+        if Height::decode_vec(&self.header.height)
+            .expect("header must be validly encoded")
+            .value()
+            == 1
+        {
+            let prev_hash = TmHash(tendermint::Hash::Sha256(*GENESIS_PLACEHOLDER_HASH));
+            *cached_hash = Some(prev_hash.clone());
+            return prev_hash;
+        }
+
+        // In all other cases, we simply return the previous block hash parsed from the header
         let hash =
             <tendermint::block::Id as Protobuf<celestia_tm_version::types::BlockId>>::decode(
                 self.header.last_block_id.as_ref(),
@@ -440,5 +457,12 @@ mod tests {
         let compact_header: CompactHeader = original_header.header.into();
 
         assert_eq!(tm_header.hash(), compact_header.hash());
+        assert_eq!(
+            hex::decode("32381A0B7262F15F081ACEF769EE59E6BB4C42C1013A3EEE23967FBF32B86AE6")
+                .unwrap(),
+            compact_header.hash().as_bytes()
+        );
+
+        assert_eq!(tm_header.hash(), compact_header.hash(),);
     }
 }
