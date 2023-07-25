@@ -1,9 +1,9 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 
+use crate::default_context::DefaultContext;
 use crate::default_signature::private_key::DefaultPrivateKey;
 use crate::default_signature::{DefaultPublicKey, DefaultSignature};
-use crate::{Signature, Address, ModuleInfo};
-use crate::default_context::DefaultContext;
+use crate::{Address, ModuleInfo, Signature};
 
 #[test]
 fn test_account_bech32m_display() {
@@ -46,8 +46,8 @@ fn test_hex_conversion() {
     assert_eq!(priv_key.pub_key(), deserialized_pub_key)
 }
 
-struct ModuleA { 
-    address: Address
+struct ModuleA {
+    address: Address,
 }
 
 impl crate::ModuleInfo for ModuleA {
@@ -58,13 +58,13 @@ impl crate::ModuleInfo for ModuleA {
     }
 
     fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {
-        vec!()
+        vec![]
     }
 }
 
-struct ModuleB { 
+struct ModuleB {
     address: Address,
-    module_a: ModuleA
+    module_a: ModuleA,
 }
 
 impl crate::ModuleInfo for ModuleB {
@@ -75,14 +75,14 @@ impl crate::ModuleInfo for ModuleB {
     }
 
     fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {
-        vec!(&self.module_a.address())
+        vec![self.module_a.address()]
     }
 }
 
-struct ModuleC { 
+struct ModuleC {
     address: Address,
     module_a: ModuleA,
-    module_b: ModuleB
+    module_b: ModuleB,
 }
 
 impl crate::ModuleInfo for ModuleC {
@@ -92,50 +92,79 @@ impl crate::ModuleInfo for ModuleC {
         &self.address
     }
 
-    fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {      
-        vec!(&self.module_a.address(), &self.module_b.address())
+    fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {
+        vec![self.module_a.address(), self.module_b.address()]
     }
 }
 
 #[test]
 fn test_sorting_modules() {
-    let module_a_b = ModuleA { address: Address::from([1; 32])};
-    let module_a_c = ModuleA { address: Address::from([1; 32])};
-    let module_a_b_c = ModuleA { address: Address::from([1; 32])};    
-    let module_b_c = ModuleB { address: Address::from([2; 32]), module_a: module_a_b_c};
+    let module_a_b = ModuleA {
+        address: Address::from([1; 32]),
+    };
+    let module_a_c = ModuleA {
+        address: Address::from([1; 32]),
+    };
+    let module_a_b_c = ModuleA {
+        address: Address::from([1; 32]),
+    };
+    let module_b_c = ModuleB {
+        address: Address::from([2; 32]),
+        module_a: module_a_b_c,
+    };
 
-    let module_a = ModuleA { address: Address::from([1; 32])};
-    let module_b = ModuleB { address: Address::from([2; 32]), module_a: module_a_b};
-    let module_c = ModuleC { address: Address::from([3; 32]), module_a: module_a_c, module_b: module_b_c};
+    let module_a = ModuleA {
+        address: Address::from([1; 32]),
+    };
+    let module_b = ModuleB {
+        address: Address::from([2; 32]),
+        module_a: module_a_b,
+    };
+    let module_c = ModuleC {
+        address: Address::from([3; 32]),
+        module_a: module_a_c,
+        module_b: module_b_c,
+    };
 
-    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, &i32)> = vec![
-        (&module_b, &2),
-        (&module_c, &3),
-        (&module_a, &1)
-    ];
+    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, &i32)> =
+        vec![(&module_b, &2), (&module_c, &3), (&module_a, &1)];
 
     let sorted_modules = crate::sort_modules_by_dependencies(&modules).unwrap();
-    
+
     assert_eq!(sorted_modules, vec![&1, &2, &3]);
 }
 
 #[test]
 fn test_sorting_modules_missing_module() {
-    let module_a_b = ModuleA { address: Address::from([1; 32])};
-    let module_a_c = ModuleA { address: Address::from([1; 32])};
-    let module_a_b_c = ModuleA { address: Address::from([1; 32])};    
-    let module_b_c = ModuleB { address: Address::from([2; 32]), module_a: module_a_b_c};
+    let module_a_b = ModuleA {
+        address: Address::from([1; 32]),
+    };
+    let module_a_c = ModuleA {
+        address: Address::from([1; 32]),
+    };
+    let module_a_b_c = ModuleA {
+        address: Address::from([1; 32]),
+    };
+    let module_b_c = ModuleB {
+        address: Address::from([2; 32]),
+        module_a: module_a_b_c,
+    };
 
-    let module_b = ModuleB { address: Address::from([2; 32]), module_a: module_a_b};
-    let module_c = ModuleC { address: Address::from([3; 32]), module_a: module_a_c, module_b: module_b_c};
+    let module_b = ModuleB {
+        address: Address::from([2; 32]),
+        module_a: module_a_b,
+    };
+    let module_c = ModuleC {
+        address: Address::from([3; 32]),
+        module_a: module_a_c,
+        module_b: module_b_c,
+    };
 
-    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, &i32)> = vec![
-        (&module_b, &2),
-        (&module_c, &3)        
-    ];
+    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, &i32)> =
+        vec![(&module_b, &2), (&module_c, &3)];
 
     let sorted_modules = crate::sort_modules_by_dependencies(&modules);
-    
+
     assert!(sorted_modules.is_err());
     let error_string = sorted_modules.err().unwrap().to_string();
     assert_eq!(error_string, "Module not found: AddressBech32 { value: \"sov1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs259tk3\" }");
