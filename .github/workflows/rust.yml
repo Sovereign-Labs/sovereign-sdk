@@ -26,12 +26,9 @@ jobs:
     timeout-minutes: 60
     env:
       RUSTFLAGS: -D warnings
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
       - name: Run lint
         run: |
           if ! make lint ; then
@@ -47,12 +44,9 @@ jobs:
     timeout-minutes: 90
     env:
       RUSTFLAGS: -D warnings
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
       - name: Run cargo check
         run: cd examples/demo-prover && cargo check
       - name: Run cargo fmt check
@@ -71,12 +65,9 @@ jobs:
     timeout-minutes: 60
     env:
       RUSTFLAGS: -D warnings
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
       - name: cargo install cargo-hack
         uses: taiki-e/install-action@cargo-hack
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
@@ -86,35 +77,24 @@ jobs:
     runs-on:
       group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 60
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
       - name: Run cargo test
         run: cargo test
   test-experimental:
     runs-on:
       group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 60
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
       - name: Run cargo test --features experimental
         run: cargo test --features experimental
   coverage:
     runs-on:
       group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 90
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
         with:
@@ -122,7 +102,6 @@ jobs:
       - name: add llvm component
         run: rustup component add llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
       - name: cargo install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: cargo generate-lockfile
@@ -137,12 +116,8 @@ jobs:
           fail_ci_if_error: false
   demo-rollup-local:
     runs-on: ubuntu-latest
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
-      - uses: mozilla-actions/sccache-action@v0.0.3
       - name: start celestia local
         working-directory: ./examples/demo-rollup
         run: make start
