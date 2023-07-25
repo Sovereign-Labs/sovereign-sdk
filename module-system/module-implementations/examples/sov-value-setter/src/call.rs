@@ -1,9 +1,9 @@
 use std::fmt::Debug;
 
 use anyhow::Result;
-use sov_modules_api::CallResponse;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::CliWalletArg;
+use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 use thiserror::Error;
 
