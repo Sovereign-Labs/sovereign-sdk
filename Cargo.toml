@@ -78,7 +78,7 @@ clap = { version = "4.2.7", features = ["derive"] }
 toml = "0.7.3"
 jsonrpsee = "0.16.2"
 schemars = { version = "0.8.12", features = ["derive"] }
-tempfile = "3.5"
+tempfile = "3.7"
 tokio = { version = "1", features = ["full"] }
 
 ethers = "2.0.8"
