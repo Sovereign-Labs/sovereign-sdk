@@ -468,6 +468,26 @@ dependencies = [
 
 [[package]]
 name = "bindgen"
+version = "0.63.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "36d860121800b2a9a94f9b5604b332d5cffb234ce17609ea479d723dbc9d3885"
+dependencies = [
+ "bitflags 1.3.2",
+ "cexpr",
+ "clang-sys",
+ "lazy_static",
+ "lazycell",
+ "peeking_take_while",
+ "proc-macro2 1.0.66",
+ "quote 1.0.31",
+ "regex",
+ "rustc-hash",
+ "shlex",
+ "syn 1.0.107",
+]
+
+[[package]]
+name = "bindgen"
 version = "0.65.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfdf7b466f9a4903edc73f95d6d2bcd5baf8ae620638762244d3f60143643cc5"
@@ -3385,7 +3405,7 @@ version = "0.11.0+8.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3386f101bcb4bd252d8e9d2fb41ec3b0862a15a62b478c355b2982efa469e3e"
 dependencies = [
- "bindgen",
+ "bindgen 0.65.1",
  "bzip2-sys",
  "cc",
  "glob",
@@ -3606,6 +3626,33 @@ dependencies = [
  "num-traits",
  "rawpointer",
  "rayon",
+]
+
+[[package]]
+name = "nettle"
+version = "7.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b9fdccf3eae7b161910d2daa2f0155ca35041322e8fe5c5f1f2c9d0b12356336"
+dependencies = [
+ "getrandom 0.2.8",
+ "libc",
+ "nettle-sys",
+ "thiserror",
+ "typenum",
+]
+
+[[package]]
+name = "nettle-sys"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b5e81c347b9002da0b6b0c4060993c280e99eb14b42ecf65a2fefcd6eb3d8a73"
+dependencies = [
+ "bindgen 0.63.0",
+ "cc",
+ "libc",
+ "pkg-config",
+ "tempfile",
+ "vcpkg",
 ]
 
 [[package]]
@@ -5909,6 +5956,7 @@ dependencies = [
  "derive_more",
  "ed25519-dalek",
  "hex",
+ "nettle",
  "rand 0.7.3",
  "schemars",
  "serde",

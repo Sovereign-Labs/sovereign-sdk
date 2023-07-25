@@ -19,6 +19,7 @@ sov-modules-macros = { path = "../sov-modules-macros", version = "0.1", optional
 serde = { workspace = true }
 borsh = { workspace = true }
 thiserror = { workspace = true }
+nettle = "7.3"
 sha2 = { workspace = true }
 bech32 = { workspace = true }
 derive_more = { workspace = true }

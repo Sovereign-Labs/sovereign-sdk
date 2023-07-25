@@ -22,6 +22,10 @@ pub use sov_modules_macros::{
     DispatchCall, Genesis, MessageCodec, ModuleCallJsonSchema, ModuleInfo,
 };
 
+pub fn nettle_version() -> (u32, u32) {
+    nettle::version()
+}
+
 /// Procedural macros to assist with creating new modules.
 #[cfg(feature = "macros")]
 pub mod macros {
