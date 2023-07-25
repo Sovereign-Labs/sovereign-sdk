@@ -345,17 +345,17 @@ pub fn sort_modules_by_dependencies<C: Context>(
 
 /// Accepts Vec<> of tuples (&ModuleInfo, &TValue), and returns Vec<&TValue> sorted by mapped module dependencies
 pub fn sort_values_by_modules_dependencies<'a, C: Context, TValue>(
-    modules: Vec<(&dyn ModuleInfo<Context = C>, &'a TValue)>,
+    module_value_tuples: Vec<(&dyn ModuleInfo<Context = C>, &'a TValue)>,
 ) -> Result<Vec<&'a TValue>, anyhow::Error>
 where
     TValue: 'a,
 {
     let sorted_modules =
-        sort_modules_by_dependencies(modules.iter().map(|(module, _)| *module).collect())?;
+        sort_modules_by_dependencies(module_value_tuples.iter().map(|(module, _)| *module).collect())?;
 
     let mut value_map = HashMap::new();
 
-    for module in modules {
+    for module in module_value_tuples {
         value_map.insert(module.0.address(), module.1);
     }
 
