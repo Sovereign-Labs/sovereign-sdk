@@ -129,9 +129,9 @@ fn test_sorting_modules() {
     let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, &i32)> =
         vec![(&module_b, &2), (&module_c, &3), (&module_a, &1)];
 
-    let sorted_modules = crate::sort_modules_by_dependencies(&modules).unwrap();
+    let sorted_modules = crate::sort_values_by_modules_dependencies(modules).unwrap();
 
-    assert_eq!(sorted_modules, vec![&1, &2, &3]);
+    assert_eq!(vec![&1, &2, &3], sorted_modules);
 }
 
 #[test]
@@ -163,9 +163,9 @@ fn test_sorting_modules_missing_module() {
     let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, &i32)> =
         vec![(&module_b, &2), (&module_c, &3)];
 
-    let sorted_modules = crate::sort_modules_by_dependencies(&modules);
+    let sorted_modules = crate::sort_values_by_modules_dependencies(modules);
 
     assert!(sorted_modules.is_err());
     let error_string = sorted_modules.err().unwrap().to_string();
-    assert_eq!(error_string, "Module not found: AddressBech32 { value: \"sov1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs259tk3\" }");
+    assert_eq!("Module not found: AddressBech32 { value: \"sov1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs259tk3\" }", error_string);
 }
