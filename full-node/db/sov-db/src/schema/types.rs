@@ -19,6 +19,7 @@ use sov_rollup_interface::stf::{Event, EventKey, TransactionReceipt};
 pub struct DbBytes(Arc<Vec<u8>>);
 
 impl DbBytes {
+    /// Create `DbBytes` from a `Vec<u8>`
     pub fn new(contents: Vec<u8>) -> Self {
         Self(Arc::new(contents))
     }
@@ -30,41 +31,40 @@ impl From<Vec<u8>> for DbBytes {
     }
 }
 
-#[derive(
-    Debug, Clone, Copy, BorshDeserialize, BorshSerialize, PartialEq, Eq, Serialize, Deserialize,
-)]
-pub enum Status {
-    Applied,
-    Skipped,
-    Reverted,
-}
-
 impl AsRef<[u8]> for DbBytes {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
     }
 }
 
+/// A hash stored in the database
 pub type DbHash = [u8; 32];
+/// The "value" half of a key/value pair from the JMT
 pub type JmtValue = Option<Vec<u8>>;
 pub(crate) type StateKey = Vec<u8>;
 
 /// The on-disk format of a slot. Specifies the batches contained in the slot
 /// and the hash of the da block. TODO(@preston-evans98): add any additional data
-/// required to reconstruct the da block proof
+/// required to reconstruct the da block proof.
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct StoredSlot {
+    /// The slot's hash, as reported by the DA layer.
     pub hash: DbHash,
+    /// Any extra data which the rollup decides to store relating to this slot.
     pub extra_data: DbBytes,
+    /// The range of batches which occurred in this slot.
     pub batches: std::ops::Range<BatchNumber>,
 }
 
 /// The on-disk format for a batch. Stores the hash and identifies the range of transactions
-/// included in the batch
+/// included in the batch.
 #[derive(Debug, PartialEq, BorshDeserialize, BorshSerialize)]
 pub struct StoredBatch {
+    /// The hash of the batch, as reported by the DA layer.
     pub hash: DbHash,
+    /// The range of transactions which occurred in this batch.
     pub txs: std::ops::Range<TxNumber>,
+    /// A customer "receipt" for this batch defined by the rollup.
     pub custom_receipt: DbBytes,
 }
 
@@ -84,10 +84,13 @@ impl<B: DeserializeOwned, T> TryFrom<StoredBatch> for BatchResponse<B, T> {
 /// and identifies the events emitted by this transaction
 #[derive(Debug, PartialEq, BorshSerialize, BorshDeserialize, Clone)]
 pub struct StoredTransaction {
+    /// The hash of the transaction.
     pub hash: DbHash,
-    /// The range of event-numbers emitted by this transaction
+    /// The range of event-numbers emitted by this transaction.
     pub events: std::ops::Range<EventNumber>,
+    /// The serialized transaction data, if the rollup decides to store it.
     pub body: Option<Vec<u8>>,
+    /// A customer "receipt" for this transaction defined by the rollup.
     pub custom_receipt: DbBytes,
 }
 
@@ -103,6 +106,7 @@ impl<R: DeserializeOwned> TryFrom<StoredTransaction> for TxResponse<R> {
     }
 }
 
+/// Split a `TransactionReceipt` into a `StoredTransaction` and a list of `Event`s for storage in the database.
 pub fn split_tx_for_storage<R: Serialize>(
     tx: TransactionReceipt<R>,
     event_offset: u64,
@@ -122,7 +126,9 @@ pub fn split_tx_for_storage<R: Serialize>(
 /// An identifier that specifies a single event
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum EventIdentifier {
+    /// A unique identifier for an event consiting of a [`TxIdentifier`] and an offset into that transaction's event list
     TxIdAndIndex((TxIdentifier, u64)),
+    /// A unique identifier for an event consiting of a [`TxIdentifier`] and an event key
     TxIdAndKey((TxIdentifier, EventKey)),
     /// The monotonically increasing number of the event, ordered by the DA layer For example, if the first tx
     /// contains 7 events, tx 2 contains 11 events, and tx 3 contains 7 txs,
@@ -133,7 +139,9 @@ pub enum EventIdentifier {
 /// An identifier for a group of related events
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum EventGroupIdentifier {
+    /// All of the events which occurred in a particular transaction
     TxId(TxIdentifier),
+    /// All events wich a particular key (typically, these events will have been emitted by several different transactions)
     Key(Vec<u8>),
 }
 

@@ -31,14 +31,21 @@ pub struct LedgerDB {
     next_item_numbers: Arc<Mutex<ItemNumbers>>,
 }
 
+/// A SlotNumber, BatchNumber, TxNumber, and EventNumber which are grouped together, typically representing
+/// the respective heights at the start or end of slot processing.
 #[derive(Default, Clone, Debug)]
 pub struct ItemNumbers {
+    /// The slot number
     pub slot_number: u64,
+    /// The batch number
     pub batch_number: u64,
+    /// The transaction number
     pub tx_number: u64,
+    /// The event number
     pub event_number: u64,
 }
 
+/// All of the data to be commited to the ledger db for a single slot.
 #[derive(Debug)]
 pub struct SlotCommit<S: SlotData, B, T> {
     slot_data: S,
@@ -48,16 +55,17 @@ pub struct SlotCommit<S: SlotData, B, T> {
 }
 
 impl<S: SlotData, B, T> SlotCommit<S, B, T> {
+    /// Returns a reference to the commit's slot_data
     pub fn slot_data(&self) -> &S {
         &self.slot_data
     }
 
+    /// Returns a reference to the commit's batch_receipts
     pub fn batch_receipts(&self) -> &[BatchReceipt<B, T>] {
         &self.batch_receipts
     }
-}
 
-impl<S: SlotData, B, T> SlotCommit<S, B, T> {
+    /// Create a new SlotCommit from the given slot data
     pub fn new(slot_data: S) -> Self {
         Self {
             slot_data,
@@ -66,9 +74,7 @@ impl<S: SlotData, B, T> SlotCommit<S, B, T> {
             num_events: 0,
         }
     }
-}
-
-impl<S: SlotData, B, T> SlotCommit<S, B, T> {
+    /// Add a `batch` (of transactions) to the commit
     pub fn add_batch(&mut self, batch: BatchReceipt<B, T>) {
         self.num_txs += batch.tx_receipts.len();
         let events_this_batch: usize = batch.tx_receipts.iter().map(|r| r.events.len()).sum();
@@ -78,6 +84,8 @@ impl<S: SlotData, B, T> SlotCommit<S, B, T> {
 }
 
 impl LedgerDB {
+    /// Open a [`LedgerDB`] (backed by RocksDB) at the specified path.
+    /// The returned instance will be at the path `{path}/ledger-db`.
     pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
         let path = path.as_ref().join(LEDGER_DB_PATH_SUFFIX);
         let inner = DB::open(
@@ -102,6 +110,7 @@ impl LedgerDB {
         })
     }
 
+    /// Get the next slot, block, transaction, and event numbers
     pub fn get_next_items_numbers(&self) -> ItemNumbers {
         self.next_item_numbers.lock().unwrap().clone()
     }
