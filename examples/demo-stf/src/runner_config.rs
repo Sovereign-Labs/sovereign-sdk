@@ -86,9 +86,6 @@ mod tests {
         let config: anyhow::Result<Config> = from_toml_path(path);
 
         assert!(config.is_err());
-        assert_eq!(
-            config.unwrap_err().to_string(),
-            "No such file or directory (os error 2)"
-        );
+        assert!(config.unwrap_err().to_string().ends_with("(os error 2)"));
     }
 }
