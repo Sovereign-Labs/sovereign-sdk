@@ -7,7 +7,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::da::BlobTransactionTrait;
+use crate::da::BlobReaderTrait;
 use crate::zk::Zkvm;
 
 #[cfg(any(test, feature = "fuzzing"))]
@@ -69,14 +69,29 @@ pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
     pub inner: BatchReceiptContents,
 }
 
+/// Result of applying a slot to current state
+/// Where:
+///  - S - generic for state root
+///  - B - generic for batch receipt contents
+///  - T - generic for transaction receipt contents
+///  - W - generic for witness
+pub struct SlotResult<S, B, T, W> {
+    /// Final state root after all blobs were applied
+    pub state_root: S,
+    /// Receipt for each applied batch
+    pub batch_receipts: Vec<BatchReceipt<B, T>>,
+    /// Witness after applying the whole block
+    pub witness: W,
+}
+
 // TODO(@preston-evans98): update spec with simplified API
 /// State transition function defines business logic that responsible for changing state.
 /// Terminology:
 ///  - state root: root hash of state merkle tree
 ///  - block: DA layer block
 ///  - batch: Set of transactions grouped together, or block on L2
-///  - blob: Non serialised batch
-pub trait StateTransitionFunction<Vm: Zkvm, B: BlobTransactionTrait> {
+///  - blob: Non serialised batch or anything else that can be posted on DA layer, like attestation or proof.
+pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     /// Root hash of state merkle tree
     type StateRoot;
     /// The initial state of the rollup.
@@ -91,39 +106,32 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobTransactionTrait> {
     /// or validated together with proof during verification
     type Witness: Default + Serialize;
 
-    /// A proof that the sequencer has misbehaved. For example, this could be a merkle proof of a transaction
-    /// with an invalid signature
-    type MisbehaviorProof;
-
     /// Perform one-time initialization for the genesis block.
     fn init_chain(&mut self, params: Self::InitialState);
 
-    /// Called at the beginning of each **DA-layer block** - whether or not that block contains any
+    /// Called at each **DA-layer block** - whether or not that block contains any
     /// data relevant to the rollup.
     /// If slot is started in Full Node mode, default witness should be provided.
     /// If slot is started in Zero Knowledge mode, witness from execution should be provided.
-    fn begin_slot(&mut self, witness: Self::Witness);
-
-    /// Apply a blob/batch of transactions to the rollup, slashing the sequencer who proposed the blob on failure.
-    /// The concrete blob type is defined by the DA layer implementation, which is why we use a generic here instead
-    /// of an associated type.
-    /// Misbehavior hint allows prover optimizations - the sequencer can be slashed
-    /// for including a transaction which fails stateless checks (i.e. has an invalid signature) -
-    /// and in that case we ignore his entire batch.
-    /// This method lets you give a hint to the prover telling
-    /// it where that invalid signature is, so that it can skip signature checks on other transactions.
-    /// (If the misbehavior hint is wrong, then the host is malicious so we can
-    /// just panic - which means that no proof will be created).
-    fn apply_blob(
-        &mut self,
-        blob: &mut B,
-        misbehavior_hint: Option<Self::MisbehaviorProof>,
-    ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents>;
-
-    /// Called once at the *end* of each DA layer block (i.e. after all rollup blobs have been processed)
-    /// Commits state changes to the database
     ///
-    fn end_slot(&mut self) -> (Self::StateRoot, Self::Witness);
+    /// Applies batches of transactions to the rollup,
+    /// slashing the sequencer who proposed the blob on failure.
+    /// The concrete blob type is defined by the DA layer implementation,
+    /// which is why we use a generic here instead of an associated type.
+    ///
+    /// Commits state changes to the database
+    fn apply_slot<'a, I>(
+        &mut self,
+        witness: Self::Witness,
+        blobs: I,
+    ) -> SlotResult<
+        Self::StateRoot,
+        Self::BatchReceiptContents,
+        Self::TxReceiptContents,
+        Self::Witness,
+    >
+    where
+        I: IntoIterator<Item = &'a mut B>;
 }
 
 /// A key-value pair representing a change to the rollup state

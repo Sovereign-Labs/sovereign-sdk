@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use borsh::BorshDeserialize;
 use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
 use sov_modules_api::{Context, DispatchCall, Genesis};
-use sov_rollup_interface::da::{BlobTransactionTrait, CountedBufReader};
+use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
 use sov_rollup_interface::Buf;
 use sov_state::StateCheckpoint;
@@ -62,7 +62,7 @@ impl From<ApplyBatchError> for BatchReceipt<SequencerOutcome, TxEffect> {
     }
 }
 
-impl<C: Context, RT, Vm, B: BlobTransactionTrait> AppTemplate<C, RT, Vm, B>
+impl<C: Context, RT, Vm, B: BlobReaderTrait> AppTemplate<C, RT, Vm, B>
 where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>

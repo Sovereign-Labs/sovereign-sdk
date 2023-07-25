@@ -2297,6 +2297,7 @@ dependencies = [
  "borsh",
  "sov-modules-api",
  "sov-state",
+ "thiserror",
 ]
 
 [[package]]
@@ -2305,8 +2306,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "hex",
  "sov-modules-api",
+ "sov-rollup-interface",
  "sov-state",
+ "thiserror",
 ]
 
 [[package]]
@@ -2338,7 +2342,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "hex",
  "sov-modules-api",
+ "sov-rollup-interface",
  "sov-state",
 ]
 

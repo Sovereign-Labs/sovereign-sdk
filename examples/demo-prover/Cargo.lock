@@ -3079,12 +3079,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "clap",
  "jsonrpsee",
  "schemars",
  "serde",
  "serde_json",
  "sov-modules-api",
  "sov-state",
+ "thiserror",
 ]
 
 [[package]]
@@ -3093,12 +3095,16 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "clap",
+ "hex",
  "jsonrpsee",
  "schemars",
  "serde",
  "serde_json",
  "sov-modules-api",
+ "sov-rollup-interface",
  "sov-state",
+ "thiserror",
 ]
 
 [[package]]
@@ -3147,11 +3153,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "clap",
+ "hex",
  "jsonrpsee",
  "schemars",
  "serde",
  "serde_json",
  "sov-modules-api",
+ "sov-rollup-interface",
  "sov-state",
 ]
 
@@ -3169,6 +3178,7 @@ dependencies = [
  "anyhow",
  "bech32",
  "borsh",
+ "clap",
  "derive_more",
  "ed25519-dalek",
  "hex",
@@ -3256,6 +3266,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "clap",
  "jsonrpsee",
  "schemars",
  "serde",
@@ -3288,6 +3299,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "clap",
  "jsonrpsee",
  "schemars",
  "serde",
