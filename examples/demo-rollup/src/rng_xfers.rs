@@ -1,4 +1,5 @@
 use std::env;
+use std::str::FromStr;
 
 use async_trait::async_trait;
 use borsh::ser::BorshSerialize;
@@ -154,7 +155,7 @@ impl DaService for RngDaService {
             generate_transfers(num_txns, (block.height - 1) * (num_txns as u64))
         };
 
-        let address = CelestiaAddress::try_from(&SEQUENCER_DA_ADDRESS[..]).unwrap();
+        let address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
         let blob = TestBlob::new(data, address, [0u8; 32]);
 
         vec![blob]

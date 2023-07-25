@@ -1,4 +1,5 @@
 use std::env;
+use std::str::FromStr;
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
@@ -6,6 +7,7 @@ use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
+use jupiter::verifier::address::CelestiaAddress;
 use jupiter::verifier::{ChainValidityCondition, RollupParams};
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::{Risc0Host, Risc0Verifier};
@@ -60,10 +62,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let is_storage_empty = app.get_storage().is_empty();
 
     if is_storage_empty {
+        let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
         let genesis_config = create_demo_genesis_config(
             100000000,
             sequencer_private_key.default_address(),
-            SEQUENCER_DA_ADDRESS.to_vec(),
+            sequencer_da_address.as_ref().to_vec(),
             &sequencer_private_key,
             &sequencer_private_key,
         );

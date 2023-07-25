@@ -1,5 +1,4 @@
 use borsh::BorshSerialize;
-use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use sov_accounts::Response;
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
 use sov_election::Election;
@@ -22,6 +21,8 @@ use crate::tests::TestBlob;
 
 const SEQUENCER_BALANCE_DELTA: u64 = 1;
 const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + SEQUENCER_BALANCE_DELTA;
+// Assume there was proper address and we converted it to bytes already.
+const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 
 #[test]
 fn test_tx_revert() {
@@ -352,7 +353,8 @@ fn test_tx_bad_serialization() {
             sov_election::GetResultResponse::Err("Election is not frozen".to_owned())
         );
 
-        // Sequencer is not in list of allowed sequencers
+        // Sequencer is not in the list of allowed sequencers
+
         let allowed_sequencer = runtime
             .sequencer_registry
             .sequencer_address(SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set)
