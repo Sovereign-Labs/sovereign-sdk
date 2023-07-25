@@ -13,6 +13,12 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+# Automatically cancels a job if a new commit if pushed to the same PR, branch, or tag.
+# Source: <https://stackoverflow.com/a/72408109/5148606>
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
     runs-on: ubuntu-latest
