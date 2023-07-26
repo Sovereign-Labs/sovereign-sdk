@@ -301,46 +301,55 @@ pub trait RpcRunner {
     fn get_storage(&self) -> <Self::Context as Spec>::Storage;
 }
 
-/// Sorts ModuleInfo objects by their dependencies
-pub fn sort_modules_by_dependencies<C: Context>(
-    modules: Vec<&dyn ModuleInfo<Context = C>>,
-) -> Result<Vec<&dyn ModuleInfo<Context = C>>, anyhow::Error> {
-    fn visit_module<'a, C: Context>(
+struct ModuleVisitor<'a, C: Context> {
+    visited: HashSet<<C as Spec>::Address>,
+    sorted_modules: std::vec::Vec<&'a dyn ModuleInfo<Context = C>>,
+}
+
+impl<'a, C: Context> ModuleVisitor<'a, C>{
+    fn visit_module(
+        &mut self, 
         module: &'a dyn ModuleInfo<Context = C>,
-        visited: &mut HashSet<&'a C::Address>,
-        sorted_modules: &mut std::vec::Vec<&'a (dyn ModuleInfo<Context = C> + 'a)>,
-        module_map: &HashMap<&<C as Spec>::Address, &'a (dyn ModuleInfo<Context = C> + 'a)>,
+        module_map: &HashMap<&<C as Spec>::Address, &'a (dyn ModuleInfo<Context = C>)>,
     ) -> Result<(), anyhow::Error> {
         let address = module.address();
-
+        
         // if the module hasn't been visited yet, visit it and its dependencies
-        if visited.insert(address) {
+        if self.visited.insert(address.clone()) {
             for dependency_address in module.dependencies() {
                 let dependency_module = *module_map.get(dependency_address).ok_or_else(|| {
                     anyhow::Error::msg(format!("Module not found: {:?}", dependency_address))
                 })?;
-                visit_module(dependency_module, visited, sorted_modules, module_map)?;
+                self.visit_module(dependency_module, module_map)?;
             }
-
-            sorted_modules.push(module);
+    
+            self.sorted_modules.push(module);
         }
-
+    
         Ok(())
     }
+}
 
+/// Sorts ModuleInfo objects by their dependencies
+pub fn sort_modules_by_dependencies<C: Context>(
+    modules: Vec<&dyn ModuleInfo<Context = C>>,
+) -> Result<Vec<&dyn ModuleInfo<Context = C>>, anyhow::Error> {
     let mut module_map = HashMap::new();
 
     for module in &modules {
         module_map.insert(module.address(), *module);
     }
 
-    let mut visited = HashSet::new();
-    let mut sorted_modules = Vec::new();
+    let mut module_visitor = ModuleVisitor::<C> {
+        visited: HashSet::new(),
+        sorted_modules: Vec::new(),
+    };    
+
     for module in modules {
-        visit_module(module, &mut visited, &mut sorted_modules, &module_map)?;
+        module_visitor.visit_module(module, &module_map)?;
     }
 
-    Ok(sorted_modules)
+    Ok(module_visitor.sorted_modules)
 }
 
 /// Accepts Vec<> of tuples (&ModuleInfo, &TValue), and returns Vec<&TValue> sorted by mapped module dependencies
