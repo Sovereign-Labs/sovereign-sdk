@@ -97,6 +97,44 @@ impl crate::ModuleInfo for ModuleC {
     }
 }
 
+struct ModuleD {
+    address: Address,
+    module_e: Option<Box<ModuleE>>,
+}
+
+impl crate::ModuleInfo for ModuleD {
+    type Context = DefaultContext;
+
+    fn address(&self) -> &<Self::Context as crate::Spec>::Address {
+        &self.address
+    }
+
+    fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {
+        vec![self.module_e.as_ref().unwrap().address()]
+    }
+}
+
+struct ModuleE {
+    address: Address,
+    module_a: ModuleA,
+    module_d: Option<Box<ModuleD>>,
+}
+
+impl crate::ModuleInfo for ModuleE {
+    type Context = DefaultContext;
+
+    fn address(&self) -> &<Self::Context as crate::Spec>::Address {
+        &self.address
+    }
+
+    fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {
+        vec![
+            self.module_d.as_ref().unwrap().address(),
+            self.module_a.address(),
+        ]
+    }
+}
+
 #[test]
 fn test_sorting_modules() {
     let module_a_b = ModuleA {
@@ -168,4 +206,52 @@ fn test_sorting_modules_missing_module() {
     assert!(sorted_modules.is_err());
     let error_string = sorted_modules.err().unwrap().to_string();
     assert_eq!("Module not found: AddressBech32 { value: \"sov1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs259tk3\" }", error_string);
+}
+
+#[test]
+fn test_sorting_modules_cycle() {
+    let module_a_b = ModuleA {
+        address: Address::from([1; 32]),
+    };
+    let module_a_e = ModuleA {
+        address: Address::from([1; 32]),
+    };
+    let module_a_e_d = ModuleA {
+        address: Address::from([1; 32]),
+    };
+    let module_d_e = ModuleD {
+        address: Address::from([4; 32]),
+        module_e: None,
+    };
+    let module_e_d = ModuleE {
+        address: Address::from([5; 32]),
+        module_a: module_a_e_d,
+        module_d: None,
+    };
+
+    let module_a = ModuleA {
+        address: Address::from([1; 32]),
+    };
+    let module_b = ModuleB {
+        address: Address::from([2; 32]),
+        module_a: module_a_b,
+    };
+    let module_d = ModuleD {
+        address: Address::from([4; 32]),
+        module_e: Some(Box::new(module_e_d)),
+    };
+    let module_e = ModuleE {
+        address: Address::from([5; 32]),
+        module_a: module_a_e,
+        module_d: Some(Box::new(module_d_e)),
+    };
+
+    let modules: Vec<&dyn ModuleInfo<Context = DefaultContext>> =
+        vec![&module_b, &module_d, &module_a, &module_e];
+
+    let sorted_modules = crate::sort_modules_by_dependencies(modules);
+
+    assert!(sorted_modules.is_err());
+    let error_string = sorted_modules.err().unwrap().to_string();
+    assert_eq!("Cyclic dependency of length 2 detected: {AddressBech32 { value: \"sov1q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zskwvj87\" }, AddressBech32 { value: \"sov1qszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqnu4g3u\" }}", error_string);
 }
