@@ -12,6 +12,8 @@ use demo_stf::runner_config::from_toml_path;
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
 use jsonrpsee::core::server::rpc_module::Methods;
 use jupiter::da_service::CelestiaService;
+#[cfg(feature = "experimental")]
+use jupiter::da_service::DaServiceConfig;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::{CelestiaVerifier, ChainValidityCondition, RollupParams};
 use jupiter::BlobWithSender;
@@ -116,9 +118,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
         .nth(1)
         .unwrap_or_else(|| "rollup_config.toml".to_string());
+
     debug!("Starting demo rollup with config {}", rollup_config_path);
     let rollup_config: RollupConfig =
         from_toml_path(&rollup_config_path).context("Failed to read rollup configuration")?;
+
     let rpc_config = rollup_config.rpc_config;
     let address = SocketAddr::new(rpc_config.bind_host.parse()?, rpc_config.bind_port);
 
@@ -166,9 +170,7 @@ async fn main() -> Result<(), anyhow::Error> {
     methods.merge(r).expect("Failed to merge Txs RPC modules");
 
     #[cfg(feature = "experimental")]
-    let ethereum_rpc = get_ethereum_rpc(rollup_config.da.clone());
-    #[cfg(feature = "experimental")]
-    methods.merge(ethereum_rpc).unwrap();
+    register_ethereum(rollup_config.da.clone(), &mut methods)?;
 
     let _handle = tokio::spawn(async move {
         start_rpc_server(methods, address).await;
@@ -271,6 +273,27 @@ async fn main() -> Result<(), anyhow::Error> {
         ledger_db.commit_slot(data_to_commit)?;
         prev_state_root = next_state_root.0;
     }
+
+    Ok(())
+}
+
+#[cfg(feature = "experimental")]
+fn register_ethereum(
+    da_config: DaServiceConfig,
+    methods: &mut jsonrpsee::RpcModule<()>,
+) -> Result<(), anyhow::Error> {
+    use std::fs;
+
+    let data = fs::read_to_string("../test-data/keys/tx_signer_private_key.json")
+        .context("Unable to read file")?;
+
+    let hex_key: HexKey =
+        serde_json::from_str(&data).context("JSON does not have correct format.")?;
+
+    let tx_signer_private_key = DefaultPrivateKey::from_hex(&hex_key.hex_priv_key).unwrap();
+
+    let ethereum_rpc = get_ethereum_rpc(da_config, tx_signer_private_key);
+    methods.merge(ethereum_rpc)?;
 
     Ok(())
 }
