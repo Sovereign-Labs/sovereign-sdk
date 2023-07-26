@@ -302,11 +302,35 @@ pub trait RpcRunner {
 }
 
 struct ModuleVisitor<'a, C: Context> {
-    visited: HashSet<<C as Spec>::Address>,
+    visited: HashSet<&'a <C as Spec>::Address>,
     sorted_modules: std::vec::Vec<&'a dyn ModuleInfo<Context = C>>,
 }
 
 impl<'a, C: Context> ModuleVisitor<'a, C> {
+    pub fn new() -> Self {
+        Self {
+            visited: HashSet::new(),
+            sorted_modules: Vec::new(),
+        }
+    }
+
+    fn visit_modules(
+        &mut self,
+        modules: Vec<&'a dyn ModuleInfo<Context = C>>,
+    ) -> Result<(), anyhow::Error> {
+        let mut module_map = HashMap::new();
+
+        for module in &modules {
+            module_map.insert(module.address(), *module);
+        }
+
+        for module in modules {
+            self.visit_module(module, &module_map)?;
+        }
+
+        Ok(())
+    }
+
     fn visit_module(
         &mut self,
         module: &'a dyn ModuleInfo<Context = C>,
@@ -315,7 +339,7 @@ impl<'a, C: Context> ModuleVisitor<'a, C> {
         let address = module.address();
 
         // if the module hasn't been visited yet, visit it and its dependencies
-        if self.visited.insert(address.clone()) {
+        if self.visited.insert(address) {
             for dependency_address in module.dependencies() {
                 let dependency_module = *module_map.get(dependency_address).ok_or_else(|| {
                     anyhow::Error::msg(format!("Module not found: {:?}", dependency_address))
@@ -334,21 +358,8 @@ impl<'a, C: Context> ModuleVisitor<'a, C> {
 pub fn sort_modules_by_dependencies<C: Context>(
     modules: Vec<&dyn ModuleInfo<Context = C>>,
 ) -> Result<Vec<&dyn ModuleInfo<Context = C>>, anyhow::Error> {
-    let mut module_map = HashMap::new();
-
-    for module in &modules {
-        module_map.insert(module.address(), *module);
-    }
-
-    let mut module_visitor = ModuleVisitor::<C> {
-        visited: HashSet::new(),
-        sorted_modules: Vec::new(),
-    };
-
-    for module in modules {
-        module_visitor.visit_module(module, &module_map)?;
-    }
-
+    let mut module_visitor = ModuleVisitor::<C>::new();
+    module_visitor.visit_modules(modules)?;
     Ok(module_visitor.sorted_modules)
 }
 
