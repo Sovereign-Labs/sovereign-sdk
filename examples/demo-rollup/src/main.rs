@@ -158,19 +158,13 @@ async fn main() -> Result<(), anyhow::Error> {
     let storage = demo_runner.get_storage();
     let is_storage_empty = storage.is_empty();
     let mut methods = get_rpc_methods(storage);
-    let ledger_rpc_module =
-        ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db.clone());
-    methods
-        .merge(ledger_rpc_module)
-        .expect("Failed to merge ledger RPC modules");
-
-    let batch_builder = demo_runner.take_batch_builder().unwrap();
-
-    let r = get_sequencer_rpc(batch_builder, da_service.clone());
-    methods.merge(r).expect("Failed to merge Txs RPC modules");
-
-    #[cfg(feature = "experimental")]
-    register_ethereum(rollup_config.da.clone(), &mut methods)?;
+    // register rpc methods
+    {
+        register_ledger(ledger_db.clone(), &mut methods)?;
+        register_sequencer(da_service.clone(), &mut demo_runner, &mut methods)?;
+        #[cfg(feature = "experimental")]
+        register_ethereum(rollup_config.da.clone(), &mut methods)?;
+    }
 
     let _handle = tokio::spawn(async move {
         start_rpc_server(methods, address).await;
@@ -277,6 +271,28 @@ async fn main() -> Result<(), anyhow::Error> {
     Ok(())
 }
 
+fn register_sequencer(
+    da_service: Arc<CelestiaService>,
+    demo_runner: &mut NativeAppRunner<Risc0Verifier, BlobWithSender>,
+    methods: &mut jsonrpsee::RpcModule<()>,
+) -> Result<(), anyhow::Error> {
+    let batch_builder = demo_runner.take_batch_builder().unwrap();
+    let sequencer_rpc = get_sequencer_rpc(batch_builder, da_service);
+    methods
+        .merge(sequencer_rpc)
+        .context("Failed to merge Txs RPC modules")
+}
+
+fn register_ledger(
+    ledger_db: LedgerDB,
+    methods: &mut jsonrpsee::RpcModule<()>,
+) -> Result<(), anyhow::Error> {
+    let ledger_rpc = ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db);
+    methods
+        .merge(ledger_rpc)
+        .context("Failed to merge ledger RPC modules")
+}
+
 #[cfg(feature = "experimental")]
 fn register_ethereum(
     da_config: DaServiceConfig,
@@ -293,7 +309,7 @@ fn register_ethereum(
     let tx_signer_private_key = DefaultPrivateKey::from_hex(&hex_key.hex_priv_key).unwrap();
 
     let ethereum_rpc = get_ethereum_rpc(da_config, tx_signer_private_key);
-    methods.merge(ethereum_rpc)?;
-
-    Ok(())
+    methods
+        .merge(ethereum_rpc)
+        .context("Failed to merge Ethereum RPC modules")
 }

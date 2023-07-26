@@ -4,7 +4,7 @@ start_height = 1
 
 [da]
 # The JWT used to authenticate with the celestia light client. Instructions for generating this token can be found in the README
-celestia_rpc_auth_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJBbGxvdyI6WyJwdWJsaWMiLCJyZWFkIiwid3JpdGUiLCJhZG1pbiJdfQ.RXm9jpq18_02FaA-NquOyMibEptVokwz13n3fBNYmHo"
+celestia_rpc_auth_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJBbGxvdyI6WyJwdWJsaWMiLCJyZWFkIiwid3JpdGUiLCJhZG1pbiJdfQ.B5PSklFz1FGuUTLfL2uKbr839BZrq2Kcn1y8rt959DI"
 # The address of the *trusted* Celestia light client to interact with
 celestia_rpc_address = "http://127.0.0.1:26658"
 # The largest response the rollup will accept from the Celestia node. Defaults to 100 MB
