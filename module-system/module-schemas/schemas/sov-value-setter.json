@@ -4,6 +4,7 @@
   "description": "This enumeration represents the available call messages for interacting with the `sov-value-setter` module.",
   "oneOf": [
     {
+      "description": "value to set",
       "type": "object",
       "required": [
         "SetValue"

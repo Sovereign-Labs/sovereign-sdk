@@ -26,7 +26,9 @@ trybuild = "1.0"
 
 sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
 sov-state = { path = "../sov-state", version = "0.1", default-features = false }
-sov-bank = { path = "../module-implementations/sov-bank", version = "0.1" }
+sov-bank = { path = "../module-implementations/sov-bank", version = "0.1", features = ["native"] }
+clap = { workspace = true }
+serde = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }

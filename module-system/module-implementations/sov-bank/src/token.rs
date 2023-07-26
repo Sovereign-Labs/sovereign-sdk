@@ -1,8 +1,14 @@
+#[cfg(feature = "native")]
+use core::str::FromStr;
 use std::collections::HashSet;
 use std::fmt::Formatter;
+#[cfg(feature = "native")]
+use std::num::ParseIntError;
 
 use anyhow::{bail, Context, Result};
 use sov_state::{Prefix, WorkingSet};
+#[cfg(feature = "native")]
+use thiserror::Error;
 
 use crate::call::prefix_from_address_with_parent;
 
@@ -12,6 +18,7 @@ pub type Amount = u64;
     feature = "native",
     derive(serde::Serialize),
     derive(serde::Deserialize),
+    derive(clap::Parser),
     derive(schemars::JsonSchema),
     schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "Coins")
 )]
@@ -21,6 +28,56 @@ pub struct Coins<C: sov_modules_api::Context> {
     pub token_address: C::Address,
 }
 
+/// The errors that might arise when parsing a `Coins` struct from a string.
+#[cfg(feature = "native")]
+#[derive(Debug, Error)]
+pub enum CoinsFromStrError {
+    /// The amount could not be parsed as a u64.
+    #[error("Could not parse {input} as a valid amount: {err}")]
+    InvalidAmount { input: String, err: ParseIntError },
+    /// The input string was malformed, so the `amount` substring could not be extracted.
+    #[error("No amount was provided. Make sure that your input is in the format: amount,token_address. Example: 100,sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6")]
+    NoAmountProvided,
+    /// The token address could not be parsed as a valid address.
+    #[error("Could not parse {input} as a valid address: {err}")]
+    InvalidTokenAddress { input: String, err: anyhow::Error },
+    /// The input string was malformed, so the `token_address` substring could not be extracted.
+    #[error("No token address was provided. Make sure that your input is in the format: amount,token_address. Example: 100,sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6")]
+    NoTokenAddressProvided,
+}
+
+#[cfg(feature = "native")]
+impl<C: sov_modules_api::Context> FromStr for Coins<C> {
+    type Err = CoinsFromStrError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut parts = s.splitn(2, ',');
+
+        let amount_str = parts.next().ok_or(CoinsFromStrError::NoAmountProvided)?;
+        let token_address_str = parts
+            .next()
+            .ok_or(CoinsFromStrError::NoTokenAddressProvided)?;
+
+        let amount =
+            amount_str
+                .parse::<Amount>()
+                .map_err(|err| CoinsFromStrError::InvalidAmount {
+                    input: amount_str.into(),
+                    err,
+                })?;
+        let token_address = C::Address::from_str(token_address_str).map_err(|err| {
+            CoinsFromStrError::InvalidTokenAddress {
+                input: token_address_str.into(),
+                err,
+            }
+        })?;
+
+        Ok(Self {
+            amount,
+            token_address,
+        })
+    }
+}
 impl<C: sov_modules_api::Context> std::fmt::Display for Coins<C> {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         // implement Display for Coins

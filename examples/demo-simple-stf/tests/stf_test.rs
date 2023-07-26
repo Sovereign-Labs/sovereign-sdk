@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::str::FromStr;
 
 use demo_simple_stf::{ApplyBlobResult, CheckHashPreimageStf};
 use sov_rollup_interface::mocks::{MockZkvm, TestBlob};
@@ -21,6 +22,18 @@ impl AsRef<[u8]> for DaAddress {
 impl From<[u8; 32]> for DaAddress {
     fn from(addr: [u8; 32]) -> Self {
         DaAddress { addr }
+    }
+}
+
+impl FromStr for DaAddress {
+    type Err = hex::FromHexError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Remove the "0x" prefix, if it exists.
+        let s = s.strip_prefix("0x").unwrap_or(s);
+        let mut addr = [0u8; 32];
+        hex::decode_to_slice(s, &mut addr)?;
+        Ok(DaAddress { addr })
     }
 }
 
