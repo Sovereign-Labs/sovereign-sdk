@@ -41,6 +41,9 @@ mod ledger_rpc;
 #[cfg(test)]
 mod test_rpc;
 
+#[cfg(feature = "experimental")]
+const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
+
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 // You can change this constant to point your rollup at a different namespace
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
@@ -300,8 +303,7 @@ fn register_ethereum(
 ) -> Result<(), anyhow::Error> {
     use std::fs;
 
-    let data = fs::read_to_string("../test-data/keys/tx_signer_private_key.json")
-        .context("Unable to read file")?;
+    let data = fs::read_to_string(TX_SIGNER_PRIV_KEY_PATH).context("Unable to read file")?;
 
     let hex_key: HexKey =
         serde_json::from_str(&data).context("JSON does not have correct format.")?;
