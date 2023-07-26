@@ -9,10 +9,10 @@ use crate::rocks_db_config::gen_rocksdb_options;
 use crate::schema::tables::{JmtNodes, JmtValues, KeyHashToKey, STATE_TABLES};
 use crate::schema::types::StateKey;
 
-/// A typed wrapper around RocksDB for storing rollup state. Internally, 
+/// A typed wrapper around RocksDB for storing rollup state. Internally,
 /// this is roughly just an `Arc<SchemaDB>`.
-/// 
-/// StateDB implements several convenience functions for state storage - 
+///
+/// StateDB implements several convenience functions for state storage -
 /// notably the `TreeReader` and `TreeWriter` traits.
 #[derive(Clone)]
 pub struct StateDB {
@@ -44,7 +44,7 @@ impl StateDB {
         })
     }
 
-    /// Put the preimage of a hashed key into the database. Note that the preimage is not checked for correctness, 
+    /// Put the preimage of a hashed key into the database. Note that the preimage is not checked for correctness,
     /// since the DB is unaware of the hash function used by the JMT.
     pub fn put_preimage(&self, key_hash: KeyHash, key: &Vec<u8>) -> Result<(), anyhow::Error> {
         self.db.put::<KeyHashToKey>(&key_hash.0, key)
