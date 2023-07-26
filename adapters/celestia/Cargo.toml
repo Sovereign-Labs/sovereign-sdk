@@ -2,6 +2,7 @@
 name = "jupiter"
 version = { workspace = true }
 edition = { workspace = true }
+license = { workspace = true }
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -14,15 +15,14 @@ tendermint = "0.32"
 tendermint-proto = "0.32"
 
 # Convenience
+async-trait = { workspace = true }
 anyhow = { workspace = true }
 sha2 = { workspace = true }
-base64 = "0.13.1"
+base64 = "0.21.2"
 hex = { version = "0.4.3", features = ["serde"] }
-hex-literal = "0.3.4"
+hex-literal = "0.4.1"
 jsonrpsee = { version = "0.16.2", features = ["http-client"], optional = true }
-reqwest = { version = "0.11.13", features = ["blocking"], optional = true }
 serde = { workspace = true }
-serde_cbor = "0.11.2"
 serde_json = { workspace = true }
 tokio = { workspace = true, optional = true }
 thiserror = { workspace = true }
@@ -39,8 +39,7 @@ wiremock = "0.5"
 [build-dependencies]
 prost-build = { version = "0.11" }
 
-
 [features]
 default = ["native"]
-native = ["dep:tokio", "dep:reqwest", "dep:jsonrpsee"]
+native = ["dep:tokio", "dep:jsonrpsee"]
 verifier = []

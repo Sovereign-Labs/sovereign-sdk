@@ -1,5 +1,5 @@
+use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::Context;
-use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
 
 use crate::SequencerRegistry;

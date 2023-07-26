@@ -68,7 +68,7 @@ impl TmHash {
             tendermint::Hash::Sha256(ref h) => h,
             // Hack: when the hash is None, we return a hash of all 255s as a placeholder.
             // TODO: add special casing for the genesis block at a higher level
-            tendermint::Hash::None => &[255u8; 32],
+            tendermint::Hash::None => unreachable!("Only the genesis block has a None hash, and we use a placholder in that corner case") 
         }
     }
 }

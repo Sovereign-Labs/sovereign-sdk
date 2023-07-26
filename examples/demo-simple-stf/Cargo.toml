@@ -4,13 +4,13 @@ version = { workspace = true }
 edition = { workspace = true } 
 resolver = "2"
 authors = { workspace = true } 
+license = { workspace = true } 
 homepage = "sovereign.xyz"
 publish = false
 
 [dependencies]
 anyhow = { workspace = true}
 serde = { workspace = true }
-serde_json = { workspace = true, optional = true }
 sha2 = { workspace = true }
 
 sov-rollup-interface = { path = "../../rollup-interface" }

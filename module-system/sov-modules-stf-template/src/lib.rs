@@ -1,4 +1,6 @@
-pub mod app_template;
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
+mod app_template;
 mod batch;
 mod tx_verifier;
 
@@ -6,6 +8,7 @@ pub use app_template::AppTemplate;
 pub use batch::Batch;
 use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
 use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
+use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_rollup_interface::stf::{BatchReceipt, StateTransitionFunction};
 use sov_rollup_interface::zk::Zkvm;
 use sov_state::{StateCheckpoint, Storage};
@@ -16,37 +19,48 @@ use zk_cycle_utils::cycle_tracker;
 
 extern crate risc0_zkvm;
 
+/// The receipts of all the transactions in a batch.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TxEffect {
+    /// Batch was reverted.
     Reverted,
+    /// Batch was processed successfully.
     Successful,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 // TODO: Should be generic for Address for pretty printing https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
+/// Represents the different outcomes that can occur for a sequencer after batch processing.
 pub enum SequencerOutcome {
     /// Sequencer receives reward amount in defined token and can withdraw its deposit
     Rewarded(u64),
     /// Sequencer loses its deposit and receives no reward
     Slashed {
+        /// Reason why sequencer was slashed.
         reason: SlashingReason,
         // Keep this comment for so it doesn't need to investigate serde issue again.
         // https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
         // #[serde(bound(deserialize = ""))]
+        /// Sequencer address on DA.
         sequencer_da_address: Vec<u8>,
     },
     /// Batch was ignored, sequencer deposit left untouched.
     Ignored,
 }
 
+/// Reason why sequencer was slashed.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum SlashingReason {
+    /// This status indicates problem with batch deserialization.
     InvalidBatchEncoding,
+    /// Stateless verification failed, for example deserialized transactions have invalid signatures.
     StatelessVerificationFailed,
+    /// This status indicates problem with transaction deserialization.
     InvalidTransactionEncoding,
 }
 
-impl<C: Context, RT, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, RT, Vm>
+impl<C: Context, RT, Vm: Zkvm, B: BlobTransactionTrait> StateTransitionFunction<Vm, B>
+    for AppTemplate<C, RT, Vm, B>
 where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
@@ -89,7 +103,7 @@ where
     #[cfg_attr(target_os = "zkvm", cycle_tracker)]
     fn apply_blob(
         &mut self,
-        blob: &mut impl sov_rollup_interface::da::BlobTransactionTrait,
+        blob: &mut B,
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
     ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
         match self.apply_blob(blob) {

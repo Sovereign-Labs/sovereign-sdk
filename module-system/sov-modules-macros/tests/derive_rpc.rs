@@ -1,7 +1,6 @@
 use sov_modules_api::default_context::ZkDefaultContext;
-use sov_modules_api::Context;
-use sov_modules_macros::rpc_gen;
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::macros::rpc_gen;
+use sov_modules_api::{Context, ModuleInfo};
 use sov_state::{WorkingSet, ZkStorage};
 
 #[derive(ModuleInfo)]

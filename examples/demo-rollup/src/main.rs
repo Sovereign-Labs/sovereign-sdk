@@ -19,6 +19,7 @@ use jsonrpsee::core::server::rpc_module::Methods;
 use jupiter::da_service::CelestiaService;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::{CelestiaVerifier, ChainValidityCondition, RollupParams};
+use jupiter::BlobWithSender;
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 #[cfg(feature = "experimental")]
@@ -138,16 +139,20 @@ async fn main() -> Result<(), anyhow::Error> {
     let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
 
     // Initialize the Celestia service using the DaService interface
-    let da_service = Arc::new(CelestiaService::new(
-        rollup_config.da.clone(),
-        RollupParams {
-            namespace: ROLLUP_NAMESPACE,
-        },
-    ));
+    let da_service = Arc::new(
+        CelestiaService::new(
+            rollup_config.da.clone(),
+            RollupParams {
+                namespace: ROLLUP_NAMESPACE,
+            },
+        )
+        .await,
+    );
 
     // Our state transition function implements the StateTransitionRunner interface,
     // so we use that to initialize the STF
-    let mut demo_runner = NativeAppRunner::<Risc0Verifier>::new(rollup_config.runner.clone());
+    let mut demo_runner =
+        NativeAppRunner::<Risc0Verifier, BlobWithSender>::new(rollup_config.runner.clone());
 
     // Our state transition also implements the RpcRunner interface,
     // so we use that to initialize the RPC server.
@@ -255,8 +260,9 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         let (next_state_root, _witness) = demo.end_slot();
 
-        let (inclusion_proof, completeness_proof) =
-            da_service.get_extraction_proof(&filtered_block, &blobs);
+        let (inclusion_proof, completeness_proof) = da_service
+            .get_extraction_proof(&filtered_block, &blobs)
+            .await;
 
         let validity_condition = da_verifier
             .verify_relevant_tx_list::<NoOpHasher>(

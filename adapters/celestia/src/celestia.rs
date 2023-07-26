@@ -1,7 +1,9 @@
-use std::cell::RefCell;
 use std::fmt::{Display, Formatter};
 use std::ops::Range;
+use std::sync::{Arc, Mutex};
 
+use base64::engine::general_purpose::STANDARD as B64_ENGINE;
+use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespacedHash;
 use prost::bytes::Buf;
@@ -10,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlockHeaderTrait as BlockHeader, CountedBufReader};
 use sov_rollup_interface::AddressTrait;
 pub use tendermint::block::Header as TendermintHeader;
+use tendermint::block::Height;
 use tendermint::crypto::default::Sha256;
 use tendermint::merkle::simple_hash_from_byte_vectors;
 use tendermint::Hash;
@@ -18,6 +21,8 @@ use tendermint_proto::Protobuf;
 use tracing::debug;
 
 const NAMESPACED_HASH_LEN: usize = 48;
+
+pub const GENESIS_PLACEHOLDER_HASH: &[u8; 32] = &[255; 32];
 
 use crate::pfb::{BlobTx, MsgPayForBlobs, Tx};
 use crate::shares::{read_varint, BlobIterator, BlobRefIterator, NamespaceGroup};
@@ -184,14 +189,14 @@ pub struct DataAvailabilityHeader {
 }
 
 // Danger! This method panics if the provided bas64 is longer than a namespaced hash
-fn decode_to_ns_hash(b64: &str) -> Result<NamespacedHash, base64::DecodeError> {
+fn decode_to_ns_hash(b64: &str) -> Result<NamespacedHash, base64::DecodeSliceError> {
     let mut out = [0u8; NAMESPACED_HASH_LEN];
-    base64::decode_config_slice(b64, base64::STANDARD, &mut out)?;
+    B64_ENGINE.decode_slice(b64.as_bytes(), &mut out)?;
     Ok(NamespacedHash(out))
 }
 
 impl TryFrom<MarshalledDataAvailabilityHeader> for DataAvailabilityHeader {
-    type Error = base64::DecodeError;
+    type Error = base64::DecodeSliceError;
 
     fn try_from(value: MarshalledDataAvailabilityHeader) -> Result<Self, Self::Error> {
         let mut row_roots = Vec::with_capacity(value.row_roots.len());
@@ -223,13 +228,19 @@ pub struct NamespacedSharesResponse {
     pub height: u64,
 }
 
-#[derive(Debug, PartialEq, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize)]
 pub struct CelestiaHeader {
     pub dah: DataAvailabilityHeader,
     pub header: CompactHeader,
     #[borsh_skip]
     #[serde(skip)]
-    cached_prev_hash: RefCell<Option<TmHash>>,
+    cached_prev_hash: Arc<Mutex<Option<TmHash>>>,
+}
+
+impl PartialEq for CelestiaHeader {
+    fn eq(&self, other: &Self) -> bool {
+        self.dah == other.dah && self.header == other.header
+    }
 }
 
 impl CelestiaHeader {
@@ -237,7 +248,7 @@ impl CelestiaHeader {
         Self {
             dah,
             header,
-            cached_prev_hash: RefCell::new(None),
+            cached_prev_hash: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -257,13 +268,25 @@ impl BlockHeader for CelestiaHeader {
     type Hash = TmHash;
 
     fn prev_hash(&self) -> Self::Hash {
-        // Try to return the cached value
-        if let Some(hash) = self.cached_prev_hash.borrow().as_ref() {
+        let mut cached_hash = self.cached_prev_hash.lock().unwrap();
+        if let Some(hash) = cached_hash.as_ref() {
             return hash.clone();
         }
-        // If we reach this point, we know that the cach is empty - so there can't be any outstanding references to its value.
-        // That means its safe to borrow the cache mutably and populate it.
-        let mut cached_hash = self.cached_prev_hash.borrow_mut();
+
+        // We special case the block following genesis, since genesis has a `None` hash, which
+        // we don't want to deal with. In this case, we return a specail placeholder for the
+        // block "hash"
+        if Height::decode_vec(&self.header.height)
+            .expect("header must be validly encoded")
+            .value()
+            == 1
+        {
+            let prev_hash = TmHash(tendermint::Hash::Sha256(*GENESIS_PLACEHOLDER_HASH));
+            *cached_hash = Some(prev_hash.clone());
+            return prev_hash;
+        }
+
+        // In all other cases, we simply return the previous block hash parsed from the header
         let hash =
             <tendermint::block::Id as Protobuf<celestia_tm_version::types::BlockId>>::decode(
                 self.header.last_block_id.as_ref(),
@@ -428,5 +451,12 @@ mod tests {
         let compact_header: CompactHeader = original_header.header.into();
 
         assert_eq!(tm_header.hash(), compact_header.hash());
+        assert_eq!(
+            hex::decode("32381A0B7262F15F081ACEF769EE59E6BB4C42C1013A3EEE23967FBF32B86AE6")
+                .unwrap(),
+            compact_header.hash().as_bytes()
+        );
+
+        assert_eq!(tm_header.hash(), compact_header.hash(),);
     }
 }

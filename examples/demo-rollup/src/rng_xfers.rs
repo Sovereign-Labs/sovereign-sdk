@@ -1,13 +1,11 @@
 use std::env;
-use std::future::Future;
-use std::pin::Pin;
 
+use async_trait::async_trait;
 use borsh::ser::BorshSerialize;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::runtime::Runtime;
 use jupiter::verifier::address::CelestiaAddress;
-use sov_bank::call::CallMessage;
-use sov_bank::Coins;
+use sov_bank::{CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
@@ -32,14 +30,13 @@ fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
         let priv_key = DefaultPrivateKey::generate();
         let address: <DefaultContext as Spec>::Address = priv_key.pub_key().to_address();
         let pk = DefaultPrivateKey::from_hex("236e80cb222c4ed0431b093b3ac53e6aa7a2273fe1f4351cd354989a823432a27b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe6").unwrap();
-        let msg: sov_bank::call::CallMessage<DefaultContext> =
-            CallMessage::<DefaultContext>::Transfer {
-                to: address,
-                coins: Coins {
-                    amount: 1,
-                    token_address: token_address.clone(),
-                },
-            };
+        let msg: sov_bank::CallMessage<DefaultContext> = CallMessage::<DefaultContext>::Transfer {
+            to: address,
+            coins: Coins {
+                amount: 1,
+                token_address: token_address.clone(),
+            },
+        };
         let enc_msg = Runtime::<DefaultContext>::encode_bank_call(msg);
         let tx =
             Transaction::<DefaultContext>::new_signed_tx(&pk, enc_msg, start_nonce + (i as u64));
@@ -59,14 +56,13 @@ fn generate_create(start_nonce: u64) -> Vec<u8> {
         AddressBech32::try_from(sender_address)
             .unwrap_or_else(|_e| panic!("Failed generating token create transaction")),
     );
-    let msg: sov_bank::call::CallMessage<DefaultContext> =
-        CallMessage::<DefaultContext>::CreateToken {
-            salt: 11,
-            token_name: "sov-test-token".to_string(),
-            initial_balance: 100000000,
-            minter_address: minter_address.clone(),
-            authorized_minters: vec![minter_address],
-        };
+    let msg: sov_bank::CallMessage<DefaultContext> = CallMessage::<DefaultContext>::CreateToken {
+        salt: 11,
+        token_name: "sov-test-token".to_string(),
+        initial_balance: 100000000,
+        minter_address: minter_address.clone(),
+        authorized_minters: vec![minter_address],
+    };
     let enc_msg = Runtime::<DefaultContext>::encode_bank_call(msg);
     let tx = Transaction::<DefaultContext>::new_signed_tx(&pk, enc_msg, start_nonce);
     let ser_tx = tx.try_to_vec().unwrap();
@@ -97,21 +93,21 @@ impl DaSpec for RngDaSpec {
     type ChainParams = ();
 }
 
+#[async_trait]
 impl DaService for RngDaService {
     type RuntimeConfig = ();
     type Spec = RngDaSpec;
     type FilteredBlock = TestBlock;
-    type Future<T> = Pin<Box<dyn Future<Output = Result<T, Self::Error>> + Send>>;
     type Error = anyhow::Error;
 
-    fn new(
+    async fn new(
         _config: Self::RuntimeConfig,
         _chain_params: <Self::Spec as DaSpec>::ChainParams,
     ) -> Self {
         RngDaService::new()
     }
 
-    fn get_finalized_at(&self, height: u64) -> Self::Future<Self::FilteredBlock> {
+    async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let num_bytes = height.to_le_bytes();
         let mut barray = [0u8; 32];
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
@@ -124,10 +120,10 @@ impl DaService for RngDaService {
             height,
         };
 
-        Box::pin(async move { Ok(block) })
+        Ok(block)
     }
 
-    fn get_block_at(&self, _height: u64) -> Self::Future<Self::FilteredBlock> {
+    async fn get_block_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         unimplemented!()
     }
 
@@ -156,7 +152,7 @@ impl DaService for RngDaService {
         vec![blob]
     }
 
-    fn get_extraction_proof(
+    async fn get_extraction_proof(
         &self,
         _block: &Self::FilteredBlock,
         _blobs: &[<Self::Spec as DaSpec>::BlobTransaction],
@@ -168,7 +164,7 @@ impl DaService for RngDaService {
 
     }
 
-    fn send_transaction(&self, _blob: &[u8]) -> Self::Future<()> {
+    async fn send_transaction(&self, _blob: &[u8]) -> Result<(), Self::Error> {
         unimplemented!()
     }
 }

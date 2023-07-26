@@ -16,6 +16,7 @@ pub(crate) struct TransactionAndRawHash<C: Context> {
 /// RawTx represents a serialized rollup transaction received from the DA.
 #[derive(Debug, PartialEq, Clone, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
 pub struct RawTx {
+    /// Serialized transaction.
     pub data: Vec<u8>,
 }
 

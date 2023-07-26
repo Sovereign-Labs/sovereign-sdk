@@ -14,6 +14,20 @@ mod serde_address;
 mod tests;
 pub mod transaction;
 
+#[cfg(feature = "macros")]
+extern crate sov_modules_macros;
+
+#[cfg(feature = "macros")]
+pub use sov_modules_macros::{
+    DispatchCall, Genesis, MessageCodec, ModuleCallJsonSchema, ModuleInfo,
+};
+
+/// Procedural macros to assist with creating new modules.
+#[cfg(feature = "macros")]
+pub mod macros {
+    pub use sov_modules_macros::{cli_parser, expose_rpc, rpc_gen, DefaultRuntime, MessageCodec};
+}
+
 use core::fmt::{self, Debug, Display};
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -37,6 +51,7 @@ impl AsRef<[u8]> for Address {
 
 impl AddressTrait for Address {}
 
+#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 #[derive(PartialEq, Clone, Eq, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Address {
     addr: [u8; 32],
@@ -122,6 +137,9 @@ pub trait Spec {
     type Address: AddressTrait
         + BorshSerialize
         + BorshDeserialize
+        // Do we always need this, even when the module does not have a JSON
+        // Schema? That feels a bit wrong.
+        + ::schemars::JsonSchema
         + Into<AddressBech32>
         + From<AddressBech32>;
 
@@ -142,6 +160,7 @@ pub trait Spec {
         + PublicKey
         + Serialize
         + for<'a> Deserialize<'a>
+        + ::schemars::JsonSchema
         + Send
         + Sync;
 
@@ -159,6 +178,16 @@ pub trait Spec {
     type Hasher: Hasher;
 
     /// The digital signature scheme used by the rollup
+    #[cfg(feature = "native")]
+    type Signature: borsh::BorshDeserialize
+        + borsh::BorshSerialize
+        + schemars::JsonSchema
+        + Eq
+        + Clone
+        + Debug
+        + Signature<PublicKey = Self::PublicKey>;
+
+    #[cfg(not(feature = "native"))]
     type Signature: borsh::BorshDeserialize
         + borsh::BorshSerialize
         + Eq
@@ -233,6 +262,18 @@ pub trait Module {
     ) -> Result<CallResponse, Error> {
         unreachable!()
     }
+}
+
+/// A [`Module`] that has a well-defined and known [JSON
+/// Schema](https://json-schema.org/) for its [`Module::CallMessage`].
+///
+/// This trait is intended to support code generation tools, CLIs, and
+/// documentation. You can derive it with `#[derive(ModuleCallJsonSchema)]`, or
+/// implement it manually if your use case demands more control over the JSON
+/// Schema generation.
+pub trait ModuleCallJsonSchema: Module {
+    /// Returns the JSON schema for [`Module::CallMessage`].
+    fn json_schema() -> String;
 }
 
 /// Every module has to implement this trait.

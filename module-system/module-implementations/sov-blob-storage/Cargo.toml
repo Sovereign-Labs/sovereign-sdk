@@ -1,0 +1,30 @@
+[package]
+name = "sov-blob-storage"
+description = "A Sovereign SDK module for holding blobs from Data Availability Layer"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+
+resolver = "2"
+
+
+[dependencies]
+anyhow = { workspace = true }
+bincode = { workspace = true }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false, features = ["macros"] }
+sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
+sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
+
+[dev-dependencies]
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+tempfile = { workspace = true }
+
+[features]
+default = ["native"]
+native = ["sov-modules-api/native", "sov-state/native"]

@@ -3,8 +3,7 @@ pub mod genesis;
 #[cfg(feature = "native")]
 pub mod query;
 
-use sov_modules_api::{CallResponse, Context, Error, Module};
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
 use sov_state::WorkingSet;
 
 #[derive(ModuleInfo, Clone)]

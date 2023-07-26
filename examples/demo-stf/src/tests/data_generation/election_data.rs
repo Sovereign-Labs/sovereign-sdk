@@ -32,12 +32,12 @@ impl CallGenerator {
         &mut self,
     ) -> Vec<(
         Rc<DefaultPrivateKey>,
-        sov_election::call::CallMessage<DefaultContext>,
+        sov_election::CallMessage<DefaultContext>,
         u64,
     )> {
         let mut messages = Vec::default();
 
-        let set_candidates_message = sov_election::call::CallMessage::SetCandidates {
+        let set_candidates_message = sov_election::CallMessage::SetCandidates {
             names: vec!["candidate_1".to_owned(), "candidate_2".to_owned()],
         };
 
@@ -50,7 +50,7 @@ impl CallGenerator {
 
         for voter in self.voters.clone() {
             let add_voter_message =
-                sov_election::call::CallMessage::AddVoter(voter.pub_key().to_address());
+                sov_election::CallMessage::AddVoter(voter.pub_key().to_address());
 
             messages.push((
                 self.election_admin.clone(),
@@ -58,7 +58,7 @@ impl CallGenerator {
                 self.election_admin_nonce,
             ));
 
-            let vote_message = sov_election::call::CallMessage::Vote(1);
+            let vote_message = sov_election::CallMessage::Vote(1);
             messages.push((voter, vote_message, 0));
             self.inc_nonce();
         }
@@ -70,12 +70,12 @@ impl CallGenerator {
         &mut self,
     ) -> Vec<(
         Rc<DefaultPrivateKey>,
-        sov_election::call::CallMessage<DefaultContext>,
+        sov_election::CallMessage<DefaultContext>,
         u64,
     )> {
         let mut messages = Vec::default();
 
-        let freeze_message = sov_election::call::CallMessage::FreezeElection;
+        let freeze_message = sov_election::CallMessage::FreezeElection;
         messages.push((
             self.election_admin.clone(),
             freeze_message,
@@ -90,7 +90,7 @@ impl CallGenerator {
         &mut self,
     ) -> Vec<(
         Rc<DefaultPrivateKey>,
-        sov_election::call::CallMessage<DefaultContext>,
+        sov_election::CallMessage<DefaultContext>,
         u64,
     )> {
         let mut messages = Vec::default();
@@ -114,7 +114,7 @@ impl ElectionCallMessages {
 }
 
 impl MessageGenerator for ElectionCallMessages {
-    type Call = sov_election::call::CallMessage<DefaultContext>;
+    type Call = sov_election::CallMessage<DefaultContext>;
 
     fn create_messages(&self) -> Vec<(Rc<DefaultPrivateKey>, Self::Call, u64)> {
         let call_generator = &mut CallGenerator::new(self.election_admin.clone());
@@ -146,7 +146,7 @@ impl InvalidElectionCallMessages {
 }
 
 impl MessageGenerator for InvalidElectionCallMessages {
-    type Call = sov_election::call::CallMessage<DefaultContext>;
+    type Call = sov_election::CallMessage<DefaultContext>;
 
     fn create_messages(&self) -> Vec<(Rc<DefaultPrivateKey>, Self::Call, u64)> {
         let call_generator = &mut CallGenerator::new(self.election_admin.clone());
@@ -158,7 +158,7 @@ impl MessageGenerator for InvalidElectionCallMessages {
         // Additional invalid message: This voter already voted.
         {
             let voter = call_generator.voters[0].clone();
-            let vote_message = sov_election::call::CallMessage::Vote(1);
+            let vote_message = sov_election::CallMessage::Vote(1);
             messages.push((voter, vote_message, 1));
         }
 
@@ -191,7 +191,7 @@ impl BadSigElectionCallMessages {
 }
 
 impl MessageGenerator for BadSigElectionCallMessages {
-    type Call = sov_election::call::CallMessage<DefaultContext>;
+    type Call = sov_election::CallMessage<DefaultContext>;
 
     fn create_messages(&self) -> Vec<(Rc<DefaultPrivateKey>, Self::Call, u64)> {
         let call_generator = &mut CallGenerator::new(self.election_admin.clone());
@@ -234,7 +234,7 @@ impl BadNonceElectionCallMessages {
 }
 
 impl MessageGenerator for BadNonceElectionCallMessages {
-    type Call = sov_election::call::CallMessage<DefaultContext>;
+    type Call = sov_election::CallMessage<DefaultContext>;
 
     fn create_messages(&self) -> Vec<(Rc<DefaultPrivateKey>, Self::Call, u64)> {
         let call_generator = &mut CallGenerator::new(self.election_admin.clone());
@@ -268,7 +268,7 @@ impl BadSerializationElectionCallMessages {
 }
 
 impl MessageGenerator for BadSerializationElectionCallMessages {
-    type Call = sov_election::call::CallMessage<DefaultContext>;
+    type Call = sov_election::CallMessage<DefaultContext>;
 
     fn create_messages(&self) -> Vec<(Rc<DefaultPrivateKey>, Self::Call, u64)> {
         let call_generator = &mut CallGenerator::new(self.election_admin.clone());

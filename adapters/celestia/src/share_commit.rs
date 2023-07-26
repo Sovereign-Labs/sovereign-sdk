@@ -28,7 +28,7 @@ impl std::fmt::Display for CommitmentError {
 
 impl std::error::Error for CommitmentError {}
 
-/// Derived from https://github.com/celestiaorg/celestia-app/blob/0c81704939cd743937aac2859f3cb5ae6368f174/x/payment/types/payfordata.go#L170
+/// Derived from <https://github.com/celestiaorg/celestia-app/blob/0c81704939cd743937aac2859f3cb5ae6368f174/x/payment/types/payfordata.go#L170>
 pub fn recreate_commitment(
     square_size: usize,
     shares: shares::BlobRef,

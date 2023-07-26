@@ -18,6 +18,7 @@ exclude = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 serde = { workspace = true }
 bytes = { workspace = true }
@@ -30,12 +31,12 @@ anyhow = { workspace = true }
 
 # Proptest should be a dev-dependency, but those can't be optional
 proptest = { workspace = true, optional = true }
-proptest-derive =  { workspace = true, optional = true }
+proptest-derive = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json = "1"
 proptest = { workspace = true }
-proptest-derive =  { workspace = true }
+proptest-derive = { workspace = true }
 
 [features]
 default = []

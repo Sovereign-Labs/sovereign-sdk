@@ -7,11 +7,14 @@ use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::app::NativeAppRunner;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runner_config::from_toml_path;
+use jupiter::verifier::address::CelestiaAddress;
 use prometheus::{Histogram, HistogramOpts, Registry};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_demo_rollup::config::RollupConfig;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_rollup_interface::mocks::{TestBlob, TestBlock, TestBlockHeader, TestHash};
+use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use tempfile::TempDir;
@@ -19,6 +22,7 @@ use sov_demo_rollup::data_gen::generate_blocks;
 
 #[macro_use]
 extern crate prettytable;
+
 use prettytable::Table;
 
 fn print_times(
@@ -109,7 +113,9 @@ async fn main() -> Result<(), anyhow::Error> {
         LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
 
 
-    let mut demo_runner = NativeAppRunner::<Risc0Verifier>::new(rollup_config.runner);
+    let mut demo_runner =
+        NativeAppRunner::<Risc0Verifier, TestBlob<CelestiaAddress>>::new(rollup_config.runner);
+
     let demo = demo_runner.inner_mut();
 
     let sequencer_private_key = DefaultPrivateKey::generate();

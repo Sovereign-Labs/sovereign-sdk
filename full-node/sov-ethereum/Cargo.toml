@@ -12,11 +12,7 @@ resolver = "2"
 
 
 [dependencies]
-anyhow = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
-serde = { workspace = true, features = ["derive"] }
-sov-rollup-interface = { path = "../../rollup-interface" }
-ethers = {version = "2.0.7"}
 
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", default-features = false }
 demo-stf = { path = "../../examples/demo-stf", features = ["native"] }
@@ -26,6 +22,9 @@ jupiter = { path = "../../adapters/celestia", features = ["native"] }
 
 borsh = { workspace = true }
 serde_json = { workspace = true }
+
+anvil-core  = { workspace = true }
+ethers = { workspace = true }
 
 
 [dev-dependencies]

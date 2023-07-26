@@ -2,16 +2,22 @@ name: Rust
 
 on:
   push:
-    branches: ["main"]
+    branches: ["nightly", "stable"]
     paths-ignore:
       - "**.md"
   pull_request:
-    branches: ["main"]
+    branches: ["nightly", "stable"]
     paths-ignore:
       - "**.md"
 
 env:
   CARGO_TERM_COLOR: always
+
+# Automatically cancels a job if a new commit if pushed to the same PR, branch, or tag.
+# Source: <https://stackoverflow.com/a/72408109/5148606>
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
@@ -59,7 +65,8 @@ jobs:
 
   # Check that every combination of features is working properly.
   hack:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
     name: features
     timeout-minutes: 60
     env:
@@ -76,7 +83,8 @@ jobs:
       - name: cargo hack
         run: make check-features
   test:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 60
     env:
       SCCACHE_GHA_ENABLED: "true"
@@ -87,8 +95,22 @@ jobs:
       - uses: mozilla-actions/sccache-action@v0.0.3
       - name: Run cargo test
         run: cargo test
+  test-experimental:
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
+    timeout-minutes: 60
+    env:
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: "sccache"
+    steps:
+      - uses: actions/checkout@v3
+      - uses: Swatinem/rust-cache@v2
+      - uses: mozilla-actions/sccache-action@v0.0.3
+      - name: Run cargo test --features experimental
+        run: cargo test --features experimental
   coverage:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 90
     env:
       SCCACHE_GHA_ENABLED: "true"
@@ -150,9 +172,23 @@ jobs:
             echo "Curl failed, retrying in 5 seconds..."
             sleep 5
           done
+  check-licenses:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Rust toolchain
+        run: rustup show
+      - run: cargo install cargo-deny
+      - run: cargo deny check licenses
   cargo-doc-artifact:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
+    # We only deploy `cargo doc` to GH pages on `stable`, but let's at least
+    # build it on `nightly` as well to avoid nasty surprises when merging
+    # `nightly` into `stable`. Running it on every PR would be excessive,
+    # though.
+    if: (github.ref == 'refs/heads/stable') || (github.ref == 'refs/heads/nightly')
     steps:
       - uses: actions/checkout@v3
       - uses: Swatinem/rust-cache@v2
@@ -174,8 +210,7 @@ jobs:
   deploy-github-pages:
     needs: cargo-doc-artifact
     timeout-minutes: 5
-    # No point in deploying if we're not on `main`, as it will just fail.
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/stable'
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
       pages: write # to deploy to Pages

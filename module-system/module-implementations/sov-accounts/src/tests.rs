@@ -129,7 +129,7 @@ fn test_update_account_fails() {
 }
 
 #[test]
-fn test_get_acc_after_pub_key_update() {
+fn test_get_account_after_pub_key_update() {
     let tmpdir = tempfile::tempdir().unwrap();
     let native_working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let accounts = &mut Accounts::<C>::default();

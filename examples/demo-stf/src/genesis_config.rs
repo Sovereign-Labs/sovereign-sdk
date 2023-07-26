@@ -45,6 +45,7 @@ pub fn create_demo_genesis_config<C: Context>(
             amount: LOCKED_AMOUNT,
             token_address,
         },
+        preferred_sequencer: None,
     };
 
     let value_setter_config = ValueSetterConfig {
@@ -71,7 +72,7 @@ pub fn create_demo_genesis_config<C: Context>(
         EvmConfig {
             data: vec![AccountData {
                 address: genesis_evm_address,
-                balance: AccountData::balance(1000000000),
+                balance: AccountData::balance(u64::MAX),
                 code_hash: AccountData::empty_code(),
                 code: vec![],
                 nonce: 0,
