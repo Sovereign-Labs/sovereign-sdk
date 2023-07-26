@@ -1,6 +1,8 @@
 use std::fmt::Debug;
 
 use anyhow::Result;
+#[cfg(feature = "native")]
+use sov_modules_api::macros::CliWalletArg;
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 use thiserror::Error;
@@ -12,10 +14,12 @@ use super::ValueSetter;
     feature = "native",
     derive(serde::Serialize),
     derive(serde::Deserialize),
+    derive(CliWalletArg),
     derive(schemars::JsonSchema)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage {
+    /// value to set
     SetValue(u32),
 }
 

@@ -1,8 +1,8 @@
 mod modules;
 use modules::{first_test_module, second_test_module};
 use sov_modules_api::default_context::ZkDefaultContext;
-use sov_modules_api::macros::{DefaultRuntime, MessageCodec};
-use sov_modules_api::{Address, Context, DispatchCall, Genesis, ModuleInfo};
+use sov_modules_api::macros::DefaultRuntime;
+use sov_modules_api::{Address, Context, DispatchCall, Genesis, MessageCodec, ModuleInfo};
 use sov_state::ZkStorage;
 
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]

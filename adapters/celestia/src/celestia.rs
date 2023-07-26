@@ -1,5 +1,6 @@
 use std::fmt::{Display, Formatter};
 use std::ops::Range;
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use base64::engine::general_purpose::STANDARD as B64_ENGINE;
@@ -349,6 +350,18 @@ impl From<[u8; 32]> for H160 {
         let mut addr = [0u8; 20];
         addr.copy_from_slice(&value[12..]);
         Self(addr)
+    }
+}
+
+impl FromStr for H160 {
+    type Err = hex::FromHexError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Remove the "0x" prefix, if it exists.
+        let s = s.strip_prefix("0x").unwrap_or(s);
+        let mut output = [0u8; 20];
+        hex::decode_to_slice(s, &mut output)?;
+        Ok(H160(output))
     }
 }
 

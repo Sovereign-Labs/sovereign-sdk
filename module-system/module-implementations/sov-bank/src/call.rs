@@ -1,4 +1,6 @@
 use anyhow::{bail, Context, Result};
+#[cfg(feature = "native")]
+use sov_modules_api::macros::CliWalletArg;
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
@@ -9,14 +11,12 @@ use crate::{Amount, Bank, Coins, Token};
     feature = "native",
     derive(serde::Serialize),
     derive(serde::Deserialize),
+    derive(CliWalletArg),
     derive(schemars::JsonSchema),
     schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub enum CallMessage<C>
-where
-    C: sov_modules_api::Context,
-{
+pub enum CallMessage<C: sov_modules_api::Context> {
     /// Creates a new token with the specified name and initial balance.
     CreateToken {
         /// Random value use to create a unique token address.

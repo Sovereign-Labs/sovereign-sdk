@@ -25,13 +25,16 @@ pub use sov_modules_macros::{
 /// Procedural macros to assist with creating new modules.
 #[cfg(feature = "macros")]
 pub mod macros {
-    pub use sov_modules_macros::{cli_parser, expose_rpc, rpc_gen, DefaultRuntime, MessageCodec};
+    pub use sov_modules_macros::{expose_rpc, rpc_gen, CliWallet, CliWalletArg, DefaultRuntime};
 }
 
 use core::fmt::{self, Debug, Display};
 use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(feature = "native")]
+pub use clap;
 pub use dispatch::{DispatchCall, Genesis};
 pub use error::Error;
 pub use prefix::Prefix;
@@ -74,6 +77,16 @@ impl<'a> TryFrom<&'a [u8]> for Address {
         let mut addr_bytes = [0u8; 32];
         addr_bytes.copy_from_slice(addr);
         Ok(Self { addr: addr_bytes })
+    }
+}
+
+impl FromStr for Address {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        AddressBech32::from_str(s)
+            .map_err(|e| anyhow::anyhow!(e))
+            .map(|addr_bech32| addr_bech32.into())
     }
 }
 
@@ -144,11 +157,13 @@ pub trait Spec {
     type Address: AddressTrait
         + BorshSerialize
         + BorshDeserialize
+        + Sync
         // Do we always need this, even when the module does not have a JSON
         // Schema? That feels a bit wrong.
         + ::schemars::JsonSchema
         + Into<AddressBech32>
-        + From<AddressBech32>;
+        + From<AddressBech32>
+        + FromStr<Err = anyhow::Error>;
 
     /// The Address type used on the rollup. Typically calculated as the hash of a public key.
     #[cfg(not(feature = "native"))]
@@ -169,7 +184,8 @@ pub trait Spec {
         + for<'a> Deserialize<'a>
         + ::schemars::JsonSchema
         + Send
-        + Sync;
+        + Sync
+        + FromStr<Err = anyhow::Error>;
 
     #[cfg(not(feature = "native"))]
     type PublicKey: borsh::BorshDeserialize
@@ -192,15 +208,21 @@ pub trait Spec {
         + Eq
         + Clone
         + Debug
+        + Send
+        + Sync
+        + FromStr<Err = anyhow::Error>
         + Signature<PublicKey = Self::PublicKey>;
 
+    /// The digital signature scheme used by the rollup
     #[cfg(not(feature = "native"))]
     type Signature: borsh::BorshDeserialize
         + borsh::BorshSerialize
         + Eq
         + Clone
         + Debug
-        + Signature<PublicKey = Self::PublicKey>;
+        + Signature<PublicKey = Self::PublicKey>
+        + Send
+        + Sync;
 
     /// A structure containing the non-deterministic inputs from the prover to the zk-circuit
     type Witness: Witness;
@@ -213,7 +235,7 @@ pub trait Spec {
 /// Context objects also implement the [`Spec`] trait, which specifies the types to be used in this
 /// instance of the state transition function. By making modules generic over a `Context`, developers
 /// can easily update their cryptography to conform to the needs of different zk-proof systems.
-pub trait Context: Spec + Clone + Debug + PartialEq {
+pub trait Context: Spec + Clone + Debug + PartialEq + 'static {
     /// Sender of the transaction.
     fn sender(&self) -> &Self::Address;
 
@@ -403,4 +425,14 @@ where
     }
 
     Ok(sorted_values)
+}
+
+/// This trait is implemented by types that can be used as arguments in the sov-cli wallet.
+/// The recommended way to implement this trait is using the provided derive macro (`#[derive(CliWalletArg)]`).
+/// Currently, this trait is a thin wrapper around [`clap::Parser`]
+#[cfg(feature = "native")]
+pub trait CliWalletArg: From<Self::CliStringRepr> {
+    /// The type that is used to represent this type in the CLI. Typically,
+    /// this type implements the clap::Subcommand trait.
+    type CliStringRepr;
 }

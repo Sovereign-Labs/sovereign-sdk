@@ -1,12 +1,42 @@
+use std::collections::HashMap;
+
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, ToTokens};
-use syn::{DataStruct, GenericParam, Generics, ImplGenerics, Meta, TypeGenerics, WhereClause};
+use syn::punctuated::Punctuated;
+use syn::spanned::Spanned;
+use syn::{
+    DataStruct, Fields, GenericParam, Generics, ImplGenerics, Meta, PathSegment, TypeGenerics,
+    TypeParamBound, TypePath, WhereClause, WherePredicate,
+};
 
 #[derive(Clone)]
 pub(crate) struct StructNamedField {
     pub(crate) ident: proc_macro2::Ident,
     pub(crate) ty: syn::Type,
+    pub(crate) attrs: Vec<syn::Attribute>,
     pub(crate) vis: syn::Visibility,
+}
+
+impl StructNamedField {
+    pub(crate) fn filter_attrs(&mut self, filter: impl FnMut(&syn::Attribute) -> bool) {
+        self.attrs = std::mem::take(&mut self.attrs)
+            .into_iter()
+            .filter(filter)
+            .collect();
+    }
+}
+
+impl ToTokens for StructNamedField {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let docs = &self.attrs;
+        let vis = &self.vis;
+        let ident = &self.ident;
+        let ty = &self.ty;
+        tokens.extend(quote::quote! {
+            #( #docs )*
+            #vis #ident: #ty
+        });
+    }
 }
 
 pub(crate) struct StructFieldExtractor {
@@ -36,6 +66,42 @@ impl StructFieldExtractor {
         }
     }
 
+    /// Extract the named fields from a struct, or generate named fields matching the fields of an unnamed struct.
+    /// Names follow the pattern `field0`, `field1`, etc.
+    pub(crate) fn get_or_generate_named_fields(fields: &Fields) -> Vec<StructNamedField> {
+        match fields {
+            Fields::Unnamed(unnamed_fields) => unnamed_fields
+                .unnamed
+                .iter()
+                .enumerate()
+                .map(|(i, field)| {
+                    let ident = Ident::new(&format!("field{}", i), field.span());
+                    let ty = &field.ty;
+                    StructNamedField {
+                        attrs: field.attrs.clone(),
+                        vis: field.vis.clone(),
+                        ident,
+                        ty: ty.clone(),
+                    }
+                })
+                .collect::<Vec<_>>(),
+            Fields::Named(fields_named) => fields_named
+                .named
+                .iter()
+                .map(|field| {
+                    let ty = &field.ty;
+                    StructNamedField {
+                        attrs: field.attrs.clone(),
+                        vis: field.vis.clone(),
+                        ident: field.ident.clone().expect("Named fields must have names!"),
+                        ty: ty.clone(),
+                    }
+                })
+                .collect::<Vec<_>>(),
+            Fields::Unit => Vec::new(),
+        }
+    }
+
     fn get_fields_from_data_struct(
         &self,
         data_struct: &DataStruct,
@@ -57,6 +123,7 @@ impl StructFieldExtractor {
             let field = StructNamedField {
                 ident: field_ident.clone(),
                 ty: original_field.ty.clone(),
+                attrs: original_field.attrs.clone(),
                 vis: original_field.vis.clone(),
             };
 
@@ -151,7 +218,10 @@ pub(crate) fn get_generics_type_param(
     Ok(generic_param.clone())
 }
 
-pub fn get_attribute_values(item: &syn::DeriveInput, attribute_name: &str) -> Vec<TokenStream> {
+pub(crate) fn get_attribute_values(
+    item: &syn::DeriveInput,
+    attribute_name: &str,
+) -> Vec<TokenStream> {
     let mut values = vec![];
 
     // Find the attribute with the given name on the root item
@@ -172,7 +242,9 @@ pub fn get_attribute_values(item: &syn::DeriveInput, attribute_name: &str) -> Ve
     values
 }
 
-pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStream>, syn::Error> {
+pub(crate) fn get_serialization_attrs(
+    item: &syn::DeriveInput,
+) -> Result<Vec<TokenStream>, syn::Error> {
     const SERIALIZE: &str = "Serialize";
     const DESERIALIZE: &str = "Deserialize";
 
@@ -212,4 +284,149 @@ pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStrea
     }
 
     Ok(serialization_attrs)
+}
+
+/// Extract a mapping from generic types to their associated trait bounds, including
+/// the ones from the where clause.
+///
+/// For example, given the following struct:
+/// ```rust,ignore
+/// use sov_modules_macros::common::GenericTypesWithBounds;
+/// let test_struct: syn::ItemStruct = syn::parse_quote! {
+///     struct TestStruct<T: SomeTrait> where T: SomeOtherTrait {
+///         field: T
+///     }
+/// };
+/// // We want to extract both the inline bounds, and the bounds from the where clause...
+/// // so that the generics from above definition are equivalent what we would have gotten
+/// // from writing `T: SomeTrait + SomeOtherTrait` inline
+/// let desired_bounds_for_t: syn::TypeParam = syn::parse_quote!(T: SomeTrait + SomeThirdTrait);
+///
+/// // That is exactly what `GenericTypesWithBounds` does
+/// let our_bounds = extract_generic_type_bounds(&test_struct.generics);
+/// assert_eq!(our_bounds.get(T), Some(&desired_bounds_for_t.bounds));
+/// ```
+pub(crate) fn extract_generic_type_bounds(
+    generics: &Generics,
+) -> HashMap<TypePath, Punctuated<TypeParamBound, syn::token::Add>> {
+    let mut generics_with_bounds: HashMap<_, _> = Default::default();
+    // Collect the inline bounds from each generic param
+    for param in generics.params.iter() {
+        if let GenericParam::Type(ty) = param {
+            let path_segment = PathSegment {
+                ident: ty.ident.clone(),
+                arguments: syn::PathArguments::None,
+            };
+            let path = syn::Path {
+                leading_colon: None,
+                segments: Punctuated::from_iter(vec![path_segment]),
+            };
+            let type_path = syn::TypePath { qself: None, path };
+            generics_with_bounds.insert(type_path, ty.bounds.clone());
+        }
+    }
+
+    // Iterate over the bounds in the `where_clause` and add them to the map
+    if let Some(where_clause) = &generics.where_clause {
+        for predicate in &where_clause.predicates {
+            // We can ignore lifetimes and "Eq" predicates since they don't add any trait bounds
+            // so just match on `Type` predicates
+            if let WherePredicate::Type(predicate_type) = predicate {
+                // If the bounded type is a regular type path, we need to extract the bounds and add them to the map.
+                // For now, we ignore more exotic bounds `[T; N]: SomeTrait`.
+                if let syn::Type::Path(type_path) = &predicate_type.bounded_ty {
+                    match generics_with_bounds.entry(type_path.clone()) {
+                        std::collections::hash_map::Entry::Occupied(mut entry) => {
+                            entry.get_mut().extend(predicate_type.bounds.clone())
+                        }
+                        std::collections::hash_map::Entry::Vacant(entry) => {
+                            entry.insert(predicate_type.bounds.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    generics_with_bounds
+}
+
+/// Extract the type ident from a `TypePath`.
+pub fn extract_ident(type_path: &syn::TypePath) -> &Ident {
+    &type_path
+        .path
+        .segments
+        .last()
+        .expect("Type path must have at least one segment")
+        .ident
+}
+
+#[cfg(test)]
+mod tests {
+    use syn::parse_quote;
+
+    use crate::common::extract_generic_type_bounds;
+
+    #[test]
+    fn test_generic_types_with_bounds() {
+        let test_struct: syn::ItemStruct = syn::parse_quote! {
+            struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> where T: SomeThirdTrait {
+                field: (T, U, V)
+            }
+        };
+        let generics = test_struct.generics;
+        let our_bounds = extract_generic_type_bounds(&generics);
+        let expected_bounds_for_t: syn::TypeParam =
+            syn::parse_quote!(T: SomeTrait + SomeThirdTrait);
+        let expected_bounds_for_u: syn::TypeParam = syn::parse_quote!(U: SomeOtherTrait);
+
+        assert_eq!(
+            our_bounds.get(&parse_quote!(T)),
+            Some(&expected_bounds_for_t.bounds)
+        );
+        assert_eq!(
+            our_bounds.get(&parse_quote!(U)),
+            Some(&expected_bounds_for_u.bounds)
+        );
+        assert_eq!(
+            our_bounds.get(&parse_quote!(V)),
+            Some(&syn::punctuated::Punctuated::new())
+        );
+    }
+
+    #[test]
+    fn test_generic_types_with_associated_type_bounds() {
+        let test_struct: syn::ItemStruct = syn::parse_quote! {
+            struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> where T::Error: Debug {
+                field: (T, U, V)
+            }
+        };
+        let generics = test_struct.generics;
+        let our_bounds = extract_generic_type_bounds(&generics);
+        let expected_bounds_for_t: syn::TypeParam = syn::parse_quote!(T: SomeTrait);
+        let expected_bounds_for_t_error: syn::WherePredicate = syn::parse_quote!(T::Error: Debug);
+        if let syn::WherePredicate::Type(expected_bounds_for_t_error) = expected_bounds_for_t_error
+        {
+            assert_eq!(
+                our_bounds.get(&parse_quote!(T::Error)),
+                Some(&expected_bounds_for_t_error.bounds)
+            );
+        } else {
+            unreachable!("Expected a type predicate")
+        };
+        let expected_bounds_for_u: syn::TypeParam = syn::parse_quote!(U: SomeOtherTrait);
+
+        assert_eq!(
+            our_bounds.get(&parse_quote!(T)),
+            Some(&expected_bounds_for_t.bounds)
+        );
+
+        assert_eq!(
+            our_bounds.get(&parse_quote!(U)),
+            Some(&expected_bounds_for_u.bounds)
+        );
+        assert_eq!(
+            our_bounds.get(&parse_quote!(V)),
+            Some(&syn::punctuated::Punctuated::new())
+        );
+    }
 }

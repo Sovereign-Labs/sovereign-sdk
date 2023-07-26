@@ -37,6 +37,7 @@ impl Context for DefaultContext {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "native", derive(Serialize, Deserialize))]
 pub struct ZkDefaultContext {
     pub sender: Address,
 }

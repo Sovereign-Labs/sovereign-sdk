@@ -13,6 +13,7 @@ pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
     derive(serde::Serialize),
     derive(serde::Deserialize),
     derive(schemars::JsonSchema),
+    derive(sov_modules_api::macros::CliWalletArg),
     schemars(
         bound = "C::PublicKey: ::schemars::JsonSchema, C::Signature: ::schemars::JsonSchema",
         rename = "CallMessage"
