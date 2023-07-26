@@ -11,7 +11,7 @@ members = [
     "examples/demo-nft-module",
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
-    
+    "zk-cycle-utils",
     "module-system/sov-modules-stf-template",
     "module-system/sov-modules-macros",
     "module-system/sov-state",
@@ -43,6 +43,7 @@ rust-version = "1.66"
 
 [workspace.dependencies]
 # Dependencies maintained by sovereign
+#jmt = { path = "../jmt", version = "0.6.0" }
 jmt = "0.6.0"
 
 # External dependencies

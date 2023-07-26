@@ -32,7 +32,6 @@ jsonrpsee = { workspace = true, features = ["http-client", "server"] }
 sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
 
-
 syn = { version = "1.0", features = ["full"] }
 quote = "1.0"
 proc-macro2 = "1.0"

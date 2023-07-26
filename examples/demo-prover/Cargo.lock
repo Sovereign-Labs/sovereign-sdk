@@ -1525,9 +1525,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.144"
+version = "0.2.147"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b00cc1c228a6782d0f076e7b232802e0c5689d41bb5df366f2a6b6621cfdfe1"
+checksum = "b4668fb0ea861c1df094127ac5f1da3409a82116a4ba74fca2e58ef927159bb3"
 
 [[package]]
 name = "libloading"
@@ -2976,12 +2976,14 @@ dependencies = [
  "hex",
  "jmt",
  "rand 0.7.3",
+ "risc0-zkvm",
  "serde",
  "serde_json",
  "sha2 0.10.6",
  "sov-rollup-interface",
  "sov-state",
  "thiserror",
+ "zk-cycle-utils",
 ]
 
 [[package]]
@@ -3006,12 +3008,13 @@ dependencies = [
  "borsh",
  "hex",
  "jmt",
+ "risc0-zkvm",
  "serde",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
  "tracing",
+ "zk-cycle-utils",
 ]
 
 [[package]]
@@ -3078,6 +3081,7 @@ dependencies = [
  "borsh",
  "hex",
  "jmt",
+ "risc0-zkvm",
  "serde",
  "sha2 0.10.6",
  "sov-db",
@@ -3085,6 +3089,7 @@ dependencies = [
  "sov-rollup-interface",
  "thiserror",
  "tracing",
+ "zk-cycle-utils",
 ]
 
 [[package]]
@@ -3929,6 +3934,17 @@ dependencies = [
  "sha1",
  "time",
  "zstd",
+]
+
+[[package]]
+name = "zk-cycle-utils"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]

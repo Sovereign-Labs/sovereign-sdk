@@ -8,13 +8,13 @@ use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
 use sov_rollup_interface::traits::BatchTrait;
 use sov_rollup_interface::Buf;
 use sov_state::StateCheckpoint;
-use sov_modules_macros::cycle_tracker;
 use tracing::{debug, error};
 
 use crate::tx_verifier::{verify_txs_stateless, TransactionAndRawHash};
 use crate::{Batch, SequencerOutcome, SlashingReason, TxEffect};
 
 type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
+
 
 pub struct AppTemplate<C: Context, RT, Vm> {
     pub current_storage: C::Storage,
@@ -74,7 +74,6 @@ where
         }
     }
 
-    #[cycle_tracker]
     pub(crate) fn apply_blob(&mut self, blob: &mut impl BlobTransactionTrait) -> ApplyBatchResult<BatchReceipt<SequencerOutcome, TxEffect>> {
         debug!(
             "Applying batch from sequencer: 0x{}",
@@ -141,6 +140,7 @@ where
             messages.len(),
             "Error in preprocessing batch, there should be same number of txs and messages"
         );
+        println!("batch has {} transactions",txs.len());
 
         // Dispatching transactions
         let mut tx_receipts = Vec::with_capacity(txs.len());

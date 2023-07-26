@@ -6,6 +6,9 @@ use crate::default_signature::private_key::DefaultPrivateKey;
 use crate::Spec;
 use crate::{Context, Hasher, Signature};
 
+#[cfg(target_os = "zkvm")]
+use zk_cycle_utils::cycle_tracker;
+
 /// A Transaction object that is compatible with the module-system/sov-default-stf.
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Transaction<C: Context> {
@@ -33,6 +36,7 @@ impl<C: Context> Transaction<C> {
     }
 
     /// Check whether the transaction has been signed correctly.
+    #[cfg_attr(target_os = "zkvm", cycle_tracker)]
     pub fn verify(&self) -> anyhow::Result<()> {
         // We check signature against runtime_msg and nonce.
         let mut hasher = C::Hasher::new();

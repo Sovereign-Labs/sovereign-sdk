@@ -78,8 +78,8 @@ fn main() -> Result<(), anyhow::Error> {
         })
         .collect();
 
-    // for height in 0..(borshed_blocks.len() as u64) {
-    for height in 0..4 {
+    for height in 0..(borshed_blocks.len() as u64) {
+    // for height in 0..5 {
         let mut host = Risc0Host::new(ROLLUP_ELF);
         host.write_to_guest(prev_state_root);
         println!(
@@ -95,7 +95,6 @@ fn main() -> Result<(), anyhow::Error> {
 
         host.write_to_guest(&inclusion_proof);
         host.write_to_guest(&completeness_proof);
-
         demo.begin_slot(Default::default());
         if blob_txs.is_empty() {
             println!(
@@ -117,12 +116,12 @@ fn main() -> Result<(), anyhow::Error> {
 
         let (next_state_root, witness) = demo.end_slot();
         host.write_to_guest(&witness);
-
         println!("Started proving block {height}");
         let now = Instant::now();
         let receipt = host.run().expect("Prover should run successfully");
-        println!("prover time: {:?}",now.elapsed());
-        println!("prover cycles: {}",host.cycles());
+        println!("prover time: {:?}\n\n",now.elapsed());
+        println!("==================================================\n");
+        prev_state_root = next_state_root.0;
 
     }
 

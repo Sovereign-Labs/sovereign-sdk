@@ -9,6 +9,21 @@ use crate::storage::{StorageKey, StorageValue};
 use crate::witness::{TreeWitnessReader, Witness};
 use crate::{MerkleProofSpec, Storage};
 
+#[cfg(target_os = "zkvm")]
+use zk_cycle_utils::cycle_tracker;
+
+#[cfg(target_os = "zkvm")]
+fn get_cycle_count() -> usize {
+    risc0_zkvm::guest::env::get_cycle_count()
+}
+
+#[cfg(not(target_os = "zkvm"))]
+fn get_cycle_count() -> usize {
+    0
+}
+
+extern crate risc0_zkvm;
+
 pub struct ZkStorage<S: MerkleProofSpec> {
     prev_state_root: [u8; 32],
     _phantom_hasher: PhantomData<S::Hasher>,
@@ -45,6 +60,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         witness.get_hint()
     }
 
+    #[cfg_attr(target_os = "zkvm", cycle_tracker)]
     fn validate_and_commit(
         &self,
         state_accesses: OrderedReadsAndWrites,
@@ -88,7 +104,6 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         let (new_root, _tree_update) = jmt
             .put_value_set(batch, next_version)
             .expect("JMT update must succeed");
-
         Ok(new_root.0)
     }
 

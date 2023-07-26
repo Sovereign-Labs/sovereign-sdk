@@ -54,6 +54,7 @@ pub fn main() {
     let witness: ArrayWitness = guest.read_from_host();
     env::write(&"Witness read\n");
 
+    let start_cycles = env::get_cycle_count();
     demo.begin_slot(witness);
     env::write(&"Slot has begun\n");
     for blob in &mut blobs {
@@ -61,7 +62,9 @@ pub fn main() {
         env::write(&"Blob applied\n");
     }
     let (state_root, _) = demo.end_slot();
+
     env::write(&"Slot has ended\n");
+
 
     // Step 3: Verify tx list
     let verifier = CelestiaVerifier::new(jupiter::verifier::RollupParams {
@@ -70,13 +73,15 @@ pub fn main() {
     let validity_condition = verifier
         .verify_relevant_tx_list::<NoOpHasher>(&header, &blobs, inclusion_proof, completeness_proof)
         .expect("Transaction list must be correct");
+    let end_cycles = env::get_cycle_count();
     env::write(&"Relevant txs verified\n");
-
+    env::write(&format!("==================> total cycles used {}\n",end_cycles-start_cycles));
     let output = StateTransition {
         initial_state_root: prev_state_root_hash,
         final_state_root: state_root.0,
         validity_condition,
     };
     env::commit(&output);
+
     env::write(&"new state root committed\n");
 }

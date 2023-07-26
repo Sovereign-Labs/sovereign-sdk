@@ -25,6 +25,7 @@ impl RawTx {
     }
 }
 
+
 pub(crate) fn verify_txs_stateless<C: Context>(
     raw_txs: Vec<RawTx>,
 ) -> anyhow::Result<Vec<TransactionAndRawHash<C>>> {
@@ -34,7 +35,7 @@ pub(crate) fn verify_txs_stateless<C: Context>(
         let raw_tx_hash = raw_tx.hash::<C>();
         let mut data = Cursor::new(&raw_tx.data);
         let tx = Transaction::<C>::deserialize_reader(&mut data)?;
-        //tx.verify()?;
+        tx.verify()?;
         txs.push(TransactionAndRawHash { tx, raw_tx_hash });
     }
     Ok(txs)
