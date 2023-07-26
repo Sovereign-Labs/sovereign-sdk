@@ -378,11 +378,11 @@ pub fn sort_modules_by_dependencies<C: Context>(
 }
 
 /// Accepts Vec<> of tuples (&ModuleInfo, &TValue), and returns Vec<&TValue> sorted by mapped module dependencies
-pub fn sort_values_by_modules_dependencies<'a, C: Context, TValue>(
-    module_value_tuples: Vec<(&dyn ModuleInfo<Context = C>, &'a TValue)>,
-) -> Result<Vec<&'a TValue>, anyhow::Error>
+pub fn sort_values_by_modules_dependencies<C: Context, TValue>(
+    module_value_tuples: Vec<(&dyn ModuleInfo<Context = C>, TValue)>,
+) -> Result<Vec<TValue>, anyhow::Error>
 where
-    TValue: 'a,
+    TValue: Clone,
 {
     let sorted_modules = sort_modules_by_dependencies(
         module_value_tuples
@@ -399,7 +399,7 @@ where
 
     let mut sorted_values = Vec::new();
     for module in sorted_modules {
-        sorted_values.push(*value_map.get(module.address()).unwrap());
+        sorted_values.push(value_map.get(module.address()).unwrap().clone());
     }
 
     Ok(sorted_values)

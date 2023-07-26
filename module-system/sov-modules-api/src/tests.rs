@@ -164,12 +164,12 @@ fn test_sorting_modules() {
         module_b: module_b_c,
     };
 
-    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, &i32)> =
-        vec![(&module_b, &2), (&module_c, &3), (&module_a, &1)];
+    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, i32)> =
+        vec![(&module_b, 2), (&module_c, 3), (&module_a, 1)];
 
     let sorted_modules = crate::sort_values_by_modules_dependencies(modules).unwrap();
 
-    assert_eq!(vec![&1, &2, &3], sorted_modules);
+    assert_eq!(vec![1, 2, 3], sorted_modules);
 }
 
 #[test]
@@ -198,8 +198,8 @@ fn test_sorting_modules_missing_module() {
         module_b: module_b_c,
     };
 
-    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, &i32)> =
-        vec![(&module_b, &2), (&module_c, &3)];
+    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, i32)> =
+        vec![(&module_b, 2), (&module_c, 3)];
 
     let sorted_modules = crate::sort_values_by_modules_dependencies(modules);
 
