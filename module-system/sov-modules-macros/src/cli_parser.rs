@@ -1,4 +1,4 @@
-use quote::{format_ident, quote, ToTokens};
+use quote::{format_ident, quote};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{Data, DataEnum, DeriveInput, Fields, GenericParam, Ident, PathArguments, Type};
@@ -227,7 +227,9 @@ impl CliParserMacro {
     }
 }
 
-pub fn derive_cli_wallet_arg(ast: DeriveInput) -> Result<proc_macro::TokenStream, syn::Error> {
+pub(crate) fn derive_cli_wallet_arg(
+    ast: DeriveInput,
+) -> Result<proc_macro::TokenStream, syn::Error> {
     let item_name = &ast.ident;
     let generics = &ast.generics;
     let item_with_named_fields_ident = Ident::new(
@@ -254,7 +256,11 @@ pub fn derive_cli_wallet_arg(ast: DeriveInput) -> Result<proc_macro::TokenStream
                     .filter(|attr| attr.path.is_ident("doc"))
                     .collect::<Vec<_>>();
 
-                let named_variant_fields = build_named_fields_with_docs(&variant.fields);
+                let mut named_variant_fields =
+                    StructFieldExtractor::get_or_generate_named_fields(&variant.fields);
+                named_variant_fields
+                    .iter_mut()
+                    .for_each(|field| field.filter_attrs(|attr| attr.path.is_ident("doc")));
                 let variant_field_names = named_variant_fields
                     .iter()
                     .map(|f| &f.ident)
@@ -306,7 +312,10 @@ pub fn derive_cli_wallet_arg(ast: DeriveInput) -> Result<proc_macro::TokenStream
             (enum_defn, from_body)
         }
         Data::Struct(s) => {
-            let named_fields = build_named_fields_with_docs(&s.fields);
+            let mut named_fields = StructFieldExtractor::get_or_generate_named_fields(&s.fields);
+            named_fields
+                .iter_mut()
+                .for_each(|field| field.filter_attrs(|attr| attr.path.is_ident("doc")));
             let field_names = named_fields.iter().map(|f| &f.ident).collect::<Vec<_>>();
             let conversion_logic = match s.fields {
                 Fields::Named(_) => quote! {{
@@ -364,68 +373,4 @@ pub fn derive_cli_wallet_arg(ast: DeriveInput) -> Result<proc_macro::TokenStream
         }
     };
     Ok(expanded.into())
-}
-
-/// A struct or enum field with a name and type
-pub struct NamedFieldWithDocs {
-    pub docs: Vec<syn::Attribute>,
-    pub vis: syn::Visibility,
-    pub ident: Ident,
-    pub ty: Type,
-}
-
-impl ToTokens for NamedFieldWithDocs {
-    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
-        let docs = &self.docs;
-        let vis = &self.vis;
-        let ident = &self.ident;
-        let ty = &self.ty;
-        tokens.extend(quote! {
-            #( #docs )*
-            #vis #ident: #ty
-        });
-    }
-}
-
-fn build_named_fields_with_docs(fields: &Fields) -> Vec<NamedFieldWithDocs> {
-    match fields {
-        Fields::Unnamed(unnamed_fields) => unnamed_fields
-            .unnamed
-            .iter()
-            .enumerate()
-            .map(|(i, field)| {
-                let ident = Ident::new(&format!("field{}", i), field.span());
-                let ty = &field.ty;
-                NamedFieldWithDocs {
-                    docs: get_doc_attrs(field),
-                    vis: field.vis.clone(),
-                    ident,
-                    ty: ty.clone(),
-                }
-            })
-            .collect::<Vec<_>>(),
-        Fields::Named(fields_named) => fields_named
-            .named
-            .iter()
-            .map(|field| {
-                let ty = &field.ty;
-                NamedFieldWithDocs {
-                    docs: get_doc_attrs(field),
-                    vis: field.vis.clone(),
-                    ident: field.ident.clone().expect("Named fields must have names!"),
-                    ty: ty.clone(),
-                }
-            })
-            .collect::<Vec<_>>(),
-        Fields::Unit => Vec::new(),
-    }
-}
-
-fn get_doc_attrs(field: &syn::Field) -> Vec<syn::Attribute> {
-    field
-        .attrs
-        .iter()
-        .filter(|attr| attr.path.is_ident("doc"))
-        .cloned()
-        .collect::<Vec<_>>()
 }

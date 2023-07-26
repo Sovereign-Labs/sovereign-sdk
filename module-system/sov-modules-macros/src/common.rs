@@ -3,8 +3,9 @@ use std::collections::HashMap;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, ToTokens};
 use syn::punctuated::Punctuated;
+use syn::spanned::Spanned;
 use syn::{
-    DataStruct, GenericParam, Generics, ImplGenerics, Meta, PathSegment, TypeGenerics,
+    DataStruct, Fields, GenericParam, Generics, ImplGenerics, Meta, PathSegment, TypeGenerics,
     TypeParamBound, TypePath, WhereClause, WherePredicate,
 };
 
@@ -13,6 +14,29 @@ pub(crate) struct StructNamedField {
     pub(crate) ident: proc_macro2::Ident,
     pub(crate) ty: syn::Type,
     pub(crate) attrs: Vec<syn::Attribute>,
+    pub(crate) vis: syn::Visibility,
+}
+
+impl StructNamedField {
+    pub(crate) fn filter_attrs(&mut self, filter: impl FnMut(&syn::Attribute) -> bool) {
+        self.attrs = std::mem::take(&mut self.attrs)
+            .into_iter()
+            .filter(filter)
+            .collect();
+    }
+}
+
+impl ToTokens for StructNamedField {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let docs = &self.attrs;
+        let vis = &self.vis;
+        let ident = &self.ident;
+        let ty = &self.ty;
+        tokens.extend(quote::quote! {
+            #( #docs )*
+            #vis #ident: #ty
+        });
+    }
 }
 
 pub(crate) struct StructFieldExtractor {
@@ -42,6 +66,42 @@ impl StructFieldExtractor {
         }
     }
 
+    /// Extract the named fields from a struct, or generate named fields matching the fields of an unnamed struct.
+    /// Names follow the pattern `field0`, `field1`, etc.
+    pub(crate) fn get_or_generate_named_fields(fields: &Fields) -> Vec<StructNamedField> {
+        match fields {
+            Fields::Unnamed(unnamed_fields) => unnamed_fields
+                .unnamed
+                .iter()
+                .enumerate()
+                .map(|(i, field)| {
+                    let ident = Ident::new(&format!("field{}", i), field.span());
+                    let ty = &field.ty;
+                    StructNamedField {
+                        attrs: field.attrs.clone(),
+                        vis: field.vis.clone(),
+                        ident,
+                        ty: ty.clone(),
+                    }
+                })
+                .collect::<Vec<_>>(),
+            Fields::Named(fields_named) => fields_named
+                .named
+                .iter()
+                .map(|field| {
+                    let ty = &field.ty;
+                    StructNamedField {
+                        attrs: field.attrs.clone(),
+                        vis: field.vis.clone(),
+                        ident: field.ident.clone().expect("Named fields must have names!"),
+                        ty: ty.clone(),
+                    }
+                })
+                .collect::<Vec<_>>(),
+            Fields::Unit => Vec::new(),
+        }
+    }
+
     fn get_fields_from_data_struct(
         &self,
         data_struct: &DataStruct,
@@ -64,6 +124,7 @@ impl StructFieldExtractor {
                 ident: field_ident.clone(),
                 ty: original_field.ty.clone(),
                 attrs: original_field.attrs.clone(),
+                vis: original_field.vis.clone(),
             };
 
             output_fields.push(field);
@@ -157,7 +218,10 @@ pub(crate) fn get_generics_type_param(
     Ok(generic_param.clone())
 }
 
-pub fn get_attribute_values(item: &syn::DeriveInput, attribute_name: &str) -> Vec<TokenStream> {
+pub(crate) fn get_attribute_values(
+    item: &syn::DeriveInput,
+    attribute_name: &str,
+) -> Vec<TokenStream> {
     let mut values = vec![];
 
     // Find the attribute with the given name on the root item
@@ -178,7 +242,9 @@ pub fn get_attribute_values(item: &syn::DeriveInput, attribute_name: &str) -> Ve
     values
 }
 
-pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStream>, syn::Error> {
+pub(crate) fn get_serialization_attrs(
+    item: &syn::DeriveInput,
+) -> Result<Vec<TokenStream>, syn::Error> {
     const SERIALIZE: &str = "Serialize";
     const DESERIALIZE: &str = "Deserialize";
 
@@ -240,7 +306,7 @@ pub fn get_serialization_attrs(item: &syn::DeriveInput) -> Result<Vec<TokenStrea
 /// let our_bounds = extract_generic_type_bounds(&test_struct.generics);
 /// assert_eq!(our_bounds.get(T), Some(&desired_bounds_for_t.bounds));
 /// ```
-pub fn extract_generic_type_bounds(
+pub(crate) fn extract_generic_type_bounds(
     generics: &Generics,
 ) -> HashMap<TypePath, Punctuated<TypeParamBound, syn::token::Add>> {
     let mut generics_with_bounds: HashMap<_, _> = Default::default();

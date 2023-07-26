@@ -293,7 +293,6 @@ pub async fn main() -> Result<(), anyhow::Error> {
                 let mut hex_string = String::new();
                 file.read_to_string(&mut hex_string)
                     .context("Unable to read the file")?;
-                // push it into data_list
                 hex_encoded_txs.push(hex_string);
             }
 
