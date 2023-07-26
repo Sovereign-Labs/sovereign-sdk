@@ -295,7 +295,7 @@ pub async fn main() {
                     }),
                 );
                 let token_address =
-                    sov_bank::create_token_address::<C>(&token_name, sender_address.as_ref(), salt);
+                    sov_bank::get_token_address::<C>(&token_name, sender_address.as_ref(), salt);
                 println!("{}", token_address);
             }
 
@@ -366,12 +366,15 @@ mod test {
         let tempdir = tempfile::tempdir().unwrap();
         let mut test_demo = TestDemo::with_path(tempdir.path().to_path_buf());
         let test_tx = serialize_call(&Commands::SerializeCall {
-            sender_priv_key_path: make_test_path("token_deployer_private_key.json")
+            sender_priv_key_path: make_test_path("keys/token_deployer_private_key.json")
                 .to_str()
                 .unwrap()
                 .into(),
             module_name: "Bank".into(),
-            call_data_path: make_test_path("create_token.json").to_str().unwrap().into(),
+            call_data_path: make_test_path("requests/create_token.json")
+                .to_str()
+                .unwrap()
+                .into(),
             nonce: 0,
         });
 
@@ -431,9 +434,8 @@ mod test {
 
     fn make_test_path<P: AsRef<Path>>(path: P) -> PathBuf {
         let mut sender_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        sender_path.push("src");
-        sender_path.push("sov-cli");
-        sender_path.push("test_data");
+        sender_path.push("..");
+        sender_path.push("test-data");
 
         sender_path.push(path);
 
@@ -442,25 +444,25 @@ mod test {
 
     fn read_test_data() -> TestData {
         let create_token = SerializedTx::new(
-            make_test_path("token_deployer_private_key.json"),
+            make_test_path("keys/token_deployer_private_key.json"),
             "Bank",
-            make_test_path("create_token.json"),
+            make_test_path("requests/create_token.json"),
             0,
         )
         .unwrap();
 
         let transfer = SerializedTx::new(
-            make_test_path("minter_private_key.json"),
+            make_test_path("keys/minter_private_key.json"),
             "Bank",
-            make_test_path("transfer.json"),
+            make_test_path("requests/transfer.json"),
             0,
         )
         .unwrap();
 
         let burn = SerializedTx::new(
-            make_test_path("minter_private_key.json"),
+            make_test_path("keys/minter_private_key.json"),
             "Bank",
-            make_test_path("burn.json"),
+            make_test_path("requests/burn.json"),
             1,
         )
         .unwrap();
@@ -510,6 +512,6 @@ mod test {
     }
 
     fn create_token_address(token_deployer_address: &Address) -> Address {
-        sov_bank::create_token_address::<C>("sov-test-token", token_deployer_address.as_ref(), 11)
+        sov_bank::get_token_address::<C>("sov-test-token", token_deployer_address.as_ref(), 11)
     }
 }

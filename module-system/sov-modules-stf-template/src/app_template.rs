@@ -5,7 +5,6 @@ use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
 use sov_modules_api::{Context, DispatchCall, Genesis};
 use sov_rollup_interface::da::{BlobTransactionTrait, CountedBufReader};
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
-use sov_rollup_interface::traits::BatchTrait;
 use sov_rollup_interface::Buf;
 use sov_state::StateCheckpoint;
 use tracing::{debug, error};
@@ -255,11 +254,9 @@ where
         match Batch::deserialize_reader(blob_data) {
             Ok(batch) => Ok(batch),
             Err(e) => {
-                let data_so_far = blob_data.acc();
                 error!(
-                    "Unable to deserialize batch provided by the sequencer {}: 0x{}",
-                    e,
-                    hex::encode(data_so_far),
+                    "Unable to deserialize batch provided by the sequencer {}",
+                    e
                 );
                 Err(SlashingReason::InvalidBatchEncoding)
             }

@@ -7,7 +7,7 @@ pub use batch::Batch;
 use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
 use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
 use sov_rollup_interface::stf::{BatchReceipt, StateTransitionFunction};
-use sov_rollup_interface::zk::traits::Zkvm;
+use sov_rollup_interface::zk::Zkvm;
 use sov_state::{StateCheckpoint, Storage};
 pub use tx_verifier::RawTx;
 

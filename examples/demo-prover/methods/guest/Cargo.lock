@@ -1045,8 +1045,6 @@ checksum = "453ad9f582a441959e5f0d088b02ce04cfe8d51a8eaf077f12ac6d3e94164ca6"
 [[package]]
 name = "jmt"
 version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1a302f0defd323b833c9848c20ab40c3156128f50d7bf8eebeed2ef58167258"
 dependencies = [
  "anyhow",
  "borsh",
@@ -1057,10 +1055,12 @@ dependencies = [
  "mirai-annotations",
  "num-derive",
  "num-traits",
+ "risc0-zkvm",
  "serde",
  "sha2 0.10.6",
  "thiserror",
  "tracing",
+ "zk-cycle-utils",
 ]
 
 [[package]]

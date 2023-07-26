@@ -2,10 +2,10 @@ use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::crypto::SimpleHasher;
 use sov_rollup_interface::da::{
-    self, BlobTransactionTrait, BlockHashTrait as BlockHash, CountedBufReader, DaSpec,
+    self, BlobTransactionTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, CountedBufReader,
+    DaSpec,
 };
-use sov_rollup_interface::traits::{BlockHeaderTrait, CanonicalHash};
-use sov_rollup_interface::zk::traits::ValidityCondition;
+use sov_rollup_interface::zk::ValidityCondition;
 use sov_rollup_interface::Buf;
 use thiserror::Error;
 

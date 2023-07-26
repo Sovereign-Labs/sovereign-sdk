@@ -26,8 +26,7 @@ fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
         AddressBech32::try_from(sender_address)
             .unwrap_or_else(|_e| panic!("Failed generating transfers")),
     );
-    let token_address =
-        sov_bank::create_token_address::<DefaultContext>(token_name, sa.as_ref(), 11);
+    let token_address = sov_bank::get_token_address::<DefaultContext>(token_name, sa.as_ref(), 11);
     let mut message_vec = vec![];
     for i in 1..(n + 1) {
         let priv_key = DefaultPrivateKey::generate();
