@@ -11,7 +11,7 @@ mod module_call_json_schema;
 mod module_info;
 mod rpc;
 
-use cli_parser::CliParserMacro;
+use cli_parser::{derive_cli_wallet_arg, CliParserMacro};
 use default_runtime::DefaultRuntimeMacro;
 use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
@@ -19,7 +19,7 @@ use dispatch::message_codec::MessageCodec;
 use module_call_json_schema::derive_module_call_json_schema;
 use proc_macro::TokenStream;
 use rpc::ExposeRpcMacro;
-use syn::parse_macro_input;
+use syn::{parse_macro_input, DeriveInput};
 
 /// Derives the [`ModuleInfo`](trait.ModuleInfo.html) trait for the underlying `struct`.
 ///
@@ -244,23 +244,84 @@ pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
 ///
 /// ## Examples
 /// ```
-/// use sov_modules_api::{Context, DispatchCall};
+/// use sov_modules_api::{Context, DispatchCall, MessageCodec};
 /// use sov_modules_api::default_context::DefaultContext;
-/// use sov_modules_api::macros::{MessageCodec, cli_parser};
+/// use sov_modules_api::macros::CliWallet;
 ///
-/// #[derive(DispatchCall, MessageCodec)]
+/// #[derive(DispatchCall, MessageCodec, CliWallet)]
 /// #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-/// #[cli_parser(DefaultContext)]
 /// pub struct Runtime<C: Context> {
 ///     pub bank: sov_bank::Bank<C>,
 ///     // ...
 /// }
 /// ```
-#[proc_macro_attribute]
-pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
-    let context_type = parse_macro_input!(attr);
+#[proc_macro_derive(CliWallet, attributes(cli_skip))]
+pub fn cli_parser(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
     let cli_parser = CliParserMacro::new("Cmd");
+    handle_macro_error(cli_parser.cli_macro(input))
+}
 
-    handle_macro_error(cli_parser.cli_parser(input, context_type))
+/// Implement [`sov_modules_api::CliWalletArg`] for the annotated struct or enum. Unions are not supported.
+///
+/// Under the hood, this macro generates a new struct or enum which derives the [`clap::Parser`] trait, and then implements the
+/// [`sov_modules_api::CliWalletArg`] trait where the `CliStringRepr` type is the new struct or enum.
+///
+/// As an implementation detail, `clap` requires that all types have named fields - so this macro auto generates an appropriate
+/// `clap`-compatible type from the annotated item. Tor example, the struct `MyStruct(u64, u64)` would be transformed into
+/// `MyStructWithNamedFields { field0: u64, field1: u64 }`.
+///
+/// ## Example
+///
+/// This code..
+/// ```rust
+/// use sov_modules_api::macros::CliWalletArg;
+/// #[derive(CliWalletArg, Clone)]
+/// pub enum MyEnum {
+///    /// A number
+///    Number(u32),
+///    /// A hash
+///    Hash { hash: String },
+/// }
+/// ```
+///
+/// ...expands into the following code:
+/// ```rust,ignore
+/// // The original enum definition is left in its original place
+/// pub enum MyEnum {
+///    /// A number
+///    Number(u32),
+///    /// A hash
+///    Hash { hash: String },
+/// }
+///
+/// // We generate a new enum with named fields which can derive `clap::Parser`.
+/// // Since this variant is only ever converted back to the original, we
+/// // don't carry over any of the original derives. However, we do preserve
+/// // doc comments from the original version so that `clap` can display them.
+/// #[derive(::clap::Parser)]
+/// pub enum MyEnumWithNamedFields {
+///    /// A number
+///    Number { field0: u32 } ,
+///    /// A hash
+///    Hash { hash: String },
+/// }
+/// // We generate a `From` impl to convert between the types.
+/// impl From<MyEnumWithNamedFields> for MyEnum {
+///    fn from(item: MyEnumWithNamedFields) -> Self {
+///       match item {
+///         Number { field0 } => MyEnum::Number(field0),
+///         Hash { hash } => MyEnum::Hash { hash },
+///       }
+///    }
+/// }
+///
+/// impl sov_modules_api::CliWalletArg for MyEnum {
+///     type CliStringRepr = MyEnumWithNamedFields;
+/// }
+/// ```
+#[proc_macro_derive(CliWalletArg)]
+pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
+    let input: DeriveInput = parse_macro_input!(input);
+    handle_macro_error(derive_cli_wallet_arg(input))
 }
