@@ -306,14 +306,14 @@ struct ModuleVisitor<'a, C: Context> {
     sorted_modules: std::vec::Vec<&'a dyn ModuleInfo<Context = C>>,
 }
 
-impl<'a, C: Context> ModuleVisitor<'a, C>{
+impl<'a, C: Context> ModuleVisitor<'a, C> {
     fn visit_module(
-        &mut self, 
+        &mut self,
         module: &'a dyn ModuleInfo<Context = C>,
         module_map: &HashMap<&<C as Spec>::Address, &'a (dyn ModuleInfo<Context = C>)>,
     ) -> Result<(), anyhow::Error> {
         let address = module.address();
-        
+
         // if the module hasn't been visited yet, visit it and its dependencies
         if self.visited.insert(address.clone()) {
             for dependency_address in module.dependencies() {
@@ -322,10 +322,10 @@ impl<'a, C: Context> ModuleVisitor<'a, C>{
                 })?;
                 self.visit_module(dependency_module, module_map)?;
             }
-    
+
             self.sorted_modules.push(module);
         }
-    
+
         Ok(())
     }
 }
@@ -343,7 +343,7 @@ pub fn sort_modules_by_dependencies<C: Context>(
     let mut module_visitor = ModuleVisitor::<C> {
         visited: HashSet::new(),
         sorted_modules: Vec::new(),
-    };    
+    };
 
     for module in modules {
         module_visitor.visit_module(module, &module_map)?;
@@ -359,8 +359,12 @@ pub fn sort_values_by_modules_dependencies<'a, C: Context, TValue>(
 where
     TValue: 'a,
 {
-    let sorted_modules =
-        sort_modules_by_dependencies(module_value_tuples.iter().map(|(module, _)| *module).collect())?;
+    let sorted_modules = sort_modules_by_dependencies(
+        module_value_tuples
+            .iter()
+            .map(|(module, _)| *module)
+            .collect(),
+    )?;
 
     let mut value_map = HashMap::new();
 
