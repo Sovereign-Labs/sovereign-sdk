@@ -350,8 +350,12 @@ pub fn sort_values_by_modules_dependencies<'a, C: Context, TValue>(
 where
     TValue: 'a,
 {
-    let sorted_modules =
-        sort_modules_by_dependencies(module_value_tuples.iter().map(|(module, _)| *module).collect())?;
+    let sorted_modules = sort_modules_by_dependencies(
+        module_value_tuples
+            .iter()
+            .map(|(module, _)| *module)
+            .collect(),
+    )?;
 
     let mut value_map = HashMap::new();
 
