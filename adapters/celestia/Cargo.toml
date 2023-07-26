@@ -12,7 +12,7 @@ bech32 = { workspace = true }
 prost = "0.11"
 prost-types = "0.11"
 tendermint = "0.32"
-tendermint-proto = "0.32"
+tendermint-proto = "0.33"
 
 # Convenience
 async-trait = { workspace = true }
