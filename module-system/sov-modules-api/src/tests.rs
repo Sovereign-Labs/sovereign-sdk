@@ -46,11 +46,12 @@ fn test_hex_conversion() {
     assert_eq!(priv_key.pub_key(), deserialized_pub_key)
 }
 
-struct ModuleA {
+struct Module {
     address: Address,
+    dependencies: Vec<Address>,
 }
 
-impl crate::ModuleInfo for ModuleA {
+impl crate::ModuleInfo for Module {
     type Context = DefaultContext;
 
     fn address(&self) -> &<Self::Context as crate::Spec>::Address {
@@ -58,77 +59,7 @@ impl crate::ModuleInfo for ModuleA {
     }
 
     fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {
-        vec![]
-    }
-}
-
-struct ModuleB {
-    address: Address,
-    module_a_address: Address,
-}
-
-impl crate::ModuleInfo for ModuleB {
-    type Context = DefaultContext;
-
-    fn address(&self) -> &<Self::Context as crate::Spec>::Address {
-        &self.address
-    }
-
-    fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {
-        vec![&self.module_a_address]
-    }
-}
-
-struct ModuleC {
-    address: Address,
-    module_a_address: Address,
-    module_b_address: Address,
-}
-
-impl crate::ModuleInfo for ModuleC {
-    type Context = DefaultContext;
-
-    fn address(&self) -> &<Self::Context as crate::Spec>::Address {
-        &self.address
-    }
-
-    fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {
-        vec![&self.module_a_address, &self.module_b_address]
-    }
-}
-
-struct ModuleD {
-    address: Address,
-    module_e_address: Address,
-}
-
-impl crate::ModuleInfo for ModuleD {
-    type Context = DefaultContext;
-
-    fn address(&self) -> &<Self::Context as crate::Spec>::Address {
-        &self.address
-    }
-
-    fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {
-        vec![&self.module_e_address]
-    }
-}
-
-struct ModuleE {
-    address: Address,
-    module_a_address: Address,
-    module_d_address: Address,
-}
-
-impl crate::ModuleInfo for ModuleE {
-    type Context = DefaultContext;
-
-    fn address(&self) -> &<Self::Context as crate::Spec>::Address {
-        &self.address
-    }
-
-    fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {
-        vec![&self.module_d_address, &self.module_a_address]
+        self.dependencies.iter().collect()
     }
 }
 
@@ -138,17 +69,17 @@ fn test_sorting_modules() {
     let module_b_address = Address::from([2; 32]);
     let module_c_address = Address::from([3; 32]);
 
-    let module_a = ModuleA {
+    let module_a = Module {
         address: module_a_address.clone(),
+        dependencies: vec![],
     };
-    let module_b = ModuleB {
+    let module_b = Module {
         address: module_b_address.clone(),
-        module_a_address: module_a_address.clone(),
+        dependencies: vec![module_a_address.clone()],
     };
-    let module_c = ModuleC {
+    let module_c = Module {
         address: module_c_address.clone(),
-        module_a_address: module_a_address.clone(),
-        module_b_address: module_b_address.clone(),
+        dependencies: vec![module_a_address.clone(), module_b_address.clone()],
     };
 
     let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, i32)> =
@@ -165,14 +96,13 @@ fn test_sorting_modules_missing_module() {
     let module_b_address = Address::from([2; 32]);
     let module_c_address = Address::from([3; 32]);
 
-    let module_b = ModuleB {
+    let module_b = Module {
         address: module_b_address.clone(),
-        module_a_address: module_a_address.clone(),
+        dependencies: vec![module_a_address.clone()],
     };
-    let module_c = ModuleC {
+    let module_c = Module {
         address: module_c_address.clone(),
-        module_a_address: module_a_address.clone(),
-        module_b_address: module_b_address.clone(),
+        dependencies: vec![module_a_address.clone(), module_b_address.clone()],
     };
 
     let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, i32)> =
@@ -192,21 +122,21 @@ fn test_sorting_modules_cycle() {
     let module_d_address = Address::from([4; 32]);
     let module_e_address = Address::from([5; 32]);
 
-    let module_a = ModuleA {
+    let module_a = Module {
         address: module_a_address.clone(),
+        dependencies: vec![],
     };
-    let module_b = ModuleB {
+    let module_b = Module {
         address: module_b_address.clone(),
-        module_a_address: module_a_address.clone(),
+        dependencies: vec![module_a_address.clone()],
     };
-    let module_d = ModuleD {
+    let module_d = Module {
         address: module_d_address.clone(),
-        module_e_address: module_e_address.clone(),
+        dependencies: vec![module_e_address.clone()],
     };
-    let module_e = ModuleE {
+    let module_e = Module {
         address: module_e_address.clone(),
-        module_a_address: module_a_address.clone(),
-        module_d_address: module_d_address.clone(),
+        dependencies: vec![module_a_address.clone(), module_d_address.clone()],
     };
 
     let modules: Vec<&dyn ModuleInfo<Context = DefaultContext>> =
@@ -216,5 +146,5 @@ fn test_sorting_modules_cycle() {
 
     assert!(sorted_modules.is_err());
     let error_string = sorted_modules.err().unwrap().to_string();
-    assert_eq!("Cyclic dependency of length 2 detected: {AddressBech32 { value: \"sov1q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zskwvj87\" }, AddressBech32 { value: \"sov1qszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqnu4g3u\" }}", error_string);
+    assert_eq!("Cyclic dependency of length 2 detected: [AddressBech32 { value: \"sov1qszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqnu4g3u\" }, AddressBech32 { value: \"sov1q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zskwvj87\" }]", error_string);
 }

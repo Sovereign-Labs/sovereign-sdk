@@ -319,7 +319,7 @@ pub trait RpcRunner {
 
 struct ModuleVisitor<'a, C: Context> {
     visited: HashSet<&'a <C as Spec>::Address>,
-    visited_on_this_path: HashSet<&'a <C as Spec>::Address>,
+    visited_on_this_path: Vec<&'a <C as Spec>::Address>,
     sorted_modules: std::vec::Vec<&'a dyn ModuleInfo<Context = C>>,
 }
 
@@ -328,7 +328,7 @@ impl<'a, C: Context> ModuleVisitor<'a, C> {
         Self {
             visited: HashSet::new(),
             sorted_modules: Vec::new(),
-            visited_on_this_path: HashSet::new(),
+            visited_on_this_path: Vec::new(),
         }
     }
 
@@ -360,12 +360,21 @@ impl<'a, C: Context> ModuleVisitor<'a, C> {
         let address = module.address();
 
         // if the module have been visited on this path, then we have a cycle dependency
-        if !self.visited_on_this_path.insert(address) {
+        if let Some((index, _)) = self
+            .visited_on_this_path
+            .iter()
+            .enumerate()
+            .find(|(_, &x)| x == address)
+        {
+            let cycle = &self.visited_on_this_path[index..];
+
             anyhow::bail!(
                 "Cyclic dependency of length {} detected: {:?}",
-                self.visited_on_this_path.len(),
-                self.visited_on_this_path
+                cycle.len(),
+                cycle
             );
+        } else {
+            self.visited_on_this_path.push(address)
         }
 
         // if the module hasn't been visited yet, visit it and its dependencies
@@ -379,6 +388,9 @@ impl<'a, C: Context> ModuleVisitor<'a, C> {
 
             self.sorted_modules.push(module);
         }
+
+        // remove the module from the visited_on_this_path list
+        self.visited_on_this_path.pop();
 
         Ok(())
     }
