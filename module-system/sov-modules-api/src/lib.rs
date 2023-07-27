@@ -1,4 +1,4 @@
-// #![feature(associated_type_defaults)]
+#![feature(associated_type_defaults)]
 
 mod bech32;
 pub mod default_context;
@@ -228,7 +228,7 @@ pub trait Spec {
 /// Context objects also implement the [`Spec`] trait, which specifies the types to be used in this
 /// instance of the state transition function. By making modules generic over a `Context`, developers
 /// can easily update their cryptography to conform to the needs of different zk-proof systems.
-pub trait Context: Send + Sync + Spec + Clone + Debug + PartialEq + 'static {
+pub trait Context: Spec + Clone + Debug + PartialEq + 'static {
     /// Sender of the transaction.
     fn sender(&self) -> &Self::Address;
 
@@ -263,7 +263,7 @@ pub trait Module {
     type Config;
 
     /// Module defined argument to the call method.
-    type CallMessage: Debug + BorshSerialize + BorshDeserialize;
+    type CallMessage: Debug + BorshSerialize + BorshDeserialize = NonInstantiable;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(
