@@ -88,9 +88,18 @@ ethers-providers = "2.0.8"
 ethers-signers = { version = "2.0.8", default-features = false }
 ethers-middleware = "2.0.8"
 
+
 reth-primitives = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
+
+revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
+revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
+
+
 
 # TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/498
 anvil = { git = "https://github.com/foundry-rs/foundry", rev = "684d394db587bef427475a660c72013e97ef71d2" }
 anvil-core = { git = "https://github.com/foundry-rs/foundry", features = ["fastrlp", "serde"], rev = "684d394db587bef427475a660c72013e97ef71d2" }
 
+[patch.crates-io]
+revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
+revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
