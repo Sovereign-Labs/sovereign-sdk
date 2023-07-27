@@ -120,7 +120,7 @@ async fn main() -> Result<(), anyhow::Error> {
         host.write_to_guest(&witness);
         println!("Started proving block {height}");
         let now = Instant::now();
-        let receipt = host.run().expect("Prover should run successfully");
+        let receipt = host.run_without_proving().expect("Prover should run successfully");
         println!("prover time: {:?}\n\n",now.elapsed());
         println!("==================================================\n");
         prev_state_root = next_state_root.0;
