@@ -179,7 +179,7 @@ impl From<EthTransactionRequest> for EvmTransaction {
 
 impl From<TxEip1559> for EvmTransaction {
     fn from(transaction: TxEip1559) -> Self {
-        let to = transaction.to.to().map(|addr| (*addr).into());
+        let to = transaction.to.to().map(|addr| addr.into());
 
         Self {
             sender: todo!(),
