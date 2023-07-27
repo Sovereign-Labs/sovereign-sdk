@@ -153,7 +153,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // so we use that to initialize the RPC server.
     let storage = demo_runner.get_storage();
     let is_storage_empty = storage.is_empty();
-    let mut methods = get_rpc_methods(storage);
+    let mut methods = get_rpc_methods::<DefaultContext>(storage);
     let ledger_rpc_module =
         ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db.clone());
     methods
