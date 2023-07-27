@@ -1,7 +1,6 @@
 //! Procedural macros to assist in the creation of Sovereign modules.
 
 #![deny(missing_docs)]
-#![feature(log_syntax)]
 
 mod cli_parser;
 mod common;
@@ -217,8 +216,9 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// ```
 #[proc_macro_attribute]
 pub fn rpc_gen(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let attr: Vec<syn::NestedMeta> = parse_macro_input!(attr);
     let input = parse_macro_input!(item as syn::ItemImpl);
-    handle_macro_error(rpc::rpc_gen(attr.into(), input).map(|ok| ok.into()))
+    handle_macro_error(rpc::rpc_gen(attr, input).map(|ok| ok.into()))
 }
 
 fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> TokenStream {
@@ -231,13 +231,11 @@ fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> To
 /// This proc macro generates the actual implementations for the trait created above for the module
 /// It iterates over each struct
 #[proc_macro_attribute]
-pub fn expose_rpc(attr: TokenStream, input: TokenStream) -> TokenStream {
-    let context_type = parse_macro_input!(attr);
-
+pub fn expose_rpc(_attr: TokenStream, input: TokenStream) -> TokenStream {
     let original = input.clone();
     let input = parse_macro_input!(input);
     let expose_macro = ExposeRpcMacro::new("Expose");
-    handle_macro_error(expose_macro.generate_rpc(original, input, context_type))
+    handle_macro_error(expose_macro.generate_rpc(original, input))
 }
 
 /// Generates a CLI arguments parser for the specified runtime.
