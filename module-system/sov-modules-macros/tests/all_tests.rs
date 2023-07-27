@@ -25,3 +25,13 @@ fn rpc_tests() {
     let t = trybuild::TestCases::new();
     t.pass("tests/derive_rpc.rs");
 }
+
+#[test]
+fn cli_wallet_arg_tests() {
+    let t: trybuild::TestCases = trybuild::TestCases::new();
+    t.pass("tests/cli_wallet_arg/derive_enum_named_fields.rs");
+    t.pass("tests/cli_wallet_arg/derive_struct_unnamed_fields.rs");
+    t.pass("tests/cli_wallet_arg/derive_struct_named_fields.rs");
+    t.pass("tests/cli_wallet_arg/derive_enum_mixed_fields.rs");
+    t.pass("tests/cli_wallet_arg/derive_enum_unnamed_fields.rs");
+}

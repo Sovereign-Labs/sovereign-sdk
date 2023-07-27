@@ -9,15 +9,24 @@ use crate::rocks_db_config::gen_rocksdb_options;
 use crate::schema::tables::{JmtNodes, JmtValues, KeyHashToKey, STATE_TABLES};
 use crate::schema::types::StateKey;
 
+/// A typed wrapper around RocksDB for storing rollup state. Internally,
+/// this is roughly just an `Arc<SchemaDB>`.
+///
+/// StateDB implements several convenience functions for state storage -
+/// notably the `TreeReader` and `TreeWriter` traits.
 #[derive(Clone)]
 pub struct StateDB {
+    /// The underlying RocksDB instance, wrapped in an [`Arc`] for convenience and [`SchemaDB`] for type safety
     db: Arc<DB>,
+    /// The [`Version`] that will be used for the next batch of writes to the DB.
     next_version: Arc<Mutex<Version>>,
 }
 
 const STATE_DB_PATH_SUFFIX: &str = "state";
 
 impl StateDB {
+    /// Open a [`StateDB`] (backed by RocksDB) at the specified path.
+    /// The returned instance will be at the path `{path}/state-db`.
     pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
         let path = path.as_ref().join(STATE_DB_PATH_SUFFIX);
         let inner = DB::open(
@@ -35,10 +44,13 @@ impl StateDB {
         })
     }
 
+    /// Put the preimage of a hashed key into the database. Note that the preimage is not checked for correctness,
+    /// since the DB is unaware of the hash function used by the JMT.
     pub fn put_preimage(&self, key_hash: KeyHash, key: &Vec<u8>) -> Result<(), anyhow::Error> {
         self.db.put::<KeyHashToKey>(&key_hash.0, key)
     }
 
+    /// Get an optional value from the database, given a version and a key hash.
     pub fn get_value_option_by_key(
         &self,
         version: Version,
@@ -62,6 +74,7 @@ impl StateDB {
         }
     }
 
+    /// Store an item in the database, given a key, a key hash, a version, and a value
     pub fn update_db(
         &self,
         key: StateKey,
@@ -74,11 +87,13 @@ impl StateDB {
         Ok(())
     }
 
+    /// Increment the `next_version` counter by 1.
     pub fn inc_next_version(&self) {
         let mut version = self.next_version.lock().unwrap();
         *version += 1;
     }
 
+    /// Get the current value of the `next_version` counter
     pub fn get_next_version(&self) -> Version {
         let version = self.next_version.lock().unwrap();
         *version

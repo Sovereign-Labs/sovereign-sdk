@@ -11,7 +11,7 @@ use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
-use sov_modules_api::macros::{cli_parser, expose_rpc};
+use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
@@ -54,11 +54,7 @@ use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
 /// instead of going through the DA layer.
 
 #[cfg(not(feature = "experimental"))]
-#[cfg_attr(
-    feature = "native",
-    cli_parser(DefaultContext),
-    expose_rpc(DefaultContext)
-)]
+#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc(DefaultContext))]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
@@ -70,11 +66,7 @@ pub struct Runtime<C: Context> {
 }
 
 #[cfg(feature = "experimental")]
-#[cfg_attr(
-    feature = "native",
-    cli_parser(DefaultContext),
-    expose_rpc(DefaultContext)
-)]
+#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc(DefaultContext))]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct Runtime<C: Context> {
@@ -83,5 +75,6 @@ pub struct Runtime<C: Context> {
     pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
+    #[cfg_attr(feature = "native", cli_skip)]
     pub evm: sov_evm::Evm<C>,
 }

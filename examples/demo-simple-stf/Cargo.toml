@@ -12,6 +12,7 @@ publish = false
 anyhow = { workspace = true}
 serde = { workspace = true }
 sha2 = { workspace = true }
+hex = { workspace = true }
 
 sov-rollup-interface = { path = "../../rollup-interface" }
 
