@@ -78,8 +78,8 @@ fn test_sorting_modules() {
         dependencies: vec![module_a_address.clone()],
     };
     let module_c = Module {
-        address: module_c_address.clone(),
-        dependencies: vec![module_a_address.clone(), module_b_address.clone()],
+        address: module_c_address,
+        dependencies: vec![module_a_address, module_b_address],
     };
 
     let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, i32)> =
@@ -101,8 +101,8 @@ fn test_sorting_modules_missing_module() {
         dependencies: vec![module_a_address.clone()],
     };
     let module_c = Module {
-        address: module_c_address.clone(),
-        dependencies: vec![module_a_address.clone(), module_b_address.clone()],
+        address: module_c_address,
+        dependencies: vec![module_a_address, module_b_address],
     };
 
     let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, i32)> =
@@ -127,7 +127,7 @@ fn test_sorting_modules_cycle() {
         dependencies: vec![],
     };
     let module_b = Module {
-        address: module_b_address.clone(),
+        address: module_b_address,
         dependencies: vec![module_a_address.clone()],
     };
     let module_d = Module {
@@ -135,8 +135,8 @@ fn test_sorting_modules_cycle() {
         dependencies: vec![module_e_address.clone()],
     };
     let module_e = Module {
-        address: module_e_address.clone(),
-        dependencies: vec![module_a_address.clone(), module_d_address.clone()],
+        address: module_e_address,
+        dependencies: vec![module_a_address, module_d_address],
     };
 
     let modules: Vec<&dyn ModuleInfo<Context = DefaultContext>> =
