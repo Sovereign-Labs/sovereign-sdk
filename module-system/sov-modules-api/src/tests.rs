@@ -99,7 +99,7 @@ impl crate::ModuleInfo for ModuleC {
 
 struct ModuleD {
     address: Address,
-    module_e: Option<Box<ModuleE>>,
+    module_e: ModuleE,
 }
 
 impl crate::ModuleInfo for ModuleD {
@@ -110,14 +110,14 @@ impl crate::ModuleInfo for ModuleD {
     }
 
     fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {
-        vec![self.module_e.as_ref().unwrap().address()]
+        vec![self.module_e.address()]
     }
 }
 
 struct ModuleE {
     address: Address,
     module_a: ModuleA,
-    module_d: Option<Box<ModuleD>>,
+    module_d_address: Address,
 }
 
 impl crate::ModuleInfo for ModuleE {
@@ -128,10 +128,7 @@ impl crate::ModuleInfo for ModuleE {
     }
 
     fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {
-        vec![
-            self.module_d.as_ref().unwrap().address(),
-            self.module_a.address(),
-        ]
+        vec![&self.module_d_address, self.module_a.address()]
     }
 }
 
@@ -219,14 +216,10 @@ fn test_sorting_modules_cycle() {
     let module_a_e_d = ModuleA {
         address: Address::from([1; 32]),
     };
-    let module_d_e = ModuleD {
-        address: Address::from([4; 32]),
-        module_e: None,
-    };
     let module_e_d = ModuleE {
         address: Address::from([5; 32]),
         module_a: module_a_e_d,
-        module_d: None,
+        module_d_address: Address::from([4; 32]),
     };
 
     let module_a = ModuleA {
@@ -238,12 +231,12 @@ fn test_sorting_modules_cycle() {
     };
     let module_d = ModuleD {
         address: Address::from([4; 32]),
-        module_e: Some(Box::new(module_e_d)),
+        module_e: module_e_d,
     };
     let module_e = ModuleE {
         address: Address::from([5; 32]),
         module_a: module_a_e,
-        module_d: Some(Box::new(module_d_e)),
+        module_d_address: Address::from([4; 32]),
     };
 
     let modules: Vec<&dyn ModuleInfo<Context = DefaultContext>> =
@@ -253,6 +246,5 @@ fn test_sorting_modules_cycle() {
 
     assert!(sorted_modules.is_err());
     let error_string = sorted_modules.err().unwrap().to_string();
-    assert!(error_string == "Cyclic dependency of length 2 detected: {AddressBech32 { value: \"sov1q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zskwvj87\" }, AddressBech32 { value: \"sov1qszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqnu4g3u\" }}"
-            || error_string == "Cyclic dependency of length 2 detected: {AddressBech32 { value: \"sov1qszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqnu4g3u\" }, AddressBech32 { value: \"sov1q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zskwvj87\" }}");
+    assert_eq!("Cyclic dependency of length 2 detected: {AddressBech32 { value: \"sov1qszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqnu4g3u\" }, AddressBech32 { value: \"sov1q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zskwvj87\" }}", error_string);
 }
