@@ -40,17 +40,12 @@ ethers-signers = { workspace = true }
 anvil-core = { workspace = true }
 ethers = { workspace = true }
 
+revm = { workspace = true }
 
 
-revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
-
-
-#[patch.crates-io]
-#revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
-#revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
 
 [dev-dependencies]
-anvil = { workspace = true }
+#anvil = { workspace = true }
 primitive-types = "0.12.1"
 tokio = { workspace = true }
 tempfile = { workspace = true }
