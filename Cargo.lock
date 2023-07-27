@@ -6780,9 +6780,11 @@ dependencies = [
 name = "sov-ethereum"
 version = "0.1.0"
 dependencies = [
+ "anvil-core",
  "borsh",
  "const-rollup-config",
  "demo-stf",
+ "ethers",
  "jsonrpsee 0.16.2",
  "jupiter",
  "reth-primitives",
@@ -6790,6 +6792,8 @@ dependencies = [
  "serde_json",
  "sov-evm",
  "sov-modules-api",
+ "sov-rollup-interface",
+ "tokio",
 ]
 
 [[package]]

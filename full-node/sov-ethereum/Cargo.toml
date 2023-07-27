@@ -29,13 +29,13 @@ reth-rpc = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha
 
 
 
-# anvil-core  = { workspace = true }
-# ethers = { workspace = true }
+anvil-core  = { workspace = true }
+ethers = { workspace = true }
 
 
-# [dev-dependencies]
-# sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
-# tokio = { workspace = true }
+[dev-dependencies]
+sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
+tokio = { workspace = true }
 
 
 
@@ -47,6 +47,6 @@ revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "releas
 
 [features]
 default = ["native", "experimental"]
-experimental = [] #["demo-stf/experimental", "sov-evm/experimental"]
+experimental = ["demo-stf/experimental", "sov-evm/experimental"]
 
 native = ["demo-stf/native", "sov-evm/native"]

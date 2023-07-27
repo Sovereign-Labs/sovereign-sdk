@@ -1,4 +1,4 @@
-/*#[cfg(feature = "experimental")]
+#[cfg(feature = "experimental")]
 pub use experimental::{get_ethereum_rpc, Ethereum};
 
 #[cfg(feature = "experimental")]
@@ -152,4 +152,3 @@ pub mod experimental {
         1024 * 1024 * 100 // 100 MB
     }
 }
-*/
