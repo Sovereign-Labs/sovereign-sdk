@@ -375,13 +375,13 @@ pub(crate) fn generics_for_field(
     outer_generics: &Generics,
     field_generic_types: &PathArguments,
 ) -> Generics {
-    let generic_bounds = extract_generic_type_bounds(&outer_generics);
+    let generic_bounds = extract_generic_type_bounds(outer_generics);
     match field_generic_types {
         PathArguments::AngleBracketed(angle_bracketed_data) => {
             let mut args_with_bounds = Punctuated::<GenericParam, syn::token::Comma>::new();
             for generic_arg in &angle_bracketed_data.args {
                 if let syn::GenericArgument::Type(syn::Type::Path(type_path)) = generic_arg {
-                    let ident = extract_ident(&type_path);
+                    let ident = extract_ident(type_path);
                     let bounds = generic_bounds.get(type_path).cloned().unwrap_or_default();
 
                     // Construct a "type param" with the appropriate bounds. This corresponds to a syntax

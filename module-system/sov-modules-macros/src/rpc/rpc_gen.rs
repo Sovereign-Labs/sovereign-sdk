@@ -218,11 +218,9 @@ fn wrap_in_jsonprsee_result(return_type: &syn::ReturnType) -> syn::ReturnType {
 
 fn add_server_bounds_attr_if_missing(attrs: &mut Vec<syn::NestedMeta>) {
     for attr in attrs.iter() {
-        if let syn::NestedMeta::Meta(attr) = attr {
-            if let syn::Meta::List(syn::MetaList { path, .. }) = attr {
-                if path.is_ident("server_bounds") {
-                    return;
-                }
+        if let syn::NestedMeta::Meta(syn::Meta::List(syn::MetaList { path, .. })) = attr {
+            if path.is_ident("server_bounds") {
+                return;
             }
         }
     }

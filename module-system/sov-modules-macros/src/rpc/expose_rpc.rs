@@ -60,7 +60,7 @@ impl ExposeRpcMacro {
                 .last()
                 .expect("A type path must have at least one segment")
                 .arguments;
-            let field_generics = generics_for_field(&generics, &field_path_args);
+            let field_generics = generics_for_field(&generics, field_path_args);
 
             let module_ident = ty.path.segments.last().unwrap().clone().ident;
 
