@@ -37,8 +37,8 @@ ethers-signers = { workspace = true }
 
 
 #anvil = { workspace = true }
-#anvil-core = { workspace = true }
-#ethers = { workspace = true }
+anvil-core = { workspace = true }
+ethers = { workspace = true }
 
 
 

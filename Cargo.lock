@@ -7176,10 +7176,12 @@ name = "sov-evm"
 version = "0.1.0"
 dependencies = [
  "anvil",
+ "anvil-core",
  "anyhow",
  "borsh",
  "bytes",
  "ethereum-types",
+ "ethers",
  "ethers-contract",
  "ethers-core",
  "ethers-middleware",

@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use anvil::eth::backend::mem::inspector::Inspector;
+//use anvil::eth::backend::mem::inspector::Inspector;
 use revm::primitives::{CfgEnv, EVMError, Env, ExecutionResult, ResultAndState};
 use revm::{self, Database, DatabaseCommit};
 
@@ -31,7 +31,7 @@ pub(crate) fn inspect<DB: Database<Error = Infallible> + DatabaseCommit>(
     tx: EvmTransaction,
     config_env: CfgEnv,
 ) -> Result<ResultAndState, EVMError<Infallible>> {
-    let mut evm = revm::new();
+    /*let mut evm = revm::new();
 
     let env = Env {
         cfg: config_env,
@@ -43,5 +43,7 @@ pub(crate) fn inspect<DB: Database<Error = Infallible> + DatabaseCommit>(
     evm.database(db);
 
     let mut inspector = Inspector::default();
-    evm.inspect(&mut inspector)
+    evm.inspect(&mut inspector)*/
+
+    todo!()
 }
