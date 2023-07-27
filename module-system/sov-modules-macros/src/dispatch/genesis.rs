@@ -42,7 +42,7 @@ impl GenesisMacro {
                 type Config = GenesisConfig #type_generics;
 
                 fn genesis(&self, config: &Self::Config, working_set: &mut sov_state::WorkingSet<<<Self as sov_modules_api::Genesis>::Context as sov_modules_api::Spec>::Storage>) -> core::result::Result<(), sov_modules_api::Error> {
-                    #(#genesis_fn_body)*
+                    #genesis_fn_body
                     Ok(())
                 }
             }
@@ -50,17 +50,33 @@ impl GenesisMacro {
         .into())
     }
 
-    fn make_genesis_fn_body(fields: &[StructNamedField]) -> Vec<proc_macro2::TokenStream> {
-        fields
-            .iter()
-            .map(|field| {
-                let ident = &field.ident;
+    fn make_genesis_fn_body(fields: &[StructNamedField]) -> proc_macro2::TokenStream {
+        let idents = fields.iter().enumerate().map(|(i, field)| {
+            let ident = &field.ident;
 
-                quote::quote! {
-                    ::sov_modules_api::Genesis::genesis(&self.#ident, &config.#ident, working_set)?;
+            quote::quote! {
+                (&self.#ident, #i)
+            }
+        });
+
+        let matches = fields.iter().enumerate().map(|(i, field)| {
+            let ident = &field.ident;
+
+            quote::quote! {
+                #i => ::sov_modules_api::Genesis::genesis(&self.#ident, &config.#ident, working_set),
+            }
+        });
+
+        quote::quote! {
+                let modules: ::std::vec::Vec<(&dyn ::sov_modules_api::ModuleInfo<Context = <Self as sov_modules_api::Genesis>::Context>, usize)> = ::std::vec![#(#idents),*];
+                let sorted_modules = ::sov_modules_api::sort_values_by_modules_dependencies(modules)?;
+                for module in sorted_modules {
+                     match module {
+                         #(#matches)*
+                         _ => Err(::sov_modules_api::Error::ModuleError(::anyhow::Error::msg(format!("Module not found: {:?}", module)))),
+                     }?
                 }
-            })
-            .collect()
+        }
     }
 
     fn make_genesis_config(

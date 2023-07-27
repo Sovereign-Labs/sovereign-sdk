@@ -8,7 +8,9 @@ use thiserror::Error;
 
 const HRP: &str = "celestia";
 
-#[derive(Debug, PartialEq, Clone, Eq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+#[derive(
+    Debug, PartialEq, Clone, Eq, Serialize, Deserialize, BorshDeserialize, BorshSerialize, Hash,
+)]
 // Raw ASCII bytes, including HRP
 // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/469
 pub struct CelestiaAddress(Vec<u8>);

@@ -323,7 +323,7 @@ impl AsRef<[u8]> for Sha2Hash {
     }
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Debug, Clone, Eq)]
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone, Eq, Hash)]
 pub struct H160(#[serde(deserialize_with = "hex::deserialize")] pub [u8; 20]);
 
 impl AsRef<[u8]> for H160 {
