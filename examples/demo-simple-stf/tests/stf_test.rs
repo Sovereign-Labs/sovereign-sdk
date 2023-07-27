@@ -6,7 +6,7 @@ use sov_rollup_interface::mocks::{MockZkvm, TestBlob};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::AddressTrait;
 
-#[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize, Hash)]
 pub struct DaAddress {
     pub addr: [u8; 32],
 }
@@ -53,12 +53,6 @@ impl<'a> TryFrom<&'a [u8]> for DaAddress {
 impl Display for DaAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.addr)
-    }
-}
-
-impl std::hash::Hash for DaAddress {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.addr.hash(state);
     }
 }
 

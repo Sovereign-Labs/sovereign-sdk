@@ -7,7 +7,9 @@ use sov_rollup_interface::AddressTrait;
 
 const HRP: &str = "celestia";
 
-#[derive(Debug, PartialEq, Clone, Eq, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+#[derive(
+    Debug, PartialEq, Clone, Eq, Serialize, Deserialize, BorshDeserialize, BorshSerialize, Hash,
+)]
 // Raw ASCII bytes, including HRP
 // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/469
 pub struct CelestiaAddress(Vec<u8>);
@@ -52,12 +54,6 @@ impl FromStr for CelestiaAddress {
         }
         let value = s.as_bytes().to_vec();
         Ok(Self(value))
-    }
-}
-
-impl std::hash::Hash for CelestiaAddress {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.hash(state);
     }
 }
 

@@ -323,7 +323,7 @@ impl AsRef<[u8]> for Sha2Hash {
     }
 }
 
-#[derive(Deserialize, Serialize, PartialEq, Debug, Clone, Eq)]
+#[derive(Deserialize, Serialize, PartialEq, Debug, Clone, Eq, Hash)]
 pub struct H160(#[serde(deserialize_with = "hex::deserialize")] pub [u8; 20]);
 
 impl AsRef<[u8]> for H160 {
@@ -368,12 +368,6 @@ impl FromStr for H160 {
 impl Display for H160 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "0x{}", hex::encode(self.0))
-    }
-}
-
-impl std::hash::Hash for H160 {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.0.as_ref().hash(state);
     }
 }
 

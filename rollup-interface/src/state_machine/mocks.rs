@@ -103,7 +103,7 @@ fn test_mock_proof_roundtrip() {
 }
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
-#[derive(Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize, Hash)]
 pub struct MockAddress {
     addr: [u8; 32],
 }
@@ -151,12 +151,6 @@ impl From<[u8; 32]> for MockAddress {
 impl Display for MockAddress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self.addr)
-    }
-}
-
-impl std::hash::Hash for MockAddress {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.addr.hash(state);
     }
 }
 

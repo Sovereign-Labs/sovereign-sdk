@@ -53,16 +53,10 @@ impl AsRef<[u8]> for Address {
     }
 }
 
-impl std::hash::Hash for Address {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.addr.hash(state);
-    }
-}
-
 impl AddressTrait for Address {}
 
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
-#[derive(PartialEq, Clone, Eq, borsh::BorshDeserialize, borsh::BorshSerialize)]
+#[derive(PartialEq, Clone, Eq, borsh::BorshDeserialize, borsh::BorshSerialize, Hash)]
 pub struct Address {
     addr: [u8; 32],
 }
