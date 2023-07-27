@@ -88,3 +88,60 @@ pub mod second_test_module {
         }
     }
 }
+
+pub mod third_test_module {
+    use super::*;
+
+    pub trait ModuleThreeStorable:
+        borsh::BorshSerialize + borsh::BorshDeserialize + core::fmt::Debug + Default
+    {
+    }
+
+    impl ModuleThreeStorable for u32 {}
+
+    #[derive(ModuleInfo)]
+    pub struct ThirdTestStruct<Ctx: Context, OtherGeneric: ModuleThreeStorable> {
+        #[address]
+        pub address: Ctx::Address,
+
+        #[state]
+        pub state_in_third_struct: StateValue<OtherGeneric>,
+    }
+
+    impl<Ctx: Context, OtherGeneric: ModuleThreeStorable> ThirdTestStruct<Ctx, OtherGeneric> {
+        pub fn get_state_value(
+            &self,
+            working_set: &mut WorkingSet<Ctx::Storage>,
+        ) -> Option<OtherGeneric> {
+            self.state_in_third_struct.get(working_set)
+        }
+    }
+
+    impl<Ctx: Context, OtherGeneric: ModuleThreeStorable> Module
+        for ThirdTestStruct<Ctx, OtherGeneric>
+    {
+        type Context = Ctx;
+        type Config = ();
+        type CallMessage = OtherGeneric;
+
+        fn genesis(
+            &self,
+            _config: &Self::Config,
+            working_set: &mut WorkingSet<Ctx::Storage>,
+        ) -> Result<(), Error> {
+            self.state_in_third_struct
+                .set(&Default::default(), working_set);
+            Ok(())
+        }
+
+        fn call(
+            &self,
+            msg: Self::CallMessage,
+            _context: &Self::Context,
+            working_set: &mut WorkingSet<Ctx::Storage>,
+        ) -> Result<CallResponse, Error> {
+            self.state_in_third_struct.set(&msg, working_set);
+            Ok(CallResponse::default())
+        }
+    }
+}

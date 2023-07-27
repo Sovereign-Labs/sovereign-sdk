@@ -4,6 +4,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::AddressTrait;
+use thiserror::Error;
 
 const HRP: &str = "celestia";
 
@@ -41,14 +42,25 @@ impl Display for CelestiaAddress {
     }
 }
 
+#[derive(Clone, Debug, Error)]
+/// An error which occurs while decoding a `CelestialAddress` from a string.
+pub enum CelestiaAddressFromStrError {
+    /// The address has an invalid human readable prefix. Valid addresses must start with the prefix 'celestia'.
+    #[error("The address has an invalid human readable prefix. Valid addresses must start with the prefix 'celestia', but this one began with {0}")]
+    InvalidHumanReadablePrefix(String),
+    /// The address could note be decoded as valid bech32
+    #[error("The address could not be decoded as valid bech32: {0}")]
+    InvalidBech32(#[from] bech32::Error),
+}
+
 impl FromStr for CelestiaAddress {
-    type Err = anyhow::Error;
+    type Err = CelestiaAddressFromStrError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // This could be the way to save memory:
         let (hrp, _raw_address_u5, _variant) = bech32::decode(s)?;
         if hrp != HRP {
-            anyhow::bail!("Incorrect HRP. Expected {} got {}", HRP, hrp);
+            return Err(CelestiaAddressFromStrError::InvalidHumanReadablePrefix(hrp));
         }
         let value = s.as_bytes().to_vec();
         Ok(Self(value))

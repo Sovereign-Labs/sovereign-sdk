@@ -5,8 +5,8 @@ use quote::{format_ident, ToTokens};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    DataStruct, Fields, GenericParam, Generics, ImplGenerics, Meta, PathSegment, TypeGenerics,
-    TypeParamBound, TypePath, WhereClause, WherePredicate,
+    DataStruct, Fields, GenericParam, Generics, ImplGenerics, Meta, PathArguments, PathSegment,
+    TypeGenerics, TypeParamBound, TypePath, WhereClause, WherePredicate,
 };
 
 #[derive(Clone)]
@@ -358,6 +358,63 @@ pub fn extract_ident(type_path: &syn::TypePath) -> &Ident {
         .last()
         .expect("Type path must have at least one segment")
         .ident
+}
+
+/// Build the generics for a field based on the generics of the outer struct.
+/// For example, given the following struct:
+/// ```rust,ignore
+/// struct MyStruct<T: SomeTrait, U: SomeOtherTrait> {
+///    field1: PhantomData<T>,
+///    field2: Vec<U>
+/// }
+/// ```
+///
+/// This function will return a `syn::Generics` corresponding to `<T: SomeTrait>` when
+/// invoked on the PathArguments for field1.
+pub(crate) fn generics_for_field(
+    outer_generics: &Generics,
+    field_generic_types: &PathArguments,
+) -> Generics {
+    let generic_bounds = extract_generic_type_bounds(outer_generics);
+    match field_generic_types {
+        PathArguments::AngleBracketed(angle_bracketed_data) => {
+            let mut args_with_bounds = Punctuated::<GenericParam, syn::token::Comma>::new();
+            for generic_arg in &angle_bracketed_data.args {
+                if let syn::GenericArgument::Type(syn::Type::Path(type_path)) = generic_arg {
+                    let ident = extract_ident(type_path);
+                    let bounds = generic_bounds.get(type_path).cloned().unwrap_or_default();
+
+                    // Construct a "type param" with the appropriate bounds. This corresponds to a syntax
+                    // tree like `T: Trait1 + Trait2`
+                    let generic_type_param_with_bounds = syn::TypeParam {
+                        attrs: Vec::new(),
+                        ident: ident.clone(),
+                        colon_token: Some(syn::token::Colon {
+                            spans: [type_path.span()],
+                        }),
+                        bounds: bounds.clone(),
+                        eq_token: None,
+                        default: None,
+                    };
+                    args_with_bounds.push(GenericParam::Type(generic_type_param_with_bounds))
+                }
+            }
+            // Construct a `Generics` struct with the generic type parameters and their bounds.
+            // This corresponds to a syntax tree like `<T: Trait1 + Trait2>`
+            syn::Generics {
+                lt_token: Some(syn::token::Lt {
+                    spans: [field_generic_types.span()],
+                }),
+                params: args_with_bounds,
+                gt_token: Some(syn::token::Gt {
+                    spans: [field_generic_types.span()],
+                }),
+                where_clause: None,
+            }
+        }
+        // We don't need to do anything if the generic type parameters are not angle bracketed
+        _ => Default::default(),
+    }
 }
 
 #[cfg(test)]

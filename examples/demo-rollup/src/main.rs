@@ -160,7 +160,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // so we use that to initialize the RPC server.
     let storage = demo_runner.get_storage();
     let is_storage_empty = storage.is_empty();
-    let mut methods = get_rpc_methods(storage);
+    let mut methods = get_rpc_methods::<DefaultContext>(storage);
     // register rpc methods
     {
         register_ledger(ledger_db.clone(), &mut methods)?;
