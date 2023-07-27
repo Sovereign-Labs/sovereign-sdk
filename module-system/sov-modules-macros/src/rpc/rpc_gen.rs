@@ -79,21 +79,7 @@ impl RpcImplBlock {
     fn build_rpc_impl_trait(&self) -> proc_macro2::TokenStream {
         let type_name = &self.type_name;
         let generics = &self.generics;
-        let generics_params = generics
-            .params
-            .iter()
-            .map(|param| {
-                if let syn::GenericParam::Type(syn::TypeParam { ident, .. }) = param {
-                    return quote! { #ident };
-                }
-                unreachable!("Expected a type parameter")
-            })
-            .collect::<Vec<_>>();
-
-        // let debug_var = quote! { println!("STUFF {:?}", #(#generics_params)*,); };
-        // println!("DBG1: {}", debug_var);
-        // let debug_var = quote! { println!("STUFF {:?}", #type_name) };
-        // println!("DBG2: {}", debug_var);
+        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
         let mut blanket_impl_methods = vec![];
         let mut impl_trait_methods = vec![];
@@ -139,7 +125,7 @@ impl RpcImplBlock {
 
                 quote! {
                     #signature {
-                        <#type_name <#(#generics_params)*,> as ::std::default::Default>::default().#method_name(#(#pre_working_set_args,)* &mut Self::get_working_set(self), #(#post_working_set_args),* )
+                        <#type_name #ty_generics as ::std::default::Default>::default().#method_name(#(#pre_working_set_args,)* &mut Self::get_working_set(self), #(#post_working_set_args),* )
                     }
                 }
             } else {
@@ -149,7 +135,7 @@ impl RpcImplBlock {
                     .filter(|arg| arg.to_string() != quote! { self }.to_string());
                 quote! {
                     #signature {
-                        <#type_name <#(#generics_params)*,> as ::std::default::Default>::default().#method_name(#(#arg_values),*)
+                        <#type_name  #ty_generics as ::std::default::Default>::default().#method_name(#(#arg_values),*)
                     }
                 }
             };
@@ -163,13 +149,13 @@ impl RpcImplBlock {
                 let post_working_set_args = arg_values.clone().skip(idx + 1);
                 quote! {
                     #signature {
-                        Ok(<Self as #impl_trait_name < #(#generics_params)*, >>::#method_name(#(#pre_working_set_args,)* #(#post_working_set_args),* ))
+                        Ok(<Self as #impl_trait_name #ty_generics >::#method_name(#(#pre_working_set_args,)* #(#post_working_set_args),* ))
                     }
                 }
             } else {
                 quote! {
                     #signature {
-                        Ok(<Self as #impl_trait_name < #(#generics_params)*, >>::#method_name(#(#arg_values),*))
+                        Ok(<Self as #impl_trait_name #ty_generics >::#method_name(#(#arg_values),*))
                     }
                 }
             };
@@ -192,7 +178,6 @@ impl RpcImplBlock {
             }
         };
 
-        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
         let blanket_impl_generics = quote! {
             #impl_generics
         }
@@ -231,15 +216,31 @@ fn wrap_in_jsonprsee_result(return_type: &syn::ReturnType) -> syn::ReturnType {
     )
 }
 
+fn add_server_bounds_attr_if_missing(attrs: &mut Vec<syn::NestedMeta>) {
+    for attr in attrs.iter() {
+        if let syn::NestedMeta::Meta(syn::Meta::List(syn::MetaList { path, .. })) = attr {
+            if path.is_ident("server_bounds") {
+                return;
+            }
+        }
+    }
+    attrs.push(syn::NestedMeta::Meta(syn::Meta::List(
+        syn::parse_quote! { server_bounds() },
+    )));
+}
+
 fn build_rpc_trait(
-    attrs: &proc_macro2::TokenStream,
+    mut attrs: Vec<syn::NestedMeta>,
     type_name: Ident,
     mut input: syn::ItemImpl,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let intermediate_trait_name = format_ident!("{}Rpc", type_name);
+    // If the user hasn't directly provided trait bounds, override jsonrpsee's defaults
+    // with an empty bound. This prevents spurious compilation errors like `Context does not implement DeserializeOwned`
+    add_server_bounds_attr_if_missing(&mut attrs);
 
     let wrapped_attr_args = quote! {
-        (#attrs)
+        ( #(#attrs),* )
     };
     let rpc_attribute = syn::Attribute {
         pound_token: syn::token::Pound {
@@ -340,7 +341,7 @@ fn build_rpc_trait(
 }
 
 pub(crate) fn rpc_gen(
-    attrs: proc_macro2::TokenStream,
+    attrs: Vec<syn::NestedMeta>,
     input: syn::ItemImpl,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let type_name = match *input.self_ty {
@@ -348,7 +349,7 @@ pub(crate) fn rpc_gen(
         _ => return Err(syn::Error::new_spanned(input.self_ty, "Invalid type")),
     };
 
-    build_rpc_trait(&attrs, type_name.clone(), input)
+    build_rpc_trait(attrs, type_name.clone(), input)
 }
 
 struct TypeList(pub Punctuated<Type, syn::token::Comma>);
