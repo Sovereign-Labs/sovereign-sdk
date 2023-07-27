@@ -1,6 +1,7 @@
-use anvil_core::eth::transaction::{EIP1559Transaction, EthTransactionRequest};
+use anvil_core::eth::transaction::{self, EIP1559Transaction, EthTransactionRequest};
 use bytes::Bytes;
 use ethers_core::types::{OtherFields, Transaction};
+use reth_primitives::TxEip1559;
 use revm::primitives::{
     AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, Bytecode, CreateScheme, TransactTo,
     TxEnv, B160, B256, U256,
@@ -172,6 +173,33 @@ impl From<EthTransactionRequest> for EvmTransaction {
             s: Default::default(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
             hash: Default::default(),
+        }
+    }
+}
+
+impl From<TxEip1559> for EvmTransaction {
+    fn from(transaction: TxEip1559) -> Self {
+        let to = transaction.to.to().map(|addr| (*addr).into());
+
+        Self {
+            sender: todo!(),
+            data: transaction.input.to_vec(),
+            gas_limit: transaction.gas_limit,
+            // https://github.com/foundry-rs/foundry/blob/master/anvil/core/src/eth/transaction/mod.rs#L1251C20-L1251C20
+            gas_price: todo!(), //transaction.max_fee_per_gas.into(),
+            max_priority_fee_per_gas: todo!(), //transaction.max_priority_fee_per_gas.into(),
+            max_fee_per_gas: todo!(), //transaction.max_fee_per_gas.into(),
+            to,
+            value: todo!(), //transaction.value.into(),
+            nonce: transaction.nonce,
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
+            access_lists: vec![],
+            chain_id: transaction.chain_id,
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
+            hash: todo!(),         //tx_hash.into(),
+            odd_y_parity: todo!(), //transaction.odd_y_parity,
+            r: todo!(),
+            s: todo!(),
         }
     }
 }

@@ -6814,6 +6814,7 @@ dependencies = [
  "hex",
  "jsonrpsee 0.16.2",
  "primitive-types",
+ "reth-primitives",
  "revm",
  "schemars",
  "serde",

@@ -18,6 +18,8 @@ pub mod experimental {
     use jsonrpsee::http_client::{HeaderMap, HttpClient};
     use jsonrpsee::RpcModule;
     use jupiter::da_service::DaServiceConfig;
+    use reth_primitives::{Bytes as RethBytes, TransactionSigned, TransactionSignedEcRecovered};
+    use reth_rpc::eth::error::{EthApiError, EthResult};
     use sov_evm::call::CallMessage;
     use sov_evm::evm::{EthAddress, EvmTransaction};
     use sov_modules_api::transaction::Transaction;
@@ -77,11 +79,29 @@ pub mod experimental {
         }
     }
 
+    pub(crate) fn recover_raw_transaction(
+        data: RethBytes,
+    ) -> EthResult<TransactionSignedEcRecovered> {
+        if data.is_empty() {
+            return Err(EthApiError::EmptyRawTransactionData);
+        }
+
+        let transaction = TransactionSigned::decode_enveloped(data)
+            .map_err(|_| EthApiError::FailedToDecodeSignedTransaction)?;
+
+        transaction
+            .into_ecrecovered()
+            .ok_or(EthApiError::InvalidTransactionSignature)
+    }
+
     fn register_rpc_methods(rpc: &mut RpcModule<Ethereum>) -> Result<(), jsonrpsee::core::Error> {
         rpc.register_async_method(
             "eth_sendRawTransaction",
             |parameters, ethereum| async move {
                 let data: Bytes = parameters.one().unwrap();
+
+                //recover_raw_transaction(data);
+
                 let data = data.as_ref();
 
                 if data.is_empty() {
@@ -96,32 +116,53 @@ pub mod experimental {
                     ));
                 }
 
-                let extend = rlp::encode(&data);
-                let typed_transaction = match rlp::decode::<TypedTransaction>(&extend[..]) {
-                    Ok(transaction) => transaction,
-                    Err(e) => {
-                        return Err(jsonrpsee::core::Error::Custom(format!(
-                            "Failed to decode signed transaction: {}",
-                            e
-                        )))
-                    }
-                };
+                let data = RethBytes::from(data);
+                let typed_transaction = recover_raw_transaction(data).unwrap();
+                let signed_transaction = typed_transaction.into_signed();
+                let tx_hash = signed_transaction.hash();
 
-                let transaction = match typed_transaction {
-                    TypedTransaction::Legacy(_) => {
+                let transaction = match signed_transaction.transaction {
+                    reth_primitives::Transaction::Legacy(_) => {
                         return Err(jsonrpsee::core::Error::Custom(
                             "Legacy transaction not supported".to_owned(),
                         ))
                     }
-                    TypedTransaction::EIP2930(_) => {
+                    reth_primitives::Transaction::Eip2930(_) => {
                         return Err(jsonrpsee::core::Error::Custom(
                             "EIP2930 not supported".to_owned(),
                         ))
                     }
-                    TypedTransaction::EIP1559(tx) => tx,
+                    reth_primitives::Transaction::Eip1559(tx) => tx,
                 };
 
-                let tx_hash = transaction.hash();
+                /*
+                                let extend = rlp::encode(&data);
+                                let typed_transaction = match rlp::decode::<TypedTransaction>(&extend[..]) {
+                                    Ok(transaction) => transaction,
+                                    Err(e) => {
+                                        return Err(jsonrpsee::core::Error::Custom(format!(
+                                            "Failed to decode signed transaction: {}",
+                                            e
+                                        )))
+                                    }
+                                };
+
+                                let transaction = match typed_transaction {
+                                    TypedTransaction::Legacy(_) => {
+                                        return Err(jsonrpsee::core::Error::Custom(
+                                            "Legacy transaction not supported".to_owned(),
+                                        ))
+                                    }
+                                    TypedTransaction::EIP2930(_) => {
+                                        return Err(jsonrpsee::core::Error::Custom(
+                                            "EIP2930 not supported".to_owned(),
+                                        ))
+                                    }
+                                    TypedTransaction::EIP1559(tx) => tx,
+                                };
+
+                */
+
                 let evm_transaction: EvmTransaction = transaction.into();
                 let sender = evm_transaction.sender;
 

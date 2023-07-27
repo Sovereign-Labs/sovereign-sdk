@@ -41,7 +41,7 @@ anvil-core = { workspace = true }
 ethers = { workspace = true }
 
 revm = { workspace = true }
-
+reth-primitives = { workspace = true }
 
 
 [dev-dependencies]
