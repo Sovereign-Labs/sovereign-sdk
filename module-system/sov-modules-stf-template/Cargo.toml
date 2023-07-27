@@ -23,7 +23,7 @@ sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
 sov-state = { path = "../sov-state", version = "0.1", default-features = false }
 sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
 zk-cycle-utils = {path = "../../zk-cycle-utils" }
-risc0-zkvm = { version = "0.14", default-features = false, features = ["std"] }
+risc0-zkvm = { version = "0.16", default-features = false, features = ["std"] }
 
 [features]
 default = ["native"]

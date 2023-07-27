@@ -14,6 +14,7 @@ use demo_stf::runner_config::{from_toml_path, Config as RunnerConfig};
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
 use jupiter::verifier::RollupParams;
+use jupiter::BlobWithSender;
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::Risc0Host;
 use serde::Deserialize;
@@ -21,7 +22,7 @@ use sov_modules_api::RpcRunner;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::traits::ZkvmHost;
+use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::Storage;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -34,7 +35,8 @@ pub struct RollupConfig {
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
-fn main() -> Result<(), anyhow::Error> {
+#[tokio::main]
+async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = "benches/rollup_config.toml".to_string();
     let mut rollup_config: RollupConfig = from_toml_path(&rollup_config_path)
         .context("Failed to read rollup configuration")
@@ -48,11 +50,11 @@ fn main() -> Result<(), anyhow::Error> {
         RollupParams {
             namespace: ROLLUP_NAMESPACE,
         },
-    );
+    ).await;
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
+    let mut demo_runner = NativeAppRunner::<Risc0Host,BlobWithSender>::new(rollup_config.runner.clone());
     let demo = demo_runner.inner_mut();
 
     let genesis_config = create_demo_genesis_config(
@@ -91,7 +93,7 @@ fn main() -> Result<(), anyhow::Error> {
         let header_hash = hex::encode(filtered_block.header.header.hash());
         host.write_to_guest(&filtered_block.header);
         let (blob_txs, inclusion_proof, completeness_proof) =
-            da_service.extract_relevant_txs_with_proof(&filtered_block);
+            da_service.extract_relevant_txs_with_proof(&filtered_block).await;
 
         host.write_to_guest(&inclusion_proof);
         host.write_to_guest(&completeness_proof);
