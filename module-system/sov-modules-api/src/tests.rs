@@ -65,21 +65,17 @@ impl crate::ModuleInfo for Module {
 
 #[test]
 fn test_sorting_modules() {
-    let module_a_address = Address::from([1; 32]);
-    let module_b_address = Address::from([2; 32]);
-    let module_c_address = Address::from([3; 32]);
-
     let module_a = Module {
-        address: module_a_address.clone(),
+        address: Address::from([1; 32]),
         dependencies: vec![],
     };
     let module_b = Module {
-        address: module_b_address.clone(),
-        dependencies: vec![module_a_address.clone()],
+        address: Address::from([2; 32]),
+        dependencies: vec![module_a.address.clone()],
     };
     let module_c = Module {
-        address: module_c_address,
-        dependencies: vec![module_a_address, module_b_address],
+        address: Address::from([3; 32]),
+        dependencies: vec![module_a.address.clone(), module_b.address.clone()],
     };
 
     let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, i32)> =
@@ -93,16 +89,13 @@ fn test_sorting_modules() {
 #[test]
 fn test_sorting_modules_missing_module() {
     let module_a_address = Address::from([1; 32]);
-    let module_b_address = Address::from([2; 32]);
-    let module_c_address = Address::from([3; 32]);
-
     let module_b = Module {
-        address: module_b_address.clone(),
+        address: Address::from([2; 32]),
         dependencies: vec![module_a_address.clone()],
     };
     let module_c = Module {
-        address: module_c_address,
-        dependencies: vec![module_a_address, module_b_address],
+        address: Address::from([3; 32]),
+        dependencies: vec![module_a_address, module_b.address.clone()],
     };
 
     let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, i32)> =
@@ -117,26 +110,22 @@ fn test_sorting_modules_missing_module() {
 
 #[test]
 fn test_sorting_modules_cycle() {
-    let module_a_address = Address::from([1; 32]);
-    let module_b_address = Address::from([2; 32]);
-    let module_d_address = Address::from([4; 32]);
     let module_e_address = Address::from([5; 32]);
-
     let module_a = Module {
-        address: module_a_address.clone(),
+        address: Address::from([1; 32]),
         dependencies: vec![],
     };
     let module_b = Module {
-        address: module_b_address,
-        dependencies: vec![module_a_address.clone()],
+        address: Address::from([2; 32]),
+        dependencies: vec![module_a.address.clone()],
     };
     let module_d = Module {
-        address: module_d_address.clone(),
+        address: Address::from([4; 32]),
         dependencies: vec![module_e_address.clone()],
     };
     let module_e = Module {
         address: module_e_address,
-        dependencies: vec![module_a_address, module_d_address],
+        dependencies: vec![module_a.address.clone(), module_d.address.clone()],
     };
 
     let modules: Vec<&dyn ModuleInfo<Context = DefaultContext>> =
