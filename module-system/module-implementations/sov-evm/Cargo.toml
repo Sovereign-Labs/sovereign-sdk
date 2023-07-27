@@ -36,6 +36,7 @@ ethers-middleware = { workspace = true }
 ethers-providers = { workspace = true }
 ethers-signers = { workspace = true }
 
+reth-primitives = { workspace = true }
 
 anvil = { workspace = true }
 anvil-core = { workspace = true }
@@ -51,7 +52,8 @@ bytes = { workspace = true }
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1", features = ["macros"] }
 
 [features]
-default = ["native"]
+default = ["native", "experimental"]
 serde = ["dep:serde", "dep:serde_json"]
 native = ["serde", "sov-state/native", "dep:jsonrpsee", "dep:schemars", "sov-modules-api/native", "dep:clap"]
 experimental = ["native"]
+
