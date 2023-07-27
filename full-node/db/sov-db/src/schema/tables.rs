@@ -15,6 +15,11 @@
 //! Event Tables:
 //! - (EventKey, TxNumber) -> EventNumber
 //! - EventNumber -> (EventKey, EventValue)
+//!
+//! JMT Tables:
+//! - KeyHash -> Key
+//! - (Key, Version) -> JmtValue
+//! - NodeKey -> Node
 
 use borsh::{maybestd, BorshDeserialize, BorshSerialize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -29,12 +34,16 @@ use super::types::{
     StoredTransaction, TxNumber,
 };
 
+/// A list of all tables used by the StateDB. These tables store rollup state - meaning
+/// account balances, nonces, etc.
 pub const STATE_TABLES: &[&str] = &[
     KeyHashToKey::table_name(),
     JmtValues::table_name(),
     JmtNodes::table_name(),
 ];
 
+/// A list of all tables used by the LedgerDB. These tables store rollup "history" - meaning
+/// transaction, events, receipts, etc.
 pub const LEDGER_TABLES: &[&str] = &[
     SlotByNumber::table_name(),
     SlotByHash::table_name(),
