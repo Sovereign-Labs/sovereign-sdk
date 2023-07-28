@@ -7,22 +7,33 @@ name: Rust
 #
 # https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows#matching-a-cache-key
 #
-# - Always install and select the desired Rust toolchain before running
+# - Always install and select the desired Rust toolchain *before* running
 #   `Swatinem/rust-cache`. This is because the active Rust toolchain is used as
 #   a cache key.
+# - When caching Rust compilation artifacts, keep in mind that different `cargo`
+#   commands will use different profiles
+#   (https://doc.rust-lang.org/cargo/reference/profiles.html). Learn what you
+#   can reuse between one job and another and don't assume two commands will
+#   just share caches without conflicts.
 # - Be extremely aware of cache thrashing a.k.a. churning. GitHub Actions' cache
-#   allows for 10GiB of data which is easily exceeded if not careful. The time
-#   is takes to run your new, shiny CI might look very different 6 months from
-#   now when your cache is overweight and has been invalidated over and over.
-#   It's better not to cache than cache excessively (which kind of defeats the
-#   purpose of a cache – GitHub should really do better here).
+#   allows for 10GiB of data which is easily exceeded if not careful.
+#   Sometimes it's better not to cache than cache excessively.
 #   We might even want to disable caching writes for non-default branches
-#   altogether.
-# - `Swatinem/rust-cache` always invalidates the caches whenever rustc's version
-#   changes, so it's less effective if you frequently update your nightly
-#   version.
-# - `Swatinem/rust-cache` also generates an up-to-date `Cargo.lock` file if one
-#   is missing, so it's less effective for libraries that lack one.
+#   altogether if cache churning is unacceptably high.
+# - Learn cache invalidation rules of `Swatinem/rust-cache` before making
+#   changes, e.g. what happens when `rustc --version` changes or `Cargo.lock`
+#   changes (or is missing).
+# - The jobs dependency tree is the way it is to accomodate for sharing caches,
+#   not necessarily because it makes logical sense to run one job after the
+#   other. This is due to the fact that we can't share caches between jobs that
+#   run in parallel.
+# - `sccache` is a good alternative to `Swatinem/rust-cache`, but it behaves
+#   poorly with GHA and often incurs into cache requests rate limits. We should
+#   probably explore `sccache` with a different backend.
+# - If a job makes good use of extra cores, consider give it a bigger machine.
+#   GHA larger runners increase in cost linearly with the number of cores
+#   (https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions),
+#   so you're not wasting money unless several cores are sitting idle for long.
 
 on:
   push:
@@ -56,9 +67,6 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: |
-            .
-            examples/demo-prover
           shared-key: cargo-check
       - name: Run lint
         run: |
@@ -69,6 +77,9 @@ jobs:
   # Check that every combination of features is working properly.
   hack:
     name: features
+    # `cargo-hack` uses the same profile as `cargo check` and doesn't require
+    # building dependencies, only chceking them, so we can share caches
+    # effectively.
     needs: check
     runs-on:
       group: 8-cores_32GB_Ubuntu Group
@@ -77,14 +88,11 @@ jobs:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
       - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: cargo install cargo-hack
+        uses: taiki-e/install-action@cargo-hack
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-check
-          workspaces: |
-            .
-            examples/demo-prover
-      - name: cargo install cargo-hack
-        uses: taiki-e/install-action@cargo-hack
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
       - name: cargo hack
         run: make check-features
@@ -96,21 +104,19 @@ jobs:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-      # cargo-nextest is much faster than standard `cargo test`.
+      # `cargo-nextest` is much faster than standard `cargo test`.
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-build
-          workspaces: |
-            .
-            examples/demo-prover
       - run: cargo nextest run --workspace --all-features
-      # cargo-nextest does not support doctests yet, so we have to run them separately.
+      # `cargo-nextest` does not support doctests (yet?), so we have to run them
+      # separately.
       # TODO: https://github.com/nextest-rs/nextest/issues/16
       - run: cargo test --workspace --doc --all-features
   demo-rollup-local:
-    # tests have already built most needed dependencies, so we can share
-    # caches.
+    # `test` has already built dependencies, so we can share
+    # caches (the profile is `dev` in both cases).
     needs: test
     runs-on:
       group: 8-cores_32GB_Ubuntu Group
@@ -121,9 +127,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-build
-          workspaces: |
-            .
-            examples/demo-prover
       - name: start celestia local
         working-directory: ./examples/demo-rollup
         run: make start
@@ -150,7 +153,7 @@ jobs:
       - name: submit rollup transaction
         working-directory: ./examples/demo-rollup
         run: make test-create-token
-      - name: evaluate result
+      - name: check token supply
         # simple grep check on RPC to verify if the curl output contains "1000" which is the supply of token - could use jq and parse, but considering this won't change, it seems like a simple check to get it out quick
         # if we want more complex parsing in the future and validation, we can switch to jq or other tools
         run: |
@@ -167,8 +170,11 @@ jobs:
           done
           echo "demo-rollup took too long to process transaction; exiting"
           exit 1
-  # TODO: Temporary before migration to RiscZero 0.15: https://github.com/Sovereign-Labs/sovereign-sdk/issues/338
-  #   After that demo-prover should be integrated into workspace
+  # TODO: Temporary before migration to RiscZero 0.15:
+  #   https://github.com/Sovereign-Labs/sovereign-sdk/issues/338.
+  # After that demo-prover should be integrated into workspace.
+  # Note that `demo-prover` has (at the time of writing) a different `dev`
+  # profile from the rest of the codebase, so caches can't be shared.
   check-demo-prover:
     name: check demo prover
     runs-on:
@@ -203,9 +209,6 @@ jobs:
           submodules: true
       - uses: rui314/setup-mold@v1
       - uses: actions-rust-lang/setup-rust-toolchain@v1
-      # Swatinem/rust-cache automatically removes stuff from `~/.cargo` that was
-      # already installed prior to cache restoration. This makes the cache
-      # slimmer!
       - name: add llvm component
         run: rustup component add llvm-tools-preview
       - name: cargo install cargo-llvm-cov
@@ -234,30 +237,21 @@ jobs:
       - run: cargo deny check licenses
   cargo-doc-artifact:
     runs-on: ubuntu-latest
+    # `cargo doc` requires `cargo check`, so we can share caches.
     needs: check
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v3
-        # Not sure this is actually needed, but it's what the `check` job does
-        # and their caches are shared, so it's best to keep things as similar as
-        # possible.
+        # Not sure installing `mold` is actually needed, but it's what the
+        # `check` job does and their caches are shared, so it's best to keep
+        # things as similar as possible.
       - uses: rui314/setup-mold@v1
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-check
-          # The workspaces have to be identical to effectively share the caches.
-          workspaces: |
-            .
-            examples/demo-prover
       # The docs' artifact tends to become quite large with all the
-      # dependencies, so we don't include them. We also use `--all-features`
-      # because we're reusing the cache from `cargo check --all-features`, so
-      # this should increase the number of shared compilation artifacts in the
-      # cache.
-      #
-      # Using `--all-features` because it's what we're also using for `cargo
-      # check`.
+      # dependencies, so we don't include them.
       - run: cargo doc --no-deps --all-features
       - name: Add index.html
         # We're inside a Cargo workspace, so there's no index.html by default.
