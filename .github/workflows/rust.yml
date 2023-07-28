@@ -21,6 +21,8 @@ name: Rust
 # - `Swatinem/rust-cache` always invalidates the caches whenever rustc's version
 #   changes, so it's less effective if you frequently update your nightly
 #   version.
+# - `Swatinem/rust-cache` also generates an up-to-date `Cargo.lock` file if one
+#   is missing, so it's less effective for libraries that lack one.
 
 on:
   push:
