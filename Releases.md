@@ -5,7 +5,7 @@ This document describes how to cut a release of the Sovereign SDK
 ## Pick a version number
 
 - [ ] Decide a new version number. During alpha, This should have the form `vA.B.C-alpha` where `A, B, C` are natural numbers. Since we're pre `1.0` releases which are not backwards compatible should
-      get a new `minor` version, while releases which are backwards compatible only receive a `patch` version bump. Since almost all of our releaese contain breaking changes, we'll almost always bump the minor version (i.e. from `v0.1.0-alpha` to `v0.2.0-alpha`)
+      get a new `minor` version, while releases which are backwards compatible only receive a `patch` version bump. Since almost all of our releases contain breaking changes, we'll almost always bump the minor version (i.e. from `v0.1.0-alpha` to `v0.2.0-alpha`)
   - [ ] Don't forget the `v`!
 
 ## Check Consistency
