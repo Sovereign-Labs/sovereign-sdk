@@ -29,6 +29,7 @@ pub mod macros {
 }
 
 use core::fmt::{self, Debug, Display};
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -55,7 +56,7 @@ impl AsRef<[u8]> for Address {
 impl AddressTrait for Address {}
 
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
-#[derive(PartialEq, Clone, Eq, borsh::BorshDeserialize, borsh::BorshSerialize)]
+#[derive(PartialEq, Clone, Eq, borsh::BorshDeserialize, borsh::BorshSerialize, Hash)]
 pub struct Address {
     addr: [u8; 32],
 }
@@ -299,11 +300,14 @@ pub trait ModuleCallJsonSchema: Module {
 }
 
 /// Every module has to implement this trait.
-pub trait ModuleInfo: Default {
+pub trait ModuleInfo {
     type Context: Context;
 
     /// Returns address of the module.
     fn address(&self) -> &<Self::Context as Spec>::Address;
+
+    /// Returns addresses of all the other modules this module is dependent on
+    fn dependencies(&self) -> Vec<&<Self::Context as Spec>::Address>;
 }
 
 /// A StateTransitionRunner needs to implement this if
@@ -311,6 +315,122 @@ pub trait ModuleInfo: Default {
 pub trait RpcRunner {
     type Context: Context;
     fn get_storage(&self) -> <Self::Context as Spec>::Storage;
+}
+
+struct ModuleVisitor<'a, C: Context> {
+    visited: HashSet<&'a <C as Spec>::Address>,
+    visited_on_this_path: Vec<&'a <C as Spec>::Address>,
+    sorted_modules: std::vec::Vec<&'a dyn ModuleInfo<Context = C>>,
+}
+
+impl<'a, C: Context> ModuleVisitor<'a, C> {
+    pub fn new() -> Self {
+        Self {
+            visited: HashSet::new(),
+            sorted_modules: Vec::new(),
+            visited_on_this_path: Vec::new(),
+        }
+    }
+
+    /// Visits all the modules and their dependencies, and populates a Vec of modules sorted by their dependencies
+    fn visit_modules(
+        &mut self,
+        modules: Vec<&'a dyn ModuleInfo<Context = C>>,
+    ) -> Result<(), anyhow::Error> {
+        let mut module_map = HashMap::new();
+
+        for module in &modules {
+            module_map.insert(module.address(), *module);
+        }
+
+        for module in modules {
+            self.visited_on_this_path.clear();
+            self.visit_module(module, &module_map)?;
+        }
+
+        Ok(())
+    }
+
+    /// Visits a module and its dependencies, and populates a Vec of modules sorted by their dependencies
+    fn visit_module(
+        &mut self,
+        module: &'a dyn ModuleInfo<Context = C>,
+        module_map: &HashMap<&<C as Spec>::Address, &'a (dyn ModuleInfo<Context = C>)>,
+    ) -> Result<(), anyhow::Error> {
+        let address = module.address();
+
+        // if the module have been visited on this path, then we have a cycle dependency
+        if let Some((index, _)) = self
+            .visited_on_this_path
+            .iter()
+            .enumerate()
+            .find(|(_, &x)| x == address)
+        {
+            let cycle = &self.visited_on_this_path[index..];
+
+            anyhow::bail!(
+                "Cyclic dependency of length {} detected: {:?}",
+                cycle.len(),
+                cycle
+            );
+        } else {
+            self.visited_on_this_path.push(address)
+        }
+
+        // if the module hasn't been visited yet, visit it and its dependencies
+        if self.visited.insert(address) {
+            for dependency_address in module.dependencies() {
+                let dependency_module = *module_map.get(dependency_address).ok_or_else(|| {
+                    anyhow::Error::msg(format!("Module not found: {:?}", dependency_address))
+                })?;
+                self.visit_module(dependency_module, module_map)?;
+            }
+
+            self.sorted_modules.push(module);
+        }
+
+        // remove the module from the visited_on_this_path list
+        self.visited_on_this_path.pop();
+
+        Ok(())
+    }
+}
+
+/// Sorts ModuleInfo objects by their dependencies
+pub fn sort_modules_by_dependencies<C: Context>(
+    modules: Vec<&dyn ModuleInfo<Context = C>>,
+) -> Result<Vec<&dyn ModuleInfo<Context = C>>, anyhow::Error> {
+    let mut module_visitor = ModuleVisitor::<C>::new();
+    module_visitor.visit_modules(modules)?;
+    Ok(module_visitor.sorted_modules)
+}
+
+/// Accepts Vec<> of tuples (&ModuleInfo, &TValue), and returns Vec<&TValue> sorted by mapped module dependencies
+pub fn sort_values_by_modules_dependencies<C: Context, TValue>(
+    module_value_tuples: Vec<(&dyn ModuleInfo<Context = C>, TValue)>,
+) -> Result<Vec<TValue>, anyhow::Error>
+where
+    TValue: Clone,
+{
+    let sorted_modules = sort_modules_by_dependencies(
+        module_value_tuples
+            .iter()
+            .map(|(module, _)| *module)
+            .collect(),
+    )?;
+
+    let mut value_map = HashMap::new();
+
+    for module in module_value_tuples {
+        value_map.insert(module.0.address(), module.1);
+    }
+
+    let mut sorted_values = Vec::new();
+    for module in sorted_modules {
+        sorted_values.push(value_map.get(module.address()).unwrap().clone());
+    }
+
+    Ok(sorted_values)
 }
 
 /// This trait is implemented by types that can be used as arguments in the sov-cli wallet.

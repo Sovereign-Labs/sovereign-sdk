@@ -6,7 +6,7 @@ use sov_rollup_interface::mocks::{MockZkvm, TestBlob};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::AddressTrait;
 
-#[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize, Hash)]
 pub struct DaAddress {
     pub addr: [u8; 32],
 }

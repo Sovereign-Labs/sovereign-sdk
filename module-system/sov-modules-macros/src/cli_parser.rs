@@ -1,9 +1,7 @@
 use quote::{format_ident, quote};
-use syn::punctuated::Punctuated;
-use syn::spanned::Spanned;
-use syn::{Data, DataEnum, DeriveInput, Fields, GenericParam, Ident, PathArguments, Type};
+use syn::{Data, DataEnum, DeriveInput, Fields, Ident, Type};
 
-use crate::common::{extract_generic_type_bounds, extract_ident, StructFieldExtractor};
+use crate::common::{extract_ident, generics_for_field, StructFieldExtractor};
 
 pub(crate) struct CliParserMacro {
     field_extractor: StructFieldExtractor,
@@ -27,28 +25,8 @@ impl CliParserMacro {
             ..
         } = input;
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
-        let generic_bounds = extract_generic_type_bounds(&generics);
 
-        // We assume that the `Context` type is the first generic type parameter
-        // Since macro expansion happens before type inference, there is no reliable way
-        // to extract the `Context` type without making this assumption. (i.e. we can't look for a type
-        // that implements `sov_modules_api::Context`, because that name might have been aliased)
-        let context_type = generics
-            .params
-            .iter()
-            .find_map(|item| {
-                if let GenericParam::Type(type_param) = item {
-                    Some(type_param)
-                } else {
-                    None
-                }
-            })
-            .ok_or(syn::Error::new_spanned(
-                &generics,
-                "a runtime must be generic over a sov_modules_api::Context to derive CliWallet",
-            ))?
-            .ident
-            .clone();
+        let (_, ty_generics, _) = generics.split_for_impl();
 
         let mut module_command_arms = vec![];
         let mut module_args = vec![];
@@ -71,50 +49,8 @@ impl CliParserMacro {
                 let mut module_path = type_path.path.clone();
                 if let Some(segment) = module_path.segments.last_mut() {
                     let field_generic_types = &segment.arguments;
-                    let field_generics_with_bounds = match field_generic_types {
-                        PathArguments::AngleBracketed(angle_bracketed_data) => {
-                            let mut args_with_bounds =
-                                Punctuated::<GenericParam, syn::token::Comma>::new();
-                            for generic_arg in &angle_bracketed_data.args {
-                                if let syn::GenericArgument::Type(syn::Type::Path(type_path)) =
-                                    generic_arg
-                                {
-                                    let ident = extract_ident(type_path);
-                                    let bounds =
-                                        generic_bounds.get(type_path).cloned().unwrap_or_default();
-
-                                    // Construct a "type param" with the appropriate bounds. This corresponds to a syntax
-                                    // tree like `T: Trait1 + Trait2`
-                                    let generic_type_param_with_bounds = syn::TypeParam {
-                                        attrs: Vec::new(),
-                                        ident: ident.clone(),
-                                        colon_token: Some(syn::token::Colon {
-                                            spans: [type_path.span()],
-                                        }),
-                                        bounds: bounds.clone(),
-                                        eq_token: None,
-                                        default: None,
-                                    };
-                                    args_with_bounds
-                                        .push(GenericParam::Type(generic_type_param_with_bounds))
-                                }
-                            }
-                            // Construct a `Generics` struct with the generic type parameters and their bounds.
-                            // This corresponds to a syntax tree like `<T: Trait1 + Trait2>`
-                            syn::Generics {
-                                lt_token: Some(syn::token::Lt {
-                                    spans: [type_path.span()],
-                                }),
-                                params: args_with_bounds,
-                                gt_token: Some(syn::token::Gt {
-                                    spans: [type_path.span()],
-                                }),
-                                where_clause: None,
-                            }
-                        }
-                        // We don't need to do anything if the generic type parameters are not angle bracketed
-                        _ => Default::default(),
-                    };
+                    let field_generics_with_bounds =
+                        generics_for_field(&generics, field_generic_types);
 
                     let module_ident = segment.ident.clone();
                     let module_args_ident = format_ident!("{}Args", module_ident);
@@ -148,7 +84,7 @@ impl CliParserMacro {
                     parse_match_arms.push(quote! {
                             CliTransactionParser::#module_ident(mod_args) => {
                                 let command_as_call_message: <#module_path as ::sov_modules_api::Module>::CallMessage = mod_args.command.into();
-                                #ident::<#context_type>::#encode_function_name(
+                                #ident:: #ty_generics ::#encode_function_name(
                                     command_as_call_message
                                 )
                             },
@@ -171,7 +107,7 @@ impl CliParserMacro {
                     // Build the `match` arms for the CLI's json parser
                     match_arms.push(quote! {
                             #type_name_string => Ok({
-                                #ident::<#context_type>::#encode_function_name(
+                                #ident:: #ty_generics ::#encode_function_name(
                                     ::serde_json::from_str::<<#module_path as ::sov_modules_api::Module>::CallMessage>(&call_data)?
                                 )
                             }),
