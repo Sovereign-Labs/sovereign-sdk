@@ -19,11 +19,20 @@ This document describes how to cut a release of the Sovereign SDK
   - [ ] demo-nft-module/README.md
 - [ ] Audit `packages_to_publish.txt` and ensure that all relevant _library_ packages are included. Binaries (such as demo-rollup) should not be included.
 - [ ] Commit any changes.
-- [ ] Create a new PR (e.g. `release/{version}`). Ensure all tests and lints pass
-- [ ] Once the PR is approved, release the crates
+- [ ] Change the `package.version` field of all workspace crates from `workspace = true` to the _old_ version number
+- [ ] Commit any changes.
+- [ ] Bump the workspace `package.version` (this is safe, since now no crates depend on it)
+- [ ] Create a new PR (e.g. `release/{version}`) against nightly. Ensure all tests and lints pass but _DO NOT MERGE_
+- [ ] Wait for the PR to be approved before merging
 
-## Release
+## Cut the Release
 
-- [ ] Tag the new commit on main with the version
+- [ ] Release all packages from `packages_to_publish.txt` _in order_ (it's pre-sorted by dependencies)
+  - [ ] For each crate: change its `package.version` back to `workspace = true`. Bump the versions of all of its `sovereign-sdk` dependencies.
+  - [ ] run `cargo publish --dry-run {crate}` to ensure there are no issues
+  - [ ] run `cargo publish {crate}` to release the crate
+- [ ] Bump the versions and dependency versions of all unreleased crates
+- [ ] Commit all changes and push. Be sure to tag your commit with the version.
+- [ ] Once CI passes, merge your PR to nightly.
+- [ ] Merge from nightly to stable
 - [ ] Push the tag (`git push origin {version} `)[^1]
-- [ ] Release all packages from `packages_to_publish.txt` in order
