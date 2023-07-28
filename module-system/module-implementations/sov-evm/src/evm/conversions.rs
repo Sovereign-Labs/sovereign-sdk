@@ -1,6 +1,7 @@
-use anvil_core::eth::transaction::{EIP1559Transaction, EthTransactionRequest};
 use bytes::Bytes;
 use ethers_core::types::{OtherFields, Transaction};
+use reth_rpc::eth::error::{EthApiError, RpcInvalidTransactionError};
+use reth_rpc_types::CallRequest;
 use revm::primitives::{
     AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, Bytecode, CreateScheme, TransactTo,
     TxEnv, B160, B256, U256,
@@ -75,10 +76,10 @@ impl From<EvmTransaction> for TxEnv {
             caller: B160::from_slice(&tx.sender),
             data: Bytes::from(tx.data),
             gas_limit: tx.gas_limit,
-            gas_price: U256::from_be_bytes(tx.gas_price),
-            gas_priority_fee: Some(U256::from_be_bytes(tx.max_priority_fee_per_gas)),
+            gas_price: U256::from(tx.gas_price),
+            gas_priority_fee: Some(U256::from(tx.max_priority_fee_per_gas)),
             transact_to: to,
-            value: U256::from_be_bytes(tx.value),
+            value: U256::from(tx.value),
             nonce: Some(tx.nonce),
             chain_id: Some(tx.chain_id),
             access_list,
@@ -119,59 +120,85 @@ impl From<EvmTransaction> for Transaction {
     }
 }
 
-impl From<EIP1559Transaction> for EvmTransaction {
-    fn from(transaction: EIP1559Transaction) -> Self {
-        let to = transaction.kind.as_call().map(|addr| (*addr).into());
-        let tx_hash = transaction.hash();
-        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/515
-        let sender = transaction.recover().unwrap();
+use reth_primitives::{Bytes as RethBytes, TransactionSigned};
 
-        Self {
-            sender: sender.into(),
-            data: transaction.input.to_vec(),
-            gas_limit: transaction.gas_limit.as_u64(),
+impl TryFrom<RethBytes> for EvmTransaction {
+    type Error = EthApiError;
+
+    fn try_from(data: RethBytes) -> Result<Self, Self::Error> {
+        if data.is_empty() {
+            return Err(EthApiError::EmptyRawTransactionData);
+        }
+
+        let transaction = TransactionSigned::decode_enveloped(data)
+            .map_err(|_| EthApiError::FailedToDecodeSignedTransaction)?;
+
+        let transaction = transaction
+            .into_ecrecovered()
+            .ok_or(EthApiError::InvalidTransactionSignature)?;
+
+        let (signed_transaction, signer) = transaction.to_components();
+
+        let tx_hash = signed_transaction.hash();
+        let tx_eip_1559 = match signed_transaction.transaction {
+            reth_primitives::Transaction::Legacy(_) => {
+                return Err(EthApiError::InvalidTransaction(
+                    RpcInvalidTransactionError::TxTypeNotSupported,
+                ))
+            }
+            reth_primitives::Transaction::Eip2930(_) => {
+                return Err(EthApiError::InvalidTransaction(
+                    RpcInvalidTransactionError::TxTypeNotSupported,
+                ))
+            }
+            reth_primitives::Transaction::Eip1559(tx_eip_1559) => tx_eip_1559,
+        };
+
+        Ok(Self {
+            sender: signer.into(),
+            data: tx_eip_1559.input.to_vec(),
+            gas_limit: tx_eip_1559.gas_limit,
             // https://github.com/foundry-rs/foundry/blob/master/anvil/core/src/eth/transaction/mod.rs#L1251C20-L1251C20
-            gas_price: transaction.max_fee_per_gas.into(),
-            max_priority_fee_per_gas: transaction.max_priority_fee_per_gas.into(),
-            max_fee_per_gas: transaction.max_fee_per_gas.into(),
-            to,
-            value: transaction.value.into(),
-            nonce: transaction.nonce.as_u64(),
+            gas_price: tx_eip_1559.max_fee_per_gas,
+            max_priority_fee_per_gas: tx_eip_1559.max_priority_fee_per_gas,
+            max_fee_per_gas: tx_eip_1559.max_fee_per_gas,
+            to: tx_eip_1559.to.to().map(|addr| addr.into()),
+            value: tx_eip_1559.value,
+            nonce: tx_eip_1559.nonce,
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
             access_lists: vec![],
-            chain_id: transaction.chain_id,
+            chain_id: tx_eip_1559.chain_id,
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
             hash: tx_hash.into(),
-            odd_y_parity: transaction.odd_y_parity,
-            r: transaction.r.into(),
-            s: transaction.s.into(),
-        }
+            odd_y_parity: Default::default(),
+            r: Default::default(),
+            s: Default::default(),
+        })
     }
 }
 
-impl From<EthTransactionRequest> for EvmTransaction {
-    fn from(req: EthTransactionRequest) -> Self {
-        Self {
-            sender: req.from.map(|addr| addr.into()).unwrap(),
-            data: req.data.map(|d| d.to_vec()).unwrap_or_default(),
-            gas_limit: req.gas.unwrap_or_default().as_u64(),
-            gas_price: req.gas_price.unwrap_or_default().into(),
-            max_priority_fee_per_gas: req.max_priority_fee_per_gas.unwrap_or_default().into(),
-            max_fee_per_gas: req.max_fee_per_gas.unwrap_or_default().into(),
-            to: req.to.map(|to| to.into()),
-            value: req.value.unwrap_or_default().into(),
-            nonce: req.nonce.unwrap_or_default().as_u64(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
-            access_lists: Default::default(),
-            chain_id: req.chain_id.unwrap_or_default().as_u64(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/515
-            odd_y_parity: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/515
-            r: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/515
-            s: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
-            hash: Default::default(),
-        }
+// TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/576
+// https://github.com/paradigmxyz/reth/blob/d8677b4146f77c7c82d659c59b79b38caca78778/crates/rpc/rpc/src/eth/revm_utils.rs#L201
+pub fn prepare_call_env(request: CallRequest) -> TxEnv {
+    TxEnv {
+        caller: request.from.unwrap(),
+        gas_limit: request.gas.map(|p| p.try_into().unwrap()).unwrap(),
+        gas_price: request.gas_price.unwrap_or_default(),
+        gas_priority_fee: request.max_priority_fee_per_gas,
+        transact_to: request
+            .to
+            .map(TransactTo::Call)
+            .unwrap_or_else(TransactTo::create),
+        value: request.value.unwrap_or_default(),
+        data: request
+            .input
+            .try_into_unique_input()
+            .unwrap()
+            .map(|data| data.0)
+            .unwrap_or_default(),
+        chain_id: request.chain_id.map(|c| c.as_u64()),
+        nonce: request.nonce.map(|n| TryInto::<u64>::try_into(n).unwrap()),
+
+        access_list: Default::default(),
     }
 }
