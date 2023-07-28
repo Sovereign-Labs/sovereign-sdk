@@ -149,13 +149,13 @@ impl RpcImplBlock {
                 let post_working_set_args = arg_values.clone().skip(idx + 1);
                 quote! {
                     #signature {
-                        Ok(<Self as #impl_trait_name #ty_generics >::#method_name(#(#pre_working_set_args,)* #(#post_working_set_args),* ))
+                        <Self as #impl_trait_name #ty_generics >::#method_name(#(#pre_working_set_args,)* #(#post_working_set_args),* )
                     }
                 }
             } else {
                 quote! {
                     #signature {
-                        Ok(<Self as #impl_trait_name #ty_generics >::#method_name(#(#arg_values),*))
+                        <Self as #impl_trait_name #ty_generics >::#method_name(#(#arg_values),*)
                     }
                 }
             };
@@ -204,16 +204,19 @@ impl RpcImplBlock {
 }
 
 fn wrap_in_jsonprsee_result(return_type: &syn::ReturnType) -> syn::ReturnType {
-    let result_type: Type = match return_type {
+    /*let result_type: Type = match return_type {
         syn::ReturnType::Default => syn::parse_quote! { ::jsonrpsee::core::RpcResult<()> },
         syn::ReturnType::Type(_, ty) => syn::parse_quote! { ::jsonrpsee::core::RpcResult<#ty> },
-    };
+    };*/
+    /*
     syn::ReturnType::Type(
         syn::token::RArrow {
             spans: [proc_macro2::Span::call_site(); 2],
         },
-        Box::new(result_type),
-    )
+        Box::new(return_type.clone()),
+    )*/
+
+    return_type.clone()
 }
 
 fn add_server_bounds_attr_if_missing(attrs: &mut Vec<syn::NestedMeta>) {
