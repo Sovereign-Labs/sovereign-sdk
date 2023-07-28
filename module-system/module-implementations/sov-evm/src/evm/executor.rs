@@ -1,7 +1,7 @@
 use std::convert::Infallible;
 
-use anvil::eth::backend::mem::inspector::Inspector;
-use revm::primitives::{CfgEnv, EVMError, Env, ExecutionResult, ResultAndState};
+use reth_revm::tracing::{TracingInspector, TracingInspectorConfig};
+use revm::primitives::{CfgEnv, EVMError, Env, ExecutionResult, ResultAndState, TxEnv};
 use revm::{self, Database, DatabaseCommit};
 
 use super::transaction::{BlockEnv, EvmTransaction};
@@ -28,7 +28,7 @@ pub(crate) fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
 pub(crate) fn inspect<DB: Database<Error = Infallible> + DatabaseCommit>(
     db: DB,
     block_env: BlockEnv,
-    tx: EvmTransaction,
+    tx: TxEnv,
     config_env: CfgEnv,
 ) -> Result<ResultAndState, EVMError<Infallible>> {
     let mut evm = revm::new();
@@ -36,12 +36,15 @@ pub(crate) fn inspect<DB: Database<Error = Infallible> + DatabaseCommit>(
     let env = Env {
         cfg: config_env,
         block: block_env.into(),
-        tx: tx.into(),
+        tx,
     };
 
     evm.env = env;
     evm.database(db);
 
-    let mut inspector = Inspector::default();
+    let config = TracingInspectorConfig::all();
+
+    let mut inspector = TracingInspector::new(config);
+
     evm.inspect(&mut inspector)
 }

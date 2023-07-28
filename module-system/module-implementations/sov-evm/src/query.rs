@@ -1,15 +1,15 @@
-use anvil_core::eth::state::StateOverride;
-use anvil_core::eth::transaction::EthTransactionRequest;
 use ethereum_types::{Address, H256, U256, U64};
 use ethers::types::Bytes;
 use ethers_core::types::{Block, BlockId, FeeHistory, Transaction, TransactionReceipt, TxHash};
+use reth_rpc_types::state::StateOverride;
+use reth_rpc_types::{BlockOverrides, CallRequest, TransactionRequest};
 use revm::primitives::{CfgEnv, ExecutionResult, U256 as EVM_U256};
 use sov_modules_api::macros::rpc_gen;
 use sov_state::WorkingSet;
 use tracing::info;
 
 use crate::evm::db::EvmDb;
-use crate::evm::{executor, EvmTransaction};
+use crate::evm::{executor, prepare_call_env};
 use crate::Evm;
 
 #[rpc_gen(client, server, namespace = "eth")]
@@ -71,24 +71,27 @@ impl<C: sov_modules_api::Context> Evm<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Option<TransactionReceipt> {
         info!("evm module: eth_getTransactionReceipt");
-
         let receipt = self.receipts.get(&hash.into(), working_set);
         receipt.map(|r| r.into())
     }
+
+    //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
+    //https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-types/src/eth/call.rs#L7
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "call")]
     pub fn get_call(
         &self,
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/501
-        request: EthTransactionRequest,
+        request: CallRequest,
         _block_number: Option<BlockId>,
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/501
-        _overrides: Option<StateOverride>,
+        _state_overrides: Option<StateOverride>,
+        _block_overrides: Option<Box<BlockOverrides>>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Bytes {
         info!("evm module: eth_call");
-        let tx: EvmTransaction = request.into();
+        let tx_env = prepare_call_env(request);
 
         // https://github.com/Sovereign-Labs/sovereign-sdk/issues/516
         let cfg_env = CfgEnv {
@@ -100,7 +103,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
-        let result = executor::inspect(evm_db, block_env, tx, cfg_env).unwrap();
+        let result = executor::inspect(evm_db, block_env, tx_env, cfg_env).unwrap();
         let output = match result.result {
             ExecutionResult::Success { output, .. } => output,
             _ => todo!(),
@@ -113,7 +116,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     pub fn send_transaction(
         &self,
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/501
-        _request: EthTransactionRequest,
+        _request: TransactionRequest,
         _working_set: &mut WorkingSet<C::Storage>,
     ) -> U256 {
         unimplemented!("eth_sendTransaction not implemented")

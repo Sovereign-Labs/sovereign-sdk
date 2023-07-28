@@ -10,7 +10,6 @@ version = { workspace = true }
 readme = "README.md"
 resolver = "2"
 
-
 [dependencies]
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
 
@@ -24,10 +23,9 @@ borsh = { workspace = true }
 serde_json = { workspace = true }
 
 reth-primitives = { workspace = true }
+reth-rpc = { workspace = true }
 
-anvil-core  = { workspace = true }
 ethers = { workspace = true }
-
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
@@ -36,6 +34,6 @@ tokio = { workspace = true }
 
 [features]
 default = ["native", "experimental"]
-experimental =["demo-stf/experimental", "sov-evm/experimental"]
+experimental = ["demo-stf/experimental", "sov-evm/experimental"]
 
 native = ["demo-stf/native", "sov-evm/native"]

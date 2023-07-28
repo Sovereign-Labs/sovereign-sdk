@@ -6,18 +6,17 @@ pub mod experimental {
     use std::collections::HashMap;
     use std::sync::Mutex;
 
-    use anvil_core::eth::transaction::TypedTransaction;
     use borsh::ser::BorshSerialize;
     use const_rollup_config::ROLLUP_NAMESPACE_RAW;
     use demo_stf::app::DefaultPrivateKey;
     use demo_stf::runtime::{DefaultContext, Runtime};
-    use ethers::types::Bytes;
-    use ethers::utils::rlp;
+    use ethers::types::{Bytes, H256};
     use jsonrpsee::core::client::ClientT;
     use jsonrpsee::core::params::ArrayParams;
     use jsonrpsee::http_client::{HeaderMap, HttpClient};
     use jsonrpsee::RpcModule;
     use jupiter::da_service::DaServiceConfig;
+    use reth_primitives::Bytes as RethBytes;
     use sov_evm::call::CallMessage;
     use sov_evm::evm::{EthAddress, EvmTransaction};
     use sov_modules_api::transaction::Transaction;
@@ -44,13 +43,12 @@ pub mod experimental {
     }
 
     impl Ethereum {
-        fn make_raw_tx(
-            &self,
-            evm_tx: EvmTransaction,
-            sender: EthAddress,
-        ) -> Result<Vec<u8>, std::io::Error> {
+        fn make_raw_tx(&self, evm_tx: EvmTransaction) -> Result<Vec<u8>, std::io::Error> {
             let mut nonces = self.nonces.lock().unwrap();
-            let nonce = *nonces.entry(sender).and_modify(|n| *n += 1).or_insert(0);
+            let nonce = *nonces
+                .entry(evm_tx.sender)
+                .and_modify(|n| *n += 1)
+                .or_insert(0);
 
             let tx = CallMessage { tx: evm_tx };
             let message = Runtime::<DefaultContext>::encode_evm_call(tx);
@@ -106,52 +104,15 @@ pub mod experimental {
             "eth_sendRawTransaction",
             |parameters, ethereum| async move {
                 let data: Bytes = parameters.one().unwrap();
-                let data = data.as_ref();
+                let data = RethBytes::from(data.as_ref());
 
-                if data.is_empty() {
-                    return Err(jsonrpsee::core::Error::Custom(
-                        "Empty raw transaction data".to_owned(),
-                    ));
-                }
+                let evm_transaction: EvmTransaction = data.try_into().unwrap();
 
-                if data[0] > 0x7f {
-                    return Err(jsonrpsee::core::Error::Custom(
-                        "Legacy transaction not supported".to_owned(),
-                    ));
-                }
+                let tx_hash = evm_transaction.hash;
+                let raw_tx = ethereum.make_raw_tx(evm_transaction)?;
 
-                let extend = rlp::encode(&data);
-                let typed_transaction = match rlp::decode::<TypedTransaction>(&extend[..]) {
-                    Ok(transaction) => transaction,
-                    Err(e) => {
-                        return Err(jsonrpsee::core::Error::Custom(format!(
-                            "Failed to decode signed transaction: {}",
-                            e
-                        )))
-                    }
-                };
-
-                let transaction = match typed_transaction {
-                    TypedTransaction::Legacy(_) => {
-                        return Err(jsonrpsee::core::Error::Custom(
-                            "Legacy transaction not supported".to_owned(),
-                        ))
-                    }
-                    TypedTransaction::EIP2930(_) => {
-                        return Err(jsonrpsee::core::Error::Custom(
-                            "EIP2930 not supported".to_owned(),
-                        ))
-                    }
-                    TypedTransaction::EIP1559(tx) => tx,
-                };
-
-                let tx_hash = transaction.hash();
-                let evm_transaction: EvmTransaction = transaction.into();
-                let sender = evm_transaction.sender;
-
-                let raw_tx = ethereum.make_raw_tx(evm_transaction, sender)?;
                 ethereum.send_tx_to_da(raw_tx).await?;
-                Ok(tx_hash)
+                Ok(H256::from(tx_hash))
             },
         )?;
 

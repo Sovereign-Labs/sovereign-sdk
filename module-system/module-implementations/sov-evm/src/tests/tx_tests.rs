@@ -1,6 +1,5 @@
 use std::str::FromStr;
 
-use anvil::NodeConfig;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
@@ -12,7 +11,7 @@ use ethers_signers::{LocalWallet, Signer, Wallet};
 
 use crate::evm::test_helpers::SimpleStorageContract;
 
-const MAX_FEE_PER_GAS: u64 = 1000000001;
+const MAX_FEE_PER_GAS: u64 = 100000001;
 
 #[tokio::test]
 async fn tx_rlp_encoding_test() -> Result<(), Box<dyn std::error::Error>> {
@@ -58,36 +57,6 @@ struct TestClient {
 }
 
 impl TestClient {
-    async fn new_anvil_client(
-        chain_id: u64,
-        key: Wallet<SigningKey>,
-        from_addr: Address,
-        contract: SimpleStorageContract,
-    ) -> Self {
-        let config = NodeConfig {
-            chain_id: Some(chain_id),
-            ..Default::default()
-        };
-
-        let (_api, handle) = anvil::spawn(config).await;
-
-        let provider = Provider::try_from(handle.http_endpoint()).unwrap();
-
-        // let endpoint = format!("http://localhost:{}", 8545);
-        // let provider = Provider::try_from(endpoint).unwrap();
-
-        let client = SignerMiddleware::new_with_provider_chain(provider, key)
-            .await
-            .unwrap();
-
-        Self {
-            chain_id,
-            from_addr,
-            contract,
-            client,
-        }
-    }
-
     #[allow(dead_code)]
     async fn new_demo_rollup_client(
         chain_id: u64,
@@ -112,6 +81,7 @@ impl TestClient {
 
     async fn execute(self) -> Result<(), Box<dyn std::error::Error>> {
         // Deploy contract
+
         let contract_address = {
             let request = Eip1559TransactionRequest::new()
                 .from(self.from_addr)
@@ -192,7 +162,7 @@ async fn send_tx_test_to_eth() -> Result<(), Box<dyn std::error::Error>> {
 
     let from_addr = Address::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
 
-    let test_client = TestClient::new_anvil_client(chain_id, key, from_addr, contract).await;
-    // let test_client = TestClient::new_demo_rollup_client(chain_id, key, from_addr, contract).await;
+    //let test_client = TestClient::new_anvil_client(chain_id, key, from_addr, contract).await;
+    let test_client = TestClient::new_demo_rollup_client(chain_id, key, from_addr, contract).await;
     test_client.execute().await
 }
