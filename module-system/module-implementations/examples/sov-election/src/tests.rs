@@ -97,7 +97,7 @@ fn test_module<C: Context>(admin: C::Address, working_set: &mut WorkingSet<C::St
 
     // Get result
     {
-        let query_response: GetResultResponse = election.results(working_set);
+        let query_response: GetResultResponse = election.results(working_set).unwrap();
 
         assert_eq!(
             query_response,
