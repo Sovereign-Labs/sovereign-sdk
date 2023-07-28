@@ -24,7 +24,8 @@ fn test_registration_lifecycle() {
         let sequencer_address = generate_address(GENESIS_SEQUENCER_KEY);
         let registry_response = test_sequencer
             .registry
-            .sequencer_address(GENESIS_SEQUENCER_DA_ADDRESS.to_vec(), working_set);
+            .sequencer_address(GENESIS_SEQUENCER_DA_ADDRESS.to_vec(), working_set)
+            .unwrap();
         assert_eq!(Some(sequencer_address), registry_response.address);
     }
 
@@ -37,12 +38,14 @@ fn test_registration_lifecycle() {
 
     let balance_before = test_sequencer
         .query_balance(sequencer_address.clone(), working_set)
+        .unwrap()
         .amount
         .unwrap();
 
     let registry_response_before = test_sequencer
         .registry
-        .sequencer_address(da_address.clone(), working_set);
+        .sequencer_address(da_address.clone(), working_set)
+        .unwrap();
     assert!(registry_response_before.address.is_none());
 
     let register_message = CallMessage::Register {
@@ -55,13 +58,15 @@ fn test_registration_lifecycle() {
 
     let balance_after_registration = test_sequencer
         .query_balance(sequencer_address.clone(), working_set)
+        .unwrap()
         .amount
         .unwrap();
     assert_eq!(balance_before - LOCKED_AMOUNT, balance_after_registration);
 
     let registry_response_after_registration = test_sequencer
         .registry
-        .sequencer_address(da_address.clone(), working_set);
+        .sequencer_address(da_address.clone(), working_set)
+        .unwrap();
     assert_eq!(
         Some(sequencer_address.clone()),
         registry_response_after_registration.address
@@ -77,13 +82,15 @@ fn test_registration_lifecycle() {
 
     let balance_after_exit = test_sequencer
         .query_balance(sequencer_address, working_set)
+        .unwrap()
         .amount
         .unwrap();
     assert_eq!(balance_before, balance_after_exit);
 
     let registry_response_after_exit = test_sequencer
         .registry
-        .sequencer_address(da_address, working_set);
+        .sequencer_address(da_address, working_set)
+        .unwrap();
     assert!(registry_response_after_exit.address.is_none());
 }
 

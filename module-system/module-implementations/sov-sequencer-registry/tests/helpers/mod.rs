@@ -1,3 +1,4 @@
+use jsonrpsee::core::RpcResult;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Hasher, Module, Spec};
 use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
@@ -38,7 +39,7 @@ impl TestSequencer {
     pub fn query_balance_via_bank(
         &mut self,
         working_set: &mut WorkingSet<<C as Spec>::Storage>,
-    ) -> sov_bank::BalanceResponse {
+    ) -> RpcResult<sov_bank::BalanceResponse> {
         self.bank.balance_of(
             self.sequencer_config.seq_rollup_address.clone(),
             self.sequencer_config.coins_to_lock.token_address.clone(),
@@ -51,7 +52,7 @@ impl TestSequencer {
         &mut self,
         user_address: <DefaultContext as Spec>::Address,
         working_set: &mut WorkingSet<<C as Spec>::Storage>,
-    ) -> sov_bank::BalanceResponse {
+    ) -> RpcResult<sov_bank::BalanceResponse> {
         self.bank.balance_of(
             user_address,
             self.sequencer_config.coins_to_lock.token_address.clone(),
