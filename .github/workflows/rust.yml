@@ -68,6 +68,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-check
+          workspaces: |
+            .
+            examples/demo-prover
       - name: Run lint
         run: |
           if ! make lint ; then
@@ -93,6 +96,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-check
+          workspaces: |
+            .
+            examples/demo-prover
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
       - name: cargo hack
         run: make check-features
@@ -109,6 +115,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-build
+          workspaces: |
+            .
+            examples/demo-prover
       - run: cargo nextest run --workspace --all-features
       # `cargo-nextest` does not support doctests (yet?), so we have to run them
       # separately.
@@ -127,6 +136,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-build
+          workspaces: |
+            .
+            examples/demo-prover
       - name: start celestia local
         working-directory: ./examples/demo-rollup
         run: make start
@@ -250,6 +262,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-check
+          workspaces: |
+            .
+            examples/demo-prover
       # The docs' artifact tends to become quite large with all the
       # dependencies, so we don't include them.
       - run: cargo doc --no-deps --all-features
