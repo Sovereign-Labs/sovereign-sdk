@@ -3099,6 +3099,8 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 [[package]]
 name = "jmt"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1a302f0defd323b833c9848c20ab40c3156128f50d7bf8eebeed2ef58167258"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3109,12 +3111,10 @@ dependencies = [
  "mirai-annotations",
  "num-derive 0.3.3",
  "num-traits",
- "risc0-zkvm",
  "serde",
  "sha2 0.10.7",
  "thiserror",
  "tracing",
- "zk-cycle-utils",
 ]
 
 [[package]]
@@ -3282,6 +3282,7 @@ dependencies = [
  "tokio",
  "tracing",
  "wiremock",
+ "zk-cycle-utils",
 ]
 
 [[package]]
@@ -4971,9 +4972,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "bytemuck",
+ "once_cell",
+ "parking_lot 0.11.2",
  "risc0-circuit-rv32im",
  "risc0-zkp",
  "risc0-zkvm",
+ "risc0-zkvm-platform",
  "serde",
  "sov-rollup-interface",
 ]
@@ -5991,6 +5996,7 @@ dependencies = [
  "hex",
  "rand 0.7.3",
  "risc0-zkvm",
+ "risc0-zkvm-platform",
  "schemars",
  "serde",
  "serde_json",
@@ -6030,6 +6036,7 @@ dependencies = [
  "hex",
  "jmt",
  "risc0-zkvm",
+ "risc0-zkvm-platform",
  "serde",
  "sov-modules-api",
  "sov-rollup-interface",
@@ -6127,6 +6134,7 @@ dependencies = [
  "hex",
  "jmt",
  "risc0-zkvm",
+ "risc0-zkvm-platform",
  "serde",
  "sha2 0.10.7",
  "sov-db",

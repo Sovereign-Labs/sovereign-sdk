@@ -25,6 +25,12 @@ use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::Storage;
 
+#[cfg(feature = "bench")]
+use risc0_adapter::host::GLOBAL_HASHMAP;
+
+#[cfg(feature = "bench")]
+use std::collections::HashMap;
+
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RollupConfig {
     pub start_height: u64,
@@ -35,12 +41,58 @@ pub struct RollupConfig {
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
+#[macro_use]
+extern crate prettytable;
+
+use prettytable::Table;
+
+fn print_cycle_averages(
+    metric_map: HashMap<String, (u64,u64)>
+) {
+
+    let mut metrics_vec: Vec<(String, (u64,u64))> = metric_map.iter()
+        .map(|(k, (sum, count))| (k.clone(), (((*sum as f64)/(*count as f64)).round() as u64, count.clone())))
+        .collect();
+
+    metrics_vec.sort_by(|a, b| b.1.cmp(&a.1));
+
+    let mut table = Table::new();
+    table.add_row(row!["Function", "Average Cycles", "Num Calls"]);
+    for (k, (avg, count)) in metrics_vec {
+        table.add_row(row![k, format!("{}", avg),  format!("{}",count)]);
+    }
+    table.printstd();
+
+}
+
+fn chain_stats(
+    num_blocks: usize,
+    num_blocks_with_txns : usize,
+    num_txns: usize,
+    num_blobs: usize
+) {
+
+    let mut table = Table::new();
+    table.add_row(row!["Total blocks", num_blocks]);
+    table.add_row(row!["Blocks with transactions", num_blocks_with_txns]);
+    table.add_row(row!["Number of blobs", num_blobs]);
+    table.add_row(row!["Total number of transactions", num_txns]);
+    table.add_row(row!["Average number of transactions per block", ((num_txns as f64) / (num_blocks_with_txns as f64)) as u64]);
+    table.printstd();
+
+}
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = "benches/rollup_config.toml".to_string();
     let mut rollup_config: RollupConfig = from_toml_path(&rollup_config_path)
         .context("Failed to read rollup configuration")
         .unwrap();
+
+    let mut num_blocks = 0;
+    let mut num_blobs = 0;
+    let mut num_blocks_with_txns = 0;
+    let mut num_total_transactions = 0;
 
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
     rollup_config.runner.storage.path = PathBuf::from(temp_dir.path());
@@ -81,7 +133,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .collect();
 
     for height in 0..(borshed_blocks.len() as u64) {
-    // for height in 0..5 {
+        num_blocks+=1;
         let mut host = Risc0Host::new(ROLLUP_ELF);
         host.write_to_guest(prev_state_root);
         println!(
@@ -105,9 +157,12 @@ async fn main() -> Result<(), anyhow::Error> {
             );
             continue;
         }
+        num_blocks_with_txns+=1;
         println!("Block has {} batches", blob_txs.len());
         for mut blob in blob_txs.clone() {
+            num_blobs+=1;
             let receipt = demo.apply_blob(&mut blob, None);
+            num_total_transactions += receipt.tx_receipts.len();
             println!(
                 "batch with hash=0x{} has been applied",
                 hex::encode(receipt.batch_hash)
@@ -120,10 +175,24 @@ async fn main() -> Result<(), anyhow::Error> {
         host.write_to_guest(&witness);
         println!("Started proving block {height}");
         let now = Instant::now();
+        println!("Skipping prover to capture cycle counts\n");
         let receipt = host.run_without_proving().expect("Prover should run successfully");
         println!("prover time: {:?}\n\n",now.elapsed());
         println!("==================================================\n");
         prev_state_root = next_state_root.0;
+
+    }
+
+    #[cfg(feature = "bench")]
+    {
+        let hashmap_guard = GLOBAL_HASHMAP.lock();
+        let metric_map = hashmap_guard.clone();
+        let total_cycles = metric_map.get("Cycles per block").unwrap().0;
+        println!("\nBlock stats\n");
+        chain_stats(num_blocks, num_blocks_with_txns, num_total_transactions, num_blobs);
+        println!("\nCycle Metrics\n");
+        print_cycle_averages(metric_map);
+        println!("\nTotal cycles consumed for test: {}\n", total_cycles);
 
     }
 

@@ -2,12 +2,13 @@ use std::cell::RefCell;
 
 use risc0_zkvm::receipt::Receipt;
 use risc0_zkvm::serde::to_vec;
-use risc0_zkvm::sha::Impl;
 use risc0_zkvm::{
     Executor, ExecutorEnvBuilder, LocalExecutor, SegmentReceipt, Session, SessionReceipt,
 };
 use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
+use std::collections::HashMap;
 
+use risc0_zkvm_platform::syscall::SyscallName;
 
 use crate::Risc0MethodId;
 
@@ -16,22 +17,61 @@ pub struct Risc0Host<'a> {
     elf: &'a [u8],
 }
 
+
+#[cfg(feature = "bench")]
+use once_cell::sync::Lazy;
+#[cfg(feature = "bench")]
+use parking_lot::Mutex;
+
+#[cfg(feature = "bench")]
+pub static GLOBAL_HASHMAP: Lazy<Mutex<HashMap<String,(u64, u64)>>> = Lazy::new(|| {
+    Mutex::new(HashMap::new())
+});
+
+#[cfg(feature = "bench")]
+pub fn add_value(metric: String, value:  u64) {
+    let mut hashmap = GLOBAL_HASHMAP.lock();
+    hashmap.entry(metric)
+        .and_modify(|(sum, count)| {
+            *sum += value;
+            *count += 1;
+        })
+        .or_insert((value, 1));
+}
+
+fn deserialize_custom(serialized: &[u8]) -> (String, u64) {
+    let null_pos = serialized.iter().position(|&b| b == 0).unwrap();
+    let (string_bytes, size_bytes_with_null) = serialized.split_at(null_pos);
+    let size_bytes = &size_bytes_with_null[1..]; // Skip the null terminator
+    let string = String::from_utf8(string_bytes.to_vec()).unwrap();
+    let size = u64::from_ne_bytes(size_bytes.try_into().unwrap()); // Convert bytes back into usize
+    let tuple = (string, size);
+    tuple
+}
+
 impl<'a> Risc0Host<'a> {
     pub fn new(elf: &'a [u8]) -> Self {
+        let mut default_env = ExecutorEnvBuilder::default();
+        default_env.env_var("RISC0_EXPERIMENTAL_PREFLIGHT","1");
+
+        let cycle_string = String::from("cycle_metrics\0");
+        let metrics_syscall_name = unsafe {
+            SyscallName::from_bytes_with_nul(cycle_string.as_ptr())
+        };
+
+        let metrics_callback = |input: &[u8]| -> Vec<u8> {
+            #[cfg(feature = "bench")]
+            {
+                let met_tuple = deserialize_custom(input);
+                add_value(met_tuple.0, met_tuple.1);
+            }
+            vec![]
+        };
+
+        default_env.io_callback(metrics_syscall_name, metrics_callback);
+
         Self {
-            //     prover: RefCell::new(
-            //         Prover::new_with_opts(
-            //             elf,
-            //             ProverOpts::default()
-            //                 .with_skip_seal(true)
-            //                 // .with_skip_verify(true)
-            //         )
-            //         .expect("Prover should be constructed from valid ELF binary"))
-            // // prover: RefCell::new(
-            // //                 Prover::new(elf)
-            // //                     .expect("Prover should be constructed from valid ELF binary"),
-            // //             )
-            env: RefCell::new(ExecutorEnvBuilder::default()),
+            env: RefCell::new(default_env),
             elf,
         }
     }

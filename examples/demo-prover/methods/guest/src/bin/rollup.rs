@@ -16,6 +16,7 @@ use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::{StateTransitionFunction, ZkConfig};
 use sov_rollup_interface::zk::{StateTransition, ZkvmGuest};
 
+
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
@@ -29,6 +30,7 @@ risc0_zkvm::guest::entry!(main);
 //  5. Call end_slot
 //  6. Output (Da hash, start_root, end_root, event_root)
 pub fn main() {
+
     env::write(&"Start guest\n");
     let guest = Risc0Guest;
 
@@ -56,6 +58,7 @@ pub fn main() {
     env::write(&"Witness read\n");
 
     let start_cycles = env::get_cycle_count();
+
     demo.begin_slot(witness);
     env::write(&"Slot has begun\n");
     for blob in &mut blobs {
@@ -74,9 +77,7 @@ pub fn main() {
     let validity_condition = verifier
         .verify_relevant_tx_list::<NoOpHasher>(&header, &blobs, inclusion_proof, completeness_proof)
         .expect("Transaction list must be correct");
-    let end_cycles = env::get_cycle_count();
     env::write(&"Relevant txs verified\n");
-    env::write(&format!("==================> total cycles used {}\n",end_cycles-start_cycles));
     let output = StateTransition {
         initial_state_root: prev_state_root_hash,
         final_state_root: state_root.0,
@@ -85,4 +86,23 @@ pub fn main() {
     env::commit(&output);
 
     env::write(&"new state root committed\n");
+
+    let end_cycles = env::get_cycle_count();
+
+    // serialization. lol.
+    let tuple = ("Cycles per block".to_string(), (end_cycles - start_cycles) as u64);
+    let mut serialized = Vec::new();
+    serialized.extend(tuple.0.as_bytes());
+    serialized.push(0);
+    let size_bytes = tuple.1.to_ne_bytes();
+    serialized.extend(&size_bytes);
+
+    // calculate the syscall name.
+    /// TODO: figure out how to do once. doesn't need to do it everytime.
+    let cycle_string = String::from("cycle_metrics\0");
+    let metrics_syscall_name = unsafe {
+        risc0_zkvm_platform::syscall::SyscallName::from_bytes_with_nul(cycle_string.as_ptr())
+    };
+
+    risc0_zkvm::guest::env::send_recv_slice::<u8,u8>(metrics_syscall_name, &serialized);
 }

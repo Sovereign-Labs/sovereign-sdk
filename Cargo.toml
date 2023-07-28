@@ -47,8 +47,8 @@ rust-version = "1.66"
 
 [workspace.dependencies]
 # Dependencies maintained by sovereign
-jmt = { path = "../jmt", version = "0.6.0" }
-#jmt = "0.6.0"
+#jmt = { path = "../jmt", version = "0.6.0" }
+jmt = "0.6.0"
 
 # External dependencies
 async-trait = "0.1.71"

@@ -820,9 +820,9 @@ checksum = "b6c80984affa11d98d1b88b66ac8853f143217b399d3c74116778ff8fdb4ed2e"
 
 [[package]]
 name = "globset"
-version = "0.4.11"
+version = "0.4.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1391ab1f92ffcc08911957149833e682aa3fe252b9f45f966d2ef972274c97df"
+checksum = "aca8bbd8e0707c1887a8bbb7e6b40e228f251ff5d62c8220a4a7a53c73aff006"
 dependencies = [
  "aho-corasick",
  "bstr",
@@ -1070,6 +1070,8 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 [[package]]
 name = "jmt"
 version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1a302f0defd323b833c9848c20ab40c3156128f50d7bf8eebeed2ef58167258"
 dependencies = [
  "anyhow",
  "borsh",
@@ -1080,12 +1082,10 @@ dependencies = [
  "mirai-annotations",
  "num-derive 0.3.3",
  "num-traits",
- "risc0-zkvm",
  "serde",
  "sha2 0.10.6",
  "thiserror",
  "tracing",
- "zk-cycle-utils",
 ]
 
 [[package]]
@@ -1214,6 +1214,8 @@ dependencies = [
  "prost",
  "prost-build",
  "prost-types",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
  "serde",
  "serde_json",
  "sha2 0.10.6",
@@ -1222,6 +1224,7 @@ dependencies = [
  "tendermint-proto",
  "thiserror",
  "tracing",
+ "zk-cycle-utils",
 ]
 
 [[package]]
@@ -1852,7 +1855,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "bytemuck",
  "risc0-zkvm",
+ "risc0-zkvm-platform",
  "serde",
  "sov-rollup-interface",
 ]
@@ -2088,9 +2093,9 @@ checksum = "b0293b4b29daaf487284529cc2f5675b8e57c61f70167ba415a463651fd6a918"
 
 [[package]]
 name = "serde"
-version = "1.0.175"
+version = "1.0.177"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5d25439cd7397d044e2748a6fe2432b5e85db703d6d097bd014b3c0ad1ebff0b"
+checksum = "63ba2516aa6bf82e0b19ca8b50019d52df58455d3cf9bdaf6315225fdd0c560a"
 dependencies = [
  "serde_derive",
 ]
@@ -2106,9 +2111,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.175"
+version = "1.0.177"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b23f7ade6f110613c0d63858ddb8b94c1041f550eab58a16b371bdf2c9c80ab4"
+checksum = "401797fe7833d72109fedec6bfcbe67c0eed9b99772f26eb8afd261f0abc6fd3"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2128,9 +2133,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.103"
+version = "1.0.104"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d03b412469450d4404fe8499a268edd7f8b79fecb074b0d812ad64ca21f4031b"
+checksum = "076066c5f1078eac5b722a31827a8832fe108bed65dfa75e233c89f8206e976c"
 dependencies = [
  "itoa",
  "ryu",
@@ -2139,9 +2144,9 @@ dependencies = [
 
 [[package]]
 name = "serde_repr"
-version = "0.1.15"
+version = "0.1.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e168eaaf71e8f9bd6037feb05190485708e019f4fd87d161b3c0a0d37daf85e5"
+checksum = "8725e1dfadb3a50f7e5ce0b1a540466f6ed3fe7a0fca2ac2b8b831d31316bd00"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2200,6 +2205,7 @@ dependencies = [
 [[package]]
 name = "sha2"
 version = "0.10.6"
+source = "git+https://github.com/risc0/RustCrypto-hashes?tag=sha2/v0.10.6-risc0#e75cafd9f55da196061f6fadf8bc8a86778192b7"
 dependencies = [
  "cfg-if",
  "cpufeatures",
@@ -2303,6 +2309,7 @@ dependencies = [
  "log",
  "risc0-adapter",
  "risc0-zkvm",
+ "risc0-zkvm-platform",
  "serde",
  "serde_json",
  "sha2 0.10.6",
@@ -2340,6 +2347,7 @@ dependencies = [
  "derive_more",
  "ed25519-dalek",
  "risc0-zkvm",
+ "risc0-zkvm-platform",
  "serde",
  "serde_json",
  "sha2 0.10.6",
@@ -2373,6 +2381,7 @@ dependencies = [
  "hex",
  "jmt",
  "risc0-zkvm",
+ "risc0-zkvm-platform",
  "serde",
  "sov-modules-api",
  "sov-rollup-interface",
@@ -2415,6 +2424,7 @@ dependencies = [
  "hex",
  "jmt",
  "risc0-zkvm",
+ "risc0-zkvm-platform",
  "serde",
  "sha2 0.10.6",
  "sov-first-read-last-write-cache",

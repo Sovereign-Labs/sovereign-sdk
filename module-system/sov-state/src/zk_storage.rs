@@ -12,16 +12,6 @@ use crate::{MerkleProofSpec, Storage};
 #[cfg(target_os = "zkvm")]
 use zk_cycle_utils::cycle_tracker;
 
-#[cfg(target_os = "zkvm")]
-fn get_cycle_count() -> usize {
-    risc0_zkvm::guest::env::get_cycle_count()
-}
-
-#[cfg(not(target_os = "zkvm"))]
-fn get_cycle_count() -> usize {
-    0
-}
-
 extern crate risc0_zkvm;
 
 pub struct ZkStorage<S: MerkleProofSpec> {
