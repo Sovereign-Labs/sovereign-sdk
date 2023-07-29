@@ -2,7 +2,7 @@
 //! instantiate and run the state transition function.
 use crate::services::batch_builder::BatchBuilder;
 use crate::stf::{StateTransitionConfig, StateTransitionFunction};
-use crate::zk::Zkvm;
+use crate::zk::{ValidityCondition, Zkvm};
 
 /// A StateTransitionRunner (STR) is responsible for running the state transition function. For any particular function,
 /// you might have a few different STRs, each with different runtime configs. For example, you might have a STR which takes
@@ -23,7 +23,7 @@ use crate::zk::Zkvm;
 /// and a `impl StateTransitionRunner<ZkConfig, Vm> for MyRunner` which instead uses a state root as its runtime config.
 ///
 /// TODO: Why is it called runner? It only creates. Creator, Factory: https://github.com/Sovereign-Labs/sovereign-sdk/issues/447
-pub trait StateTransitionRunner<T: StateTransitionConfig, Vm: Zkvm> {
+pub trait StateTransitionRunner<T: StateTransitionConfig, Vm: Zkvm, Cond: ValidityCondition> {
     /// The parameters of the state transition function which are set at runtime. For example,
     /// the runtime config might contain path to a data directory.
     type RuntimeConfig;

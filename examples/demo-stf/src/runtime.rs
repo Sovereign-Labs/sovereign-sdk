@@ -9,14 +9,16 @@ use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
 use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
-#[cfg(feature = "native")]
+#[cfg(feature = "zk")]
 use sov_modules_api::default_context::ZkDefaultContext;
-use sov_modules_api::hooks::SyncHooks;
+use sov_modules_api::hooks::{SlotHooks, SyncHooks};
 use sov_modules_api::Context;
 #[cfg(feature = "native")]
 use sov_modules_macros::{cli_parser, expose_rpc};
 #[cfg(feature = "native")]
 use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
+use sov_rollup_interface::mocks::TestValidityCond;
+use sov_rollup_interface::zk::ValidityCondition;
 #[cfg(feature = "native")]
 use sov_sequencer_registry::query::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 #[cfg(feature = "native")]
@@ -76,6 +78,13 @@ pub struct Runtime<C: Context> {
 impl SyncHooks for Runtime<DefaultContext> {
     type Context = DefaultContext;
 
+    fn post_genesis_hook(
+        &self,
+        working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+    ) -> anyhow::Result<()> {
+        unimplemented!()
+    }
+
     fn pre_blob_hook(
         &self,
         _blob: &mut impl sov_rollup_interface::da::BlobTransactionTrait,
@@ -85,6 +94,29 @@ impl SyncHooks for Runtime<DefaultContext> {
     }
 }
 
+impl<Cond> SlotHooks<Cond> for Runtime<DefaultContext> {
+    type Context = DefaultContext;
+
+    fn begin_slot_hook(
+        &self,
+        slot_data: &impl sov_rollup_interface::services::da::SlotData,
+        working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    fn end_slot_hook(
+        &self,
+        new_state_root: [u8; 32],
+        state_checkpoint: sov_state::StateCheckpoint<
+            <Self::Context as sov_modules_api::Spec>::Storage,
+        >,
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
+}
+
+#[cfg(feature = "zk")]
 impl SyncHooks for Runtime<ZkDefaultContext> {
     type Context = ZkDefaultContext;
 

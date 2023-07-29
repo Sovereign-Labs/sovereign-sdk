@@ -99,6 +99,8 @@ impl DaSpec for CelestiaSpec {
     type CompletenessProof = Vec<RelevantRowProof>;
 
     type ChainParams = RollupParams;
+
+    type ValidityCondition = ChainValidityCondition;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -107,7 +109,16 @@ pub struct RollupParams {
 }
 
 #[derive(
-    Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash, BorshDeserialize, BorshSerialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    Hash,
+    BorshDeserialize,
+    BorshSerialize,
 )]
 /// A validity condition expressing that a chain of DA layer blocks is contiguous and canonical
 pub struct ChainValidityCondition {
@@ -135,8 +146,6 @@ impl da::DaVerifier for CelestiaVerifier {
 
     type Error = ValidationError;
 
-    type ValidityCondition = ChainValidityCondition;
-
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self {
         Self {
             rollup_namespace: params.namespace,
@@ -149,7 +158,7 @@ impl da::DaVerifier for CelestiaVerifier {
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
         inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
         completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
-    ) -> Result<Self::ValidityCondition, Self::Error> {
+    ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error> {
         // Validate that the provided DAH is well-formed
         block_header.validate_dah()?;
         let validity_condition = ChainValidityCondition {

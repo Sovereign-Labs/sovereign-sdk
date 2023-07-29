@@ -280,7 +280,7 @@ impl<
     ) -> Result<()> {
         let bonding_root = {
             if attestation.proof_of_bond.transition_num == 0 {
-                self.chain_state.genesis_hash.get_or_err(working_set)?
+                self.chain_state.genesis_hash(working_set)
             } else {
                 self.chain_state
                     .historical_transitions
@@ -356,9 +356,7 @@ impl<
             // We can assume that the genesis hash is always set, otherwise we need to panic.
             // We don't need to prove that the attester was bonded, simply need to check that the current bond is higher than the
             // minimal bond and that the attester is not unbonding
-            if !(self.chain_state.genesis_hash.get(working_set).unwrap()
-                == attestation.initial_state_root)
-            {
+            if !(self.chain_state.genesis_hash(working_set) == attestation.initial_state_root) {
                 // Slash the attester, and burn the fees
                 return self.slash_burn_reward(attester, working_set);
             }
@@ -473,7 +471,7 @@ impl<
             .get_or_err(&transition_num, working_set)?;
         let initial_hash = {
             if transition_num == 0 {
-                self.chain_state.genesis_hash.get_or_err(working_set)?
+                self.chain_state.genesis_hash(working_set)
             } else {
                 self.chain_state
                     .historical_transitions

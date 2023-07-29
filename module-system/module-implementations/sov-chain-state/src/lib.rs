@@ -11,7 +11,7 @@ pub mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
-use sov_rollup_interface::mocks::MockValidityCond;
+use sov_rollup_interface::mocks::TestValidityCond;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
 use sov_state::WorkingSet;
 
@@ -22,11 +22,11 @@ pub struct StateTransitionId<Cond: ValidityCondition> {
     validity_condition: Cond,
 }
 
-impl StateTransitionId<MockValidityCond> {
+impl StateTransitionId<TestValidityCond> {
     pub fn new(
         da_block_hash: [u8; 32],
         post_state_root: [u8; 32],
-        validity_condition: MockValidityCond,
+        validity_condition: TestValidityCond,
     ) -> Self {
         Self {
             da_block_hash,
@@ -85,10 +85,6 @@ pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
     /// The transition that is currently processed
     #[state]
     pub in_progress_transition: sov_state::StateValue<TransitionInProgress<Cond>>,
-
-    /// The initial state hash
-    #[state]
-    pub genesis_hash: sov_state::StateValue<[u8; 32]>,
 }
 
 impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Module

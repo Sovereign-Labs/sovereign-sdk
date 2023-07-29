@@ -1,3 +1,6 @@
+use std::default;
+use std::marker::PhantomData;
+
 use borsh::BorshSerialize;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use sov_accounts::query::Response;
@@ -6,7 +9,7 @@ use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::PublicKey;
 use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, SlashingReason};
-use sov_rollup_interface::mocks::MockZkvm;
+use sov_rollup_interface::mocks::{MockZkvm, TestBlock, TestBlockHeader, TestValidityCond};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -36,9 +39,11 @@ fn test_tx_revert() {
 
     {
         let mut demo = create_new_demo(path);
+        // TODO: Maybe complete with actual block data
+        let data = TestBlock::default();
 
         StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
-        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
+        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, &data, Default::default());
 
         let txs = simulate_da_with_revert_msg(election_admin_private_key);
 
@@ -110,9 +115,11 @@ fn test_nonce_incremented_on_revert() {
     );
 
     {
+        // TODO: Maybe complete with actual block data
+        let data = TestBlock::default();
         let mut demo = create_new_demo(path);
         StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
-        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
+        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, &data, Default::default());
 
         let set_candidates_message = Runtime::<DefaultContext>::encode_election_call(
             sov_election::call::CallMessage::SetCandidates {
@@ -202,9 +209,11 @@ fn test_tx_bad_sig() {
 
     {
         let mut demo = create_new_demo(path);
+        // TODO: Maybe complete with actual block data
+        let data = TestBlock::default();
 
         StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
-        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
+        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, &data, Default::default());
 
         let txs = simulate_da_with_bad_sig(election_admin_private_key);
 
@@ -281,8 +290,11 @@ fn test_tx_bad_serialization() {
     };
 
     {
+        // TODO: Maybe complete with actual block data
+        let data = TestBlock::default();
+
         let mut demo = create_new_demo(path);
-        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
+        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, &data, Default::default());
 
         let txs = simulate_da_with_bad_serialization(election_admin_private_key);
 

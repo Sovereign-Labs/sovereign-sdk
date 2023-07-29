@@ -1,7 +1,11 @@
-use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
+use sov_modules_api::default_context::DefaultContext;
+#[cfg(feature = "zk")]
+use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::{Address, Context, Module, PublicKey};
-use sov_state::{ProverStorage, WorkingSet, ZkStorage};
+#[cfg(feature = "zk")]
+use sov_state::ZkStorage;
+use sov_state::{ProverStorage, WorkingSet};
 
 use super::call::CallMessage;
 use super::query::GetResultResponse;
@@ -19,10 +23,14 @@ fn test_election() {
 
     test_module::<DefaultContext>(admin.clone(), &mut native_working_set);
 
-    let (_log, witness) = native_working_set.checkpoint().freeze();
-    let zk_storage = ZkStorage::new([0u8; 32]);
-    let mut zk_working_set = WorkingSet::with_witness(zk_storage, witness);
-    test_module::<ZkDefaultContext>(admin, &mut zk_working_set);
+    // Zk context
+    #[cfg(feature = "zk")]
+    {
+        let (_log, witness) = native_working_set.checkpoint().freeze();
+        let zk_storage = ZkStorage::new([0u8; 32]);
+        let mut zk_working_set = WorkingSet::with_witness(zk_storage, witness);
+        test_module::<ZkDefaultContext>(admin, &mut zk_working_set);
+    }
 }
 
 fn test_module<C: Context>(admin: C::Address, working_set: &mut WorkingSet<C::Storage>) {

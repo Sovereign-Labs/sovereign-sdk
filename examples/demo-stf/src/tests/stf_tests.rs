@@ -1,9 +1,14 @@
 #[cfg(test)]
 pub mod test {
+    use std::marker::PhantomData;
+
     use sov_modules_api::default_context::DefaultContext;
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_stf_template::{Batch, SequencerOutcome};
-    use sov_rollup_interface::mocks::MockZkvm;
+    use sov_rollup_interface::mocks::{
+        MockZkvm, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
+    };
+    use sov_rollup_interface::services::da::SlotData;
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::{ProverStorage, WorkingSet};
 
@@ -28,7 +33,18 @@ pub mod test {
             let mut demo = create_new_demo(path);
 
             StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
-            StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
+
+            // TODO: Maybe complete with actual block data
+            let data = TestBlock {
+                curr_hash: [0_u8; 32],
+                header: TestBlockHeader {
+                    prev_hash: TestHash([0_u8; 32]),
+                },
+                height: 0,
+                validity_cond: TestValidityCond { cond: true },
+            };
+
+            StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, &data, Default::default());
 
             let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
@@ -85,8 +101,17 @@ pub mod test {
             &election_admin_private_key,
         );
 
+        // TODO: Maybe complete with actual block data
+        let data = TestBlock {
+            curr_hash: [0_u8; 32],
+            header: TestBlockHeader {
+                prev_hash: TestHash([0_u8; 32]),
+            },
+            height: 0,
+            validity_cond: TestValidityCond { cond: true },
+        };
         StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
-        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
+        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, &data, Default::default());
 
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
@@ -140,8 +165,17 @@ pub mod test {
         {
             let mut demo = create_new_demo(path);
 
+            // TODO: Maybe complete with actual block data
+            let data = TestBlock {
+                curr_hash: [0_u8; 32],
+                header: TestBlockHeader {
+                    prev_hash: TestHash([0_u8; 32]),
+                },
+                height: 0,
+                validity_cond: TestValidityCond { cond: true },
+            };
             StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
-            StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
+            StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, &data, Default::default());
 
             let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
@@ -193,8 +227,16 @@ pub mod test {
 
         let mut demo = create_new_demo(path);
 
+        let data = TestBlock {
+            curr_hash: [0_u8; 32],
+            header: TestBlockHeader {
+                prev_hash: TestHash([0_u8; 32]),
+            },
+            height: 0,
+            validity_cond: TestValidityCond { cond: true },
+        };
         StateTransitionFunction::<MockZkvm>::init_chain(&mut demo, config);
-        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, Default::default());
+        StateTransitionFunction::<MockZkvm>::begin_slot(&mut demo, &data, Default::default());
 
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 

@@ -8,7 +8,8 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::da::BlobTransactionTrait;
-use crate::zk::Zkvm;
+use crate::services::da::SlotData;
+use crate::zk::{ValidityCondition, Zkvm};
 
 #[cfg(any(test, feature = "fuzzing"))]
 pub mod fuzzing;
@@ -109,14 +110,21 @@ pub trait StateTransitionFunction<Vm: Zkvm> {
     /// with an invalid signature
     type MisbehaviorProof;
 
+    /// The validity condition that must be verified outside of the Vm
+    type Condition: ValidityCondition;
+
     /// Perform one-time initialization for the genesis block.
-    fn init_chain(&mut self, params: Self::InitialState);
+    fn init_chain(&mut self, params: Self::InitialState) -> anyhow::Result<[u8; 32]>;
 
     /// Called at the beginning of each **DA-layer block** - whether or not that block contains any
     /// data relevant to the rollup.
     /// If slot is started in Full Node mode, default witness should be provided.
     /// If slot is started in Zero Knowledge mode, witness from execution should be provided.
-    fn begin_slot(&mut self, witness: Self::Witness);
+    fn begin_slot(
+        &mut self,
+        slot_data: &impl SlotData<Condition = Self::Condition>,
+        witness: Self::Witness,
+    ) -> anyhow::Result<()>;
 
     /// Apply a blob/batch of transactions to the rollup, slashing the sequencer who proposed the blob on failure.
     /// The concrete blob type is defined by the DA layer implementation, which is why we use a generic here instead

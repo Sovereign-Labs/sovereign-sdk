@@ -1,12 +1,19 @@
 #[cfg(feature = "native")]
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "native")]
 use sov_rollup_interface::crypto::SimpleHasher;
+#[cfg(feature = "native")]
 use sov_rollup_interface::AddressTrait;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
-use sov_state::{ArrayWitness, DefaultStorageSpec, ZkStorage};
+#[cfg(feature = "zk")]
+use sov_state::ZkStorage;
+#[cfg(feature = "native")]
+use sov_state::{ArrayWitness, DefaultStorageSpec};
 
+#[cfg(feature = "native")]
 use crate::default_signature::{DefaultPublicKey, DefaultSignature};
+#[cfg(feature = "native")]
 use crate::{Address, Context, PublicKey, Spec};
 
 #[cfg(feature = "native")]
@@ -36,11 +43,13 @@ impl Context for DefaultContext {
     }
 }
 
+#[cfg(feature = "zk")]
 #[derive(Clone, Debug, PartialEq)]
 pub struct ZkDefaultContext {
     pub sender: Address,
 }
 
+#[cfg(feature = "zk")]
 impl Spec for ZkDefaultContext {
     type Address = Address;
     type Storage = ZkStorage<DefaultStorageSpec>;
@@ -50,6 +59,7 @@ impl Spec for ZkDefaultContext {
     type Witness = ArrayWitness;
 }
 
+#[cfg(feature = "zk")]
 impl Context for ZkDefaultContext {
     fn sender(&self) -> &Self::Address {
         &self.sender
@@ -60,9 +70,10 @@ impl Context for ZkDefaultContext {
     }
 }
 
+#[cfg(feature = "native")]
 impl PublicKey for DefaultPublicKey {
     fn to_address<A: AddressTrait>(&self) -> A {
-        let pub_key_hash = <ZkDefaultContext as Spec>::Hasher::hash(self.pub_key);
+        let pub_key_hash = <DefaultContext as Spec>::Hasher::hash(self.pub_key);
         A::from(pub_key_hash)
     }
 }

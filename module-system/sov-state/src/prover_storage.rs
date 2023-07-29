@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use jmt::storage::TreeWriter;
-use jmt::{JellyfishMerkleTree, KeyHash};
+use jmt::{JellyfishMerkleTree, KeyHash, RootHash, Version};
 use sov_db::state_db::StateDB;
 use sov_rollup_interface::crypto::SimpleHasher;
 
@@ -52,6 +52,12 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
             Err(e) => panic!("Unable to read value from db: {e}"),
         }
     }
+
+    fn get_root_hash(&self, version: Version) -> Result<RootHash, anyhow::Error> {
+        let temp_merkle: JellyfishMerkleTree<'_, StateDB, S::Hasher> =
+            JellyfishMerkleTree::new(&self.db);
+        temp_merkle.get_root_hash(version)
+    }
 }
 
 impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
@@ -69,6 +75,11 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         val
     }
 
+    fn get_state_root(&self) -> Result<[u8; 32], anyhow::Error> {
+        self.get_root_hash(self.db.get_next_version() - 1)
+            .map(|root| root.0)
+    }
+
     fn get_with_proof(
         &self,
         key: StorageKey,
@@ -78,7 +89,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         let (val_opt, proof) = merkle
             .get_with_proof(
                 KeyHash::with::<S::Hasher>(key.as_ref()),
-                self.db.get_next_version(),
+                self.db.get_next_version() - 1,
             )
             .unwrap();
         (val_opt.as_ref().map(|val| StorageValue::new(val)), proof)

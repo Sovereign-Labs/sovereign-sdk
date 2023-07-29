@@ -55,8 +55,8 @@ impl<'prover> Zkvm for Risc0Host<'prover> {
         C: sov_rollup_interface::zk::ValidityCondition,
         Add: AddressTrait,
     >(
-        serialized_proof: &'a [u8],
-        code_commitment: &Self::CodeCommitment,
+        _serialized_proof: &'a [u8],
+        _code_commitment: &Self::CodeCommitment,
     ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
         todo!()
     }
@@ -81,8 +81,8 @@ impl Zkvm for Risc0Verifier {
         C: sov_rollup_interface::zk::ValidityCondition,
         Add: AddressTrait,
     >(
-        serialized_proof: &'a [u8],
-        code_commitment: &Self::CodeCommitment,
+        _serialized_proof: &'a [u8],
+        _code_commitment: &Self::CodeCommitment,
     ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
         todo!()
     }

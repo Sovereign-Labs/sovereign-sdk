@@ -7,6 +7,7 @@ use proptest::{prop_compose, proptest};
 use reqwest::header::CONTENT_TYPE;
 use serde_json::json;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
+use sov_rollup_interface::mocks::TestValidityCond;
 #[cfg(test)]
 use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader, TestHash};
 use sov_rollup_interface::services::da::SlotData;
@@ -115,6 +116,7 @@ fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value)
             prev_hash: TestHash(sha2::Sha256::digest(b"prev_header")),
         },
         height: 0,
+        validity_cond: TestValidityCond::default(),
     })];
 
     let batches = vec![
@@ -317,7 +319,8 @@ prop_compose! {
                 header: TestBlockHeader {
                     prev_hash,
                 },
-                height: 0
+                height: 0,
+                validity_cond: TestValidityCond::default()
             });
 
             total_num_batches += batches.len();

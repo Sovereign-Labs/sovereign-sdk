@@ -1,7 +1,11 @@
-use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
+use sov_modules_api::default_context::DefaultContext;
+#[cfg(feature = "zk")]
+use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::{Address, Context, Module};
 use sov_rollup_interface::stf::Event;
-use sov_state::{ProverStorage, WorkingSet, ZkStorage};
+#[cfg(feature = "zk")]
+use sov_state::ZkStorage;
+use sov_state::{ProverStorage, WorkingSet};
 
 use super::ExampleModule;
 use crate::{call, query, ExampleModuleConfig};
@@ -12,6 +16,7 @@ fn test_value_setter() {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let admin = Address::from([1; 32]);
     // Test Native-Context
+    #[cfg(feature = "native")]
     {
         let config = ExampleModuleConfig {};
         let context = DefaultContext::new(admin.clone());
@@ -20,6 +25,7 @@ fn test_value_setter() {
 
     let (_, witness) = working_set.checkpoint().freeze();
 
+    #[cfg(feature = "zk")]
     // Test Zk-Context
     {
         let config = ExampleModuleConfig {};

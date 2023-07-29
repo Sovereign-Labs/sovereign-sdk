@@ -148,6 +148,10 @@ pub trait Storage: Clone {
         witness: &Self::Witness,
     ) -> (Option<StorageValue>, Self::Proof);
 
+    /// Returns the latest state root hash from the storage.
+    #[cfg(feature = "native")]
+    fn get_state_root(&self) -> Result<[u8; 32], anyhow::Error>;
+
     /// Validate all of the storage accesses in a particular cache log,
     /// returning the new state root after applying all writes
     fn validate_and_commit(

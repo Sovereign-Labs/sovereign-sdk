@@ -22,6 +22,7 @@ use sov_ethereum::get_ethereum_rpc;
 use sov_modules_api::RpcRunner;
 use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaVerifier};
+use sov_rollup_interface::mocks::{TestBlock, TestValidityCond};
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -128,7 +129,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     // Our state transition function implements the StateTransitionRunner interface,
     // so we use that to initialize the STF
-    let mut demo_runner = NativeAppRunner::<Risc0Verifier>::new(rollup_config.runner.clone());
+    let mut demo_runner =
+        NativeAppRunner::<Risc0Verifier, TestValidityCond>::new(rollup_config.runner.clone());
 
     // Our state transition also implements the RpcRunner interface,
     // so we use that to initialize the RPC server.
@@ -161,23 +163,21 @@ async fn main() -> Result<(), anyhow::Error> {
         namespace: ROLLUP_NAMESPACE,
     }));
 
+    let storage = demo_runner.get_storage();
     let demo = demo_runner.inner_mut();
     let mut prev_state_root = {
         // Check if the rollup has previously been initialized
         if is_storage_empty {
             info!("No history detected. Initializing chain...");
-            demo.init_chain(get_genesis_config());
+            let post_genesis_root = demo.init_chain(get_genesis_config());
             info!("Chain initialization is done.");
+            post_genesis_root
         } else {
             debug!("Chain is already initialized. Skipping initialization.");
+            storage.get_state_root()
         }
-
-        // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
-        // This will be removed shortly.
-        demo.begin_slot(Default::default());
-        let (prev_state_root, _) = demo.end_slot();
-        prev_state_root.0
-    };
+    }
+    .unwrap();
 
     // Start the main rollup loop
     let item_numbers = ledger_db.get_next_items_numbers();
@@ -203,7 +203,8 @@ async fn main() -> Result<(), anyhow::Error> {
         info!("Received {} blobs", blob_txs.len());
 
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
-        demo.begin_slot(Default::default());
+        let data: TestBlock = todo!();
+        demo.begin_slot(&data, Default::default());
         for blob in &mut blob_txs {
             let batch_receipt = demo.apply_tx_blob(blob, None);
             info!(

@@ -1,8 +1,12 @@
-use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
+use sov_modules_api::default_context::DefaultContext;
+#[cfg(feature = "zk")]
+use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::{Context, Prefix};
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::stf::Event;
-use sov_state::{ProverStorage, StateMap, StateValue, Storage, WorkingSet, ZkStorage};
+#[cfg(feature = "zk")]
+use sov_state::ZkStorage;
+use sov_state::{ProverStorage, StateMap, StateValue, Storage, WorkingSet};
 
 pub mod module_a {
     use super::*;
@@ -112,6 +116,7 @@ fn nested_module_call_test() {
         .expect("State update is valid");
 
     // Test the `zk` execution.
+    #[cfg(feature = "zk")]
     {
         let zk_storage = ZkStorage::new([0u8; 32]);
         let working_set = &mut WorkingSet::with_witness(zk_storage, witness);

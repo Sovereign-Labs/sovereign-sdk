@@ -12,7 +12,7 @@ use tendermint::merkle;
 use crate::pfb::MsgPayForBlobs;
 use crate::shares::{NamespaceGroup, Share};
 use crate::utils::BoxError;
-use crate::verifier::PARITY_SHARES_NAMESPACE;
+use crate::verifier::{ChainValidityCondition, PARITY_SHARES_NAMESPACE};
 use crate::{CelestiaHeader, TxPosition};
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
@@ -79,6 +79,7 @@ pub struct FilteredCelestiaBlock {
 
 impl SlotData for FilteredCelestiaBlock {
     type BlockHeader = CelestiaHeader;
+    type Condition = ChainValidityCondition;
 
     fn hash(&self) -> [u8; 32] {
         match self.header.header.hash() {
@@ -89,6 +90,10 @@ impl SlotData for FilteredCelestiaBlock {
 
     fn header(&self) -> &Self::BlockHeader {
         &self.header
+    }
+
+    fn validity_condition(&self) -> &ChainValidityCondition {
+        todo!()
     }
 }
 

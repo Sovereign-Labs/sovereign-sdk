@@ -14,7 +14,7 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_demo_rollup::config::RollupConfig;
 use sov_demo_rollup::rng_xfers::RngDaService;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader, TestHash};
+use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader, TestHash, TestValidityCond};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -42,7 +42,8 @@ fn rollup_bench(_bench: &mut Criterion) {
 
     let da_service = Arc::new(RngDaService::new());
 
-    let mut demo_runner = NativeAppRunner::<Risc0Verifier>::new(rollup_config.runner);
+    let mut demo_runner =
+        NativeAppRunner::<Risc0Verifier, TestValidityCond>::new(rollup_config.runner);
 
     let demo = demo_runner.inner_mut();
     let sequencer_private_key = DefaultPrivateKey::generate();
@@ -56,7 +57,8 @@ fn rollup_bench(_bench: &mut Criterion) {
     let _prev_state_root = {
         // Check if the rollup has previously been initialized
         demo.init_chain(demo_genesis_config);
-        demo.begin_slot(Default::default());
+        let data: TestBlock = todo!();
+        demo.begin_slot(&data, Default::default());
         let (prev_state_root, _) = demo.end_slot();
         prev_state_root.0
     };
@@ -74,6 +76,7 @@ fn rollup_bench(_bench: &mut Criterion) {
                 prev_hash: TestHash([0u8; 32]),
             },
             height,
+            validity_cond: TestValidityCond::default(),
         };
         blocks.push(filtered_block.clone());
 
@@ -87,10 +90,11 @@ fn rollup_bench(_bench: &mut Criterion) {
             let filtered_block = &blocks[height as usize];
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
-            demo.begin_slot(Default::default());
+            let data: TestBlock = todo!();
+            demo.begin_slot(&data, Default::default());
 
             for blob in &mut blobs[height as usize] {
-                let receipts = demo.apply_blob(blob, None);
+                let receipts = demo.apply_tx_blob(blob, None);
                 // println!("{:?}", receipts);
                 data_to_commit.add_batch(receipts);
             }

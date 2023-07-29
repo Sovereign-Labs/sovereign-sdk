@@ -6,12 +6,13 @@ use std::io::Read;
 
 pub use app_template::AppTemplate;
 pub use batch::Batch;
-use sov_modules_api::hooks::{ApplyBlobHooks, SyncHooks, TxHooks};
+use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, SyncHooks, TxHooks};
 use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
+use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{
     BatchReceipt, StateTransitionFunction, SyncReceipt, TransactionReceipt,
 };
-use sov_rollup_interface::zk::Zkvm;
+use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 use sov_state::{StateCheckpoint, Storage};
 use tracing::log::info;
 use tracing::{debug, error};
@@ -50,13 +51,15 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-impl<C: Context, RT, Vm: Zkvm> StateTransitionFunction<Vm> for AppTemplate<C, RT, Vm>
+impl<C: Context, RT, Vm: Zkvm, Cond: ValidityCondition> StateTransitionFunction<Vm>
+    for AppTemplate<C, RT, Vm, Cond>
 where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
         + TxHooks<Context = C>
         + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>
-        + SyncHooks<Context = C>,
+        + SyncHooks<Context = C>
+        + SlotHooks<Cond, Context = C>,
 {
     type StateRoot = jmt::RootHash;
 
@@ -70,7 +73,9 @@ where
 
     type MisbehaviorProof = ();
 
-    fn init_chain(&mut self, params: Self::InitialState) {
+    type Condition = Cond;
+
+    fn init_chain(&mut self, params: Self::InitialState) -> anyhow::Result<[u8; 32]> {
         let mut working_set = StateCheckpoint::new(self.current_storage.clone()).to_revertable();
 
         self.runtime
@@ -78,16 +83,35 @@ where
             .expect("module initialization must succeed");
 
         let (log, witness) = working_set.checkpoint().freeze();
-        self.current_storage
+        let genesis_hash = self
+            .current_storage
             .validate_and_commit(log, &witness)
             .expect("Storage update must succeed");
+
+        // We build a new working set since the previous one have been consumed
+        let mut working_set = StateCheckpoint::new(self.current_storage.clone()).to_revertable();
+
+        self.runtime.post_genesis_hook(&mut working_set)?;
+
+        self.checkpoint = Some(working_set.checkpoint());
+
+        Ok(genesis_hash)
     }
 
-    fn begin_slot(&mut self, witness: Self::Witness) {
-        self.checkpoint = Some(StateCheckpoint::with_witness(
-            self.current_storage.clone(),
-            witness,
-        ));
+    fn begin_slot(
+        &mut self,
+        slot_data: &impl SlotData<Condition = Cond>,
+        witness: Self::Witness,
+    ) -> anyhow::Result<()> {
+        let state_checkpoint = StateCheckpoint::with_witness(self.current_storage.clone(), witness);
+
+        let mut working_set = state_checkpoint.to_revertable();
+
+        self.runtime.begin_slot_hook(slot_data, &mut working_set)?;
+
+        self.checkpoint = Some(working_set.checkpoint());
+
+        Ok(())
     }
 
     fn apply_tx_blob(

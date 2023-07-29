@@ -125,10 +125,6 @@ impl<S: Storage> WorkingSet<S> {
         &self.events
     }
 
-    pub fn consume_get_storage(self) -> S {
-        self.delta.inner.inner
-    }
-
     pub fn backing(&self) -> &S {
         &self.delta.inner.inner
     }

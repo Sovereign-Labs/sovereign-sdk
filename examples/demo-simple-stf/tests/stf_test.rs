@@ -1,7 +1,10 @@
 use std::fmt::Display;
+use std::marker::PhantomData;
 
 use demo_simple_stf::{ApplyBlobResult, CheckHashPreimageStf};
-use sov_rollup_interface::mocks::{MockZkvm, TestBlob};
+use sov_rollup_interface::mocks::{
+    MockZkvm, TestBlob, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
+};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::AddressTrait;
 
@@ -49,10 +52,26 @@ fn test_stf() {
     let preimage = vec![0; 32];
 
     let mut test_blob = TestBlob::<DaAddress>::new(preimage, address, [0; 32]);
-    let stf = &mut CheckHashPreimageStf {};
+    let stf = &mut CheckHashPreimageStf::<TestValidityCond> {
+        phantom_data: PhantomData::default(),
+    };
 
-    StateTransitionFunction::<MockZkvm>::init_chain(stf, ());
-    StateTransitionFunction::<MockZkvm>::begin_slot(stf, ());
+    let test_block = TestBlock {
+        curr_hash: [0; 32],
+        header: TestBlockHeader {
+            prev_hash: TestHash([0; 32]),
+        },
+        height: 0,
+        validity_cond: TestValidityCond { cond: true },
+    };
+
+    StateTransitionFunction::<MockZkvm>::init_chain(stf, ()).unwrap();
+    StateTransitionFunction::<MockZkvm>::begin_slot(
+        stf,
+        &test_block,
+        <CheckHashPreimageStf<TestValidityCond> as StateTransitionFunction<MockZkvm>>::Witness::default(),
+    )
+    .unwrap();
 
     let receipt = StateTransitionFunction::<MockZkvm>::apply_tx_blob(stf, &mut test_blob, None);
     assert_eq!(receipt.inner, ApplyBlobResult::Success);

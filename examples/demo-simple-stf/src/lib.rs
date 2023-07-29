@@ -1,13 +1,17 @@
 use std::io::Read;
+use std::marker::PhantomData;
 
 use sha2::Digest;
 use sov_rollup_interface::da::BlobTransactionTrait;
+use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{BatchReceipt, StateTransitionFunction};
-use sov_rollup_interface::zk::Zkvm;
+use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
 
-pub struct CheckHashPreimageStf {}
+pub struct CheckHashPreimageStf<Cond> {
+    pub phantom_data: PhantomData<Cond>,
+}
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum ApplyBlobResult {
@@ -15,7 +19,7 @@ pub enum ApplyBlobResult {
     Success,
 }
 
-impl<VM: Zkvm> StateTransitionFunction<VM> for CheckHashPreimageStf {
+impl<VM: Zkvm, Cond: ValidityCondition> StateTransitionFunction<VM> for CheckHashPreimageStf<Cond> {
     // Since our rollup is stateless, we don't need to consider the StateRoot.
     type StateRoot = ();
 
@@ -35,15 +39,23 @@ impl<VM: Zkvm> StateTransitionFunction<VM> for CheckHashPreimageStf {
     // This represents a proof of misbehavior by the sequencer, but we won't utilize it in this tutorial.
     type MisbehaviorProof = ();
 
+    type Condition = Cond;
+
     // Perform one-time initialization for the genesis block.
-    fn init_chain(&mut self, _params: Self::InitialState) {
+    fn init_chain(&mut self, _params: Self::InitialState) -> anyhow::Result<[u8; 32]> {
         // Do nothing
+        Ok([0; 32])
     }
 
     // Called at the beginning of each DA-layer block - whether or not that block contains any
     // data relevant to the rollup.
-    fn begin_slot(&mut self, _witness: Self::Witness) {
+    fn begin_slot(
+        &mut self,
+        _slot_data: &impl SlotData,
+        _witness: Self::Witness,
+    ) -> anyhow::Result<()> {
         // Do nothing
+        Ok(())
     }
 
     // The core logic of our rollup.

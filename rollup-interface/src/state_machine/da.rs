@@ -24,6 +24,9 @@ pub trait DaSpec {
     /// The transaction type used by the DA layer.
     type BlobTransaction: BlobTransactionTrait;
 
+    /// Any conditions imposed by the DA layer which need to be checked outside of the SNARK
+    type ValidityCondition: ValidityCondition;
+
     /// A proof that each tx in a set of blob transactions is included in a given block.
     type InclusionMultiProof: Serialize + DeserializeOwned;
 
@@ -52,9 +55,6 @@ pub trait DaVerifier {
     /// TODO: Should we add `std::Error` bound so it can be `()?` ?
     type Error: Debug;
 
-    /// Any conditions imposed by the DA layer which need to be checked outside of the SNARK
-    type ValidityCondition: ValidityCondition;
-
     /// Create a new da verifier with the given chain parameters
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self;
 
@@ -65,7 +65,7 @@ pub trait DaVerifier {
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
         inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
         completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
-    ) -> Result<Self::ValidityCondition, Self::Error>;
+    ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error>;
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize, PartialEq)]

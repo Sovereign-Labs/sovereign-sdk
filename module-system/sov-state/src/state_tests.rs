@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use super::*;
-use crate::{ArrayWitness, DefaultStorageSpec, ProverStorage};
+use crate::{DefaultStorageSpec, ProverStorage};
 
 enum Operation {
     Merge,

@@ -13,10 +13,6 @@ pub struct BondAmountResponse {
     pub value: u64,
 }
 
-pub struct BondProofResponse<P> {
-    pub proof: StorageProof<P>,
-}
-
 // TODO: adapt rpc_gen macro to accept structure definitions having multiple generics
 impl<C, Vm, Cond, Checker> AttesterIncentives<C, Vm, Cond, Checker>
 where
@@ -60,19 +56,15 @@ where
         address: C::Address,
         witness: &<<C as Spec>::Storage as Storage>::Witness,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> BondProofResponse<<C::Storage as Storage>::Proof> {
-        BondProofResponse {
-            proof: {
-                let (value, proof) = working_set.backing().get_with_proof(
-                    StorageKey::new(self.bonded_attesters.prefix(), &self.address),
-                    witness,
-                );
-                StorageProof {
-                    key: StorageKey::new(self.bonded_attesters.prefix(), &address),
-                    value,
-                    proof,
-                }
-            },
+    ) -> StorageProof<<C::Storage as Storage>::Proof> {
+        let (value, proof) = working_set.backing().get_with_proof(
+            StorageKey::new(self.bonded_attesters.prefix(), &address),
+            witness,
+        );
+        StorageProof {
+            key: StorageKey::new(self.bonded_attesters.prefix(), &address),
+            value,
+            proof,
         }
     }
 }

@@ -1,5 +1,6 @@
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
+#[cfg(feature = "zk")]
 pub use sov_modules_api::default_context::ZkDefaultContext;
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
@@ -14,27 +15,30 @@ use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::ProverConfig;
 use sov_rollup_interface::stf::ZkConfig;
-use sov_rollup_interface::zk::Zkvm;
+use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
-use sov_state::{Storage, ZkStorage};
+use sov_state::Storage;
+#[cfg(feature = "zk")]
+use sov_state::ZkStorage;
 
 use crate::batch_builder::FiFoStrictBatchBuilder;
 #[cfg(feature = "native")]
 use crate::runner_config::Config;
 use crate::runtime::Runtime;
 
-pub struct DemoAppRunner<C: Context, Vm: Zkvm> {
-    pub stf: DemoApp<C, Vm>,
+pub struct DemoAppRunner<C: Context, Vm: Zkvm, Cond: ValidityCondition> {
+    pub stf: DemoApp<C, Vm, Cond>,
     pub batch_builder: Option<FiFoStrictBatchBuilder<Runtime<C>, C>>,
 }
 
+#[cfg(feature = "zk")]
 pub type ZkAppRunner<Vm> = DemoAppRunner<ZkDefaultContext, Vm>;
 
 #[cfg(feature = "native")]
-pub type NativeAppRunner<Vm> = DemoAppRunner<DefaultContext, Vm>;
+pub type NativeAppRunner<Vm, Cond> = DemoAppRunner<DefaultContext, Vm, Cond>;
 
-pub type DemoApp<C, Vm> = AppTemplate<C, Runtime<C>, Vm>;
+pub type DemoApp<C, Vm, Cond> = AppTemplate<C, Runtime<C>, Vm, Cond>;
 
 /// Batch receipt type used by the demo app. We export this type so that it's easily accessible to the full node.
 pub type DemoBatchReceipt = SequencerOutcome;
@@ -42,9 +46,11 @@ pub type DemoBatchReceipt = SequencerOutcome;
 pub type DemoTxReceipt = TxEffect;
 
 #[cfg(feature = "native")]
-impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
+impl<Vm: Zkvm, Cond: ValidityCondition> StateTransitionRunner<ProverConfig, Vm, Cond>
+    for DemoAppRunner<DefaultContext, Vm, Cond>
+{
     type RuntimeConfig = Config;
-    type Inner = DemoApp<DefaultContext, Vm>;
+    type Inner = DemoApp<DefaultContext, Vm, Cond>;
     type BatchBuilder = FiFoStrictBatchBuilder<Runtime<DefaultContext>, DefaultContext>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
@@ -77,6 +83,7 @@ impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<Default
     }
 }
 
+#[cfg(feature = "zk")]
 impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultContext, Vm> {
     type RuntimeConfig = [u8; 32];
     type Inner = DemoApp<ZkDefaultContext, Vm>;
@@ -114,7 +121,7 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
 }
 
 #[cfg(feature = "native")]
-impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
+impl<Vm: Zkvm, Cond: ValidityCondition> RpcRunner for DemoAppRunner<DefaultContext, Vm, Cond> {
     type Context = DefaultContext;
     fn get_storage(&self) -> <Self::Context as Spec>::Storage {
         self.inner().current_storage.clone()

@@ -319,6 +319,8 @@ pub async fn main() {
 
 #[cfg(test)]
 mod test {
+    use std::default;
+
     use borsh::BorshDeserialize;
     use demo_stf::app::{DemoApp, DemoAppRunner};
     use demo_stf::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
@@ -326,7 +328,7 @@ mod test {
     use demo_stf::runtime::GenesisConfig;
     use sov_modules_api::Address;
     use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome};
-    use sov_rollup_interface::mocks::MockZkvm;
+    use sov_rollup_interface::mocks::{MockZkvm, TestBlock, TestValidityCond};
     use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::WorkingSet;
@@ -398,7 +400,7 @@ mod test {
     // Test helpers
     struct TestDemo {
         config: GenesisConfig<C>,
-        demo: DemoApp<C, MockZkvm>,
+        demo: DemoApp<C, MockZkvm, TestValidityCond>,
     }
 
     impl TestDemo {
@@ -418,7 +420,10 @@ mod test {
 
             Self {
                 config: genesis_config,
-                demo: DemoAppRunner::<DefaultContext, MockZkvm>::new(runner_config).stf,
+                demo: DemoAppRunner::<DefaultContext, MockZkvm, TestValidityCond>::new(
+                    runner_config,
+                )
+                .stf,
             }
         }
     }
@@ -474,9 +479,14 @@ mod test {
         }
     }
 
-    fn execute_txs(demo: &mut DemoApp<C, MockZkvm>, config: GenesisConfig<C>, txs: Vec<RawTx>) {
-        StateTransitionFunction::<MockZkvm>::init_chain(demo, config);
-        StateTransitionFunction::<MockZkvm>::begin_slot(demo, Default::default());
+    fn execute_txs(
+        demo: &mut DemoApp<C, MockZkvm, TestValidityCond>,
+        config: GenesisConfig<C>,
+        txs: Vec<RawTx>,
+    ) {
+        let data = TestBlock::default();
+        StateTransitionFunction::<MockZkvm>::init_chain(demo, config).unwrap();
+        StateTransitionFunction::<MockZkvm>::begin_slot(demo, &data, Default::default()).unwrap();
 
         let apply_tx_blob_outcome = StateTransitionFunction::<MockZkvm>::apply_tx_blob(
             demo,
@@ -493,7 +503,7 @@ mod test {
     }
 
     fn get_balance(
-        demo: &mut DemoApp<DefaultContext, MockZkvm>,
+        demo: &mut DemoApp<DefaultContext, MockZkvm, TestValidityCond>,
         token_deployer_address: &Address,
         user_address: Address,
     ) -> Option<u64> {
