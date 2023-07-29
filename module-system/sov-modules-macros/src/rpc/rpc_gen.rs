@@ -142,7 +142,6 @@ impl RpcImplBlock {
 
             impl_trait_methods.push(impl_trait_method);
 
-            signature.output = wrap_in_jsonprsee_result(&signature.output);
             let blanket_impl_method = if let Some(idx) = method.idx_of_working_set_arg {
                 // If necessary, adjust the signature to remove the working set argument.
                 let pre_working_set_args = arg_values.clone().take(idx);
@@ -201,22 +200,6 @@ impl RpcImplBlock {
             #blanket_impl
         }
     }
-}
-
-fn wrap_in_jsonprsee_result(return_type: &syn::ReturnType) -> syn::ReturnType {
-    /*let result_type: Type = match return_type {
-        syn::ReturnType::Default => syn::parse_quote! { ::jsonrpsee::core::RpcResult<()> },
-        syn::ReturnType::Type(_, ty) => syn::parse_quote! { ::jsonrpsee::core::RpcResult<#ty> },
-    };*/
-    /*
-    syn::ReturnType::Type(
-        syn::token::RArrow {
-            spans: [proc_macro2::Span::call_site(); 2],
-        },
-        Box::new(return_type.clone()),
-    )*/
-
-    return_type.clone()
 }
 
 fn add_server_bounds_attr_if_missing(attrs: &mut Vec<syn::NestedMeta>) {
@@ -295,9 +278,6 @@ fn build_rpc_trait(
                 // Remove the working set argument from the signature
                 let mut intermediate_signature = method.sig.clone();
                 intermediate_signature.inputs = intermediate_trait_inputs;
-
-                intermediate_signature.output =
-                    wrap_in_jsonprsee_result(&intermediate_signature.output);
 
                 // Build the annotated signature for the intermediate trait
                 let annotated_signature = quote! {
