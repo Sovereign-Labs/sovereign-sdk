@@ -194,10 +194,10 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// #[jsonrpsee::proc_macros::rpc(client, server, namespace ="myNamespace")]
 /// pub trait MyModuleRpc {
 ///     #[method(name = "myMethod")]
-///     fn my_method(&self, param: u32) -> Result<u32, jsonrpsee::core::Error>;
+///     fn my_method(&self, param: u32) ->RpcResult<u32>;
 ///
 ///     #[method(name = "health")]
-///     fn health(&self) -> Result<(), jsonrpsee::core::Error> {
+///     fn health(&self) -> RpcResult<()> {
 ///         Ok(())
 ///     }
 /// }
