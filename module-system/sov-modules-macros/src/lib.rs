@@ -152,6 +152,7 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// ```
 /// use sov_modules_api::{Context, ModuleInfo};
 /// use sov_modules_api::macros::rpc_gen;
+/// use jsonrpsee::core::RpcResult;
 ///
 /// #[derive(ModuleInfo)]
 /// struct MyModule<C: Context> {
@@ -163,8 +164,8 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// #[rpc_gen(client, server, namespace = "myNamespace")]
 /// impl<C: Context> MyModule<C> {
 ///     #[rpc_method(name = "myMethod")]
-///     fn my_method(&self, param: u32) -> u32 {
-///         1
+///     fn my_method(&self, param: u32) -> RpcResult<u32> {
+///         Ok(1)
 ///     }
 /// }
 /// ```
@@ -175,6 +176,7 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// use sov_modules_api::{Context, ModuleInfo};
 /// use sov_modules_api::macros::rpc_gen;
 /// use sov_state::WorkingSet;
+/// use jsonrpsee::core::RpcResult;
 ///
 /// #[derive(ModuleInfo)]
 /// struct MyModule<C: Context> {
@@ -184,8 +186,8 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// };
 ///
 /// impl<C: Context> MyModule<C> {
-///     fn my_method(&self, working_set: &mut WorkingSet<C::Storage>, param: u32) -> u32 {
-///         1
+///     fn my_method(&self, working_set: &mut WorkingSet<C::Storage>, param: u32) -> RpcResult<u32> {
+///         Ok(1)
 ///     }  
 /// }
 ///
