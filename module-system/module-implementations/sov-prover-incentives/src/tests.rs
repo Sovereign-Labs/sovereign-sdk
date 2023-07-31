@@ -10,6 +10,7 @@ type C = DefaultContext;
 const BOND_AMOUNT: u64 = 1000;
 const MOCK_CODE_COMMITMENT: MockCodeCommitment = MockCodeCommitment([0u8; 32]);
 
+/// Generates an address by hashing the provided `key`.
 pub fn generate_address(key: &str) -> <C as Spec>::Address {
     let hash = <C as Spec>::Hasher::hash(key.as_bytes());
     Address::from(hash)
