@@ -58,7 +58,7 @@ pub mod test {
             let storage = ProverStorage::with_path(path).unwrap();
             let mut working_set = WorkingSet::new(storage);
 
-            let resp = runtime.election.results(&mut working_set);
+            let resp = runtime.election.results(&mut working_set).unwrap();
 
             assert_eq!(
                 resp,
@@ -67,7 +67,7 @@ pub mod test {
                     count: 3
                 }))
             );
-            let resp = runtime.value_setter.query_value(&mut working_set);
+            let resp = runtime.value_setter.query_value(&mut working_set).unwrap();
 
             assert_eq!(resp, sov_value_setter::Response { value: Some(33) });
         }
@@ -112,7 +112,7 @@ pub mod test {
         let runtime = &mut Runtime::<DefaultContext>::default();
         let mut working_set = WorkingSet::new(demo.current_storage.clone());
 
-        let resp = runtime.election.results(&mut working_set);
+        let resp = runtime.election.results(&mut working_set).unwrap();
 
         assert_eq!(
             resp,
@@ -122,7 +122,7 @@ pub mod test {
             }))
         );
 
-        let resp = runtime.value_setter.query_value(&mut working_set);
+        let resp = runtime.value_setter.query_value(&mut working_set).unwrap();
 
         assert_eq!(resp, sov_value_setter::Response { value: Some(33) });
     }
@@ -170,14 +170,14 @@ pub mod test {
             let storage = ProverStorage::with_path(path).unwrap();
             let mut working_set = WorkingSet::new(storage);
 
-            let resp = runtime.election.results(&mut working_set);
+            let resp = runtime.election.results(&mut working_set).unwrap();
 
             assert_eq!(
                 resp,
                 sov_election::GetResultResponse::Err("Election is not frozen".to_owned())
             );
 
-            let resp = runtime.value_setter.query_value(&mut working_set);
+            let resp = runtime.value_setter.query_value(&mut working_set).unwrap();
 
             assert_eq!(resp, sov_value_setter::Response { value: None });
         }

@@ -53,7 +53,7 @@ fn test_value_setter_helper<C: Context>(
 
     // Test query
     {
-        let query_response = module.query_value(working_set);
+        let query_response = module.query_value(working_set).unwrap();
 
         assert_eq!(
             query::Response {

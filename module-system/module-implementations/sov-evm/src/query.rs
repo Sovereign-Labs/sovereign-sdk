@@ -1,6 +1,7 @@
 use ethereum_types::{Address, H256, U256, U64};
 use ethers::types::Bytes;
 use ethers_core::types::{Block, BlockId, FeeHistory, Transaction, TransactionReceipt, TxHash};
+use jsonrpsee::core::RpcResult;
 use reth_rpc_types::state::StateOverride;
 use reth_rpc_types::{BlockOverrides, CallRequest, TransactionRequest};
 use revm::primitives::{CfgEnv, ExecutionResult, U256 as EVM_U256};
@@ -16,9 +17,9 @@ use crate::Evm;
 impl<C: sov_modules_api::Context> Evm<C> {
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "chainId")]
-    pub fn chain_id(&self, _working_set: &mut WorkingSet<C::Storage>) -> Option<U64> {
+    pub fn chain_id(&self, _working_set: &mut WorkingSet<C::Storage>) -> RpcResult<Option<U64>> {
         info!("evm module: eth_chainId");
-        Some(U64::from(1u64))
+        Ok(Some(U64::from(1u64)))
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
@@ -28,7 +29,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _block_number: Option<String>,
         _details: Option<bool>,
         _working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<Block<TxHash>> {
+    ) -> RpcResult<Option<Block<TxHash>>> {
         info!("evm module: eth_getBlockByNumber");
 
         let block = Block::<TxHash> {
@@ -36,19 +37,19 @@ impl<C: sov_modules_api::Context> Evm<C> {
             ..Default::default()
         };
 
-        Some(block)
+        Ok(Some(block))
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "feeHistory")]
-    pub fn fee_history(&self, _working_set: &mut WorkingSet<C::Storage>) -> FeeHistory {
+    pub fn fee_history(&self, _working_set: &mut WorkingSet<C::Storage>) -> RpcResult<FeeHistory> {
         info!("evm module: eth_feeHistory");
-        FeeHistory {
+        Ok(FeeHistory {
             base_fee_per_gas: Default::default(),
             gas_used_ratio: Default::default(),
             oldest_block: Default::default(),
             reward: Default::default(),
-        }
+        })
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
@@ -57,10 +58,10 @@ impl<C: sov_modules_api::Context> Evm<C> {
         &self,
         hash: H256,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<Transaction> {
+    ) -> RpcResult<Option<Transaction>> {
         info!("evm module: eth_getTransactionByHash");
         let evm_transaction = self.transactions.get(&hash.into(), working_set);
-        evm_transaction.map(|tx| tx.into())
+        Ok(evm_transaction.map(|tx| tx.into()))
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
@@ -69,10 +70,10 @@ impl<C: sov_modules_api::Context> Evm<C> {
         &self,
         hash: H256,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<TransactionReceipt> {
+    ) -> RpcResult<Option<TransactionReceipt>> {
         info!("evm module: eth_getTransactionReceipt");
         let receipt = self.receipts.get(&hash.into(), working_set);
-        receipt.map(|r| r.into())
+        Ok(receipt.map(|r| r.into()))
     }
 
     //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
@@ -89,7 +90,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _state_overrides: Option<StateOverride>,
         _block_overrides: Option<Box<BlockOverrides>>,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Bytes {
+    ) -> RpcResult<Bytes> {
         info!("evm module: eth_call");
         let tx_env = prepare_call_env(request);
 
@@ -108,7 +109,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
             ExecutionResult::Success { output, .. } => output,
             _ => todo!(),
         };
-        output.into_data().into()
+        Ok(output.into_data().into())
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
@@ -118,13 +119,13 @@ impl<C: sov_modules_api::Context> Evm<C> {
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/501
         _request: TransactionRequest,
         _working_set: &mut WorkingSet<C::Storage>,
-    ) -> U256 {
+    ) -> RpcResult<U256> {
         unimplemented!("eth_sendTransaction not implemented")
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "blockNumber")]
-    pub fn block_number(&self, _working_set: &mut WorkingSet<C::Storage>) -> U256 {
+    pub fn block_number(&self, _working_set: &mut WorkingSet<C::Storage>) -> RpcResult<U256> {
         unimplemented!("eth_blockNumber not implemented")
     }
 
@@ -135,7 +136,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _address: Address,
         _block_number: Option<BlockId>,
         _working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<U256> {
+    ) -> RpcResult<Option<U256>> {
         unimplemented!("eth_getTransactionCount not implemented")
     }
 }

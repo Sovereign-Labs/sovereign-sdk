@@ -534,7 +534,8 @@ mod test {
         let balance = demo
             .runtime
             .bank
-            .balance_of(user_address, token_address, &mut working_set);
+            .balance_of(user_address, token_address, &mut working_set)
+            .unwrap();
 
         balance.amount
     }

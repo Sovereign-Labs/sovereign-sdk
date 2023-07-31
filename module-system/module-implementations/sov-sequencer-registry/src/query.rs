@@ -1,3 +1,4 @@
+use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::Context;
 use sov_state::WorkingSet;
@@ -19,9 +20,9 @@ impl<C: Context> SequencerRegistry<C> {
         &self,
         da_address: Vec<u8>,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> SequencerAddressResponse<C> {
-        SequencerAddressResponse {
+    ) -> RpcResult<SequencerAddressResponse<C>> {
+        Ok(SequencerAddressResponse {
             address: self.allowed_sequencers.get(&da_address, working_set),
-        }
+        })
     }
 }
