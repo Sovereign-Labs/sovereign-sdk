@@ -65,7 +65,7 @@ jobs:
 
   # Check that every combination of features is working properly.
   hack:
-    needs: [check, check-demo-prover, demo-rollup-local, check-licenses, cargo-doc-artifact, check-demo-rollup-table-of-contents]
+    needs: [check, check-demo-prover, demo-rollup-local, check-licenses, check-demo-rollup-table-of-contents]
     runs-on:
       group: 8-cores_32GB_Ubuntu Group
     name: features
@@ -84,7 +84,7 @@ jobs:
       - name: cargo hack
         run: make check-features
   test:
-    needs: [check, check-demo-prover, demo-rollup-local, check-licenses, cargo-doc-artifact, check-demo-rollup-table-of-contents]
+    needs: [check, check-demo-prover, demo-rollup-local, check-licenses, check-demo-rollup-table-of-contents]
     runs-on:
       group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 60
@@ -98,7 +98,7 @@ jobs:
       - name: Run cargo test
         run: cargo test
   test-experimental:
-    needs: [check, check-demo-prover, demo-rollup-local, check-licenses, cargo-doc-artifact, check-demo-rollup-table-of-contents]
+    needs: [check, check-demo-prover, demo-rollup-local, check-licenses, check-demo-rollup-table-of-contents]
     runs-on:
       group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 60
@@ -112,7 +112,7 @@ jobs:
       - name: Run cargo test --features experimental
         run: cargo test --features experimental
   coverage:
-    needs: [check, check-demo-prover, demo-rollup-local, check-licenses, cargo-doc-artifact, check-demo-rollup-table-of-contents]
+    needs: [check, check-demo-prover, demo-rollup-local, check-licenses, check-demo-rollup-table-of-contents]
     runs-on:
       group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 90
