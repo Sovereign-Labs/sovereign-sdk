@@ -8,7 +8,9 @@ mod tests;
 mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+/// The call methods specified in this module
 pub use call::CallMessage;
+/// The response type used by RPC queries.
 #[cfg(feature = "native")]
 pub use query::Response;
 use sov_modules_api::{Context, Error, ModuleInfo};

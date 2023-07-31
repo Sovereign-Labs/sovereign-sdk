@@ -2,17 +2,25 @@ use demo_stf::runner_config::Config as RunnerConfig;
 use jupiter::da_service::DaServiceConfig;
 use serde::Deserialize;
 
+/// Struct specifying a configuration for rpc.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RpcConfig {
+    /// The host to bind to as a [`String`]
     pub bind_host: String,
+    /// The port to bind to as an [`u16`]
     pub bind_port: u16,
 }
 
+/// The rollup configuration used for the demo.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RollupConfig {
+    /// The height of the DA layer to start processing the transactions as an [`u64`].
     pub start_height: u64,
+    /// The configuration of the DA layer as a [`DaSeviceConfig`] object.
     pub da: DaServiceConfig,
+    /// The configuration of the app runner as a [`RunnerConfig`] object.
     pub runner: RunnerConfig,
+    /// The rpc configuration as a [`RpcConfig`] object.
     pub rpc_config: RpcConfig,
 }
 

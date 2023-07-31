@@ -7,13 +7,17 @@ mod query;
 mod token;
 mod utils;
 
+/// Specifies the call methods using in that module.
 pub use call::CallMessage;
 #[cfg(feature = "native")]
+/// Specifies the different queries used in that module.
 pub use query::{BalanceResponse, BankRpcImpl, BankRpcServer, TotalSupplyResponse};
 use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 use token::Token;
+/// Specifies an interfact to interact with tokens.
 pub use token::{Amount, Coins};
+/// Methods to get a token address.
 pub use utils::{get_genesis_token_address, get_token_address};
 
 /// [`TokenConfig`] specifies a configuration used when generating a token for the bank
