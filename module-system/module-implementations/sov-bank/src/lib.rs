@@ -1,5 +1,3 @@
-#![deny(missing_docs)]
-
 mod call;
 mod genesis;
 #[cfg(feature = "native")]
