@@ -17,6 +17,7 @@ pub fn get_token_address<C: sov_modules_api::Context>(
     C::Address::from(hash)
 }
 
+/// Gets the token address for the genesis block using the `DEPLOYER` address as the sender.
 pub fn get_genesis_token_address<C: sov_modules_api::Context>(
     token_name: &str,
     salt: u64,

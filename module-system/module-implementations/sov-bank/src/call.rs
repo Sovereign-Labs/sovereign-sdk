@@ -53,7 +53,7 @@ pub enum CallMessage<C: sov_modules_api::Context> {
         minter_address: C::Address,
     },
 
-    /// Freeze a token so that the supply is frozen
+    /// Freezes a token so that the supply is frozen
     Freeze {
         /// Address of the token to be frozen
         token_address: C::Address,
@@ -61,6 +61,8 @@ pub enum CallMessage<C: sov_modules_api::Context> {
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
+    /// Creates a token from a set of configuration parameters.
+    /// Checks if a token already exists at that address. If so return an error.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn create_token(
         &self,
@@ -94,6 +96,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
         Ok(CallResponse::default())
     }
 
+    /// Transfers the set of `coins` to the address specified by `to`.
+    /// Helper function that calls the [`transfer_from`] method from the bank module
     pub fn transfer(
         &self,
         to: C::Address,
@@ -104,6 +108,9 @@ impl<C: sov_modules_api::Context> Bank<C> {
         self.transfer_from(context.sender(), &to, coins, working_set)
     }
 
+    /// Burns the set of `coins`. If there is no token at the address specified in the
+    /// `Coins` structure, return an error.
+    /// Calls the [`Token::burn`] function and updates the total supply of tokens.
     pub(crate) fn burn(
         &self,
         coins: Coins<C>,
@@ -130,6 +137,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
         Ok(CallResponse::default())
     }
 
+    /// Mints the `coins` set by the address `minter_address`. If the token address doesn't exist return an error.
+    /// Calls the [`Token::mint`] function and update the `self.tokens` set to store the new minted address.
     pub(crate) fn mint(
         &self,
         coins: Coins<C>,
@@ -157,6 +166,9 @@ impl<C: sov_modules_api::Context> Bank<C> {
         Ok(CallResponse::default())
     }
 
+    /// Tries to freeze the token address `token_address`.
+    /// Returns an error if the token address doesn't exist,
+    /// otherwise calls the [`Token::freeze`] function, and update the token set upon success.
     pub(crate) fn freeze(
         &self,
         token_address: C::Address,
@@ -184,6 +196,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
+    /// Transfers the set of `coins` from the address `from` to the address `to`.
+    /// Returns an error if the token address doesn't exist. Otherwise, call the [`Token::transfer`] function.
     pub fn transfer_from(
         &self,
         from: &C::Address,
@@ -208,6 +222,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
     }
 }
 
+/// Creates a new prefix from an already existing prefix `parent_prefix` and a `token_address`
+/// by extending the parent prefix.
 pub(crate) fn prefix_from_address_with_parent<C: sov_modules_api::Context>(
     parent_prefix: &sov_state::Prefix,
     token_address: &C::Address,

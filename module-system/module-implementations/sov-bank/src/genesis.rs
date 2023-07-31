@@ -4,9 +4,13 @@ use sov_state::WorkingSet;
 use crate::token::Token;
 use crate::Bank;
 
+/// The address of the deployment node. For now, set to [0; 32]
 pub(crate) const DEPLOYER: [u8; 32] = [0; 32];
 
 impl<C: sov_modules_api::Context> Bank<C> {
+    /// Init an instance of the bank module from the configuration `config`.
+    /// For each token in the `config`, calls the [`Token::create`] function to create
+    /// the token. Upon success, updates the token set if the token address doesn't already exist.
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,
