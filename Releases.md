@@ -9,9 +9,10 @@ This document describes how to cut a release of the Sovereign SDK
   - [ ] Don't forget the `v`!
 
 ## Check Consistency
-
+- [ ] Make a fresh clone of the repo or ensure your local copy is up to date and has no untracked/uncommitted changes.
 - [ ] Audit the getting-started documentation
   - [ ] Manually run the steps from `demo-rollup/README.md` to ensure there is no breakage
+  - [ ] Manually run the steps from `demo-prover/README.md`
 - [ ] Review all tutorials and ensure explanations are up to date
   - [ ] demo-nft-module/README.md
   - [ ] demo-simple-stf/README.md
