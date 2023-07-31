@@ -1,3 +1,5 @@
+use jsonrpsee::types::error::ErrorCode;
+use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -19,39 +21,48 @@ use self::query_args::{extract_query_args, QueryArgs};
 ///    Example Query: `curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"ledger_getBatches","params":[[1, 2], "Full"],"id":1}' http://127.0.0.1:12345`
 /// - ledger_getEvents
 ///    Example Query: `curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"ledger_getBatches","params":[1, 2],"id":1}' http://127.0.0.1:12345`
-fn register_ledger_rpc_methods<B: Serialize + DeserializeOwned, T: Serialize + DeserializeOwned>(
+fn register_ledger_rpc_methods<
+    B: Serialize + DeserializeOwned + Clone + 'static,
+    T: Serialize + DeserializeOwned + Clone + 'static,
+>(
     rpc: &mut RpcModule<LedgerDB>,
 ) -> Result<(), jsonrpsee::core::Error> {
     rpc.register_method("ledger_getHead", move |_, db| {
-        db.get_head::<B, T>().map_err(|e| e.into())
+        db.get_head::<B, T>()
+            .map_err(|e| ErrorObjectOwned::from(ErrorCode::InvalidRequest))
     })?;
 
     rpc.register_method("ledger_getSlots", move |params, db| {
-        let args: QueryArgs<SlotIdentifier> = extract_query_args(params)?;
-        db.get_slots::<B, T>(&args.0, args.1).map_err(|e| e.into())
+        let args: QueryArgs<SlotIdentifier> = extract_query_args(params).unwrap();
+        db.get_slots::<B, T>(&args.0, args.1)
+            .map_err(|e| ErrorObjectOwned::from(ErrorCode::InvalidRequest))
     })?;
 
     rpc.register_method("ledger_getBatches", move |params, db| {
-        let args: QueryArgs<BatchIdentifier> = extract_query_args(params)?;
+        let args: QueryArgs<BatchIdentifier> = extract_query_args(params).unwrap();
         db.get_batches::<B, T>(&args.0, args.1)
-            .map_err(|e| e.into())
+            .map_err(|e| ErrorObjectOwned::from(ErrorCode::InvalidRequest))
     })?;
 
     rpc.register_method("ledger_getTransactions", move |params, db| {
-        let args: QueryArgs<TxIdentifier> = extract_query_args(params)?;
+        let args: QueryArgs<TxIdentifier> = extract_query_args(params).unwrap();
         db.get_transactions::<T>(&args.0, args.1)
-            .map_err(|e| e.into())
+            .map_err(|e| ErrorObjectOwned::from(ErrorCode::InvalidRequest))
     })?;
 
     rpc.register_method("ledger_getEvents", move |params, db| {
-        let ids: Vec<EventIdentifier> = params.parse()?;
-        db.get_events(&ids).map_err(|e| e.into())
+        let ids: Vec<EventIdentifier> = params.parse().unwrap();
+        db.get_events(&ids)
+            .map_err(|e| ErrorObjectOwned::from(ErrorCode::InvalidRequest))
     })?;
 
     Ok(())
 }
 
-pub fn get_ledger_rpc<B: Serialize + DeserializeOwned, T: Serialize + DeserializeOwned>(
+pub fn get_ledger_rpc<
+    B: Serialize + DeserializeOwned + Clone + 'static,
+    T: Serialize + DeserializeOwned + Clone + 'static,
+>(
     ledger_db: LedgerDB,
 ) -> RpcModule<LedgerDB> {
     let mut rpc = RpcModule::new(ledger_db);

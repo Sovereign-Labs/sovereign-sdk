@@ -1,6 +1,8 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::anyhow;
+use jsonrpsee::types::error::UNKNOWN_ERROR_CODE;
+use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_rollup_interface::services::da::DaService;
@@ -58,18 +60,17 @@ where
     D: DaService + Send + Sync + 'static,
 {
     rpc.register_async_method("sequencer_publishBatch", |_, batch_builder| async move {
-        batch_builder
-            .submit_batch()
-            .await
-            .map_err(|e| jsonrpsee::core::Error::Custom(e.to_string()))
+        batch_builder.submit_batch().await.map_err(|e| {
+            ErrorObjectOwned::owned(UNKNOWN_ERROR_CODE, "custom_error", Some(e.to_string()))
+        })
     })?;
     rpc.register_method("sequencer_acceptTx", move |params, sequencer| {
-        let tx: SubmitTransaction = params.one()?;
+        let tx: SubmitTransaction = params.one().unwrap();
         let response = match sequencer.accept_tx(tx.body) {
             Ok(()) => SubmitTransactionResponse::Registered,
             Err(e) => SubmitTransactionResponse::Failed(e.to_string()),
         };
-        Ok(response)
+        Ok::<_, ErrorObjectOwned>(response)
     })?;
 
     Ok(())

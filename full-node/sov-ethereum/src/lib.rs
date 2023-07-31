@@ -14,6 +14,7 @@ pub mod experimental {
     use jsonrpsee::core::client::ClientT;
     use jsonrpsee::core::params::ArrayParams;
     use jsonrpsee::http_client::{HeaderMap, HttpClient};
+    use jsonrpsee::types::ErrorObjectOwned;
     use jsonrpsee::RpcModule;
     use jupiter::da_service::DaServiceConfig;
     use reth_primitives::Bytes as RethBytes;
@@ -73,7 +74,7 @@ pub mod experimental {
 
             jsonrpsee::http_client::HttpClientBuilder::default()
                 .set_headers(headers)
-                .max_request_body_size(default_max_response_size()) // 100 MB
+                //          .max_request_body_size(default_max_response_size()) // 100 MB
                 .build(self.config.celestia_rpc_address.clone())
                 .expect("Client initialization is valid")
         }
@@ -109,10 +110,10 @@ pub mod experimental {
                 let evm_transaction: EvmTransaction = data.try_into().unwrap();
 
                 let tx_hash = evm_transaction.hash;
-                let raw_tx = ethereum.make_raw_tx(evm_transaction)?;
+                let raw_tx = ethereum.make_raw_tx(evm_transaction).unwrap();
 
-                ethereum.send_tx_to_da(raw_tx).await?;
-                Ok(H256::from(tx_hash))
+                ethereum.send_tx_to_da(raw_tx).await.unwrap();
+                Ok::<_, ErrorObjectOwned>(H256::from(tx_hash))
             },
         )?;
 

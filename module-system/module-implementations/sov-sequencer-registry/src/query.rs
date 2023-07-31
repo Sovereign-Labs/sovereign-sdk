@@ -5,7 +5,7 @@ use sov_state::WorkingSet;
 
 use crate::SequencerRegistry;
 
-#[cfg_attr(feature = "native", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(feature = "native", derive(serde::Deserialize, serde::Serialize, Clone))]
 #[derive(Debug, Eq, PartialEq)]
 pub struct SequencerAddressResponse<C: Context> {
     pub address: Option<C::Address>,
