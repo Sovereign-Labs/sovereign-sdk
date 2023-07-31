@@ -67,11 +67,11 @@ fn test_tx_revert() {
         let mut working_set = WorkingSet::new(storage);
 
         // We sent 4 vote messages but one of them is invalid and should be reverted.
-        let resp = runtime.election.number_of_votes(&mut working_set);
+        let resp = runtime.election.number_of_votes(&mut working_set).unwrap();
 
         assert_eq!(resp, sov_election::GetNbOfVotesResponse::Result(3));
 
-        let resp = runtime.election.results(&mut working_set);
+        let resp = runtime.election.results(&mut working_set).unwrap();
 
         assert_eq!(
             resp,
@@ -83,7 +83,8 @@ fn test_tx_revert() {
 
         let resp = runtime
             .sequencer_registry
-            .sequencer_address(DEMO_SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set);
+            .sequencer_address(DEMO_SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set)
+            .unwrap();
         // Sequencer is not excluded from list of allowed!
         assert_eq!(Some(sequencer_rollup_address), resp.address);
     }
@@ -166,13 +167,14 @@ fn test_nonce_incremented_on_revert() {
         let mut working_set = WorkingSet::new(storage);
 
         // No votes actually recorded, because there was invalid vote
-        let resp = runtime.election.number_of_votes(&mut working_set);
+        let resp = runtime.election.number_of_votes(&mut working_set).unwrap();
 
         assert_eq!(resp, sov_election::GetNbOfVotesResponse::Result(0));
 
         let nonce = match runtime
             .accounts
             .get_account(voter.pub_key(), &mut working_set)
+            .unwrap()
         {
             Response::AccountExists { nonce, .. } => nonce,
             Response::AccountEmpty => 0,
@@ -230,7 +232,7 @@ fn test_tx_bad_sig() {
         let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
-        let resp = runtime.election.results(&mut working_set);
+        let resp = runtime.election.results(&mut working_set).unwrap();
 
         assert_eq!(
             resp,
@@ -306,7 +308,7 @@ fn test_tx_bad_serialization() {
         let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
-        let resp = runtime.election.results(&mut working_set);
+        let resp = runtime.election.results(&mut working_set).unwrap();
 
         assert_eq!(
             resp,
@@ -316,7 +318,8 @@ fn test_tx_bad_serialization() {
         // Sequencer is not in list of allowed sequencers
         let allowed_sequencer = runtime
             .sequencer_registry
-            .sequencer_address(SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set);
+            .sequencer_address(SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set)
+            .unwrap();
         assert!(allowed_sequencer.address.is_none());
 
         // Balance of sequencer is not increased

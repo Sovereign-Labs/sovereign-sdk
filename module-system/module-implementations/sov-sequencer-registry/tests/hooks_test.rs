@@ -16,7 +16,7 @@ fn begin_blob_hook_known_sequencer() {
     test_sequencer.genesis(working_set);
 
     let balance_after_genesis = {
-        let resp = test_sequencer.query_balance_via_bank(working_set);
+        let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
         resp.amount.unwrap()
     };
     assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
@@ -32,11 +32,12 @@ fn begin_blob_hook_known_sequencer() {
         .begin_blob_hook(&mut test_blob, working_set)
         .unwrap();
 
-    let resp = test_sequencer.query_balance_via_bank(working_set);
+    let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
     assert_eq!(balance_after_genesis, resp.amount.unwrap());
     let resp = test_sequencer
         .registry
-        .sequencer_address(GENESIS_SEQUENCER_DA_ADDRESS.to_vec(), working_set);
+        .sequencer_address(GENESIS_SEQUENCER_DA_ADDRESS.to_vec(), working_set)
+        .unwrap();
     assert!(resp.address.is_some());
 }
 
@@ -69,7 +70,7 @@ fn end_blob_hook_success() {
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
     let balance_after_genesis = {
-        let resp = test_sequencer.query_balance_via_bank(working_set);
+        let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
         resp.amount.unwrap()
     };
     assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
@@ -89,11 +90,12 @@ fn end_blob_hook_success() {
         .registry
         .end_blob_hook(SequencerOutcome::Completed, working_set)
         .unwrap();
-    let resp = test_sequencer.query_balance_via_bank(working_set);
+    let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
     assert_eq!(balance_after_genesis, resp.amount.unwrap());
     let resp = test_sequencer
         .registry
-        .sequencer_address(GENESIS_SEQUENCER_DA_ADDRESS.to_vec(), working_set);
+        .sequencer_address(GENESIS_SEQUENCER_DA_ADDRESS.to_vec(), working_set)
+        .unwrap();
     assert!(resp.address.is_some());
 }
 
@@ -104,7 +106,7 @@ fn end_blob_hook_slash() {
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
     let balance_after_genesis = {
-        let resp = test_sequencer.query_balance_via_bank(working_set);
+        let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
         resp.amount.unwrap()
     };
     assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
@@ -128,11 +130,12 @@ fn end_blob_hook_slash() {
         .end_blob_hook(result, working_set)
         .unwrap();
 
-    let resp = test_sequencer.query_balance_via_bank(working_set);
+    let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
     assert_eq!(balance_after_genesis, resp.amount.unwrap());
     let resp = test_sequencer
         .registry
-        .sequencer_address(GENESIS_SEQUENCER_DA_ADDRESS.to_vec(), working_set);
+        .sequencer_address(GENESIS_SEQUENCER_DA_ADDRESS.to_vec(), working_set)
+        .unwrap();
     assert!(resp.address.is_none());
 }
 
@@ -162,7 +165,7 @@ fn end_blob_hook_slash_preferred_sequencer() {
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
     let balance_after_genesis = {
-        let resp = test_sequencer.query_balance_via_bank(working_set);
+        let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
         resp.amount.unwrap()
     };
     assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
@@ -186,11 +189,12 @@ fn end_blob_hook_slash_preferred_sequencer() {
         .end_blob_hook(result, working_set)
         .unwrap();
 
-    let resp = test_sequencer.query_balance_via_bank(working_set);
+    let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
     assert_eq!(balance_after_genesis, resp.amount.unwrap());
     let resp = test_sequencer
         .registry
-        .sequencer_address(GENESIS_SEQUENCER_DA_ADDRESS.to_vec(), working_set);
+        .sequencer_address(GENESIS_SEQUENCER_DA_ADDRESS.to_vec(), working_set)
+        .unwrap();
     assert!(resp.address.is_none());
 
     assert!(test_sequencer
@@ -219,7 +223,8 @@ fn end_blob_hook_slash_unknown_sequencer() {
 
     let resp = test_sequencer
         .registry
-        .sequencer_address(UNKNOWN_SEQUENCER_DA_ADDRESS.to_vec(), working_set);
+        .sequencer_address(UNKNOWN_SEQUENCER_DA_ADDRESS.to_vec(), working_set)
+        .unwrap();
     assert!(resp.address.is_none());
 
     let result = SequencerOutcome::Slashed {
@@ -232,6 +237,7 @@ fn end_blob_hook_slash_unknown_sequencer() {
 
     let resp = test_sequencer
         .registry
-        .sequencer_address(UNKNOWN_SEQUENCER_DA_ADDRESS.to_vec(), working_set);
+        .sequencer_address(UNKNOWN_SEQUENCER_DA_ADDRESS.to_vec(), working_set)
+        .unwrap();
     assert!(resp.address.is_none());
 }
