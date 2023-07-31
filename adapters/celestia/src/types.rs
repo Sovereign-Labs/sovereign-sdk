@@ -123,6 +123,7 @@ pub enum ValidationError {
     MissingTx,
     InvalidRowProof,
     InvalidSigner,
+    IncompleteData,
 }
 
 impl CelestiaHeader {

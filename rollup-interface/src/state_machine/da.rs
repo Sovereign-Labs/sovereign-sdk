@@ -68,6 +68,27 @@ pub trait DaVerifier {
     ) -> Result<Self::ValidityCondition, Self::Error>;
 }
 
+/// [`AccumulatorStatus`] is a wrapper around an accumulator vector that specifies
+/// whether a [`CountedBufReader`] has finished reading the underlying buffer.
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum AccumulatorStatus {
+    /// The underlying buffer has been completely read and [`Vec<u8>`] contains the result
+    Completed(Vec<u8>),
+    /// The underlying buffer still contains elements to be read. [`Vec<u8>`] contains the
+    /// accumulated elements.
+    InProgress(Vec<u8>),
+}
+
+impl AccumulatorStatus {
+    /// Returns the accumulator vector contained in the wrapper
+    pub fn inner_vec(&mut self) -> &mut Vec<u8> {
+        match self {
+            Self::Completed(vec) => vec,
+            Self::InProgress(vec) => vec,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize, PartialEq)]
 /// Simple structure that implements the Read trait for a buffer and  counts the number of bytes read from the beginning.
 /// Useful for the partial blob reading optimization: we know for each blob how many bytes have been read from the beginning.
@@ -83,7 +104,7 @@ pub struct CountedBufReader<B: Buf> {
 
     /// An accumulator that stores the data read from the blob buffer into a vector.
     /// Allows easy access to the data that has already been read
-    reading_acc: Vec<u8>,
+    accumulator: AccumulatorStatus,
 }
 
 impl<B: Buf> CountedBufReader<B> {
@@ -93,7 +114,7 @@ impl<B: Buf> CountedBufReader<B> {
         CountedBufReader {
             inner,
             counter: 0,
-            reading_acc: Vec::with_capacity(buf_size),
+            accumulator: AccumulatorStatus::InProgress(Vec::with_capacity(buf_size)),
         }
     }
 
@@ -103,9 +124,8 @@ impl<B: Buf> CountedBufReader<B> {
     }
 
     /// Getter: returns a reference to an accumulator of the blob data read by the rollup
-    /// TODO: Refactor <https://github.com/Sovereign-Labs/sovereign-sdk/issues/462>
-    pub fn acc(&self) -> &Vec<u8> {
-        &self.reading_acc
+    pub fn accumulator(&self) -> &AccumulatorStatus {
+        &self.accumulator
     }
 }
 
@@ -119,7 +139,17 @@ impl<B: Buf> Read for CountedBufReader<B> {
 
         let num_read = len_before_reading - self.inner.remaining();
 
-        self.reading_acc.extend_from_slice(&buf[..buf_end]);
+        let inner_acc_vec = self.accumulator.inner_vec();
+        inner_acc_vec.extend_from_slice(&buf[..buf_end]);
+
+        match self.inner.remaining() {
+            0 => {
+                self.accumulator = AccumulatorStatus::Completed(inner_acc_vec.to_vec());
+            }
+            _ => {
+                self.accumulator = AccumulatorStatus::InProgress(inner_acc_vec.to_vec());
+            }
+        }
 
         self.counter += num_read;
 

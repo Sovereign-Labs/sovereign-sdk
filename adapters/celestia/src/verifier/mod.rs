@@ -235,9 +235,17 @@ impl da::DaVerifier for CelestiaVerifier {
                 let mut blob_iter = blob_ref.data();
                 let mut blob_data = vec![0; blob_iter.remaining()];
                 blob_iter.copy_to_slice(blob_data.as_mut_slice());
-                let tx_data = tx.data().acc();
+                let tx_data = tx.data().accumulator();
 
-                assert_eq!(blob_data, *tx_data);
+                match tx_data {
+                    da::AccumulatorStatus::Completed(tx_data) => {
+                        assert_eq!(blob_data, *tx_data);
+                    }
+                    // For now we bail and return, maybe want to change that behaviour in the future
+                    da::AccumulatorStatus::InProgress(_) => {
+                        return Err(ValidationError::IncompleteData);
+                    }
+                }
 
                 // Link blob commitment to e-tx commitment
                 let expected_commitment =
