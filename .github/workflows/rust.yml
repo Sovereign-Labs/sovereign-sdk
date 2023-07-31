@@ -18,8 +18,8 @@ name: Rust
 # - Be extremely aware of cache thrashing a.k.a. churning. GitHub Actions' cache
 #   allows for 10GiB of data which is easily exceeded if not careful.
 #   Sometimes it's better not to cache than cache excessively.
-#   We might even want to disable caching writes for non-default branches
-#   altogether if cache churning is unacceptably high.
+#   Disabling cache writes for non-default branches altogether if cache churning
+#   is unacceptably high is supposed to help with this.
 # - Learn cache invalidation rules of `Swatinem/rust-cache` before making
 #   changes, e.g. what happens when `rustc --version` changes or `Cargo.lock`
 #   changes (or is missing).
@@ -68,6 +68,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-check
+          save-if: github.ref == 'refs/heads/nightly'
           workspaces: |
             .
             examples/demo-prover
@@ -96,6 +97,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-check
+          save-if: github.ref == 'refs/heads/nightly'
           workspaces: |
             .
             examples/demo-prover
@@ -115,6 +117,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-build
+          save-if: github.ref == 'refs/heads/nightly'
           workspaces: |
             .
             examples/demo-prover
@@ -136,6 +139,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-build
+          save-if: github.ref == 'refs/heads/nightly'
           workspaces: |
             .
             examples/demo-prover
@@ -198,6 +202,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - uses: Swatinem/rust-cache@v2
         with:
+          save-if: github.ref == 'refs/heads/nightly'
           workspaces: |
             .
             examples/demo-prover
@@ -227,6 +232,7 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
       - uses: Swatinem/rust-cache@v2
         with:
+          save-if: github.ref == 'refs/heads/nightly'
           workspaces: |
             .
             examples/demo-prover
@@ -262,6 +268,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-check
+          save-if: github.ref == 'refs/heads/nightly'
           workspaces: |
             .
             examples/demo-prover
