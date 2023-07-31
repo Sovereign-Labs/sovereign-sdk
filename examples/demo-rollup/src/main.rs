@@ -5,7 +5,6 @@ use std::sync::Arc;
 use jupiter::types::FilteredCelestiaBlock;
 use borsh::de::BorshDeserialize;
 use std::fs::read_to_string;
-use std::path::PathBuf;
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
