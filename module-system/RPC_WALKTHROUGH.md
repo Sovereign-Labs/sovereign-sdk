@@ -31,7 +31,7 @@ impl<C: Context> Bank<C> {
         user_address: C::Address,
         token_address: C::Address,
         working_set: &mut WorkingSet<C::Storage>,
-    ) ->  BalanceResponse {
+    ) ->  RpcResult<BalanceResponse> {
     ...
     }
 
@@ -40,7 +40,7 @@ impl<C: Context> Bank<C> {
         &self,
         token_address: C::Address,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> TotalSupplyResponse {
+    ) -> RpcResult<TotalSupplyResponse> {
      ...
     }
 }

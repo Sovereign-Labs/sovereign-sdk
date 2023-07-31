@@ -1,3 +1,4 @@
+use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
 use sov_state::WorkingSet;
 
@@ -21,10 +22,10 @@ impl<C: sov_modules_api::Context> Bank<C> {
         user_address: C::Address,
         token_address: C::Address,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> BalanceResponse {
-        BalanceResponse {
+    ) -> RpcResult<BalanceResponse> {
+        Ok(BalanceResponse {
             amount: self.get_balance_of(user_address, token_address, working_set),
-        }
+        })
     }
 
     #[rpc_method(name = "supplyOf")]
@@ -32,13 +33,13 @@ impl<C: sov_modules_api::Context> Bank<C> {
         &self,
         token_address: C::Address,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> TotalSupplyResponse {
-        TotalSupplyResponse {
+    ) -> RpcResult<TotalSupplyResponse> {
+        Ok(TotalSupplyResponse {
             amount: self
                 .tokens
                 .get(&token_address, working_set)
                 .map(|token| token.total_supply),
-        }
+        })
     }
 }
 

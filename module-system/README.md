@@ -102,10 +102,10 @@ impl<C: sov_modules_api::Context> Bank<C> {
         user_address: C::Address,
         token_address: C::Address,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> BalanceResponse {
-        BalanceResponse {
+    ) -> RpcResult<BalanceResponse> {
+        Ok(BalanceResponse {
             amount: self.get_balance_of(user_address, token_address, working_set),
-        }
+        })
     }
 }
 ```
