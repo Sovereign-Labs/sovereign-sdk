@@ -68,7 +68,7 @@ where
             .map_err(|e| to_jsonrpsee_error_object(e, SEQUENCER_RPC_ERROR))
     })?;
     rpc.register_method("sequencer_acceptTx", move |params, sequencer| {
-        let tx: SubmitTransaction = params.one().unwrap();
+        let tx: SubmitTransaction = params.one()?;
         let response = match sequencer.accept_tx(tx.body) {
             Ok(()) => SubmitTransactionResponse::Registered,
             Err(e) => SubmitTransactionResponse::Failed(e.to_string()),
