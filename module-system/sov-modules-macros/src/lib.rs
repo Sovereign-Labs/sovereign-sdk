@@ -10,7 +10,6 @@ mod dispatch;
 mod module_call_json_schema;
 mod module_info;
 mod rpc;
-mod utils;
 
 use cli_parser::CliParserMacro;
 use default_runtime::DefaultRuntimeMacro;
@@ -21,8 +20,6 @@ use module_call_json_schema::derive_module_call_json_schema;
 use proc_macro::TokenStream;
 use rpc::ExposeRpcMacro;
 use syn::parse_macro_input;
-use syn::ItemFn;
-use utils::cycle_tracker::wrap_function;
 
 /// Derives the [`ModuleInfo`](trait.ModuleInfo.html) trait for the underlying `struct`.
 ///
@@ -266,20 +263,4 @@ pub fn cli_parser(attr: TokenStream, input: TokenStream) -> TokenStream {
     let cli_parser = CliParserMacro::new("Cmd");
 
     handle_macro_error(cli_parser.cli_parser(input, context_type))
-}
-
-/// `cycle_tracker` is a function that...
-///
-/// # Arguments
-///
-/// * `_attr` - A description of the _attr parameter
-/// * `item` - A description of the item parameter
-///
-/// # Returns
-///
-/// * A `TokenStream` that...
-#[proc_macro_attribute]
-pub fn cycle_tracker(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as ItemFn);
-    handle_macro_error(wrap_function(input).into())
 }

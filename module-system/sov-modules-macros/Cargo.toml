@@ -31,7 +31,6 @@ sov-bank = { path = "../module-implementations/sov-bank", version = "0.1" }
 [dependencies]
 anyhow = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
-#sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
 
 syn = { version = "1.0", features = ["full"] }
