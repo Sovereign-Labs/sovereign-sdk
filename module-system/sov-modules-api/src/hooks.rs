@@ -1,6 +1,6 @@
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::services::da::SlotData;
-use sov_state::{StateCheckpoint, WorkingSet};
+use sov_state::WorkingSet;
 
 use crate::transaction::Transaction;
 use crate::{Context, Spec};

@@ -3,6 +3,7 @@ use core::fmt;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::{Context, Spec};
+use sov_rollup_interface::mocks::{MockValidityCond, TestValidityCond};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::{Storage, WorkingSet};
@@ -10,6 +11,8 @@ use thiserror::Error;
 
 use super::ChainState;
 use crate::{StateTransitionId, TransitionInProgress};
+
+const GENESIS_BLOCK_HASH: [u8; 32] = [0; 32];
 
 #[derive(Debug, Clone, Error)]
 pub(crate) enum ChainStateError {
@@ -26,8 +29,8 @@ impl fmt::Display for ChainStateError {
     }
 }
 
-impl<Ctx: Context, Cond: ValidityCondition + BorshDeserialize + BorshSerialize> SlotHooks<Cond>
-    for ChainState<Ctx, Cond>
+impl<Ctx: Context, Cond: ValidityCondition + Default + BorshDeserialize + BorshSerialize>
+    SlotHooks<Cond> for ChainState<Ctx, Cond>
 {
     type Context = Ctx;
 
@@ -38,12 +41,12 @@ impl<Ctx: Context, Cond: ValidityCondition + BorshDeserialize + BorshSerialize> 
     ) -> anyhow::Result<()> {
         let curr_height = self.slot_height.get_or_err(working_set)?;
 
-        let transition = if curr_height == 0 {
+        let transition: StateTransitionId<Cond> = if curr_height == 0 {
             // First transition right after the genesis block
             StateTransitionId {
-                da_block_hash: todo!(),
-                post_state_root: todo!(),
-                validity_condition: todo!(),
+                da_block_hash: GENESIS_BLOCK_HASH,
+                post_state_root: working_set.backing().get_state_root()?,
+                validity_condition: Cond::default(),
             }
         } else {
             let last_transition_in_progress = self

@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
+use crate::da::{BlockHeaderTrait, DaSpec};
 use crate::zk::ValidityCondition;
 
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer
@@ -103,7 +103,7 @@ pub trait SlotData:
     type BlockHeader: BlockHeaderTrait;
 
     /// The validity condition associated with the slot data.
-    type Condition: ValidityCondition;
+    type Condition: ValidityCondition + Default;
 
     /// The canonical hash of the DA layer block.
     fn hash(&self) -> [u8; 32];

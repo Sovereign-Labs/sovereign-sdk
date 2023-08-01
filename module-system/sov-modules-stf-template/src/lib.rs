@@ -6,7 +6,6 @@ mod tx_verifier;
 
 pub use app_template::AppTemplate;
 pub use batch::Batch;
-use serde::__private::de::Content;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
 use sov_rollup_interface::da::BlobReaderTrait;
