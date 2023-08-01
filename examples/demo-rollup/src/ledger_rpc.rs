@@ -1,12 +1,13 @@
-use jsonrpsee::types::error::ErrorCode;
-use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_db::ledger_db::LedgerDB;
+use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_rollup_interface::rpc::{
     BatchIdentifier, EventIdentifier, LedgerRpcProvider, SlotIdentifier, TxIdentifier,
 };
+
+const LEDGER_RPC_ERROR: &str = "LEDGER_RPC_ERROR";
 
 use self::query_args::{extract_query_args, QueryArgs};
 
@@ -29,31 +30,31 @@ fn register_ledger_rpc_methods<
 ) -> Result<(), jsonrpsee::core::Error> {
     rpc.register_method("ledger_getHead", move |_, db| {
         db.get_head::<B, T>()
-            .map_err(|e| ErrorObjectOwned::from(ErrorCode::InvalidRequest))
+            .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))
     })?;
 
     rpc.register_method("ledger_getSlots", move |params, db| {
         let args: QueryArgs<SlotIdentifier> = extract_query_args(params).unwrap();
         db.get_slots::<B, T>(&args.0, args.1)
-            .map_err(|e| ErrorObjectOwned::from(ErrorCode::InvalidRequest))
+            .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))
     })?;
 
     rpc.register_method("ledger_getBatches", move |params, db| {
         let args: QueryArgs<BatchIdentifier> = extract_query_args(params).unwrap();
         db.get_batches::<B, T>(&args.0, args.1)
-            .map_err(|e| ErrorObjectOwned::from(ErrorCode::InvalidRequest))
+            .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))
     })?;
 
     rpc.register_method("ledger_getTransactions", move |params, db| {
         let args: QueryArgs<TxIdentifier> = extract_query_args(params).unwrap();
         db.get_transactions::<T>(&args.0, args.1)
-            .map_err(|e| ErrorObjectOwned::from(ErrorCode::InvalidRequest))
+            .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))
     })?;
 
     rpc.register_method("ledger_getEvents", move |params, db| {
         let ids: Vec<EventIdentifier> = params.parse().unwrap();
         db.get_events(&ids)
-            .map_err(|e| ErrorObjectOwned::from(ErrorCode::InvalidRequest))
+            .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))
     })?;
 
     Ok(())

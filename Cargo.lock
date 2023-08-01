@@ -6405,6 +6405,7 @@ dependencies = [
  "derive_more",
  "ed25519-dalek",
  "hex",
+ "jsonrpsee 0.18.2",
  "rand 0.7.3",
  "schemars",
  "serde",

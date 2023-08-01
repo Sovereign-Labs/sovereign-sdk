@@ -13,6 +13,8 @@ mod serde_address;
 #[cfg(test)]
 mod tests;
 pub mod transaction;
+#[cfg(feature = "native")]
+pub mod utils;
 
 #[cfg(feature = "macros")]
 extern crate sov_modules_macros;
