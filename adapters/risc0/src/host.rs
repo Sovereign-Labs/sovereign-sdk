@@ -23,7 +23,7 @@ impl<'a> Risc0Host<'a> {
     }
 
     /// Run a computation in the zkvm without generating a receipt.
-    /// This creates the "Session" trace without invoking the heavy cryptoraphic machinery.
+    /// This creates the "Session" trace without invoking the heavy cryptographic machinery.
     pub fn run_without_proving(&mut self) -> anyhow::Result<Session> {
         let env = self.env.borrow_mut().build()?;
         let mut executor = LocalExecutor::from_elf(env, self.elf)?;
