@@ -10,6 +10,7 @@ pub mod hooks;
 mod prefix;
 mod response;
 mod serde_address;
+pub mod test_utils;
 #[cfg(test)]
 mod tests;
 pub mod transaction;
@@ -17,6 +18,8 @@ pub mod transaction;
 #[cfg(feature = "macros")]
 extern crate sov_modules_macros;
 
+use digest::typenum::U32;
+use digest::Digest;
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::{
     DispatchCall, Genesis, MessageCodec, ModuleCallJsonSchema, ModuleInfo,
@@ -40,8 +43,7 @@ pub use error::Error;
 pub use prefix::Prefix;
 pub use response::CallResponse;
 use serde::{Deserialize, Serialize};
-pub use sov_rollup_interface::crypto::SimpleHasher as Hasher;
-pub use sov_rollup_interface::AddressTrait;
+pub use sov_rollup_interface::{digest, AddressTrait};
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
 
@@ -120,11 +122,7 @@ pub enum SigVerificationError {
 pub trait Signature {
     type PublicKey;
 
-    fn verify(
-        &self,
-        pub_key: &Self::PublicKey,
-        msg_hash: [u8; 32],
-    ) -> Result<(), SigVerificationError>;
+    fn verify(&self, pub_key: &Self::PublicKey, msg: &[u8]) -> Result<(), SigVerificationError>;
 }
 
 /// A type that can't be instantiated.
@@ -134,6 +132,19 @@ pub enum NonInstantiable {}
 /// PublicKey used in the Module System.
 pub trait PublicKey {
     fn to_address<A: AddressTrait>(&self) -> A;
+}
+
+/// PublicKey used in the Module System.
+#[cfg(feature = "native")]
+pub trait PrivateKey {
+    type PublicKey: PublicKey;
+    type Signature: Signature<PublicKey = Self::PublicKey>;
+    fn generate() -> Self;
+    fn pub_key(&self) -> Self::PublicKey;
+    fn sign(&self, msg: &[u8]) -> Self::Signature;
+    fn to_address<A: AddressTrait>(&self) -> A {
+        self.pub_key().to_address::<A>()
+    }
 }
 
 /// The `Spec` trait configures certain key primitives to be used by a by a particular instance of a rollup.
@@ -181,6 +192,14 @@ pub trait Spec {
         + Sync
         + FromStr<Err = anyhow::Error>;
 
+    /// The public key used for digital signatures
+    #[cfg(feature = "native")]
+    type PrivateKey: Debug
+        + Send
+        + Sync
+        + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+        + PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
+
     #[cfg(not(feature = "native"))]
     type PublicKey: borsh::BorshDeserialize
         + borsh::BorshSerialize
@@ -192,7 +211,7 @@ pub trait Spec {
         + PublicKey;
 
     /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
-    type Hasher: Hasher;
+    type Hasher: Digest<OutputSize = U32>;
 
     /// The digital signature scheme used by the rollup
     #[cfg(feature = "native")]

@@ -10,3 +10,4 @@ mod node;
 
 pub use borsh::maybestd;
 pub use node::*;
+pub use digest;

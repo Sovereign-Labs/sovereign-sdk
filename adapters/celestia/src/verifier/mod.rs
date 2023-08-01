@@ -1,10 +1,10 @@
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::crypto::SimpleHasher;
 use sov_rollup_interface::da::{
     self, BlobTransactionTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, CountedBufReader,
     DaSpec,
 };
+use sov_rollup_interface::digest::Digest;
 use sov_rollup_interface::zk::ValidityCondition;
 use sov_rollup_interface::Buf;
 use thiserror::Error;
@@ -68,7 +68,7 @@ impl TmHash {
             tendermint::Hash::Sha256(ref h) => h,
             // Hack: when the hash is None, we return a hash of all 255s as a placeholder.
             // TODO: add special casing for the genesis block at a higher level
-            tendermint::Hash::None => unreachable!("Only the genesis block has a None hash, and we use a placholder in that corner case") 
+            tendermint::Hash::None => unreachable!("Only the genesis block has a None hash, and we use a placeholder in that corner case")
         }
     }
 }
@@ -119,7 +119,7 @@ pub enum ValidityConditionError {
 
 impl ValidityCondition for ChainValidityCondition {
     type Error = ValidityConditionError;
-    fn combine<H: SimpleHasher>(&self, rhs: Self) -> Result<Self, Self::Error> {
+    fn combine<H: Digest>(&self, rhs: Self) -> Result<Self, Self::Error> {
         if self.block_hash != rhs.prev_hash {
             return Err(ValidityConditionError::BlocksNotConsecutive);
         }
@@ -140,7 +140,7 @@ impl da::DaVerifier for CelestiaVerifier {
         }
     }
 
-    fn verify_relevant_tx_list<H: SimpleHasher>(
+    fn verify_relevant_tx_list<H: Digest>(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
