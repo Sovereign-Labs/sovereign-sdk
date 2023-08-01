@@ -1,6 +1,6 @@
 //! Defines mock instantiations of many important traits, which are useful
 //! for testing, fuzzing, and benchmarking.
-use std::default;
+
 use std::fmt::Display;
 use std::io::Write;
 use std::marker::PhantomData;
@@ -9,7 +9,6 @@ use anyhow::{ensure, Error};
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Bytes;
 use jmt::SimpleHasher;
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
@@ -90,8 +89,8 @@ impl Zkvm for MockZkvm {
         Ok(proof.log)
     }
 
-    fn verify_and_extract_output<'a, C, Add: AddressTrait>(
-        _serialized_proof: &'a [u8],
+    fn verify_and_extract_output<C, Add: AddressTrait>(
+        _serialized_proof: &[u8],
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<crate::zk::StateTransition<C, Add>, Self::Error> {
         todo!()

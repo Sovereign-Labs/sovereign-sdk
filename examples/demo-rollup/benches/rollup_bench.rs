@@ -82,7 +82,7 @@ fn rollup_bench(_bench: &mut Criterion) {
             height,
             validity_cond: TestValidityCond::default(),
         };
-        blocks.push(filtered_block.clone());
+        blocks.push(filtered_block);
 
         let blob_txs = da_service.extract_relevant_txs(&filtered_block);
         blobs.push(blob_txs.clone());
@@ -93,7 +93,7 @@ fn rollup_bench(_bench: &mut Criterion) {
         b.iter(|| {
             let filtered_block = &blocks[height as usize];
 
-            let mut data_to_commit = SlotCommit::new(filtered_block.clone());
+            let mut data_to_commit = SlotCommit::new(*filtered_block);
             let apply_block_result =
                 demo.apply_slot(Default::default(), &mut blobs[height as usize]);
             for receipts in apply_block_result.batch_receipts {

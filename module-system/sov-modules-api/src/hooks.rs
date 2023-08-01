@@ -1,6 +1,5 @@
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::services::da::SlotData;
-use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::{StateCheckpoint, WorkingSet};
 
 use crate::transaction::Transaction;

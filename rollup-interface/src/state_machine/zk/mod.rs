@@ -43,8 +43,8 @@ pub trait Zkvm {
 
     /// Same as the function right above, except that instead of returning the output as a serialized array,
     /// it returns a state transition structure.
-    fn verify_and_extract_output<'a, C: ValidityCondition, Add: AddressTrait>(
-        serialized_proof: &'a [u8],
+    fn verify_and_extract_output<C: ValidityCondition, Add: AddressTrait>(
+        serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<StateTransition<C, Add>, Self::Error>;
 }

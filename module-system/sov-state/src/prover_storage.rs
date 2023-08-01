@@ -182,7 +182,7 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
                 self.db.get_next_version() - 1,
             )
             .unwrap();
-        (val_opt.as_ref().map(|val| StorageValue::new(val)), proof)
+        (val_opt.as_ref().map(StorageValue::new), proof)
     }
 }
 

@@ -11,18 +11,11 @@ pub use batch::Batch;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
 use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::services::da::SlotData;
-use sov_rollup_interface::stf::{
-    BatchReceipt, SlotResult, StateTransitionFunction, TransactionReceipt,
-};
+use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 use sov_state::{StateCheckpoint, Storage};
 use tracing::log::info;
-use tracing::{debug, error};
 pub use tx_verifier::RawTx;
-
-use crate::app_template::ApplyBatchError;
-use crate::tx_verifier::TransactionAndRawHash;
 
 /// The result of the tx application.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

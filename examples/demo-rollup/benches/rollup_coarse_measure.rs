@@ -129,7 +129,7 @@ async fn main() -> Result<(), anyhow::Error> {
             height,
             validity_cond: TestValidityCond::default(),
         };
-        blocks.push(filtered_block.clone());
+        blocks.push(filtered_block);
 
         let blob_txs = da_service.extract_relevant_txs(&filtered_block);
         blobs.push(blob_txs);
@@ -141,7 +141,7 @@ async fn main() -> Result<(), anyhow::Error> {
     for height in start_height..end_height {
         let filtered_block = &blocks[height as usize];
 
-        let mut data_to_commit = SlotCommit::new(filtered_block.clone());
+        let mut data_to_commit = SlotCommit::new(*filtered_block);
 
         let now = Instant::now();
 

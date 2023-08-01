@@ -8,7 +8,6 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::da::BlobReaderTrait;
-use crate::services::da::SlotData;
 use crate::zk::{ValidityCondition, Zkvm};
 
 #[cfg(any(test, feature = "fuzzing"))]

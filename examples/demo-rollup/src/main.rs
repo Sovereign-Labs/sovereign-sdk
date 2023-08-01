@@ -25,7 +25,6 @@ use sov_ethereum::get_ethereum_rpc;
 use sov_modules_api::RpcRunner;
 use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaVerifier};
-use sov_rollup_interface::mocks::{TestBlock, TestValidityCond};
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
