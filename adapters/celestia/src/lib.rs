@@ -1,4 +1,3 @@
-#![feature(array_windows)]
 pub mod celestia;
 pub mod shares;
 pub use celestia::*;
