@@ -68,7 +68,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-check
-          save-if: github.ref == 'refs/heads/nightly'
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
             .
             examples/demo-prover
@@ -97,7 +97,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-check
-          save-if: github.ref == 'refs/heads/nightly'
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
             .
             examples/demo-prover
@@ -117,7 +117,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-build
-          save-if: github.ref == 'refs/heads/nightly'
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
             .
             examples/demo-prover
@@ -139,7 +139,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-build
-          save-if: github.ref == 'refs/heads/nightly'
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
             .
             examples/demo-prover
@@ -202,7 +202,7 @@ jobs:
       - uses: actions-rust-lang/setup-rust-toolchain@v1
       - uses: Swatinem/rust-cache@v2
         with:
-          save-if: github.ref == 'refs/heads/nightly'
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
             .
             examples/demo-prover
@@ -232,7 +232,7 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
       - uses: Swatinem/rust-cache@v2
         with:
-          save-if: github.ref == 'refs/heads/nightly'
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
             .
             examples/demo-prover
@@ -268,7 +268,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-check
-          save-if: github.ref == 'refs/heads/nightly'
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
             .
             examples/demo-prover
