@@ -6267,6 +6267,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-chain-state"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "serde",
+ "serde_json",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-state",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "sov-db"
 version = "0.1.0"
 dependencies = [
