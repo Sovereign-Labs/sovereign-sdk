@@ -14,9 +14,10 @@ use sov_rollup_interface::zk::Zkvm;
 use sov_state::{StateCheckpoint, Storage};
 pub use tx_verifier::RawTx;
 
-#[cfg(target_os = "zkvm")]
+#[cfg(all(target_os = "zkvm", feature="bench"))]
 use zk_cycle_utils::cycle_tracker;
 
+#[cfg(all(target_os = "zkvm", feature="bench"))]
 extern crate risc0_zkvm;
 
 /// The receipts of all the transactions in a batch.
@@ -92,7 +93,7 @@ where
             .expect("Storage update must succeed");
     }
 
-    #[cfg_attr(target_os = "zkvm", cycle_tracker)]
+    #[cfg_attr(all(target_os = "zkvm", feature="bench"), cycle_tracker)]
     fn begin_slot(&mut self, witness: Self::Witness) {
         self.checkpoint = Some(StateCheckpoint::with_witness(
             self.current_storage.clone(),
@@ -100,7 +101,7 @@ where
         ));
     }
 
-    #[cfg_attr(target_os = "zkvm", cycle_tracker)]
+    #[cfg_attr(all(target_os = "zkvm", feature="bench"), cycle_tracker)]
     fn apply_blob(
         &mut self,
         blob: &mut B,
@@ -112,7 +113,7 @@ where
         }
     }
 
-    #[cfg_attr(target_os = "zkvm", cycle_tracker)]
+    #[cfg_attr(all(target_os = "zkvm", feature="bench"), cycle_tracker)]
     fn end_slot(&mut self) -> (Self::StateRoot, Self::Witness) {
         let (cache_log, witness) = self.checkpoint.take().unwrap().freeze();
         let root_hash = self

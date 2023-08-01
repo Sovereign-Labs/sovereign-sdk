@@ -9,9 +9,10 @@ use crate::storage::{StorageKey, StorageValue};
 use crate::witness::{TreeWitnessReader, Witness};
 use crate::{MerkleProofSpec, Storage};
 
-#[cfg(target_os = "zkvm")]
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
 use zk_cycle_utils::cycle_tracker;
 
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
 extern crate risc0_zkvm;
 
 pub struct ZkStorage<S: MerkleProofSpec> {
@@ -50,7 +51,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         witness.get_hint()
     }
 
-    #[cfg_attr(target_os = "zkvm", cycle_tracker)]
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn validate_and_commit(
         &self,
         state_accesses: OrderedReadsAndWrites,

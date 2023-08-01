@@ -21,6 +21,9 @@ pub struct Risc0Host<'a> {
 
 impl<'a> Risc0Host<'a> {
     pub fn new(elf: &'a [u8]) -> Self {
+        #[cfg(not(feature = "bench"))]
+        let default_env = ExecutorEnvBuilder::default();
+        #[cfg(feature = "bench")]
         let mut default_env = ExecutorEnvBuilder::default();
         #[cfg(feature = "bench")]
         {

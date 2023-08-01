@@ -41,5 +41,5 @@ name = "prover_bench"
 harness = false
 
 [features]
-bench = ["risc0-adapter/bench", "zk-cycle-utils/bench", "jupiter/bench"]
+bench = ["risc0-adapter/bench", "zk-cycle-utils/bench", "methods/bench"]
 

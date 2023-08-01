@@ -89,20 +89,21 @@ pub fn main() {
 
     let end_cycles = env::get_cycle_count();
 
-    // serialization. lol.
-    let tuple = ("Cycles per block".to_string(), (end_cycles - start_cycles) as u64);
-    let mut serialized = Vec::new();
-    serialized.extend(tuple.0.as_bytes());
-    serialized.push(0);
-    let size_bytes = tuple.1.to_ne_bytes();
-    serialized.extend(&size_bytes);
+    #[cfg(feature = "bench")]
+    {
+        let tuple = ("Cycles per block".to_string(), (end_cycles - start_cycles) as u64);
+        let mut serialized = Vec::new();
+        serialized.extend(tuple.0.as_bytes());
+        serialized.push(0);
+        let size_bytes = tuple.1.to_ne_bytes();
+        serialized.extend(&size_bytes);
 
-    // calculate the syscall name.
-    /// TODO: figure out how to do once. doesn't need to do it everytime.
-    let cycle_string = String::from("cycle_metrics\0");
-    let metrics_syscall_name = unsafe {
-        risc0_zkvm_platform::syscall::SyscallName::from_bytes_with_nul(cycle_string.as_ptr())
-    };
+        // calculate the syscall name.
+        let cycle_string = String::from("cycle_metrics\0");
+        let metrics_syscall_name = unsafe {
+            risc0_zkvm_platform::syscall::SyscallName::from_bytes_with_nul(cycle_string.as_ptr())
+        };
 
-    risc0_zkvm::guest::env::send_recv_slice::<u8,u8>(metrics_syscall_name, &serialized);
+        risc0_zkvm::guest::env::send_recv_slice::<u8, u8>(metrics_syscall_name, &serialized);
+    }
 }

@@ -1,10 +1,9 @@
-use std::env;
 use jupiter::types::FilteredCelestiaBlock;
 use borsh::de::BorshDeserialize;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
@@ -15,20 +14,17 @@ use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
 use jupiter::verifier::RollupParams;
 use jupiter::BlobWithSender;
-use methods::{ROLLUP_ELF, ROLLUP_ID};
+use methods::{ROLLUP_ELF};
 use risc0_adapter::host::Risc0Host;
 use serde::Deserialize;
-use sov_modules_api::RpcRunner;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
-use sov_state::Storage;
 
 #[cfg(feature = "bench")]
 use risc0_adapter::metrics::GLOBAL_HASHMAP;
 
-#[cfg(feature = "bench")]
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -176,7 +172,7 @@ async fn main() -> Result<(), anyhow::Error> {
         println!("Started proving block {height}");
         let now = Instant::now();
         println!("Skipping prover to capture cycle counts\n");
-        let receipt = host.run_without_proving().expect("Prover should run successfully");
+        let _receipt = host.run_without_proving().expect("Prover should run successfully");
         println!("prover time: {:?}\n\n",now.elapsed());
         println!("==================================================\n");
         prev_state_root = next_state_root.0;

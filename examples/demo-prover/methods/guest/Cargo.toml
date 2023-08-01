@@ -16,6 +16,9 @@ demo-stf = { path = "../../../demo-stf", default-features = false }
 sov-rollup-interface = { path = "../../../../rollup-interface", default-features = false}
 risc0-adapter = { path = "../../../../adapters/risc0", default-features = false }
 const-rollup-config = { path = "../../../const-rollup-config" }
+sov-modules-stf-template = {path = "../../../../module-system/sov-modules-stf-template", optional=true}
+sov-state = {path = "../../../../module-system/sov-state", default-features = false, optional=true}
+sov-modules-api = {path = "../../../../module-system/sov-modules-api", default-features = false, optional=true}
 
 # TODO: Just for test
 tracing = "0.1.37"
@@ -30,7 +33,6 @@ sha2 = "0.10.6"
 sha3 = "0.10.8"
 tempfile = "3.5"
 zip = "0.6"
-
 
 [patch.crates-io]
 ## Placing this patch statement in the workspace Cargo.toml will add RISC Zero SHA-256 accelerator
@@ -51,5 +53,4 @@ lto = true
 opt-level = 3
 
 [features]
-#default = ["bench"]
-bench=["jupiter/bench"]
+bench=["jupiter/bench", "sov-modules-stf-template/bench", "sov-state/bench", "sov-modules-api/bench"]

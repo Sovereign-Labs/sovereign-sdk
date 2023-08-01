@@ -3282,8 +3282,6 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "rand 0.7.3",
- "risc0-zkvm",
- "risc0-zkvm-platform",
  "schemars",
  "serde",
  "serde_json",
@@ -3292,7 +3290,6 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "thiserror",
- "zk-cycle-utils",
 ]
 
 [[package]]
@@ -3317,14 +3314,11 @@ dependencies = [
  "borsh",
  "hex",
  "jmt",
- "risc0-zkvm",
- "risc0-zkvm-platform",
  "serde",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
  "tracing",
- "zk-cycle-utils",
 ]
 
 [[package]]
@@ -3390,15 +3384,12 @@ dependencies = [
  "borsh",
  "hex",
  "jmt",
- "risc0-zkvm",
- "risc0-zkvm-platform",
  "serde",
  "sha2 0.10.7",
  "sov-db",
  "sov-first-read-last-write-cache",
  "sov-rollup-interface",
  "thiserror",
- "zk-cycle-utils",
 ]
 
 [[package]]
