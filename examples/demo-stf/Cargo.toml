@@ -30,6 +30,7 @@ const-rollup-config = { path = "../const-rollup-config" }
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-election = { path = "../../module-system/module-implementations/examples/sov-election", default-features = false }
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry", default-features = false }
+sov-blob-storage = { path = "../../module-system/module-implementations/sov-blob-storage", default-features = false }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", default-features = false }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" } # no features available
 sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", default-features = false }
@@ -56,6 +57,7 @@ native = [
     "sov-accounts/native",
     "sov-election/native",
     "sov-sequencer-registry/native",
+    "sov-blob-storage/native",
     "sov-value-setter/native",
     "sov-modules-api/native",
     "sov-rollup-interface/mocks",
