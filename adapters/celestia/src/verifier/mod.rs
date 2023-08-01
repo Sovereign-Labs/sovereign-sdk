@@ -20,7 +20,7 @@ use crate::shares::{read_varint, BlobIterator, NamespaceGroup, Share};
 use crate::types::ValidationError;
 use crate::{pfb_from_iter, BlobWithSender, CelestiaHeader, DataAvailabilityHeader};
 
-#[cfg(target_os = "zkvm")]
+#[cfg(all(target_os = "zkvm",feature="bench"))]
 use zk_cycle_utils::cycle_tracker;
 
 pub struct CelestiaVerifier {
@@ -143,7 +143,7 @@ impl da::DaVerifier for CelestiaVerifier {
         }
     }
 
-    #[cfg_attr(target_os = "zkvm", cycle_tracker)]
+    #[cfg_attr(all(target_os = "zkvm", feature="bench"), cycle_tracker)]
     fn verify_relevant_tx_list<H: SimpleHasher>(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,

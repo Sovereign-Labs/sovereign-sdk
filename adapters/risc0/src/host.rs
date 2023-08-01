@@ -19,38 +19,6 @@ pub struct Risc0Host<'a> {
     elf: &'a [u8],
 }
 
-
-// #[cfg(feature = "bench")]
-// use once_cell::sync::Lazy;
-// #[cfg(feature = "bench")]
-// use parking_lot::Mutex;
-
-// #[cfg(feature = "bench")]
-// pub static GLOBAL_HASHMAP: Lazy<Mutex<HashMap<String,(u64, u64)>>> = Lazy::new(|| {
-//     Mutex::new(HashMap::new())
-// });
-
-// #[cfg(feature = "bench")]
-// pub fn add_value(metric: String, value:  u64) {
-//     let mut hashmap = GLOBAL_HASHMAP.lock();
-//     hashmap.entry(metric)
-//         .and_modify(|(sum, count)| {
-//             *sum += value;
-//             *count += 1;
-//         })
-//         .or_insert((value, 1));
-// }
-
-// fn deserialize_custom(serialized: &[u8]) -> (String, u64) {
-//     let null_pos = serialized.iter().position(|&b| b == 0).unwrap();
-//     let (string_bytes, size_bytes_with_null) = serialized.split_at(null_pos);
-//     let size_bytes = &size_bytes_with_null[1..]; // Skip the null terminator
-//     let string = String::from_utf8(string_bytes.to_vec()).unwrap();
-//     let size = u64::from_ne_bytes(size_bytes.try_into().unwrap()); // Convert bytes back into usize
-//     let tuple = (string, size);
-//     tuple
-// }
-
 impl<'a> Risc0Host<'a> {
     pub fn new(elf: &'a [u8]) -> Self {
         let mut default_env = ExecutorEnvBuilder::default();

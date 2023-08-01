@@ -18,7 +18,7 @@ tokio = { workspace = true }
 tracing = "0.1.37"
 tracing-subscriber = "0.3.16"
 
-jupiter = { path = "../../../adapters/celestia", features = ["native"] }
+jupiter = { path = "../../../adapters/celestia", features = ["native","bench"] }
 demo-stf = { path = "../../demo-stf" }
 sov-rollup-interface = { path = "../../../rollup-interface" }
 risc0-adapter = { path = "../../../adapters/risc0" }
@@ -41,5 +41,5 @@ name = "prover_bench"
 harness = false
 
 [features]
-bench = ["risc0-adapter/bench", "zk-cycle-utils/bench"]
+bench = ["risc0-adapter/bench", "zk-cycle-utils/bench", "jupiter/bench"]
 

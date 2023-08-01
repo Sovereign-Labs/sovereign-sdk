@@ -26,7 +26,7 @@ use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::Storage;
 
 #[cfg(feature = "bench")]
-use risc0_adapter::host::GLOBAL_HASHMAP;
+use risc0_adapter::metrics::GLOBAL_HASHMAP;
 
 #[cfg(feature = "bench")]
 use std::collections::HashMap;
