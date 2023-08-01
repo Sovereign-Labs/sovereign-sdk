@@ -12,7 +12,7 @@ readme = "README.md"
 resolver = "2"
 
 [dependencies]
-jsonrpsee = { workspace = true } 
+jsonrpsee = { workspace = true, optional = true } 
 anyhow = { workspace = true }
 sov-state = { path = "../sov-state", version = "0.1", default-features = false }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
@@ -37,5 +37,5 @@ serde_json = { workspace = true }
 
 [features]
 default = ["native", "macros"]
-native = ["sov-state/native", "rand", "hex", "schemars", "ed25519-dalek/default", "clap"]
+native = ["sov-state/native", "rand", "hex", "schemars", "ed25519-dalek/default", "clap", "jsonrpsee"]
 macros = ["sov-modules-macros"]
