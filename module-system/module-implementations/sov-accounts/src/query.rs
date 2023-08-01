@@ -7,7 +7,7 @@ use sov_state::WorkingSet;
 use crate::{Account, Accounts};
 
 /// This is the response returned from the accounts_getAccount endpoint.
-#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
 pub enum Response {
     /// The account corresponding to the given public key exists.
     AccountExists {
