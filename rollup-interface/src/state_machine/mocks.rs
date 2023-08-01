@@ -9,7 +9,7 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
-use crate::da::{BlobTransactionTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
+use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
 use crate::services::da::SlotData;
 use crate::zk::{Matches, Zkvm};
 use crate::AddressTrait;
@@ -173,7 +173,7 @@ pub struct TestBlob<Address> {
     data: CountedBufReader<Bytes>,
 }
 
-impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
+impl<Address: AddressTrait> BlobReaderTrait for TestBlob<Address> {
     type Data = Bytes;
     type Address = Address;
 
