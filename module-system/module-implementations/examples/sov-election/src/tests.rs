@@ -19,10 +19,13 @@ fn test_election() {
 
     test_module::<DefaultContext>(admin.clone(), &mut native_working_set);
 
-    let (_log, witness) = native_working_set.checkpoint().freeze();
-    let zk_storage = ZkStorage::new([0u8; 32]);
-    let mut zk_working_set = WorkingSet::with_witness(zk_storage, witness);
-    test_module::<ZkDefaultContext>(admin, &mut zk_working_set);
+    // Zk context
+    {
+        let (_log, witness) = native_working_set.checkpoint().freeze();
+        let zk_storage = ZkStorage::new([0u8; 32]);
+        let mut zk_working_set = WorkingSet::with_witness(zk_storage, witness);
+        test_module::<ZkDefaultContext>(admin, &mut zk_working_set);
+    }
 }
 
 fn test_module<C: Context>(admin: C::Address, working_set: &mut WorkingSet<C::Storage>) {

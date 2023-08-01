@@ -15,7 +15,7 @@ use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::ProverConfig;
 use sov_rollup_interface::stf::ZkConfig;
-use sov_rollup_interface::zk::Zkvm;
+use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
 use sov_state::{Storage, ZkStorage};
@@ -25,17 +25,17 @@ use crate::batch_builder::FiFoStrictBatchBuilder;
 use crate::runner_config::Config;
 use crate::runtime::Runtime;
 
-pub struct DemoAppRunner<C: Context, Vm: Zkvm, B: BlobReaderTrait> {
-    pub stf: DemoApp<C, Vm, B>,
+pub struct DemoAppRunner<C: Context, Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> {
+    pub stf: DemoApp<C, Vm, Cond, B>,
     pub batch_builder: Option<FiFoStrictBatchBuilder<Runtime<C>, C>>,
 }
 
-pub type ZkAppRunner<Vm, B> = DemoAppRunner<ZkDefaultContext, Vm, B>;
+pub type ZkAppRunner<Vm, Cond, B> = DemoAppRunner<ZkDefaultContext, Vm, Cond, B>;
 
 #[cfg(feature = "native")]
-pub type NativeAppRunner<Vm, B> = DemoAppRunner<DefaultContext, Vm, B>;
+pub type NativeAppRunner<Vm, Cond, B> = DemoAppRunner<DefaultContext, Vm, Cond, B>;
 
-pub type DemoApp<C, Vm, B> = AppTemplate<C, Runtime<C>, Vm, B>;
+pub type DemoApp<C, Vm, Cond, B> = AppTemplate<C, Runtime<C>, Vm, Cond, B>;
 
 /// Batch receipt type used by the demo app. We export this type so that it's easily accessible to the full node.
 pub type DemoBatchReceipt = SequencerOutcome;
@@ -43,11 +43,12 @@ pub type DemoBatchReceipt = SequencerOutcome;
 pub type DemoTxReceipt = TxEffect;
 
 #[cfg(feature = "native")]
-impl<Vm: Zkvm, B: BlobReaderTrait> StateTransitionRunner<ProverConfig, Vm, B>
-    for DemoAppRunner<DefaultContext, Vm, B>
+impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait>
+    StateTransitionRunner<ProverConfig, Vm, Cond, B>
+    for DemoAppRunner<DefaultContext, Vm, Cond, B>
 {
     type RuntimeConfig = Config;
-    type Inner = DemoApp<DefaultContext, Vm, B>;
+    type Inner = DemoApp<DefaultContext, Vm, Cond, B>;
     type BatchBuilder = FiFoStrictBatchBuilder<Runtime<DefaultContext>, DefaultContext>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
@@ -80,16 +81,16 @@ impl<Vm: Zkvm, B: BlobReaderTrait> StateTransitionRunner<ProverConfig, Vm, B>
     }
 }
 
-impl<Vm: Zkvm, B: BlobReaderTrait> StateTransitionRunner<ZkConfig, Vm, B>
-    for DemoAppRunner<ZkDefaultContext, Vm, B>
+impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait>
+    StateTransitionRunner<ZkConfig, Vm, Cond, B> for DemoAppRunner<ZkDefaultContext, Vm, Cond, B>
 {
     type RuntimeConfig = [u8; 32];
-    type Inner = DemoApp<ZkDefaultContext, Vm, B>;
+    type Inner = DemoApp<ZkDefaultContext, Vm, Cond, B>;
     type BatchBuilder = FiFoStrictBatchBuilder<Runtime<ZkDefaultContext>, ZkDefaultContext>;
 
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
         let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
-        let app: AppTemplate<ZkDefaultContext, Runtime<ZkDefaultContext>, Vm, B> =
+        let app: AppTemplate<ZkDefaultContext, Runtime<ZkDefaultContext>, Vm, Cond, B> =
             AppTemplate::new(storage.clone(), Runtime::default());
 
         let batch_size_bytes = 1024 * 100; // 100 KB
@@ -119,7 +120,9 @@ impl<Vm: Zkvm, B: BlobReaderTrait> StateTransitionRunner<ZkConfig, Vm, B>
 }
 
 #[cfg(feature = "native")]
-impl<Vm: Zkvm, B: BlobReaderTrait> RpcRunner for DemoAppRunner<DefaultContext, Vm, B> {
+impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> RpcRunner
+    for DemoAppRunner<DefaultContext, Vm, Cond, B>
+{
     type Context = DefaultContext;
     fn get_storage(&self) -> <Self::Context as Spec>::Storage {
         self.inner().current_storage.clone()

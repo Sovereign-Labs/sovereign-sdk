@@ -1,8 +1,11 @@
 use std::fmt::Display;
+use std::marker::PhantomData;
 use std::str::FromStr;
 
 use demo_simple_stf::{ApplyBlobResult, CheckHashPreimageStf};
-use sov_rollup_interface::mocks::{MockZkvm, TestBlob};
+use sov_rollup_interface::mocks::{
+    MockZkvm, TestBlob, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
+};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::AddressTrait;
 
@@ -62,7 +65,9 @@ fn test_stf() {
     let preimage = vec![0; 32];
 
     let test_blob = TestBlob::<DaAddress>::new(preimage, address, [0; 32]);
-    let stf = &mut CheckHashPreimageStf {};
+    let stf = &mut CheckHashPreimageStf::<TestValidityCond> {
+        phantom_data: PhantomData::default(),
+    };
 
     let mut blobs = [test_blob];
 

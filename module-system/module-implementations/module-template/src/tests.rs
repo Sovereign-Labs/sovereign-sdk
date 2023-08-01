@@ -12,6 +12,7 @@ fn test_value_setter() {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let admin = Address::from([1; 32]);
     // Test Native-Context
+    #[cfg(feature = "native")]
     {
         let config = ExampleModuleConfig {};
         let context = DefaultContext::new(admin.clone());

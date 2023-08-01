@@ -110,7 +110,7 @@ mod tests {
     use anyhow::bail;
     use async_trait::async_trait;
     use sov_rollup_interface::da::DaSpec;
-    use sov_rollup_interface::mocks::{MockDaSpec, TestBlock};
+    use sov_rollup_interface::mocks::{MockDaSpec, TestBlock, TestValidityCond};
 
     use super::*;
 

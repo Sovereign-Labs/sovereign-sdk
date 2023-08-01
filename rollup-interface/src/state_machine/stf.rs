@@ -8,7 +8,8 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::da::BlobReaderTrait;
-use crate::zk::Zkvm;
+use crate::services::da::SlotData;
+use crate::zk::{ValidityCondition, Zkvm};
 
 #[cfg(any(test, feature = "fuzzing"))]
 pub mod fuzzing;
@@ -42,6 +43,7 @@ mod sealed {
 /// and may be queried via RPC. Receipts are generic over a type `R` which the rollup can use to
 /// store additional data, such as the status code of the transaction or the amout of gas used.s
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// A receipt showing the result of a transaction
 pub struct TransactionReceipt<R> {
     /// The canonical hash of this transaction
     pub tx_hash: [u8; 32],
@@ -60,6 +62,7 @@ pub struct TransactionReceipt<R> {
 /// can use to store arbitrary typed data, like the gas used by the batch. They are also generic over a type `TxReceiptContents`,
 /// since they contain a vectors of [`TransactionReceipt`]s.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// A receipt giving the outcome of a batch of transactions
 pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
     /// The canonical hash of this batch
     pub batch_hash: [u8; 32],
@@ -99,6 +102,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
 
     /// The contents of a transaction receipt. This is the data that is persisted in the database
     type TxReceiptContents: Serialize + DeserializeOwned + Clone;
+
     /// The contents of a batch receipt. This is the data that is persisted in the database
     type BatchReceiptContents: Serialize + DeserializeOwned + Clone;
 
@@ -106,8 +110,11 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     /// or validated together with proof during verification
     type Witness: Default + Serialize;
 
+    /// The validity condition that must be verified outside of the Vm
+    type Condition: ValidityCondition;
+
     /// Perform one-time initialization for the genesis block.
-    fn init_chain(&mut self, params: Self::InitialState);
+    fn init_chain(&mut self, params: Self::InitialState) -> anyhow::Result<[u8; 32]>;
 
     /// Called at each **DA-layer block** - whether or not that block contains any
     /// data relevant to the rollup.

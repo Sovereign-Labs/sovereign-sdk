@@ -6,6 +6,7 @@ use risc0_zkvm::{
     Executor, ExecutorEnvBuilder, LocalExecutor, SegmentReceipt, Session, SessionReceipt,
 };
 use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
+use sov_rollup_interface::AddressTrait;
 
 use crate::Risc0MethodId;
 
@@ -55,6 +56,17 @@ impl<'prover> Zkvm for Risc0Host<'prover> {
     ) -> Result<&'a [u8], Self::Error> {
         verify_from_slice(serialized_proof, code_commitment)
     }
+
+    fn verify_and_extract_output<
+        'a,
+        C: sov_rollup_interface::zk::ValidityCondition,
+        Add: AddressTrait,
+    >(
+        _serialized_proof: &'a [u8],
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
+        todo!()
+    }
 }
 
 pub struct Risc0Verifier;
@@ -69,6 +81,17 @@ impl Zkvm for Risc0Verifier {
         code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error> {
         verify_from_slice(serialized_proof, code_commitment)
+    }
+
+    fn verify_and_extract_output<
+        'a,
+        C: sov_rollup_interface::zk::ValidityCondition,
+        Add: AddressTrait,
+    >(
+        _serialized_proof: &'a [u8],
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
+        todo!()
     }
 }
 

@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Context;
+use borsh::{BorshDeserialize, BorshSerialize};
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{
     DefaultContext, DefaultPrivateKey, DemoBatchReceipt, DemoTxReceipt, NativeAppRunner,
@@ -24,6 +25,7 @@ use sov_ethereum::get_ethereum_rpc;
 use sov_modules_api::RpcRunner;
 use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaVerifier};
+use sov_rollup_interface::mocks::{TestBlock, TestValidityCond};
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -100,6 +102,7 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
     )
 }
 
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct CelestiaChainChecker {
     current_block_hash: [u8; 32],
 }
@@ -154,7 +157,9 @@ async fn main() -> Result<(), anyhow::Error> {
     // Our state transition function implements the StateTransitionRunner interface,
     // so we use that to initialize the STF
     let mut demo_runner =
-        NativeAppRunner::<Risc0Verifier, BlobWithSender>::new(rollup_config.runner.clone());
+        NativeAppRunner::<Risc0Verifier, ChainValidityCondition, BlobWithSender>::new(
+            rollup_config.runner.clone(),
+        );
 
     // Our state transition also implements the RpcRunner interface,
     // so we use that to initialize the RPC server.
@@ -179,16 +184,20 @@ async fn main() -> Result<(), anyhow::Error> {
         namespace: ROLLUP_NAMESPACE,
     }));
 
+    let storage = demo_runner.get_storage();
     let demo = demo_runner.inner_mut();
     let mut prev_state_root = {
         // Check if the rollup has previously been initialized
         if is_storage_empty {
             info!("No history detected. Initializing chain...");
-            demo.init_chain(get_genesis_config());
+            let post_genesis_root = demo.init_chain(get_genesis_config());
             info!("Chain initialization is done.");
+            post_genesis_root
         } else {
             debug!("Chain is already initialized. Skipping initialization.");
+            storage.get_state_root()
         }
+        .unwrap();
 
         let res = demo.apply_slot(Default::default(), []);
         // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
@@ -262,7 +271,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
 fn register_sequencer(
     da_service: Arc<CelestiaService>,
-    demo_runner: &mut NativeAppRunner<Risc0Verifier, BlobWithSender>,
+    demo_runner: &mut NativeAppRunner<Risc0Verifier, ChainValidityCondition, BlobWithSender>,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error> {
     let batch_builder = demo_runner.take_batch_builder().unwrap();

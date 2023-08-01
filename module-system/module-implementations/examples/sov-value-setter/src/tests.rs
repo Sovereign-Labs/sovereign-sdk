@@ -12,6 +12,7 @@ fn test_value_setter() {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let admin = Address::from([1; 32]);
     // Test Native-Context
+    #[cfg(feature = "native")]
     {
         let config = ValueSetterConfig {
             admin: admin.clone(),
@@ -74,6 +75,7 @@ fn test_err_on_sender_is_not_admin() {
 
     let sender_not_admin = Address::from([2; 32]);
     // Test Native-Context
+    #[cfg(feature = "native")]
     {
         let config = ValueSetterConfig {
             admin: sender_not_admin.clone(),

@@ -15,7 +15,9 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_demo_rollup::config::RollupConfig;
 use sov_demo_rollup::rng_xfers::RngDaService;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_rollup_interface::mocks::{TestBlob, TestBlock, TestBlockHeader, TestHash};
+use sov_rollup_interface::mocks::{
+    TestBlob, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
+};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -92,7 +94,9 @@ async fn main() -> Result<(), anyhow::Error> {
     let da_service = Arc::new(RngDaService::new());
 
     let mut demo_runner =
-        NativeAppRunner::<Risc0Verifier, TestBlob<CelestiaAddress>>::new(rollup_config.runner);
+        NativeAppRunner::<Risc0Verifier, TestValidityCond, TestBlob<CelestiaAddress>>::new(
+            rollup_config.runner,
+        );
 
     let demo = demo_runner.inner_mut();
     let sequencer_private_key = DefaultPrivateKey::generate();
@@ -105,10 +109,8 @@ async fn main() -> Result<(), anyhow::Error> {
     );
     let _prev_state_root = {
         // Check if the rollup has previously been initialized
-        demo.init_chain(demo_genesis_config);
-        let apply_block_result = demo.apply_slot(Default::default(), []);
-        let prev_state_root = apply_block_result.state_root;
-        prev_state_root.0
+        let prev_state_root = demo.init_chain(demo_genesis_config);
+        prev_state_root.unwrap()
     };
 
     // data generation
@@ -125,6 +127,7 @@ async fn main() -> Result<(), anyhow::Error> {
                 prev_hash: TestHash([0u8; 32]),
             },
             height,
+            validity_cond: TestValidityCond::default(),
         };
         blocks.push(filtered_block.clone());
 

@@ -1,3 +1,6 @@
+use std::default;
+use std::marker::PhantomData;
+
 use borsh::BorshSerialize;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use sov_accounts::Response;
@@ -6,7 +9,7 @@ use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::PublicKey;
 use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, SlashingReason};
-use sov_rollup_interface::mocks::MockZkvm;
+use sov_rollup_interface::mocks::{MockZkvm, TestBlock, TestBlockHeader, TestValidityCond};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -36,6 +39,8 @@ fn test_tx_revert() {
 
     {
         let mut demo = create_new_demo(path);
+        // TODO: Maybe complete with actual block data
+        let data = TestBlock::default();
 
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
 
@@ -111,6 +116,8 @@ fn test_nonce_incremented_on_revert() {
     );
 
     {
+        // TODO: Maybe complete with actual block data
+        let data = TestBlock::default();
         let mut demo = create_new_demo(path);
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
 
@@ -207,6 +214,8 @@ fn test_tx_bad_sig() {
 
     {
         let mut demo = create_new_demo(path);
+        // TODO: Maybe complete with actual block data
+        let data = TestBlock::default();
 
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
 
@@ -288,6 +297,9 @@ fn test_tx_bad_serialization() {
     };
 
     {
+        // TODO: Maybe complete with actual block data
+        let data = TestBlock::default();
+
         let mut demo = create_new_demo(path);
 
         let txs = simulate_da_with_bad_serialization(election_admin_private_key);

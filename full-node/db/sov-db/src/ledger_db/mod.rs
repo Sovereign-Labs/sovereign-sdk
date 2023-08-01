@@ -1,9 +1,11 @@
+use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use serde::Serialize;
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{BatchReceipt, Event};
+use sov_rollup_interface::zk::ValidityCondition;
 use sov_schema_db::{Schema, SchemaBatch, SeekKeyEncoder, DB};
 
 use crate::rocks_db_config::gen_rocksdb_options;

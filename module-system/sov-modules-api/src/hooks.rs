@@ -1,10 +1,12 @@
 use sov_rollup_interface::da::BlobReaderTrait;
-use sov_state::WorkingSet;
+use sov_rollup_interface::services::da::SlotData;
+use sov_rollup_interface::zk::ValidityCondition;
+use sov_state::{StateCheckpoint, WorkingSet};
 
 use crate::transaction::Transaction;
 use crate::{Context, Spec};
 
-/// Hooks that execute within the `StateTransitionFunction::apply_blob` function for each processed transaction.
+/// Hooks that execute within the `StateTransitionFunction::apply_tx_blob` function for each processed transaction.
 pub trait TxHooks {
     type Context: Context;
 
@@ -28,13 +30,13 @@ pub trait TxHooks {
 }
 
 /// Hooks related to the Sequencer functionality.
-/// In essence, the sequencer locks a bond at the beginning of the `StateTransitionFunction::apply_blob`,
+/// In essence, the sequencer locks a bond at the beginning of the `StateTransitionFunction::apply_tx_blob`,
 /// and is rewarded once a blob of transactions is processed.
 pub trait ApplyBlobHooks {
     type Context: Context;
     type BlobResult;
 
-    /// Runs at the beginning of apply_blob, locks the sequencer bond.
+    /// Runs at the beginning of apply_tx_blob, locks the sequencer bond.
     /// If this hook returns Err, batch is not applied
     fn begin_blob_hook(
         &self,
@@ -42,11 +44,28 @@ pub trait ApplyBlobHooks {
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()>;
 
-    /// Executes at the end of apply_blob and rewards or slashed the sequencer
+    /// Executes at the end of apply_tx_blob and rewards or slashed the sequencer
     /// If this hook returns Err rollup panics
     fn end_blob_hook(
         &self,
         result: Self::BlobResult,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> anyhow::Result<()>;
+}
+
+/// Hooks that execute during the `StateTransitionFunction::begin_slot` and `end_slot` functions.
+pub trait SlotHooks<Cond> {
+    type Context: Context;
+
+    fn begin_slot_hook(
+        &self,
+        slot_data: &impl SlotData<Condition = Cond>,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> anyhow::Result<()>;
+
+    fn end_slot_hook(
+        &self,
+        new_state_root: [u8; 32],
+        state_checkpoint: StateCheckpoint<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()>;
 }

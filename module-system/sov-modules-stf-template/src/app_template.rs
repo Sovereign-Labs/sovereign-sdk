@@ -5,6 +5,7 @@ use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
 use sov_modules_api::{Context, DispatchCall, Genesis};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
+use sov_rollup_interface::zk::ValidityCondition;
 use sov_rollup_interface::Buf;
 use sov_state::StateCheckpoint;
 use tracing::{debug, error};
@@ -17,13 +18,14 @@ type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to work with the module-system.
-pub struct AppTemplate<C: Context, RT, Vm, B> {
+pub struct AppTemplate<C: Context, RT, Vm, Cond, B> {
     /// State storage used by the rollup.
     pub current_storage: C::Storage,
     /// The runtime includes all the modules that the rollup supports.
     pub runtime: RT,
     pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
+    phantom_cond: PhantomData<Cond>,
     phantom_blob: PhantomData<B>,
 }
 
@@ -62,7 +64,8 @@ impl From<ApplyBatchError> for BatchReceipt<SequencerOutcome, TxEffect> {
     }
 }
 
-impl<C: Context, RT, Vm, B: BlobReaderTrait> AppTemplate<C, RT, Vm, B>
+impl<C: Context, RT, Vm, Cond: ValidityCondition, B: BlobReaderTrait>
+    AppTemplate<C, RT, Vm, Cond, B>
 where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
@@ -76,6 +79,7 @@ where
             current_storage: storage,
             checkpoint: None,
             phantom_vm: PhantomData,
+            phantom_cond: PhantomData,
             phantom_blob: PhantomData,
         }
     }
@@ -234,7 +238,7 @@ where
     }
 
     // Do all stateless checks and data formatting, that can be results in sequencer slashing
-    fn pre_process_batch(
+    pub(crate) fn pre_process_batch(
         &self,
         blob_data: &mut CountedBufReader<impl Buf>,
     ) -> Result<

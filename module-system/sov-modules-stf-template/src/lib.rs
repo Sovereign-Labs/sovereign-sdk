@@ -4,18 +4,27 @@ mod app_template;
 mod batch;
 mod tx_verifier;
 
+use std::io::Read;
+
 pub use app_template::AppTemplate;
 pub use batch::Batch;
-use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
+use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
 use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
-use sov_rollup_interface::zk::Zkvm;
+use sov_rollup_interface::services::da::SlotData;
+use sov_rollup_interface::stf::{
+    BatchReceipt, SlotResult, StateTransitionFunction, TransactionReceipt,
+};
+use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 use sov_state::{StateCheckpoint, Storage};
-use tracing::info;
+use tracing::log::info;
+use tracing::{debug, error};
 pub use tx_verifier::RawTx;
 
-/// The receipts of all the transactions in a batch.
+use crate::app_template::ApplyBatchError;
+use crate::tx_verifier::TransactionAndRawHash;
+
+/// The result of the tx application.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TxEffect {
     /// Batch was reverted.
@@ -55,7 +64,9 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-impl<C: Context, RT, Vm: Zkvm, B: BlobReaderTrait> AppTemplate<C, RT, Vm, B> {
+impl<C: Context, RT, Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait>
+    AppTemplate<C, RT, Vm, Cond, B>
+{
     fn begin_slot(&mut self, witness: <<C as Spec>::Storage as Storage>::Witness) {
         self.checkpoint = Some(StateCheckpoint::with_witness(
             self.current_storage.clone(),
@@ -73,13 +84,14 @@ impl<C: Context, RT, Vm: Zkvm, B: BlobReaderTrait> AppTemplate<C, RT, Vm, B> {
     }
 }
 
-impl<C: Context, RT, Vm: Zkvm, B: BlobReaderTrait> StateTransitionFunction<Vm, B>
-    for AppTemplate<C, RT, Vm, B>
+impl<C: Context, RT, Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait>
+    StateTransitionFunction<Vm, B> for AppTemplate<C, RT, Vm, Cond, B>
 where
     RT: DispatchCall<Context = C>
         + Genesis<Context = C>
         + TxHooks<Context = C>
-        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
+        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>
+        + SlotHooks<Cond, Context = C>,
 {
     type StateRoot = jmt::RootHash;
 
@@ -91,7 +103,9 @@ where
 
     type Witness = <<C as Spec>::Storage as Storage>::Witness;
 
-    fn init_chain(&mut self, params: Self::InitialState) {
+    type Condition = Cond;
+
+    fn init_chain(&mut self, params: Self::InitialState) -> anyhow::Result<[u8; 32]> {
         let mut working_set = StateCheckpoint::new(self.current_storage.clone()).to_revertable();
 
         self.runtime
@@ -99,9 +113,12 @@ where
             .expect("module initialization must succeed");
 
         let (log, witness) = working_set.checkpoint().freeze();
-        self.current_storage
+        let genesis_hash = self
+            .current_storage
             .validate_and_commit(log, &witness)
             .expect("Storage update must succeed");
+
+        Ok(genesis_hash)
     }
 
     fn apply_slot<'a, I>(

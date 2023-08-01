@@ -9,10 +9,14 @@ use sov_election::{ElectionRpcImpl, ElectionRpcServer};
 use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_context::ZkDefaultContext;
+use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
+use sov_rollup_interface::mocks::TestValidityCond;
+use sov_rollup_interface::zk::ValidityCondition;
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 #[cfg(feature = "native")]
@@ -77,4 +81,48 @@ pub struct Runtime<C: Context> {
     pub accounts: sov_accounts::Accounts<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub evm: sov_evm::Evm<C>,
+}
+
+impl<Cond> SlotHooks<Cond> for Runtime<DefaultContext> {
+    type Context = DefaultContext;
+
+    fn begin_slot_hook(
+        &self,
+        slot_data: &impl sov_rollup_interface::services::da::SlotData,
+        working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    fn end_slot_hook(
+        &self,
+        new_state_root: [u8; 32],
+        state_checkpoint: sov_state::StateCheckpoint<
+            <Self::Context as sov_modules_api::Spec>::Storage,
+        >,
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
+}
+
+impl<Cond> SlotHooks<Cond> for Runtime<ZkDefaultContext> {
+    type Context = ZkDefaultContext;
+
+    fn begin_slot_hook(
+        &self,
+        slot_data: &impl sov_rollup_interface::services::da::SlotData,
+        working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
+
+    fn end_slot_hook(
+        &self,
+        new_state_root: [u8; 32],
+        state_checkpoint: sov_state::StateCheckpoint<
+            <Self::Context as sov_modules_api::Spec>::Storage,
+        >,
+    ) -> anyhow::Result<()> {
+        todo!()
+    }
 }
