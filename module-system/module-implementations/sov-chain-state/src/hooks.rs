@@ -80,13 +80,7 @@ impl<Ctx: Context, Cond: ValidityCondition + BorshDeserialize + BorshSerialize> 
         Ok(())
     }
 
-    fn end_slot_hook(
-        &self,
-        _new_state_root: [u8; 32],
-        _state_checkpoint: sov_state::StateCheckpoint<
-            <Self::Context as sov_modules_api::Spec>::Storage,
-        >,
-    ) -> anyhow::Result<()> {
+    fn end_slot_hook(&self, _new_state_root: [u8; 32]) -> anyhow::Result<()> {
         Ok(())
     }
 }

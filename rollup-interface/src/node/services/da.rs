@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::da::{BlockHeaderTrait, DaSpec};
+use crate::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use crate::zk::ValidityCondition;
 
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer

@@ -44,10 +44,12 @@ fn test_tx_revert() {
         let txs = simulate_da_with_revert_msg(election_admin_private_key);
         let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
         let mut blobs = [blob];
+        let data = TestBlock::default();
 
         let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
             Default::default(),
+            &data,
             &mut blobs,
         );
 
@@ -156,9 +158,11 @@ fn test_nonce_incremented_on_revert() {
         let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
         let mut blobs = [blob];
 
+        let data = TestBlock::default();
         let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
             Default::default(),
+            &data,
             &mut blobs,
         );
 
@@ -221,9 +225,11 @@ fn test_tx_bad_sig() {
         let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
         let mut blobs = [blob];
 
+        let data = TestBlock::default();
         let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
             Default::default(),
+            &data,
             &mut blobs,
         );
 
@@ -303,9 +309,11 @@ fn test_tx_bad_serialization() {
         let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
         let mut blobs = [blob];
 
+        let data = TestBlock::default();
         let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
             Default::default(),
+            &data,
             &mut blobs,
         );
 

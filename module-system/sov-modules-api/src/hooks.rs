@@ -62,9 +62,5 @@ pub trait SlotHooks<Cond> {
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()>;
 
-    fn end_slot_hook(
-        &self,
-        new_state_root: [u8; 32],
-        state_checkpoint: StateCheckpoint<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<()>;
+    fn end_slot_hook(&self, new_state_root: [u8; 32]) -> anyhow::Result<()>;
 }

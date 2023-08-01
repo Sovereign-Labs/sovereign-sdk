@@ -6,9 +6,11 @@ mod tx_verifier;
 
 pub use app_template::AppTemplate;
 pub use batch::Batch;
+use serde::__private::de::Content;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
 use sov_rollup_interface::da::BlobReaderTrait;
+use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 use sov_state::{StateCheckpoint, Storage};
@@ -57,12 +59,27 @@ pub enum SlashingReason {
 
 impl<C: Context, RT, Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait>
     AppTemplate<C, RT, Vm, Cond, B>
+where
+    RT: DispatchCall<Context = C>
+        + Genesis<Context = C>
+        + TxHooks<Context = C>
+        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>
+        + SlotHooks<Cond, Context = C>,
 {
-    fn begin_slot(&mut self, witness: <<C as Spec>::Storage as Storage>::Witness) {
-        self.checkpoint = Some(StateCheckpoint::with_witness(
-            self.current_storage.clone(),
-            witness,
-        ));
+    fn begin_slot(
+        &mut self,
+        slot_data: &impl SlotData<Condition = Cond>,
+        witness: <AppTemplate<C, RT, Vm, Cond, B> as StateTransitionFunction<Vm, B>>::Witness,
+    ) -> anyhow::Result<()> {
+        let state_checkpoint = StateCheckpoint::with_witness(self.current_storage.clone(), witness);
+
+        let mut working_set = state_checkpoint.to_revertable();
+
+        self.runtime.begin_slot_hook(slot_data, &mut working_set)?;
+
+        self.checkpoint = Some(working_set.checkpoint());
+
+        Ok(())
     }
 
     fn end_slot(&mut self) -> (jmt::RootHash, <<C as Spec>::Storage as Storage>::Witness) {
@@ -71,6 +88,9 @@ impl<C: Context, RT, Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait>
             .current_storage
             .validate_and_commit(cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
+
+        self.runtime.end_slot_hook(root_hash);
+
         (jmt::RootHash(root_hash), witness)
     }
 }
@@ -112,9 +132,10 @@ where
         Ok(genesis_hash)
     }
 
-    fn apply_slot<'a, I>(
+    fn apply_slot<'a, I, Data: SlotData<Condition = Self::Condition>>(
         &mut self,
         witness: Self::Witness,
+        slot_data: &Data,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,
@@ -125,7 +146,7 @@ where
     where
         I: IntoIterator<Item = &'a mut B>,
     {
-        self.begin_slot(witness);
+        self.begin_slot(slot_data, witness);
 
         let mut batch_receipts = vec![];
         for (blob_idx, blob) in blobs.into_iter().enumerate() {

@@ -350,7 +350,7 @@ mod test {
     use demo_stf::runtime::GenesisConfig;
     use sov_modules_api::Address;
     use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome};
-    use sov_rollup_interface::mocks::{MockZkvm, TestValidityCond};
+    use sov_rollup_interface::mocks::{MockZkvm, TestBlock, TestValidityCond};
     use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::WorkingSet;
@@ -510,12 +510,14 @@ mod test {
     ) {
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(demo, config).unwrap();
 
+        let data = TestBlock::default();
         let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
         let mut blobs = [blob];
 
         let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             demo,
             Default::default(),
+            &data,
             &mut blobs,
         );
 

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::str::FromStr;
 
 use demo_simple_stf::{ApplyBlobResult, CheckHashPreimageStf};
-use sov_rollup_interface::mocks::{MockZkvm, TestBlob, TestValidityCond};
+use sov_rollup_interface::mocks::{MockZkvm, TestBlob, TestBlock, TestValidityCond};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::AddressTrait;
 
@@ -67,12 +67,17 @@ fn test_stf() {
         phantom_data: PhantomData,
     };
 
+    let data = TestBlock::default();
     let mut blobs = [test_blob];
 
     StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::init_chain(stf, ()).unwrap();
 
-    let result =
-        StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::apply_slot(stf, (), &mut blobs);
+    let result = StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::apply_slot(
+        stf,
+        (),
+        &data,
+        &mut blobs,
+    );
 
     assert_eq!(1, result.batch_receipts.len());
     let receipt = result.batch_receipts[0].clone();

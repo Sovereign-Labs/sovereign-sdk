@@ -196,12 +196,7 @@ async fn main() -> Result<(), anyhow::Error> {
             debug!("Chain is already initialized. Skipping initialization.");
             storage.get_state_root()
         }
-        .unwrap();
-
-        let res = demo.apply_slot(Default::default(), []);
-        // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
-        // This will be removed shortly.
-        res.state_root.0
+        .unwrap()
     };
 
     // Start the main rollup loop
@@ -233,7 +228,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
 
-        let slot_result = demo.apply_slot(Default::default(), &mut blobs);
+        let slot_result =
+            demo.apply_slot(Default::default(), data_to_commit.slot_data(), &mut blobs);
         for receipt in slot_result.batch_receipts {
             data_to_commit.add_batch(receipt);
         }

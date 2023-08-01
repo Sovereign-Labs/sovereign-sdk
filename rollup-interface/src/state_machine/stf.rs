@@ -8,6 +8,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::da::BlobReaderTrait;
+use crate::services::da::SlotData;
 use crate::zk::{ValidityCondition, Zkvm};
 
 #[cfg(any(test, feature = "fuzzing"))]
@@ -126,9 +127,10 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     /// which is why we use a generic here instead of an associated type.
     ///
     /// Commits state changes to the database
-    fn apply_slot<'a, I>(
+    fn apply_slot<'a, I, Data: SlotData<Condition = Self::Condition>>(
         &mut self,
         witness: Self::Witness,
+        slot_data: &Data,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,
