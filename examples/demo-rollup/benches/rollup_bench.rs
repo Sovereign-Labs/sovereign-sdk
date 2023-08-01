@@ -59,8 +59,8 @@ fn rollup_bench(_bench: &mut Criterion) {
     let _prev_state_root = {
         // Check if the rollup has previously been initialized
         demo.init_chain(demo_genesis_config);
-        demo.begin_slot(Default::default());
-        let (prev_state_root, _) = demo.end_slot();
+        let apply_block_result = demo.apply_slot(Default::default(), []);
+        let prev_state_root = apply_block_result.state_root;
         prev_state_root.0
     };
 
@@ -90,14 +90,12 @@ fn rollup_bench(_bench: &mut Criterion) {
             let filtered_block = &blocks[height as usize];
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
-            demo.begin_slot(Default::default());
 
-            for blob in &mut blobs[height as usize] {
-                let receipts = demo.apply_blob(blob, None);
-                // println!("{:?}", receipts);
+            let apply_block_result =
+                demo.apply_slot(Default::default(), &mut blobs[height as usize]);
+            for receipts in apply_block_result.batch_receipts {
                 data_to_commit.add_batch(receipts);
             }
-            let (_next_state_root, _witness) = demo.end_slot();
 
             ledger_db.commit_slot(data_to_commit).unwrap();
             height += 1;

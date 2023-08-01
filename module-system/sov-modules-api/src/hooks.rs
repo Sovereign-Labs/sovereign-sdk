@@ -1,4 +1,4 @@
-use sov_rollup_interface::da::BlobTransactionTrait;
+use sov_rollup_interface::da::BlobReaderTrait;
 use sov_state::WorkingSet;
 
 use crate::transaction::Transaction;
@@ -38,7 +38,7 @@ pub trait ApplyBlobHooks {
     /// If this hook returns Err, batch is not applied
     fn begin_blob_hook(
         &self,
-        blob: &mut impl BlobTransactionTrait,
+        blob: &mut impl BlobReaderTrait,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()>;
 

@@ -2,7 +2,7 @@ use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, Spec};
 use sov_modules_stf_template::SequencerOutcome;
-use sov_rollup_interface::da::BlobTransactionTrait;
+use sov_rollup_interface::da::BlobReaderTrait;
 use sov_state::WorkingSet;
 use tracing::info;
 
@@ -34,7 +34,7 @@ impl<C: Context> ApplyBlobHooks for Runtime<C> {
 
     fn begin_blob_hook(
         &self,
-        blob: &mut impl BlobTransactionTrait,
+        blob: &mut impl BlobReaderTrait,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
         self.sequencer_registry.begin_blob_hook(blob, working_set)

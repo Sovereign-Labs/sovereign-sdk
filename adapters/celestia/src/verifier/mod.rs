@@ -1,8 +1,7 @@
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{
-    self, BlobTransactionTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, CountedBufReader,
-    DaSpec,
+    self, BlobReaderTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, CountedBufReader, DaSpec,
 };
 use sov_rollup_interface::digest::Digest;
 use sov_rollup_interface::zk::ValidityCondition;
@@ -27,7 +26,7 @@ pub struct CelestiaVerifier {
 pub const PFB_NAMESPACE: NamespaceId = NamespaceId(hex_literal::hex!("0000000000000004"));
 pub const PARITY_SHARES_NAMESPACE: NamespaceId = NamespaceId(hex_literal::hex!("ffffffffffffffff"));
 
-impl BlobTransactionTrait for BlobWithSender {
+impl BlobReaderTrait for BlobWithSender {
     type Data = BlobIterator;
     type Address = CelestiaAddress;
 

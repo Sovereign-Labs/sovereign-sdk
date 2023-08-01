@@ -10,7 +10,7 @@ use demo_stf::app::{
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runner_config::from_toml_path;
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
-use jsonrpsee::core::server::rpc_module::Methods;
+use jsonrpsee::core::server::Methods;
 use jupiter::da_service::CelestiaService;
 #[cfg(feature = "experimental")]
 use jupiter::da_service::DaServiceConfig;
@@ -190,11 +190,10 @@ async fn main() -> Result<(), anyhow::Error> {
             debug!("Chain is already initialized. Skipping initialization.");
         }
 
+        let res = demo.apply_slot(Default::default(), []);
         // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
         // This will be removed shortly.
-        demo.begin_slot(Default::default());
-        let (prev_state_root, _) = demo.end_slot();
-        prev_state_root.0
+        res.state_root.0
     };
 
     // Start the main rollup loop
@@ -218,32 +217,19 @@ async fn main() -> Result<(), anyhow::Error> {
         // simply download the data from Celestia without extracting and checking a merkle proof here,
         let mut blobs = da_service.extract_relevant_txs(&filtered_block);
 
-        info!("Received {} blobs at height {}", blobs.len(), height);
+        info!(
+            "Extracted {} relevant blobs at height {}",
+            blobs.len(),
+            height
+        );
 
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
-        demo.begin_slot(Default::default());
-        for (blob_idx, blob) in blobs.iter_mut().enumerate() {
-            let batch_receipt = demo.apply_blob(blob, None);
-            info!(
-                "blob #{} at height {} with blob_hash 0x{} has been applied with #{} transactions, sequencer outcome {:?}",
-                blob_idx,
-                height,
-                hex::encode(batch_receipt.batch_hash),
-                batch_receipt.tx_receipts.len(),
-                batch_receipt.inner
-            );
-            for (i, tx_receipt) in batch_receipt.tx_receipts.iter().enumerate() {
-                info!(
-                    "tx #{} hash: 0x{} result {:?}",
-                    i,
-                    hex::encode(tx_receipt.tx_hash),
-                    tx_receipt.receipt
-                );
-            }
 
-            data_to_commit.add_batch(batch_receipt);
+        let slot_result = demo.apply_slot(Default::default(), &mut blobs);
+        for receipt in slot_result.batch_receipts {
+            data_to_commit.add_batch(receipt);
         }
-        let (next_state_root, _witness) = demo.end_slot();
+        let next_state_root = slot_result.state_root;
 
         let (inclusion_proof, completeness_proof) = da_service
             .get_extraction_proof(&filtered_block, &blobs)

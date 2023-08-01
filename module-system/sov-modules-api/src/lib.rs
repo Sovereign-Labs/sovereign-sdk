@@ -14,6 +14,8 @@ pub mod test_utils;
 #[cfg(test)]
 mod tests;
 pub mod transaction;
+#[cfg(feature = "native")]
+pub mod utils;
 
 #[cfg(feature = "macros")]
 extern crate sov_modules_macros;

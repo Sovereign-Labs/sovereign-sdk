@@ -4,7 +4,7 @@ use sov_state::WorkingSet;
 
 use super::ValueSetter;
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Clone)]
 pub struct Response {
     pub value: Option<u32>,
 }

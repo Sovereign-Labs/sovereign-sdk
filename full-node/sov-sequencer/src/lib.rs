@@ -1,9 +1,13 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::anyhow;
+use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
+use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_rollup_interface::services::da::DaService;
+
+const SEQUENCER_RPC_ERROR: &str = "SEQUENCER_RPC_ERROR";
 
 /// Single data structure that manages mempool and batch producing.
 pub struct Sequencer<B: BatchBuilder, T: DaService> {
@@ -61,7 +65,7 @@ where
         batch_builder
             .submit_batch()
             .await
-            .map_err(|e| jsonrpsee::core::Error::Custom(e.to_string()))
+            .map_err(|e| to_jsonrpsee_error_object(e, SEQUENCER_RPC_ERROR))
     })?;
     rpc.register_method("sequencer_acceptTx", move |params, sequencer| {
         let tx: SubmitTransaction = params.one()?;
@@ -69,7 +73,7 @@ where
             Ok(()) => SubmitTransactionResponse::Registered,
             Err(e) => SubmitTransactionResponse::Failed(e.to_string()),
         };
-        Ok(response)
+        Ok::<_, ErrorObjectOwned>(response)
     })?;
 
     Ok(())
@@ -223,8 +227,9 @@ mod tests {
         assert!(result.is_err());
         let error = result.err().unwrap();
         assert_eq!(
-            "RPC call failed: ErrorObject { code: ServerError(-32001), message: \"Custom error: Mock mempool is empty\", data: None }",
-            error.to_string());
+            "ErrorObject { code: ServerError(-32001), message: \"SEQUENCER_RPC_ERROR\", data: Some(RawValue(\"Mock mempool is empty\")) }",
+            error.to_string()
+        );
     }
 
     #[tokio::test]
