@@ -3,8 +3,8 @@ use crate::default_context::DefaultContext;
 #[cfg(feature = "native")]
 use crate::default_signature::private_key::DefaultPrivateKey;
 #[cfg(feature = "native")]
-use crate::Spec;
-use crate::{Context, PrivateKey, Signature};
+use crate::{Spec, PrivateKey};
+use crate::{Context, Signature};
 
 /// A Transaction object that is compatible with the module-system/sov-default-stf.
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
@@ -38,7 +38,7 @@ impl<C: Context> Transaction<C> {
             Vec::with_capacity(self.runtime_msg().len() + std::mem::size_of::<u64>());
         serialized_tx.extend_from_slice(self.runtime_msg());
         serialized_tx.extend_from_slice(&self.nonce().to_le_bytes());
-        self.signature().verify(self.pub_key(), &serialized_tx)?;
+        self.signature().verify(&self.pub_key, &serialized_tx)?;
 
         Ok(())
     }

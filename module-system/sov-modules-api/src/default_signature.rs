@@ -201,11 +201,7 @@ impl BorshSerialize for DefaultSignature {
 impl Signature for DefaultSignature {
     type PublicKey = DefaultPublicKey;
 
-    fn verify(
-        &self,
-        pub_key: &Self::PublicKey,
-        msg: &[u8],
-    ) -> Result<(), SigVerificationError> {
+    fn verify(&self, pub_key: &Self::PublicKey, msg: &[u8]) -> Result<(), SigVerificationError> {
         pub_key
             .pub_key
             .verify_strict(msg, &self.msg_sig)
