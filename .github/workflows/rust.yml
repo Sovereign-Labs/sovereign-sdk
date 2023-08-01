@@ -10,6 +10,9 @@ name: Rust
 # - Always install and select the desired Rust toolchain *before* running
 #   `Swatinem/rust-cache`. This is because the active Rust toolchain is used as
 #   a cache key.
+# - You can use `rustup show` to install and select the right Rust toolchain if
+#   you have a `rust-toolchain.toml` file:
+#   https://github.com/rust-lang/rustup/issues/1397.
 # - When caching Rust compilation artifacts, keep in mind that different `cargo`
 #   commands will use different profiles
 #   (https://doc.rust-lang.org/cargo/reference/profiles.html). Learn what you
@@ -64,7 +67,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install Rust
+        run: rustup show
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-check
@@ -91,7 +95,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install Rust
+        run: rustup show
       - name: cargo install cargo-hack
         uses: taiki-e/install-action@cargo-hack
       - uses: Swatinem/rust-cache@v2
@@ -111,7 +116,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install Rust
+        run: rustup show
       # `cargo-nextest` is much faster than standard `cargo test`.
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
@@ -135,7 +141,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install Rust
+        run: rustup show
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-build
@@ -199,7 +206,8 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install Rust
+        run: rustup show
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
@@ -225,7 +233,8 @@ jobs:
         with:
           submodules: true
       - uses: rui314/setup-mold@v1
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install Rust
+        run: rustup show
       - name: add llvm component
         run: rustup component add llvm-tools-preview
       - name: cargo install cargo-llvm-cov
@@ -264,7 +273,8 @@ jobs:
         # `check` job does and their caches are shared, so it's best to keep
         # things as similar as possible.
       - uses: rui314/setup-mold@v1
-      - uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install Rust
+        run: rustup show
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: cargo-check
