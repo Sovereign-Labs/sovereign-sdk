@@ -26,7 +26,9 @@ fn test_config_account() {
         .init_module(&account_config, native_working_set)
         .unwrap();
 
-    let query_response = accounts.get_account(init_pub_key, native_working_set);
+    let query_response = accounts
+        .get_account(init_pub_key, native_working_set)
+        .unwrap();
 
     assert_eq!(
         query_response,
@@ -55,7 +57,9 @@ fn test_update_account() {
             .create_default_account(sender.clone(), native_working_set)
             .unwrap();
 
-        let query_response = accounts.get_account(sender.clone(), native_working_set);
+        let query_response = accounts
+            .get_account(sender.clone(), native_working_set)
+            .unwrap();
 
         assert_eq!(
             query_response,
@@ -80,12 +84,14 @@ fn test_update_account() {
             .unwrap();
 
         // Account corresponding to the old public key does not exist
-        let query_response = accounts.get_account(sender, native_working_set);
+        let query_response = accounts.get_account(sender, native_working_set).unwrap();
 
         assert_eq!(query_response, query::Response::AccountEmpty);
 
         // New account with the new public key and an old address is created.
-        let query_response = accounts.get_account(new_pub_key, native_working_set);
+        let query_response = accounts
+            .get_account(new_pub_key, native_working_set)
+            .unwrap();
 
         assert_eq!(
             query_response,

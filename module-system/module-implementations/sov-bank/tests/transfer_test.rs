@@ -36,7 +36,8 @@ fn transfer_initial_token() {
         };
 
     let query_total_supply = |working_set: &mut WorkingSet<Storage>| -> Option<u64> {
-        let total_supply: TotalSupplyResponse = bank.supply_of(token_address.clone(), working_set);
+        let total_supply: TotalSupplyResponse =
+            bank.supply_of(token_address.clone(), working_set).unwrap();
         total_supply.amount
     };
 
@@ -278,7 +279,8 @@ fn transfer_deployed_token() {
         };
 
     let query_total_supply = |working_set: &mut WorkingSet<Storage>| -> Option<u64> {
-        let total_supply: TotalSupplyResponse = bank.supply_of(token_address.clone(), working_set);
+        let total_supply: TotalSupplyResponse =
+            bank.supply_of(token_address.clone(), working_set).unwrap();
         total_supply.amount
     };
 
