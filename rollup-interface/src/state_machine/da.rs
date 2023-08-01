@@ -22,7 +22,7 @@ pub trait DaSpec {
     type BlockHeader: BlockHeaderTrait<Hash = Self::SlotHash>;
 
     /// The transaction type used by the DA layer.
-    type BlobTransaction: BlobTransactionTrait;
+    type BlobTransaction: BlobReaderTrait;
 
     /// A proof that each tx in a set of blob transactions is included in a given block.
     type InclusionMultiProof: Serialize + DeserializeOwned;
@@ -128,7 +128,7 @@ impl<B: Buf> Read for CountedBufReader<B> {
 }
 
 /// A transaction on a data availability layer, including the address of the sender.
-pub trait BlobTransactionTrait: Serialize + DeserializeOwned + Send + Sync {
+pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static {
     /// The type of the raw data of the blob. For example, the "calldata" of an Ethereum rollup transaction
     type Data: Buf;
 

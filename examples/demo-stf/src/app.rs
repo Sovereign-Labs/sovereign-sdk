@@ -10,7 +10,7 @@ use sov_modules_api::RpcRunner;
 use sov_modules_api::Spec;
 pub use sov_modules_stf_template::Batch;
 use sov_modules_stf_template::{AppTemplate, SequencerOutcome, TxEffect};
-use sov_rollup_interface::da::BlobTransactionTrait;
+use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::ProverConfig;
@@ -25,7 +25,7 @@ use crate::batch_builder::FiFoStrictBatchBuilder;
 use crate::runner_config::Config;
 use crate::runtime::Runtime;
 
-pub struct DemoAppRunner<C: Context, Vm: Zkvm, B: BlobTransactionTrait> {
+pub struct DemoAppRunner<C: Context, Vm: Zkvm, B: BlobReaderTrait> {
     pub stf: DemoApp<C, Vm, B>,
     pub batch_builder: Option<FiFoStrictBatchBuilder<Runtime<C>, C>>,
 }
@@ -43,7 +43,7 @@ pub type DemoBatchReceipt = SequencerOutcome;
 pub type DemoTxReceipt = TxEffect;
 
 #[cfg(feature = "native")]
-impl<Vm: Zkvm, B: BlobTransactionTrait> StateTransitionRunner<ProverConfig, Vm, B>
+impl<Vm: Zkvm, B: BlobReaderTrait> StateTransitionRunner<ProverConfig, Vm, B>
     for DemoAppRunner<DefaultContext, Vm, B>
 {
     type RuntimeConfig = Config;
@@ -80,7 +80,7 @@ impl<Vm: Zkvm, B: BlobTransactionTrait> StateTransitionRunner<ProverConfig, Vm, 
     }
 }
 
-impl<Vm: Zkvm, B: BlobTransactionTrait> StateTransitionRunner<ZkConfig, Vm, B>
+impl<Vm: Zkvm, B: BlobReaderTrait> StateTransitionRunner<ZkConfig, Vm, B>
     for DemoAppRunner<ZkDefaultContext, Vm, B>
 {
     type RuntimeConfig = [u8; 32];
@@ -119,7 +119,7 @@ impl<Vm: Zkvm, B: BlobTransactionTrait> StateTransitionRunner<ZkConfig, Vm, B>
 }
 
 #[cfg(feature = "native")]
-impl<Vm: Zkvm, B: BlobTransactionTrait> RpcRunner for DemoAppRunner<DefaultContext, Vm, B> {
+impl<Vm: Zkvm, B: BlobReaderTrait> RpcRunner for DemoAppRunner<DefaultContext, Vm, B> {
     type Context = DefaultContext;
     fn get_storage(&self) -> <Self::Context as Spec>::Storage {
         self.inner().current_storage.clone()

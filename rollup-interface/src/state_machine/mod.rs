@@ -27,5 +27,6 @@ pub trait AddressTrait:
     + Sync
     + core::fmt::Display
     + std::hash::Hash
+    + 'static
 {
 }
