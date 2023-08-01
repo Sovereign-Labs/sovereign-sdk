@@ -174,8 +174,10 @@ impl da::DaVerifier for CelestiaVerifier {
 
             // Verify each sub-proof and flatten the shares back into a sequential array
             // First, enforce that the sub-proofs cover a contiguous range of shares
-            for [l, r] in tx_proof.proof.array_windows::<2>() {
-                assert_eq!(l.start_share_idx + l.shares.len(), r.start_share_idx)
+            for i in 1..tx_proof.proof.len() {
+                let l = &tx_proof.proof[i - 1];
+                let r = &tx_proof.proof[i];
+                assert_eq!(l.start_share_idx + l.shares.len(), r.start_share_idx);
             }
             let mut tx_shares = Vec::new();
             // Then, verify the sub proofs

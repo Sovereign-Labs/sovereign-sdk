@@ -1,4 +1,3 @@
-#![feature(array_windows)]
 #![feature(array_chunks)]
 pub mod celestia;
 pub mod shares;
