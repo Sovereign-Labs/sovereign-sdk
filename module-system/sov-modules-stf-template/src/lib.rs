@@ -4,8 +4,6 @@ mod app_template;
 mod batch;
 mod tx_verifier;
 
-use std::io::Read;
-
 pub use app_template::AppTemplate;
 pub use batch::Batch;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};

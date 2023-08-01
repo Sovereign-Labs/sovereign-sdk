@@ -508,7 +508,7 @@ mod test {
         config: GenesisConfig<C>,
         txs: Vec<RawTx>,
     ) {
-        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(demo, config);
+        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(demo, config).unwrap();
 
         let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
         let mut blobs = [blob];

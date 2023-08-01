@@ -61,10 +61,8 @@ fn rollup_bench(_bench: &mut Criterion) {
     );
     let _prev_state_root = {
         // Check if the rollup has previously been initialized
-        demo.init_chain(demo_genesis_config);
-        let apply_block_result = demo.apply_slot(Default::default(), []);
-        let prev_state_root = apply_block_result.state_root;
-        prev_state_root.0
+        let prev_state_root = demo.init_chain(demo_genesis_config);
+        prev_state_root.unwrap()
     };
 
     // data generation
