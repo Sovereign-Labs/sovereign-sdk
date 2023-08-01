@@ -5,13 +5,13 @@ use sov_state::WorkingSet;
 use super::types::Candidate;
 use super::Election;
 
-#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
 pub enum GetResultResponse {
     Result(Option<Candidate>),
     Err(String),
 }
 
-#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
 pub enum GetNbOfVotesResponse {
     Result(u64),
 }

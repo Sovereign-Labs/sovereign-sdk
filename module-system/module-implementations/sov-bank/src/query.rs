@@ -4,12 +4,12 @@ use sov_state::WorkingSet;
 
 use crate::{Amount, Bank};
 
-#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
 pub struct BalanceResponse {
     pub amount: Option<Amount>,
 }
 
-#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
 pub struct TotalSupplyResponse {
     pub amount: Option<Amount>,
 }
