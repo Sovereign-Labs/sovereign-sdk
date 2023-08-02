@@ -217,6 +217,7 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_attribute]
+#[cfg(feature = "native")]
 pub fn rpc_gen(attr: TokenStream, item: TokenStream) -> TokenStream {
     let attr: Vec<syn::NestedMeta> = parse_macro_input!(attr);
     let input = parse_macro_input!(item as syn::ItemImpl);
@@ -232,6 +233,7 @@ fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> To
 
 /// This proc macro generates the actual implementations for the trait created above for the module
 /// It iterates over each struct
+#[cfg(feature = "native")]
 #[proc_macro_attribute]
 pub fn expose_rpc(_attr: TokenStream, input: TokenStream) -> TokenStream {
     let original = input.clone();
@@ -255,6 +257,7 @@ pub fn expose_rpc(_attr: TokenStream, input: TokenStream) -> TokenStream {
 ///     // ...
 /// }
 /// ```
+#[cfg(feature = "native")]
 #[proc_macro_derive(CliWallet, attributes(cli_skip))]
 pub fn cli_parser(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
@@ -320,6 +323,7 @@ pub fn cli_parser(input: TokenStream) -> TokenStream {
 ///     type CliStringRepr = MyEnumWithNamedFields;
 /// }
 /// ```
+#[cfg(feature = "native")]
 #[proc_macro_derive(CliWalletArg)]
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
     let input: DeriveInput = parse_macro_input!(input);
