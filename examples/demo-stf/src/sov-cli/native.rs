@@ -13,7 +13,7 @@ use jsonrpsee::http_client::HttpClientBuilder;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{AddressBech32, PublicKey, Spec};
+use sov_modules_api::{AddressBech32, PrivateKey, PublicKey, Spec};
 use sov_modules_stf_template::RawTx;
 use sov_sequencer::SubmitTransaction;
 
@@ -348,7 +348,7 @@ mod test {
     use demo_stf::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
     use demo_stf::runner_config::Config;
     use demo_stf::runtime::GenesisConfig;
-    use sov_modules_api::Address;
+    use sov_modules_api::{Address, PrivateKey};
     use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome};
     use sov_rollup_interface::mocks::MockZkvm;
     use sov_rollup_interface::services::stf_runner::StateTransitionRunner;

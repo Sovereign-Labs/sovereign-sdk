@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::PrivateKey;
 
 use super::*;
 

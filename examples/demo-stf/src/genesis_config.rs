@@ -3,7 +3,8 @@ use sov_election::ElectionConfig;
 use sov_evm::{AccountData, EvmConfig};
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::{Context, Hasher, PublicKey, Spec};
+use sov_modules_api::test_utils::generate_address;
+use sov_modules_api::{Context, PrivateKey, PublicKey};
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
 
@@ -79,11 +80,6 @@ pub fn create_demo_genesis_config<C: Context>(
             }],
         },
     )
-}
-
-pub fn generate_address<C: Context>(key: &str) -> <C as Spec>::Address {
-    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
-    <C as Spec>::Address::from(hash)
 }
 
 pub fn create_demo_config(

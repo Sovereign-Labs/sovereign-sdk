@@ -1,9 +1,10 @@
 //! Implements fuzzing strategies for structs in the stf module
 
+use digest::typenum::U32;
+use digest::Digest;
 use proptest::prelude::{any, Arbitrary};
 use proptest::strategy::{BoxedStrategy, Strategy};
 
-use super::super::crypto::SimpleHasher;
 use super::{BatchReceipt, Event, TransactionReceipt};
 
 /// An object-safe hashing trait, which is blanket implemented for all
@@ -18,11 +19,11 @@ fn default_fuzz_hasher() -> Box<dyn FuzzHasher> {
     Box::new(::sha2::Sha256::new())
 }
 
-impl<T: SimpleHasher + Clone> FuzzHasher for T {
+impl<T: Digest<OutputSize = U32> + Clone> FuzzHasher for T {
     fn hash(&self, data: &[u8]) -> [u8; 32] {
         let mut hasher = T::new();
         hasher.update(data);
-        hasher.finalize()
+        hasher.finalize().into()
     }
 }
 
