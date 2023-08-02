@@ -2,14 +2,17 @@
 
 #![deny(missing_docs)]
 
+#[cfg(feature = "native")]
 mod cli_parser;
 mod common;
 mod default_runtime;
 mod dispatch;
 mod module_call_json_schema;
 mod module_info;
+#[cfg(feature = "native")]
 mod rpc;
 
+#[cfg(feature = "native")]
 use cli_parser::{derive_cli_wallet_arg, CliParserMacro};
 use default_runtime::DefaultRuntimeMacro;
 use dispatch::dispatch_call::DispatchCallMacro;
@@ -17,8 +20,9 @@ use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
 use module_call_json_schema::derive_module_call_json_schema;
 use proc_macro::TokenStream;
+#[cfg(feature = "native")]
 use rpc::ExposeRpcMacro;
-use syn::{parse_macro_input, DeriveInput};
+use syn::parse_macro_input;
 
 /// Derives the [`ModuleInfo`](trait.ModuleInfo.html) trait for the underlying `struct`.
 ///
@@ -326,6 +330,6 @@ pub fn cli_parser(input: TokenStream) -> TokenStream {
 #[cfg(feature = "native")]
 #[proc_macro_derive(CliWalletArg)]
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
-    let input: DeriveInput = parse_macro_input!(input);
+    let input: syn::DeriveInput = parse_macro_input!(input);
     handle_macro_error(derive_cli_wallet_arg(input))
 }
