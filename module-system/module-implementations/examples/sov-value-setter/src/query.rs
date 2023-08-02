@@ -8,7 +8,7 @@ use super::ValueSetter;
 /// Response returned from the valueSetter_queryValue endpoint.
 #[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Clone)]
 pub struct Response {
-    /// Value saved in the module state.
+    /// Value saved in the module's state.
     pub value: Option<u32>,
 }
 
