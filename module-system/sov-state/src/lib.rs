@@ -81,10 +81,10 @@ pub trait MerkleProofSpec {
     /// The structure that accumulates the witness data
     type Witness: Witness;
     /// The hash function used to compute the merkle root
-    type Hasher: sov_rollup_interface::crypto::SimpleHasher;
+    type Hasher: Digest<OutputSize = sha2::digest::typenum::U32>;
 }
 
-use sha2::Sha256;
+use sha2::{Digest, Sha256};
 
 #[derive(Clone)]
 pub struct DefaultStorageSpec;

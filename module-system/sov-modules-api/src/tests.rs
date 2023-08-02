@@ -3,7 +3,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use crate::default_context::DefaultContext;
 use crate::default_signature::private_key::DefaultPrivateKey;
 use crate::default_signature::{DefaultPublicKey, DefaultSignature};
-use crate::{Address, ModuleInfo, Signature};
+use crate::{Address, ModuleInfo, PrivateKey, Signature};
 
 #[test]
 fn test_account_bech32m_display() {
@@ -29,13 +29,13 @@ fn test_signature_serialization() {
     let msg = [1; 32];
     let priv_key = DefaultPrivateKey::generate();
 
-    let sig = priv_key.sign(msg);
+    let sig = priv_key.sign(&msg);
     let serialized_sig = sig.try_to_vec().unwrap();
     let deserialized_sig = DefaultSignature::try_from_slice(&serialized_sig).unwrap();
     assert_eq!(sig, deserialized_sig);
 
     let pub_key = priv_key.pub_key();
-    deserialized_sig.verify(&pub_key, msg).unwrap()
+    deserialized_sig.verify(&pub_key, &msg).unwrap()
 }
 
 #[test]
@@ -136,4 +136,13 @@ fn test_sorting_modules_cycle() {
     assert!(sorted_modules.is_err());
     let error_string = sorted_modules.err().unwrap().to_string();
     assert_eq!("Cyclic dependency of length 2 detected: [AddressBech32 { value: \"sov1qszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqnu4g3u\" }, AddressBech32 { value: \"sov1q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zskwvj87\" }]", error_string);
+}
+
+#[test]
+fn test_default_signature_roundtrip() {
+    let key = DefaultPrivateKey::generate();
+    let msg = b"hello, world";
+    let sig = key.sign(msg);
+    sig.verify(&key.pub_key(), msg)
+        .expect("Roundtrip verification failed");
 }

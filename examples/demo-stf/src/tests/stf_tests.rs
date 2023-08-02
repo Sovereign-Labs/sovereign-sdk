@@ -2,6 +2,7 @@
 pub mod test {
     use sov_modules_api::default_context::DefaultContext;
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+    use sov_modules_api::PrivateKey;
     use sov_modules_stf_template::{Batch, SequencerOutcome};
     use sov_rollup_interface::mocks::MockZkvm;
     use sov_rollup_interface::stf::StateTransitionFunction;

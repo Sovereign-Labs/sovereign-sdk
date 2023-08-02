@@ -1,5 +1,6 @@
-use helpers::{generate_address, C};
+use helpers::C;
 use sov_bank::{get_token_address, Bank, BankConfig, CallMessage, Coins, TotalSupplyResponse};
+use sov_modules_api::test_utils::generate_address;
 use sov_modules_api::{Address, Context, Error, Module};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
@@ -15,7 +16,7 @@ fn mint_token() {
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 
-    let minter_address = generate_address("minter");
+    let minter_address = generate_address::<C>("minter");
     let minter_context = C::new(minter_address.clone());
 
     let salt = 0;
@@ -56,7 +57,7 @@ fn mint_token() {
     // -----
     // Mint Additional
     let mint_amount = 10;
-    let new_holder = generate_address("new_holder");
+    let new_holder = generate_address::<C>("new_holder");
     let mint_message = CallMessage::Mint {
         coins: Coins {
             amount: mint_amount,
@@ -82,7 +83,7 @@ fn mint_token() {
     assert_eq!(Some(100), bal);
 
     // Mint with an un-authorized user
-    let unauthorized_address = generate_address("unauthorized_address");
+    let unauthorized_address = generate_address::<C>("unauthorized_address");
     let unauthorized_context = C::new(unauthorized_address.clone());
     let unauthorized_mint = bank.call(mint_message, &unauthorized_context, &mut working_set);
 
@@ -115,8 +116,8 @@ fn mint_token() {
     let token_name = "Token_New".to_owned();
     let initial_balance = 100;
     let token_address = get_token_address::<C>(&token_name, minter_address.as_ref(), salt);
-    let authorized_minter_address_1 = generate_address("authorized_minter_1");
-    let authorized_minter_address_2 = generate_address("authorized_minter_2");
+    let authorized_minter_address_1 = generate_address::<C>("authorized_minter_1");
+    let authorized_minter_address_2 = generate_address::<C>("authorized_minter_2");
     // ---
     // Deploying token
     let mint_message = CallMessage::CreateToken {
@@ -137,7 +138,7 @@ fn mint_token() {
 
     // Try to mint new token with original token creator, in this case minter_context
     let mint_amount = 10;
-    let new_holder = generate_address("new_holder_2");
+    let new_holder = generate_address::<C>("new_holder_2");
     let mint_message = CallMessage::Mint {
         coins: Coins {
             amount: mint_amount,
@@ -241,7 +242,7 @@ fn mint_token() {
     assert_eq!(Some(120), supply);
 
     // Overflow test 2 - total supply
-    let new_holder = generate_address("new_holder_3");
+    let new_holder = generate_address::<C>("new_holder_3");
     let overflow_mint_message = CallMessage::Mint {
         coins: Coins {
             amount: u64::MAX - 1,
