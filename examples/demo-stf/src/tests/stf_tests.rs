@@ -10,7 +10,7 @@ pub mod test {
 
     use crate::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
     use crate::runtime::Runtime;
-    use crate::tests::data_generation::simulate_da;
+    use crate::tests::da_simulation::simulate_da;
     use crate::tests::{create_new_demo, has_tx_events, new_test_blob, TestBlob, C};
 
     #[test]
