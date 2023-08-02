@@ -11,7 +11,7 @@ use sov_state::ProverStorage;
 use crate::app::DemoApp;
 use crate::runtime::Runtime;
 
-mod data_generation;
+mod da_simulation;
 mod stf_tests;
 mod tx_revert_tests;
 pub(crate) type C = DefaultContext;

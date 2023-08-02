@@ -103,7 +103,7 @@ pub trait SlotData:
     type BlockHeader: BlockHeaderTrait;
 
     /// The validity condition associated with the slot data.
-    type Condition: ValidityCondition + Default;
+    type Condition: ValidityCondition;
 
     /// The canonical hash of the DA layer block.
     fn hash(&self) -> [u8; 32];

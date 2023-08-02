@@ -8,6 +8,8 @@ use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
 use sov_rollup_interface::zk::ValidityCondition;
 use sov_rollup_interface::Buf;
 use sov_state::StateCheckpoint;
+#[cfg(test)]
+use sov_state::WorkingSet;
 use tracing::{debug, error};
 
 use crate::tx_verifier::{verify_txs_stateless, TransactionAndRawHash};
@@ -81,6 +83,17 @@ where
             phantom_vm: PhantomData,
             phantom_cond: PhantomData,
             phantom_blob: PhantomData,
+        }
+    }
+
+    #[cfg(test)]
+    /// Builds a working set from an app template instance. Tries to get the working set from
+    /// the state checkpoint before reaching out to the current storage if the state checkpoint is
+    /// none.
+    pub fn get_working_set(self) -> WorkingSet<C::Storage> {
+        match self.checkpoint {
+            Some(checkpoint) => checkpoint.to_revertable(),
+            None => WorkingSet::new(self.current_storage),
         }
     }
 

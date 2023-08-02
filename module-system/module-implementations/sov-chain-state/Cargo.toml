@@ -25,6 +25,8 @@ borsh = { workspace = true, features = ["rc"] }
 
 [dev-dependencies]
 sov-modules-api = { path = "../../sov-modules-api" }
+sov-bank = { path = "../sov-bank", default-features = false }
+sov-modules-stf-template = { path = "../../sov-modules-stf-template" }
 tempfile = { workspace = true }
 
 [features]

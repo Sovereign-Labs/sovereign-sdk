@@ -5,6 +5,9 @@ pub mod hooks;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod tests_helpers;
+
 #[cfg(feature = "native")]
 pub mod query;
 
@@ -85,6 +88,10 @@ pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
     /// The transition that is currently processed
     #[state]
     pub in_progress_transition: sov_state::StateValue<TransitionInProgress<Cond>>,
+
+    /// The genesis root hash
+    #[state]
+    pub genesis_hash: sov_state::StateValue<[u8; 32]>,
 }
 
 impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Module

@@ -1334,6 +1334,7 @@ dependencies = [
  "serde_json",
  "sov-accounts",
  "sov-bank",
+ "sov-data-generators",
  "sov-election",
  "sov-evm",
  "sov-modules-api",
@@ -6274,11 +6275,28 @@ dependencies = [
  "borsh",
  "serde",
  "serde_json",
+ "sov-bank",
  "sov-modules-api",
  "sov-modules-macros",
+ "sov-modules-stf-template",
  "sov-rollup-interface",
  "sov-state",
  "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "sov-data-generators"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "proptest",
+ "sov-bank",
+ "sov-election",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-state",
+ "sov-value-setter",
  "thiserror",
 ]
 

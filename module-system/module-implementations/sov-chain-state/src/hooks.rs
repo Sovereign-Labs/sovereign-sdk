@@ -3,7 +3,6 @@ use core::fmt;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::{Context, Spec};
-use sov_rollup_interface::mocks::{MockValidityCond, TestValidityCond};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::{Storage, WorkingSet};
@@ -11,8 +10,6 @@ use thiserror::Error;
 
 use super::ChainState;
 use crate::{StateTransitionId, TransitionInProgress};
-
-const GENESIS_BLOCK_HASH: [u8; 32] = [0; 32];
 
 #[derive(Debug, Clone, Error)]
 pub(crate) enum ChainStateError {
@@ -41,33 +38,32 @@ impl<Ctx: Context, Cond: ValidityCondition + Default + BorshDeserialize + BorshS
     ) -> anyhow::Result<()> {
         let curr_height = self.slot_height.get_or_err(working_set)?;
 
-        let transition: StateTransitionId<Cond> = if curr_height == 0 {
+        if curr_height == 0 {
             // First transition right after the genesis block
-            StateTransitionId {
-                da_block_hash: GENESIS_BLOCK_HASH,
-                post_state_root: working_set.backing().get_state_root()?,
-                validity_condition: Cond::default(),
-            }
+            self.genesis_hash
+                .set(&working_set.backing().get_state_root()?, working_set)
         } else {
-            let last_transition_in_progress = self
-                .in_progress_transition
-                .get(working_set)
-                .ok_or(ChainStateError::NoTransitionInProgress)?;
+            let transition: StateTransitionId<Cond> = {
+                let last_transition_in_progress = self
+                    .in_progress_transition
+                    .get(working_set)
+                    .ok_or(ChainStateError::NoTransitionInProgress)?;
 
-            StateTransitionId {
-                da_block_hash: last_transition_in_progress.da_block_hash,
-                post_state_root: working_set.backing().get_state_root()?,
-                validity_condition: last_transition_in_progress.validity_condition,
-            }
-        };
+                StateTransitionId {
+                    da_block_hash: last_transition_in_progress.da_block_hash,
+                    post_state_root: working_set.backing().get_state_root()?,
+                    validity_condition: last_transition_in_progress.validity_condition,
+                }
+            };
 
-        self.store_state_transition(
-            self.slot_height
-                .get(working_set)
-                .expect("Block height must be set"),
-            transition,
-            working_set,
-        );
+            self.store_state_transition(
+                self.slot_height
+                    .get(working_set)
+                    .expect("Block height must be set"),
+                transition,
+                working_set,
+            );
+        }
 
         self.increment_slot_height(working_set);
         let validity_condition = slot.validity_condition();
