@@ -30,7 +30,9 @@ pub use sov_modules_macros::{
 /// Procedural macros to assist with creating new modules.
 #[cfg(feature = "macros")]
 pub mod macros {
-    pub use sov_modules_macros::{expose_rpc, rpc_gen, CliWallet, CliWalletArg, DefaultRuntime};
+    pub use sov_modules_macros::DefaultRuntime;
+    #[cfg(feature = "native")]
+    pub use sov_modules_macros::{expose_rpc, rpc_gen, CliWallet, CliWalletArg};
 }
 
 use core::fmt::{self, Debug, Display};
@@ -136,7 +138,7 @@ pub trait PublicKey {
     fn to_address<A: AddressTrait>(&self) -> A;
 }
 
-/// PublicKey used in the Module System.
+/// A PrivateKey used in the Module System.
 #[cfg(feature = "native")]
 pub trait PrivateKey {
     type PublicKey: PublicKey;
