@@ -17,13 +17,13 @@ use crate::{Evm, TransactionReceipt};
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct CallMessage {
-    pub tx: EvmTransaction,
+    pub tx: Vec<EvmTransaction>,
 }
 
 impl<C: sov_modules_api::Context> Evm<C> {
     pub(crate) fn execute_call(
         &self,
-        tx: EvmTransaction,
+        txs: Vec<EvmTransaction>,
         _context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
@@ -31,39 +31,43 @@ impl<C: sov_modules_api::Context> Evm<C> {
         // https://github.com/Sovereign-Labs/sovereign-sdk/issues/516
         let cfg_env = CfgEnv::default();
         let block_env = self.block_env.get(working_set).unwrap_or_default();
-        self.transactions.set(&tx.hash, &tx, working_set);
 
-        let evm_db: EvmDb<'_, C> = self.get_db(working_set);
+        for tx in txs {
+            self.transactions.set(&tx.hash, &tx, working_set);
 
-        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
-        let result = executor::execute_tx(evm_db, block_env, tx.clone(), cfg_env).unwrap();
+            let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
-        let receipt = TransactionReceipt {
-            transaction_hash: tx.hash,
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            transaction_index: 0,
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            block_hash: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            block_number: Some(0),
-            from: tx.sender,
-            to: tx.to,
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            cumulative_gas_used: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            gas_used: Default::default(),
-            contract_address: contract_address(result).map(|addr| addr.into()),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            status: Some(1),
-            root: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            transaction_type: Some(1),
-            effective_gas_price: Default::default(),
-        };
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
+            let result =
+                executor::execute_tx(evm_db, block_env.clone(), tx.clone(), cfg_env.clone())
+                    .unwrap();
 
-        self.receipts
-            .set(&receipt.transaction_hash, &receipt, working_set);
+            let receipt = TransactionReceipt {
+                transaction_hash: tx.hash,
+                // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
+                transaction_index: 0,
+                // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
+                block_hash: Default::default(),
+                // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
+                block_number: Some(0),
+                from: tx.sender,
+                to: tx.to,
+                // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
+                cumulative_gas_used: Default::default(),
+                // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
+                gas_used: Default::default(),
+                contract_address: contract_address(result).map(|addr| addr.into()),
+                // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
+                status: Some(1),
+                root: Default::default(),
+                // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
+                transaction_type: Some(1),
+                effective_gas_price: Default::default(),
+            };
 
+            self.receipts
+                .set(&receipt.transaction_hash, &receipt, working_set);
+        }
         Ok(CallResponse::default())
     }
 }

@@ -19,23 +19,23 @@ fn create_messages(contract_addr: EthAddress, set_arg: u32) -> Vec<CallMessage> 
     // Contract creation.
     {
         transactions.push(CallMessage {
-            tx: EvmTransaction {
+            tx: vec![EvmTransaction {
                 to: None,
                 data: contract.byte_code().to_vec(),
                 ..Default::default()
-            },
+            }],
         });
     }
 
     // Update contract state.
     {
         transactions.push(CallMessage {
-            tx: EvmTransaction {
+            tx: vec![EvmTransaction {
                 to: Some(contract_addr),
                 data: hex::decode(hex::encode(&contract.set_call_data(set_arg))).unwrap(),
                 nonce: 1,
                 ..Default::default()
-            },
+            }],
         });
     }
 

@@ -7,7 +7,10 @@
   ],
   "properties": {
     "tx": {
-      "$ref": "#/definitions/EvmTransaction"
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/EvmTransaction"
+      }
     }
   },
   "definitions": {
