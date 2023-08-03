@@ -1,5 +1,8 @@
+use std::rc::Rc;
+
 use sov_bank::{get_token_address, Bank, BankConfig, CallMessage, Coins, TotalSupplyResponse};
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Address, Context, Hasher, PublicKey, Spec};
@@ -8,6 +11,7 @@ use sov_modules_stf_template::{AppTemplate, SequencerOutcome};
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::mocks::{MockZkvm, TestBlob, TestValidityCond};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
 use crate::ChainState;
 
@@ -16,7 +20,7 @@ type C = DefaultContext;
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub(crate) struct TestRuntime<C: Context> {
-    pub bank: sov_bank::Bank<C>,
+    pub value_setter: ValueSetter<C>,
     pub chain_state: ChainState<C, TestValidityCond>,
 }
 
@@ -77,13 +81,10 @@ impl SlotHooks<TestValidityCond> for TestRuntime<C> {
     }
 }
 
-pub(crate) fn create_demo_genesis_config<C: Context>() -> GenesisConfig<C> {
-    let bank_config = BankConfig::<C> { tokens: vec![] };
+pub(crate) fn create_demo_genesis_config<C: Context>(
+    admin: <C as Spec>::Address,
+) -> GenesisConfig<C> {
+    let value_setter_config = ValueSetterConfig { admin };
 
-    let token_address = sov_bank::get_genesis_token_address::<C>(
-        &bank_config.tokens[0].token_name,
-        bank_config.tokens[0].salt,
-    );
-
-    GenesisConfig::new(bank_config, ())
+    GenesisConfig::new(value_setter_config, ())
 }

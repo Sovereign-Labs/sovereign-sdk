@@ -35,7 +35,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use clap;
-pub use dispatch::{DispatchCall, Genesis};
+pub use dispatch::{DispatchCall, EncodeCall, Genesis};
 pub use error::Error;
 pub use prefix::Prefix;
 pub use response::CallResponse;

@@ -4,7 +4,7 @@ use std::io::Cursor;
 use anyhow::bail;
 use borsh::BorshDeserialize;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Context, DispatchCall, PublicKey};
+use sov_modules_api::{Context, DispatchCall, EncodeCall, PublicKey};
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_state::WorkingSet;
 use tracing::warn;
@@ -166,7 +166,7 @@ mod tests {
 
     fn generate_valid_tx(private_key: &DefaultPrivateKey, value: u32) -> Vec<u8> {
         let msg = CallMessage::SetValue(value);
-        let msg = TestRuntime::<C>::encode_value_setter_call(msg);
+        let msg = TestRuntime::<C>::encode_call(msg);
 
         Transaction::new_signed_tx(private_key, msg, 1)
             .try_to_vec()

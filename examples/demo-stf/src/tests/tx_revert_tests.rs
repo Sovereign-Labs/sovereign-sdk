@@ -2,10 +2,11 @@ use borsh::BorshSerialize;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use sov_accounts::Response;
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
+use sov_election::Election;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::PublicKey;
+use sov_modules_api::{EncodeCall, PublicKey};
 use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, SlashingReason};
 use sov_rollup_interface::mocks::{MockZkvm, TestBlock};
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -122,11 +123,12 @@ fn test_nonce_incremented_on_revert() {
         let mut demo = create_new_demo(path);
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config).unwrap();
 
-        let set_candidates_message = Runtime::<DefaultContext>::encode_election_call(
-            sov_election::CallMessage::SetCandidates {
-                names: vec!["candidate_1".to_owned(), "candidate_2".to_owned()],
-            },
-        );
+        let set_candidates_message =
+            <Runtime<DefaultContext> as EncodeCall<Election<DefaultContext>>>::encode_call(
+                sov_election::CallMessage::SetCandidates {
+                    names: vec!["candidate_1".to_owned(), "candidate_2".to_owned()],
+                },
+            );
 
         let set_candidates_message = Transaction::<DefaultContext>::new_signed_tx(
             &election_admin_private_key,
@@ -134,9 +136,10 @@ fn test_nonce_incremented_on_revert() {
             0,
         );
 
-        let add_voter_message = Runtime::<DefaultContext>::encode_election_call(
-            sov_election::CallMessage::AddVoter(voter.pub_key().to_address()),
-        );
+        let add_voter_message =
+            <Runtime<DefaultContext> as EncodeCall<Election<DefaultContext>>>::encode_call(
+                sov_election::CallMessage::AddVoter(voter.pub_key().to_address()),
+            );
         let add_voter_message = Transaction::<DefaultContext>::new_signed_tx(
             &election_admin_private_key,
             add_voter_message,
@@ -145,7 +148,9 @@ fn test_nonce_incremented_on_revert() {
 
         // There's only 2 candidates
         let vote_message =
-            Runtime::<DefaultContext>::encode_election_call(sov_election::CallMessage::Vote(100));
+            <Runtime<DefaultContext> as EncodeCall<Election<DefaultContext>>>::encode_call(
+                sov_election::CallMessage::Vote(100),
+            );
         let vote_message =
             Transaction::<DefaultContext>::new_signed_tx(&voter, vote_message, original_nonce);
 

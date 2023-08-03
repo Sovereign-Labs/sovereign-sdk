@@ -26,7 +26,7 @@ fn test_value_setter() {
 
     let tmpdir = tempfile::tempdir().unwrap();
 
-    let mut storage: ProverStorage<sov_state::DefaultStorageSpec> =
+    let storage: ProverStorage<sov_state::DefaultStorageSpec> =
         ProverStorage::with_path(tmpdir.path()).unwrap();
 
     let mut app_template = AppTemplate::<
@@ -37,12 +37,16 @@ fn test_value_setter() {
         TestBlob<<DefaultContext as Spec>::Address>,
     >::new(storage, runtime);
 
+    let value_setter_messages = ValueSetterMessages::default();
+    let value_setter = value_setter_messages.create_raw_txs::<TestRuntime<C>>();
+
+    let admin_pub_key = value_setter_messages.messages[0].admin.default_address();
+
     // Genesis
     let init_root_hash = app_template
-        .init_chain(create_demo_genesis_config())
+        .init_chain(create_demo_genesis_config(admin_pub_key))
         .unwrap();
 
-    let value_setter = ValueSetterMessages::default().create_raw_txs();
     const MOCK_SEQUENCER_DA_ADDRESS: [u8; 32] = [1_u8; 32];
 
     let blob = new_test_blob_from_batch(

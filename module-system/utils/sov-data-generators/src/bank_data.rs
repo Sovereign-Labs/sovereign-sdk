@@ -4,36 +4,34 @@ use sov_bank::{get_token_address, Bank, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Address, Module, Spec};
+use sov_modules_api::{Context, EncodeCall, Module, Spec};
 
-use crate::{generate_address, MessageGenerator, Runtime};
+use crate::{generate_address, MessageGenerator};
 
-type C = DefaultContext;
-
-pub struct TransferData {
+pub struct TransferData<C: Context> {
     pub sender_pkey: Rc<DefaultPrivateKey>,
-    pub receiver_address: Address,
-    pub token_address: Address,
+    pub receiver_address: <C as Spec>::Address,
+    pub token_address: <C as Spec>::Address,
     pub transfer_amount: u64,
 }
 
-pub struct MintData {
+pub struct MintData<C: Context> {
     pub token_name: String,
     pub salt: u64,
     pub initial_balance: u64,
-    pub minter_address: <DefaultContext as Spec>::Address,
+    pub minter_address: <C as Spec>::Address,
     pub minter_pkey: Rc<DefaultPrivateKey>,
-    pub authorized_minters: Vec<<DefaultContext as Spec>::Address>,
+    pub authorized_minters: Vec<<C as Spec>::Address>,
 }
 
-pub struct BankMessageGenerator {
-    pub token_mint_txs: Vec<MintData>,
-    pub transfer_txs: Vec<TransferData>,
+pub struct BankMessageGenerator<C: Context> {
+    pub token_mint_txs: Vec<MintData<C>>,
+    pub transfer_txs: Vec<TransferData<C>>,
 }
 
-impl Default for BankMessageGenerator {
+impl Default for BankMessageGenerator<DefaultContext> {
     fn default() -> Self {
-        let minter_address = generate_address("just_sender");
+        let minter_address = generate_address::<DefaultContext>("just_sender");
         let salt = 10;
         let token_name = "Token1".to_owned();
         let mint_data = MintData {
@@ -49,14 +47,18 @@ impl Default for BankMessageGenerator {
             transfer_txs: Vec::from([TransferData {
                 sender_pkey: Rc::new(DefaultPrivateKey::generate()),
                 transfer_amount: 15,
-                receiver_address: generate_address("just_receiver"),
-                token_address: get_token_address::<C>(&token_name, minter_address.as_ref(), salt),
+                receiver_address: generate_address::<DefaultContext>("just_receiver"),
+                token_address: get_token_address::<DefaultContext>(
+                    &token_name,
+                    minter_address.as_ref(),
+                    salt,
+                ),
             }]),
         }
     }
 }
 
-pub(crate) fn mint_token_tx(mint_data: &MintData) -> CallMessage<C> {
+pub(crate) fn mint_token_tx<C: Context>(mint_data: &MintData<C>) -> CallMessage<C> {
     CallMessage::CreateToken {
         salt: mint_data.salt,
         token_name: mint_data.token_name.clone(),
@@ -66,9 +68,9 @@ pub(crate) fn mint_token_tx(mint_data: &MintData) -> CallMessage<C> {
     }
 }
 
-pub(crate) fn transfer_token_tx(transfer_data: &TransferData) -> CallMessage<C> {
+pub(crate) fn transfer_token_tx<C: Context>(transfer_data: &TransferData<C>) -> CallMessage<C> {
     CallMessage::Transfer {
-        to: transfer_data.receiver_address,
+        to: transfer_data.receiver_address.clone(),
         coins: Coins {
             amount: transfer_data.transfer_amount,
             token_address: transfer_data.token_address.clone(),
@@ -76,19 +78,19 @@ pub(crate) fn transfer_token_tx(transfer_data: &TransferData) -> CallMessage<C> 
     }
 }
 
-impl MessageGenerator for BankMessageGenerator {
-    type Call = <Bank<DefaultContext> as Module>::CallMessage;
+impl<C: Context> MessageGenerator for BankMessageGenerator<C> {
+    type Module = Bank<C>;
 
     fn create_messages(
         &self,
     ) -> Vec<(
         std::rc::Rc<sov_modules_api::default_signature::private_key::DefaultPrivateKey>,
-        Self::Call,
+        <Self::Module as Module>::CallMessage,
         u64,
     )> {
         let mut messages = Vec::<(
             std::rc::Rc<sov_modules_api::default_signature::private_key::DefaultPrivateKey>,
-            Self::Call,
+            <Self::Module as Module>::CallMessage,
             u64,
         )>::new();
 
@@ -97,7 +99,7 @@ impl MessageGenerator for BankMessageGenerator {
         for mint_message in &self.token_mint_txs {
             messages.push((
                 mint_message.minter_pkey.clone(),
-                mint_token_tx(mint_message),
+                mint_token_tx::<C>(mint_message),
                 nonce,
             ));
             nonce += 1;
@@ -106,7 +108,7 @@ impl MessageGenerator for BankMessageGenerator {
         for transfer_message in &self.transfer_txs {
             messages.push((
                 transfer_message.sender_pkey.clone(),
-                transfer_token_tx(transfer_message),
+                transfer_token_tx::<C>(transfer_message),
                 nonce,
             ));
             nonce += 1;
@@ -115,14 +117,14 @@ impl MessageGenerator for BankMessageGenerator {
         messages
     }
 
-    fn create_tx(
+    fn create_tx<Encoder: EncodeCall<Self::Module>>(
         &self,
         sender: &sov_modules_api::default_signature::private_key::DefaultPrivateKey,
-        message: Self::Call,
+        message: <Self::Module as Module>::CallMessage,
         nonce: u64,
         _is_last: bool,
     ) -> sov_modules_api::transaction::Transaction<DefaultContext> {
-        let message = Runtime::encode_bank_call(message);
+        let message = Encoder::encode_call(message);
         Transaction::<DefaultContext>::new_signed_tx(sender, message, nonce)
     }
 }
