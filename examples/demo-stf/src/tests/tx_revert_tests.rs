@@ -1,6 +1,7 @@
 use borsh::BorshSerialize;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use sov_accounts::Response;
+use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
@@ -16,7 +17,7 @@ use crate::runtime::Runtime;
 use crate::tests::da_simulation::{
     simulate_da_with_bad_serialization, simulate_da_with_bad_sig, simulate_da_with_revert_msg,
 };
-use crate::tests::{has_tx_events, new_test_blob, TestBlob};
+use crate::tests::TestBlob;
 
 const SEQUENCER_BALANCE_DELTA: u64 = 1;
 const SEQUENCER_BALANCE: u64 = LOCKED_AMOUNT + SEQUENCER_BALANCE_DELTA;
@@ -43,7 +44,7 @@ fn test_tx_revert() {
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config).unwrap();
 
         let txs = simulate_da_with_revert_msg(election_admin_private_key);
-        let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
+        let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
         let data = TestBlock::default();
 
@@ -156,7 +157,7 @@ fn test_nonce_incremented_on_revert() {
             })
             .collect();
 
-        let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
+        let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
 
         let data = TestBlock::default();
@@ -223,7 +224,7 @@ fn test_tx_bad_sig() {
 
         let txs = simulate_da_with_bad_sig(election_admin_private_key);
 
-        let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
+        let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
 
         let data = TestBlock::default();
@@ -307,7 +308,7 @@ fn test_tx_bad_serialization() {
         let mut demo = create_new_demo(path);
 
         let txs = simulate_da_with_bad_serialization(election_admin_private_key);
-        let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
+        let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
 
         let data = TestBlock::default();

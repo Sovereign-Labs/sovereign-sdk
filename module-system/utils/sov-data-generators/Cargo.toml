@@ -20,6 +20,8 @@ sov-modules-stf-template = { path = "../../sov-modules-stf-template" }
 sov-value-setter = { path = "../../module-implementations/examples/sov-value-setter", default-features = false }
 sov-election = { path = "../../module-implementations/examples/sov-election", default-features = false }
 sov-state = { path = "../../sov-state" }
+sov-rollup-interface = { path = "../../../rollup-interface" }
+
 borsh = { workspace = true }
 
 [dev-dependencies]

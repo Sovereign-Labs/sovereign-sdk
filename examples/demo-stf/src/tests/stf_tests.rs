@@ -1,6 +1,7 @@
 #[cfg(test)]
 pub mod test {
 
+    use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
     use sov_modules_api::default_context::DefaultContext;
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_stf_template::{Batch, SequencerOutcome};
@@ -11,7 +12,7 @@ pub mod test {
     use crate::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
     use crate::runtime::Runtime;
     use crate::tests::da_simulation::simulate_da;
-    use crate::tests::{create_new_demo, has_tx_events, new_test_blob, TestBlob, C};
+    use crate::tests::{create_new_demo, TestBlob, C};
 
     #[test]
     fn test_demo_values_in_db() {
@@ -31,7 +32,7 @@ pub mod test {
             StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config).unwrap();
 
             let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
-            let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
+            let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
 
             let mut blobs = [blob];
 
@@ -95,7 +96,7 @@ pub mod test {
 
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
-        let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
+        let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
         let data = TestBlock::default();
 
@@ -155,7 +156,7 @@ pub mod test {
             StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config).unwrap();
 
             let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
-            let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
+            let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
             let mut blobs = [blob];
             let data = TestBlock::default();
 
@@ -215,7 +216,7 @@ pub mod test {
 
         let some_sequencer: [u8; 32] = [121; 32];
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
-        let blob = new_test_blob(Batch { txs }, &some_sequencer);
+        let blob = new_test_blob_from_batch(Batch { txs }, &some_sequencer, [0; 32]);
         let mut blobs = [blob];
         let data = TestBlock::default();
 

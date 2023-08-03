@@ -5,7 +5,9 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Address, Context, DispatchCall, Hasher, MessageCodec, Spec};
-use sov_modules_stf_template::RawTx;
+use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, TxEffect};
+use sov_rollup_interface::mocks::TestBlob;
+use sov_rollup_interface::stf::BatchReceipt;
 
 pub mod bank_data;
 pub mod election_data;
@@ -16,6 +18,21 @@ type C = DefaultContext;
 pub fn generate_address(key: &str) -> <C as Spec>::Address {
     let hash = <C as Spec>::Hasher::hash(key.as_bytes());
     Address::from(hash)
+}
+
+pub fn new_test_blob_from_batch(batch: Batch, address: &[u8], hash: [u8; 32]) -> TestBlob<Address> {
+    let address = Address::try_from(address).unwrap();
+    let data = batch.try_to_vec().unwrap();
+    TestBlob::new(data, address, hash)
+}
+
+pub fn has_tx_events(apply_blob_outcome: &BatchReceipt<SequencerOutcome, TxEffect>) -> bool {
+    let events = apply_blob_outcome
+        .tx_receipts
+        .iter()
+        .flat_map(|receipts| receipts.events.iter());
+
+    events.peekable().peek().is_some()
 }
 
 pub trait MessageGenerator {

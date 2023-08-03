@@ -1,8 +1,10 @@
+use std::rc::Rc;
+
 use sov_data_generators::election_data::{
     BadNonceElectionCallMessages, BadSerializationElectionCallMessages, BadSigElectionCallMessages,
     ElectionCallMessages, InvalidElectionCallMessages,
 };
-use sov_data_generators::value_setter_data::ValueSetterMessages;
+use sov_data_generators::value_setter_data::{ValueSetterMessage, ValueSetterMessages};
 use sov_data_generators::MessageGenerator;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_stf_template::RawTx;
@@ -16,7 +18,10 @@ pub fn simulate_da(
     let election = ElectionCallMessages::new(election_admin);
     messages.extend(election.create_raw_txs());
 
-    let value_setter = ValueSetterMessages::new(value_setter_admin);
+    let value_setter = ValueSetterMessages::new(vec![ValueSetterMessage {
+        admin: Rc::new(value_setter_admin),
+        messages: vec![99, 33],
+    }]);
     messages.extend(value_setter.create_raw_txs());
 
     messages
