@@ -149,7 +149,6 @@ where
             messages.len(),
             "Error in preprocessing batch, there should be same number of txs and messages"
         );
-        println!("batch has {} transactions",txs.len());
 
         // Dispatching transactions
         let mut tx_receipts = Vec::with_capacity(txs.len());

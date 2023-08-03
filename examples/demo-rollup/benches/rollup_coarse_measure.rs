@@ -1,5 +1,6 @@
 use std::env;
 use std::path::PathBuf;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
@@ -12,6 +13,7 @@ use prometheus::{Histogram, HistogramOpts, Registry};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_demo_rollup::config::RollupConfig;
+use sov_demo_rollup::rng_xfers::RngDaService;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
 use sov_rollup_interface::mocks::{TestBlob, TestBlock, TestBlockHeader, TestHash};
@@ -19,7 +21,6 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use tempfile::TempDir;
-use sov_demo_rollup::data_gen::generate_blocks;
 
 #[macro_use]
 extern crate prettytable;
@@ -89,12 +90,12 @@ async fn main() -> Result<(), anyhow::Error> {
     let ledger_db =
         LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
 
+    let da_service = Arc::new(RngDaService::new());
 
     let mut demo_runner =
         NativeAppRunner::<Risc0Verifier, TestBlob<CelestiaAddress>>::new(rollup_config.runner);
 
     let demo = demo_runner.inner_mut();
-
     let sequencer_private_key = DefaultPrivateKey::generate();
     let demo_genesis_config = create_demo_genesis_config(
         100000000,
@@ -135,7 +136,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // rollup processing
     let total = Instant::now();
     let mut apply_block_time = Duration::new(0, 0);
-    for &height in start_height..end_height {
+    for height in start_height..end_height {
         let filtered_block = &blocks[height as usize];
 
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());

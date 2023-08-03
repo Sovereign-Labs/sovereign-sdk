@@ -161,7 +161,6 @@ impl DaService for RngDaService {
         <Self::Spec as DaSpec>::CompletenessProof,
     ) {
         unimplemented!()
-
     }
 
     async fn send_transaction(&self, _blob: &[u8]) -> Result<(), Self::Error> {
