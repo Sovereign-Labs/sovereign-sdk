@@ -14,8 +14,10 @@ use demo_stf::app::{
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runner_config::from_toml_path;
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
-use jsonrpsee::core::server::rpc_module::Methods;
+use jsonrpsee::core::server::Methods;
 use jupiter::da_service::CelestiaService;
+#[cfg(feature = "experimental")]
+use jupiter::da_service::DaServiceConfig;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::{CelestiaVerifier, ChainValidityCondition, RollupParams};
 use jupiter::BlobWithSender;
@@ -42,6 +44,9 @@ mod ledger_rpc;
 
 #[cfg(test)]
 mod test_rpc;
+
+#[cfg(feature = "experimental")]
+const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 // You can change this constant to point your rollup at a different namespace
@@ -120,9 +125,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
         .nth(1)
         .unwrap_or_else(|| "rollup_config.toml".to_string());
+
     debug!("Starting demo rollup with config {}", rollup_config_path);
     let rollup_config: RollupConfig =
         from_toml_path(&rollup_config_path).context("Failed to read rollup configuration")?;
+
     let rpc_config = rollup_config.rpc_config;
     let address = SocketAddr::new(rpc_config.bind_host.parse()?, rpc_config.bind_port);
 
@@ -157,22 +164,14 @@ async fn main() -> Result<(), anyhow::Error> {
     // so we use that to initialize the RPC server.
     let storage = demo_runner.get_storage();
     let is_storage_empty = storage.is_empty();
-    let mut methods = get_rpc_methods(storage);
-    let ledger_rpc_module =
-        ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db.clone());
-    methods
-        .merge(ledger_rpc_module)
-        .expect("Failed to merge ledger RPC modules");
-
-    let batch_builder = demo_runner.take_batch_builder().unwrap();
-
-    let r = get_sequencer_rpc(batch_builder, da_service.clone());
-    methods.merge(r).expect("Failed to merge Txs RPC modules");
-
-    #[cfg(feature = "experimental")]
-    let ethereum_rpc = get_ethereum_rpc(rollup_config.da.clone());
-    #[cfg(feature = "experimental")]
-    methods.merge(ethereum_rpc).unwrap();
+    let mut methods = get_rpc_methods::<DefaultContext>(storage);
+    // register rpc methods
+    {
+        register_ledger(ledger_db.clone(), &mut methods)?;
+        register_sequencer(da_service.clone(), &mut demo_runner, &mut methods)?;
+        #[cfg(feature = "experimental")]
+        register_ethereum(rollup_config.da.clone(), &mut methods)?;
+    }
 
     let _handle = tokio::spawn(async move {
         start_rpc_server(methods, address).await;
@@ -195,11 +194,10 @@ async fn main() -> Result<(), anyhow::Error> {
             debug!("Chain is already initialized. Skipping initialization.");
         }
 
+        let res = demo.apply_slot(Default::default(), []);
         // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
         // This will be removed shortly.
-        demo.begin_slot(Default::default());
-        let (prev_state_root, _) = demo.end_slot();
-        prev_state_root.0
+        res.state_root.0
     };
 
     // Start the main rollup loop
@@ -232,32 +230,19 @@ async fn main() -> Result<(), anyhow::Error> {
         // simply download the data from Celestia without extracting and checking a merkle proof here,
         let mut blobs = da_service.extract_relevant_txs(&filtered_block);
 
-        info!("Received {} blobs at height {}", blobs.len(), height);
+        info!(
+            "Extracted {} relevant blobs at height {}",
+            blobs.len(),
+            height
+        );
 
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
-        demo.begin_slot(Default::default());
-        for (blob_idx, blob) in blobs.iter_mut().enumerate() {
-            let batch_receipt = demo.apply_blob(blob, None);
-            info!(
-                "blob #{} at height {} with blob_hash 0x{} has been applied with #{} transactions, sequencer outcome {:?}",
-                blob_idx,
-                height,
-                hex::encode(batch_receipt.batch_hash),
-                batch_receipt.tx_receipts.len(),
-                batch_receipt.inner
-            );
-            for (i, tx_receipt) in batch_receipt.tx_receipts.iter().enumerate() {
-                info!(
-                    "tx #{} hash: 0x{} result {:?}",
-                    i,
-                    hex::encode(tx_receipt.tx_hash),
-                    tx_receipt.receipt
-                );
-            }
 
-            data_to_commit.add_batch(batch_receipt);
+        let slot_result = demo.apply_slot(Default::default(), &mut blobs);
+        for receipt in slot_result.batch_receipts {
+            data_to_commit.add_batch(receipt);
         }
-        let (next_state_root, _witness) = demo.end_slot();
+        let next_state_root = slot_result.state_root;
 
         let (inclusion_proof, completeness_proof) = da_service
             .get_extraction_proof(&filtered_block, &blobs)
@@ -286,4 +271,46 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     Ok(())
+}
+
+fn register_sequencer(
+    da_service: Arc<CelestiaService>,
+    demo_runner: &mut NativeAppRunner<Risc0Verifier, BlobWithSender>,
+    methods: &mut jsonrpsee::RpcModule<()>,
+) -> Result<(), anyhow::Error> {
+    let batch_builder = demo_runner.take_batch_builder().unwrap();
+    let sequencer_rpc = get_sequencer_rpc(batch_builder, da_service);
+    methods
+        .merge(sequencer_rpc)
+        .context("Failed to merge Txs RPC modules")
+}
+
+fn register_ledger(
+    ledger_db: LedgerDB,
+    methods: &mut jsonrpsee::RpcModule<()>,
+) -> Result<(), anyhow::Error> {
+    let ledger_rpc = ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db);
+    methods
+        .merge(ledger_rpc)
+        .context("Failed to merge ledger RPC modules")
+}
+
+#[cfg(feature = "experimental")]
+fn register_ethereum(
+    da_config: DaServiceConfig,
+    methods: &mut jsonrpsee::RpcModule<()>,
+) -> Result<(), anyhow::Error> {
+    use std::fs;
+
+    let data = fs::read_to_string(TX_SIGNER_PRIV_KEY_PATH).context("Unable to read file")?;
+
+    let hex_key: HexKey =
+        serde_json::from_str(&data).context("JSON does not have correct format.")?;
+
+    let tx_signer_private_key = DefaultPrivateKey::from_hex(&hex_key.hex_priv_key).unwrap();
+
+    let ethereum_rpc = get_ethereum_rpc(da_config, tx_signer_private_key);
+    methods
+        .merge(ethereum_rpc)
+        .context("Failed to merge Ethereum RPC modules")
 }

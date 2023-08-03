@@ -9,7 +9,7 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
-use crate::da::{BlobTransactionTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
+use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
 use crate::services::da::SlotData;
 use crate::zk::{Matches, Zkvm};
 use crate::AddressTrait;
@@ -103,9 +103,24 @@ fn test_mock_proof_roundtrip() {
 }
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
-#[derive(Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize, Hash)]
 pub struct MockAddress {
     addr: [u8; 32],
+}
+
+impl core::str::FromStr for MockAddress {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let addr = hex::decode(s)?;
+        if addr.len() != 32 {
+            return Err(anyhow::anyhow!("Invalid address length"));
+        }
+
+        let mut array = [0; 32];
+        array.copy_from_slice(&addr);
+        Ok(MockAddress { addr: array })
+    }
 }
 
 impl<'a> TryFrom<&'a [u8]> for MockAddress {
@@ -158,7 +173,7 @@ pub struct TestBlob<Address> {
     data: CountedBufReader<Bytes>,
 }
 
-impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
+impl<Address: AddressTrait> BlobReaderTrait for TestBlob<Address> {
     type Data = Bytes;
     type Address = Address;
 

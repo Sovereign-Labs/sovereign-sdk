@@ -9,12 +9,13 @@ use rocksdb::Options;
 /// for detailed explanations.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct RocksdbConfig {
+    /// The maximum number of files that can be open concurrently. Defaults to 5000
     pub max_open_files: i32,
+    /// Once write-ahead logs exceed this size, RocksDB will start forcing the flush of column
+    /// families whose memtables are backed by the oldest live WAL file. Defaults to 1GB
     pub max_total_wal_size: u64,
+    /// The maximum number of background threads, including threads for flushing and compaction. Defaults to 16.
     pub max_background_jobs: i32,
-    pub block_cache_size: u64,
-    pub block_size: u64,
-    pub cache_index_and_filter_blocks: bool,
 }
 
 impl Default for RocksdbConfig {
@@ -25,19 +26,14 @@ impl Default for RocksdbConfig {
             // For now we set the max total WAL size to be 1G. This config can be useful when column
             // families are updated at non-uniform frequencies.
             max_total_wal_size: 1u64 << 30,
-            // This includes threads for flashing and compaction. Rocksdb will decide the # of
+            // This includes threads for flushing and compaction. Rocksdb will decide the # of
             // threads to use internally.
             max_background_jobs: 16,
-            // Default block cache size is 8MB,
-            block_cache_size: 8 * (1u64 << 20),
-            // Default block cache size is 4KB,
-            block_size: 4 * (1u64 << 10),
-            // Whether cache index and filter blocks into block cache.
-            cache_index_and_filter_blocks: false,
         }
     }
 }
 
+/// Generate [`rocksdb::Options`] corresponding to the given [`RocksdbConfig`].
 pub fn gen_rocksdb_options(config: &RocksdbConfig, readonly: bool) -> Options {
     let mut db_opts = Options::default();
     db_opts.set_max_open_files(config.max_open_files);

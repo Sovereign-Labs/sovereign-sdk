@@ -4,7 +4,7 @@ use sov_accounts::Response;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::PublicKey;
+use sov_modules_api::{PrivateKey, PublicKey};
 use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, SlashingReason};
 use sov_rollup_interface::mocks::MockZkvm;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -38,15 +38,20 @@ fn test_tx_revert() {
         let mut demo = create_new_demo(path);
 
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
-        StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(&mut demo, Default::default());
 
         let txs = simulate_da_with_revert_msg(election_admin_private_key);
+        let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
+        let mut blobs = [blob];
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm, TestBlob>::apply_blob(
+        let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
-            &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
-            None,
+            Default::default(),
+            &mut blobs,
         );
+
+        // TODO: Check witness.
+        assert_eq!(1, apply_block_result.batch_receipts.len());
+        let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
 
         assert_eq!(
             SequencerOutcome::Rewarded(0),
@@ -56,8 +61,6 @@ fn test_tx_revert() {
 
         // Some events were observed
         assert!(has_tx_events(&apply_blob_outcome), "No events were taken");
-
-        StateTransitionFunction::<MockZkvm, TestBlob>::end_slot(&mut demo);
     }
 
     // Checks
@@ -67,11 +70,11 @@ fn test_tx_revert() {
         let mut working_set = WorkingSet::new(storage);
 
         // We sent 4 vote messages but one of them is invalid and should be reverted.
-        let resp = runtime.election.number_of_votes(&mut working_set);
+        let resp = runtime.election.number_of_votes(&mut working_set).unwrap();
 
         assert_eq!(resp, sov_election::GetNbOfVotesResponse::Result(3));
 
-        let resp = runtime.election.results(&mut working_set);
+        let resp = runtime.election.results(&mut working_set).unwrap();
 
         assert_eq!(
             resp,
@@ -83,7 +86,8 @@ fn test_tx_revert() {
 
         let resp = runtime
             .sequencer_registry
-            .sequencer_address(DEMO_SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set);
+            .sequencer_address(DEMO_SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set)
+            .unwrap();
         // Sequencer is not excluded from list of allowed!
         assert_eq!(Some(sequencer_rollup_address), resp.address);
     }
@@ -109,7 +113,6 @@ fn test_nonce_incremented_on_revert() {
     {
         let mut demo = create_new_demo(path);
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
-        StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(&mut demo, Default::default());
 
         let set_candidates_message = Runtime::<DefaultContext>::encode_election_call(
             sov_election::CallMessage::SetCandidates {
@@ -146,18 +149,23 @@ fn test_nonce_incremented_on_revert() {
             })
             .collect();
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm, TestBlob>::apply_blob(
+        let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
+        let mut blobs = [blob];
+
+        let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
-            &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
-            None,
+            Default::default(),
+            &mut blobs,
         );
+
+        assert_eq!(1, apply_block_result.batch_receipts.len());
+        let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
 
         assert_eq!(
             SequencerOutcome::Rewarded(0),
             apply_blob_outcome.inner,
             "Unexpected outcome: Batch execution should have succeeded",
         );
-        StateTransitionFunction::<MockZkvm, TestBlob>::end_slot(&mut demo);
     }
 
     {
@@ -166,13 +174,14 @@ fn test_nonce_incremented_on_revert() {
         let mut working_set = WorkingSet::new(storage);
 
         // No votes actually recorded, because there was invalid vote
-        let resp = runtime.election.number_of_votes(&mut working_set);
+        let resp = runtime.election.number_of_votes(&mut working_set).unwrap();
 
         assert_eq!(resp, sov_election::GetNbOfVotesResponse::Result(0));
 
         let nonce = match runtime
             .accounts
             .get_account(voter.pub_key(), &mut working_set)
+            .unwrap()
         {
             Response::AccountExists { nonce, .. } => nonce,
             Response::AccountEmpty => 0,
@@ -200,15 +209,20 @@ fn test_tx_bad_sig() {
         let mut demo = create_new_demo(path);
 
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
-        StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(&mut demo, Default::default());
 
         let txs = simulate_da_with_bad_sig(election_admin_private_key);
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm, TestBlob>::apply_blob(
+        let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
+        let mut blobs = [blob];
+
+        let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
-            &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
-            None,
+            Default::default(),
+            &mut blobs,
         );
+
+        assert_eq!(1, apply_block_result.batch_receipts.len());
+        let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
 
         assert_eq!(
             SequencerOutcome::Slashed{
@@ -221,8 +235,6 @@ fn test_tx_bad_sig() {
 
         // The batch receipt contains no events.
         assert!(!has_tx_events(&apply_blob_outcome));
-
-        StateTransitionFunction::<MockZkvm, TestBlob>::end_slot(&mut demo);
     }
 
     {
@@ -230,14 +242,14 @@ fn test_tx_bad_sig() {
         let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
-        let resp = runtime.election.results(&mut working_set);
+        let resp = runtime.election.results(&mut working_set).unwrap();
 
         assert_eq!(
             resp,
             sov_election::GetResultResponse::Err("Election is not frozen".to_owned())
         );
 
-        // Sequencer is slashed
+        // TODO: Sequencer is slashed
     }
 }
 
@@ -277,15 +289,19 @@ fn test_tx_bad_serialization() {
 
     {
         let mut demo = create_new_demo(path);
-        StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(&mut demo, Default::default());
 
         let txs = simulate_da_with_bad_serialization(election_admin_private_key);
+        let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
+        let mut blobs = [blob];
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm, TestBlob>::apply_blob(
+        let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
-            &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
-            None,
+            Default::default(),
+            &mut blobs,
         );
+
+        assert_eq!(1, apply_block_result.batch_receipts.len());
+        let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
 
         assert_eq!(
             SequencerOutcome::Slashed {
@@ -298,7 +314,6 @@ fn test_tx_bad_serialization() {
 
         // The batch receipt contains no events.
         assert!(!has_tx_events(&apply_blob_outcome));
-        StateTransitionFunction::<MockZkvm, TestBlob>::end_slot(&mut demo);
     }
 
     {
@@ -306,7 +321,7 @@ fn test_tx_bad_serialization() {
         let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 
-        let resp = runtime.election.results(&mut working_set);
+        let resp = runtime.election.results(&mut working_set).unwrap();
 
         assert_eq!(
             resp,
@@ -316,7 +331,8 @@ fn test_tx_bad_serialization() {
         // Sequencer is not in list of allowed sequencers
         let allowed_sequencer = runtime
             .sequencer_registry
-            .sequencer_address(SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set);
+            .sequencer_address(SEQUENCER_DA_ADDRESS.to_vec(), &mut working_set)
+            .unwrap();
         assert!(allowed_sequencer.address.is_none());
 
         // Balance of sequencer is not increased

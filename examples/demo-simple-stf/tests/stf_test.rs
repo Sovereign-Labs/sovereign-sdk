@@ -1,11 +1,12 @@
 use std::fmt::Display;
+use std::str::FromStr;
 
 use demo_simple_stf::{ApplyBlobResult, CheckHashPreimageStf};
 use sov_rollup_interface::mocks::{MockZkvm, TestBlob};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::AddressTrait;
 
-#[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize, Hash)]
 pub struct DaAddress {
     pub addr: [u8; 32],
 }
@@ -21,6 +22,18 @@ impl AsRef<[u8]> for DaAddress {
 impl From<[u8; 32]> for DaAddress {
     fn from(addr: [u8; 32]) -> Self {
         DaAddress { addr }
+    }
+}
+
+impl FromStr for DaAddress {
+    type Err = hex::FromHexError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        // Remove the "0x" prefix, if it exists.
+        let s = s.strip_prefix("0x").unwrap_or(s);
+        let mut addr = [0u8; 32];
+        hex::decode_to_slice(s, &mut addr)?;
+        Ok(DaAddress { addr })
     }
 }
 
@@ -48,18 +61,17 @@ fn test_stf() {
     let address = DaAddress { addr: [1; 32] };
     let preimage = vec![0; 32];
 
-    let mut test_blob = TestBlob::<DaAddress>::new(preimage, address, [0; 32]);
+    let test_blob = TestBlob::<DaAddress>::new(preimage, address, [0; 32]);
     let stf = &mut CheckHashPreimageStf {};
 
+    let mut blobs = [test_blob];
+
     StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::init_chain(stf, ());
-    StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::begin_slot(stf, ());
 
-    let receipt = StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::apply_blob(
-        stf,
-        &mut test_blob,
-        None,
-    );
+    let result =
+        StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::apply_slot(stf, (), &mut blobs);
+
+    assert_eq!(1, result.batch_receipts.len());
+    let receipt = result.batch_receipts[0].clone();
     assert_eq!(receipt.inner, ApplyBlobResult::Success);
-
-    StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::end_slot(stf);
 }

@@ -1,4 +1,5 @@
 use sov_bank::{get_token_address, Bank, CallMessage};
+use sov_modules_api::test_utils::generate_address;
 use sov_modules_api::{Context, Module};
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -14,9 +15,9 @@ fn initial_and_deployed_token() {
     let bank = Bank::default();
     bank.genesis(&bank_config, &mut working_set).unwrap();
 
-    let sender_address = generate_address("sender");
+    let sender_address = generate_address::<C>("sender");
     let sender_context = C::new(sender_address.clone());
-    let minter_address = generate_address("minter");
+    let minter_address = generate_address::<C>("minter");
     let initial_balance = 500;
     let token_name = "Token1".to_owned();
     let salt = 1;

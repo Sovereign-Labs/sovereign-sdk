@@ -1,3 +1,6 @@
+#[cfg(feature = "native")]
+use std::str::FromStr;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use ed25519_dalek::ed25519::signature::Signature as DalekSignatureTrait;
 use ed25519_dalek::{
@@ -16,7 +19,7 @@ pub mod private_key {
     use thiserror::Error;
 
     use super::{DefaultPublicKey, DefaultSignature};
-    use crate::{Address, PublicKey};
+    use crate::{Address, PrivateKey, PublicKey};
 
     #[derive(Error, Debug)]
     pub enum DefaultPrivateKeyHexDeserializationError {
@@ -26,12 +29,37 @@ pub mod private_key {
         PrivateKeyError(#[from] SignatureError),
     }
 
+    /// A private key for the default signature scheme.
+    /// This struct also stores the corresponding public key.
     pub struct DefaultPrivateKey {
         key_pair: Keypair,
     }
 
-    impl DefaultPrivateKey {
-        pub fn generate() -> Self {
+    impl core::fmt::Debug for DefaultPrivateKey {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("DefaultPrivateKey")
+                .field("public_key", &self.key_pair.public)
+                .field("private_key", &"***REDACTED***")
+                .finish()
+        }
+    }
+
+    impl TryFrom<&[u8]> for DefaultPrivateKey {
+        type Error = anyhow::Error;
+
+        fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+            let key_pair = Keypair::from_bytes(value)?;
+            key_pair.secret.to_bytes();
+            Ok(Self { key_pair })
+        }
+    }
+
+    impl PrivateKey for DefaultPrivateKey {
+        type PublicKey = DefaultPublicKey;
+
+        type Signature = DefaultSignature;
+
+        fn generate() -> Self {
             let mut csprng = OsRng;
 
             Self {
@@ -39,18 +67,20 @@ pub mod private_key {
             }
         }
 
-        pub fn sign(&self, msg: [u8; 32]) -> DefaultSignature {
-            DefaultSignature {
-                msg_sig: self.key_pair.sign(&msg),
-            }
-        }
-
-        pub fn pub_key(&self) -> DefaultPublicKey {
+        fn pub_key(&self) -> Self::PublicKey {
             DefaultPublicKey {
                 pub_key: self.key_pair.public,
             }
         }
 
+        fn sign(&self, msg: &[u8]) -> Self::Signature {
+            DefaultSignature {
+                msg_sig: self.key_pair.sign(msg),
+            }
+        }
+    }
+
+    impl DefaultPrivateKey {
         pub fn as_hex(&self) -> String {
             hex::encode(self.key_pair.to_bytes())
         }
@@ -171,14 +201,10 @@ impl BorshSerialize for DefaultSignature {
 impl Signature for DefaultSignature {
     type PublicKey = DefaultPublicKey;
 
-    fn verify(
-        &self,
-        pub_key: &Self::PublicKey,
-        msg_hash: [u8; 32],
-    ) -> Result<(), SigVerificationError> {
+    fn verify(&self, pub_key: &Self::PublicKey, msg: &[u8]) -> Result<(), SigVerificationError> {
         pub_key
             .pub_key
-            .verify_strict(&msg_hash, &self.msg_sig)
+            .verify_strict(msg, &self.msg_sig)
             .map_err(|e| SigVerificationError::BadSignature(e.to_string()))
     }
 }
@@ -190,4 +216,28 @@ fn map_error(e: ed25519_dalek::SignatureError) -> std::io::Error {
 #[cfg(not(feature = "native"))]
 fn map_error(_e: ed25519_dalek::SignatureError) -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::Other, "Signature error")
+}
+
+#[cfg(feature = "native")]
+impl FromStr for DefaultPublicKey {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let bytes = hex::decode(s)?;
+        let pub_key = DalekPublicKey::from_bytes(&bytes)
+            .map_err(|_| anyhow::anyhow!("Invalid public key"))?;
+        Ok(DefaultPublicKey { pub_key })
+    }
+}
+
+#[cfg(feature = "native")]
+impl FromStr for DefaultSignature {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let bytes = hex::decode(s)?;
+        let msg_sig =
+            DalekSignature::from_bytes(&bytes).map_err(|_| anyhow::anyhow!("Invalid signature"))?;
+        Ok(DefaultSignature { msg_sig })
+    }
 }

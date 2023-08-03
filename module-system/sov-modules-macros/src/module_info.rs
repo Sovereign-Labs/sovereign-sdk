@@ -95,6 +95,7 @@ impl<'a> StructDef<'a> {
 
         let mut impl_self_init = Vec::default();
         let mut impl_self_body = Vec::default();
+        let mut modules = Vec::default();
 
         let mut module_address = None;
         for field in fields.iter() {
@@ -106,6 +107,7 @@ impl<'a> StructDef<'a> {
                 FieldKind::Module(field) => {
                     impl_self_init.push(make_init_module(field)?);
                     impl_self_body.push(&field.ident);
+                    modules.push(&field.ident);
                 }
                 FieldKind::Address(field) => {
                     impl_self_init.push(make_init_address(
@@ -127,6 +129,7 @@ impl<'a> StructDef<'a> {
         let where_clause = self.where_clause;
 
         let fn_address = make_fn_address(module_address)?;
+        let fn_dependencies = make_fn_dependencies(modules);
 
         Ok(quote::quote! {
             use ::sov_modules_api::AddressTrait;
@@ -145,6 +148,8 @@ impl<'a> StructDef<'a> {
                 type Context = #generic_param;
 
                 #fn_address
+
+                #fn_dependencies
             }
         })
     }
@@ -238,7 +243,7 @@ fn make_fn_address(
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     match address_ident {
         Some(address_ident) => Ok(quote::quote! {
-            fn address(&self) -> &<Self::Context as sov_modules_api::Spec>::Address{
+            fn address(&self) -> &<Self::Context as sov_modules_api::Spec>::Address {
                &self.#address_ident
             }
         }),
@@ -249,6 +254,19 @@ fn make_fn_address(
     }
 }
 
+fn make_fn_dependencies(modules: Vec<&proc_macro2::Ident>) -> proc_macro2::TokenStream {
+    let address_tokens = modules.iter().map(|ident| {
+        quote::quote! {
+            &self.#ident.address()
+        }
+    });
+
+    quote::quote! {
+        fn dependencies(&self) -> ::std::vec::Vec<&<Self::Context as sov_modules_api::Spec>::Address> {
+            ::std::vec![#(#address_tokens),*]
+        }
+    }
+}
 fn make_init_state(field: &StructNamedField) -> Result<proc_macro2::TokenStream, syn::Error> {
     let prefix_fun = prefix_func_ident(&field.ident);
     let field_ident = &field.ident;
@@ -310,7 +328,7 @@ fn make_init_address(
             ),
         )),
         None => Ok(quote::quote! {
-            use sov_modules_api::Hasher;
+            use ::sov_modules_api::digest::Digest;
             let module_path = module_path!();
             let prefix = sov_modules_api::Prefix::new_module(module_path, stringify!(#struct_ident));
             let #field_ident : <#generic_param as sov_modules_api::Spec>::Address =

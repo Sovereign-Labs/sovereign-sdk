@@ -1,5 +1,7 @@
+use jsonrpsee::core::RpcResult;
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Hasher, Module, Spec};
+use sov_modules_api::digest::Digest;
+use sov_modules_api::{Address, Module, Spec};
 use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
 use sov_state::WorkingSet;
 
@@ -38,7 +40,7 @@ impl TestSequencer {
     pub fn query_balance_via_bank(
         &mut self,
         working_set: &mut WorkingSet<<C as Spec>::Storage>,
-    ) -> sov_bank::BalanceResponse {
+    ) -> RpcResult<sov_bank::BalanceResponse> {
         self.bank.balance_of(
             self.sequencer_config.seq_rollup_address.clone(),
             self.sequencer_config.coins_to_lock.token_address.clone(),
@@ -51,7 +53,7 @@ impl TestSequencer {
         &mut self,
         user_address: <DefaultContext as Spec>::Address,
         working_set: &mut WorkingSet<<C as Spec>::Storage>,
-    ) -> sov_bank::BalanceResponse {
+    ) -> RpcResult<sov_bank::BalanceResponse> {
         self.bank.balance_of(
             user_address,
             self.sequencer_config.coins_to_lock.token_address.clone(),
@@ -119,6 +121,6 @@ pub fn create_test_sequencer() -> TestSequencer {
 }
 
 pub fn generate_address(key: &str) -> <C as Spec>::Address {
-    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
+    let hash: [u8; 32] = <C as Spec>::Hasher::digest(key.as_bytes()).into();
     Address::from(hash)
 }

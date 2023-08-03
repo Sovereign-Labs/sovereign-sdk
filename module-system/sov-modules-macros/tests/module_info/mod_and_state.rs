@@ -69,4 +69,6 @@ fn main() {
         )
         .into()
     );
+
+    assert_eq!(second_test_struct.dependencies(), [second_test_struct.module_in_second_struct_1.address()]);
 }

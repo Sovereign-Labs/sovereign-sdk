@@ -4,6 +4,7 @@ use std::fs::read_to_string;
 use std::path::PathBuf;
 use tempfile::TempDir;
 use std::time::Instant;
+use sov_modules_api::PrivateKey;
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
@@ -114,10 +115,11 @@ async fn main() -> Result<(), anyhow::Error> {
     );
     println!("Starting from empty storage, initialization chain");
     demo.init_chain(genesis_config);
-    demo.begin_slot(Default::default());
 
-    let (prev_state_root, _) = demo.end_slot();
-    let mut prev_state_root = prev_state_root.0;
+    let mut prev_state_root = {
+        let res = demo.apply_slot(Default::default(), []);
+        res.state_root.0
+    };
 
     let hex_data = read_to_string("benches/blocks.hex").expect("Failed to read data");
     let borshed_blocks: Vec<FilteredCelestiaBlock> = hex_data
@@ -140,42 +142,25 @@ async fn main() -> Result<(), anyhow::Error> {
         let filtered_block = &borshed_blocks[height as usize];
         let header_hash = hex::encode(filtered_block.header.header.hash());
         host.write_to_guest(&filtered_block.header);
-        let (blob_txs, inclusion_proof, completeness_proof) =
+        let (mut blob_txs, inclusion_proof, completeness_proof) =
             da_service.extract_relevant_txs_with_proof(&filtered_block).await;
 
         host.write_to_guest(&inclusion_proof);
         host.write_to_guest(&completeness_proof);
-        demo.begin_slot(Default::default());
-        if blob_txs.is_empty() {
-            println!(
-                "Block at height {} with header 0x{} has no batches, skip proving",
-                height, header_hash
-            );
-            continue;
-        }
-        num_blocks_with_txns+=1;
-        println!("Block has {} batches", blob_txs.len());
-        for mut blob in blob_txs.clone() {
-            num_blobs+=1;
-            let receipt = demo.apply_blob(&mut blob, None);
-            num_total_transactions += receipt.tx_receipts.len();
-            println!(
-                "batch with hash=0x{} has been applied",
-                hex::encode(receipt.batch_hash)
-            );
-        }
-        // Write txs only after they been read, so verification can be done properly
         host.write_to_guest(&blob_txs);
 
-        let (next_state_root, witness) = demo.end_slot();
-        host.write_to_guest(&witness);
-        println!("Started proving block {height}");
-        let now = Instant::now();
-        println!("Skipping prover to capture cycle counts\n");
+        if !blob_txs.is_empty() {
+            num_blobs+=blob_txs.len();
+        }
+        let result = demo.apply_slot(Default::default(), &mut blob_txs);
+        println!("{:?}",result.batch_receipts);
+
+        host.write_to_guest(&result.witness);
+
+        println!("Skipping prover at block {height} to capture cycle counts\n");
         let _receipt = host.run_without_proving().expect("Prover should run successfully");
-        println!("prover time: {:?}\n\n",now.elapsed());
         println!("==================================================\n");
-        prev_state_root = next_state_root.0;
+        prev_state_root = result.state_root.0;
 
     }
 

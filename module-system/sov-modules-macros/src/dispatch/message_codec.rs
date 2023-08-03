@@ -24,7 +24,7 @@ impl<'a> StructDef<'a> {
             quote::quote! {
                 #[doc = #call_doc]
                 pub fn #fn_call_name(data: <#ty as sov_modules_api::Module>::CallMessage) -> std::vec::Vec<u8> {
-                    let call = #call_enum::<C>::#variant(data);
+                    let call = #call_enum:: #ty_generics ::#variant(data);
                     ::borsh::BorshSerialize::try_to_vec(&call).unwrap()
                 }
             }

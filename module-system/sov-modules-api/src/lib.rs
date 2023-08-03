@@ -10,13 +10,18 @@ pub mod hooks;
 mod prefix;
 mod response;
 mod serde_address;
+pub mod test_utils;
 #[cfg(test)]
 mod tests;
 pub mod transaction;
+#[cfg(feature = "native")]
+pub mod utils;
 
 #[cfg(feature = "macros")]
 extern crate sov_modules_macros;
 
+use digest::typenum::U32;
+use digest::Digest;
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::{
     DispatchCall, Genesis, MessageCodec, ModuleCallJsonSchema, ModuleInfo,
@@ -25,19 +30,24 @@ pub use sov_modules_macros::{
 /// Procedural macros to assist with creating new modules.
 #[cfg(feature = "macros")]
 pub mod macros {
-    pub use sov_modules_macros::{cli_parser, expose_rpc, rpc_gen, DefaultRuntime, MessageCodec};
+    pub use sov_modules_macros::DefaultRuntime;
+    #[cfg(feature = "native")]
+    pub use sov_modules_macros::{expose_rpc, rpc_gen, CliWallet, CliWalletArg};
 }
 
 use core::fmt::{self, Debug, Display};
+use std::collections::{HashMap, HashSet};
+use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(feature = "native")]
+pub use clap;
 pub use dispatch::{DispatchCall, Genesis};
 pub use error::Error;
 pub use prefix::Prefix;
 pub use response::CallResponse;
 use serde::{Deserialize, Serialize};
-pub use sov_rollup_interface::crypto::SimpleHasher as Hasher;
-pub use sov_rollup_interface::AddressTrait;
+pub use sov_rollup_interface::{digest, AddressTrait};
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
 
@@ -52,7 +62,7 @@ impl AsRef<[u8]> for Address {
 impl AddressTrait for Address {}
 
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
-#[derive(PartialEq, Clone, Eq, borsh::BorshDeserialize, borsh::BorshSerialize)]
+#[derive(PartialEq, Clone, Eq, borsh::BorshDeserialize, borsh::BorshSerialize, Hash)]
 pub struct Address {
     addr: [u8; 32],
 }
@@ -67,6 +77,16 @@ impl<'a> TryFrom<&'a [u8]> for Address {
         let mut addr_bytes = [0u8; 32];
         addr_bytes.copy_from_slice(addr);
         Ok(Self { addr: addr_bytes })
+    }
+}
+
+impl FromStr for Address {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        AddressBech32::from_str(s)
+            .map_err(|e| anyhow::anyhow!(e))
+            .map(|addr_bech32| addr_bech32.into())
     }
 }
 
@@ -106,11 +126,7 @@ pub enum SigVerificationError {
 pub trait Signature {
     type PublicKey;
 
-    fn verify(
-        &self,
-        pub_key: &Self::PublicKey,
-        msg_hash: [u8; 32],
-    ) -> Result<(), SigVerificationError>;
+    fn verify(&self, pub_key: &Self::PublicKey, msg: &[u8]) -> Result<(), SigVerificationError>;
 }
 
 /// A type that can't be instantiated.
@@ -120,6 +136,19 @@ pub enum NonInstantiable {}
 /// PublicKey used in the Module System.
 pub trait PublicKey {
     fn to_address<A: AddressTrait>(&self) -> A;
+}
+
+/// A PrivateKey used in the Module System.
+#[cfg(feature = "native")]
+pub trait PrivateKey {
+    type PublicKey: PublicKey;
+    type Signature: Signature<PublicKey = Self::PublicKey>;
+    fn generate() -> Self;
+    fn pub_key(&self) -> Self::PublicKey;
+    fn sign(&self, msg: &[u8]) -> Self::Signature;
+    fn to_address<A: AddressTrait>(&self) -> A {
+        self.pub_key().to_address::<A>()
+    }
 }
 
 /// The `Spec` trait configures certain key primitives to be used by a by a particular instance of a rollup.
@@ -137,11 +166,13 @@ pub trait Spec {
     type Address: AddressTrait
         + BorshSerialize
         + BorshDeserialize
+        + Sync
         // Do we always need this, even when the module does not have a JSON
         // Schema? That feels a bit wrong.
         + ::schemars::JsonSchema
         + Into<AddressBech32>
-        + From<AddressBech32>;
+        + From<AddressBech32>
+        + FromStr<Err = anyhow::Error>;
 
     /// The Address type used on the rollup. Typically calculated as the hash of a public key.
     #[cfg(not(feature = "native"))]
@@ -162,7 +193,16 @@ pub trait Spec {
         + for<'a> Deserialize<'a>
         + ::schemars::JsonSchema
         + Send
-        + Sync;
+        + Sync
+        + FromStr<Err = anyhow::Error>;
+
+    /// The public key used for digital signatures
+    #[cfg(feature = "native")]
+    type PrivateKey: Debug
+        + Send
+        + Sync
+        + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+        + PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
 
     #[cfg(not(feature = "native"))]
     type PublicKey: borsh::BorshDeserialize
@@ -175,7 +215,7 @@ pub trait Spec {
         + PublicKey;
 
     /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
-    type Hasher: Hasher;
+    type Hasher: Digest<OutputSize = U32>;
 
     /// The digital signature scheme used by the rollup
     #[cfg(feature = "native")]
@@ -185,15 +225,21 @@ pub trait Spec {
         + Eq
         + Clone
         + Debug
+        + Send
+        + Sync
+        + FromStr<Err = anyhow::Error>
         + Signature<PublicKey = Self::PublicKey>;
 
+    /// The digital signature scheme used by the rollup
     #[cfg(not(feature = "native"))]
     type Signature: borsh::BorshDeserialize
         + borsh::BorshSerialize
         + Eq
         + Clone
         + Debug
-        + Signature<PublicKey = Self::PublicKey>;
+        + Signature<PublicKey = Self::PublicKey>
+        + Send
+        + Sync;
 
     /// A structure containing the non-deterministic inputs from the prover to the zk-circuit
     type Witness: Witness;
@@ -206,7 +252,7 @@ pub trait Spec {
 /// Context objects also implement the [`Spec`] trait, which specifies the types to be used in this
 /// instance of the state transition function. By making modules generic over a `Context`, developers
 /// can easily update their cryptography to conform to the needs of different zk-proof systems.
-pub trait Context: Spec + Clone + Debug + PartialEq {
+pub trait Context: Spec + Clone + Debug + PartialEq + 'static {
     /// Sender of the transaction.
     fn sender(&self) -> &Self::Address;
 
@@ -277,11 +323,14 @@ pub trait ModuleCallJsonSchema: Module {
 }
 
 /// Every module has to implement this trait.
-pub trait ModuleInfo: Default {
+pub trait ModuleInfo {
     type Context: Context;
 
     /// Returns address of the module.
     fn address(&self) -> &<Self::Context as Spec>::Address;
+
+    /// Returns addresses of all the other modules this module is dependent on
+    fn dependencies(&self) -> Vec<&<Self::Context as Spec>::Address>;
 }
 
 /// A StateTransitionRunner needs to implement this if
@@ -289,4 +338,130 @@ pub trait ModuleInfo: Default {
 pub trait RpcRunner {
     type Context: Context;
     fn get_storage(&self) -> <Self::Context as Spec>::Storage;
+}
+
+struct ModuleVisitor<'a, C: Context> {
+    visited: HashSet<&'a <C as Spec>::Address>,
+    visited_on_this_path: Vec<&'a <C as Spec>::Address>,
+    sorted_modules: std::vec::Vec<&'a dyn ModuleInfo<Context = C>>,
+}
+
+impl<'a, C: Context> ModuleVisitor<'a, C> {
+    pub fn new() -> Self {
+        Self {
+            visited: HashSet::new(),
+            sorted_modules: Vec::new(),
+            visited_on_this_path: Vec::new(),
+        }
+    }
+
+    /// Visits all the modules and their dependencies, and populates a Vec of modules sorted by their dependencies
+    fn visit_modules(
+        &mut self,
+        modules: Vec<&'a dyn ModuleInfo<Context = C>>,
+    ) -> Result<(), anyhow::Error> {
+        let mut module_map = HashMap::new();
+
+        for module in &modules {
+            module_map.insert(module.address(), *module);
+        }
+
+        for module in modules {
+            self.visited_on_this_path.clear();
+            self.visit_module(module, &module_map)?;
+        }
+
+        Ok(())
+    }
+
+    /// Visits a module and its dependencies, and populates a Vec of modules sorted by their dependencies
+    fn visit_module(
+        &mut self,
+        module: &'a dyn ModuleInfo<Context = C>,
+        module_map: &HashMap<&<C as Spec>::Address, &'a (dyn ModuleInfo<Context = C>)>,
+    ) -> Result<(), anyhow::Error> {
+        let address = module.address();
+
+        // if the module have been visited on this path, then we have a cycle dependency
+        if let Some((index, _)) = self
+            .visited_on_this_path
+            .iter()
+            .enumerate()
+            .find(|(_, &x)| x == address)
+        {
+            let cycle = &self.visited_on_this_path[index..];
+
+            anyhow::bail!(
+                "Cyclic dependency of length {} detected: {:?}",
+                cycle.len(),
+                cycle
+            );
+        } else {
+            self.visited_on_this_path.push(address)
+        }
+
+        // if the module hasn't been visited yet, visit it and its dependencies
+        if self.visited.insert(address) {
+            for dependency_address in module.dependencies() {
+                let dependency_module = *module_map.get(dependency_address).ok_or_else(|| {
+                    anyhow::Error::msg(format!("Module not found: {:?}", dependency_address))
+                })?;
+                self.visit_module(dependency_module, module_map)?;
+            }
+
+            self.sorted_modules.push(module);
+        }
+
+        // remove the module from the visited_on_this_path list
+        self.visited_on_this_path.pop();
+
+        Ok(())
+    }
+}
+
+/// Sorts ModuleInfo objects by their dependencies
+pub fn sort_modules_by_dependencies<C: Context>(
+    modules: Vec<&dyn ModuleInfo<Context = C>>,
+) -> Result<Vec<&dyn ModuleInfo<Context = C>>, anyhow::Error> {
+    let mut module_visitor = ModuleVisitor::<C>::new();
+    module_visitor.visit_modules(modules)?;
+    Ok(module_visitor.sorted_modules)
+}
+
+/// Accepts Vec<> of tuples (&ModuleInfo, &TValue), and returns Vec<&TValue> sorted by mapped module dependencies
+pub fn sort_values_by_modules_dependencies<C: Context, TValue>(
+    module_value_tuples: Vec<(&dyn ModuleInfo<Context = C>, TValue)>,
+) -> Result<Vec<TValue>, anyhow::Error>
+where
+    TValue: Clone,
+{
+    let sorted_modules = sort_modules_by_dependencies(
+        module_value_tuples
+            .iter()
+            .map(|(module, _)| *module)
+            .collect(),
+    )?;
+
+    let mut value_map = HashMap::new();
+
+    for module in module_value_tuples {
+        value_map.insert(module.0.address(), module.1);
+    }
+
+    let mut sorted_values = Vec::new();
+    for module in sorted_modules {
+        sorted_values.push(value_map.get(module.address()).unwrap().clone());
+    }
+
+    Ok(sorted_values)
+}
+
+/// This trait is implemented by types that can be used as arguments in the sov-cli wallet.
+/// The recommended way to implement this trait is using the provided derive macro (`#[derive(CliWalletArg)]`).
+/// Currently, this trait is a thin wrapper around [`clap::Parser`]
+#[cfg(feature = "native")]
+pub trait CliWalletArg: From<Self::CliStringRepr> {
+    /// The type that is used to represent this type in the CLI. Typically,
+    /// this type implements the clap::Subcommand trait.
+    type CliStringRepr;
 }

@@ -2,9 +2,9 @@
 use crate::default_context::DefaultContext;
 #[cfg(feature = "native")]
 use crate::default_signature::private_key::DefaultPrivateKey;
+use crate::{Context, Signature};
 #[cfg(feature = "native")]
-use crate::Spec;
-use crate::{Context, Hasher, Signature};
+use crate::{PrivateKey, Spec};
 
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use zk_cycle_utils::cycle_tracker;
@@ -38,12 +38,11 @@ impl<C: Context> Transaction<C> {
     /// Check whether the transaction has been signed correctly.
     #[cfg_attr(all(target_os="zkvm", feature="bench"), cycle_tracker)]
     pub fn verify(&self) -> anyhow::Result<()> {
-        // We check signature against runtime_msg and nonce.
-        let mut hasher = C::Hasher::new();
-        hasher.update(self.runtime_msg());
-        hasher.update(&self.nonce().to_le_bytes());
-        let msg_hash = hasher.finalize();
-        self.signature().verify(self.pub_key(), msg_hash)?;
+        let mut serialized_tx =
+            Vec::with_capacity(self.runtime_msg().len() + std::mem::size_of::<u64>());
+        serialized_tx.extend_from_slice(self.runtime_msg());
+        serialized_tx.extend_from_slice(&self.nonce().to_le_bytes());
+        self.signature().verify(&self.pub_key, &serialized_tx)?;
 
         Ok(())
     }
@@ -52,14 +51,17 @@ impl<C: Context> Transaction<C> {
 #[cfg(feature = "native")]
 impl Transaction<DefaultContext> {
     /// New signed transaction.
-    pub fn new_signed_tx(priv_key: &DefaultPrivateKey, message: Vec<u8>, nonce: u64) -> Self {
-        let mut hasher = <DefaultContext as Spec>::Hasher::new();
-        hasher.update(&message);
-        hasher.update(&nonce.to_le_bytes());
-        let msg_hash = hasher.finalize();
+    pub fn new_signed_tx(priv_key: &DefaultPrivateKey, mut message: Vec<u8>, nonce: u64) -> Self {
+        // Since we own the message already, try to add the serialized nonce in-place.
+        // This lets us avoid a copy if the message vec has at least 8 bytes of extra capacity.
+        let orignal_length = message.len();
+        message.extend_from_slice(&nonce.to_le_bytes());
 
         let pub_key = priv_key.pub_key();
-        let signature = priv_key.sign(msg_hash);
+        let signature = priv_key.sign(&message);
+
+        // Don't forget to truncate the message back to its original length!
+        message.truncate(orignal_length);
 
         Self {
             signature,

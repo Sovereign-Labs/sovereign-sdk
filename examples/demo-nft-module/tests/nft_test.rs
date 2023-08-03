@@ -2,16 +2,15 @@ use demo_nft_module::call::CallMessage;
 use demo_nft_module::query::OwnerResponse;
 use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Hasher, Module, Spec};
+use sov_modules_api::test_utils::generate_address as gen_addr_generic;
+use sov_modules_api::{Address, Context, Module};
 use sov_rollup_interface::stf::Event;
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 pub type C = DefaultContext;
 pub type Storage = ProverStorage<DefaultStorageSpec>;
-
-pub fn generate_address(key: &str) -> <C as Spec>::Address {
-    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
-    Address::from(hash)
+fn generate_address(name: &str) -> Address {
+    gen_addr_generic::<DefaultContext>(name)
 }
 
 #[test]

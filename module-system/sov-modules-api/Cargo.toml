@@ -12,6 +12,7 @@ readme = "README.md"
 resolver = "2"
 
 [dependencies]
+jsonrpsee = { workspace = true, optional = true } 
 anyhow = { workspace = true }
 sov-state = { path = "../sov-state", version = "0.1", default-features = false }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
@@ -23,11 +24,13 @@ sha2 = { workspace = true }
 bech32 = { workspace = true }
 derive_more = { workspace = true }
 serde_json = { workspace = true }
+hex = { workspace = true, optional = true }
+clap = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true, features = [] }
 
 ed25519-dalek = { version = "1.0.1", default-features = false, features = ["alloc", "u64_backend"] }
 rand = { version = "0.7", optional = true }
-hex = { workspace = true, optional = true }
+
 zk-cycle-utils = {path = "../../zk-cycle-utils", optional=true }
 risc0-zkvm = { version = "0.16", default-features = false, features = ["std"],optional=true }
 risc0-zkvm-platform = { version = "0.16",optional=true}
@@ -38,5 +41,5 @@ serde_json = { workspace = true }
 [features]
 bench = ["zk-cycle-utils","risc0-zkvm","risc0-zkvm-platform"]
 default = ["native", "macros"]
-native = ["sov-state/native", "rand", "hex", "schemars", "ed25519-dalek/default"]
+native = ["sov-state/native", "rand", "hex", "schemars", "ed25519-dalek/default", "clap", "jsonrpsee"]
 macros = ["sov-modules-macros"]

@@ -379,16 +379,13 @@ use demo_nft_module::OwnerResponse;
 use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
 use serde::de::DeserializeOwned;
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Hasher, Module, ModuleInfo, Spec};
+use sov_modules_api::{Address, Context, Hasher, Module, ModuleInfo, Spec, test_utils::generate_address};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 pub type C = DefaultContext;
 pub type Storage = ProverStorage<DefaultStorageSpec>;
 
-pub fn generate_address(key: &str) -> <C as Spec>::Address {
-    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
-    Address::from(hash)
-}
+
 #[test]
 #[ignore = "Not implemented yet"]
 fn genesis_and_mint() {}
@@ -408,11 +405,11 @@ Here's an example of setting up a module and calling its methods:
 #[test]
 fn transfer() {
     // Preparation
-    let admin = generate_address("admin");
+    let admin = generate_address::<C>("admin");
     let admin_context = C::new(admin.clone());
-    let owner1 = generate_address("owner2");
+    let owner1 = generate_address::<C>("owner2");
     let owner1_context = C::new(owner1.clone());
-    let owner2 = generate_address("owner2");
+    let owner2 = generate_address::<C>("owner2");
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
         admin: admin.clone(),
         owners: vec![(0, admin.clone()), (1, owner1.clone()), (2, owner2.clone())],

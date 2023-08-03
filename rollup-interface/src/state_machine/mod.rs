@@ -26,5 +26,7 @@ pub trait AddressTrait:
     + Send
     + Sync
     + core::fmt::Display
+    + std::hash::Hash
+    + 'static
 {
 }

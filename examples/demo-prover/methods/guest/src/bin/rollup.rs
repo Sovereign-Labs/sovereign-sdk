@@ -38,13 +38,13 @@ pub fn main() {
     env::write(&"Prev root hash read\n");
     // Step 1: read tx list
     let header: CelestiaHeader = guest.read_from_host();
-    env::write(&"header read\n");
+    env::write(&"header has been read\n");
     let inclusion_proof: <CelestiaSpec as DaSpec>::InclusionMultiProof = guest.read_from_host();
-    env::write(&"inclusion proof read\n");
+    env::write(&"inclusion proof has been read\n");
     let completeness_proof: <CelestiaSpec as DaSpec>::CompletenessProof = guest.read_from_host();
-    env::write(&"completeness proof read\n");
+    env::write(&"completeness proof has been read\n");
     let mut blobs: Vec<BlobWithSender> = guest.read_from_host();
-    env::write(&"txs read\n");
+    env::write(&"blobs have been read\n");
 
     // Step 2: Apply blobs
     let mut demo_runner = <ZkAppRunner<Risc0Guest, BlobWithSender> as StateTransitionRunner<
@@ -55,32 +55,27 @@ pub fn main() {
     let demo = demo_runner.inner_mut();
 
     let witness: ArrayWitness = guest.read_from_host();
-    env::write(&"Witness read\n");
-
+    env::write(&"Witness have been read\n");
     let start_cycles = env::get_cycle_count();
 
-    demo.begin_slot(witness);
-    env::write(&"Slot has begun\n");
-    for blob in &mut blobs {
-        demo.apply_blob(blob, None);
-        env::write(&"Blob applied\n");
-    }
-    let (state_root, _) = demo.end_slot();
+    env::write(&"Applying slot...\n");
+    let result = demo.apply_slot(witness, &mut blobs);
 
-    env::write(&"Slot has ended\n");
+    env::write(&"Slot has been applied\n");
 
 
     // Step 3: Verify tx list
     let verifier = CelestiaVerifier::new(jupiter::verifier::RollupParams {
         namespace: ROLLUP_NAMESPACE,
     });
+
     let validity_condition = verifier
         .verify_relevant_tx_list::<NoOpHasher>(&header, &blobs, inclusion_proof, completeness_proof)
         .expect("Transaction list must be correct");
     env::write(&"Relevant txs verified\n");
     let output = StateTransition {
         initial_state_root: prev_state_root_hash,
-        final_state_root: state_root.0,
+        final_state_root: result.state_root.0,
         validity_condition,
     };
     env::commit(&output);

@@ -1,16 +1,17 @@
+use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
 use sov_state::WorkingSet;
 
 use super::types::Candidate;
 use super::Election;
 
-#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
 pub enum GetResultResponse {
     Result(Option<Candidate>),
     Err(String),
 }
 
-#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
 pub enum GetNbOfVotesResponse {
     Result(u64),
 }
@@ -18,7 +19,10 @@ pub enum GetNbOfVotesResponse {
 #[rpc_gen(client, server, namespace = "election")]
 impl<C: sov_modules_api::Context> Election<C> {
     #[rpc_method(name = "results")]
-    pub fn results(&self, working_set: &mut WorkingSet<C::Storage>) -> GetResultResponse {
+    pub fn results(
+        &self,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> RpcResult<GetResultResponse> {
         let is_frozen = self.is_frozen.get(working_set).unwrap_or_default();
 
         if is_frozen {
@@ -29,9 +33,9 @@ impl<C: sov_modules_api::Context> Election<C> {
                 .into_iter()
                 .max_by(|c1, c2| c1.count.cmp(&c2.count));
 
-            GetResultResponse::Result(candidate)
+            Ok(GetResultResponse::Result(candidate))
         } else {
-            GetResultResponse::Err("Election is not frozen".to_owned())
+            Ok(GetResultResponse::Err("Election is not frozen".to_owned()))
         }
     }
 
@@ -39,8 +43,8 @@ impl<C: sov_modules_api::Context> Election<C> {
     pub fn number_of_votes(
         &self,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> GetNbOfVotesResponse {
+    ) -> RpcResult<GetNbOfVotesResponse> {
         let number_of_votes = self.number_of_votes.get(working_set).unwrap_or_default();
-        GetNbOfVotesResponse::Result(number_of_votes)
+        Ok(GetNbOfVotesResponse::Result(number_of_votes))
     }
 }

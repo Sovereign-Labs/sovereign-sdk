@@ -87,14 +87,9 @@
           "minimum": 0.0
         },
         "gas_price": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "uint8",
-            "minimum": 0.0
-          },
-          "maxItems": 32,
-          "minItems": 32
+          "type": "integer",
+          "format": "uint128",
+          "minimum": 0.0
         },
         "hash": {
           "type": "array",
@@ -107,24 +102,14 @@
           "minItems": 32
         },
         "max_fee_per_gas": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "uint8",
-            "minimum": 0.0
-          },
-          "maxItems": 32,
-          "minItems": 32
+          "type": "integer",
+          "format": "uint128",
+          "minimum": 0.0
         },
         "max_priority_fee_per_gas": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "uint8",
-            "minimum": 0.0
-          },
-          "maxItems": 32,
-          "minItems": 32
+          "type": "integer",
+          "format": "uint128",
+          "minimum": 0.0
         },
         "nonce": {
           "type": "integer",
@@ -178,14 +163,9 @@
           "minItems": 20
         },
         "value": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "uint8",
-            "minimum": 0.0
-          },
-          "maxItems": 32,
-          "minItems": 32
+          "type": "integer",
+          "format": "uint128",
+          "minimum": 0.0
         }
       }
     }

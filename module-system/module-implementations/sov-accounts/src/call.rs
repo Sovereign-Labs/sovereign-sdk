@@ -13,6 +13,7 @@ pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
     derive(serde::Serialize),
     derive(serde::Deserialize),
     derive(schemars::JsonSchema),
+    derive(sov_modules_api::macros::CliWalletArg),
     schemars(
         bound = "C::PublicKey: ::schemars::JsonSchema, C::Signature: ::schemars::JsonSchema",
         rename = "CallMessage"
@@ -22,7 +23,12 @@ pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 pub enum CallMessage<C: sov_modules_api::Context> {
     /// Updates a public key for the corresponding Account.
     /// The sender must be in possession of the new key.
-    UpdatePublicKey(C::PublicKey, C::Signature),
+    UpdatePublicKey(
+        /// The new public key
+        C::PublicKey,
+        /// A valid signature from the new public key
+        C::Signature,
+    ),
 }
 
 impl<C: sov_modules_api::Context> Accounts<C> {
@@ -45,7 +51,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         );
 
         // Proof that the sender is in possession of the `new_pub_key`.
-        signature.verify(&new_pub_key, UPDATE_ACCOUNT_MSG)?;
+        signature.verify(&new_pub_key, &UPDATE_ACCOUNT_MSG)?;
 
         // Update the public key (account data remains the same).
         self.accounts.set(&new_pub_key, &account, working_set);

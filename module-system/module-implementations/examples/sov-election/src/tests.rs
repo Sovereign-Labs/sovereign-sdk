@@ -1,6 +1,6 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::{Address, Context, Module, PublicKey};
+use sov_modules_api::{Address, Context, Module, PrivateKey, PublicKey};
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 
 use super::call::CallMessage;
@@ -97,7 +97,7 @@ fn test_module<C: Context>(admin: C::Address, working_set: &mut WorkingSet<C::St
 
     // Get result
     {
-        let query_response: GetResultResponse = election.results(working_set);
+        let query_response: GetResultResponse = election.results(working_set).unwrap();
 
         assert_eq!(
             query_response,

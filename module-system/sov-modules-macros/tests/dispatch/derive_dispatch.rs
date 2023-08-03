@@ -1,24 +1,30 @@
 mod modules;
+use modules::third_test_module::{self, ModuleThreeStorable};
 use modules::{first_test_module, second_test_module};
 use sov_modules_api::default_context::ZkDefaultContext;
-use sov_modules_api::macros::{DefaultRuntime, MessageCodec};
-use sov_modules_api::{Address, Context, DispatchCall, Genesis, ModuleInfo};
+use sov_modules_api::macros::DefaultRuntime;
+use sov_modules_api::{Address, Context, DispatchCall, Genesis, MessageCodec, ModuleInfo};
 use sov_state::ZkStorage;
 
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-struct Runtime<C: Context> {
+struct Runtime<C, T>
+where
+    C: Context,
+    T: ModuleThreeStorable,
+{
     pub first: first_test_module::FirstTestStruct<C>,
     pub second: second_test_module::SecondTestStruct<C>,
+    pub third: third_test_module::ThirdTestStruct<C, T>,
 }
 
 fn main() {
-    type RT = Runtime<ZkDefaultContext>;
+    type RT = Runtime<ZkDefaultContext, u32>;
     let runtime = &mut RT::default();
 
     let storage = ZkStorage::new([1u8; 32]);
     let mut working_set = &mut sov_state::WorkingSet::new(storage);
-    let config = GenesisConfig::new((), ());
+    let config = GenesisConfig::new((), (), ());
     runtime.genesis(&config, working_set).unwrap();
     let context = ZkDefaultContext::new(Address::try_from([0; 32].as_ref()).unwrap());
 

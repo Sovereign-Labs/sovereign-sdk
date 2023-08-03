@@ -1,4 +1,5 @@
 #![allow(missing_docs)]
+use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::AddressBech32;
 use sov_state::WorkingSet;
@@ -6,7 +7,7 @@ use sov_state::WorkingSet;
 use crate::{Account, Accounts};
 
 /// This is the response returned from the accounts_getAccount endpoint.
-#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
 pub enum Response {
     /// The account corresponding to the given public key exists.
     AccountExists {
@@ -26,13 +27,15 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         &self,
         pub_key: C::PublicKey,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Response {
-        match self.accounts.get(&pub_key, working_set) {
+    ) -> RpcResult<Response> {
+        let response = match self.accounts.get(&pub_key, working_set) {
             Some(Account { addr, nonce }) => Response::AccountExists {
                 addr: addr.into(),
                 nonce,
             },
             None => Response::AccountEmpty,
-        }
+        };
+
+        Ok(response)
     }
 }
