@@ -28,6 +28,7 @@ sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-featur
 sov-state = { path = "../sov-state", version = "0.1", default-features = false }
 sov-bank = { path = "../module-implementations/sov-bank", version = "0.1", features = ["native"] }
 serde = { workspace = true }
+clap = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
