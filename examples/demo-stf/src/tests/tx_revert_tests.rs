@@ -35,7 +35,7 @@ fn test_tx_revert() {
         &value_setter_admin_private_key,
         &election_admin_private_key,
     );
-    let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address.clone();
+    let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
 
     {
         let mut demo = create_new_demo(path);
@@ -285,7 +285,7 @@ fn test_tx_bad_serialization() {
         &value_setter_admin_private_key,
         &election_admin_private_key,
     );
-    let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address.clone();
+    let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
     let sequencer_balance_before = {
         let mut demo = create_new_demo(path);
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config).unwrap();
@@ -299,7 +299,7 @@ fn test_tx_bad_serialization() {
         demo.runtime
             .bank
             .get_balance_of(
-                sequencer_rollup_address.clone(),
+                sequencer_rollup_address,
                 coins.token_address,
                 &mut working_set,
             )

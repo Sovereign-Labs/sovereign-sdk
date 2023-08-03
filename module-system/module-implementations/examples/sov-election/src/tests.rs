@@ -17,7 +17,7 @@ fn test_election() {
     let native_storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut native_working_set = WorkingSet::new(native_storage);
 
-    test_module::<DefaultContext>(admin.clone(), &mut native_working_set);
+    test_module::<DefaultContext>(admin, &mut native_working_set);
 
     // Zk context
     {

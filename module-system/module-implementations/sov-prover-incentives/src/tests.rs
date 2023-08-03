@@ -20,8 +20,8 @@ fn create_bank_config() -> (sov_bank::BankConfig<C>, <C as Spec>::Address) {
 
     let token_config = sov_bank::TokenConfig {
         token_name: "InitialToken".to_owned(),
-        address_and_balances: vec![(prover_address.clone(), BOND_AMOUNT * 5)],
-        authorized_minters: vec![prover_address.clone()],
+        address_and_balances: vec![(prover_address, BOND_AMOUNT * 5)],
+        authorized_minters: vec![prover_address],
         salt: 2,
     };
 
@@ -53,7 +53,7 @@ fn setup(
         bonding_token_address: token_address,
         minimum_bond: BOND_AMOUNT,
         commitment_of_allowed_verifier_method: MockCodeCommitment([0u8; 32]),
-        initial_provers: vec![(prover_address.clone(), BOND_AMOUNT)],
+        initial_provers: vec![(prover_address, BOND_AMOUNT)],
     };
 
     module
@@ -71,7 +71,7 @@ fn test_burn_on_invalid_proof() {
     // Assert that the prover has the correct bond amount before processing the proof
     assert_eq!(
         module
-            .get_bond_amount(prover_address.clone(), &mut working_set)
+            .get_bond_amount(prover_address, &mut working_set)
             .value,
         BOND_AMOUNT
     );
@@ -79,7 +79,7 @@ fn test_burn_on_invalid_proof() {
     // Process an invalid proof
     {
         let context = DefaultContext {
-            sender: prover_address.clone(),
+            sender: prover_address,
         };
         let proof = MockProof {
             program_id: MOCK_CODE_COMMITMENT,
@@ -109,7 +109,7 @@ fn test_valid_proof() {
     // Assert that the prover has the correct bond amount before processing the proof
     assert_eq!(
         module
-            .get_bond_amount(prover_address.clone(), &mut working_set)
+            .get_bond_amount(prover_address, &mut working_set)
             .value,
         BOND_AMOUNT
     );
@@ -117,7 +117,7 @@ fn test_valid_proof() {
     // Process a valid proof
     {
         let context = DefaultContext {
-            sender: prover_address.clone(),
+            sender: prover_address,
         };
         let proof = MockProof {
             program_id: MOCK_CODE_COMMITMENT,
@@ -144,7 +144,7 @@ fn test_unbonding() {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let (module, prover_address) = setup(&mut working_set);
     let context = DefaultContext {
-        sender: prover_address.clone(),
+        sender: prover_address,
     };
     let token_address = module
         .bonding_token_address
@@ -154,7 +154,7 @@ fn test_unbonding() {
     // Assert that the prover has bonded tokens
     assert_eq!(
         module
-            .get_bond_amount(prover_address.clone(), &mut working_set)
+            .get_bond_amount(prover_address, &mut working_set)
             .value,
         BOND_AMOUNT
     );
@@ -164,8 +164,8 @@ fn test_unbonding() {
         module
             .bank
             .get_balance_of(
-                prover_address.clone(),
-                token_address.clone(),
+                prover_address,
+                token_address,
                 &mut working_set,
             )
             .unwrap_or_default()
@@ -179,7 +179,7 @@ fn test_unbonding() {
     // Assert that the prover no longer has bonded tokens
     assert_eq!(
         module
-            .get_bond_amount(prover_address.clone(), &mut working_set)
+            .get_bond_amount(prover_address, &mut working_set)
             .value,
         0
     );
@@ -201,7 +201,7 @@ fn test_prover_not_bonded() {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let (module, prover_address) = setup(&mut working_set);
     let context = DefaultContext {
-        sender: prover_address.clone(),
+        sender: prover_address,
     };
 
     // Unbond the prover

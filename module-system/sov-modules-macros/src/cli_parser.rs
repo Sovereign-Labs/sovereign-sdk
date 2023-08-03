@@ -67,7 +67,7 @@ impl CliParserMacro {
                     });
 
                     let field_name = field.ident.clone();
-                    let field_name_string = field_name.to_string();
+                    let _field_name_string = field_name.to_string();
 
                     let type_name_string = match &field.ty {
                         Type::Path(type_path) => extract_ident(type_path).to_string(),
@@ -109,7 +109,7 @@ impl CliParserMacro {
                                 let _data: <#module_path as ::sov_modules_api::Module>::CallMessage =
                                  ::serde_json::from_str::<<#module_path as ::sov_modules_api::Module>::CallMessage>(&call_data)?;
                                 <#ident:: #ty_generics as sov_data_generators::EncodeCall<#module_path>> ::encode_call(
-                                   _data 
+                                   _data
                                 )
                             }),
                         });

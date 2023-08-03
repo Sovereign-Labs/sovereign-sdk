@@ -49,7 +49,7 @@ fn test_update_account() {
 
     let sender = priv_key.pub_key();
     let sender_addr = sender.to_address::<<C as Spec>::Address>();
-    let sender_context = C::new(sender_addr.clone());
+    let sender_context = C::new(sender_addr);
 
     // Test new account creation
     {
@@ -142,7 +142,7 @@ fn test_get_account_after_pub_key_update() {
 
     let sender_1 = DefaultPrivateKey::generate().pub_key();
     let sender_1_addr = sender_1.to_address::<<C as Spec>::Address>();
-    let sender_context_1 = C::new(sender_1_addr.clone());
+    let sender_context_1 = C::new(sender_1_addr);
 
     accounts
         .create_default_account(sender_1, native_working_set)

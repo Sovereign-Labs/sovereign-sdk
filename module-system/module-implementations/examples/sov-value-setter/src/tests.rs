@@ -15,9 +15,9 @@ fn test_value_setter() {
     #[cfg(feature = "native")]
     {
         let config = ValueSetterConfig {
-            admin: admin.clone(),
+            admin: admin,
         };
-        let context = DefaultContext::new(admin.clone());
+        let context = DefaultContext::new(admin);
         test_value_setter_helper(context, &config, &mut working_set);
     }
 
@@ -26,7 +26,7 @@ fn test_value_setter() {
     // Test Zk-Context
     {
         let config = ValueSetterConfig {
-            admin: admin.clone(),
+            admin: admin,
         };
         let zk_context = ZkDefaultContext::new(admin);
         let mut zk_working_set = WorkingSet::with_witness(ZkStorage::new([0u8; 32]), witness);
@@ -78,9 +78,9 @@ fn test_err_on_sender_is_not_admin() {
     #[cfg(feature = "native")]
     {
         let config = ValueSetterConfig {
-            admin: sender_not_admin.clone(),
+            admin: sender_not_admin,
         };
-        let context = DefaultContext::new(sender.clone());
+        let context = DefaultContext::new(sender);
         test_err_on_sender_is_not_admin_helper(context, &config, &mut native_working_set);
     }
     let (_, witness) = native_working_set.checkpoint().freeze();

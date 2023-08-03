@@ -22,7 +22,7 @@ impl<C: Context> ValueSetterMessages<C> {
     pub fn new(messages: Vec<ValueSetterMessage>) -> Self {
         Self {
             messages,
-            phantom_context: PhantomData::default(),
+            phantom_context: PhantomData,
         }
     }
 }

@@ -16,7 +16,7 @@ fn freeze_token() {
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 
     let minter_address = generate_address("minter");
-    let minter_context = C::new(minter_address.clone());
+    let minter_context = C::new(minter_address);
 
     let salt = 0;
     let token_name = "Token1".to_owned();
@@ -29,8 +29,8 @@ fn freeze_token() {
         salt,
         token_name: token_name.clone(),
         initial_balance,
-        minter_address: minter_address.clone(),
-        authorized_minters: vec![minter_address.clone()],
+        minter_address: minter_address,
+        authorized_minters: vec![minter_address],
     };
     let _minted = bank
         .call(mint_message, &minter_context, &mut working_set)
@@ -41,7 +41,7 @@ fn freeze_token() {
     // -----
     // Freeze
     let freeze_message = CallMessage::Freeze {
-        token_address: token_address.clone(),
+        token_address: token_address,
     };
 
     let _freeze = bank
@@ -52,7 +52,7 @@ fn freeze_token() {
     // ----
     // Try to freeze an already frozen token
     let freeze_message = CallMessage::Freeze {
-        token_address: token_address.clone(),
+        token_address: token_address,
     };
 
     let freeze = bank.call(freeze_message, &minter_context, &mut working_set);
@@ -82,8 +82,8 @@ fn freeze_token() {
         salt,
         token_name: token_name_2.clone(),
         initial_balance,
-        minter_address: minter_address.clone(),
-        authorized_minters: vec![minter_address.clone()],
+        minter_address: minter_address,
+        authorized_minters: vec![minter_address],
     };
     let _minted = bank
         .call(mint_message, &minter_context, &mut working_set)
@@ -93,9 +93,9 @@ fn freeze_token() {
 
     // Try to freeze with a non authorized minter
     let unauthorized_address = generate_address("unauthorized_address");
-    let unauthorized_context = C::new(unauthorized_address.clone());
+    let unauthorized_context = C::new(unauthorized_address);
     let freeze_message = CallMessage::Freeze {
-        token_address: token_address_2.clone(),
+        token_address: token_address_2,
     };
 
     let freeze = bank.call(freeze_message, &unauthorized_context, &mut working_set);
@@ -126,9 +126,9 @@ fn freeze_token() {
     let mint_message = CallMessage::Mint {
         coins: Coins {
             amount: mint_amount,
-            token_address: token_address.clone(),
+            token_address: token_address,
         },
-        minter_address: new_holder.clone(),
+        minter_address: new_holder,
     };
 
     let query_total_supply = |token_address: Address,
@@ -164,9 +164,9 @@ fn freeze_token() {
     let mint_message = CallMessage::Mint {
         coins: Coins {
             amount: mint_amount,
-            token_address: token_address_2.clone(),
+            token_address: token_address_2,
         },
-        minter_address: minter_address.clone(),
+        minter_address: minter_address,
     };
 
     let _minted = bank
@@ -174,7 +174,7 @@ fn freeze_token() {
         .expect("Failed to mint token");
     assert!(working_set.events().is_empty());
 
-    let total_supply = query_total_supply(token_address_2.clone(), &mut working_set);
+    let total_supply = query_total_supply(token_address_2, &mut working_set);
     assert_eq!(Some(initial_balance + mint_amount), total_supply);
 
     let query_user_balance =

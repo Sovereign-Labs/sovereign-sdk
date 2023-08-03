@@ -36,7 +36,7 @@ fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
             to: address,
             coins: Coins {
                 amount: 1,
-                token_address: token_address.clone(),
+                token_address,
             },
         };
         let enc_msg =
@@ -63,7 +63,7 @@ fn generate_create(start_nonce: u64) -> Vec<u8> {
         salt: 11,
         token_name: "sov-test-token".to_string(),
         initial_balance: 100000000,
-        minter_address: minter_address.clone(),
+        minter_address,
         authorized_minters: vec![minter_address],
     };
     let enc_msg = <Runtime<DefaultContext> as EncodeCall<Bank<DefaultContext>>>::encode_call(msg);

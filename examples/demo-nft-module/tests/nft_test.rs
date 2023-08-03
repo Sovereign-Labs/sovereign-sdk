@@ -22,7 +22,7 @@ fn genesis_and_mint() {
     let owner2 = generate_address("owner2");
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
         admin,
-        owners: vec![(0, owner1.clone())],
+        owners: vec![(0, owner1)],
     };
 
     let tmpdir = tempfile::tempdir().unwrap();
@@ -41,7 +41,7 @@ fn genesis_and_mint() {
 
     // Mint, anybody can mint
     let mint_message = CallMessage::Mint { id: 1 };
-    let owner2_context = C::new(owner2.clone());
+    let owner2_context = C::new(owner2);
     nft.call(mint_message.clone(), &owner2_context, &mut working_set)
         .expect("Minting failed");
 
@@ -64,13 +64,13 @@ fn genesis_and_mint() {
 fn transfer() {
     // Preparation
     let admin = generate_address("admin");
-    let admin_context = C::new(admin.clone());
+    let admin_context = C::new(admin);
     let owner1 = generate_address("owner2");
-    let owner1_context = C::new(owner1.clone());
+    let owner1_context = C::new(owner1);
     let owner2 = generate_address("owner2");
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
-        admin: admin.clone(),
-        owners: vec![(0, admin.clone()), (1, owner1.clone()), (2, owner2.clone())],
+        admin: admin,
+        owners: vec![(0, admin), (1, owner1), (2, owner2)],
     };
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
@@ -79,7 +79,7 @@ fn transfer() {
 
     let transfer_message = CallMessage::Transfer {
         id: 1,
-        to: owner2.clone(),
+        to: owner2,
     };
 
     // admin cannot transfer token of the owner1
@@ -123,9 +123,9 @@ fn transfer() {
 fn burn() {
     // Preparation
     let admin = generate_address("admin");
-    let admin_context = C::new(admin.clone());
+    let admin_context = C::new(admin);
     let owner1 = generate_address("owner2");
-    let owner1_context = C::new(owner1.clone());
+    let owner1_context = C::new(owner1);
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
         admin,
         owners: vec![(0, owner1)],

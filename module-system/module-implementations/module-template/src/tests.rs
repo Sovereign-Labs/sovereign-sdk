@@ -15,7 +15,7 @@ fn test_value_setter() {
     #[cfg(feature = "native")]
     {
         let config = ExampleModuleConfig {};
-        let context = DefaultContext::new(admin.clone());
+        let context = DefaultContext::new(admin);
         test_value_setter_helper(context, &config, &mut working_set);
     }
 

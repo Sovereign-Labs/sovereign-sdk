@@ -1,16 +1,12 @@
-use std::rc::Rc;
-
-use sov_bank::{get_token_address, Bank, BankConfig, CallMessage, Coins, TotalSupplyResponse};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Address, Context, Hasher, PublicKey, Spec};
+use sov_modules_api::{Context, Hasher, PublicKey, Spec};
 use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
-use sov_modules_stf_template::{AppTemplate, SequencerOutcome};
+use sov_modules_stf_template::SequencerOutcome;
 use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::mocks::{MockZkvm, TestBlob, TestValidityCond};
-use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_rollup_interface::mocks::TestValidityCond;
+use sov_state::WorkingSet;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
 use crate::ChainState;
@@ -30,15 +26,15 @@ impl<C: Context> TxHooks for TestRuntime<C> {
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<<Self::Context as Spec>::Address> {
         Ok(tx.pub_key().to_address())
     }
 
     fn post_dispatch_tx_hook(
         &self,
-        tx: &Transaction<Self::Context>,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        _tx: &Transaction<Self::Context>,
+        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -50,16 +46,16 @@ impl<C: Context> ApplyBlobHooks for TestRuntime<C> {
 
     fn begin_blob_hook(
         &self,
-        blob: &mut impl BlobReaderTrait,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        _blob: &mut impl BlobReaderTrait,
+        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
 
     fn end_blob_hook(
         &self,
-        result: Self::BlobResult,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        _result: Self::BlobResult,
+        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
         Ok(())
     }

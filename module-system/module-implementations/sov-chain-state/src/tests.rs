@@ -1,18 +1,13 @@
-use std::marker::PhantomData;
-
-use sov_bank::TotalSupplyResponse;
 use sov_data_generators::value_setter_data::ValueSetterMessages;
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch, MessageGenerator};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, DispatchCall, Spec};
+use sov_modules_api::Spec;
 use sov_modules_stf_template::{AppTemplate, SequencerOutcome};
-use sov_rollup_interface::mocks::{MockAddress, MockZkvm, TestBlob, TestBlock, TestValidityCond};
-use sov_rollup_interface::services::da::SlotData;
+use sov_rollup_interface::mocks::{MockZkvm, TestBlob, TestBlock, TestValidityCond};
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_state::{DefaultStorageSpec, ProverStorage, Storage, WorkingSet, ZkStorage};
+use sov_state::ProverStorage;
 
 use crate::tests_helpers::{create_demo_genesis_config, TestRuntime};
-use crate::{call, ChainState};
 
 type C = DefaultContext;
 
@@ -43,7 +38,7 @@ fn test_value_setter() {
     let admin_pub_key = value_setter_messages.messages[0].admin.default_address();
 
     // Genesis
-    let init_root_hash = app_template
+    let _init_root_hash = app_template
         .init_chain(create_demo_genesis_config(admin_pub_key))
         .unwrap();
 

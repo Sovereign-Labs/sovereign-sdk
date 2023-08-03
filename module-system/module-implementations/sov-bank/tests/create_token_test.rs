@@ -15,7 +15,7 @@ fn initial_and_deployed_token() {
     bank.genesis(&bank_config, &mut working_set).unwrap();
 
     let sender_address = generate_address("sender");
-    let sender_context = C::new(sender_address.clone());
+    let sender_context = C::new(sender_address);
     let minter_address = generate_address("minter");
     let initial_balance = 500;
     let token_name = "Token1".to_owned();
@@ -25,8 +25,8 @@ fn initial_and_deployed_token() {
         salt,
         token_name,
         initial_balance,
-        minter_address: minter_address.clone(),
-        authorized_minters: vec![minter_address.clone()],
+        minter_address: minter_address,
+        authorized_minters: vec![minter_address],
     };
 
     bank.call(create_token_message, &sender_context, &mut working_set)
@@ -35,7 +35,7 @@ fn initial_and_deployed_token() {
     assert!(working_set.events().is_empty());
 
     let sender_balance =
-        bank.get_balance_of(sender_address, token_address.clone(), &mut working_set);
+        bank.get_balance_of(sender_address, token_address, &mut working_set);
     assert!(sender_balance.is_none());
 
     let minter_balance = bank.get_balance_of(minter_address, token_address, &mut working_set);
