@@ -37,5 +37,5 @@ serde_json = { workspace = true }
 
 [features]
 default = ["native", "macros"]
-native = ["sov-state/native", "rand", "hex", "schemars", "ed25519-dalek/default", "clap", "jsonrpsee"]
+native = ["sov-state/native", "rand", "hex", "schemars", "ed25519-dalek/default", "clap", "jsonrpsee", "macros", "sov-modules-macros/native"]
 macros = ["sov-modules-macros"]
