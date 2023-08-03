@@ -128,8 +128,10 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let (block, senders) = block.into_components();
         let block = block.unseal();
 
-        let post_state = executor.execute_and_verify_receipt(&block, U256::MAX, Some(senders))?;
+        let mut post_state =
+            executor.execute_and_verify_receipt(&block, U256::MAX, Some(senders))?;
 
+        //post_state.revert_to(target_block_number)
         //todo!
 
         for tx in txs {

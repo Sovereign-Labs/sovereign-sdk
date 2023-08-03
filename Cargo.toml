@@ -90,13 +90,13 @@ ethers-providers = "=2.0.8"
 ethers-signers = { version = "=2.0.8", default-features = false }
 ethers-middleware = "=2.0.8"
 
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
-reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
-reth-rpc = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
-reth-revm = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
-reth-provider = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
-reth-interfaces = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
-
+reth-primitives = { git = "https://github.com/bkolad/reth", version = "0.1.0-alpha.4"}
+reth-rpc-types = { git = "https://github.com/bkolad/reth", version = "0.1.0-alpha.4"}
+reth-rpc = { git = "https://github.com/bkolad/reth", version = "0.1.0-alpha.4"}
+reth-revm = { git = "https://github.com/bkolad/reth", version = "0.1.0-alpha.4"}
+reth-provider = { git = "https://github.com/bkolad/reth", version = "0.1.0-alpha.4"}
+reth-interfaces = { git = "https://github.com/bkolad/reth", version = "0.1.0-alpha.4"}
+reth-db = { git = "https://github.com/bkolad/reth", version = "0.1.0-alpha.4"}
 
 
 revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
