@@ -3,7 +3,6 @@ use std::io::Read;
 use sha2::Digest;
 
 use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::da::BlobTransactionTrait;
 use sov_rollup_interface::stf::{BatchReceipt, SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::Zkvm;
 

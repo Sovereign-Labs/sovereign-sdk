@@ -130,7 +130,7 @@ async fn main() -> Result<(), anyhow::Error> {
         })
         .collect();
 
-    for height in 0..(borshed_blocks.len() as u64) {
+    for height in 2..(borshed_blocks.len() as u64) {
         num_blocks+=1;
         let mut host = Risc0Host::new(ROLLUP_ELF);
         host.write_to_guest(prev_state_root);
@@ -153,7 +153,14 @@ async fn main() -> Result<(), anyhow::Error> {
             num_blobs+=blob_txs.len();
         }
         let result = demo.apply_slot(Default::default(), &mut blob_txs);
-        println!("{:?}",result.batch_receipts);
+        for r in result.batch_receipts {
+            let num_tx = r.tx_receipts.len();
+            num_total_transactions+=num_tx;
+            if num_tx > 0 {
+                num_blocks_with_txns+=1;
+            }
+        }
+        // println!("{:?}",result.batch_receipts);
 
         host.write_to_guest(&result.witness);
 

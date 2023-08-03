@@ -34,6 +34,7 @@ pub fn main() {
     env::write(&"Start guest\n");
     let guest = Risc0Guest;
 
+    let start_cycles = env::get_cycle_count();
     let prev_state_root_hash: [u8; 32] = guest.read_from_host();
     env::write(&"Prev root hash read\n");
     // Step 1: read tx list
@@ -56,7 +57,7 @@ pub fn main() {
 
     let witness: ArrayWitness = guest.read_from_host();
     env::write(&"Witness have been read\n");
-    let start_cycles = env::get_cycle_count();
+
 
     env::write(&"Applying slot...\n");
     let result = demo.apply_slot(witness, &mut blobs);
