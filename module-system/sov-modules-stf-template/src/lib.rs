@@ -112,7 +112,7 @@ where
             .expect("Storage update must succeed");
     }
 
-    // #[cfg_attr(all(target_os = "zkvm", feature="bench"), cycle_tracker)]
+    #[cfg_attr(all(target_os = "zkvm", feature="bench"), cycle_tracker)]
     fn apply_slot<'a, I>(
         &mut self,
         witness: Self::Witness,

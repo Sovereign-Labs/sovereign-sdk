@@ -3,7 +3,6 @@ use borsh::de::BorshDeserialize;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 use tempfile::TempDir;
-use std::time::Instant;
 use sov_modules_api::PrivateKey;
 
 use anyhow::Context;
@@ -140,7 +139,7 @@ async fn main() -> Result<(), anyhow::Error> {
             hex::encode(prev_state_root)
         );
         let filtered_block = &borshed_blocks[height as usize];
-        let header_hash = hex::encode(filtered_block.header.header.hash());
+        let _header_hash = hex::encode(filtered_block.header.header.hash());
         host.write_to_guest(&filtered_block.header);
         let (mut blob_txs, inclusion_proof, completeness_proof) =
             da_service.extract_relevant_txs_with_proof(&filtered_block).await;

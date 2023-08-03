@@ -63,22 +63,22 @@ let after = risc0_zkvm::guest::env::get_cycle_count();
 ## Input set
 * Unlike demo-prover it's harder to generate fake data since all the proofs and checks need to succeed. 
 * This means the DA samples, hashes, signatures etc need to succeed
-* To make this easier we use a static input set consisting of 8 blocks
-  * 0,1,2 - empty blocks
-  * 3 - contains 1 token creation transactions
-  * 4 - contains 1 transfer transaction
-  * 5 - contains 2 transfer transactions
-  * 6,7 - empty blocks
+* To make this easier we use a static input set consisting of 3 blocks
+  * we avoid using empty blocks because they skew average metrics
+  * we have 3 blocks
+    * block 1 -> 1 blob containing 1 create token transaction
+    * block 2 -> 1 blob containing 1 transfer transaction
+    * block 3 -> 1 blob containing 2 transfer transactions
 * This dataset is stored at `demo-prover/benches/blocks.hex`
 * The dataset can be substituted with another valid dataset as well from Celestia (TBD: automate parametrized generation of blocks.hex)
-* 
+* We can run this on different kinds of workloads to gauge the efficiency of different parts of the code
 
 ## Result
 ```
 Block stats
 
 +------------------------------------------+---+
-| Total blocks                             | 8 |
+| Total blocks                             | 3 |
 +------------------------------------------+---+
 | Blocks with transactions                 | 3 |
 +------------------------------------------+---+
@@ -94,20 +94,78 @@ Cycle Metrics
 +-------------------------+----------------+-----------+
 | Function                | Average Cycles | Num Calls |
 +-------------------------+----------------+-----------+
-| Cycles per block        | 6664105        | 3         |
+| Cycles per block        | 6935250        | 3         |
 +-------------------------+----------------+-----------+
-| apply_blob              | 5844454        | 3         |
+| apply_slot              | 6433166        | 3         |
 +-------------------------+----------------+-----------+
-| verify                  | 3921431        | 4         |
+| verify                  | 3965858        | 4         |
 +-------------------------+----------------+-----------+
-| end_slot                | 452223         | 3         |
+| end_slot                | 514929         | 3         |
 +-------------------------+----------------+-----------+
-| validate_and_commit     | 440060         | 3         |
+| validate_and_commit     | 496189         | 3         |
 +-------------------------+----------------+-----------+
-| verify_relevant_tx_list | 331109         | 3         |
+| verify_relevant_tx_list | 277438         | 3         |
 +-------------------------+----------------+-----------+
-| begin_slot              | 3599           | 3         |
+| begin_slot              | 4683           | 3         |
 +-------------------------+----------------+-----------+
-
-Total cycles consumed for test: 19992315
 ```
+
+## Custom annotations
+* We can also get finer grained information by annotating low level functions, but the process for this isn't straightforward. 
+* For code that we control, it's as simple as adding the `cycle_tracker` annotation to our function and then feature gating it (not feature gating it causes compilation errors)
+* For external dependencies, we need to fork and include a path dependency locally after annotating
+* We did this for the `jmt` jellyfish merkle tree library to measure cycle gains when we use the risc0 accelerated sha function vs without
+* We apply the risc0 patch in the following way in demo-prover/methods/guest/Cargo.toml
+```yaml
+[patch.crates-io]
+sha2 = { git = "https://github.com/risc0/RustCrypto-hashes", tag = "sha2/v0.10.6-risc0" }
+```
+* Note that the specific tag needs to be pointed to, since master and other branches don't contain acceleration
+
+## Accelerated vs Non-accelerated libs
+* Accelerated and risc0 optimized crypto libraries give a significant (nearly 10x) cycle gain
+* With sha2 acceleration
+```
+=====> hash: 1781
+=====> hash: 1781
+=====> hash: 1781
+=====> hash: 1781
+=====> hash: 1781
+```
+* Without sha2 acceleration
+```
+=====> hash: 13901
+=====> hash: 13901
+=====> hash: 13901
+=====> hash: 13901
+=====> hash: 13901
+```
+* Overall performance difference when using sha acceleration vs without for the same dataset (3 blocks, 4 transactions) as described above
+* With sha acceleration
+```
++-------------------------+----------------+-----------+
+| Function                | Average Cycles | Num Calls |
++-------------------------+----------------+-----------+
+| Cycles per block        | 6944938        | 3         |
++-------------------------+----------------+-----------+
+| validate_and_commit     | 503468         | 3         |
++-------------------------+----------------+-----------+
+| verify_relevant_tx_list | 277092         | 3         |
++-------------------------+----------------+-----------+
+Total cycles consumed for test: 20834815
+```
+* Without sha acceleration
+```
++-------------------------+----------------+-----------+
+| Function                | Average Cycles | Num Calls |
++-------------------------+----------------+-----------+
+| Cycles per block        | 8717567        | 3         |
++-------------------------+----------------+-----------+
+| validate_and_commit     | 1432461        | 3         |
++-------------------------+----------------+-----------+
+| verify_relevant_tx_list | 966893         | 3         |
++-------------------------+----------------+-----------+
+Total cycles consumed for test: 26152702
+```
+* There's an overall efficiency of 6 million cycles in total for 3 blocks. 
+* Keep in mind that the above table shows average number of cycles per call, so they give an efficiency per call, but the "Total cycles consumed for test" metric at the bottom shows total for 3 blocks

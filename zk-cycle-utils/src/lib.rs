@@ -24,19 +24,19 @@ fn wrap_function(input: ItemFn) -> Result<TokenStream, syn::Error> {
     let output = &input.sig.output;
     let block = &input.block;
     let generics = &input.sig.generics;
+    let where_clause = &input.sig.generics.where_clause;
     let risc0_zkvm = syn::Ident::new("risc0_zkvm", proc_macro2::Span::call_site());
     let risc0_zkvm_platform = syn::Ident::new("risc0_zkvm_platform", proc_macro2::Span::call_site());
 
     if let Some(self_param) = inputs.first() {
         if matches!(self_param, FnArg::Receiver(_)) {
-            // #[cfg(feature = "bench")]
             let result = quote! {
-                #visibility fn #name #generics (#inputs) #output {
+                #visibility fn #name #generics (#inputs) #output #where_clause {
                     let before = #risc0_zkvm::guest::env::get_cycle_count();
                     let result = (|| #block)();
                     let after = #risc0_zkvm::guest::env::get_cycle_count();
 
-                    // serialization. lol.
+                    // simple serialization to avoid pulling in bincode or other libs
                     let tuple = (stringify!(#name).to_string(), (after - before) as u64);
                     let mut serialized = Vec::new();
                     serialized.extend(tuple.0.as_bytes());
