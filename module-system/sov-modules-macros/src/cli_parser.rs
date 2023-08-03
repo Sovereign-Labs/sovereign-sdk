@@ -24,6 +24,7 @@ impl CliParserMacro {
             data,
             ..
         } = input;
+        let call_message_ident = format_ident!("{}Call", ident);
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
 
         let (_, ty_generics, _) = generics.split_for_impl();
@@ -32,6 +33,7 @@ impl CliParserMacro {
         let mut module_args = vec![];
         let mut match_arms = vec![];
         let mut parse_match_arms = vec![];
+        let mut convert_match_arms = vec![];
         let mut deserialize_constraints: Vec<syn::WherePredicate> = vec![];
 
         // Loop over the fields
@@ -48,6 +50,7 @@ impl CliParserMacro {
             if let syn::Type::Path(type_path) = &field.ty {
                 let mut module_path = type_path.path.clone();
                 if let Some(segment) = module_path.segments.last_mut() {
+                    let field_name = field.ident.clone();
                     let field_generic_types = &segment.arguments;
                     let field_generics_with_bounds =
                         generics_for_field(&generics, field_generic_types);
@@ -55,7 +58,7 @@ impl CliParserMacro {
                     let module_ident = segment.ident.clone();
                     let module_args_ident = format_ident!("{}Args", module_ident);
                     module_command_arms.push(quote! {
-                        #module_ident(#module_args_ident #field_generic_types)
+                        #field_name(#module_args_ident #field_generic_types)
                     });
                     module_args.push(quote! {
                         #[derive(::clap::Parser)]
@@ -66,7 +69,6 @@ impl CliParserMacro {
                         }
                     });
 
-                    let field_name = field.ident.clone();
                     let field_name_string = field_name.to_string();
                     let encode_function_name = format_ident!("encode_{}_call", field_name_string);
 
@@ -82,9 +84,18 @@ impl CliParserMacro {
 
                     // Build the `match` arm for the CLI's `clap` parse function
                     parse_match_arms.push(quote! {
-                            CliTransactionParser::#module_ident(mod_args) => {
+                            CliTransactionParser::#field_name(mod_args) => {
                                 let command_as_call_message: <#module_path as ::sov_modules_api::Module>::CallMessage = mod_args.command.into();
                                 #ident:: #ty_generics ::#encode_function_name(
+                                    command_as_call_message
+                                )
+                            },
+                         });
+
+                    convert_match_arms.push(quote! {
+                            CliTransactionParser::#field_name(mod_args) => {
+                                let command_as_call_message: <#module_path as ::sov_modules_api::Module>::CallMessage = mod_args.command.into();
+                                #call_message_ident:: #field_name(
                                     command_as_call_message
                                 )
                             },
@@ -145,6 +156,14 @@ impl CliParserMacro {
                 match cmd {
                     #(#parse_match_arms)*
                     _ => panic!("unknown module name"),
+                }
+            }
+
+            impl #impl_generics From<CliTransactionParser #ty_generics> for #call_message_ident #ty_generics #where_clause {
+                fn from(cmd: CliTransactionParser #ty_generics) -> Self {
+                    match cmd {
+                        #(#convert_match_arms)*
+                    }
                 }
             }
 
