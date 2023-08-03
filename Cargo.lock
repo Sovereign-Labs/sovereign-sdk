@@ -6433,7 +6433,7 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-state",
- "syn 1.0.109",
+ "syn 2.0.27",
  "trybuild",
 ]
 
@@ -6477,8 +6477,8 @@ dependencies = [
  "async-trait",
  "borsh",
  "bytes",
+ "digest 0.10.7",
  "hex",
- "jmt",
  "proptest",
  "proptest-derive",
  "serde",
