@@ -6356,6 +6356,7 @@ dependencies = [
  "jsonrpsee 0.18.2",
  "primitive-types",
  "reth-primitives",
+ "reth-provider",
  "reth-revm",
  "reth-rpc",
  "reth-rpc-types",

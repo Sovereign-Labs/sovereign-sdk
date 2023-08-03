@@ -94,6 +94,8 @@ reth-primitives = { git = "https://github.com/paradigmxyz/reth", version = "0.1.
 reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
 reth-rpc = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
 reth-revm = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
+reth-provider = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
+
 
 revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
 revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
