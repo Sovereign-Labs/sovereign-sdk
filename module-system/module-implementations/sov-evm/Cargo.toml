@@ -47,6 +47,7 @@ reth-rpc-types = { workspace = true }
 reth-rpc = { workspace = true }
 reth-revm = { workspace = true }
 reth-provider = { workspace = true }
+reth-interfaces = { workspace = true }
 
 [dev-dependencies]
 

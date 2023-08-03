@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
 use anyhow::Result;
+use reth_interfaces::provider::ProviderError;
+use reth_interfaces::Result as RethResult;
 use reth_primitives::{
     Address, BlockNumber, Bytes, ChainSpec, ChainSpecBuilder, SealedBlock, SealedBlockWithSenders,
-    SealedHeader, H256, U256,
+    SealedHeader, StorageValue, H256, U256,
 };
-use reth_provider::{AccountReader, BlockHashReader, PostState, StateProvider, StateRootProvider};
+use reth_provider::{
+    AccountReader, BlockExecutor, BlockHashReader, PostState, StateProvider, StateRootProvider,
+};
 use reth_revm::database::{State, SubState};
 use reth_revm::executor::Executor;
 use revm::primitives::{Account, Bytecode, CfgEnv};
@@ -30,37 +34,53 @@ pub struct CallMessage {
     pub tx: Vec<EvmTransaction>,
 }
 
-impl<'a, C: Context> StateRootProvider for EvmDb<'a, C> {
-    fn state_root(&self, post_state: PostState) -> Result<H256> {
+struct InMemDb {}
+
+impl StateRootProvider for InMemDb {
+    fn state_root(&self, post_state: PostState) -> RethResult<H256> {
         todo!()
     }
 }
 
-impl<'a, C: Context> AccountReader for EvmDb<'a, C> {
-    fn basic_account(&self, address: Address) -> Result<Option<Account>> {
+impl AccountReader for InMemDb {
+    fn basic_account(
+        &self,
+        address: Address,
+    ) -> std::result::Result<std::option::Option<reth_primitives::Account>, reth_interfaces::Error>
+    {
         todo!()
     }
 }
 
-impl<'a, C: Context> BlockHashReader for EvmDb<'a, C> {
-    #[doc = " Get the hash of the block with the given number. Returns `None` if no block with this number"]
-    #[doc = " exists."]
-    fn block_hash(&self, number: BlockNumber) -> Result<Option<H256>> {
+impl BlockHashReader for InMemDb {
+    fn block_hash(&self, number: BlockNumber) -> RethResult<Option<H256>> {
         todo!()
     }
 
     #[doc = " Get headers in range of block hashes or numbers"]
-    fn canonical_hashes_range(&self, start: BlockNumber, end: BlockNumber) -> Result<Vec<H256>> {
+    fn canonical_hashes_range(
+        &self,
+        start: BlockNumber,
+        end: BlockNumber,
+    ) -> RethResult<Vec<H256>> {
         todo!()
     }
 }
 
-impl<'a, C: Context> StateProvider for EvmDb<'a, C> {
-    fn storage(&self, account: Address, storage_key: StorageKey) -> Result<Option<StorageValue>> {
+impl StateProvider for InMemDb {
+    fn storage(
+        &self,
+        account: Address,
+        storage_key: reth_primitives::H256,
+    ) -> RethResult<Option<StorageValue>> {
         todo!()
     }
 
-    fn bytecode_by_hash(&self, code_hash: H256) -> Result<Option<Bytecode>> {
+    fn bytecode_by_hash(
+        &self,
+        code_hash: H256,
+    ) -> std::result::Result<std::option::Option<reth_primitives::Bytecode>, reth_interfaces::Error>
+    {
         todo!()
     }
 
@@ -68,7 +88,7 @@ impl<'a, C: Context> StateProvider for EvmDb<'a, C> {
         &self,
         address: Address,
         keys: &[H256],
-    ) -> Result<(Vec<Bytes>, H256, Vec<Vec<Bytes>>)> {
+    ) -> RethResult<(Vec<Bytes>, H256, Vec<Vec<Bytes>>)> {
         todo!()
     }
 }
@@ -89,7 +109,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         let chain_spec = Arc::new(ChainSpecBuilder::mainnet().berlin_activated().build());
 
-        let db = SubState::new(State::new(evm_db));
+        let db = SubState::new(State::new(InMemDb {}));
 
         let mut executor = Executor::new(chain_spec, db);
 

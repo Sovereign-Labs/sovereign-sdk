@@ -6355,6 +6355,7 @@ dependencies = [
  "hex",
  "jsonrpsee 0.18.2",
  "primitive-types",
+ "reth-interfaces",
  "reth-primitives",
  "reth-provider",
  "reth-revm",
