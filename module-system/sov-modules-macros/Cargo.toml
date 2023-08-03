@@ -21,22 +21,24 @@ path = "tests/all_tests.rs"
 
 [dev-dependencies]
 serde_json = "1"
-jsonrpsee = { workspace = true, features = ["macros", "http-client", "server"] }
+jsonrpsee = { workspace = true, features = ["macros", "http-client", "server"]}
 trybuild = "1.0"
 
 sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
 sov-state = { path = "../sov-state", version = "0.1", default-features = false }
 sov-bank = { path = "../module-implementations/sov-bank", version = "0.1", features = ["native"] }
-clap = { workspace = true }
 serde = { workspace = true }
+clap = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
-jsonrpsee = { workspace = true, features = ["http-client", "server"] }
-sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
-
-syn = { version = "1.0", features = ["full"] }
-quote = "1.0"
-proc-macro2 = "1.0"
 borsh = { workspace = true }
+jsonrpsee = { workspace = true, features = ["http-client", "server"], optional = true }
+proc-macro2 = "1.0"
+quote = "1.0"
 schemars = { workspace = true }
+syn = { version = "1.0", features = ["full"] }
+
+[features]
+default = []
+native = ["dep:jsonrpsee"]

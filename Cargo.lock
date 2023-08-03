@@ -6441,7 +6441,6 @@ dependencies = [
  "serde_json",
  "sov-bank",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
  "syn 1.0.109",
  "trybuild",

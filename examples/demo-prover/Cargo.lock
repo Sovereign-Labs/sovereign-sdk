@@ -3459,7 +3459,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "schemars",
- "sov-rollup-interface",
  "syn 1.0.109",
 ]
 

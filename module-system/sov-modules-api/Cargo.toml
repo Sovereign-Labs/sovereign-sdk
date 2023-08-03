@@ -41,5 +41,5 @@ serde_json = { workspace = true }
 [features]
 bench = ["zk-cycle-utils","risc0-zkvm","risc0-zkvm-platform"]
 default = ["native", "macros"]
-native = ["sov-state/native", "rand", "hex", "schemars", "ed25519-dalek/default", "clap", "jsonrpsee"]
+native = ["sov-state/native", "rand", "hex", "schemars", "ed25519-dalek/default", "clap", "jsonrpsee", "macros", "sov-modules-macros/native"]
 macros = ["sov-modules-macros"]
