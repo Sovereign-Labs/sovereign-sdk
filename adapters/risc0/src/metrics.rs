@@ -36,6 +36,5 @@ pub fn metrics_callback(input: &[u8]) -> Vec<u8> {
 pub fn get_syscall_name() -> SyscallName {
     let cycle_string = "cycle_metrics\0";
     let bytes = cycle_string.as_bytes();
-    let metrics_syscall_name = unsafe { SyscallName::from_bytes_with_nul(bytes.as_ptr()) };
-    metrics_syscall_name
+    unsafe { SyscallName::from_bytes_with_nul(bytes.as_ptr()) }
 }
