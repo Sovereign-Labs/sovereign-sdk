@@ -4,9 +4,10 @@ use sov_bank::{get_token_address, Bank, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Context, EncodeCall, Module, Spec};
+use sov_modules_api::utils::generate_address;
+use sov_modules_api::{Context, EncodeCall, Module, PrivateKey, Spec};
 
-use crate::{generate_address, MessageGenerator};
+use crate::MessageGenerator;
 
 pub struct TransferData<C: Context> {
     pub sender_pkey: Rc<DefaultPrivateKey>,

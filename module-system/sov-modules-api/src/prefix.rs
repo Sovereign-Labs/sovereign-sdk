@@ -1,4 +1,6 @@
-use crate::{Context, Hasher};
+use sha2::Digest;
+
+use crate::Context;
 
 // separator == "/"
 const DOMAIN_SEPARATOR: [u8; 1] = [47];
@@ -58,7 +60,9 @@ impl Prefix {
 
     pub fn hash<C: Context>(&self) -> [u8; 32] {
         let combined_prefix = self.combine_prefix();
-        C::Hasher::hash(combined_prefix)
+        let mut hasher = C::Hasher::new();
+        hasher.update(combined_prefix);
+        hasher.finalize().into()
     }
 }
 

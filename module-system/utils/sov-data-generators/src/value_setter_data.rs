@@ -3,6 +3,7 @@ use std::vec;
 
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_modules_api::PrivateKey;
 use sov_value_setter::ValueSetter;
 
 use super::*;

@@ -2,16 +2,15 @@ use demo_nft_module::call::CallMessage;
 use demo_nft_module::query::OwnerResponse;
 use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Hasher, Module, Spec};
+use sov_modules_api::utils::generate_address as gen_addr_generic;
+use sov_modules_api::{Address, Context, Module};
 use sov_rollup_interface::stf::Event;
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 pub type C = DefaultContext;
 pub type Storage = ProverStorage<DefaultStorageSpec>;
-
-pub fn generate_address(key: &str) -> <C as Spec>::Address {
-    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
-    Address::from(hash)
+fn generate_address(name: &str) -> Address {
+    gen_addr_generic::<DefaultContext>(name)
 }
 
 #[test]
@@ -77,10 +76,7 @@ fn transfer() {
     let nft = NonFungibleToken::default();
     nft.genesis(&config, &mut working_set).unwrap();
 
-    let transfer_message = CallMessage::Transfer {
-        id: 1,
-        to: owner2,
-    };
+    let transfer_message = CallMessage::Transfer { id: 1, to: owner2 };
 
     // admin cannot transfer token of the owner1
     let transfer_attempt = nft.call(transfer_message.clone(), &admin_context, &mut working_set);

@@ -6,7 +6,7 @@ use sov_election::Election;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{EncodeCall, PublicKey};
+use sov_modules_api::{EncodeCall, PrivateKey, PublicKey};
 use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, SlashingReason};
 use sov_rollup_interface::mocks::{MockZkvm, TestBlock};
 use sov_rollup_interface::stf::StateTransitionFunction;

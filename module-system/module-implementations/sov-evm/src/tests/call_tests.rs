@@ -1,7 +1,7 @@
 use revm::primitives::{KECCAK_EMPTY, U256};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::{Context, Module, PublicKey, Spec};
+use sov_modules_api::{Context, Module, PrivateKey, Spec};
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::call::CallMessage;
@@ -44,6 +44,7 @@ fn create_messages(contract_addr: EthAddress, set_arg: u32) -> Vec<CallMessage> 
 
 #[test]
 fn evm_test() {
+    use sov_modules_api::PublicKey;
     let tmpdir = tempfile::tempdir().unwrap();
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
 

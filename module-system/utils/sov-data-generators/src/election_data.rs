@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::rc::Rc;
 
 use sov_election::Election;
-use sov_modules_api::{EncodeCall, PublicKey};
+use sov_modules_api::{EncodeCall, PrivateKey, PublicKey};
 
 use super::*;
 

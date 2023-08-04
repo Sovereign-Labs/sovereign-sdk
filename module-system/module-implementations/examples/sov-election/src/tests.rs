@@ -1,6 +1,6 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::{Address, Context, Module, PublicKey};
+use sov_modules_api::{Address, Context, Module, PrivateKey, PublicKey};
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 
 use super::call::CallMessage;

@@ -1,12 +1,15 @@
 use sov_bank::{BankConfig, TokenConfig};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Hasher, Spec};
+use sov_modules_api::utils::generate_address as gen_address_generic;
+use sov_modules_api::Address;
 
 pub type C = DefaultContext;
 
-pub fn generate_address(key: &str) -> <C as Spec>::Address {
-    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
-    Address::from(hash)
+// This code is not actually dead; rustc treats each test file as a separate crate
+// so this code looks unused during some of the compilations.
+#[allow(dead_code)]
+pub fn generate_address(name: &str) -> Address {
+    gen_address_generic::<C>(name)
 }
 
 #[allow(dead_code)]

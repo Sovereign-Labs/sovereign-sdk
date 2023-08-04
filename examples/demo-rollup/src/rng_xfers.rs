@@ -9,7 +9,7 @@ use sov_bank::{Bank, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Address, AddressBech32, EncodeCall, PublicKey, Spec};
+use sov_modules_api::{Address, AddressBech32, EncodeCall, PrivateKey, PublicKey, Spec};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::mocks::{
     TestBlob, TestBlock, TestBlockHeader, TestHash, TestValidityCond,

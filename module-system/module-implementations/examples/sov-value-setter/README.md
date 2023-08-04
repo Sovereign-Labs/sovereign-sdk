@@ -11,6 +11,6 @@ It demonstrates the following concepts:
 
 ### 2. Functionality:
 
-The `admin` (specified in the `ValueSetter` genesis) can update a single `u32` value by creating `CallMessage::SetValue(new_value)` message. Any other module can query the module state by invoking the `get_value` function.
+The `admin` (specified in the `ValueSetter` genesis) can update a single `u32` value by creating `CallMessage::SetValue(new_value)` message. Anyone can query the module state by calling the `valueSetter_queryValue` endpoint.
 
 For implementation details, please check comments in the `genesis.rs, call.rs & query.rs`.

@@ -5,19 +5,14 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 pub use sov_modules_api::EncodeCall;
-use sov_modules_api::{Address, Context, Hasher, Module, Spec};
+use sov_modules_api::{Address, Context, Module, Spec};
 use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, TxEffect};
+use sov_rollup_interface::digest::Digest;
 use sov_rollup_interface::mocks::TestBlob;
 use sov_rollup_interface::stf::BatchReceipt;
-
 pub mod bank_data;
 pub mod election_data;
 pub mod value_setter_data;
-
-pub fn generate_address<C: Context>(key: &str) -> <C as Spec>::Address {
-    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
-    <C as Spec>::Address::from(hash)
-}
 
 pub fn new_test_blob_from_batch(batch: Batch, address: &[u8], hash: [u8; 32]) -> TestBlob<Address> {
     let address = Address::try_from(address).unwrap();

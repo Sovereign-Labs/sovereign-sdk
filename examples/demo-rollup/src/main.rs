@@ -11,7 +11,7 @@ use demo_stf::app::{
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runner_config::from_toml_path;
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
-use jsonrpsee::core::server::rpc_module::Methods;
+use jsonrpsee::core::server::Methods;
 use jupiter::da_service::CelestiaService;
 #[cfg(feature = "experimental")]
 use jupiter::da_service::DaServiceConfig;

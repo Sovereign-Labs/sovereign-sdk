@@ -8,7 +8,6 @@ use std::marker::PhantomData;
 use anyhow::{ensure, Error};
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Bytes;
-use jmt::SimpleHasher;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
@@ -34,7 +33,7 @@ pub struct MockValidityCond;
 impl ValidityCondition for MockValidityCond {
     type Error = anyhow::Error;
 
-    fn combine<H: SimpleHasher>(&self, _rhs: Self) -> Result<Self, Self::Error> {
+    fn combine<H: Digest>(&self, _rhs: Self) -> Result<Self, Self::Error> {
         Ok(MockValidityCond)
     }
 }
@@ -200,7 +199,7 @@ pub struct TestValidityCond {
 
 impl ValidityCondition for TestValidityCond {
     type Error = Error;
-    fn combine<H: SimpleHasher>(&self, rhs: Self) -> Result<Self, Self::Error> {
+    fn combine<H: Digest>(&self, rhs: Self) -> Result<Self, Self::Error> {
         Ok(TestValidityCond {
             cond: self.cond & rhs.cond,
         })

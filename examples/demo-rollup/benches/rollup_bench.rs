@@ -15,6 +15,7 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_demo_rollup::config::RollupConfig;
 use sov_demo_rollup::rng_xfers::RngDaService;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_modules_api::PrivateKey;
 use sov_rollup_interface::mocks::{
     TestBlob, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
 };
@@ -91,7 +92,7 @@ fn rollup_bench(_bench: &mut Criterion) {
         b.iter(|| {
             let filtered_block = &blocks[height as usize];
 
-            let mut data_to_commit = SlotCommit::new(*filtered_block);
+            let mut data_to_commit = SlotCommit::new(filtered_block.clone());
             let apply_block_result = demo.apply_slot(
                 Default::default(),
                 data_to_commit.slot_data(),

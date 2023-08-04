@@ -12,7 +12,7 @@ use jupiter::BlobWithSender;
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::Risc0Host;
 use serde::Deserialize;
-use sov_modules_api::RpcRunner;
+use sov_modules_api::{PrivateKey, RpcRunner};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;

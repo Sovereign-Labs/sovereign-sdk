@@ -82,6 +82,9 @@ pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
 
     /// A record of all previous state transitions which are available to the VM.
     /// Currently, this includes *all* historical state transitions, but that may change in the future.
+    /// This state map is delayed by one transition. In other words - the transition that happens in time i
+    /// is stored during transition i+1. This is mainly due to the fact that this structure depends on the
+    /// rollup's root hash which is only stored once the transition has completed.
     #[state]
     pub historical_transitions: sov_state::StateMap<u64, StateTransitionId<Cond>>,
 

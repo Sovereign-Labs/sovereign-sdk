@@ -189,7 +189,7 @@ pub enum ItemOrHash<T> {
 /// A LedgerRpcProvider provides a way to query the ledger for information about slots, batches, transactions, and events.
 pub trait LedgerRpcProvider {
     /// Get the latest slot in the ledger.
-    fn get_head<B: DeserializeOwned, T: DeserializeOwned>(
+    fn get_head<B: DeserializeOwned + Clone, T: DeserializeOwned>(
         &self,
     ) -> Result<Option<SlotResponse<B, T>>, anyhow::Error>;
 

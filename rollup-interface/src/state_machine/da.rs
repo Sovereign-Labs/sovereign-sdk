@@ -6,10 +6,10 @@ use std::io::Read;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Buf;
+use digest::Digest;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::crypto::SimpleHasher;
 use crate::zk::ValidityCondition;
 use crate::AddressTrait;
 
@@ -59,7 +59,7 @@ pub trait DaVerifier {
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self;
 
     /// Verify a claimed set of transactions against a block header.
-    fn verify_relevant_tx_list<H: SimpleHasher>(
+    fn verify_relevant_tx_list<H: Digest>(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],

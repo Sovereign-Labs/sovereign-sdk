@@ -4,6 +4,7 @@ pub mod test {
     use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
     use sov_modules_api::default_context::DefaultContext;
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+    use sov_modules_api::PrivateKey;
     use sov_modules_stf_template::{Batch, SequencerOutcome};
     use sov_rollup_interface::mocks::{MockZkvm, TestBlock};
     use sov_rollup_interface::stf::StateTransitionFunction;

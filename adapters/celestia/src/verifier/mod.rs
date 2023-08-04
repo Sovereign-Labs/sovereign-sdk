@@ -1,10 +1,10 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::crypto::SimpleHasher;
 use sov_rollup_interface::da::{
     self, BlobReaderTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, CountedBufReader, DaSpec,
 };
+use sov_rollup_interface::digest::Digest;
 use sov_rollup_interface::zk::ValidityCondition;
 use sov_rollup_interface::Buf;
 use thiserror::Error;
@@ -68,7 +68,7 @@ impl TmHash {
             tendermint::Hash::Sha256(ref h) => h,
             // Hack: when the hash is None, we return a hash of all 255s as a placeholder.
             // TODO: add special casing for the genesis block at a higher level
-            tendermint::Hash::None => unreachable!("Only the genesis block has a None hash, and we use a placholder in that corner case") 
+            tendermint::Hash::None => unreachable!("Only the genesis block has a None hash, and we use a placeholder in that corner case")
         }
     }
 }
@@ -132,7 +132,7 @@ pub enum ValidityConditionError {
 
 impl ValidityCondition for ChainValidityCondition {
     type Error = ValidityConditionError;
-    fn combine<H: SimpleHasher>(&self, rhs: Self) -> Result<Self, Self::Error> {
+    fn combine<H: Digest>(&self, rhs: Self) -> Result<Self, Self::Error> {
         if self.block_hash != rhs.prev_hash {
             return Err(ValidityConditionError::BlocksNotConsecutive);
         }
@@ -151,7 +151,7 @@ impl da::DaVerifier for CelestiaVerifier {
         }
     }
 
-    fn verify_relevant_tx_list<H: SimpleHasher>(
+    fn verify_relevant_tx_list<H: Digest>(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
@@ -186,8 +186,10 @@ impl da::DaVerifier for CelestiaVerifier {
 
             // Verify each sub-proof and flatten the shares back into a sequential array
             // First, enforce that the sub-proofs cover a contiguous range of shares
-            for [l, r] in tx_proof.proof.array_windows::<2>() {
-                assert_eq!(l.start_share_idx + l.shares.len(), r.start_share_idx)
+            for i in 1..tx_proof.proof.len() {
+                let l = &tx_proof.proof[i - 1];
+                let r = &tx_proof.proof[i];
+                assert_eq!(l.start_share_idx + l.shares.len(), r.start_share_idx);
             }
             let mut tx_shares = Vec::new();
             // Then, verify the sub proofs

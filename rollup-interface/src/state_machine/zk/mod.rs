@@ -9,10 +9,10 @@
 use core::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use digest::Digest;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::crypto::SimpleHasher;
 use crate::AddressTrait;
 
 /// A trait implemented by the prover ("host") of a zkVM program.
@@ -65,7 +65,7 @@ pub trait ValidityCondition:
     type Error: Into<anyhow::Error>;
     /// Combine two conditions into one (typically run inside a recursive proof).
     /// Returns an error if the two conditions cannot be combined
-    fn combine<H: SimpleHasher>(&self, rhs: Self) -> Result<Self, Self::Error>;
+    fn combine<H: Digest>(&self, rhs: Self) -> Result<Self, Self::Error>;
 }
 
 /// The public output of a SNARK proof in Sovereign, this struct makes a claim that

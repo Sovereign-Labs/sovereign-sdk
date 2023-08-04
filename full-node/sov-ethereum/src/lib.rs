@@ -14,14 +14,17 @@ pub mod experimental {
     use jsonrpsee::core::client::ClientT;
     use jsonrpsee::core::params::ArrayParams;
     use jsonrpsee::http_client::{HeaderMap, HttpClient};
+    use jsonrpsee::types::ErrorObjectOwned;
     use jsonrpsee::RpcModule;
     use jupiter::da_service::DaServiceConfig;
     use reth_primitives::Bytes as RethBytes;
     use sov_evm::call::CallMessage;
     use sov_evm::evm::{EthAddress, EvmTransaction};
     use sov_modules_api::transaction::Transaction;
+    use sov_modules_api::utils::to_jsonrpsee_error_object;
 
     const GAS_PER_BYTE: usize = 120;
+    const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 
     pub fn get_ethereum_rpc(
         config: DaServiceConfig,
@@ -73,7 +76,7 @@ pub mod experimental {
 
             jsonrpsee::http_client::HttpClientBuilder::default()
                 .set_headers(headers)
-                .max_request_body_size(default_max_response_size()) // 100 MB
+                .max_request_size(default_max_response_size())
                 .build(self.config.celestia_rpc_address.clone())
                 .expect("Client initialization is valid")
         }
@@ -106,13 +109,19 @@ pub mod experimental {
                 let data: Bytes = parameters.one().unwrap();
                 let data = RethBytes::from(data.as_ref());
 
-                let evm_transaction: EvmTransaction = data.try_into().unwrap();
+                let evm_transaction: EvmTransaction = data.try_into()?;
 
                 let tx_hash = evm_transaction.hash;
-                let raw_tx = ethereum.make_raw_tx(evm_transaction)?;
+                let raw_tx = ethereum
+                    .make_raw_tx(evm_transaction)
+                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
-                ethereum.send_tx_to_da(raw_tx).await?;
-                Ok(H256::from(tx_hash))
+                ethereum
+                    .send_tx_to_da(raw_tx)
+                    .await
+                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+
+                Ok::<_, ErrorObjectOwned>(H256::from(tx_hash))
             },
         )?;
 
