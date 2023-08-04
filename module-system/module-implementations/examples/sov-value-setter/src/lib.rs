@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
 mod call;
 mod genesis;
 
@@ -13,7 +15,9 @@ pub use query::{Response, ValueSetterRpcImpl, ValueSetterRpcServer};
 use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 
+/// Initial configuration for sov-value-setter module.
 pub struct ValueSetterConfig<C: sov_modules_api::Context> {
+    /// Admin of the module.
     pub admin: C::Address,
 }
 
