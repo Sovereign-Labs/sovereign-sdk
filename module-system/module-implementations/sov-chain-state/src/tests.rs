@@ -1,4 +1,3 @@
-use borsh::BorshDeserialize;
 use sov_data_generators::value_setter_data::ValueSetterMessages;
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch, MessageGenerator};
 use sov_modules_api::default_context::DefaultContext;
@@ -8,11 +7,10 @@ use sov_rollup_interface::mocks::{
     MockZkvm, TestBlob, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
 };
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_state::storage::StorageKey;
-use sov_state::{ProverStorage, SingletonKey};
+use sov_state::{ProverStorage, SingletonKey, Storage};
 
 use crate::tests_helpers::{create_demo_genesis_config, TestRuntime};
-use crate::TransitionInProgress;
+use crate::{StateTransitionId, TransitionInProgress};
 
 type C = DefaultContext;
 
@@ -58,6 +56,13 @@ fn test_simple_value_setter() {
         .prefix()
         .clone();
 
+    let historical_transitions = app_template
+        .runtime
+        .chain_state
+        .historical_transitions
+        .prefix()
+        .clone();
+
     let value_setter_messages = ValueSetterMessages::default();
     let value_setter = value_setter_messages.create_raw_txs::<TestRuntime<C>>();
 
@@ -92,7 +97,7 @@ fn test_simple_value_setter() {
 
     assert_eq!(new_height_storage, 0, "The initial height was not computed");
 
-    let result = app_template.apply_slot(Default::default(), &slot_data, &mut [blob]);
+    let result = app_template.apply_slot(Default::default(), &slot_data, &mut [blob.clone()]);
 
     assert_eq!(1, result.batch_receipts.len());
     let apply_blob_outcome = result.batch_receipts[0].clone();
@@ -101,6 +106,9 @@ fn test_simple_value_setter() {
         apply_blob_outcome.inner,
         "Sequencer execution should have succeeded but failed "
     );
+
+    // Get the new state root hash
+    let new_root_hash = app_template.current_storage.get_state_root().unwrap();
 
     // Check that the root hash has been stored correctly
     let stored_root: [u8; 32] = app_template
@@ -131,4 +139,65 @@ fn test_simple_value_setter() {
     );
 
     assert!(has_tx_events(&apply_blob_outcome),);
+
+    // We apply a new transaction with the same values
+    let new_slot_data: TestBlock = TestBlock {
+        curr_hash: [20; 32],
+        header: TestBlockHeader {
+            prev_hash: TestHash([10; 32]),
+        },
+        height: 1,
+        validity_cond: TestValidityCond::default(),
+    };
+
+    let result = app_template.apply_slot(Default::default(), &new_slot_data, &mut [blob.clone()]);
+
+    assert_eq!(1, result.batch_receipts.len());
+    let apply_blob_outcome = result.batch_receipts[0].clone();
+    assert_eq!(
+        SequencerOutcome::Rewarded(0),
+        apply_blob_outcome.inner,
+        "Sequencer execution should have succeeded but failed "
+    );
+
+    // Check that the root hash has been stored correctly
+    let stored_root: [u8; 32] = app_template
+        .get_from_storage_with_prefix(&genesis_hash_prefix, &SingletonKey)
+        .unwrap();
+
+    assert_eq!(stored_root, init_root_hash, "Root hashes don't match");
+
+    // Check the slot height
+    let new_height_storage: u64 = app_template
+        .get_from_storage_with_prefix(&slot_height_prefix, &SingletonKey)
+        .unwrap();
+
+    assert_eq!(new_height_storage, 2, "The new height did not update");
+
+    // Check the tx in progress
+    let new_tx_in_progress: TransitionInProgress<TestValidityCond> = app_template
+        .get_from_storage_with_prefix(&transition_in_progress, &SingletonKey)
+        .unwrap();
+
+    assert_eq!(
+        new_tx_in_progress,
+        TransitionInProgress::<TestValidityCond> {
+            da_block_hash: [20; 32],
+            validity_condition: TestValidityCond::default()
+        },
+        "The new transition has not been correctly stored"
+    );
+
+    let last_tx_stored: StateTransitionId<TestValidityCond> = app_template
+        .get_from_storage_with_prefix(&historical_transitions, &1_u64)
+        .unwrap();
+
+    assert_eq!(
+        last_tx_stored,
+        StateTransitionId {
+            da_block_hash: [10; 32],
+            post_state_root: new_root_hash,
+            validity_condition: TestValidityCond::default()
+        }
+    );
 }
