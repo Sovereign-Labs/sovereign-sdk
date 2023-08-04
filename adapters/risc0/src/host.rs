@@ -8,7 +8,9 @@ use risc0_zkvm::{
 use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
 
 #[cfg(feature = "bench")]
-use crate::metrics::get_syscall_name_handler;
+use crate::metrics::get_syscall_name;
+#[cfg(feature = "bench")]
+use crate::metrics::metrics_callback;
 use crate::Risc0MethodId;
 
 pub struct Risc0Host<'a> {
@@ -24,7 +26,7 @@ impl<'a> Risc0Host<'a> {
         let mut default_env = ExecutorEnvBuilder::default();
         #[cfg(feature = "bench")]
         {
-            let (metrics_syscall_name, metrics_callback) = get_syscall_name_handler();
+            let metrics_syscall_name = get_syscall_name();
             default_env.io_callback(metrics_syscall_name, metrics_callback);
         }
 

@@ -24,22 +24,18 @@ pub fn deserialize_custom(serialized: &[u8]) -> (String, u64) {
     let size_bytes = &size_bytes_with_null[1..]; // Skip the null terminator
     let string = String::from_utf8(string_bytes.to_vec()).unwrap();
     let size = u64::from_ne_bytes(size_bytes.try_into().unwrap()); // Convert bytes back into usize
-    let tuple = (string, size);
-    tuple
+    (string, size)
 }
 
-pub fn get_syscall_name_handler() -> (SyscallName, fn(&[u8]) -> Vec<u8>) {
+pub fn metrics_callback(input: &[u8]) -> Vec<u8> {
+    let met_tuple = deserialize_custom(input);
+    add_value(met_tuple.0, met_tuple.1);
+    vec![]
+}
+
+pub fn get_syscall_name() -> SyscallName {
     let cycle_string = "cycle_metrics\0";
     let bytes = cycle_string.as_bytes();
     let metrics_syscall_name = unsafe { SyscallName::from_bytes_with_nul(bytes.as_ptr()) };
-
-    let metrics_callback = |input: &[u8]| -> Vec<u8> {
-        {
-            let met_tuple = deserialize_custom(input);
-            add_value(met_tuple.0, met_tuple.1);
-        }
-        vec![]
-    };
-
-    (metrics_syscall_name, metrics_callback)
+    metrics_syscall_name
 }
