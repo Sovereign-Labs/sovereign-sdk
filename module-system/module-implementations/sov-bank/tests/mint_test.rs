@@ -17,7 +17,7 @@ fn mint_token() {
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 
     let minter_address = generate_address::<C>("minter");
-    let minter_context = C::new(minter_address.clone());
+    let minter_context = C::new(minter_address);
 
     let salt = 0;
     let token_name = "Token1".to_owned();
@@ -30,7 +30,7 @@ fn mint_token() {
         salt,
         token_name: token_name.clone(),
         initial_balance,
-        minter_address: minter_address,
+        minter_address,
         authorized_minters: vec![minter_address],
     };
     let _minted = bank
@@ -61,7 +61,7 @@ fn mint_token() {
     let mint_message = CallMessage::Mint {
         coins: Coins {
             amount: mint_amount,
-            token_address: token_address,
+            token_address,
         },
         minter_address: new_holder,
     };
@@ -84,7 +84,7 @@ fn mint_token() {
 
     // Mint with an un-authorized user
     let unauthorized_address = generate_address::<C>("unauthorized_address");
-    let unauthorized_context = C::new(unauthorized_address.clone());
+    let unauthorized_context = C::new(unauthorized_address);
     let unauthorized_mint = bank.call(mint_message, &unauthorized_context, &mut working_set);
 
     assert!(unauthorized_mint.is_err());
@@ -124,7 +124,7 @@ fn mint_token() {
         salt,
         token_name: token_name.clone(),
         initial_balance,
-        minter_address: minter_address,
+        minter_address,
         authorized_minters: vec![authorized_minter_address_1, authorized_minter_address_2],
     };
     let _minted = bank
@@ -139,7 +139,7 @@ fn mint_token() {
     let mint_message = CallMessage::Mint {
         coins: Coins {
             amount: mint_amount,
-            token_address: token_address,
+            token_address,
         },
         minter_address: new_holder,
     };
@@ -171,7 +171,7 @@ fn mint_token() {
     let mint_message = CallMessage::Mint {
         coins: Coins {
             amount: mint_amount,
-            token_address: token_address,
+            token_address,
         },
         minter_address: new_holder,
     };
@@ -188,7 +188,7 @@ fn mint_token() {
     let mint_message = CallMessage::Mint {
         coins: Coins {
             amount: mint_amount,
-            token_address: token_address,
+            token_address,
         },
         minter_address: new_holder,
     };
@@ -204,7 +204,7 @@ fn mint_token() {
     let overflow_mint_message = CallMessage::Mint {
         coins: Coins {
             amount: u64::MAX,
-            token_address: token_address,
+            token_address,
         },
         minter_address: new_holder,
     };
@@ -243,7 +243,7 @@ fn mint_token() {
     let overflow_mint_message = CallMessage::Mint {
         coins: Coins {
             amount: u64::MAX - 1,
-            token_address: token_address,
+            token_address,
         },
         minter_address: new_holder,
     };

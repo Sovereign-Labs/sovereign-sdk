@@ -92,7 +92,7 @@ fn rollup_bench(_bench: &mut Criterion) {
         b.iter(|| {
             let filtered_block = &blocks[height as usize];
 
-            let mut data_to_commit = SlotCommit::new(filtered_block.clone());
+            let mut data_to_commit = SlotCommit::new(*filtered_block);
             let apply_block_result = demo.apply_slot(
                 Default::default(),
                 data_to_commit.slot_data(),

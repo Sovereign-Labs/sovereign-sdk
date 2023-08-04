@@ -14,9 +14,7 @@ fn test_value_setter() {
     // Test Native-Context
     #[cfg(feature = "native")]
     {
-        let config = ValueSetterConfig {
-            admin: admin,
-        };
+        let config = ValueSetterConfig { admin };
         let context = DefaultContext::new(admin);
         test_value_setter_helper(context, &config, &mut working_set);
     }
@@ -25,9 +23,7 @@ fn test_value_setter() {
 
     // Test Zk-Context
     {
-        let config = ValueSetterConfig {
-            admin: admin,
-        };
+        let config = ValueSetterConfig { admin };
         let zk_context = ZkDefaultContext::new(admin);
         let mut zk_working_set = WorkingSet::with_witness(ZkStorage::new([0u8; 32]), witness);
         test_value_setter_helper(zk_context, &config, &mut zk_working_set);

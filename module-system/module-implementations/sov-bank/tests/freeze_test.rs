@@ -18,7 +18,7 @@ fn freeze_token() {
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 
     let minter_address = generate_address::<DefaultContext>("minter");
-    let minter_context = C::new(minter_address.clone());
+    let minter_context = C::new(minter_address);
 
     let salt = 0;
     let token_name = "Token1".to_owned();
@@ -31,7 +31,7 @@ fn freeze_token() {
         salt,
         token_name: token_name.clone(),
         initial_balance,
-        minter_address: minter_address,
+        minter_address,
         authorized_minters: vec![minter_address],
     };
     let _minted = bank
@@ -43,7 +43,7 @@ fn freeze_token() {
     // -----
     // Freeze
     let freeze_message = CallMessage::Freeze {
-        token_address: token_address,
+        token_address,
     };
 
     let _freeze = bank
@@ -54,7 +54,7 @@ fn freeze_token() {
     // ----
     // Try to freeze an already frozen token
     let freeze_message = CallMessage::Freeze {
-        token_address: token_address,
+        token_address,
     };
 
     let freeze = bank.call(freeze_message, &minter_context, &mut working_set);
@@ -84,7 +84,7 @@ fn freeze_token() {
         salt,
         token_name: token_name_2.clone(),
         initial_balance,
-        minter_address: minter_address,
+        minter_address,
         authorized_minters: vec![minter_address],
     };
     let _minted = bank
@@ -95,7 +95,7 @@ fn freeze_token() {
 
     // Try to freeze with a non authorized minter
     let unauthorized_address = generate_address::<C>("unauthorized_address");
-    let unauthorized_context = C::new(unauthorized_address.clone());
+    let unauthorized_context = C::new(unauthorized_address);
     let freeze_message = CallMessage::Freeze {
         token_address: token_address_2,
     };
@@ -128,7 +128,7 @@ fn freeze_token() {
     let mint_message = CallMessage::Mint {
         coins: Coins {
             amount: mint_amount,
-            token_address: token_address,
+            token_address,
         },
         minter_address: new_holder,
     };
@@ -168,7 +168,7 @@ fn freeze_token() {
             amount: mint_amount,
             token_address: token_address_2,
         },
-        minter_address: minter_address,
+        minter_address,
     };
 
     let _minted = bank

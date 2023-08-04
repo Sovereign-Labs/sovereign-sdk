@@ -36,7 +36,7 @@ fn burn_deployed_tokens() {
         salt,
         token_name,
         initial_balance,
-        minter_address: minter_address,
+        minter_address,
         authorized_minters: vec![minter_address],
     };
     bank.call(mint_message, &minter_context, &mut working_set)
@@ -45,8 +45,7 @@ fn burn_deployed_tokens() {
     assert!(working_set.events().is_empty());
 
     let query_total_supply = |working_set: &mut WorkingSet<Storage>| -> Option<u64> {
-        let total_supply: TotalSupplyResponse =
-            bank.supply_of(token_address, working_set).unwrap();
+        let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set).unwrap();
         total_supply.amount
     };
 
@@ -64,7 +63,7 @@ fn burn_deployed_tokens() {
     let burn_message = CallMessage::Burn {
         coins: Coins {
             amount: burn_amount,
-            token_address: token_address,
+            token_address,
         },
     };
 
@@ -110,7 +109,7 @@ fn burn_deployed_tokens() {
     let burn_zero_message = CallMessage::Burn {
         coins: Coins {
             amount: 0,
-            token_address: token_address,
+            token_address,
         },
     };
 
@@ -125,7 +124,7 @@ fn burn_deployed_tokens() {
     let burn_message = CallMessage::Burn {
         coins: Coins {
             amount: initial_balance + 10,
-            token_address: token_address,
+            token_address,
         },
     };
 
@@ -156,7 +155,7 @@ fn burn_deployed_tokens() {
     let burn_message = CallMessage::Burn {
         coins: Coins {
             amount: 1,
-            token_address: token_address,
+            token_address,
         },
     };
 
@@ -207,7 +206,7 @@ fn burn_initial_tokens() {
     let burn_message = CallMessage::Burn {
         coins: Coins {
             amount: burn_amount,
-            token_address: token_address,
+            token_address,
         },
     };
 

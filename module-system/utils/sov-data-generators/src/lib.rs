@@ -5,7 +5,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 pub use sov_modules_api::EncodeCall;
-use sov_modules_api::{Address, Context, Module, Spec};
+use sov_modules_api::{Address, Context, Module};
 use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, TxEffect};
 use sov_rollup_interface::digest::Digest;
 use sov_rollup_interface::mocks::TestBlob;

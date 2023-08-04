@@ -150,7 +150,7 @@ fn test_simple_value_setter() {
         validity_cond: TestValidityCond::default(),
     };
 
-    let result = app_template.apply_slot(Default::default(), &new_slot_data, &mut [blob.clone()]);
+    let result = app_template.apply_slot(Default::default(), &new_slot_data, &mut [blob]);
 
     assert_eq!(1, result.batch_receipts.len());
     let apply_blob_outcome = result.batch_receipts[0].clone();

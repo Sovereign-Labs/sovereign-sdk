@@ -164,11 +164,7 @@ fn test_unbonding() {
     let initial_unlocked_balance = {
         module
             .bank
-            .get_balance_of(
-                prover_address,
-                token_address,
-                &mut working_set,
-            )
+            .get_balance_of(prover_address, token_address, &mut working_set)
             .unwrap_or_default()
     };
 

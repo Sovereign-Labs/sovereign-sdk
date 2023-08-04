@@ -68,7 +68,7 @@ fn transfer() {
     let owner1_context = C::new(owner1);
     let owner2 = generate_address("owner2");
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
-        admin: admin,
+        admin,
         owners: vec![(0, admin), (1, owner1), (2, owner2)],
     };
     let tmpdir = tempfile::tempdir().unwrap();

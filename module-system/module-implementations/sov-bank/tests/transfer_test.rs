@@ -56,7 +56,7 @@ fn transfer_initial_token() {
             to: receiver_address,
             coins: Coins {
                 amount: transfer_amount,
-                token_address: token_address,
+                token_address,
             },
         };
 
@@ -85,7 +85,7 @@ fn transfer_initial_token() {
             to: receiver_address,
             coins: Coins {
                 amount: initial_balance + 1,
-                token_address: token_address,
+                token_address,
             },
         };
 
@@ -130,7 +130,7 @@ fn transfer_initial_token() {
             to: receiver_address,
             coins: Coins {
                 amount: 1,
-                token_address: token_address,
+                token_address,
             },
         };
 
@@ -155,7 +155,7 @@ fn transfer_initial_token() {
     // Sender does not exist
     {
         let unknown_sender = generate_address::<C>("non_existing_sender");
-        let unknown_sender_context = C::new(unknown_sender.clone());
+        let unknown_sender_context = C::new(unknown_sender);
 
         let sender_balance = query_user_balance(unknown_sender, &mut working_set);
         assert!(sender_balance.is_none());
@@ -166,7 +166,7 @@ fn transfer_initial_token() {
             to: receiver_address,
             coins: Coins {
                 amount: 1,
-                token_address: token_address,
+                token_address,
             },
         };
 
@@ -216,7 +216,7 @@ fn transfer_initial_token() {
             to: unknown_receiver,
             coins: Coins {
                 amount: 1,
-                token_address: token_address,
+                token_address,
             },
         };
 
@@ -238,7 +238,7 @@ fn transfer_initial_token() {
             to: sender_address,
             coins: Coins {
                 amount: 1,
-                token_address: token_address,
+                token_address,
             },
         };
         bank.call(transfer_message, &sender_context, &mut working_set)
@@ -315,7 +315,7 @@ fn transfer_deployed_token() {
         to: receiver_address,
         coins: Coins {
             amount: transfer_amount,
-            token_address: token_address,
+            token_address,
         },
     };
 

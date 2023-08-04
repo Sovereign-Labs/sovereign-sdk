@@ -1,5 +1,13 @@
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
+
+/// Contains the call methods used by the module
 pub mod call;
+
+/// Genesis state configuration
 pub mod genesis;
+
+/// Hook implementation for the module
 pub mod hooks;
 
 #[cfg(test)]
@@ -9,6 +17,7 @@ mod tests;
 mod tests_helpers;
 
 #[cfg(feature = "native")]
+/// The query interface with the module
 pub mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -19,6 +28,7 @@ use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
 use sov_state::WorkingSet;
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]
+/// Structure that contains the information needed to represent a single state transition.
 pub struct StateTransitionId<Cond: ValidityCondition> {
     da_block_hash: [u8; 32],
     post_state_root: [u8; 32],
@@ -26,6 +36,7 @@ pub struct StateTransitionId<Cond: ValidityCondition> {
 }
 
 impl StateTransitionId<TestValidityCond> {
+    /// Creates a new state transition
     pub fn new(
         da_block_hash: [u8; 32],
         post_state_root: [u8; 32],
@@ -40,18 +51,23 @@ impl StateTransitionId<TestValidityCond> {
 }
 
 impl<Cond: ValidityCondition> StateTransitionId<Cond> {
+    /// Compare the transition block hash and state root with the provided input couple. If
+    /// the pairs are equal, return [`true`].
     pub fn compare_tx_hashes(&self, da_block_hash: [u8; 32], post_state_root: [u8; 32]) -> bool {
         self.da_block_hash == da_block_hash && self.post_state_root == post_state_root
     }
 
+    /// Returns the post state root of a state transition
     pub fn post_state_root(&self) -> [u8; 32] {
         self.post_state_root
     }
 
+    /// Returns the da block hash of a state transition
     pub fn da_block_hash(&self) -> [u8; 32] {
         self.da_block_hash
     }
 
+    /// Checks the validity condition of a state transition
     pub fn validity_condition_check<Checker: ValidityConditionChecker<Cond>>(
         &self,
         checker: &mut Checker,
@@ -61,6 +77,7 @@ impl<Cond: ValidityCondition> StateTransitionId<Cond> {
 }
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]
+/// Represents a transition in progress for the rollup.
 pub struct TransitionInProgress<Cond> {
     da_block_hash: [u8; 32],
     validity_condition: Cond,
