@@ -74,6 +74,9 @@ let after = risc0_zkvm::guest::env::get_cycle_count();
 * We can run this on different kinds of workloads to gauge the efficiency of different parts of the code
 
 ## Result
+* Standard hash function patched with risc0/rust_crypto
+* Signature verification currently NOT patched (TBD)
+* Signature verification takes about 60% of the total cycles
 ```
 Block stats
 
