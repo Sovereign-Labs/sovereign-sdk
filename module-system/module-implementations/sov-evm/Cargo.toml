@@ -14,6 +14,7 @@ resolver = "2"
 
 [dependencies]
 
+sov-db = { path = "../../../full-node/db/sov-db" }
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false, features = ["macros"] }
 sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
 
@@ -48,6 +49,14 @@ reth-rpc = { workspace = true }
 reth-revm = { workspace = true }
 reth-provider = { workspace = true }
 reth-interfaces = { workspace = true }
+reth-transaction-pool = { workspace = true }
+reth-network-api = { workspace = true }
+reth-tasks = { workspace = true }
+reth-blockchain-tree = { workspace = true }
+reth-beacon-consensus = { workspace = true }
+
+
+tokio = { workspace = true }
 
 [dev-dependencies]
 

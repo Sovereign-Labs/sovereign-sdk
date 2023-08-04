@@ -16,6 +16,8 @@ mod tests;
 pub use experimental::{AccountData, Evm, EvmConfig};
 #[cfg(feature = "experimental")]
 pub use receipt::TransactionReceipt;
+#[cfg(feature = "experimental")]
+pub mod reth_api;
 
 #[cfg(feature = "experimental")]
 mod experimental {

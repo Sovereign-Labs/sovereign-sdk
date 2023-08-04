@@ -215,7 +215,7 @@ checksum = "cc6dde6e4ed435a4c1ee4e73592f5ba9da2151af10076cc04858746af9352d09"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -361,7 +361,7 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -453,7 +453,7 @@ dependencies = [
 [[package]]
 name = "boa_ast"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#33e8c51fc644354ba5510e221257e3fb0d292ae2"
+source = "git+https://github.com/boa-dev/boa#f3a0ff0971b113a9dc23230493075e97700a0e4a"
 dependencies = [
  "bitflags 2.3.3",
  "boa_interner",
@@ -466,7 +466,7 @@ dependencies = [
 [[package]]
 name = "boa_engine"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#33e8c51fc644354ba5510e221257e3fb0d292ae2"
+source = "git+https://github.com/boa-dev/boa#f3a0ff0971b113a9dc23230493075e97700a0e4a"
 dependencies = [
  "bitflags 2.3.3",
  "boa_ast",
@@ -504,7 +504,7 @@ dependencies = [
 [[package]]
 name = "boa_gc"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#33e8c51fc644354ba5510e221257e3fb0d292ae2"
+source = "git+https://github.com/boa-dev/boa#f3a0ff0971b113a9dc23230493075e97700a0e4a"
 dependencies = [
  "boa_macros",
  "boa_profiler",
@@ -514,7 +514,7 @@ dependencies = [
 [[package]]
 name = "boa_icu_provider"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#33e8c51fc644354ba5510e221257e3fb0d292ae2"
+source = "git+https://github.com/boa-dev/boa#f3a0ff0971b113a9dc23230493075e97700a0e4a"
 dependencies = [
  "icu_collections",
  "icu_normalizer",
@@ -527,7 +527,7 @@ dependencies = [
 [[package]]
 name = "boa_interner"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#33e8c51fc644354ba5510e221257e3fb0d292ae2"
+source = "git+https://github.com/boa-dev/boa#f3a0ff0971b113a9dc23230493075e97700a0e4a"
 dependencies = [
  "boa_gc",
  "boa_macros",
@@ -542,18 +542,18 @@ dependencies = [
 [[package]]
 name = "boa_macros"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#33e8c51fc644354ba5510e221257e3fb0d292ae2"
+source = "git+https://github.com/boa-dev/boa#f3a0ff0971b113a9dc23230493075e97700a0e4a"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
  "synstructure 0.13.0",
 ]
 
 [[package]]
 name = "boa_parser"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#33e8c51fc644354ba5510e221257e3fb0d292ae2"
+source = "git+https://github.com/boa-dev/boa#f3a0ff0971b113a9dc23230493075e97700a0e4a"
 dependencies = [
  "bitflags 2.3.3",
  "boa_ast",
@@ -573,7 +573,7 @@ dependencies = [
 [[package]]
 name = "boa_profiler"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#33e8c51fc644354ba5510e221257e3fb0d292ae2"
+source = "git+https://github.com/boa-dev/boa#f3a0ff0971b113a9dc23230493075e97700a0e4a"
 
 [[package]]
 name = "bonsai-sdk"
@@ -680,7 +680,7 @@ checksum = "fdde5c9cd29ebd706ce1b35600920a33550e402fc998a2e53ad3b42c3c47a192"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -874,7 +874,7 @@ dependencies = [
  "heck",
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -892,14 +892,14 @@ checksum = "67ba02a97a2bd10f4b59b25c7973101c79642302776489e030cd13cdab09ed15"
 [[package]]
 name = "codecs-derive"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "convert_case 0.6.0",
  "parity-scale-codec",
  "proc-macro2 1.0.66",
  "quote 1.0.32",
  "serde",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -1243,7 +1243,7 @@ dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
  "strsim",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -1254,7 +1254,7 @@ checksum = "836a9bbc7ad63342d6d6e7b815ccab164bc77a2d95d84bc3117a8c0d5c98e2d5"
 dependencies = [
  "darling_core",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -1449,7 +1449,7 @@ checksum = "487585f4d0c6655fe74905e2504d8ad6908e4db67f744eb140876906c2f3175d"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -1644,7 +1644,7 @@ dependencies = [
  "num-traits",
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -1655,7 +1655,7 @@ checksum = "b893c4eb2dc092c811165f84dc7447fae16fb66521717968c34c509b39b1a5c5"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -1831,7 +1831,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "syn 2.0.27",
+ "syn 2.0.28",
  "toml 0.7.6",
  "walkdir",
 ]
@@ -1849,7 +1849,7 @@ dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
  "serde_json",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -1875,7 +1875,7 @@ dependencies = [
  "serde",
  "serde_json",
  "strum",
- "syn 2.0.27",
+ "syn 2.0.28",
  "tempfile",
  "thiserror",
  "tiny-keccak",
@@ -2242,7 +2242,7 @@ checksum = "89ca545a94061b6365f2c7355b4b32bd20df3ff95f02da9329b34ccc3bd6ee72"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -3417,6 +3417,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "linked-hash-map"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0717cef1bc8b636c6e1c1bbdefc09e6322da8a9321966e8928ef80d20f7f770f"
+
+[[package]]
+name = "linked_hash_set"
+version = "0.1.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47186c6da4d81ca383c7c47c1bfc80f4b95f4720514d860a5407aaf4233f9588"
+dependencies = [
+ "linked-hash-map",
+]
+
+[[package]]
 name = "linux-raw-sys"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3443,6 +3458,15 @@ name = "log"
 version = "0.4.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b06a4cde4c0f271a446782e3eff8de789548ce57dbc8eca9292c27f4a42004b4"
+
+[[package]]
+name = "lru"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "718e8fae447df0c7e1ba7f5189829e63fd536945c8988d61444c19039f16b670"
+dependencies = [
+ "hashbrown 0.13.2",
+]
 
 [[package]]
 name = "lz4-sys"
@@ -3726,7 +3750,7 @@ checksum = "9e6a0fd4f737c707bd9086cc16c925f294943eb62eb71499e9fd4cf71f8b9f4e"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -3800,7 +3824,7 @@ dependencies = [
  "proc-macro-crate 1.3.1",
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -3891,7 +3915,7 @@ checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -4141,7 +4165,7 @@ dependencies = [
  "phf_shared 0.11.2",
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -4179,7 +4203,7 @@ checksum = "ec2e072ecce94ec471b13398d5402c188e76ac03cf74dd1a975161b23a3f6d9c"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -4308,7 +4332,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c64d9ba0963cdcea2e1b2230fbae2bab30eb25a174be395c41e764bfb65dd62"
 dependencies = [
  "proc-macro2 1.0.66",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -4789,7 +4813,7 @@ checksum = "4389f1d5789befaf6029ebd9f7dac4af7f7e3d61b69d4f30e2ac02b57e7712b0"
 [[package]]
 name = "reth-beacon-consensus"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "futures",
  "reth-consensus-common",
@@ -4811,9 +4835,27 @@ dependencies = [
 ]
 
 [[package]]
+name = "reth-blockchain-tree"
+version = "0.1.0-alpha.4"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
+dependencies = [
+ "aquamarine",
+ "linked_hash_set",
+ "lru",
+ "parking_lot 0.12.1",
+ "reth-db",
+ "reth-interfaces",
+ "reth-metrics",
+ "reth-primitives",
+ "reth-provider",
+ "reth-stages",
+ "tracing",
+]
+
+[[package]]
 name = "reth-codecs"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "bytes",
  "codecs-derive",
@@ -4823,7 +4865,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus-common"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "reth-interfaces",
  "reth-primitives",
@@ -4833,7 +4875,7 @@ dependencies = [
 [[package]]
 name = "reth-db"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "bytes",
  "derive_more",
@@ -4860,7 +4902,7 @@ dependencies = [
 [[package]]
 name = "reth-ecies"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "aes",
  "block-padding",
@@ -4891,7 +4933,7 @@ dependencies = [
 [[package]]
 name = "reth-eth-wire"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "async-trait",
  "bytes",
@@ -4916,7 +4958,7 @@ dependencies = [
 [[package]]
 name = "reth-interfaces"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "async-trait",
  "auto_impl",
@@ -4940,7 +4982,7 @@ dependencies = [
 [[package]]
 name = "reth-libmdbx"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "bitflags 2.3.3",
  "byteorder",
@@ -4955,7 +4997,7 @@ dependencies = [
 [[package]]
 name = "reth-mdbx-sys"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "bindgen",
  "cc",
@@ -4965,28 +5007,30 @@ dependencies = [
 [[package]]
 name = "reth-metrics"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
+ "futures",
  "metrics",
  "reth-metrics-derive",
+ "tokio",
 ]
 
 [[package]]
 name = "reth-metrics-derive"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "once_cell",
  "proc-macro2 1.0.66",
  "quote 1.0.32",
  "regex",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
 name = "reth-net-common"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "pin-project",
  "reth-primitives",
@@ -4996,7 +5040,7 @@ dependencies = [
 [[package]]
 name = "reth-network-api"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "async-trait",
  "reth-eth-wire",
@@ -5010,7 +5054,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-builder"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "futures-util",
  "reth-interfaces",
@@ -5030,7 +5074,7 @@ dependencies = [
 [[package]]
 name = "reth-primitives"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "bytes",
  "crc",
@@ -5070,7 +5114,7 @@ dependencies = [
 [[package]]
 name = "reth-provider"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "auto_impl",
  "derive_more",
@@ -5091,7 +5135,7 @@ dependencies = [
 [[package]]
 name = "reth-prune"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "itertools 0.11.0",
  "rayon",
@@ -5107,7 +5151,7 @@ dependencies = [
 [[package]]
 name = "reth-revm"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "reth-consensus-common",
  "reth-interfaces",
@@ -5122,7 +5166,7 @@ dependencies = [
 [[package]]
 name = "reth-revm-inspectors"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "boa_engine",
  "boa_gc",
@@ -5139,7 +5183,7 @@ dependencies = [
 [[package]]
 name = "reth-revm-primitives"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "reth-primitives",
  "revm",
@@ -5148,7 +5192,7 @@ dependencies = [
 [[package]]
 name = "reth-rlp"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "arrayvec",
  "auto_impl",
@@ -5162,17 +5206,17 @@ dependencies = [
 [[package]]
 name = "reth-rlp-derive"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
 name = "reth-rpc"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "async-trait",
  "bytes",
@@ -5218,7 +5262,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-api"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "jsonrpsee 0.19.0",
  "reth-primitives",
@@ -5229,7 +5273,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-engine-api"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "async-trait",
  "jsonrpsee-core 0.19.0",
@@ -5250,7 +5294,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-types"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "itertools 0.11.0",
  "jsonrpsee-types 0.19.0",
@@ -5264,7 +5308,7 @@ dependencies = [
 [[package]]
 name = "reth-stages"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "aquamarine",
  "async-trait",
@@ -5290,7 +5334,7 @@ dependencies = [
 [[package]]
 name = "reth-tasks"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "dyn-clone",
  "futures-util",
@@ -5304,7 +5348,7 @@ dependencies = [
 [[package]]
 name = "reth-transaction-pool"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "aquamarine",
  "async-trait",
@@ -5331,7 +5375,7 @@ dependencies = [
 [[package]]
 name = "reth-trie"
 version = "0.1.0-alpha.4"
-source = "git+https://github.com/bkolad/reth#ce6e24770e7f3ce6d3fa8356f95d5a4a6cb9a5b0"
+source = "git+https://github.com/bkolad/reth#40d73a99f677651661c23bbf4ad0ab1d1fc46e68"
 dependencies = [
  "derive_more",
  "hex",
@@ -5974,9 +6018,9 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "serde"
-version = "1.0.176"
+version = "1.0.181"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76dc28c9523c5d70816e393136b86d48909cfb27cecaa902d338c19ed47164dc"
+checksum = "6d3e73c93c3240c0bda063c239298e633114c69a888c3e37ca8bb33f343e9890"
 dependencies = [
  "serde_derive",
 ]
@@ -5992,13 +6036,13 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.176"
+version = "1.0.181"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4e7b8c5dc823e3b90651ff1d3808419cd14e5ad76de04feaf37da114e7a306f"
+checksum = "be02f6cb0cd3a5ec20bbcfbcbd749f57daddb1a0882dc2e46a6c236c90b977ed"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -6042,7 +6086,7 @@ checksum = "8725e1dfadb3a50f7e5ce0b1a540466f6ed3fe7a0fca2ac2b8b831d31316bd00"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -6091,7 +6135,7 @@ dependencies = [
  "darling",
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -6442,16 +6486,22 @@ dependencies = [
  "hex",
  "jsonrpsee 0.18.2",
  "primitive-types",
+ "reth-beacon-consensus",
+ "reth-blockchain-tree",
  "reth-interfaces",
+ "reth-network-api",
  "reth-primitives",
  "reth-provider",
  "reth-revm",
  "reth-rpc",
  "reth-rpc-types",
+ "reth-tasks",
+ "reth-transaction-pool",
  "revm",
  "schemars",
  "serde",
  "serde_json",
+ "sov-db",
  "sov-modules-api",
  "sov-state",
  "tempfile",
@@ -6739,7 +6789,7 @@ dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
  "rustversion",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -6829,9 +6879,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.27"
+version = "2.0.28"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b60f673f44a8255b9c8c657daf66a596d435f2da81a555b06dc644d080ba45e0"
+checksum = "04361975b3f5e348b2189d8dc55bc942f278b2d482a6a0365de5bdd62d351567"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
@@ -6858,7 +6908,7 @@ checksum = "285ba80e733fac80aa4270fbcdf83772a79b80aa35c97075320abfee4a915b06"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
  "unicode-xid 0.2.4",
 ]
 
@@ -6971,7 +7021,7 @@ checksum = "090198534930841fab3a5d1bb637cde49e339654e606195f8d9c76eeb081dc96"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -7085,7 +7135,7 @@ checksum = "630bdcf245f78637c13ec01ffae6187cca34625e8c63150d424b59e55af2675e"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -7252,7 +7302,7 @@ checksum = "5f4f31f56159e98206da9efd823404b79b6ef3143b4a7ab76e67b1751b25a4ab"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -7379,7 +7429,7 @@ checksum = "30c49a6815b4f8379c36f06618bc1b80ca77aaf8a3fd4d8549dca6fdb016000f"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -7593,7 +7643,7 @@ dependencies = [
  "once_cell",
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
  "wasm-bindgen-shared",
 ]
 
@@ -7627,7 +7677,7 @@ checksum = "54681b18a46765f095758388f2d0cf16eb8d4169b639ab575a8f5693af210c7b"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -7941,7 +7991,7 @@ checksum = "ce36e65b0d2999d2aafac989fb249189a141aee1f53c612c1f37d72631959f69"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
- "syn 2.0.27",
+ "syn 2.0.28",
 ]
 
 [[package]]
