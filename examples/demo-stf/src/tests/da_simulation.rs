@@ -8,7 +8,6 @@ use sov_data_generators::value_setter_data::{ValueSetterMessage, ValueSetterMess
 use sov_data_generators::MessageGenerator;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::Context;
 use sov_modules_stf_template::RawTx;
 
 use crate::runtime::Runtime;

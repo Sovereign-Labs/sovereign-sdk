@@ -53,6 +53,10 @@ impl<S: Storage> StateCheckpoint<S> {
         }
     }
 
+    pub fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
+        self.delta.get(key)
+    }
+
     pub fn with_witness(inner: S, witness: S::Witness) -> Self {
         Self {
             delta: Delta::with_witness(inner, witness),

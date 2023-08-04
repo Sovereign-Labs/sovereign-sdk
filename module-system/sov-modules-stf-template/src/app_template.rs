@@ -1,15 +1,16 @@
 use std::marker::PhantomData;
 
-use borsh::BorshDeserialize;
+use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
 use sov_modules_api::{Context, DispatchCall, Genesis};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
 use sov_rollup_interface::zk::ValidityCondition;
 use sov_rollup_interface::Buf;
-use sov_state::StateCheckpoint;
+use sov_state::storage::{StorageKey, StorageValue};
 #[cfg(test)]
 use sov_state::WorkingSet;
+use sov_state::{Prefix, StateCheckpoint, Storage};
 use tracing::{debug, error};
 
 use crate::tx_verifier::{verify_txs_stateless, TransactionAndRawHash};
@@ -95,6 +96,26 @@ where
             Some(checkpoint) => checkpoint.to_revertable(),
             None => WorkingSet::new(self.current_storage),
         }
+    }
+
+    /// Gets a key from the storage, updates the current storage checkpoint to cache the key if not cached yet.
+    pub fn get_from_storage(&mut self, key: StorageKey) -> Option<StorageValue> {
+        match &mut self.checkpoint {
+            Some(ref mut checkpoint) => checkpoint.get(key),
+            None => self.current_storage.get(key, &Default::default()),
+        }
+    }
+
+    /// Helper function that returns a storage value from a key and a prefix.
+    /// It deserializes the storage value to the output type.
+    pub fn get_from_storage_with_prefix<K: BorshSerialize, Out: BorshDeserialize>(
+        &mut self,
+        prefix: &Prefix,
+        key: &K,
+    ) -> Option<Out> {
+        let storage_val_opt = self.get_from_storage(StorageKey::new(prefix, key));
+        storage_val_opt
+            .map(|storage_val| BorshDeserialize::deserialize(&mut storage_val.value()).unwrap())
     }
 
     pub(crate) fn apply_blob(

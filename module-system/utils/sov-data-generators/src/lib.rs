@@ -5,7 +5,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 pub use sov_modules_api::EncodeCall;
-use sov_modules_api::{Address, Context, DispatchCall, Hasher, MessageCodec, Module, Spec};
+use sov_modules_api::{Address, Context, Hasher, Module, Spec};
 use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, TxEffect};
 use sov_rollup_interface::mocks::TestBlob;
 use sov_rollup_interface::stf::BatchReceipt;
@@ -19,7 +19,6 @@ pub fn generate_address<C: Context>(key: &str) -> <C as Spec>::Address {
     <C as Spec>::Address::from(hash)
 }
 
-#[cfg(feature = "mocks")]
 pub fn new_test_blob_from_batch(batch: Batch, address: &[u8], hash: [u8; 32]) -> TestBlob<Address> {
     let address = Address::try_from(address).unwrap();
     let data = batch.try_to_vec().unwrap();
@@ -68,12 +67,4 @@ pub trait MessageGenerator {
         }
         serialized_messages
     }
-}
-
-#[derive(DispatchCall, MessageCodec)]
-#[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub struct Runtime<C: Context> {
-    pub bank: sov_bank::Bank<C>,
-    pub election: sov_election::Election<C>,
-    pub value_setter: sov_value_setter::ValueSetter<C>,
 }

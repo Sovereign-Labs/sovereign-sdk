@@ -15,6 +15,8 @@ mod utils;
 mod value;
 mod witness;
 
+pub use value::SingletonKey;
+
 mod zk_storage;
 
 pub use zk_storage::ZkStorage;
