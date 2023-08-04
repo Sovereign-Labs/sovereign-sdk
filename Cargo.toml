@@ -13,6 +13,7 @@ members = [
     "full-node/sov-sequencer",
     "full-node/sov-ethereum",
     
+    "module-system/sov-cli",
     "module-system/sov-modules-stf-template",
     "module-system/sov-modules-macros",
     "module-system/sov-state",
@@ -102,4 +103,3 @@ revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "releas
 # See reth: https://github.com/paradigmxyz/reth/blob/main/Cargo.toml#L79
 revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
 revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
-
