@@ -14,7 +14,7 @@ use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
-use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
+use sov_modules_api::{Context, DispatchCall,  Genesis, MessageCodec};
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 #[cfg(feature = "native")]
@@ -89,11 +89,11 @@ impl<Cond> SlotHooks<Cond> for Runtime<DefaultContext> {
         _slot_data: &impl sov_rollup_interface::services::da::SlotData,
         _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
     ) -> anyhow::Result<()> {
-        todo!()
+        Ok(())
     }
 
     fn end_slot_hook(&self, _new_state_root: [u8; 32]) -> anyhow::Result<()> {
-        todo!()
+        Ok(())
     }
 }
 
@@ -105,10 +105,10 @@ impl<Cond> SlotHooks<Cond> for Runtime<ZkDefaultContext> {
         _slot_data: &impl sov_rollup_interface::services::da::SlotData,
         _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
     ) -> anyhow::Result<()> {
-        todo!()
+        Ok(())
     }
 
     fn end_slot_hook(&self, _new_state_root: [u8; 32]) -> anyhow::Result<()> {
-        todo!()
+        Ok(())
     }
 }

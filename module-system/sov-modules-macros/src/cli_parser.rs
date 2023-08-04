@@ -83,7 +83,7 @@ impl CliParserMacro {
                     parse_match_arms.push(quote! {
                             CliTransactionParser::#module_ident(mod_args) => {
                                 let command_as_call_message: <#module_path as ::sov_modules_api::Module>::CallMessage = mod_args.command.into();
-                                <#ident:: #ty_generics as sov_data_generators::EncodeCall<#module_path>> ::encode_call(
+                                <#ident:: #ty_generics as ::sov_modules_api::EncodeCall<#module_path>> ::encode_call(
                                     command_as_call_message
                                 )
                             },
@@ -108,7 +108,7 @@ impl CliParserMacro {
                             #type_name_string => Ok({
                                 let _data: <#module_path as ::sov_modules_api::Module>::CallMessage =
                                  ::serde_json::from_str::<<#module_path as ::sov_modules_api::Module>::CallMessage>(&call_data)?;
-                                <#ident:: #ty_generics as sov_data_generators::EncodeCall<#module_path>> ::encode_call(
+                                <#ident:: #ty_generics as ::sov_modules_api::EncodeCall<#module_path>> ::encode_call(
                                    _data
                                 )
                             }),

@@ -3,7 +3,9 @@ use modules::third_test_module::{self, ModuleThreeStorable};
 use modules::{first_test_module, second_test_module};
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::DefaultRuntime;
-use sov_modules_api::{Address, Context, DispatchCall, Genesis, MessageCodec, ModuleInfo};
+use sov_modules_api::{
+    Address, Context, DispatchCall, EncodeCall, Genesis, MessageCodec, ModuleInfo,
+};
 use sov_state::ZkStorage;
 
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
@@ -31,7 +33,9 @@ fn main() {
     let value = 11;
     {
         let message = value;
-        let serialized_message = RT::encode_first_call(message);
+        let serialized_message = <RT as EncodeCall<
+            first_test_module::FirstTestStruct<ZkDefaultContext>,
+        >>::encode_call(message);
         let module = RT::decode_call(&serialized_message).unwrap();
 
         assert_eq!(runtime.module_address(&module), runtime.first.address());
@@ -48,7 +52,9 @@ fn main() {
     let value = 22;
     {
         let message = value;
-        let serialized_message = RT::encode_second_call(message);
+        let serialized_message = <RT as EncodeCall<
+            second_test_module::SecondTestStruct<ZkDefaultContext>,
+        >>::encode_call(message);
         let module = RT::decode_call(&serialized_message).unwrap();
 
         assert_eq!(runtime.module_address(&module), runtime.second.address());
