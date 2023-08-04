@@ -68,7 +68,7 @@ where
     fn begin_slot(
         &mut self,
         slot_data: &impl SlotData<Condition = Cond>,
-        witness: <AppTemplate<C, RT, Vm, Cond, B> as StateTransitionFunction<Vm, B>>::Witness,
+        witness: <Self as StateTransitionFunction<Vm, B>>::Witness,
     ) -> anyhow::Result<()> {
         let state_checkpoint = StateCheckpoint::with_witness(self.current_storage.clone(), witness);
 

@@ -140,7 +140,7 @@ pub trait Storage: Clone {
     fn get(&self, key: StorageKey, witness: &Self::Witness) -> Option<StorageValue>;
 
     /// Returns the latest state root hash from the storage.
-    fn get_state_root(&self) -> Result<[u8; 32], anyhow::Error>;
+    fn get_state_root(&self, witness: &Self::Witness) -> [u8; 32];
 
     /// Validate all of the storage accesses in a particular cache log,
     /// returning the new state root after applying all writes
