@@ -108,7 +108,9 @@ fn test_simple_value_setter() {
     );
 
     // Get the new state root hash
-    let new_root_hash = app_template.current_storage.get_state_root().unwrap();
+    let new_root_hash = app_template
+        .current_storage
+        .get_state_root(&Default::default());
 
     // Check that the root hash has been stored correctly
     let stored_root: [u8; 32] = app_template

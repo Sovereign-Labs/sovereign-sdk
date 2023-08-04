@@ -40,8 +40,10 @@ impl<Ctx: Context, Cond: ValidityCondition + Default + BorshDeserialize + BorshS
 
         if curr_height == 0 {
             // First transition right after the genesis block
-            self.genesis_hash
-                .set(&working_set.backing().get_state_root()?, working_set)
+            self.genesis_hash.set(
+                &working_set.backing().get_state_root(&Default::default()),
+                working_set,
+            )
         } else {
             let transition: StateTransitionId<Cond> = {
                 let last_transition_in_progress = self
@@ -51,7 +53,7 @@ impl<Ctx: Context, Cond: ValidityCondition + Default + BorshDeserialize + BorshS
 
                 StateTransitionId {
                     da_block_hash: last_transition_in_progress.da_block_hash,
-                    post_state_root: working_set.backing().get_state_root()?,
+                    post_state_root: working_set.backing().get_state_root(&Default::default()),
                     validity_condition: last_transition_in_progress.validity_condition,
                 }
             };
