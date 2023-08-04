@@ -191,12 +191,11 @@ async fn main() -> Result<(), anyhow::Error> {
             info!("No history detected. Initializing chain...");
             let post_genesis_root = demo.init_chain(get_genesis_config());
             info!("Chain initialization is done.");
-            post_genesis_root
+            post_genesis_root.unwrap()
         } else {
             debug!("Chain is already initialized. Skipping initialization.");
-            storage.get_state_root()
+            storage.get_state_root(&Default::default())
         }
-        .unwrap()
     };
 
     // Start the main rollup loop
