@@ -219,7 +219,3 @@ impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultCo
 Whew, that was a lot of information. To recap, implementing your own state transition function is as simple as plugging  
 a Runtime, a Transaction Verifier, and some Transaction Hooks into the pre-built app template. Once you've done that,
 you can integrate with any DA layer and ZKVM to create a Sovereign Rollup.
-
-Everything else in this tutorial is about making it easy to _run_ your Sovereign Rollup. To be as compatible as
-possible, state transitions usually want to implement the StateTransitionRunner and RpcRunner traits. For more
-detail about integrating your STF into a full-node, check out the [`demo-rollup` example](../demo-rollup/).

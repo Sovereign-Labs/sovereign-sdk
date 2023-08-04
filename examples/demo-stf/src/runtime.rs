@@ -78,3 +78,5 @@ pub struct Runtime<C: Context> {
     #[cfg_attr(feature = "native", cli_skip)]
     pub evm: sov_evm::Evm<C>,
 }
+
+impl<C: Context> sov_modules_stf_template::Runtime<C> for Runtime<C> {}

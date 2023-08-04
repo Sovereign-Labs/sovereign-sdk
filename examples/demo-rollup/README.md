@@ -376,12 +376,11 @@ automatically picked up by the node implementation. For this tutorial, the Makef
 
 ### 2. Initialize the State Transition Function
 
-The next step is to initialize your state transition function. If it implements the [StateTransitionRunner](../../rollup-interface/src/state_machine/stf.rs)
-interface, you can use that for easy initialization.
+The next step is to initialize your state transition function.
 
 ```rust
-let mut stf_runner = NativeAppRunner::<Risc0Host>::new(rollup_config);
-let mut stf = stf_runner.inner_mut();
+  let mut app: App<Risc0Verifier, jupiter::BlobWithSender> =
+        App::new(config);
 ```
 
 If your StateTransitionRunner provides an RPC interface, you should initialize that too. If it implements RpcRunner, you
