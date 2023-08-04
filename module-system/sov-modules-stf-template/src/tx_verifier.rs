@@ -27,7 +27,6 @@ impl RawTx {
     }
 }
 
-
 pub(crate) fn verify_txs_stateless<C: Context>(
     raw_txs: Vec<RawTx>,
 ) -> anyhow::Result<Vec<TransactionAndRawHash<C>>> {

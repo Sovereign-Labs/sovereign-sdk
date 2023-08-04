@@ -14,11 +14,10 @@ use sov_rollup_interface::zk::Zkvm;
 use sov_state::{StateCheckpoint, Storage};
 use tracing::info;
 pub use tx_verifier::RawTx;
-
-#[cfg(all(target_os = "zkvm", feature="bench"))]
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
 use zk_cycle_utils::cycle_tracker;
 
-#[cfg(all(target_os = "zkvm", feature="bench"))]
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
 extern crate risc0_zkvm;
 
 /// The receipts of all the transactions in a batch.
@@ -62,7 +61,7 @@ pub enum SlashingReason {
 }
 
 impl<C: Context, RT, Vm: Zkvm, B: BlobReaderTrait> AppTemplate<C, RT, Vm, B> {
-    #[cfg_attr(all(target_os = "zkvm", feature="bench"), cycle_tracker)]
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_slot(&mut self, witness: <<C as Spec>::Storage as Storage>::Witness) {
         self.checkpoint = Some(StateCheckpoint::with_witness(
             self.current_storage.clone(),
@@ -70,7 +69,7 @@ impl<C: Context, RT, Vm: Zkvm, B: BlobReaderTrait> AppTemplate<C, RT, Vm, B> {
         ));
     }
 
-    #[cfg_attr(all(target_os = "zkvm", feature="bench"), cycle_tracker)]
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn end_slot(&mut self) -> (jmt::RootHash, <<C as Spec>::Storage as Storage>::Witness) {
         let (cache_log, witness) = self.checkpoint.take().unwrap().freeze();
         let root_hash = self
@@ -112,7 +111,7 @@ where
             .expect("Storage update must succeed");
     }
 
-    #[cfg_attr(all(target_os = "zkvm", feature="bench"), cycle_tracker)]
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn apply_slot<'a, I>(
         &mut self,
         witness: Self::Witness,
@@ -157,5 +156,4 @@ where
             witness,
         }
     }
-
 }

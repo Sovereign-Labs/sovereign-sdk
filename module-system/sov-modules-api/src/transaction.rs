@@ -1,3 +1,6 @@
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+use zk_cycle_utils::cycle_tracker;
+
 #[cfg(feature = "native")]
 use crate::default_context::DefaultContext;
 #[cfg(feature = "native")]
@@ -5,9 +8,6 @@ use crate::default_signature::private_key::DefaultPrivateKey;
 use crate::{Context, Signature};
 #[cfg(feature = "native")]
 use crate::{PrivateKey, Spec};
-
-#[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_utils::cycle_tracker;
 
 /// A Transaction object that is compatible with the module-system/sov-default-stf.
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
@@ -36,7 +36,7 @@ impl<C: Context> Transaction<C> {
     }
 
     /// Check whether the transaction has been signed correctly.
-    #[cfg_attr(all(target_os="zkvm", feature="bench"), cycle_tracker)]
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     pub fn verify(&self) -> anyhow::Result<()> {
         let mut serialized_tx =
             Vec::with_capacity(self.runtime_msg().len() + std::mem::size_of::<u64>());

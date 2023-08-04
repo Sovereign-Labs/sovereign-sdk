@@ -1,22 +1,22 @@
+use std::collections::HashMap;
+
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use risc0_zkvm_platform::syscall::SyscallName;
-use std::collections::HashMap;
 
-pub static GLOBAL_HASHMAP: Lazy<Mutex<HashMap<String,(u64, u64)>>> = Lazy::new(|| {
-    Mutex::new(HashMap::new())
-});
+pub static GLOBAL_HASHMAP: Lazy<Mutex<HashMap<String, (u64, u64)>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
 
-pub fn add_value(metric: String, value:  u64) {
+pub fn add_value(metric: String, value: u64) {
     let mut hashmap = GLOBAL_HASHMAP.lock();
-    hashmap.entry(metric)
+    hashmap
+        .entry(metric)
         .and_modify(|(sum, count)| {
             *sum += value;
             *count += 1;
         })
         .or_insert((value, 1));
 }
-
 
 pub fn deserialize_custom(serialized: &[u8]) -> (String, u64) {
     let null_pos = serialized.iter().position(|&b| b == 0).unwrap();
@@ -31,9 +31,7 @@ pub fn deserialize_custom(serialized: &[u8]) -> (String, u64) {
 pub fn get_syscall_name_handler() -> (SyscallName, fn(&[u8]) -> Vec<u8>) {
     let cycle_string = "cycle_metrics\0";
     let bytes = cycle_string.as_bytes();
-    let metrics_syscall_name = unsafe {
-        SyscallName::from_bytes_with_nul(bytes.as_ptr())
-    };
+    let metrics_syscall_name = unsafe { SyscallName::from_bytes_with_nul(bytes.as_ptr()) };
 
     let metrics_callback = |input: &[u8]| -> Vec<u8> {
         {
@@ -44,5 +42,4 @@ pub fn get_syscall_name_handler() -> (SyscallName, fn(&[u8]) -> Vec<u8>) {
     };
 
     (metrics_syscall_name, metrics_callback)
-
 }

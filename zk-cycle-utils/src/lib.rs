@@ -2,17 +2,16 @@ extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::ItemFn;
-use syn::parse_macro_input;
+use syn::{parse_macro_input, ItemFn};
 
 #[proc_macro_attribute]
 pub fn cycle_tracker(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);
-    let r = match wrap_function(input).into() {
+
+    match wrap_function(input) {
         Ok(ok) => ok,
         Err(err) => err.to_compile_error().into(),
-    };
-    r.into()
+    }
 }
 
 fn wrap_function(input: ItemFn) -> Result<TokenStream, syn::Error> {
@@ -24,7 +23,8 @@ fn wrap_function(input: ItemFn) -> Result<TokenStream, syn::Error> {
     let generics = &input.sig.generics;
     let where_clause = &input.sig.generics.where_clause;
     let risc0_zkvm = syn::Ident::new("risc0_zkvm", proc_macro2::Span::call_site());
-    let risc0_zkvm_platform = syn::Ident::new("risc0_zkvm_platform", proc_macro2::Span::call_site());
+    let risc0_zkvm_platform =
+        syn::Ident::new("risc0_zkvm_platform", proc_macro2::Span::call_site());
 
     let result = quote! {
         #visibility fn #name #generics (#inputs) #output #where_clause {

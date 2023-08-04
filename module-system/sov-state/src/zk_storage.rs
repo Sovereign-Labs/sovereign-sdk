@@ -2,14 +2,13 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use jmt::{JellyfishMerkleTree, KeyHash, Version};
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+use zk_cycle_utils::cycle_tracker;
 
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::storage::{StorageKey, StorageValue};
 use crate::witness::{TreeWitnessReader, Witness};
 use crate::{MerkleProofSpec, Storage};
-
-#[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_utils::cycle_tracker;
 
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 extern crate risc0_zkvm;

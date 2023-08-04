@@ -7,12 +7,9 @@ use risc0_zkvm::{
 };
 use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
 
-use crate::Risc0MethodId;
-
 #[cfg(feature = "bench")]
-use crate::metrics::{
-    get_syscall_name_handler
-};
+use crate::metrics::get_syscall_name_handler;
+use crate::Risc0MethodId;
 
 pub struct Risc0Host<'a> {
     env: RefCell<ExecutorEnvBuilder<'a>>,
@@ -50,7 +47,6 @@ impl<'a> Risc0Host<'a> {
         let session = self.run_without_proving()?;
         session.prove()
     }
-
 }
 
 impl<'a> ZkvmHost for Risc0Host<'a> {

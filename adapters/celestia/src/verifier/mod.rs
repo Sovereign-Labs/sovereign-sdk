@@ -12,15 +12,14 @@ pub mod address;
 pub mod proofs;
 
 use proofs::*;
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+use zk_cycle_utils::cycle_tracker;
 
 use self::address::CelestiaAddress;
 use crate::share_commit::recreate_commitment;
 use crate::shares::{read_varint, BlobIterator, NamespaceGroup, Share};
 use crate::types::ValidationError;
 use crate::{pfb_from_iter, BlobWithSender, CelestiaHeader, DataAvailabilityHeader};
-
-#[cfg(all(target_os = "zkvm",feature="bench"))]
-use zk_cycle_utils::cycle_tracker;
 
 pub struct CelestiaVerifier {
     pub rollup_namespace: NamespaceId,
@@ -142,8 +141,7 @@ impl da::DaVerifier for CelestiaVerifier {
         }
     }
 
-
-    #[cfg_attr(all(target_os = "zkvm", feature="bench"), cycle_tracker)]
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn verify_relevant_tx_list<H: Digest>(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
