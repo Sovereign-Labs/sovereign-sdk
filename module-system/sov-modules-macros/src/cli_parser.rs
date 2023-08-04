@@ -24,7 +24,6 @@ impl CliParserMacro {
             data,
             ..
         } = input;
-        let call_message_ident = format_ident!("{}Call", ident);
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
 
         let (_, ty_generics, _) = generics.split_for_impl();
@@ -95,7 +94,7 @@ impl CliParserMacro {
                     convert_match_arms.push(quote! {
                             CliTransactionParser::#field_name(mod_args) => {
                                 let command_as_call_message: <#module_path as ::sov_modules_api::Module>::CallMessage = mod_args.command.into();
-                                #call_message_ident:: #field_name(
+                                <#ident #ty_generics as ::sov_modules_api::DispatchCall>::Decodable:: #field_name(
                                     command_as_call_message
                                 )
                             },
@@ -142,8 +141,9 @@ impl CliParserMacro {
         };
         // Merge and generate the new code
         let expanded = quote! {
-            /// A CLI parser for transactions which can be sent to the runtime
+            /// Parse a transaction from command-line arguments
             #[derive(::clap::Parser)]
+            #[allow(non_camel_case_types)]
             pub enum CliTransactionParser #generics {
                 #( #module_command_arms, )*
             }
@@ -159,12 +159,16 @@ impl CliParserMacro {
                 }
             }
 
-            impl #impl_generics From<CliTransactionParser #ty_generics> for #call_message_ident #ty_generics #where_clause {
+            impl #impl_generics From<CliTransactionParser #ty_generics> for <#ident #ty_generics as ::sov_modules_api::DispatchCall>::Decodable #where_clause {
                 fn from(cmd: CliTransactionParser #ty_generics) -> Self {
                     match cmd {
                         #(#convert_match_arms)*
                     }
                 }
+            }
+
+            impl #impl_generics sov_modules_api::CliWallet for #ident #ty_generics #where_clause {
+                type CliStringRepr = CliTransactionParser #ty_generics;
             }
 
             /// Attempts to parse the provided call data as a [`sov_modules_api::Module::CallMessage`] for the given module.
