@@ -55,10 +55,8 @@
         "max_fee_per_gas",
         "max_priority_fee_per_gas",
         "nonce",
-        "odd_y_parity",
-        "r",
-        "s",
         "sender",
+        "sig",
         "value"
       ],
       "properties": {
@@ -116,29 +114,6 @@
           "format": "uint64",
           "minimum": 0.0
         },
-        "odd_y_parity": {
-          "type": "boolean"
-        },
-        "r": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "uint8",
-            "minimum": 0.0
-          },
-          "maxItems": 32,
-          "minItems": 32
-        },
-        "s": {
-          "type": "array",
-          "items": {
-            "type": "integer",
-            "format": "uint8",
-            "minimum": 0.0
-          },
-          "maxItems": 32,
-          "minItems": 32
-        },
         "sender": {
           "type": "array",
           "items": {
@@ -148,6 +123,9 @@
           },
           "maxItems": 20,
           "minItems": 20
+        },
+        "sig": {
+          "$ref": "#/definitions/Signature"
         },
         "to": {
           "type": [
@@ -166,6 +144,42 @@
           "type": "integer",
           "format": "uint128",
           "minimum": 0.0
+        }
+      }
+    },
+    "Signature": {
+      "type": "object",
+      "required": [
+        "odd_y_parity",
+        "r",
+        "s"
+      ],
+      "properties": {
+        "odd_y_parity": {
+          "description": "yParity: Signature Y parity; formally Ty",
+          "type": "boolean"
+        },
+        "r": {
+          "description": "The R field of the signature; the point on the curve.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
+        },
+        "s": {
+          "description": "The S field of the signature; the point on the curve.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          },
+          "maxItems": 32,
+          "minItems": 32
         }
       }
     }

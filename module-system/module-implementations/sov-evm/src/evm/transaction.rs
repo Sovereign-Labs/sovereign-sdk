@@ -56,31 +56,23 @@ pub struct EvmTransaction {
     pub nonce: u64,
     pub access_lists: Vec<AccessListItem>,
     pub chain_id: u64,
-    pub odd_y_parity: bool,
-    pub r: [u8; 32],
-    pub s: [u8; 32],
+    pub sig: Signature,
     // todo remove it
     pub hash: [u8; 32],
 }
 
-impl Default for EvmTransaction {
-    fn default() -> Self {
-        Self {
-            sender: Default::default(),
-            data: Default::default(),
-            gas_limit: u64::MAX,
-            gas_price: Default::default(),
-            max_priority_fee_per_gas: Default::default(),
-            max_fee_per_gas: Default::default(),
-            to: Default::default(),
-            value: Default::default(),
-            nonce: Default::default(),
-            access_lists: Default::default(),
-            chain_id: 1,
-            hash: Default::default(),
-            odd_y_parity: Default::default(),
-            r: Default::default(),
-            s: Default::default(),
-        }
-    }
+#[cfg_attr(
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize),
+    derive(schemars::JsonSchema)
+)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
+pub struct Signature {
+    /// The R field of the signature; the point on the curve.
+    pub r: [u8; 32],
+    /// The S field of the signature; the point on the curve.
+    pub s: [u8; 32],
+    /// yParity: Signature Y parity; formally Ty
+    pub odd_y_parity: bool,
 }

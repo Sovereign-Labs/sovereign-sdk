@@ -7,7 +7,7 @@ use revm::primitives::{
     TxEnv, B160, B256, U256,
 };
 
-use super::transaction::{AccessListItem, BlockEnv, EvmTransaction};
+use super::transaction::{AccessListItem, BlockEnv, EvmTransaction, Signature};
 use super::AccountInfo;
 
 impl From<AccountInfo> for ReVmAccountInfo {
@@ -98,9 +98,9 @@ impl From<EvmTransaction> for Transaction {
             // https://github.com/foundry-rs/foundry/blob/master/anvil/core/src/eth/transaction/mod.rs#L1251
             gas_price: Some(evm_tx.max_fee_per_gas.into()),
             input: evm_tx.data.into(),
-            v: (evm_tx.odd_y_parity as u8).into(),
-            r: evm_tx.r.into(),
-            s: evm_tx.s.into(),
+            v: (evm_tx.sig.odd_y_parity as u8).into(),
+            r: evm_tx.sig.r.into(),
+            s: evm_tx.sig.s.into(),
             transaction_type: Some(2.into()),
             access_list: None,
             max_priority_fee_per_gas: Some(evm_tx.max_priority_fee_per_gas.into()),
@@ -120,7 +120,9 @@ impl From<EvmTransaction> for Transaction {
     }
 }
 
-use reth_primitives::{Bytes as RethBytes, TransactionSigned};
+use reth_primitives::{
+    Bytes as RethBytes, Signature as RethSignature, TransactionSigned as RethTransactionSigned,
+};
 
 impl TryFrom<RethBytes> for EvmTransaction {
     type Error = EthApiError;
@@ -130,7 +132,7 @@ impl TryFrom<RethBytes> for EvmTransaction {
             return Err(EthApiError::EmptyRawTransactionData);
         }
 
-        let transaction = TransactionSigned::decode_enveloped(data)
+        let transaction = RethTransactionSigned::decode_enveloped(data)
             .map_err(|_| EthApiError::FailedToDecodeSignedTransaction)?;
 
         let transaction = transaction
@@ -170,10 +172,18 @@ impl TryFrom<RethBytes> for EvmTransaction {
             chain_id: tx_eip_1559.chain_id,
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
             hash: tx_hash.into(),
-            odd_y_parity: Default::default(),
-            r: Default::default(),
-            s: Default::default(),
+            sig: signed_transaction.signature.into(),
         })
+    }
+}
+
+impl From<RethSignature> for Signature {
+    fn from(sig: RethSignature) -> Self {
+        Self {
+            s: sig.s.to_be_bytes(),
+            r: sig.r.to_be_bytes(),
+            odd_y_parity: sig.odd_y_parity,
+        }
     }
 }
 
@@ -198,7 +208,6 @@ pub fn prepare_call_env(request: CallRequest) -> TxEnv {
             .unwrap_or_default(),
         chain_id: request.chain_id.map(|c| c.as_u64()),
         nonce: request.nonce.map(|n| TryInto::<u64>::try_into(n).unwrap()),
-
         access_list: Default::default(),
     }
 }
