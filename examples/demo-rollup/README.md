@@ -381,17 +381,10 @@ The next step is to initialize your state transition function.
 ```rust
   let mut app: App<Risc0Verifier, jupiter::BlobWithSender> =
         App::new(config);
+
+  app.start_rpc_server(..)
 ```
 
-If your StateTransitionRunner provides an RPC interface, you should initialize that too. If it implements RpcRunner, you
-can use that for easy access to RPC:
-
-```rust
-let rpc_module = get_rpc_module(stf_runner.get_storage());
-let _handle = tokio::spawn(async move {
-     start_rpc_server(module, address).await;
-});
-```
 
 ### 3. Run the Main Loop
 

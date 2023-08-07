@@ -160,59 +160,20 @@ customization. At the very least, you'll have to modify our `demo-rollup` exampl
 to import your custom STF! But, when you're building an STF it's useful to stick as closely as possible to some standard interfaces.
 That way, you can minimize the changeset for your custom node implementation, which reduces the risk of bugs.
 
-To help you integrate with full node implementations, we provide standard traits for intitializing an app (`StateTransitionRunner`) and
-starting an RPC server (`RpcRunner`). In this section, we'll briefly show how to implement both traits. Again, neither trait is strictly
-required - just by implementing STF, you get the capability to integrate with DA layers and ZKVMs. But, implementing these traits
+To help you integrate with full node implementations, we provide standard tools for intitializing an app (`StateTransitionRunner`). In this section, we'll briefly show how to use them. Again it is not strictly
+required - just by implementing STF, you get the capability to integrate with DA layers and ZKVMs. But, using these structures
 makes you more compatible with full node implementations out of the box.
 
 ### Implementing State Transition Runner
 
-The State Transition Runner trait contains logic related to initialization. It has just three methods:
+The State Transition Runner struct contains logic related to initialization and running the rollup. It has just three methods:
 
 1. `new` - which allows us to instantiate a state transition function using a `RuntimeConfig` specific to the particular execution mode.
    For example, when you're running a prover you likely want to configure a standard RocksDB instance - but in ZK mode, you have to
    set up your STF to read from a Merkle tree instead. Using STR, we can easily swap out this configuration.
-2. `inner` - which returns an immutable reference to the inner state transition function
-3. `inner mut` - which returns a mutable reference to the inner STF
+2. `run` - which runs the rollup.
+3. `start_rpc_server` - which exposes an RPC server.
 
-As you can see in the demo codebase, we implement `StateTransitionRunner` two different times for the `DemoAppRunner` struct - once for `Prover` mode
-and once for `Zk` mode.
-
-The `Prover` implementation is gated behind the `native` feature flag. This flag is what we use in the SDK to mark code which can only be run
-outside of the zk-circuit. Since this implementation will always run on a physical machine, we can annotate it with the
-`
-c` macro telling it to enable RPC queries against the Bank, Election, and ValueSetter modules.
-We'll cover this macro in more detail in the next section.
-
-```rust
-pub struct DemoAppRunner<C: Context, Vm: Zkvm>(pub DemoApp<C, Vm>);
-
-#[cfg(feature = "native")]
-impl<Vm: Zkvm> StateTransitionRunner<ProverConfig, Vm> for DemoAppRunner<DefaultContext, Vm> {
-    type RuntimeConfig = Config;
-    type Inner = DemoApp<DefaultContext, Vm>;
-
-    fn new(runtime_config: Self::RuntimeConfig) -> Self {
-        let storage = ProverStorage::with_config(runtime_config.storage)
-            .expect("Failed to open prover storage");
-        let app = AppTemplate::new(storage, Runtime::new());
-        Self(app)
-    }
-	// ...
-}
-
-impl<Vm: Zkvm> StateTransitionRunner<ZkConfig, Vm> for DemoAppRunner<ZkDefaultContext, Vm> {
-    type RuntimeConfig = [u8; 32];
-    type Inner = DemoApp<ZkDefaultContext, Vm>;
-
-    fn new(runtime_config: Self::RuntimeConfig) -> Self {
-        let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
-        let app = AppTemplate::new(storage, Runtime::new());
-        Self(app)
-    }
-	// ...
-}
-```
 
 ## Wrapping Up
 
