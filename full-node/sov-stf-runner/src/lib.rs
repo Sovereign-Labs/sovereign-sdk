@@ -41,7 +41,7 @@ where
     app: ST,
     ledger_db: LedgerDB,
     state_root: StateRoot<ST, Vm, DA>,
-    socket_address: SocketAddr,
+    listen_address: SocketAddr,
 }
 
 impl<ST, DA, Vm> StateTransitionRunner<ST, DA, Vm>
@@ -77,7 +77,7 @@ where
             res.state_root
         };
 
-        let socket_address = SocketAddr::new(rpc_config.bind_host.parse()?, rpc_config.bind_port);
+        let listen_address = SocketAddr::new(rpc_config.bind_host.parse()?, rpc_config.bind_port);
 
         // Start the main rollup loop
         let item_numbers = ledger_db.get_next_items_numbers();
@@ -90,16 +90,16 @@ where
             app,
             ledger_db,
             state_root: prev_state_root,
-            socket_address,
+            listen_address,
         })
     }
 
     /// Starts an rpc server with provided rpc methods.
     pub async fn start_rpc_server(&self, methods: RpcModule<()>) {
-        let socket_address = self.socket_address;
+        let listen_address = self.listen_address;
         let _handle = tokio::spawn(async move {
             let server = jsonrpsee::server::ServerBuilder::default()
-                .build([socket_address].as_ref())
+                .build([listen_address].as_ref())
                 .await
                 .unwrap();
 
