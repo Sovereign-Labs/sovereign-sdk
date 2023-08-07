@@ -5,14 +5,14 @@ use sov_state::WorkingSet;
 use crate::{Amount, Bank};
 
 /// Structure returned by the `balance_of` rpc method.
-#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
 pub struct BalanceResponse {
     /// The balance amount of a given user for a given token. Equivalent to u64.
     pub amount: Option<Amount>,
 }
 
 /// Structure returned by the `supply_of` rpc method.
-#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+#[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
 pub struct TotalSupplyResponse {
     /// The amount of token supply for a given token address. Equivalent to u64.
     pub amount: Option<Amount>,

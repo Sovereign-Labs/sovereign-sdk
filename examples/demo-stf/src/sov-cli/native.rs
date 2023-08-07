@@ -13,7 +13,7 @@ use jsonrpsee::http_client::HttpClientBuilder;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{AddressBech32, PublicKey, Spec};
+use sov_modules_api::{AddressBech32, PrivateKey, PublicKey, Spec};
 use sov_modules_stf_template::RawTx;
 use sov_sequencer::SubmitTransaction;
 
@@ -348,7 +348,7 @@ mod test {
     use demo_stf::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
     use demo_stf::runner_config::Config;
     use demo_stf::runtime::GenesisConfig;
-    use sov_modules_api::Address;
+    use sov_modules_api::{Address, PrivateKey};
     use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome};
     use sov_rollup_interface::mocks::MockZkvm;
     use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
@@ -506,20 +506,24 @@ mod test {
         txs: Vec<RawTx>,
     ) {
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(demo, config);
-        StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(demo, Default::default());
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm, TestBlob>::apply_blob(
+        let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
+        let mut blobs = [blob];
+
+        let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             demo,
-            &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
-            None,
-        )
-        .inner;
+            Default::default(),
+            &mut blobs,
+        );
+
+        assert_eq!(1, apply_block_result.batch_receipts.len());
+        let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
+
         assert_eq!(
             SequencerOutcome::Rewarded(0),
-            apply_blob_outcome,
+            apply_blob_outcome.inner,
             "Sequencer execution should have succeeded but failed",
         );
-        StateTransitionFunction::<MockZkvm, TestBlob>::end_slot(demo);
     }
 
     fn get_balance(

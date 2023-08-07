@@ -1,4 +1,4 @@
-use sov_modules_api::Hasher;
+use sov_modules_api::digest::Digest;
 
 use crate::genesis::DEPLOYER;
 
@@ -9,11 +9,11 @@ pub fn get_token_address<C: sov_modules_api::Context>(
     salt: u64,
 ) -> C::Address {
     let mut hasher = C::Hasher::new();
-    hasher.update(sender.as_ref());
+    hasher.update(sender);
     hasher.update(token_name.as_bytes());
-    hasher.update(&salt.to_le_bytes());
+    hasher.update(salt.to_le_bytes());
 
-    let hash = hasher.finalize();
+    let hash: [u8; 32] = hasher.finalize().into();
     C::Address::from(hash)
 }
 

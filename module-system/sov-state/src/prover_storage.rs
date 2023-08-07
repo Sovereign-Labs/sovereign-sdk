@@ -6,7 +6,6 @@ use std::sync::Arc;
 use jmt::storage::TreeWriter;
 use jmt::{JellyfishMerkleTree, KeyHash};
 use sov_db::state_db::StateDB;
-use sov_rollup_interface::crypto::SimpleHasher;
 
 use crate::config::Config;
 use crate::internal_cache::OrderedReadsAndWrites;
@@ -97,7 +96,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 
         // For each value that's been read from the tree, read it from the logged JMT to populate hints
         for (key, read_value) in state_accesses.ordered_reads {
-            let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
+            let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
             // TODO: Switch to the batch read API once it becomes available
             let (result, proof) = untracked_jmt.get_with_proof(key_hash, latest_version)?;
             if result.as_ref() != read_value.as_ref().map(|f| f.value.as_ref()) {
@@ -112,7 +111,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .ordered_writes
             .into_iter()
             .map(|(key, value)| {
-                let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
+                let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
                 self.db
                     .put_preimage(key_hash, key.key.as_ref())
                     .expect("preimage must succeed");

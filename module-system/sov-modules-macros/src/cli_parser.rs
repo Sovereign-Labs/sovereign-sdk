@@ -206,6 +206,7 @@ pub(crate) fn derive_cli_wallet_arg(
                     Fields::Unnamed(_) => {
                         variants_with_named_fields.push(quote! {
                             #( #variant_docs )*
+                            #[command(arg_required_else_help(true))]
                             #variant_name {#(#named_variant_fields),* }
                         });
                         convert_cases.push(quote! {
@@ -215,6 +216,7 @@ pub(crate) fn derive_cli_wallet_arg(
                     Fields::Named(_) => {
                         variants_with_named_fields.push(quote! {
                             #( #variant_docs )*
+                            #[command(arg_required_else_help(true))]
                             #variant_name {#(#named_variant_fields),* }
                         });
                         convert_cases.push(quote! {

@@ -3,7 +3,7 @@
 //! Blob storage module allows to save DA blobs in the state
 
 use sov_modules_api::{Module, ModuleInfo};
-use sov_rollup_interface::da::BlobTransactionTrait;
+use sov_rollup_interface::da::BlobReaderTrait;
 use sov_state::{StateMap, WorkingSet};
 
 /// Blob storage contains only address and vector of blobs
@@ -24,7 +24,7 @@ pub struct BlobStorage<C: sov_modules_api::Context> {
 /// Non standard methods for blob storage
 impl<C: sov_modules_api::Context> BlobStorage<C> {
     /// Store blobs for given block number, overwrite if already exists
-    pub fn store_blobs<B: BlobTransactionTrait>(
+    pub fn store_blobs<B: BlobReaderTrait>(
         &self,
         block_number: u64,
         blobs: &[B],
@@ -40,7 +40,7 @@ impl<C: sov_modules_api::Context> BlobStorage<C> {
 
     /// Take all blobs for given block number, return empty vector if not exists
     /// Returned blobs are removed from the storage
-    pub fn take_blobs_for_block_number<B: BlobTransactionTrait>(
+    pub fn take_blobs_for_block_number<B: BlobReaderTrait>(
         &self,
         block_number: u64,
         working_set: &mut WorkingSet<C::Storage>,

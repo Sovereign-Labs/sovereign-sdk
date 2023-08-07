@@ -1,5 +1,6 @@
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Hasher, Module, Spec};
+use sov_modules_api::digest::Digest;
+use sov_modules_api::{Address, Module, Spec};
 use sov_rollup_interface::mocks::{MockCodeCommitment, MockProof, MockZkvm};
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -12,7 +13,7 @@ const MOCK_CODE_COMMITMENT: MockCodeCommitment = MockCodeCommitment([0u8; 32]);
 
 /// Generates an address by hashing the provided `key`.
 pub fn generate_address(key: &str) -> <C as Spec>::Address {
-    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
+    let hash: [u8; 32] = <C as Spec>::Hasher::digest(key.as_bytes()).into();
     Address::from(hash)
 }
 

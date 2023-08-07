@@ -3,7 +3,8 @@ use std::io::Cursor;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Context, Hasher, Spec};
+use sov_modules_api::{Context, Spec};
+use sov_rollup_interface::digest::Digest;
 use tracing::debug;
 
 type RawTxHash = [u8; 32];
@@ -22,7 +23,7 @@ pub struct RawTx {
 
 impl RawTx {
     fn hash<C: Context>(&self) -> [u8; 32] {
-        <C as Spec>::Hasher::hash(&self.data)
+        <C as Spec>::Hasher::digest(&self.data).into()
     }
 }
 

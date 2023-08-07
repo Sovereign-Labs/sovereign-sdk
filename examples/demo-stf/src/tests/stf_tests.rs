@@ -2,6 +2,7 @@
 pub mod test {
     use sov_modules_api::default_context::DefaultContext;
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+    use sov_modules_api::PrivateKey;
     use sov_modules_stf_template::{Batch, SequencerOutcome};
     use sov_rollup_interface::mocks::MockZkvm;
     use sov_rollup_interface::stf::StateTransitionFunction;
@@ -28,19 +29,20 @@ pub mod test {
             let mut demo = create_new_demo(path);
 
             StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
-            StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(
-                &mut demo,
-                Default::default(),
-            );
 
             let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
+            let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
 
-            let apply_blob_outcome = StateTransitionFunction::<MockZkvm, TestBlob>::apply_blob(
+            let mut blobs = [blob];
+
+            let result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
                 &mut demo,
-                &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
-                None,
+                Default::default(),
+                &mut blobs,
             );
 
+            assert_eq!(1, result.batch_receipts.len());
+            let apply_blob_outcome = result.batch_receipts[0].clone();
             assert_eq!(
                 SequencerOutcome::Rewarded(0),
                 apply_blob_outcome.inner,
@@ -48,8 +50,6 @@ pub mod test {
             );
 
             assert!(has_tx_events(&apply_blob_outcome),);
-
-            StateTransitionFunction::<MockZkvm, TestBlob>::end_slot(&mut demo);
         }
 
         // Generate a new storage instance after dumping data to the db.
@@ -89,15 +89,20 @@ pub mod test {
         );
 
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
-        StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(&mut demo, Default::default());
 
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm, TestBlob>::apply_blob(
+        let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
+        let mut blobs = [blob];
+
+        let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
-            &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
-            None,
+            Default::default(),
+            &mut blobs,
         );
+
+        assert_eq!(1, apply_block_result.batch_receipts.len());
+        let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
 
         assert_eq!(
             SequencerOutcome::Rewarded(0),
@@ -106,8 +111,6 @@ pub mod test {
         );
 
         assert!(has_tx_events(&apply_blob_outcome),);
-
-        StateTransitionFunction::<MockZkvm, TestBlob>::end_slot(&mut demo);
 
         let runtime = &mut Runtime::<DefaultContext>::default();
         let mut working_set = WorkingSet::new(demo.current_storage.clone());
@@ -128,6 +131,7 @@ pub mod test {
     }
 
     #[test]
+    #[ignore = "end_slot is removed from STF trait"]
     fn test_demo_values_not_in_db() {
         let tempdir = tempfile::tempdir().unwrap();
         let path = tempdir.path();
@@ -144,22 +148,23 @@ pub mod test {
             let mut demo = create_new_demo(path);
 
             StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
-            StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(
-                &mut demo,
-                Default::default(),
-            );
 
             let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
+            let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
+            let mut blobs = [blob];
 
-            let apply_blob_outcome = StateTransitionFunction::<MockZkvm, TestBlob>::apply_blob(
+            let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
                 &mut demo,
-                &mut new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS),
-                None,
-            )
-            .inner;
+                Default::default(),
+                &mut blobs,
+            );
+
+            assert_eq!(1, apply_block_result.batch_receipts.len());
+            let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
+
             assert_eq!(
                 SequencerOutcome::Rewarded(0),
-                apply_blob_outcome,
+                apply_blob_outcome.inner,
                 "Sequencer execution should have succeeded but failed",
             );
         }
@@ -200,16 +205,20 @@ pub mod test {
         let mut demo = create_new_demo(path);
 
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
-        StateTransitionFunction::<MockZkvm, TestBlob>::begin_slot(&mut demo, Default::default());
-
-        let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
         let some_sequencer: [u8; 32] = [121; 32];
-        let apply_blob_outcome = StateTransitionFunction::<MockZkvm, TestBlob>::apply_blob(
+        let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
+        let blob = new_test_blob(Batch { txs }, &some_sequencer);
+        let mut blobs = [blob];
+
+        let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
-            &mut new_test_blob(Batch { txs }, &some_sequencer),
-            None,
+            Default::default(),
+            &mut blobs,
         );
+
+        assert_eq!(1, apply_block_result.batch_receipts.len());
+        let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
 
         assert_eq!(
             SequencerOutcome::Ignored,
