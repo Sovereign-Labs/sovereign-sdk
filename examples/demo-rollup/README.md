@@ -381,8 +381,6 @@ The next step is to initialize your state transition function.
 ```rust
   let mut app: App<Risc0Verifier, jupiter::BlobWithSender> =
         App::new(config);
-
-  app.start_rpc_server(..)
 ```
 
 
