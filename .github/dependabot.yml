@@ -1,0 +1,10 @@
+version: 2
+updates:
+    - package-ecosystem: cargo
+      directory: "/"
+      schedule:
+          interval: weekly
+          day: monday
+          time: "15:00"
+          timezone: "Europe/Warsaw"
+      open-pull-requests-limit: 10
