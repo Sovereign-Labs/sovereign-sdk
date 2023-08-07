@@ -3,9 +3,9 @@ use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, PublicKey, Spec};
 use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
-use sov_modules_stf_template::SequencerOutcome;
+use sov_modules_stf_template::{AppTemplate, SequencerOutcome};
 use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::mocks::TestValidityCond;
+use sov_rollup_interface::mocks::{MockZkvm, TestBlob, TestValidityCond};
 use sov_state::WorkingSet;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
@@ -83,4 +83,17 @@ pub(crate) fn create_demo_genesis_config<C: Context>(
     let value_setter_config = ValueSetterConfig { admin };
 
     GenesisConfig::new(value_setter_config, ())
+}
+
+/// Clones the [`AppTemplate`]'s [`Storage`] and extract the underlying [`WorkingSet`]
+pub(crate) fn get_working_set<C: Context>(
+    app_template: &AppTemplate<
+        C,
+        TestRuntime<C>,
+        MockZkvm,
+        TestValidityCond,
+        TestBlob<<DefaultContext as Spec>::Address>,
+    >,
+) -> WorkingSet<<C as Spec>::Storage> {
+    WorkingSet::new(app_template.current_storage.clone())
 }

@@ -7,9 +7,9 @@ use sov_rollup_interface::mocks::{
     MockZkvm, TestBlob, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
 };
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_state::{ProverStorage, SingletonKey, Storage};
+use sov_state::{ProverStorage, Storage};
 
-use crate::tests_helpers::{create_demo_genesis_config, TestRuntime};
+use crate::tests_helpers::{create_demo_genesis_config, get_working_set, TestRuntime};
 use crate::{StateTransitionId, TransitionInProgress};
 
 type C = DefaultContext;
@@ -34,34 +34,6 @@ fn test_simple_value_setter() {
         TestValidityCond,
         TestBlob<<DefaultContext as Spec>::Address>,
     >::new(storage, runtime);
-
-    let genesis_hash_prefix = app_template
-        .runtime
-        .chain_state
-        .genesis_hash
-        .prefix()
-        .clone();
-
-    let slot_height_prefix = app_template
-        .runtime
-        .chain_state
-        .slot_height
-        .prefix()
-        .clone();
-
-    let transition_in_progress = app_template
-        .runtime
-        .chain_state
-        .in_progress_transition
-        .prefix()
-        .clone();
-
-    let historical_transitions = app_template
-        .runtime
-        .chain_state
-        .historical_transitions
-        .prefix()
-        .clone();
 
     let value_setter_messages = ValueSetterMessages::default();
     let value_setter = value_setter_messages.create_raw_txs::<TestRuntime<C>>();
@@ -90,9 +62,14 @@ fn test_simple_value_setter() {
         validity_cond: TestValidityCond::default(),
     };
 
+    // Computes the initial working set
+    let mut working_set = get_working_set(&app_template);
+
     // Check the slot height before apply slot
     let new_height_storage: u64 = app_template
-        .get_from_storage_with_prefix(&slot_height_prefix, &SingletonKey)
+        .runtime
+        .chain_state
+        .slot_height(&mut working_set)
         .unwrap();
 
     assert_eq!(new_height_storage, 0, "The initial height was not computed");
@@ -107,28 +84,28 @@ fn test_simple_value_setter() {
         "Sequencer execution should have succeeded but failed "
     );
 
+    // Computes the new working set after slot application
+    let mut working_set = get_working_set(&app_template);
+    let chain_state_ref = &app_template.runtime.chain_state;
+
     // Get the new state root hash
     let new_root_hash = app_template
         .current_storage
         .get_state_root(&Default::default());
 
     // Check that the root hash has been stored correctly
-    let stored_root: [u8; 32] = app_template
-        .get_from_storage_with_prefix(&genesis_hash_prefix, &SingletonKey)
-        .unwrap();
+    let stored_root: [u8; 32] = chain_state_ref.genesis_hash(&mut working_set).unwrap();
 
     assert_eq!(stored_root, init_root_hash, "Root hashes don't match");
 
     // Check the slot height
-    let new_height_storage: u64 = app_template
-        .get_from_storage_with_prefix(&slot_height_prefix, &SingletonKey)
-        .unwrap();
+    let new_height_storage: u64 = chain_state_ref.slot_height(&mut working_set).unwrap();
 
     assert_eq!(new_height_storage, 1, "The new height did not update");
 
     // Check the tx in progress
-    let new_tx_in_progress: TransitionInProgress<TestValidityCond> = app_template
-        .get_from_storage_with_prefix(&transition_in_progress, &SingletonKey)
+    let new_tx_in_progress: TransitionInProgress<TestValidityCond> = chain_state_ref
+        .in_progress_transition(&mut working_set)
         .unwrap();
 
     assert_eq!(
@@ -162,23 +139,22 @@ fn test_simple_value_setter() {
         "Sequencer execution should have succeeded but failed "
     );
 
+    // Computes the new working set after slot application
+    let mut working_set = get_working_set(&app_template);
+    let chain_state_ref = &app_template.runtime.chain_state;
+
     // Check that the root hash has been stored correctly
-    let stored_root: [u8; 32] = app_template
-        .get_from_storage_with_prefix(&genesis_hash_prefix, &SingletonKey)
-        .unwrap();
+    let stored_root: [u8; 32] = chain_state_ref.genesis_hash(&mut working_set).unwrap();
 
     assert_eq!(stored_root, init_root_hash, "Root hashes don't match");
 
     // Check the slot height
-    let new_height_storage: u64 = app_template
-        .get_from_storage_with_prefix(&slot_height_prefix, &SingletonKey)
-        .unwrap();
-
+    let new_height_storage: u64 = chain_state_ref.slot_height(&mut working_set).unwrap();
     assert_eq!(new_height_storage, 2, "The new height did not update");
 
     // Check the tx in progress
-    let new_tx_in_progress: TransitionInProgress<TestValidityCond> = app_template
-        .get_from_storage_with_prefix(&transition_in_progress, &SingletonKey)
+    let new_tx_in_progress: TransitionInProgress<TestValidityCond> = chain_state_ref
+        .in_progress_transition(&mut working_set)
         .unwrap();
 
     assert_eq!(
@@ -190,8 +166,8 @@ fn test_simple_value_setter() {
         "The new transition has not been correctly stored"
     );
 
-    let last_tx_stored: StateTransitionId<TestValidityCond> = app_template
-        .get_from_storage_with_prefix(&historical_transitions, &1_u64)
+    let last_tx_stored: StateTransitionId<TestValidityCond> = chain_state_ref
+        .historical_transitions(1, &mut working_set)
         .unwrap();
 
     assert_eq!(

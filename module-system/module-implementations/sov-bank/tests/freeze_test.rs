@@ -42,9 +42,7 @@ fn freeze_token() {
 
     // -----
     // Freeze
-    let freeze_message = CallMessage::Freeze {
-        token_address,
-    };
+    let freeze_message = CallMessage::Freeze { token_address };
 
     let _freeze = bank
         .call(freeze_message, &minter_context, &mut working_set)
@@ -53,9 +51,7 @@ fn freeze_token() {
 
     // ----
     // Try to freeze an already frozen token
-    let freeze_message = CallMessage::Freeze {
-        token_address,
-    };
+    let freeze_message = CallMessage::Freeze { token_address };
 
     let freeze = bank.call(freeze_message, &minter_context, &mut working_set);
     assert!(freeze.is_err());
