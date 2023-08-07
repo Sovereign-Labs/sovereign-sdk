@@ -63,7 +63,7 @@ impl StorageKey {
     }
 }
 
-/// A serialized value suitable for storing. Internally uses an Arc<u8> for cheap cloning.
+/// A serialized value suitable for storing. Internally uses an Arc<Vec<u8>> for cheap cloning.
 #[derive(
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Default,
 )]
