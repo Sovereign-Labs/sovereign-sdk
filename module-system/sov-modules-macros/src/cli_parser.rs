@@ -129,10 +129,9 @@ impl CliParserMacro {
             /// Parse a transaction from command-line arguments
             #[derive(::clap::Parser)]
             #[allow(non_camel_case_types)]
-            pub enum CliTransactionParser #generics {
+            pub enum CliTransactionParser #impl_generics #where_clause {
                 #( #module_command_arms, )*
             }
-            // #( #module_args )*
 
             /// Borsh encode a transaction parsed from the CLI
             pub fn borsh_encode_cli_tx #impl_generics (cmd: CliTransactionParser #ty_generics) -> ::std::vec::Vec<u8>
@@ -243,6 +242,8 @@ pub(crate) fn derive_cli_wallet_arg(
             }
 
             let enum_defn = quote! {
+                /// An auto-generated version of the #ident_name::CallMessage enum which is guaranteed to have
+                /// no anonymous fields. This is necessary to enable `clap`'s automatic CLI parsing.
                 #[derive(::clap::Parser)]
                 pub enum #item_with_named_fields_ident #generics {
                     #(#variants_with_named_fields,)*
@@ -283,11 +284,15 @@ pub(crate) fn derive_cli_wallet_arg(
 
             let struct_defn = quote! {
 
+                /// An auto-generated version of the #ident_name::CallMessage struct which is guaranteed to have
+                /// no anonymous fields. This is necessary to enable `clap`'s automatic CLI parsing.
                 #[derive(::clap::Args)]
                 pub struct #item_with_named_fields_ident #generics {
                     #(#named_fields),*
                 }
 
+                /// An auto-generated single-variant enum wrapping a #ident_name::CallMessage struct. This enum
+                /// implements `clap::Subcommand`, which simplifies code generation for the CLI parser.
                 #[derive(::clap::Parser)]
                 pub enum #item_as_subcommand_ident #generics {
                     #item_name {
