@@ -3,9 +3,9 @@ use std::io::Read;
 use std::path::Path;
 
 use serde::de::DeserializeOwned;
-pub use sov_modules_api::default_context::DefaultContext;
 pub use sov_state::config::Config as StorageConfig;
 
+/// Reads toml file as a specific type.
 pub fn from_toml_path<P: AsRef<Path>, R: DeserializeOwned>(path: P) -> anyhow::Result<R> {
     let mut contents = String::new();
     {
@@ -18,8 +18,10 @@ pub fn from_toml_path<P: AsRef<Path>, R: DeserializeOwned>(path: P) -> anyhow::R
     Ok(result)
 }
 
+/// StateTransitionRunner configuration
 #[derive(serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Config {
+    /// Storage config
     pub storage: StorageConfig,
 }
 

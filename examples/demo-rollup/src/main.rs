@@ -1,42 +1,26 @@
 use std::env;
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::{
-    DefaultContext, DefaultPrivateKey, DemoBatchReceipt, DemoTxReceipt, NativeAppRunner,
-};
+use demo_stf::app::{App, DefaultContext, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
-use demo_stf::runner_config::from_toml_path;
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
-use jsonrpsee::core::server::Methods;
 use jupiter::da_service::CelestiaService;
 #[cfg(feature = "experimental")]
 use jupiter::da_service::DaServiceConfig;
 use jupiter::types::NamespaceId;
-use jupiter::verifier::{CelestiaVerifier, ChainValidityCondition, RollupParams};
-use jupiter::BlobWithSender;
+use jupiter::verifier::RollupParams;
 use risc0_adapter::host::Risc0Verifier;
-use sov_db::ledger_db::{LedgerDB, SlotCommit};
+use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::get_ethereum_rpc;
-use sov_modules_api::RpcRunner;
-use sov_rollup_interface::crypto::NoOpHasher;
-use sov_rollup_interface::da::{BlockHeaderTrait, DaVerifier};
-use sov_rollup_interface::services::da::{DaService, SlotData};
-use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
-use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::ValidityConditionChecker;
-// RPC related imports
+use sov_modules_stf_template::{SequencerOutcome, TxEffect};
+use sov_rollup_interface::services::da::DaService;
 use sov_sequencer::get_sequencer_rpc;
-use sov_state::Storage;
-use tracing::{debug, info, Level};
-
-use crate::config::RollupConfig;
-
-mod config;
-mod ledger_rpc;
+use sov_state::storage::Storage;
+use sov_stf_runner::{from_toml_path, get_ledger_rpc, RollupConfig, StateTransitionRunner};
+use tracing::{debug, Level};
 
 #[cfg(test)]
 mod test_rpc;
@@ -50,17 +34,6 @@ const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
 pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
     LedgerDB::with_path(path).expect("Ledger DB failed to open")
-}
-
-async fn start_rpc_server(methods: impl Into<Methods>, address: SocketAddr) {
-    let server = jsonrpsee::server::ServerBuilder::default()
-        .build([address].as_ref())
-        .await
-        .unwrap();
-
-    info!("Starting RPC server at {} ", server.local_addr().unwrap());
-    let _server_handle = server.start(methods).unwrap();
-    futures::future::pending::<()>().await;
 }
 
 // TODO: Remove this when sov-cli is in its own crate.
@@ -100,22 +73,6 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
     )
 }
 
-pub struct CelestiaChainChecker {
-    current_block_hash: [u8; 32],
-}
-
-impl ValidityConditionChecker<ChainValidityCondition> for CelestiaChainChecker {
-    type Error = anyhow::Error;
-
-    fn check(&mut self, condition: &ChainValidityCondition) -> Result<(), anyhow::Error> {
-        anyhow::ensure!(
-            condition.block_hash == self.current_block_hash,
-            "Invalid block hash"
-        );
-        Ok(())
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
@@ -126,9 +83,6 @@ async fn main() -> Result<(), anyhow::Error> {
     let rollup_config: RollupConfig =
         from_toml_path(&rollup_config_path).context("Failed to read rollup configuration")?;
 
-    let rpc_config = rollup_config.rpc_config;
-    let address = SocketAddr::new(rpc_config.bind_host.parse()?, rpc_config.bind_port);
-
     // Initializing logging
     let subscriber = tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
@@ -137,136 +91,58 @@ async fn main() -> Result<(), anyhow::Error> {
         .map_err(|_err| eprintln!("Unable to set global default subscriber"))
         .expect("Cannot fail to set subscriber");
 
-    // Initialize the ledger database, which stores blocks, transactions, events, etc.
     let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
 
-    // Initialize the Celestia service using the DaService interface
-    let da_service = Arc::new(
-        CelestiaService::new(
-            rollup_config.da.clone(),
-            RollupParams {
-                namespace: ROLLUP_NAMESPACE,
-            },
-        )
-        .await,
-    );
+    let da_service = CelestiaService::new(
+        rollup_config.da.clone(),
+        RollupParams {
+            namespace: ROLLUP_NAMESPACE,
+        },
+    )
+    .await;
 
-    // Our state transition function implements the StateTransitionRunner interface,
-    // so we use that to initialize the STF
-    let mut demo_runner =
-        NativeAppRunner::<Risc0Verifier, BlobWithSender>::new(rollup_config.runner.clone());
+    let mut app: App<Risc0Verifier, jupiter::BlobWithSender> =
+        App::new(rollup_config.runner.storage.clone());
 
-    // Our state transition also implements the RpcRunner interface,
-    // so we use that to initialize the RPC server.
-    let storage = demo_runner.get_storage();
-    let is_storage_empty = storage.is_empty();
+    let storage = app.get_storage();
     let mut methods = get_rpc_methods::<DefaultContext>(storage);
+
     // register rpc methods
     {
         register_ledger(ledger_db.clone(), &mut methods)?;
-        register_sequencer(da_service.clone(), &mut demo_runner, &mut methods)?;
+        register_sequencer(da_service.clone(), &mut app, &mut methods)?;
         #[cfg(feature = "experimental")]
         register_ethereum(rollup_config.da.clone(), &mut methods)?;
     }
 
-    let _handle = tokio::spawn(async move {
-        start_rpc_server(methods, address).await;
-    });
+    let storage = app.get_storage();
+    let genesis_config = get_genesis_config();
 
-    // For demonstration, we also initialize the DaVerifier interface.
-    // Running the verifier is only *necessary* during proof generation not normal execution
-    let da_verifier = Arc::new(CelestiaVerifier::new(RollupParams {
-        namespace: ROLLUP_NAMESPACE,
-    }));
+    let mut runner = StateTransitionRunner::new(
+        rollup_config,
+        da_service,
+        ledger_db,
+        app.stf,
+        storage.is_empty(),
+        genesis_config,
+    )?;
 
-    let demo = demo_runner.inner_mut();
-    let mut prev_state_root = {
-        // Check if the rollup has previously been initialized
-        if is_storage_empty {
-            info!("No history detected. Initializing chain...");
-            demo.init_chain(get_genesis_config());
-            info!("Chain initialization is done.");
-        } else {
-            debug!("Chain is already initialized. Skipping initialization.");
-        }
-
-        let res = demo.apply_slot(Default::default(), []);
-        // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
-        // This will be removed shortly.
-        res.state_root.0
-    };
-
-    // Start the main rollup loop
-    let item_numbers = ledger_db.get_next_items_numbers();
-    let last_slot_processed_before_shutdown = item_numbers.slot_number - 1;
-    let start_height = rollup_config.start_height + last_slot_processed_before_shutdown;
-
-    for height in start_height.. {
-        info!(
-            "Requesting data for height {} and prev_state_root 0x{}",
-            height,
-            hex::encode(prev_state_root)
-        );
-
-        // Fetch the relevant subset of the next Celestia block
-        let filtered_block = da_service.get_finalized_at(height).await?;
-        let header = filtered_block.header();
-
-        // For the demo, we create and verify a proof that the data has been extracted from Celestia correctly.
-        // In a production implementation, this logic would only run on the prover node - regular full nodes could
-        // simply download the data from Celestia without extracting and checking a merkle proof here,
-        let mut blobs = da_service.extract_relevant_txs(&filtered_block);
-
-        info!(
-            "Extracted {} relevant blobs at height {}",
-            blobs.len(),
-            height
-        );
-
-        let mut data_to_commit = SlotCommit::new(filtered_block.clone());
-
-        let slot_result = demo.apply_slot(Default::default(), &mut blobs);
-        for receipt in slot_result.batch_receipts {
-            data_to_commit.add_batch(receipt);
-        }
-        let next_state_root = slot_result.state_root;
-
-        let (inclusion_proof, completeness_proof) = da_service
-            .get_extraction_proof(&filtered_block, &blobs)
-            .await;
-
-        let validity_condition = da_verifier
-            .verify_relevant_tx_list::<NoOpHasher>(
-                header,
-                &blobs,
-                inclusion_proof,
-                completeness_proof,
-            )
-            .expect("Failed to verify relevant tx list but prover is honest");
-
-        // For demonstration purposes, we also show how you would check the extra validity condition
-        // imposed by celestia (that the Celestia block processed be the next one from the canonical chain).
-        // In a real rollup, this check would only be made by light clients.
-        let mut checker = CelestiaChainChecker {
-            current_block_hash: *header.hash().inner(),
-        };
-        checker.check(&validity_condition)?;
-
-        // Store the resulting receipts in the ledger database
-        ledger_db.commit_slot(data_to_commit)?;
-        prev_state_root = next_state_root.0;
-    }
+    runner.start_rpc_server(methods).await;
+    runner.run().await?;
 
     Ok(())
 }
 
-fn register_sequencer(
-    da_service: Arc<CelestiaService>,
-    demo_runner: &mut NativeAppRunner<Risc0Verifier, BlobWithSender>,
+fn register_sequencer<DA>(
+    da_service: DA,
+    demo_runner: &mut App<Risc0Verifier, jupiter::BlobWithSender>,
     methods: &mut jsonrpsee::RpcModule<()>,
-) -> Result<(), anyhow::Error> {
-    let batch_builder = demo_runner.take_batch_builder().unwrap();
-    let sequencer_rpc = get_sequencer_rpc(batch_builder, da_service);
+) -> Result<(), anyhow::Error>
+where
+    DA: DaService<Error = anyhow::Error> + Send + Sync + 'static,
+{
+    let batch_builder = demo_runner.batch_builder.take().unwrap();
+    let sequencer_rpc = get_sequencer_rpc(batch_builder, Arc::new(da_service));
     methods
         .merge(sequencer_rpc)
         .context("Failed to merge Txs RPC modules")
@@ -276,7 +152,7 @@ fn register_ledger(
     ledger_db: LedgerDB,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error> {
-    let ledger_rpc = ledger_rpc::get_ledger_rpc::<DemoBatchReceipt, DemoTxReceipt>(ledger_db);
+    let ledger_rpc = get_ledger_rpc::<SequencerOutcome, TxEffect>(ledger_db);
     methods
         .merge(ledger_rpc)
         .context("Failed to merge ledger RPC modules")

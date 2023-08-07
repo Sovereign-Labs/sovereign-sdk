@@ -333,13 +333,6 @@ pub trait ModuleInfo {
     fn dependencies(&self) -> Vec<&<Self::Context as Spec>::Address>;
 }
 
-/// A StateTransitionRunner needs to implement this if
-/// the RPC service is needed
-pub trait RpcRunner {
-    type Context: Context;
-    fn get_storage(&self) -> <Self::Context as Spec>::Storage;
-}
-
 struct ModuleVisitor<'a, C: Context> {
     visited: HashSet<&'a <C as Spec>::Address>,
     visited_on_this_path: Vec<&'a <C as Spec>::Address>,
