@@ -49,8 +49,10 @@ impl CliParserMacro {
             if let syn::Type::Path(type_path) = &field.ty {
                 let module_path = type_path.path.clone();
                 let field_name = field.ident.clone();
+                let doc_str = format!("Generates a transaction for the `{}` module", &field_name);
                 module_command_arms.push(quote! {
                         #[clap(subcommand)]
+                        #[doc = #doc_str]
                         #field_name(<<#module_path as ::sov_modules_api::Module>::CallMessage as ::sov_modules_api::CliWalletArg>::CliStringRepr)
                     });
 
@@ -282,10 +284,13 @@ pub(crate) fn derive_cli_wallet_arg(
                 Fields::Unit => quote! { #item_name },
             };
 
+            let struct_docs = ast.attrs.iter().filter(|attr| attr.path.is_ident("doc"));
             let struct_defn = quote! {
 
-                /// An auto-generated version of the #ident_name::CallMessage struct which is guaranteed to have
-                /// no anonymous fields. This is necessary to enable `clap`'s automatic CLI parsing.
+                // An auto-generated version of the #ident_name::CallMessage struct which is guaranteed to have
+                // no anonymous fields. This is necessary to enable `clap`'s automatic CLI parsing.
+
+                #( #struct_docs )*
                 #[derive(::clap::Args)]
                 pub struct #item_with_named_fields_ident #generics {
                     #(#named_fields),*
