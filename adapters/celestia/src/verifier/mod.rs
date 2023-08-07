@@ -238,11 +238,11 @@ impl da::DaVerifier for CelestiaVerifier {
                 let tx_data = tx.data().accumulator();
 
                 match tx_data {
-                    da::AccumulatorStatus::Completed(tx_data) => {
+                    da::Accumulator::Completed(tx_data) => {
                         assert_eq!(blob_data, *tx_data);
                     }
                     // For now we bail and return, maybe want to change that behaviour in the future
-                    da::AccumulatorStatus::InProgress(_) => {
+                    da::Accumulator::InProgress(_) => {
                         return Err(ValidationError::IncompleteData);
                     }
                 }

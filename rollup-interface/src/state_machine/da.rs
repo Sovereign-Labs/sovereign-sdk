@@ -2,7 +2,7 @@
 //! DA layer.
 use core::fmt::Debug;
 use std::cmp::min;
-use std::io::Read;
+use std::io::{self, Read};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Buf;
@@ -71,22 +71,12 @@ pub trait DaVerifier {
 /// [`AccumulatorStatus`] is a wrapper around an accumulator vector that specifies
 /// whether a [`CountedBufReader`] has finished reading the underlying buffer.
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum AccumulatorStatus {
+pub enum Accumulator {
     /// The underlying buffer has been completely read and [`Vec<u8>`] contains the result
     Completed(Vec<u8>),
     /// The underlying buffer still contains elements to be read. [`Vec<u8>`] contains the
     /// accumulated elements.
     InProgress(Vec<u8>),
-}
-
-impl AccumulatorStatus {
-    /// Returns the accumulator vector contained in the wrapper
-    pub fn inner_vec(&mut self) -> &mut Vec<u8> {
-        match self {
-            Self::Completed(vec) => vec,
-            Self::InProgress(vec) => vec,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize, PartialEq)]
@@ -104,7 +94,7 @@ pub struct CountedBufReader<B: Buf> {
 
     /// An accumulator that stores the data read from the blob buffer into a vector.
     /// Allows easy access to the data that has already been read
-    accumulator: AccumulatorStatus,
+    accumulator: Accumulator,
 }
 
 impl<B: Buf> CountedBufReader<B> {
@@ -114,7 +104,7 @@ impl<B: Buf> CountedBufReader<B> {
         CountedBufReader {
             inner,
             counter: 0,
-            accumulator: AccumulatorStatus::InProgress(Vec::with_capacity(buf_size)),
+            accumulator: Accumulator::InProgress(Vec::with_capacity(buf_size)),
         }
     }
 
@@ -124,7 +114,7 @@ impl<B: Buf> CountedBufReader<B> {
     }
 
     /// Getter: returns a reference to an accumulator of the blob data read by the rollup
-    pub fn accumulator(&self) -> &AccumulatorStatus {
+    pub fn accumulator(&self) -> &Accumulator {
         &self.accumulator
     }
 }
@@ -139,15 +129,22 @@ impl<B: Buf> Read for CountedBufReader<B> {
 
         let num_read = len_before_reading - self.inner.remaining();
 
-        let inner_acc_vec = self.accumulator.inner_vec();
+        let inner_acc_vec = match &mut self.accumulator {
+            Accumulator::Completed(_) => {
+                return Err(io::ErrorKind::UnexpectedEof.into());
+            }
+
+            Accumulator::InProgress(inner_vec) => inner_vec,
+        };
+
         inner_acc_vec.extend_from_slice(&buf[..buf_end]);
 
         match self.inner.remaining() {
             0 => {
-                self.accumulator = AccumulatorStatus::Completed(inner_acc_vec.to_vec());
+                self.accumulator = Accumulator::Completed(inner_acc_vec.to_vec());
             }
             _ => {
-                self.accumulator = AccumulatorStatus::InProgress(inner_acc_vec.to_vec());
+                self.accumulator = Accumulator::InProgress(inner_acc_vec.to_vec());
             }
         }
 
