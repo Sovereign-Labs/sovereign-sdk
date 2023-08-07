@@ -153,7 +153,7 @@ Your modules implement rpc methods via the `rpc_gen` macro, in order to enable t
 In the example above, you can see how to use the `expose_rpc` macro on the `native` `Runtime`.
 
 
-## Make Full Node Itegrations Simpler with the State Transition Runner trait:
+## Make Full Node Itegrations Simpler with the State Transition Runner:
 
 Now that we have an app, we want to be able to run it. For any custom state transition, your full node implementation is going to need a little
 customization. At the very least, you'll have to modify our `demo-rollup` example code
@@ -164,16 +164,32 @@ To help you integrate with full node implementations, we provide standard tools 
 required - just by implementing STF, you get the capability to integrate with DA layers and ZKVMs. But, using these structures
 makes you more compatible with full node implementations out of the box.
 
-### Implementing State Transition Runner
+### Using State Transition Runner
 
 The State Transition Runner struct contains logic related to initialization and running the rollup. It has just three methods:
 
-1. `new` - which allows us to instantiate a state transition function using a `RuntimeConfig` specific to the particular execution mode.
-   For example, when you're running a prover you likely want to configure a standard RocksDB instance - but in ZK mode, you have to
-   set up your STF to read from a Merkle tree instead. Using STR, we can easily swap out this configuration.
+1. `new` - which consumes all the dependencies need for running the rollup.
 2. `run` - which runs the rollup.
 3. `start_rpc_server` - which exposes an RPC server.
 
+
+```rust
+let mut app: App<Risc0Verifier, jupiter::BlobWithSender> =
+    App::new(rollup_config.runner.storage.clone());
+...
+let mut runner = StateTransitionRunner::new(
+    rollup_config,
+    da_service,
+    ledger_db,
+    app.stf,
+    storage.is_empty(),
+    genesis_config,
+)?;
+
+runner.start_rpc_server(methods).await;
+runner.run().await?;
+
+```
 
 ## Wrapping Up
 
