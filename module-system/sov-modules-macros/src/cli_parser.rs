@@ -289,7 +289,6 @@ pub(crate) fn derive_cli_wallet_arg(
 
                 // An auto-generated version of the #ident_name::CallMessage struct which is guaranteed to have
                 // no anonymous fields. This is necessary to enable `clap`'s automatic CLI parsing.
-
                 #( #struct_docs )*
                 #[derive(::clap::Args)]
                 pub struct #item_with_named_fields_ident #generics {
@@ -300,6 +299,7 @@ pub(crate) fn derive_cli_wallet_arg(
                 /// implements `clap::Subcommand`, which simplifies code generation for the CLI parser.
                 #[derive(::clap::Parser)]
                 pub enum #item_as_subcommand_ident #generics {
+                    #[command(arg_required_else_help(true))]
                     #item_name {
                         #[clap(flatten)]
                         args: #item_with_named_fields_ident #ty_generics

@@ -14,7 +14,6 @@ pub enum Workflows {
     Transactions(TransactionWorkflow<Runtime<Ctx>>),
     #[clap(subcommand)]
     Keys(KeyWorkflow<Ctx>),
-    PrintBatch,
 }
 
 #[derive(clap::Parser)]
@@ -35,20 +34,9 @@ fn main() -> Result<(), anyhow::Error> {
 
     match invocation.workflow {
         Workflows::Transactions(tx) => tx.run(&mut wallet_state, app_dir)?,
-        Workflows::PrintBatch => {
-            println!("Current batch:");
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&wallet_state.unsent_transactions)?
-            );
-        }
         Workflows::Keys(inner) => inner.run(&mut wallet_state, app_dir)?,
     }
     wallet_state.save(wallet_state_path)?;
-
-    // if invocation.args.send_transactions {
-    //     println!("Sending transactions!");
-    // }
 
     Ok(())
 }

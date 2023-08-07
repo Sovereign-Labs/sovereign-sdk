@@ -16,10 +16,11 @@ where
 {
     #[clap(subcommand)]
     Generate(RT::CliStringRepr),
-    // PrintSchema,
     Import(TransactionSubcommand<ImportTransaction>),
+    /// List the current batch of transactions
     List,
-    // Send(C::Address),
+    // TODO: Add `send` and `generate_schema` subcommands/
+    // TODO: design and implement batch management (remove tx, drop batch, etc.)
 }
 
 impl<RT: sov_modules_api::CliWallet> TransactionWorkflow<RT>
@@ -70,9 +71,18 @@ where
 /// Import a pre-formatted transaction from a JSON file or as a JSON string
 pub enum ImportTransaction {
     /// Import a transaction from a JSON file at the provided path
-    FromFile { path: PathBuf },
+    #[command(arg_required_else_help(true))]
+    FromFile {
+        /// The expected format of the file contents is: {"module_name": {"call_name": {"field_name": "field_value"}}}
+        path: PathBuf,
+    },
     /// Provide a JSON serialized transaction directly as input
-    FromString { json: String },
+    #[command(arg_required_else_help(true))]
+    FromString {
+        /// The JSON serialized transaction as a string.
+        /// The expected format is: {"module_name": {"call_name": {"field_name": "field_value"}}}
+        json: String,
+    },
 }
 
 #[derive(clap::Parser)]
