@@ -15,6 +15,15 @@ use sov_state::{StateCheckpoint, Storage};
 use tracing::info;
 pub use tx_verifier::RawTx;
 
+/// This trait has to be implemented by a runtime in order to be used in `AppTemplate`.
+pub trait Runtime<C: Context>:
+    DispatchCall<Context = C>
+    + Genesis<Context = C>
+    + TxHooks<Context = C>
+    + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>
+{
+}
+
 /// The receipts of all the transactions in a batch.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TxEffect {
@@ -76,10 +85,7 @@ impl<C: Context, RT, Vm: Zkvm, B: BlobReaderTrait> AppTemplate<C, RT, Vm, B> {
 impl<C: Context, RT, Vm: Zkvm, B: BlobReaderTrait> StateTransitionFunction<Vm, B>
     for AppTemplate<C, RT, Vm, B>
 where
-    RT: DispatchCall<Context = C>
-        + Genesis<Context = C>
-        + TxHooks<Context = C>
-        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
+    RT: Runtime<C>,
 {
     type StateRoot = jmt::RootHash;
 
