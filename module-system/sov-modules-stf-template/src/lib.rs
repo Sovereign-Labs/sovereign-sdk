@@ -15,7 +15,7 @@ use sov_state::{StateCheckpoint, Storage};
 use tracing::info;
 pub use tx_verifier::RawTx;
 
-///TODO
+/// This trait has to be implemented by a runtime in order to be used in `AppTemplate`.
 pub trait Runtime<C: Context>:
     DispatchCall<Context = C>
     + Genesis<Context = C>
