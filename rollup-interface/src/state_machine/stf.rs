@@ -113,7 +113,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     /// The validity condition that must be verified outside of the Vm
     type Condition: ValidityCondition;
 
-    /// Perform one-time initialization for the genesis block.
+    /// Perform one-time initialization for the genesis block and returns the resulting root hash wrapped in a result.
     fn init_chain(&mut self, params: Self::InitialState) -> anyhow::Result<[u8; 32]>;
 
     /// Called at each **DA-layer block** - whether or not that block contains any
@@ -123,6 +123,8 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     ///
     /// Applies batches of transactions to the rollup,
     /// slashing the sequencer who proposed the blob on failure.
+    /// The blobs are contained into a slot whose data is contained within the `slot_data` parameter,
+    /// this parameter is mainly used within the begin_slot hook.
     /// The concrete blob type is defined by the DA layer implementation,
     /// which is why we use a generic here instead of an associated type.
     ///

@@ -110,5 +110,5 @@ pub trait SlotData:
     /// The header of the DA layer block.
     fn header(&self) -> &Self::BlockHeader;
     /// Get the validity condition set associated with the slot
-    fn validity_condition(&self) -> &Self::Condition;
+    fn validity_condition(&self) -> Self::Condition;
 }

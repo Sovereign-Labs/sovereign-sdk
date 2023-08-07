@@ -90,8 +90,8 @@ There are two kind of hooks:
 
 `ApplyBlobHooks`, which has the following methods:
 
-1. `begin_blob_hook `Invoked at the beginning of the `apply_tx_blob` function, before the blob is deserialized into a group of transactions. This is a good time to ensure that the sequencer is properly bonded.
-2. `end_blob_hook` invoked at the end of the `apply_tx_blob` function. This is a good place to reward sequencers.
+1. `begin_blob_hook `Invoked at the beginning of the `apply_blob` function, before the blob is deserialized into a group of transactions. This is a good time to ensure that the sequencer is properly bonded.
+2. `end_blob_hook` invoked at the end of the `apply_blob` function. This is a good place to reward sequencers.
 
 To use the `AppTemplate`, the runtime needs to provide implementation of these hooks which specifies what needs to happen at each of these four stages.
 

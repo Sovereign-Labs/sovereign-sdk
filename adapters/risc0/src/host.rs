@@ -89,6 +89,8 @@ impl Zkvm for Risc0Verifier {
         _serialized_proof: &[u8],
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
+        // Method to implement: not clear how to deserialize the proof output.
+        // Issue #621.
         todo!()
     }
 }

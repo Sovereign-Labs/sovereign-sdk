@@ -41,7 +41,7 @@ pub trait Zkvm {
         code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error>;
 
-    /// Same as the function right above, except that instead of returning the output as a serialized array,
+    /// Same as [`verify`], except that instead of returning the output as a serialized array,
     /// it returns a state transition structure.
     fn verify_and_extract_output<C: ValidityCondition, Add: AddressTrait>(
         serialized_proof: &[u8],
@@ -79,10 +79,10 @@ pub struct StateTransition<C, Address> {
     pub initial_state_root: [u8; 32],
     /// The state of the rollup after the transition
     pub final_state_root: [u8; 32],
-    /// The block hash of the state transition
+    /// The slot hash of the state transition
     pub slot_hash: [u8; 32],
 
-    /// Rewarded address
+    /// Rewarded address: the account that has produced the transition proof.
     pub rewarded_address: Address,
 
     /// An additional validity condition for the state transition which needs

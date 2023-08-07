@@ -73,7 +73,7 @@ impl<Ctx: Context, Cond: ValidityCondition + Default + BorshDeserialize + BorshS
         self.in_progress_transition.set(
             &TransitionInProgress {
                 da_block_hash: slot.hash(),
-                validity_condition: *validity_condition,
+                validity_condition,
             },
             working_set,
         );

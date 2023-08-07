@@ -342,8 +342,8 @@ impl SlotData for TestBlock {
         &self.header
     }
 
-    fn validity_condition(&self) -> &TestValidityCond {
-        &self.validity_cond
+    fn validity_condition(&self) -> TestValidityCond {
+        self.validity_cond
     }
 }
 

@@ -66,9 +66,6 @@ impl CliParserMacro {
                         }
                     });
 
-                    let field_name = field.ident.clone();
-                    let _field_name_string = field_name.to_string();
-
                     let type_name_string = match &field.ty {
                         Type::Path(type_path) => extract_ident(type_path).to_string(),
                         _ => {

@@ -6,6 +6,7 @@ use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
+use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::Bytes;
 use tendermint::crypto::default::Sha256;
@@ -94,8 +95,11 @@ impl SlotData for FilteredCelestiaBlock {
         &self.header
     }
 
-    fn validity_condition(&self) -> &ChainValidityCondition {
-        todo!()
+    fn validity_condition(&self) -> ChainValidityCondition {
+        ChainValidityCondition {
+            prev_hash: *self.header().prev_hash().inner(),
+            block_hash: self.hash(),
+        }
     }
 }
 

@@ -39,7 +39,7 @@ impl Zkvm for Risc0Guest {
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error> {
         // Implement this method once risc0 supports recursion
-        todo!()
+        todo!("Implement once risc0 supports recursion")
     }
 
     fn verify_and_extract_output<
@@ -49,6 +49,7 @@ impl Zkvm for Risc0Guest {
         _serialized_proof: &[u8],
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
-        todo!()
+        // Implement this method once risc0 supports recursion
+        todo!("Implement once risc0 supports recursion")
     }
 }
