@@ -164,6 +164,7 @@ impl RpcImplBlock {
 
         let rpc_impl_trait = if let Some(ref working_set_type) = self.working_set_type {
             quote! {
+                /// Rpc methods to be implemented by the module.
                 pub trait #impl_trait_name #generics {
                     fn get_working_set(&self) -> #working_set_type;
                     #(#impl_trait_methods)*
@@ -171,6 +172,7 @@ impl RpcImplBlock {
             }
         } else {
             quote! {
+                /// Rpc methods to be implemented by the module.
                 pub trait #impl_trait_name #generics {
                     #(#impl_trait_methods)*
                 }
@@ -309,6 +311,8 @@ fn build_rpc_trait(
         #impl_rpc_trait_impl
 
         #rpc_attribute
+        /// This trait replaces the original impl block with a new version
+        ///  with the rpc_gen and related annotations removed
         pub trait #intermediate_trait_name  #generics {
 
             #(#intermediate_trait_items)*
