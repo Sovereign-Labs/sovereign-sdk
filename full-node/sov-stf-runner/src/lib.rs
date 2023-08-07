@@ -56,14 +56,14 @@ where
         da_service: DA,
         ledger_db: LedgerDB,
         mut app: ST,
-        is_storage_empty: bool,
+        should_init_chain: bool,
         genesis_config: InitialState<ST, Vm, DA>,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = rollup_config.rpc_config;
 
         let prev_state_root = {
             // Check if the rollup has previously been initialized
-            if is_storage_empty {
+            if should_init_chain {
                 info!("No history detected. Initializing chain...");
                 app.init_chain(genesis_config);
                 info!("Chain initialization is done.");
