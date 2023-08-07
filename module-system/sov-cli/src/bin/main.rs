@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use borsh::BorshSerialize;
-use demo_stf::runtime::{CliTransactionParser, Runtime, RuntimeCall};
+use demo_stf::runtime::{Runtime, RuntimeCall};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_cli::{clap, wallet_dir, KeyWorkflow, WalletState};
@@ -41,7 +41,7 @@ where
     pub fn run<C: sov_modules_api::Context>(
         self,
         wallet_state: &mut WalletState<RT::Decodable, C>,
-        app_dir: impl AsRef<Path>,
+        _app_dir: impl AsRef<Path>,
     ) -> Result<(), anyhow::Error> {
         match self {
             TransactionWorkflow::Generate(subcommand) => {
@@ -52,7 +52,7 @@ where
                 wallet_state.unsent_transactions.push(tx);
             }
             TransactionWorkflow::Import(subcommand) => {
-                let TransactionSubcommand { args, inner } = subcommand;
+                let TransactionSubcommand { args: _, inner } = subcommand;
                 let tx = match inner {
                     ImportTransaction::FromFile { path } => {
                         let tx = std::fs::read_to_string(path)?;
