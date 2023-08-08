@@ -114,7 +114,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     type Condition: ValidityCondition;
 
     /// Perform one-time initialization for the genesis block and returns the resulting root hash wrapped in a result.
-    fn init_chain(&mut self, params: Self::InitialState) -> anyhow::Result<[u8; 32]>;
+    fn init_chain(&mut self, params: Self::InitialState) -> anyhow::Result<Self::StateRoot>;
 
     /// Called at each **DA-layer block** - whether or not that block contains any
     /// data relevant to the rollup.
@@ -144,6 +144,10 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     >
     where
         I: IntoIterator<Item = &'a mut B>;
+
+    /// Gets the state root from the associated state. If not available (because the chain has not been initialized yet),
+    /// return None.
+    fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot>;
 }
 
 /// A key-value pair representing a change to the rollup state

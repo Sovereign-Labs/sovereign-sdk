@@ -1,11 +1,13 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, PublicKey, Spec};
 use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
-use sov_modules_stf_template::{AppTemplate, SequencerOutcome};
+use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::mocks::{MockZkvm, TestBlob, TestValidityCond};
+use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::WorkingSet;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
@@ -15,12 +17,12 @@ type C = DefaultContext;
 
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub(crate) struct TestRuntime<C: Context> {
+pub(crate) struct TestRuntime<C: Context, Cond: ValidityCondition> {
     pub value_setter: ValueSetter<C>,
-    pub chain_state: ChainState<C, TestValidityCond>,
+    pub chain_state: ChainState<C, Cond>,
 }
 
-impl<C: Context> TxHooks for TestRuntime<C> {
+impl<C: Context, Cond: ValidityCondition> TxHooks for TestRuntime<C, Cond> {
     type Context = C;
 
     fn pre_dispatch_tx_hook(
@@ -40,7 +42,7 @@ impl<C: Context> TxHooks for TestRuntime<C> {
     }
 }
 
-impl<C: Context> ApplyBlobHooks for TestRuntime<C> {
+impl<C: Context, Cond: ValidityCondition> ApplyBlobHooks for TestRuntime<C, Cond> {
     type Context = C;
     type BlobResult = SequencerOutcome;
 
@@ -61,33 +63,35 @@ impl<C: Context> ApplyBlobHooks for TestRuntime<C> {
     }
 }
 
-impl SlotHooks<TestValidityCond> for TestRuntime<C> {
+impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for TestRuntime<C, Cond> {
     type Context = C;
 
     fn begin_slot_hook(
         &self,
-        slot_data: &impl sov_rollup_interface::services::da::SlotData<Condition = TestValidityCond>,
+        slot_data: &impl sov_rollup_interface::services::da::SlotData<Condition = Cond>,
         working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
     ) -> anyhow::Result<()> {
         self.chain_state.begin_slot_hook(slot_data, working_set)
     }
 }
 
-pub(crate) fn create_demo_genesis_config<C: Context>(
+impl<C: Context, Cond: ValidityCondition> Runtime<C, Cond> for TestRuntime<C, Cond> {}
+
+pub(crate) fn create_demo_genesis_config<C: Context, Cond: ValidityCondition>(
     admin: <C as Spec>::Address,
-) -> GenesisConfig<C> {
+) -> GenesisConfig<C, Cond> {
     let value_setter_config = ValueSetterConfig { admin };
 
     GenesisConfig::new(value_setter_config, ())
 }
 
 /// Clones the [`AppTemplate`]'s [`Storage`] and extract the underlying [`WorkingSet`]
-pub(crate) fn get_working_set<C: Context>(
+pub(crate) fn get_working_set<C: Context, Cond: ValidityCondition>(
     app_template: &AppTemplate<
         C,
-        TestRuntime<C>,
+        Cond,
         MockZkvm,
-        TestValidityCond,
+        TestRuntime<C, Cond>,
         TestBlob<<DefaultContext as Spec>::Address>,
     >,
 ) -> WorkingSet<<C as Spec>::Storage> {

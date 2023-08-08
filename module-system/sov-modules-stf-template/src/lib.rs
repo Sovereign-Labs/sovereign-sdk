@@ -16,7 +16,17 @@ use sov_state::{StateCheckpoint, Storage};
 use tracing::log::info;
 pub use tx_verifier::RawTx;
 
-/// The result of the tx application.
+/// This trait has to be implemented by a runtime in order to be used in `AppTemplate`.
+pub trait Runtime<C: Context, Cond: ValidityCondition>:
+    DispatchCall<Context = C>
+    + Genesis<Context = C>
+    + TxHooks<Context = C>
+    + SlotHooks<Cond, Context = C>
+    + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>
+{
+}
+
+/// The receipts of all the transactions in a batch.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum TxEffect {
     /// Batch was reverted.
@@ -57,13 +67,9 @@ pub enum SlashingReason {
 }
 
 impl<C: Context, RT, Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait>
-    AppTemplate<C, RT, Vm, Cond, B>
+    AppTemplate<C, Cond, Vm, RT, B>
 where
-    RT: DispatchCall<Context = C>
-        + Genesis<Context = C>
-        + TxHooks<Context = C>
-        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>
-        + SlotHooks<Cond, Context = C>,
+    RT: Runtime<C, Cond>,
 {
     fn begin_slot(
         &mut self,
@@ -93,13 +99,9 @@ where
 }
 
 impl<C: Context, RT, Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait>
-    StateTransitionFunction<Vm, B> for AppTemplate<C, RT, Vm, Cond, B>
+    StateTransitionFunction<Vm, B> for AppTemplate<C, Cond, Vm, RT, B>
 where
-    RT: DispatchCall<Context = C>
-        + Genesis<Context = C>
-        + TxHooks<Context = C>
-        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>
-        + SlotHooks<Cond, Context = C>,
+    RT: Runtime<C, Cond>,
 {
     type StateRoot = jmt::RootHash;
 
@@ -113,7 +115,7 @@ where
 
     type Condition = Cond;
 
-    fn init_chain(&mut self, params: Self::InitialState) -> anyhow::Result<[u8; 32]> {
+    fn init_chain(&mut self, params: Self::InitialState) -> anyhow::Result<jmt::RootHash> {
         let mut working_set = StateCheckpoint::new(self.current_storage.clone()).to_revertable();
 
         self.runtime
@@ -126,7 +128,7 @@ where
             .validate_and_commit(log, &witness)
             .expect("Storage update must succeed");
 
-        Ok(genesis_hash)
+        Ok(jmt::RootHash(genesis_hash))
     }
 
     fn apply_slot<'a, I, Data: SlotData<Condition = Self::Condition>>(
@@ -175,5 +177,11 @@ where
             batch_receipts,
             witness,
         })
+    }
+
+    fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot> {
+        self.current_storage
+            .get_state_root(&Default::default())
+            .map(|root_hash| jmt::RootHash(root_hash))
     }
 }

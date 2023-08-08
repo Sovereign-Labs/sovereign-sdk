@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use hex;
+use jmt::RootHash;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
@@ -140,7 +141,7 @@ pub trait Storage: Clone {
     fn get(&self, key: StorageKey, witness: &Self::Witness) -> Option<StorageValue>;
 
     /// Returns the latest state root hash from the storage.
-    fn get_state_root(&self, witness: &Self::Witness) -> [u8; 32];
+    fn get_state_root(&self, witness: &Self::Witness) -> anyhow::Result<[u8; 32]>;
 
     /// Validate all of the storage accesses in a particular cache log,
     /// returning the new state root after applying all writes

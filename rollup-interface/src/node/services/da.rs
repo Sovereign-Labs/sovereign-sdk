@@ -22,7 +22,10 @@ pub trait DaService {
     type Spec: DaSpec;
 
     /// A DA layer block, possibly excluding some irrelevant information.
-    type FilteredBlock: SlotData<BlockHeader = <Self::Spec as DaSpec>::BlockHeader>;
+    type FilteredBlock: SlotData<
+        BlockHeader = <Self::Spec as DaSpec>::BlockHeader,
+        Condition = <Self::Spec as DaSpec>::ValidityCondition,
+    >;
 
     /// The error type for fallible methods.
     type Error: fmt::Debug + Send + Sync;

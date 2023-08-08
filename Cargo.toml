@@ -12,6 +12,7 @@ members = [
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
     "full-node/sov-ethereum",
+    "full-node/sov-stf-runner",
     
     "module-system/sov-modules-stf-template",
     "module-system/sov-modules-macros",

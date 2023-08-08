@@ -15,8 +15,8 @@ use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{AddressBech32, PrivateKey, PublicKey, Spec};
 use sov_modules_stf_template::RawTx;
+use sov_rollup_interface::mocks::TestBlock;
 use sov_sequencer::SubmitTransaction;
-
 type C = DefaultContext;
 type Address = <C as Spec>::Address;
 
@@ -344,16 +344,15 @@ pub async fn main() -> Result<(), anyhow::Error> {
 #[cfg(test)]
 mod test {
     use borsh::BorshDeserialize;
-    use demo_stf::app::{DemoApp, DemoAppRunner};
+    use demo_stf::app::App;
     use demo_stf::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
-    use demo_stf::runner_config::Config;
-    use demo_stf::runtime::GenesisConfig;
-    use sov_modules_api::{Address, PrivateKey};
-    use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome};
-    use sov_rollup_interface::mocks::{MockZkvm, TestBlock, TestValidityCond};
-    use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
+    use demo_stf::runtime::{GenesisConfig, Runtime};
+    use sov_modules_api::Address;
+    use sov_modules_stf_template::{AppTemplate, Batch, RawTx, SequencerOutcome};
+    use sov_rollup_interface::mocks::{MockZkvm, TestValidityCond};
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::WorkingSet;
+    use sov_stf_runner::Config;
 
     use super::*;
 
@@ -425,7 +424,7 @@ mod test {
     // Test helpers
     struct TestDemo {
         config: GenesisConfig<C>,
-        demo: DemoApp<C, MockZkvm, TestValidityCond, TestBlob>,
+        demo: AppTemplate<C, TestValidityCond, MockZkvm, Runtime<C>, TestBlob>,
     }
 
     impl TestDemo {
@@ -445,10 +444,7 @@ mod test {
 
             Self {
                 config: genesis_config,
-                demo: DemoAppRunner::<DefaultContext, MockZkvm, TestValidityCond, TestBlob>::new(
-                    runner_config,
-                )
-                .stf,
+                demo: App::<MockZkvm, TestValidityCond, TestBlob>::new(runner_config.storage).stf,
             }
         }
     }
@@ -504,7 +500,7 @@ mod test {
     }
 
     fn execute_txs(
-        demo: &mut DemoApp<C, MockZkvm, TestValidityCond, TestBlob>,
+        demo: &mut AppTemplate<C, TestValidityCond, MockZkvm, Runtime<C>, TestBlob>,
         config: GenesisConfig<C>,
         txs: Vec<RawTx>,
     ) {
@@ -533,7 +529,7 @@ mod test {
     }
 
     fn get_balance(
-        demo: &mut DemoApp<DefaultContext, MockZkvm, TestValidityCond, TestBlob>,
+        demo: &mut AppTemplate<C, TestValidityCond, MockZkvm, Runtime<C>, TestBlob>,
         token_deployer_address: &Address,
         user_address: Address,
     ) -> Option<u64> {

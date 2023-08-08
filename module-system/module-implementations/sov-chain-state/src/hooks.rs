@@ -26,9 +26,7 @@ impl fmt::Display for ChainStateError {
     }
 }
 
-impl<Ctx: Context, Cond: ValidityCondition + Default + BorshDeserialize + BorshSerialize>
-    SlotHooks<Cond> for ChainState<Ctx, Cond>
-{
+impl<Ctx: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<Ctx, Cond> {
     type Context = Ctx;
 
     fn begin_slot_hook(
@@ -41,7 +39,7 @@ impl<Ctx: Context, Cond: ValidityCondition + Default + BorshDeserialize + BorshS
         if curr_height == 0 {
             // First transition right after the genesis block
             self.genesis_hash.set(
-                &working_set.backing().get_state_root(&Default::default()),
+                &working_set.backing().get_state_root(&Default::default())?,
                 working_set,
             )
         } else {
@@ -53,7 +51,7 @@ impl<Ctx: Context, Cond: ValidityCondition + Default + BorshDeserialize + BorshS
 
                 StateTransitionId {
                     da_block_hash: last_transition_in_progress.da_block_hash,
-                    post_state_root: working_set.backing().get_state_root(&Default::default()),
+                    post_state_root: working_set.backing().get_state_root(&Default::default())?,
                     validity_condition: last_transition_in_progress.validity_condition,
                 }
             };

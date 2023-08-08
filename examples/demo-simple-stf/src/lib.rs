@@ -31,7 +31,7 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
     // We could incorporate the concept of a transaction into the rollup, but we leave it as an exercise for the reader.
     type TxReceiptContents = ();
 
-    // This is the type that will be returned as a result of `apply_tx_blob`.
+    // This is the type that will be returned as a result of `apply_blob`.
     type BatchReceiptContents = ApplyBlobResult;
 
     // This data is produced during actual batch execution or validated with proof during verification.
@@ -41,9 +41,9 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
     type Condition = Cond;
 
     // Perform one-time initialization for the genesis block.
-    fn init_chain(&mut self, _params: Self::InitialState) -> anyhow::Result<[u8; 32]> {
+    fn init_chain(&mut self, _params: Self::InitialState) -> anyhow::Result<()> {
         // Do nothing
-        Ok([0; 32])
+        Ok(())
     }
 
     fn apply_slot<'a, I, Data: SlotData>(
@@ -102,5 +102,9 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
             batch_receipts: receipts,
             witness: (),
         })
+    }
+
+    fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot> {
+        Ok(())
     }
 }

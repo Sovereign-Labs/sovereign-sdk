@@ -29,14 +29,14 @@ fn test_simple_value_setter() {
 
     let mut app_template = AppTemplate::<
         C,
-        TestRuntime<C>,
-        MockZkvm,
         TestValidityCond,
+        MockZkvm,
+        TestRuntime<C, TestValidityCond>,
         TestBlob<<DefaultContext as Spec>::Address>,
     >::new(storage, runtime);
 
     let value_setter_messages = ValueSetterMessages::default();
-    let value_setter = value_setter_messages.create_raw_txs::<TestRuntime<C>>();
+    let value_setter = value_setter_messages.create_raw_txs::<TestRuntime<C, TestValidityCond>>();
 
     let admin_pub_key = value_setter_messages.messages[0].admin.default_address();
 
@@ -98,7 +98,7 @@ fn test_simple_value_setter() {
     // Check that the root hash has been stored correctly
     let stored_root: [u8; 32] = chain_state_ref.genesis_hash(&mut working_set).unwrap();
 
-    assert_eq!(stored_root, init_root_hash, "Root hashes don't match");
+    assert_eq!(stored_root, init_root_hash.0, "Root hashes don't match");
 
     // Check the slot height
     let new_height_storage: u64 = chain_state_ref.slot_height(&mut working_set).unwrap();
@@ -150,7 +150,7 @@ fn test_simple_value_setter() {
     // Check that the root hash has been stored correctly
     let stored_root: [u8; 32] = chain_state_ref.genesis_hash(&mut working_set).unwrap();
 
-    assert_eq!(stored_root, init_root_hash, "Root hashes don't match");
+    assert_eq!(stored_root, init_root_hash.0, "Root hashes don't match");
 
     // Check the slot height
     let new_height_storage: u64 = chain_state_ref.slot_height(&mut working_set).unwrap();
@@ -178,7 +178,7 @@ fn test_simple_value_setter() {
         last_tx_stored,
         StateTransitionId {
             da_block_hash: [10; 32],
-            post_state_root: new_root_hash,
+            post_state_root: new_root_hash.unwrap(),
             validity_condition: TestValidityCond::default()
         }
     );

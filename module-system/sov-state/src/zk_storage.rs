@@ -46,8 +46,8 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         witness.get_hint()
     }
 
-    fn get_state_root(&self, witness: &Self::Witness) -> [u8; 32] {
-        witness.get_hint()
+    fn get_state_root(&self, witness: &Self::Witness) -> anyhow::Result<[u8; 32]> {
+        Ok(witness.get_hint())
     }
 
     fn validate_and_commit(

@@ -74,10 +74,9 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         val
     }
 
-    fn get_state_root(&self, _witness: &Self::Witness) -> [u8; 32] {
+    fn get_state_root(&self, _witness: &Self::Witness) -> anyhow::Result<[u8; 32]> {
         self.get_root_hash(self.db.get_next_version() - 1)
             .map(|root| root.0)
-            .unwrap()
     }
 
     fn validate_and_commit(

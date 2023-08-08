@@ -6,13 +6,11 @@ use std::time::Duration;
 use anyhow::Context;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use criterion::{criterion_group, criterion_main, Criterion};
-use demo_stf::app::NativeAppRunner;
+use demo_stf::app::App;
 use demo_stf::genesis_config::create_demo_genesis_config;
-use demo_stf::runner_config::from_toml_path;
 use jupiter::verifier::address::CelestiaAddress;
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_demo_rollup::config::RollupConfig;
 use sov_demo_rollup::rng_xfers::RngDaService;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
@@ -20,8 +18,8 @@ use sov_rollup_interface::mocks::{
     TestBlob, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
 };
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
 
 fn rollup_bench(_bench: &mut Criterion) {
@@ -46,12 +44,11 @@ fn rollup_bench(_bench: &mut Criterion) {
 
     let da_service = Arc::new(RngDaService::new());
 
-    let mut demo_runner =
-        NativeAppRunner::<Risc0Verifier, TestValidityCond, TestBlob<CelestiaAddress>>::new(
-            rollup_config.runner,
-        );
+    let demo_runner = App::<Risc0Verifier, TestValidityCond, TestBlob<CelestiaAddress>>::new(
+        rollup_config.runner.storage,
+    );
 
-    let demo = demo_runner.inner_mut();
+    let mut demo = demo_runner.stf;
     let sequencer_private_key = DefaultPrivateKey::generate();
     let demo_genesis_config = create_demo_genesis_config(
         100000000,

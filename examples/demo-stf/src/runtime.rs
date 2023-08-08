@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 #[cfg(feature = "native")]
 use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
@@ -15,6 +17,7 @@ use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
+use sov_rollup_interface::zk::ValidityCondition;
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 #[cfg(feature = "native")]
@@ -81,8 +84,8 @@ pub struct Runtime<C: Context> {
     pub evm: sov_evm::Evm<C>,
 }
 
-impl<Cond> SlotHooks<Cond> for Runtime<DefaultContext> {
-    type Context = DefaultContext;
+impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for Runtime<C> {
+    type Context = C;
 
     fn begin_slot_hook(
         &self,
@@ -93,14 +96,7 @@ impl<Cond> SlotHooks<Cond> for Runtime<DefaultContext> {
     }
 }
 
-impl<Cond> SlotHooks<Cond> for Runtime<ZkDefaultContext> {
-    type Context = ZkDefaultContext;
-
-    fn begin_slot_hook(
-        &self,
-        _slot_data: &impl sov_rollup_interface::services::da::SlotData,
-        _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
+impl<C: Context, Cond: ValidityCondition> sov_modules_stf_template::Runtime<C, Cond>
+    for Runtime<C>
+{
 }
