@@ -64,7 +64,7 @@ impl<'prover> Zkvm for Risc0Host<'prover> {
         _serialized_proof: &[u8],
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
-        todo!()
+        todo!("Implement once risc0 supports recursion")
     }
 }
 
@@ -91,7 +91,7 @@ impl Zkvm for Risc0Verifier {
     ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
         // Method to implement: not clear how to deserialize the proof output.
         // Issue #621.
-        todo!()
+        todo!("not clear how to deserialize the proof output. Issue #621")
     }
 }
 
