@@ -1,4 +1,5 @@
-use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
+use ethers_core::types::Block;
+use revm::primitives::{CfgEnv, SpecId, KECCAK_EMPTY, U256};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::{Context, Module, PrivateKey, Spec};
@@ -6,7 +7,7 @@ use sov_state::{ProverStorage, WorkingSet};
 
 use crate::call::CallMessage;
 use crate::evm::test_helpers::SimpleStorageContract;
-use crate::evm::transaction::EvmTransaction;
+use crate::evm::transaction::{BlockEnv, EvmTransaction};
 use crate::evm::EthAddress;
 use crate::{AccountData, Evm, EvmConfig};
 
@@ -91,4 +92,74 @@ fn evm_test() {
     let storage_value = db_account.storage.get(storage_key, working_set).unwrap();
 
     assert_eq!(set_arg.to_le_bytes(), storage_value[0..4])
+}
+
+#[test]
+fn cfg_test() {
+    let evm = Evm::<C>::default();
+    let block_env = BlockEnv {
+        number: 10,
+        ..Default::default()
+    };
+
+    let cfg = EvmChainCfg {
+        chain_id: 1,
+        limit_contract_code_size: Some(100),
+        spec: vec![(0, SpecIdWrapper::new(SpecId::SHANGHAI))]
+            .into_iter()
+            .collect(),
+    };
+
+    let template_cfg = CfgEnv {
+        chain_id: U256::from(2),
+        disable_base_fee: true,
+        ..Default::default()
+    };
+
+    let cfg_env = evm.get_cfg_env(&block_env, cfg, Some(template_cfg));
+
+    assert_eq!(
+        cfg_env,
+        CfgEnv {
+            chain_id: U256::from(1),
+            disable_base_fee: true,
+            spec_id: SpecIdWrapper::new(SpecId::SHANGHAI),
+            limit_contract_code_size: Some(100),
+            ..Default::default()
+        }
+    );
+}
+
+#[test]
+fn spec_id_lookup() {
+    let spec = vec![
+        (0, SpecIdWrapper::new(SpecId::CONSTANTINOPLE)),
+        (10, SpecIdWrapper::new(SpecId::BERLIN)),
+        (20, SpecIdWrapper::new(SpecId::LONDON)),
+    ];
+
+    assert_eq!(
+        get_spec_id(spec.clone(), 0),
+        SpecIdWrapper::new(SpecId::CONSTANTINOPLE)
+    );
+    assert_eq!(
+        get_spec_id(spec.clone(), 5),
+        SpecIdWrapper::new(SpecId::CONSTANTINOPLE)
+    );
+    assert_eq!(
+        get_spec_id(spec.clone(), 10),
+        SpecIdWrapper::new(SpecId::BERLIN)
+    );
+    assert_eq!(
+        get_spec_id(spec.clone(), 15),
+        SpecIdWrapper::new(SpecId::BERLIN)
+    );
+    assert_eq!(
+        get_spec_id(spec.clone(), 20),
+        SpecIdWrapper::new(SpecId::LONDON)
+    );
+    assert_eq!(
+        get_spec_id(spec.clone(), 25),
+        SpecIdWrapper::new(SpecId::LONDON)
+    );
 }
