@@ -32,12 +32,14 @@ pub enum KeyWorkflow<C: sov_modules_api::Context> {
     List,
     /// Set the active key
     Activate {
+        /// The identifier of the key to activate
         #[clap(subcommand)]
         identifier: KeyIdentifier<C>,
     },
 }
 
 impl<C: sov_modules_api::Context> KeyWorkflow<C> {
+    /// Run the key workflow to import, generate, activate, or list keys
     pub fn run<Tx: Serialize + DeserializeOwned>(
         self,
         wallet_state: &mut WalletState<Tx, C>,
@@ -94,6 +96,7 @@ impl<C: sov_modules_api::Context> KeyWorkflow<C> {
     }
 }
 
+/// Load a key from the given path
 pub fn load_key<C: sov_modules_api::Context>(
     path: impl AsRef<Path>,
 ) -> Result<C::PrivateKey, anyhow::Error> {

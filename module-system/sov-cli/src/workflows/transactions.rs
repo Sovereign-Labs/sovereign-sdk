@@ -14,8 +14,10 @@ pub enum TransactionWorkflow<RT: sov_modules_api::CliWallet>
 where
     RT::CliStringRepr: clap::Subcommand,
 {
+    /// Parse a transaction from the command line and add it to the current batch
     #[clap(subcommand)]
     Generate(RT::CliStringRepr),
+    /// Import a transaction from a JSON file or as a JSON string
     Import(TransactionSubcommand<ImportTransaction>),
     /// List the current batch of transactions
     List,
@@ -28,6 +30,7 @@ where
     RT::Decodable: Serialize + DeserializeOwned,
     RT::CliStringRepr: clap::Subcommand,
 {
+    /// Run the transaction workflow
     pub fn run<C: sov_modules_api::Context>(
         self,
         wallet_state: &mut WalletState<RT::Decodable, C>,
@@ -85,14 +88,18 @@ pub enum ImportTransaction {
     },
 }
 
+/// A wrapper around a subcommand that also includes the optional global arguments
 #[derive(clap::Parser)]
 pub struct TransactionSubcommand<S: Subcommand> {
+    /// The optional arguments
     #[clap(flatten)]
     pub args: OptionalArgs,
+    /// The inner subcommand
     #[clap(subcommand)]
     pub inner: S,
 }
 
+/// The optional arguments for the transaction workflow
 #[derive(Debug, Args)]
 pub struct OptionalArgs {
     #[clap(short, long, global = true, default_value_t = false)]
