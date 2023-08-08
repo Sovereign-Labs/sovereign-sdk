@@ -13,7 +13,10 @@ fn main() {
         str_field: "hello".to_string(),
     };
     let actual = <MyStruct as sov_modules_api::CliWalletArg>::CliStringRepr::try_parse_from(&[
-        "mystruct", "1", "hello",
+        "main",
+        "my-struct",
+        "1",
+        "hello",
     ])
     .expect("parsing must succed")
     .into();

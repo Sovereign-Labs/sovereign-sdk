@@ -57,6 +57,10 @@ use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
 #[cfg_attr(feature = "native", derive(CliWallet), expose_rpc(DefaultContext))]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
+#[cfg_attr(
+    feature = "native",
+    serialization(serde::Serialize, serde::Deserialize)
+)]
 pub struct Runtime<C: Context> {
     pub bank: sov_bank::Bank<C>,
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
@@ -69,6 +73,10 @@ pub struct Runtime<C: Context> {
 #[cfg_attr(feature = "native", derive(CliWallet), expose_rpc(DefaultContext))]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
+#[cfg_attr(
+    feature = "native",
+    serialization(serde::Serialize, serde::Deserialize)
+)]
 pub struct Runtime<C: Context> {
     pub bank: sov_bank::Bank<C>,
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,

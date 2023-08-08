@@ -22,6 +22,8 @@ extern crate sov_modules_macros;
 
 use digest::typenum::U32;
 use digest::Digest;
+#[cfg(feature = "native")]
+use serde::de::DeserializeOwned;
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::{
     DispatchCall, Genesis, MessageCodec, ModuleCallJsonSchema, ModuleInfo,
@@ -42,6 +44,8 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use clap;
+#[cfg(feature = "native")]
+pub use dispatch::CliWallet;
 pub use dispatch::{DispatchCall, Genesis};
 pub use error::Error;
 pub use prefix::Prefix;
@@ -202,6 +206,8 @@ pub trait Spec {
         + Send
         + Sync
         + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+        + Serialize
+        + DeserializeOwned
         + PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
 
     #[cfg(not(feature = "native"))]
@@ -221,6 +227,8 @@ pub trait Spec {
     #[cfg(feature = "native")]
     type Signature: borsh::BorshDeserialize
         + borsh::BorshSerialize
+        + Serialize
+        + for<'a> Deserialize<'a>
         + schemars::JsonSchema
         + Eq
         + Clone
