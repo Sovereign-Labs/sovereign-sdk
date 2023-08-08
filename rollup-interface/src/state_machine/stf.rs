@@ -134,11 +134,13 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
         witness: Self::Witness,
         slot_data: &Data,
         blobs: I,
-    ) -> SlotResult<
-        Self::StateRoot,
-        Self::BatchReceiptContents,
-        Self::TxReceiptContents,
-        Self::Witness,
+    ) -> anyhow::Result<
+        SlotResult<
+            Self::StateRoot,
+            Self::BatchReceiptContents,
+            Self::TxReceiptContents,
+            Self::Witness,
+        >,
     >
     where
         I: IntoIterator<Item = &'a mut B>;

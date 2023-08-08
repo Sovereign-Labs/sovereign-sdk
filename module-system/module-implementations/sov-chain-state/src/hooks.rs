@@ -80,8 +80,4 @@ impl<Ctx: Context, Cond: ValidityCondition + Default + BorshDeserialize + BorshS
 
         Ok(())
     }
-
-    fn end_slot_hook(&self, _new_state_root: [u8; 32]) -> anyhow::Result<()> {
-        Ok(())
-    }
 }

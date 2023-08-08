@@ -91,10 +91,6 @@ impl<Cond> SlotHooks<Cond> for Runtime<DefaultContext> {
     ) -> anyhow::Result<()> {
         Ok(())
     }
-
-    fn end_slot_hook(&self, _new_state_root: [u8; 32]) -> anyhow::Result<()> {
-        Ok(())
-    }
 }
 
 impl<Cond> SlotHooks<Cond> for Runtime<ZkDefaultContext> {
@@ -105,10 +101,6 @@ impl<Cond> SlotHooks<Cond> for Runtime<ZkDefaultContext> {
         _slot_data: &impl sov_rollup_interface::services::da::SlotData,
         _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
     ) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn end_slot_hook(&self, _new_state_root: [u8; 32]) -> anyhow::Result<()> {
         Ok(())
     }
 }

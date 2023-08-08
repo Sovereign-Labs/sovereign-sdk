@@ -88,8 +88,6 @@ where
             .validate_and_commit(cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
 
-        self.runtime.end_slot_hook(root_hash);
-
         (jmt::RootHash(root_hash), witness)
     }
 }
@@ -136,16 +134,18 @@ where
         witness: Self::Witness,
         slot_data: &Data,
         blobs: I,
-    ) -> SlotResult<
-        Self::StateRoot,
-        Self::BatchReceiptContents,
-        Self::TxReceiptContents,
-        Self::Witness,
+    ) -> anyhow::Result<
+        SlotResult<
+            Self::StateRoot,
+            Self::BatchReceiptContents,
+            Self::TxReceiptContents,
+            Self::Witness,
+        >,
     >
     where
         I: IntoIterator<Item = &'a mut B>,
     {
-        self.begin_slot(slot_data, witness);
+        self.begin_slot(slot_data, witness)?;
 
         let mut batch_receipts = vec![];
         for (blob_idx, blob) in blobs.into_iter().enumerate() {
@@ -170,10 +170,10 @@ where
 
         let (state_root, witness) = self.end_slot();
 
-        SlotResult {
+        Ok(SlotResult {
             state_root,
             batch_receipts,
             witness,
-        }
+        })
     }
 }

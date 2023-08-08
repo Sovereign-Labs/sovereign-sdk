@@ -519,7 +519,8 @@ mod test {
             Default::default(),
             &data,
             &mut blobs,
-        );
+        )
+        .unwrap();
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();

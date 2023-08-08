@@ -51,11 +51,13 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
         _witness: Self::Witness,
         _slot_data: &Data,
         blobs: I,
-    ) -> SlotResult<
-        Self::StateRoot,
-        Self::BatchReceiptContents,
-        Self::TxReceiptContents,
-        Self::Witness,
+    ) -> anyhow::Result<
+        SlotResult<
+            Self::StateRoot,
+            Self::BatchReceiptContents,
+            Self::TxReceiptContents,
+            Self::Witness,
+        >,
     >
     where
         I: IntoIterator<Item = &'a mut B>,
@@ -95,10 +97,10 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
             });
         }
 
-        SlotResult {
+        Ok(SlotResult {
             state_root: (),
             batch_receipts: receipts,
             witness: (),
-        }
+        })
     }
 }

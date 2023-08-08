@@ -39,7 +39,7 @@ impl StateTransitionFunction for CheckHashPreimageStf {
     // exercise for the reader.
     type TxReceiptContents = ();
 
-    // This is the type that will be returned as a result of `apply_tx_blob`.
+    // This is the type that will be returned as a result of `apply_blob`.
     type BatchReceiptContents = ApplyBlobResult;
 
    // This data is produced during actual batch execution or validated with proof during verification.
@@ -68,11 +68,11 @@ Now that we have defined the necessary types, we need to implement the following
 
 These functions handle the initialization and preparation stages of our rollup, but as we are not modifying the rollup state, their implementation is simply left empty.
 
-Next we need to write the core logic in `apply_tx_blob`:
+Next we need to write the core logic in `apply_blob`:
 
 ```rust
     // The core logic of our rollup.
-    fn apply_tx_blob(
+    fn apply_blob(
         &mut self,
         blob: impl BlobTransactionTrait,
         _misbehavior_hint: Option<Self::MisbehaviorProof>,
@@ -168,7 +168,7 @@ fn test_stf() {
     StateTransitionFunction::<MockZkvm>::init_chain(stf, ());
     StateTransitionFunction::<MockZkvm>::begin_slot(stf, ());
 
-    let receipt = StateTransitionFunction::<MockZkvm>::apply_tx_blob(stf, test_blob, None);
+    let receipt = StateTransitionFunction::<MockZkvm>::apply_blob(stf, test_blob, None);
     assert_eq!(receipt.inner, ApplyBlobResult::Success);
 
     StateTransitionFunction::<MockZkvm>::end_slot(stf);

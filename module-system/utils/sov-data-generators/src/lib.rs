@@ -7,7 +7,6 @@ use sov_modules_api::transaction::Transaction;
 pub use sov_modules_api::EncodeCall;
 use sov_modules_api::{Address, Context, Module};
 use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, TxEffect};
-use sov_rollup_interface::digest::Digest;
 use sov_rollup_interface::mocks::TestBlob;
 use sov_rollup_interface::stf::BatchReceipt;
 pub mod bank_data;

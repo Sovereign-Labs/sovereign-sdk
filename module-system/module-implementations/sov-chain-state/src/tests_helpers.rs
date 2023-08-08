@@ -71,10 +71,6 @@ impl SlotHooks<TestValidityCond> for TestRuntime<C> {
     ) -> anyhow::Result<()> {
         self.chain_state.begin_slot_hook(slot_data, working_set)
     }
-
-    fn end_slot_hook(&self, new_state_root: [u8; 32]) -> anyhow::Result<()> {
-        self.chain_state.end_slot_hook(new_state_root)
-    }
 }
 
 pub(crate) fn create_demo_genesis_config<C: Context>(

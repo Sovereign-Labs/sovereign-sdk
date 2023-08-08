@@ -77,7 +77,8 @@ fn test_stf() {
         (),
         &data,
         &mut blobs,
-    );
+    )
+    .unwrap();
 
     assert_eq!(1, result.batch_receipts.len());
     let receipt = result.batch_receipts[0].clone();

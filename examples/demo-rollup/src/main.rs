@@ -227,8 +227,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
 
-        let slot_result =
-            demo.apply_slot(Default::default(), data_to_commit.slot_data(), &mut blobs);
+        let slot_result = demo
+            .apply_slot(Default::default(), data_to_commit.slot_data(), &mut blobs)
+            .unwrap();
         for receipt in slot_result.batch_receipts {
             data_to_commit.add_batch(receipt);
         }

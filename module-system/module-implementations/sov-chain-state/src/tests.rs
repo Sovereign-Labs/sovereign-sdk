@@ -74,7 +74,9 @@ fn test_simple_value_setter() {
 
     assert_eq!(new_height_storage, 0, "The initial height was not computed");
 
-    let result = app_template.apply_slot(Default::default(), &slot_data, &mut [blob.clone()]);
+    let result = app_template
+        .apply_slot(Default::default(), &slot_data, &mut [blob.clone()])
+        .unwrap();
 
     assert_eq!(1, result.batch_receipts.len());
     let apply_blob_outcome = result.batch_receipts[0].clone();
@@ -129,7 +131,9 @@ fn test_simple_value_setter() {
         validity_cond: TestValidityCond::default(),
     };
 
-    let result = app_template.apply_slot(Default::default(), &new_slot_data, &mut [blob]);
+    let result = app_template
+        .apply_slot(Default::default(), &new_slot_data, &mut [blob])
+        .unwrap();
 
     assert_eq!(1, result.batch_receipts.len());
     let apply_blob_outcome = result.batch_receipts[0].clone();
