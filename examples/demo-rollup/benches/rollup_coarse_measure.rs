@@ -5,20 +5,19 @@ use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
-use demo_stf::app::NativeAppRunner;
+use demo_stf::app::App;
 use demo_stf::genesis_config::create_demo_genesis_config;
-use demo_stf::runner_config::from_toml_path;
 use jupiter::verifier::address::CelestiaAddress;
 use prometheus::{Histogram, HistogramOpts, Registry};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_demo_rollup::config::RollupConfig;
 use sov_demo_rollup::rng_xfers::RngDaService;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_modules_api::PrivateKey;
 use sov_rollup_interface::mocks::{TestBlob, TestBlock, TestBlockHeader, TestHash};
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
 
 #[macro_use]
@@ -26,22 +25,13 @@ extern crate prettytable;
 
 use prettytable::Table;
 
-fn print_times(
-    total: Duration,
-    begin_slot_time: Duration,
-    end_slot_time: Duration,
-    apply_blob_time: Duration,
-    blocks: u64,
-    num_txns: u64,
-) {
+fn print_times(total: Duration, apply_block_time: Duration, blocks: u64, num_txns: u64) {
     let mut table = Table::new();
 
     table.add_row(row!["Blocks", format!("{:?}", blocks)]);
     table.add_row(row!["Txns per Block", format!("{:?}", num_txns)]);
     table.add_row(row!["Total", format!("{:?}", total)]);
-    table.add_row(row!["Begin slot", format!("{:?}", begin_slot_time)]);
-    table.add_row(row!["End slot", format!("{:?}", end_slot_time)]);
-    table.add_row(row!["Apply Blob", format!("{:?}", apply_blob_time)]);
+    table.add_row(row!["Apply Block", format!("{:?}", apply_block_time)]);
     table.add_row(row![
         "Txns per sec (TPS)",
         format!(
@@ -57,30 +47,15 @@ fn print_times(
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let registry = Registry::new();
-    let h_apply_blob = Histogram::with_opts(HistogramOpts::new(
-        "block_processing_apply_blob",
+    let h_apply_block = Histogram::with_opts(HistogramOpts::new(
+        "block_processing_apply_block",
         "Histogram of block processing - apply blob times",
     ))
     .expect("Failed to create histogram");
-    let h_begin_slot = Histogram::with_opts(HistogramOpts::new(
-        "block_processing_begin_slot",
-        "Histogram of block processing - begin slot times",
-    ))
-    .expect("Failed to create histogram");
-    let h_end_slot = Histogram::with_opts(HistogramOpts::new(
-        "block_processing_end_slot",
-        "Histogram of block processing - end slot times",
-    ))
-    .expect("Failed to create histogram");
+
     registry
-        .register(Box::new(h_apply_blob.clone()))
+        .register(Box::new(h_apply_block.clone()))
         .expect("Failed to register apply blob histogram");
-    registry
-        .register(Box::new(h_begin_slot.clone()))
-        .expect("Failed to register begin slot histogram");
-    registry
-        .register(Box::new(h_end_slot.clone()))
-        .expect("Failed to register end slot histogram");
 
     let start_height: u64 = 0u64;
     let mut end_height: u64 = 10u64;
@@ -115,10 +90,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let da_service = Arc::new(RngDaService::new());
 
-    let mut demo_runner =
-        NativeAppRunner::<Risc0Verifier, TestBlob<CelestiaAddress>>::new(rollup_config.runner);
+    let demo_runner =
+        App::<Risc0Verifier, TestBlob<CelestiaAddress>>::new(rollup_config.runner.storage);
 
-    let demo = demo_runner.inner_mut();
+    let mut demo = demo_runner.stf;
     let sequencer_private_key = DefaultPrivateKey::generate();
     let demo_genesis_config = create_demo_genesis_config(
         100000000,
@@ -130,8 +105,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let _prev_state_root = {
         // Check if the rollup has previously been initialized
         demo.init_chain(demo_genesis_config);
-        demo.begin_slot(Default::default());
-        let (prev_state_root, _) = demo.end_slot();
+        let apply_block_result = demo.apply_slot(Default::default(), []);
+        let prev_state_root = apply_block_result.state_root;
         prev_state_root.0
     };
 
@@ -153,50 +128,34 @@ async fn main() -> Result<(), anyhow::Error> {
         blocks.push(filtered_block.clone());
 
         let blob_txs = da_service.extract_relevant_txs(&filtered_block);
-        blobs.push(blob_txs.clone());
+        blobs.push(blob_txs);
     }
 
     // rollup processing
-    let total = std::time::Instant::now();
-    let mut begin_slot_time = Duration::new(0, 0);
-    let mut end_slot_time = Duration::new(0, 0);
-    let mut apply_blob_time = Duration::new(0, 0);
+    let total = Instant::now();
+    let mut apply_block_time = Duration::new(0, 0);
     for height in start_height..end_height {
         let filtered_block = &blocks[height as usize];
 
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
 
         let now = Instant::now();
-        demo.begin_slot(Default::default());
-        begin_slot_time += now.elapsed();
-        h_begin_slot.observe(now.elapsed().as_secs_f64());
 
-        for blob in &mut blobs[height as usize] {
-            let now = Instant::now();
-            let receipts = demo.apply_blob(blob, None);
-            apply_blob_time += now.elapsed();
-            h_apply_blob.observe(now.elapsed().as_secs_f64());
-            data_to_commit.add_batch(receipts);
+        let apply_block_results = demo.apply_slot(Default::default(), &mut blobs[height as usize]);
+
+        apply_block_time += now.elapsed();
+        h_apply_block.observe(now.elapsed().as_secs_f64());
+
+        for receipt in apply_block_results.batch_receipts {
+            data_to_commit.add_batch(receipt);
         }
-
-        let now = Instant::now();
-        let (_next_state_root, _witness) = demo.end_slot();
-        end_slot_time += now.elapsed();
-        h_end_slot.observe(now.elapsed().as_secs_f64());
 
         ledger_db.commit_slot(data_to_commit).unwrap();
     }
 
     let total = total.elapsed();
     if timer_output {
-        print_times(
-            total,
-            begin_slot_time,
-            end_slot_time,
-            apply_blob_time,
-            end_height,
-            num_txns,
-        );
+        print_times(total, apply_block_time, end_height, num_txns);
     }
     if prometheus_output {
         println!("{:#?}", registry.gather());

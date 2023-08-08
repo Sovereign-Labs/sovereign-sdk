@@ -5,6 +5,7 @@ use sov_bank::{
     get_genesis_token_address, get_token_address, Bank, BankConfig, CallMessage, Coins,
     TotalSupplyResponse,
 };
+use sov_modules_api::test_utils::generate_address;
 use sov_modules_api::{Address, Context, Error, Module};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
@@ -154,7 +155,7 @@ fn transfer_initial_token() {
 
     // Sender does not exist
     {
-        let unknown_sender = generate_address("non_existing_sender");
+        let unknown_sender = generate_address::<C>("non_existing_sender");
         let unknown_sender_context = C::new(unknown_sender.clone());
 
         let sender_balance = query_user_balance(unknown_sender.clone(), &mut working_set);
@@ -208,7 +209,7 @@ fn transfer_initial_token() {
 
     // Receiver does not exist
     {
-        let unknown_receiver = generate_address("non_existing_receiver");
+        let unknown_receiver = generate_address::<C>("non_existing_receiver");
 
         let receiver_balance_before =
             query_user_balance(unknown_receiver.clone(), &mut working_set);
@@ -262,8 +263,8 @@ fn transfer_deployed_token() {
     let empty_bank_config = BankConfig::<C> { tokens: vec![] };
     bank.genesis(&empty_bank_config, &mut working_set).unwrap();
 
-    let sender_address = generate_address("just_sender");
-    let receiver_address = generate_address("just_receiver");
+    let sender_address = generate_address::<C>("just_sender");
+    let receiver_address = generate_address::<C>("just_receiver");
 
     let salt = 10;
     let token_name = "Token1".to_owned();

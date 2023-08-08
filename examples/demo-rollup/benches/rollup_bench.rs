@@ -6,19 +6,18 @@ use std::time::Duration;
 use anyhow::Context;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use criterion::{criterion_group, criterion_main, Criterion};
-use demo_stf::app::NativeAppRunner;
+use demo_stf::app::App;
 use demo_stf::genesis_config::create_demo_genesis_config;
-use demo_stf::runner_config::from_toml_path;
 use jupiter::verifier::address::CelestiaAddress;
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_demo_rollup::config::RollupConfig;
 use sov_demo_rollup::rng_xfers::RngDaService;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
+use sov_modules_api::PrivateKey;
 use sov_rollup_interface::mocks::{TestBlob, TestBlock, TestBlockHeader, TestHash};
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
 
 fn rollup_bench(_bench: &mut Criterion) {
@@ -43,10 +42,10 @@ fn rollup_bench(_bench: &mut Criterion) {
 
     let da_service = Arc::new(RngDaService::new());
 
-    let mut demo_runner =
-        NativeAppRunner::<Risc0Verifier, TestBlob<CelestiaAddress>>::new(rollup_config.runner);
+    let demo_runner =
+        App::<Risc0Verifier, TestBlob<CelestiaAddress>>::new(rollup_config.runner.storage);
 
-    let demo = demo_runner.inner_mut();
+    let mut demo = demo_runner.stf;
     let sequencer_private_key = DefaultPrivateKey::generate();
     let demo_genesis_config = create_demo_genesis_config(
         100000000,
@@ -58,8 +57,8 @@ fn rollup_bench(_bench: &mut Criterion) {
     let _prev_state_root = {
         // Check if the rollup has previously been initialized
         demo.init_chain(demo_genesis_config);
-        demo.begin_slot(Default::default());
-        let (prev_state_root, _) = demo.end_slot();
+        let apply_block_result = demo.apply_slot(Default::default(), []);
+        let prev_state_root = apply_block_result.state_root;
         prev_state_root.0
     };
 
@@ -89,14 +88,12 @@ fn rollup_bench(_bench: &mut Criterion) {
             let filtered_block = &blocks[height as usize];
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
-            demo.begin_slot(Default::default());
 
-            for blob in &mut blobs[height as usize] {
-                let receipts = demo.apply_blob(blob, None);
-                // println!("{:?}", receipts);
+            let apply_block_result =
+                demo.apply_slot(Default::default(), &mut blobs[height as usize]);
+            for receipts in apply_block_result.batch_receipts {
                 data_to_commit.add_batch(receipts);
             }
-            let (_next_state_root, _witness) = demo.end_slot();
 
             ledger_db.commit_slot(data_to_commit).unwrap();
             height += 1;

@@ -10,13 +10,20 @@ pub mod hooks;
 mod prefix;
 mod response;
 mod serde_address;
+pub mod test_utils;
 #[cfg(test)]
 mod tests;
 pub mod transaction;
+#[cfg(feature = "native")]
+pub mod utils;
 
 #[cfg(feature = "macros")]
 extern crate sov_modules_macros;
 
+use digest::typenum::U32;
+use digest::Digest;
+#[cfg(feature = "native")]
+use serde::de::DeserializeOwned;
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::{
     DispatchCall, Genesis, MessageCodec, ModuleCallJsonSchema, ModuleInfo,
@@ -25,7 +32,9 @@ pub use sov_modules_macros::{
 /// Procedural macros to assist with creating new modules.
 #[cfg(feature = "macros")]
 pub mod macros {
-    pub use sov_modules_macros::{expose_rpc, rpc_gen, CliWallet, CliWalletArg, DefaultRuntime};
+    pub use sov_modules_macros::DefaultRuntime;
+    #[cfg(feature = "native")]
+    pub use sov_modules_macros::{expose_rpc, rpc_gen, CliWallet, CliWalletArg};
 }
 
 use core::fmt::{self, Debug, Display};
@@ -35,13 +44,14 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use clap;
+#[cfg(feature = "native")]
+pub use dispatch::CliWallet;
 pub use dispatch::{DispatchCall, Genesis};
 pub use error::Error;
 pub use prefix::Prefix;
 pub use response::CallResponse;
 use serde::{Deserialize, Serialize};
-pub use sov_rollup_interface::crypto::SimpleHasher as Hasher;
-pub use sov_rollup_interface::AddressTrait;
+pub use sov_rollup_interface::{digest, AddressTrait};
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
 
@@ -120,11 +130,7 @@ pub enum SigVerificationError {
 pub trait Signature {
     type PublicKey;
 
-    fn verify(
-        &self,
-        pub_key: &Self::PublicKey,
-        msg_hash: [u8; 32],
-    ) -> Result<(), SigVerificationError>;
+    fn verify(&self, pub_key: &Self::PublicKey, msg: &[u8]) -> Result<(), SigVerificationError>;
 }
 
 /// A type that can't be instantiated.
@@ -134,6 +140,19 @@ pub enum NonInstantiable {}
 /// PublicKey used in the Module System.
 pub trait PublicKey {
     fn to_address<A: AddressTrait>(&self) -> A;
+}
+
+/// A PrivateKey used in the Module System.
+#[cfg(feature = "native")]
+pub trait PrivateKey {
+    type PublicKey: PublicKey;
+    type Signature: Signature<PublicKey = Self::PublicKey>;
+    fn generate() -> Self;
+    fn pub_key(&self) -> Self::PublicKey;
+    fn sign(&self, msg: &[u8]) -> Self::Signature;
+    fn to_address<A: AddressTrait>(&self) -> A {
+        self.pub_key().to_address::<A>()
+    }
 }
 
 /// The `Spec` trait configures certain key primitives to be used by a by a particular instance of a rollup.
@@ -181,6 +200,16 @@ pub trait Spec {
         + Sync
         + FromStr<Err = anyhow::Error>;
 
+    /// The public key used for digital signatures
+    #[cfg(feature = "native")]
+    type PrivateKey: Debug
+        + Send
+        + Sync
+        + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+        + Serialize
+        + DeserializeOwned
+        + PrivateKey<PublicKey = Self::PublicKey, Signature = Self::Signature>;
+
     #[cfg(not(feature = "native"))]
     type PublicKey: borsh::BorshDeserialize
         + borsh::BorshSerialize
@@ -192,12 +221,14 @@ pub trait Spec {
         + PublicKey;
 
     /// The hasher preferred by the rollup, such as Sha256 or Poseidon.
-    type Hasher: Hasher;
+    type Hasher: Digest<OutputSize = U32>;
 
     /// The digital signature scheme used by the rollup
     #[cfg(feature = "native")]
     type Signature: borsh::BorshDeserialize
         + borsh::BorshSerialize
+        + Serialize
+        + for<'a> Deserialize<'a>
         + schemars::JsonSchema
         + Eq
         + Clone
@@ -308,13 +339,6 @@ pub trait ModuleInfo {
 
     /// Returns addresses of all the other modules this module is dependent on
     fn dependencies(&self) -> Vec<&<Self::Context as Spec>::Address>;
-}
-
-/// A StateTransitionRunner needs to implement this if
-/// the RPC service is needed
-pub trait RpcRunner {
-    type Context: Context;
-    fn get_storage(&self) -> <Self::Context as Spec>::Storage;
 }
 
 struct ModuleVisitor<'a, C: Context> {

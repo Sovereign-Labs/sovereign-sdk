@@ -12,7 +12,9 @@ members = [
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
     "full-node/sov-ethereum",
+    "full-node/sov-stf-runner",
     
+    "module-system/sov-cli",
     "module-system/sov-modules-stf-template",
     "module-system/sov-modules-macros",
     "module-system/sov-state",
@@ -76,7 +78,7 @@ bech32 = "0.9.1"
 derive_more = "0.99.11"
 clap = { version = "4.2.7", features = ["derive"] }
 toml = "0.7.3"
-jsonrpsee = "0.16.2"
+jsonrpsee = {version = "0.18.2", features = ["jsonrpsee-types"] }
 schemars = { version = "0.8.12", features = ["derive"] }
 tempfile = "3.5"
 tokio = { version = "1", features = ["full"] }
@@ -102,4 +104,3 @@ revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "releas
 # See reth: https://github.com/paradigmxyz/reth/blob/main/Cargo.toml#L79
 revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
 revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
-

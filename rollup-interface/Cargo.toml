@@ -23,7 +23,7 @@ borsh = { workspace = true, features = ["rc"] }
 serde = { workspace = true }
 bytes = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
-jmt = { workspace = true }
+digest = { workspace = true }
 
 sha2 = { workspace = true, optional = true }
 

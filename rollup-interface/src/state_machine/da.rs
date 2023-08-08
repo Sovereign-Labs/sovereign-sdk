@@ -6,10 +6,10 @@ use std::io::{self, Read};
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Buf;
+use digest::Digest;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::crypto::SimpleHasher;
 use crate::zk::ValidityCondition;
 use crate::AddressTrait;
 
@@ -22,7 +22,7 @@ pub trait DaSpec {
     type BlockHeader: BlockHeaderTrait<Hash = Self::SlotHash>;
 
     /// The transaction type used by the DA layer.
-    type BlobTransaction: BlobTransactionTrait;
+    type BlobTransaction: BlobReaderTrait;
 
     /// A proof that each tx in a set of blob transactions is included in a given block.
     type InclusionMultiProof: Serialize + DeserializeOwned;
@@ -59,7 +59,7 @@ pub trait DaVerifier {
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self;
 
     /// Verify a claimed set of transactions against a block header.
-    fn verify_relevant_tx_list<H: SimpleHasher>(
+    fn verify_relevant_tx_list<H: Digest>(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
@@ -156,7 +156,7 @@ impl<B: Buf> Read for CountedBufReader<B> {
 }
 
 /// A transaction on a data availability layer, including the address of the sender.
-pub trait BlobTransactionTrait: Serialize + DeserializeOwned + Send + Sync {
+pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static {
     /// The type of the raw data of the blob. For example, the "calldata" of an Ethereum rollup transaction
     type Data: Buf;
 

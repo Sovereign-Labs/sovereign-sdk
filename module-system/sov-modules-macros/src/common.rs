@@ -18,6 +18,7 @@ pub(crate) struct StructNamedField {
 }
 
 impl StructNamedField {
+    #[cfg_attr(not(feature = "native"), allow(unused))]
     pub(crate) fn filter_attrs(&mut self, filter: impl FnMut(&syn::Attribute) -> bool) {
         self.attrs = std::mem::take(&mut self.attrs)
             .into_iter()
@@ -68,6 +69,7 @@ impl StructFieldExtractor {
 
     /// Extract the named fields from a struct, or generate named fields matching the fields of an unnamed struct.
     /// Names follow the pattern `field0`, `field1`, etc.
+    #[cfg_attr(not(feature = "native"), allow(unused))]
     pub(crate) fn get_or_generate_named_fields(fields: &Fields) -> Vec<StructNamedField> {
         match fields {
             Fields::Unnamed(unnamed_fields) => unnamed_fields
@@ -225,19 +227,18 @@ pub(crate) fn get_attribute_values(
     let mut values = vec![];
 
     // Find the attribute with the given name on the root item
-    if let Some(attr) = item
-        .attrs
+    item.attrs
         .iter()
-        .find(|attr| attr.path.is_ident(attribute_name))
-    {
-        if let Ok(Meta::List(list)) = attr.parse_meta() {
-            values.extend(list.nested.iter().map(|n| {
-                let mut tokens = TokenStream::new();
-                n.to_tokens(&mut tokens);
-                tokens
-            }));
-        }
-    }
+        .filter(|attr| attr.path.is_ident(attribute_name))
+        .for_each(|attr| {
+            if let Ok(Meta::List(list)) = attr.parse_meta() {
+                values.extend(list.nested.iter().map(|n| {
+                    let mut tokens = TokenStream::new();
+                    n.to_tokens(&mut tokens);
+                    tokens
+                }));
+            }
+        });
 
     values
 }
@@ -306,6 +307,8 @@ pub(crate) fn get_serialization_attrs(
 /// let our_bounds = extract_generic_type_bounds(&test_struct.generics);
 /// assert_eq!(our_bounds.get(T), Some(&desired_bounds_for_t.bounds));
 /// ```
+///
+#[cfg_attr(not(feature = "native"), allow(unused))]
 pub(crate) fn extract_generic_type_bounds(
     generics: &Generics,
 ) -> HashMap<TypePath, Punctuated<TypeParamBound, syn::token::Add>> {
@@ -351,6 +354,7 @@ pub(crate) fn extract_generic_type_bounds(
 }
 
 /// Extract the type ident from a `TypePath`.
+#[cfg_attr(not(feature = "native"), allow(unused))]
 pub fn extract_ident(type_path: &syn::TypePath) -> &Ident {
     &type_path
         .path
@@ -371,6 +375,7 @@ pub fn extract_ident(type_path: &syn::TypePath) -> &Ident {
 ///
 /// This function will return a `syn::Generics` corresponding to `<T: SomeTrait>` when
 /// invoked on the PathArguments for field1.
+#[cfg_attr(not(feature = "native"), allow(unused))]
 pub(crate) fn generics_for_field(
     outer_generics: &Generics,
     field_generic_types: &PathArguments,

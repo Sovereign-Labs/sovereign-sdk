@@ -2,14 +2,17 @@
 
 #![deny(missing_docs)]
 
+#[cfg(feature = "native")]
 mod cli_parser;
 mod common;
 mod default_runtime;
 mod dispatch;
 mod module_call_json_schema;
 mod module_info;
+#[cfg(feature = "native")]
 mod rpc;
 
+#[cfg(feature = "native")]
 use cli_parser::{derive_cli_wallet_arg, CliParserMacro};
 use default_runtime::DefaultRuntimeMacro;
 use dispatch::dispatch_call::DispatchCallMacro;
@@ -17,8 +20,9 @@ use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
 use module_call_json_schema::derive_module_call_json_schema;
 use proc_macro::TokenStream;
+#[cfg(feature = "native")]
 use rpc::ExposeRpcMacro;
-use syn::{parse_macro_input, DeriveInput};
+use syn::parse_macro_input;
 
 /// Derives the [`ModuleInfo`](trait.ModuleInfo.html) trait for the underlying `struct`.
 ///
@@ -217,6 +221,7 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// }
 /// ```
 #[proc_macro_attribute]
+#[cfg(feature = "native")]
 pub fn rpc_gen(attr: TokenStream, item: TokenStream) -> TokenStream {
     let attr: Vec<syn::NestedMeta> = parse_macro_input!(attr);
     let input = parse_macro_input!(item as syn::ItemImpl);
@@ -232,6 +237,7 @@ fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> To
 
 /// This proc macro generates the actual implementations for the trait created above for the module
 /// It iterates over each struct
+#[cfg(feature = "native")]
 #[proc_macro_attribute]
 pub fn expose_rpc(_attr: TokenStream, input: TokenStream) -> TokenStream {
     let original = input.clone();
@@ -240,7 +246,12 @@ pub fn expose_rpc(_attr: TokenStream, input: TokenStream) -> TokenStream {
     handle_macro_error(expose_macro.generate_rpc(original, input))
 }
 
-/// Generates a CLI arguments parser for the specified runtime.
+/// Implements the `sov_modules_api::CliWallet` trait for the annotated runtime.
+/// Under the hood, this macro generates an enum called `CliTransactionParser` which derives the [`clap::Parser`] trait.
+/// This enum has one variant for each field of the `Runtime`, and uses the `sov_modules_api::CliWalletArg` trait to parse the
+/// arguments for each of these structs.
+///
+/// To exclude a module from the CLI, use the `#[cli_skip]` attribute.
 ///
 /// ## Examples
 /// ```
@@ -255,6 +266,7 @@ pub fn expose_rpc(_attr: TokenStream, input: TokenStream) -> TokenStream {
 ///     // ...
 /// }
 /// ```
+#[cfg(feature = "native")]
 #[proc_macro_derive(CliWallet, attributes(cli_skip))]
 pub fn cli_parser(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input);
@@ -320,8 +332,9 @@ pub fn cli_parser(input: TokenStream) -> TokenStream {
 ///     type CliStringRepr = MyEnumWithNamedFields;
 /// }
 /// ```
+#[cfg(feature = "native")]
 #[proc_macro_derive(CliWalletArg)]
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
-    let input: DeriveInput = parse_macro_input!(input);
+    let input: syn::DeriveInput = parse_macro_input!(input);
     handle_macro_error(derive_cli_wallet_arg(input))
 }

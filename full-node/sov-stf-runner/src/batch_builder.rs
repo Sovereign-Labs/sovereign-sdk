@@ -20,6 +20,7 @@ pub struct FiFoStrictBatchBuilder<R, C: Context> {
 }
 
 impl<R, C: Context> FiFoStrictBatchBuilder<R, C> {
+    /// BatchBuilder constructor.
     pub fn new(
         max_batch_size_bytes: usize,
         mempool_max_txs_count: usize,
@@ -140,7 +141,7 @@ mod tests {
     use sov_modules_api::default_signature::DefaultPublicKey;
     use sov_modules_api::macros::DefaultRuntime;
     use sov_modules_api::transaction::Transaction;
-    use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
+    use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec, PrivateKey};
     use sov_rollup_interface::services::batch_builder::BatchBuilder;
     use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
     use sov_value_setter::{CallMessage, ValueSetterConfig};
