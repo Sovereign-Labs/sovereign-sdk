@@ -6,7 +6,7 @@ use sov_state::WorkingSet;
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
 use crate::evm::transaction::{BlockEnv, EvmTransaction};
-use crate::evm::{contract_address, EvmChainCfg};
+use crate::evm::{contract_address, EvmChainCfg, SpecIdWrapper};
 use crate::{Evm, TransactionReceipt};
 
 #[cfg_attr(
@@ -68,31 +68,38 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(CallResponse::default())
     }
 
+    /// Get cfg env for a given block number
+    /// Returns correct config depending on spec for given block number
+    /// Copies context dependent values from template_cfg or default if not provided
     pub(crate) fn get_cfg_env(
         &self,
         block_env: &BlockEnv,
         cfg: EvmChainCfg,
         template_cfg: Option<CfgEnv>,
     ) -> CfgEnv {
-        let spec = cfg.spec;
-        let spec_id = match spec.binary_search_by(|&(k, _)| k.cmp(&block_env.number)) {
-            Ok(index) => spec[index].1,
-            Err(index) => {
-                if index > 0 {
-                    spec[index - 1].1
-                } else {
-                    // this should never happen as we cover this in genesis
-                    panic!("EVM spec must start from block 0")
-                }
-            }
-        };
-
         CfgEnv {
             chain_id: U256::from(cfg.chain_id),
             limit_contract_code_size: cfg.limit_contract_code_size,
-            spec_id: spec_id.into(),
+            spec_id: get_spec_id(cfg.spec, block_env.number).into(),
             // disable_gas_refund: !cfg.gas_refunds, // option disabled for now, we could add if needed
             ..template_cfg.unwrap_or_default()
         }
     }
+}
+
+/// Get spec id for a given block number
+/// Returns the first spec id defined for block >= block_number
+fn get_spec_id(spec: Vec<(u64, SpecIdWrapper)>, block_number: u64) -> crate::evm::SpecIdWrapper {
+    let spec_id = match spec.binary_search_by(|&(k, _)| k.cmp(&block_number)) {
+        Ok(index) => spec[index].1,
+        Err(index) => {
+            if index > 0 {
+                spec[index - 1].1
+            } else {
+                // this should never happen as we cover this in genesis
+                panic!("EVM spec must start from block 0")
+            }
+        }
+    };
+    spec_id
 }
