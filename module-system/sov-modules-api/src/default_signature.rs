@@ -54,7 +54,7 @@ pub mod private_key {
         fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
             use serde::de::Error;
             let bytes = <&'de [u8] as serde::Deserialize>::deserialize(deserializer)?;
-            let key_pair = Keypair::from_bytes(&bytes).map_err(D::Error::custom)?;
+            let key_pair = Keypair::from_bytes(bytes).map_err(D::Error::custom)?;
             Ok(Self { key_pair })
         }
     }
