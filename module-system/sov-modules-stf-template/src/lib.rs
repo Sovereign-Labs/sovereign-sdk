@@ -183,6 +183,6 @@ where
     fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot> {
         self.current_storage
             .get_state_root(&Default::default())
-            .map(|root_hash| jmt::RootHash(root_hash))
+            .map(jmt::RootHash)
     }
 }

@@ -1,4 +1,3 @@
-
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
@@ -12,8 +11,6 @@ use sov_state::WorkingSet;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
 use crate::ChainState;
-
-type C = DefaultContext;
 
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]

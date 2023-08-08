@@ -3,7 +3,7 @@ use sov_modules_api::{Context, Spec};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::{Storage, WorkingSet};
-use thiserror::Error;
+
 
 use super::ChainState;
 use crate::{StateTransitionId, TransitionInProgress};

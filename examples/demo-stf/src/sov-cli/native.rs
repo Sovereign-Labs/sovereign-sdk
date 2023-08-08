@@ -15,6 +15,7 @@ use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{AddressBech32, PrivateKey, PublicKey, Spec};
 use sov_modules_stf_template::RawTx;
+#[cfg(test)]
 use sov_rollup_interface::mocks::TestBlock;
 use sov_sequencer::SubmitTransaction;
 type C = DefaultContext;
