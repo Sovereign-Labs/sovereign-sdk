@@ -234,7 +234,7 @@ where
     }
 
     // Do all stateless checks and data formatting, that can be results in sequencer slashing
-    pub(crate) fn pre_process_batch(
+    fn pre_process_batch(
         &self,
         blob_data: &mut CountedBufReader<impl Buf>,
     ) -> Result<

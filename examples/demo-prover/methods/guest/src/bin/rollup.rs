@@ -12,7 +12,7 @@ use risc0_adapter::guest::Risc0Guest;
 use risc0_zkvm::guest::env;
 use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
-use sov_rollup_interface::stf::{StateTransitionFunction, ZkConfig};
+use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::{StateTransition, ZkvmGuest};
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia

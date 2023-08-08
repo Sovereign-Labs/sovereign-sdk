@@ -115,7 +115,7 @@ impl Zkvm for MockZkvm {
         _serialized_proof: &[u8],
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<crate::zk::StateTransition<C, Add>, Self::Error> {
-        todo!()
+        todo!("Need to specify an output format for the proof logs")
     }
 }
 

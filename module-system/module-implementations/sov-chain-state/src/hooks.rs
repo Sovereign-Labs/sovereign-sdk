@@ -1,5 +1,3 @@
-use core::fmt;
-
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::{Context, Spec};
 use sov_rollup_interface::services::da::SlotData;
@@ -9,21 +7,6 @@ use thiserror::Error;
 
 use super::ChainState;
 use crate::{StateTransitionId, TransitionInProgress};
-
-#[derive(Debug, Clone, Error)]
-pub(crate) enum ChainStateError {
-    NoTransitionInProgress,
-}
-
-impl fmt::Display for ChainStateError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let error_msg = match self {
-            Self::NoTransitionInProgress => "No transition in progress",
-        };
-
-        write!(f, "{error_msg}")
-    }
-}
 
 impl<Ctx: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<Ctx, Cond> {
     type Context = Ctx;
@@ -46,7 +29,7 @@ impl<Ctx: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<Ctx, 
                 let last_transition_in_progress = self
                     .in_progress_transition
                     .get(working_set)
-                    .ok_or(ChainStateError::NoTransitionInProgress)?;
+                    .expect("There should always be a transition in progress");
 
                 StateTransitionId {
                     da_block_hash: last_transition_in_progress.da_block_hash,

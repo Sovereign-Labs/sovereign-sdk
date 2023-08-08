@@ -7,7 +7,6 @@ pub use config::RpcConfig;
 mod runner_config;
 use std::net::SocketAddr;
 mod ledger_rpc;
-
 pub use batch_builder::FiFoStrictBatchBuilder;
 pub use config::RollupConfig;
 use jsonrpsee::RpcModule;
@@ -17,7 +16,7 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::{Zkvm};
+use sov_rollup_interface::zk::Zkvm;
 use tracing::{debug, info};
 
 type StateRoot<ST, Vm, DA> = <ST as StateTransitionFunction<

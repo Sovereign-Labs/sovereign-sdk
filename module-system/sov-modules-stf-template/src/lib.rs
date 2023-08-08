@@ -131,7 +131,7 @@ where
         Ok(jmt::RootHash(genesis_hash))
     }
 
-    fn apply_slot<'a, I, Data: SlotData<Condition = Self::Condition>>(
+    fn apply_slot<'a, I, Data>(
         &mut self,
         witness: Self::Witness,
         slot_data: &Data,
@@ -146,6 +146,7 @@ where
     >
     where
         I: IntoIterator<Item = &'a mut B>,
+        Data: SlotData<Condition = Self::Condition>,
     {
         self.begin_slot(slot_data, witness)?;
 

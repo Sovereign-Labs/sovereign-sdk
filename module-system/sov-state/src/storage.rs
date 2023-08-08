@@ -151,6 +151,7 @@ pub trait Storage: Clone {
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error>;
 
+    /// Opens a proof and validates it against a state root.
     fn open_proof(
         &self,
         state_root: [u8; 32],

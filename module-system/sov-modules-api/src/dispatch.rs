@@ -42,3 +42,11 @@ pub trait EncodeCall<M: Module> {
     /// The encoding function
     fn encode_call(data: M::CallMessage) -> std::vec::Vec<u8>;
 }
+
+/// A trait that needs to be implemented for a *runtime* to be used with the CLI wallet
+#[cfg(feature = "native")]
+pub trait CliWallet: DispatchCall {
+    /// The type that is used to represent this type in the CLI. Typically,
+    /// this type implements the clap::Subcommand trait.
+    type CliStringRepr: Into<<Self as DispatchCall>::Decodable>;
+}

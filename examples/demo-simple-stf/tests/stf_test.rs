@@ -1,5 +1,4 @@
 use std::fmt::Display;
-use std::marker::PhantomData;
 use std::str::FromStr;
 
 use demo_simple_stf::{ApplyBlobResult, CheckHashPreimageStf};
@@ -63,9 +62,7 @@ fn test_stf() {
     let preimage = vec![0; 32];
 
     let test_blob = TestBlob::<DaAddress>::new(preimage, address, [0; 32]);
-    let stf = &mut CheckHashPreimageStf::<TestValidityCond> {
-        phantom_data: PhantomData,
-    };
+    let stf = &mut CheckHashPreimageStf::<TestValidityCond>::default();
 
     let data = TestBlock::default();
     let mut blobs = [test_blob];

@@ -7,10 +7,9 @@ use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{BatchReceipt, SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 
-#[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
-
+#[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub struct CheckHashPreimageStf<Cond> {
-    pub phantom_data: PhantomData<Cond>,
+    phantom_data: PhantomData<Cond>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -46,7 +45,7 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
         Ok(())
     }
 
-    fn apply_slot<'a, I, Data: SlotData>(
+    fn apply_slot<'a, I, Data>(
         &mut self,
         _witness: Self::Witness,
         _slot_data: &Data,
@@ -61,6 +60,7 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
     >
     where
         I: IntoIterator<Item = &'a mut B>,
+        Data: SlotData,
     {
         let mut receipts = vec![];
         for blob in blobs {

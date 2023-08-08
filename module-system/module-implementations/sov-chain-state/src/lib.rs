@@ -36,7 +36,8 @@ pub struct StateTransitionId<Cond: ValidityCondition> {
 }
 
 impl StateTransitionId<TestValidityCond> {
-    /// Creates a new state transition
+    /// Creates a new state transition. Only available for testing as we only want to create
+    /// new state transitions from existing [`TransitionInProgress`].
     pub fn new(
         da_block_hash: [u8; 32],
         post_state_root: [u8; 32],
@@ -53,7 +54,7 @@ impl StateTransitionId<TestValidityCond> {
 impl<Cond: ValidityCondition> StateTransitionId<Cond> {
     /// Compare the transition block hash and state root with the provided input couple. If
     /// the pairs are equal, return [`true`].
-    pub fn compare_tx_hashes(&self, da_block_hash: [u8; 32], post_state_root: [u8; 32]) -> bool {
+    pub fn compare_hashes(&self, da_block_hash: [u8; 32], post_state_root: [u8; 32]) -> bool {
         self.da_block_hash == da_block_hash && self.post_state_root == post_state_root
     }
 

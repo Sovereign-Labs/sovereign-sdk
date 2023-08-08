@@ -129,7 +129,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     /// which is why we use a generic here instead of an associated type.
     ///
     /// Commits state changes to the database
-    fn apply_slot<'a, I, Data: SlotData<Condition = Self::Condition>>(
+    fn apply_slot<'a, I, Data>(
         &mut self,
         witness: Self::Witness,
         slot_data: &Data,
@@ -143,7 +143,8 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
         >,
     >
     where
-        I: IntoIterator<Item = &'a mut B>;
+        I: IntoIterator<Item = &'a mut B>,
+        Data: SlotData<Condition = Self::Condition>;
 
     /// Gets the state root from the associated state. If not available (because the chain has not been initialized yet),
     /// return None.

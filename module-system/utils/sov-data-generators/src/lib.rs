@@ -28,9 +28,12 @@ pub fn has_tx_events(apply_blob_outcome: &BatchReceipt<SequencerOutcome, TxEffec
     events.peekable().peek().is_some()
 }
 
+/// Trait used to generate messages from the DA layer to automate module testing
 pub trait MessageGenerator {
+    /// Module where the messages originate from.
     type Module: Module;
 
+    /// Generates a list of messages originating from the module.
     fn create_messages(
         &self,
     ) -> Vec<(
@@ -39,14 +42,21 @@ pub trait MessageGenerator {
         u64,
     )>;
 
+    /// Creates a transaction object associated with a call message, for a given module.
     fn create_tx<Encoder: EncodeCall<Self::Module>>(
         &self,
+        // Private key of the sender
         sender: &DefaultPrivateKey,
+        // The message itself
         message: <Self::Module as Module>::CallMessage,
+        // The message nonce
         nonce: u64,
+        // A boolean that indicates whether this message is the last one to be sent.
+        // Useful to perform some operations specifically on the last message.
         is_last: bool,
     ) -> Transaction<DefaultContext>;
 
+    /// Creates a vector of raw transactions from the module.
     fn create_raw_txs<Encoder: EncodeCall<Self::Module>>(&self) -> Vec<RawTx> {
         let mut messages_iter = self.create_messages().into_iter().peekable();
         let mut serialized_messages = Vec::default();
