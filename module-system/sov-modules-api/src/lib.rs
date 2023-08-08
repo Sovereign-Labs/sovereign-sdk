@@ -421,7 +421,7 @@ impl<'a, C: Context> ModuleVisitor<'a, C> {
 }
 
 /// Sorts ModuleInfo objects by their dependencies
-pub fn sort_modules_by_dependencies<C: Context>(
+fn sort_modules_by_dependencies<C: Context>(
     modules: Vec<&dyn ModuleInfo<Context = C>>,
 ) -> Result<Vec<&dyn ModuleInfo<Context = C>>, anyhow::Error> {
     let mut module_visitor = ModuleVisitor::<C>::new();
@@ -446,7 +446,8 @@ where
     let mut value_map = HashMap::new();
 
     for module in module_value_tuples {
-        value_map.insert(module.0.address(), module.1);
+        let prev_entry = value_map.insert(module.0.address(), module.1);
+        anyhow::ensure!(prev_entry.is_none(), "Duplicate module address! Only one instance of each module is allowed in a given runtime. Module with address {} is duplicated", module.0.address());
     }
 
     let mut sorted_values = Vec::new();
