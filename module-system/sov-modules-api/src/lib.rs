@@ -22,6 +22,7 @@ extern crate sov_modules_macros;
 
 use digest::typenum::U32;
 use digest::Digest;
+#[cfg(feature = "native")]
 use serde::de::DeserializeOwned;
 #[cfg(feature = "macros")]
 pub use sov_modules_macros::{
@@ -43,7 +44,9 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use clap;
-pub use dispatch::{CliWallet, DispatchCall, Genesis};
+#[cfg(feature = "native")]
+pub use dispatch::CliWallet;
+pub use dispatch::{DispatchCall, Genesis};
 pub use error::Error;
 pub use prefix::Prefix;
 pub use response::CallResponse;
