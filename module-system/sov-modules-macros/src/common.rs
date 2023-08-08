@@ -227,19 +227,18 @@ pub(crate) fn get_attribute_values(
     let mut values = vec![];
 
     // Find the attribute with the given name on the root item
-    if let Some(attr) = item
-        .attrs
+    item.attrs
         .iter()
-        .find(|attr| attr.path.is_ident(attribute_name))
-    {
-        if let Ok(Meta::List(list)) = attr.parse_meta() {
-            values.extend(list.nested.iter().map(|n| {
-                let mut tokens = TokenStream::new();
-                n.to_tokens(&mut tokens);
-                tokens
-            }));
-        }
-    }
+        .filter(|attr| attr.path.is_ident(attribute_name))
+        .for_each(|attr| {
+            if let Ok(Meta::List(list)) = attr.parse_meta() {
+                values.extend(list.nested.iter().map(|n| {
+                    let mut tokens = TokenStream::new();
+                    n.to_tokens(&mut tokens);
+                    tokens
+                }));
+            }
+        });
 
     values
 }

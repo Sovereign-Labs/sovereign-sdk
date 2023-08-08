@@ -7,7 +7,6 @@ use sov_modules_stf_template::{AppTemplate, Batch, SequencerOutcome, TxEffect};
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_state::ProverStorage;
 
-use crate::app::DemoApp;
 use crate::runtime::Runtime;
 
 mod data_generation;
@@ -19,7 +18,12 @@ pub type TestBlob = sov_rollup_interface::mocks::TestBlob<Address>;
 
 pub fn create_new_demo(
     path: impl AsRef<Path>,
-) -> DemoApp<DefaultContext, sov_rollup_interface::mocks::MockZkvm, TestBlob> {
+) -> AppTemplate<
+    DefaultContext,
+    Runtime<DefaultContext>,
+    sov_rollup_interface::mocks::MockZkvm,
+    TestBlob,
+> {
     let runtime = Runtime::default();
     let storage = ProverStorage::with_path(path).unwrap();
     AppTemplate::new(storage, runtime)

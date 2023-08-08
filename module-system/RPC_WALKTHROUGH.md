@@ -8,9 +8,8 @@ There are 5 steps that need to be completed to enable RPC on the full node:
 
 1. Annotate you modules with `rpc_gen` and `rpc_method`.
 2. Annotate your `native` `Runtime` with the `expose_rpc` macro.
-3. Implement the `RpcRunner` trait on your `StateTransitionRunner`.
-4. Import and call `get_rpc_methods` in your full node implementation.
-5. Configure and start your RPC server in your full node implementation.
+3. Import and call `get_rpc_methods` in your full node implementation.
+4. Configure and start your RPC server in your full node implementation.
 
 ### Step 1: Generate an RPC Server for your Module
 
@@ -77,44 +76,23 @@ pub struct Runtime<C: Context> {
 
 Note that`expose_rpc` takes a tuple as argument, each element of the tuple is a concrete Context.
 
-### Step 3: Implement RpcRunner
-
-Next, we implement the `RpcRunner` trait on our `StateTransitionRunner`. If `expose_rpc` dictates which module RPCs we want to
-enable, `RpcRunner` dictates what kind of state they have access to. In this example, we'll expose the current state of our
-rollup by giving the `RpcRunner` a handle to our working database. However, we could just as easily use a different storage instance.
-For example, we might want to use a read-only database snapshot, which would prevent contention between transaction execution
-and RPC queries.
-
-```rust
-// This code goes in your state transition function crate. For example demo-stf/app.rs
-use sov_modules_api::RpcRunner;
-impl<Vm: Zkvm> RpcRunner for DemoAppRunner<DefaultContext, Vm> {
-    type Context = DefaultContext;
-    fn get_storage(&self) -> <Self::Context as Spec>::Storage {
-        self.inner().current_storage.clone()
-    }
-}
-```
-
-### Step 4: Instantiate RPC Methods
+### Step 3: Instantiate RPC Methods
 
 Now that we've implemented all of the necessary traits, a `get_rpc_methods` function will be auto-generated.
 To use it, simply import it from your state transition function. Given access to `Storage`, this function instantiates
 [`jsonrpsee::Methods`](https://docs.rs/jsonrpsee/latest/jsonrpsee/struct.Methods.html) which your full node can
-execute. Thanks to the `RpcRunner` trait we just implemented, our full node now has easy access to an appropriate
-storage instance.
+execute.
 
 ```rust
 // This code goes in your full node implementation. For example demo-rollup/main.rs
 use demo_stf::runtime::get_rpc_methods;
-use sov_modules_api::RpcRunner;
 
 #[tokio::main]
 fn main() {
 	// ...
-    let mut demo_runner = NativeAppRunner...;
+    let mut app = App...;
 
-    let storage = demo_runner.get_storage();
+    let storage = app.get_storage();
     let methods = get_rpc_methods(storage);
 	// ...
 }
@@ -137,7 +115,7 @@ async fn start_rpc_server(methods: RpcModule<()>, address: SocketAddr) {
 #[tokio::main]
 fn main() {
 	// ...
-    let mut demo_runner = NativeAppRunner...;
+    let mut demo_runner = App...;
 
     let storage = demo_runner.get_storage();
     let methods = get_rpc_methods(storage);
