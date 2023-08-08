@@ -13,14 +13,12 @@ const SOV_WALLET_DIR_ENV_VAR: &str = "SOV_WALLET_DIR";
 pub fn wallet_dir() -> Result<impl AsRef<Path>, anyhow::Error> {
     // First try to parse from the env variable
     if let Ok(val) = env::var(SOV_WALLET_DIR_ENV_VAR) {
-        return Ok(
-            PathBuf::try_from(val).map_err(|e: std::convert::Infallible| {
+        return PathBuf::try_from(val).map_err(|e: std::convert::Infallible| {
                 anyhow::format_err!(
                     "Error parsing directory from the '{SOV_WALLET_DIR_ENV_VAR}' environment variable: {}",
                     e
                 )
-            })?,
-        );
+            });
     }
 
     // Fall back to the user's home directory

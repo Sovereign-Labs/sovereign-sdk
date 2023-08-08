@@ -98,6 +98,6 @@ pub fn load_key<C: sov_modules_api::Context>(
     path: impl AsRef<Path>,
 ) -> Result<C::PrivateKey, anyhow::Error> {
     let data = std::fs::read(path)?;
-    let key = serde_json::from_slice(&mut data.as_slice())?;
+    let key = serde_json::from_slice(data.as_slice())?;
     Ok(key)
 }

@@ -17,7 +17,7 @@ impl<Tx: Serialize + DeserializeOwned, Ctx: sov_modules_api::Context> WalletStat
         let path = path.as_ref();
         if path.exists() {
             let data = fs::read(path)?;
-            let state = serde_json::from_slice(&mut data.as_slice())?;
+            let state = serde_json::from_slice(data.as_slice())?;
             Ok(state)
         } else {
             Ok(Self {
@@ -72,7 +72,7 @@ pub struct AddressEntry<Ctx: sov_modules_api::Context> {
 
 impl<Ctx: sov_modules_api::Context> AddressEntry<Ctx> {
     pub fn is_nicknamed(&self, nickname: &str) -> bool {
-        self.nickname.as_ref().map(|n| n.as_str()) == Some(nickname)
+        self.nickname.as_deref() == Some(nickname)
     }
 
     pub fn matches(&self, identifier: &KeyIdentifier<Ctx>) -> bool {
