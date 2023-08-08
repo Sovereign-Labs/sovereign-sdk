@@ -1,3 +1,8 @@
+use std::io::Read;
+
+use borsh::{BorshDeserialize, BorshSerialize};
+use derive_more::{From, Into};
+use revm::primitives::specification::SpecId;
 use revm::primitives::{ExecutionResult, Output, B160};
 use sov_state::Prefix;
 
@@ -66,5 +71,45 @@ pub(crate) fn contract_address(result: ExecutionResult) -> Option<B160> {
             ..
         } => Some(addr),
         _ => None,
+    }
+}
+
+/// EVM SpecId and their activation block
+#[derive(PartialEq, Clone, Copy, From, Into)]
+pub struct SpecIdWrapper(SpecId);
+
+impl BorshSerialize for SpecIdWrapper {
+    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        let value = self.0 as u8;
+        value.serialize(writer)
+    }
+}
+
+impl BorshDeserialize for SpecIdWrapper {
+    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+        let value = u8::deserialize(buf)?;
+        Ok(SpecIdWrapper(unsafe { std::mem::transmute(value) }))
+    }
+
+    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> Result<Self, std::io::Error> {
+        let mut buf = vec![];
+        reader.take(1).read_to_end(&mut buf).unwrap(); // Read 1 bytes for a u8
+        let mut slice = buf.as_slice();
+        SpecIdWrapper::deserialize(&mut slice)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize)]
+pub struct EvmChainCfg {
+    pub chain_id: u64,
+    pub limit_contract_code_size: Option<usize>,
+}
+
+impl Default for EvmChainCfg {
+    fn default() -> EvmChainCfg {
+        EvmChainCfg {
+            chain_id: 1,
+            limit_contract_code_size: None,
+        }
     }
 }

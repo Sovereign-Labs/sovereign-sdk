@@ -1,4 +1,4 @@
-use revm::primitives::{KECCAK_EMPTY, U256};
+use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::{Context, Module, PrivateKey, Spec};
@@ -65,7 +65,13 @@ fn evm_test() {
         nonce: 0,
     };
 
-    let config = EvmConfig { data: vec![data] };
+    let config = EvmConfig {
+        data: vec![data],
+        spec: vec![(0, SpecIdWrapper::new(SpecId::LATEST))]
+            .into_iter()
+            .collect(),
+        chain_cfg: Default::default(),
+    };
 
     evm.genesis(&config, working_set).unwrap();
 

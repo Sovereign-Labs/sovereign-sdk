@@ -1,8 +1,9 @@
 use anyhow::Result;
+use revm::primitives::SpecId;
 use sov_state::WorkingSet;
 
 use crate::evm::db_init::InitEvmDb;
-use crate::evm::AccountInfo;
+use crate::evm::{AccountInfo, SpecIdWrapper};
 use crate::Evm;
 
 impl<C: sov_modules_api::Context> Evm<C> {
@@ -24,6 +25,23 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 },
             )
         }
+
+        let mut spec = config
+            .spec
+            .iter()
+            .map(|(k, v)| (*k, v.clone()))
+            .collect::<Vec<_>>();
+
+        spec.sort_by(|a, b| a.0.cmp(&b.0));
+
+        if spec.is_empty() {
+            spec.push((0, SpecIdWrapper::from(SpecId::LATEST)));
+        } else if spec[0].0 != 0 {
+            panic!("EVM spec must start from block 0");
+        }
+
+        self.spec.set(&spec, working_set);
+
         Ok(())
     }
 }

@@ -1,12 +1,12 @@
 use anyhow::Result;
-use revm::primitives::CfgEnv;
+use revm::primitives::{CfgEnv, U256};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
 use crate::evm::contract_address;
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
-use crate::evm::transaction::EvmTransaction;
+use crate::evm::transaction::{BlockEnv, EvmTransaction};
 use crate::{Evm, TransactionReceipt};
 
 #[cfg_attr(
@@ -28,9 +28,9 @@ impl<C: sov_modules_api::Context> Evm<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/515
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/516
-        let cfg_env = CfgEnv::default();
+
         let block_env = self.block_env.get(working_set).unwrap_or_default();
+        let cfg_env = self.get_cfg_env(&block_env, working_set, None);
         self.transactions.set(&tx.hash, &tx, working_set);
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
@@ -65,5 +65,34 @@ impl<C: sov_modules_api::Context> Evm<C> {
             .set(&receipt.transaction_hash, &receipt, working_set);
 
         Ok(CallResponse::default())
+    }
+
+    pub(crate) fn get_cfg_env(
+        &self,
+        block_env: &BlockEnv,
+        working_set: &mut WorkingSet<C::Storage>,
+        template_cfg: Option<CfgEnv>,
+    ) -> CfgEnv {
+        let cfg = self.cfg.get(working_set).unwrap_or_default();
+        let spec = self.spec.get(working_set).unwrap_or_default();
+        let spec_id = match spec.binary_search_by(|&(k, _)| k.cmp(&block_env.number)) {
+            Ok(index) => spec[index].1,
+            Err(index) => {
+                if index > 0 {
+                    spec[index - 1].1
+                } else {
+                    // this should never happen as we cover this in genesis
+                    panic!("EVM spec must start from block 0")
+                }
+            }
+        };
+
+        CfgEnv {
+            chain_id: U256::from(cfg.chain_id),
+            limit_contract_code_size: cfg.limit_contract_code_size,
+            spec_id: spec_id.into(),
+            // disable_gas_refund: !cfg.gas_refunds, // option disabled for now, we could add if needed
+            ..template_cfg.unwrap_or_default()
+        }
     }
 }

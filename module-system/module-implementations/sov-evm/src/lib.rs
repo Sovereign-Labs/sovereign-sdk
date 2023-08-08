@@ -19,6 +19,8 @@ pub use receipt::TransactionReceipt;
 
 #[cfg(feature = "experimental")]
 mod experimental {
+    use std::collections::HashMap;
+
     use revm::primitives::{KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo};
     use sov_state::WorkingSet;
@@ -26,7 +28,7 @@ mod experimental {
     use super::evm::db::EvmDb;
     use super::evm::transaction::BlockEnv;
     use super::evm::{DbAccount, EthAddress};
-    use crate::evm::{Bytes32, EvmTransaction};
+    use crate::evm::{Bytes32, EvmChainCfg, EvmTransaction, SpecIdWrapper};
     use crate::TransactionReceipt;
 
     #[derive(Clone)]
@@ -39,7 +41,7 @@ mod experimental {
     }
 
     impl AccountData {
-        pub fn empty_code() -> [u8; 32] {
+        pub fn empty_code() -> Bytes32 {
             KECCAK_EMPTY.to_fixed_bytes()
         }
 
@@ -51,6 +53,8 @@ mod experimental {
     #[derive(Clone)]
     pub struct EvmConfig {
         pub data: Vec<AccountData>,
+        pub spec: HashMap<u64, SpecIdWrapper>,
+        pub chain_cfg: EvmChainCfg,
     }
 
     #[allow(dead_code)]
@@ -62,6 +66,12 @@ mod experimental {
 
         #[state]
         pub(crate) accounts: sov_state::StateMap<EthAddress, DbAccount>,
+
+        #[state]
+        pub(crate) spec: sov_state::StateValue<Vec<(u64, SpecIdWrapper)>>,
+
+        #[state]
+        pub(crate) cfg: sov_state::StateValue<EvmChainCfg>,
 
         #[state]
         pub(crate) block_env: sov_state::StateValue<BlockEnv>,
