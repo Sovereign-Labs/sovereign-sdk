@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+
 
 #[cfg(feature = "native")]
 use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
@@ -11,7 +11,7 @@ use sov_election::{ElectionRpcImpl, ElectionRpcServer};
 use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::default_context::ZkDefaultContext;
+
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]

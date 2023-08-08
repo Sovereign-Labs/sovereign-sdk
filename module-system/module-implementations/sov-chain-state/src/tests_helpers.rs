@@ -1,4 +1,4 @@
-use borsh::{BorshDeserialize, BorshSerialize};
+
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
@@ -6,7 +6,7 @@ use sov_modules_api::{Context, PublicKey, Spec};
 use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
 use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
 use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::mocks::{MockZkvm, TestBlob, TestValidityCond};
+use sov_rollup_interface::mocks::{MockZkvm, TestBlob};
 use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::WorkingSet;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
