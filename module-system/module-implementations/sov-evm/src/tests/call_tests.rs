@@ -70,7 +70,7 @@ fn evm_test() {
         spec: vec![(0, SpecIdWrapper::new(SpecId::LATEST))]
             .into_iter()
             .collect(),
-        chain_cfg: Default::default(),
+        ..Default::default()
     };
 
     evm.genesis(&config, working_set).unwrap();

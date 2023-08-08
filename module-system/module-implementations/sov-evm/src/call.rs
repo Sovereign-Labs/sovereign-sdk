@@ -3,10 +3,10 @@ use revm::primitives::{CfgEnv, U256};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
-use crate::evm::contract_address;
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
 use crate::evm::transaction::{BlockEnv, EvmTransaction};
+use crate::evm::{contract_address, EvmChainCfg};
 use crate::{Evm, TransactionReceipt};
 
 #[cfg_attr(
@@ -30,7 +30,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/515
 
         let block_env = self.block_env.get(working_set).unwrap_or_default();
-        let cfg_env = self.get_cfg_env(&block_env, working_set, None);
+        let cfg = self.cfg.get(working_set).unwrap_or_default();
+        let cfg_env = self.get_cfg_env(&block_env, cfg, None);
         self.transactions.set(&tx.hash, &tx, working_set);
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
@@ -70,11 +71,10 @@ impl<C: sov_modules_api::Context> Evm<C> {
     pub(crate) fn get_cfg_env(
         &self,
         block_env: &BlockEnv,
-        working_set: &mut WorkingSet<C::Storage>,
+        cfg: EvmChainCfg,
         template_cfg: Option<CfgEnv>,
     ) -> CfgEnv {
-        let cfg = self.cfg.get(working_set).unwrap_or_default();
-        let spec = self.spec.get(working_set).unwrap_or_default();
+        let spec = cfg.spec;
         let spec_id = match spec.binary_search_by(|&(k, _)| k.cmp(&block_env.number)) {
             Ok(index) => spec[index].1,
             Err(index) => {

@@ -53,8 +53,9 @@ mod experimental {
     #[derive(Clone)]
     pub struct EvmConfig {
         pub data: Vec<AccountData>,
+        pub chain_id: u64,
+        pub limit_contract_code_size: Option<usize>,
         pub spec: HashMap<u64, SpecIdWrapper>,
-        pub chain_cfg: EvmChainCfg,
     }
 
     #[allow(dead_code)]
@@ -66,9 +67,6 @@ mod experimental {
 
         #[state]
         pub(crate) accounts: sov_state::StateMap<EthAddress, DbAccount>,
-
-        #[state]
-        pub(crate) spec: sov_state::StateValue<Vec<(u64, SpecIdWrapper)>>,
 
         #[state]
         pub(crate) cfg: sov_state::StateValue<EvmChainCfg>,

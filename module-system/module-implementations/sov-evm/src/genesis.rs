@@ -3,7 +3,7 @@ use revm::primitives::SpecId;
 use sov_state::WorkingSet;
 
 use crate::evm::db_init::InitEvmDb;
-use crate::evm::{AccountInfo, SpecIdWrapper};
+use crate::evm::{AccountInfo, EvmChainCfg, SpecIdWrapper};
 use crate::Evm;
 
 impl<C: sov_modules_api::Context> Evm<C> {
@@ -40,7 +40,13 @@ impl<C: sov_modules_api::Context> Evm<C> {
             panic!("EVM spec must start from block 0");
         }
 
-        self.spec.set(&spec, working_set);
+        let chain_cfg = EvmChainCfg {
+            chain_id: config.chain_id,
+            limit_contract_code_size: config.limit_contract_code_size,
+            spec,
+        };
+
+        self.cfg.set(&chain_cfg, working_set);
 
         Ok(())
     }

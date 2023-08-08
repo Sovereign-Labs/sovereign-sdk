@@ -108,7 +108,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let tx_env = prepare_call_env(request);
 
         let block_env = self.block_env.get(working_set).unwrap_or_default();
-        let cfg_env = self.get_cfg_env(&block_env, working_set, Some(Self::CALL_CFG_ENV_TEMPLATE));
+        let cfg = self.cfg.get(working_set).unwrap_or_default();
+        let cfg_env = self.get_cfg_env(&block_env, cfg, Some(Self::CALL_CFG_ENV_TEMPLATE));
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 

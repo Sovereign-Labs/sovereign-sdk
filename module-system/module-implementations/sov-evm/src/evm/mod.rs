@@ -75,7 +75,7 @@ pub(crate) fn contract_address(result: ExecutionResult) -> Option<B160> {
 }
 
 /// EVM SpecId and their activation block
-#[derive(PartialEq, Clone, Copy, From, Into)]
+#[derive(Debug, PartialEq, Clone, Copy, From, Into)]
 pub struct SpecIdWrapper(SpecId);
 
 impl BorshSerialize for SpecIdWrapper {
@@ -99,10 +99,11 @@ impl BorshDeserialize for SpecIdWrapper {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct EvmChainCfg {
     pub chain_id: u64,
     pub limit_contract_code_size: Option<usize>,
+    pub spec: Vec<(u64, SpecIdWrapper)>,
 }
 
 impl Default for EvmChainCfg {
@@ -110,6 +111,7 @@ impl Default for EvmChainCfg {
         EvmChainCfg {
             chain_id: 1,
             limit_contract_code_size: None,
+            spec: vec![(0, SpecIdWrapper::from(SpecId::LATEST))],
         }
     }
 }
