@@ -131,7 +131,8 @@ impl<B: Buf> Read for CountedBufReader<B> {
 
         let inner_acc_vec = match &mut self.accumulator {
             Accumulator::Completed(_) => {
-                return Err(io::ErrorKind::UnexpectedEof.into());
+                // The accumulator is completed, we return 0 as no data was read into self
+                return Ok(0);
             }
 
             Accumulator::InProgress(inner_vec) => inner_vec,
