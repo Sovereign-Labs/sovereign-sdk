@@ -77,10 +77,18 @@ pub(crate) fn contract_address(result: ExecutionResult) -> Option<B160> {
 #[derive(Debug, PartialEq, Clone, Copy, From, Into)]
 pub struct SpecIdWrapper(SpecId);
 
+/// EVM Chain configuration
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct EvmChainCfg {
+    /// Unique chain id
+    /// Chains can be registered at https://github.com/ethereum-lists/chains
     pub chain_id: u64,
+
+    /// Limits size of contract code size
+    /// By default it is 0x6000 (~25kb).
     pub limit_contract_code_size: Option<usize>,
+
+    /// List of EVM hardforks by block number
     pub spec: Vec<(u64, SpecIdWrapper)>,
 }
 
