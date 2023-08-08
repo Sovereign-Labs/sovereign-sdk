@@ -109,7 +109,7 @@ pub mod experimental {
                 let data: Bytes = parameters.one().unwrap();
                 let data = RethBytes::from(data.as_ref());
 
-                let evm_transaction: EvmTransaction = data.try_into()?;
+                let evm_transaction: EvmTransaction = data.try_into().expect("Not an evm tx");
 
                 let tx_hash = evm_transaction.hash;
                 let raw_tx = ethereum
