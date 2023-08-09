@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
 use std::io::Read;
 
 use sha2::Digest;
@@ -7,11 +9,17 @@ use sov_rollup_interface::zk::Zkvm;
 
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
 
+/// An implementation of the
+/// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
+/// that is specifically designed to check if someone knows a preimage of a specific hash.
 pub struct CheckHashPreimageStf {}
 
+/// Outcome of the apply_slot method.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum ApplyBlobResult {
+    /// Incorrect hash preimage was posted on the DA.
     Failure,
+    /// Correct hash preimage was posted on the DA.
     Success,
 }
 
