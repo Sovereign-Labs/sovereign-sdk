@@ -8,7 +8,6 @@ use crate::call::CallMessage;
 use crate::evm::test_helpers::SimpleStorageContract;
 use crate::evm::transaction::EvmTransaction;
 use crate::evm::EthAddress;
-use crate::experimental::SpecIdWrapper;
 use crate::{AccountData, Evm, EvmConfig};
 
 type C = DefaultContext;
@@ -68,9 +67,7 @@ fn evm_test() {
 
     let config = EvmConfig {
         data: vec![data],
-        spec: vec![(0, SpecIdWrapper::new(SpecId::LATEST))]
-            .into_iter()
-            .collect(),
+        spec: vec![(0, SpecId::LATEST)].into_iter().collect(),
         ..Default::default()
     };
 

@@ -58,7 +58,7 @@ mod experimental {
         pub data: Vec<AccountData>,
         pub chain_id: u64,
         pub limit_contract_code_size: Option<usize>,
-        pub spec: HashMap<u64, SpecIdWrapper>,
+        pub spec: HashMap<u64, SpecId>,
     }
 
     impl Default for EvmConfig {
@@ -67,9 +67,7 @@ mod experimental {
                 data: vec![],
                 chain_id: 1,
                 limit_contract_code_size: None,
-                spec: vec![(0, SpecIdWrapper::from(SpecId::LATEST))]
-                    .into_iter()
-                    .collect(),
+                spec: vec![(0, SpecId::LATEST)].into_iter().collect(),
             }
         }
     }
