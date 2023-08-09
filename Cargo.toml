@@ -50,7 +50,7 @@ rust-version = "1.66"
 
 [workspace.dependencies]
 # Dependencies maintained by sovereign
-# TODO: replace by release number once available on crates.io: tracking issue #632
+# TODO: replace by release number once available on crates.io: tracking issue https://github.com/Sovereign-Labs/sovereign-sdk/issues/632
 jmt = { git = "https://github.com/penumbra-zone/jmt", commit = "46b4b00" }
 
 # External dependencies
