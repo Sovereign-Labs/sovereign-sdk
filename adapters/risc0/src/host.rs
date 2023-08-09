@@ -90,7 +90,7 @@ impl Zkvm for Risc0Verifier {
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
         // Method to implement: not clear how to deserialize the proof output.
-        // Issue #621.
+        // Issue https://github.com/Sovereign-Labs/sovereign-sdk/issues/621
         todo!("not clear how to deserialize the proof output. Issue #621")
     }
 }
