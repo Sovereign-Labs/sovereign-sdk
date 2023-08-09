@@ -13,7 +13,7 @@ use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 use sov_state::{StateCheckpoint, Storage};
-use tracing::log::info;
+use tracing::info;
 pub use tx_verifier::RawTx;
 
 /// This trait has to be implemented by a runtime in order to be used in `AppTemplate`.
