@@ -12,7 +12,7 @@ use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
-use sov_state::{StateCheckpoint, Storage};
+use sov_state::{StateCheckpoint, Storage, WorkingSet};
 use tracing::log::info;
 pub use tx_verifier::RawTx;
 
@@ -73,18 +73,16 @@ where
 {
     fn begin_slot(
         &mut self,
-        slot_data: &impl SlotData<Condition = Cond>,
+        slot_data: &impl SlotData<Cond = Cond>,
         witness: <Self as StateTransitionFunction<Vm, B>>::Witness,
-    ) -> anyhow::Result<()> {
+    ) {
         let state_checkpoint = StateCheckpoint::with_witness(self.current_storage.clone(), witness);
 
         let mut working_set = state_checkpoint.to_revertable();
 
-        self.runtime.begin_slot_hook(slot_data, &mut working_set)?;
+        self.runtime.begin_slot_hook(slot_data, &mut working_set);
 
         self.checkpoint = Some(working_set.checkpoint());
-
-        Ok(())
     }
 
     fn end_slot(&mut self) -> (jmt::RootHash, <<C as Spec>::Storage as Storage>::Witness) {
@@ -93,6 +91,10 @@ where
             .current_storage
             .validate_and_commit(cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
+
+        let mut working_set = WorkingSet::new(self.current_storage.clone());
+
+        self.runtime.end_slot_hook(&mut working_set);
 
         (jmt::RootHash(root_hash), witness)
     }
@@ -146,9 +148,9 @@ where
     >
     where
         I: IntoIterator<Item = &'a mut B>,
-        Data: SlotData<Condition = Self::Condition>,
+        Data: SlotData<Cond = Self::Condition>,
     {
-        self.begin_slot(slot_data, witness)?;
+        self.begin_slot(slot_data, witness);
 
         let mut batch_receipts = vec![];
         for (blob_idx, blob) in blobs.into_iter().enumerate() {

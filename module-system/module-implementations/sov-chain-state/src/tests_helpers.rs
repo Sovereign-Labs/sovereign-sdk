@@ -65,11 +65,13 @@ impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for TestRuntime<C, Con
 
     fn begin_slot_hook(
         &self,
-        slot_data: &impl sov_rollup_interface::services::da::SlotData<Condition = Cond>,
+        slot_data: &impl sov_rollup_interface::services::da::SlotData<Cond = Cond>,
         working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
-    ) -> anyhow::Result<()> {
+    ) {
         self.chain_state.begin_slot_hook(slot_data, working_set)
     }
+
+    fn end_slot_hook(&self, _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>) {}
 }
 
 impl<C: Context, Cond: ValidityCondition> Runtime<C, Cond> for TestRuntime<C, Cond> {}

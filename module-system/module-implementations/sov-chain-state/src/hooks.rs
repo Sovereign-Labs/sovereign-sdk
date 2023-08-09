@@ -12,15 +12,21 @@ impl<Ctx: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<Ctx, 
 
     fn begin_slot_hook(
         &self,
-        slot: &impl SlotData<Condition = Cond>,
+        slot: &impl SlotData<Cond = Cond>,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<()> {
-        let curr_height = self.slot_height.get_or_err(working_set)?;
+    ) {
+        let curr_height = self
+            .slot_height
+            .get_or_err(working_set)
+            .expect("Should have a slot height");
 
         if curr_height == 0 {
             // First transition right after the genesis block
             self.genesis_hash.set(
-                &working_set.backing().get_state_root(&Default::default())?,
+                &working_set
+                    .backing()
+                    .get_state_root(&Default::default())
+                    .expect("Should have a state root"),
                 working_set,
             )
         } else {
@@ -32,7 +38,10 @@ impl<Ctx: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<Ctx, 
 
                 StateTransitionId {
                     da_block_hash: last_transition_in_progress.da_block_hash,
-                    post_state_root: working_set.backing().get_state_root(&Default::default())?,
+                    post_state_root: working_set
+                        .backing()
+                        .get_state_root(&Default::default())
+                        .expect("Should have a state root"),
                     validity_condition: last_transition_in_progress.validity_condition,
                 }
             };
@@ -56,7 +65,7 @@ impl<Ctx: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<Ctx, 
             },
             working_set,
         );
-
-        Ok(())
     }
+
+    fn end_slot_hook(&self, _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>) {}
 }

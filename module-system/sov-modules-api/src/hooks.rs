@@ -59,7 +59,9 @@ pub trait SlotHooks<Condition: ValidityCondition> {
 
     fn begin_slot_hook(
         &self,
-        slot_data: &impl SlotData<Condition = Condition>,
+        slot_data: &impl SlotData<Cond = Condition>,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<()>;
+    );
+
+    fn end_slot_hook(&self, working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>);
 }

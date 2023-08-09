@@ -82,7 +82,7 @@ pub struct FilteredCelestiaBlock {
 
 impl SlotData for FilteredCelestiaBlock {
     type BlockHeader = CelestiaHeader;
-    type Condition = ChainValidityCondition;
+    type Cond = ChainValidityCondition;
 
     fn hash(&self) -> [u8; 32] {
         match self.header.header.hash() {

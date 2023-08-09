@@ -151,7 +151,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     >
     where
         I: IntoIterator<Item = &'a mut B>,
-        Data: SlotData<Condition = Self::Condition>;
+        Data: SlotData<Cond = Self::Condition>;
 
     /// Gets the state root from the associated state. If not available (because the chain has not been initialized yet),
     /// return None.

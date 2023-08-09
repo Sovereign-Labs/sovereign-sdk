@@ -24,7 +24,7 @@ pub trait DaService {
     /// A DA layer block, possibly excluding some irrelevant information.
     type FilteredBlock: SlotData<
         BlockHeader = <Self::Spec as DaSpec>::BlockHeader,
-        Condition = <Self::Spec as DaSpec>::ValidityCondition,
+        Cond = <Self::Spec as DaSpec>::ValidityCondition,
     >;
 
     /// The error type for fallible methods.
@@ -106,12 +106,12 @@ pub trait SlotData:
     type BlockHeader: BlockHeaderTrait;
 
     /// The validity condition associated with the slot data.
-    type Condition: ValidityCondition;
+    type Cond: ValidityCondition;
 
     /// The canonical hash of the DA layer block.
     fn hash(&self) -> [u8; 32];
     /// The header of the DA layer block.
     fn header(&self) -> &Self::BlockHeader;
     /// Get the validity condition set associated with the slot
-    fn validity_condition(&self) -> Self::Condition;
+    fn validity_condition(&self) -> Self::Cond;
 }

@@ -332,7 +332,7 @@ impl Default for TestBlock {
 
 impl SlotData for TestBlock {
     type BlockHeader = TestBlockHeader;
-    type Condition = TestValidityCond;
+    type Cond = TestValidityCond;
 
     fn hash(&self) -> [u8; 32] {
         self.curr_hash

@@ -96,8 +96,13 @@ impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for Runtime<C> {
         &self,
         _slot_data: &impl sov_rollup_interface::services::da::SlotData,
         _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
-    ) -> anyhow::Result<()> {
-        Ok(())
+    ) {
+    }
+
+    fn end_slot_hook(
+        &self,
+        _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+    ) {
     }
 }
 
