@@ -1,4 +1,3 @@
-use jupiter::da_service::DaServiceConfig;
 use serde::Deserialize;
 
 use crate::runner_config::Config as RunnerConfig;
@@ -17,8 +16,6 @@ pub struct RpcConfig {
 pub struct RollupConfig {
     /// DA start height.
     pub start_height: u64,
-    /// DA configuration.
-    pub da: DaServiceConfig,
     /// Runner configuration.
     pub runner: RunnerConfig,
     /// RPC configuration.

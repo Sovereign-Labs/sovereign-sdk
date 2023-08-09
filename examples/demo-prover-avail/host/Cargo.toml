@@ -3,6 +3,7 @@ name = "sov-demo-avail-prover-host"
 version = "0.1.0"
 edition = "2021"
 publish = false
+resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
@@ -23,5 +24,6 @@ sov-rollup-interface = { path = "../../../rollup-interface" }
 risc0-adapter = { path = "../../../adapters/risc0" }
 sov-modules-api = { path = "../../../module-system/sov-modules-api", features = ["native"] }
 sov-state = { path = "../../../module-system/sov-state", features = ["native"] }
+sov-stf-runner = { path = "../../../full-node/sov-stf-runner" }
 
 methods = { path = "../methods" }

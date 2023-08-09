@@ -8,11 +8,11 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.68"
 presence = { path = "../../../../adapters/avail", default-features = false, features = ["verifier"] }
-risc0-zkvm = { version = "0.14", default-features = false, features = ["std"] }
+risc0-zkvm = { version = "0.16", default-features = false, features = ["std"] }
+borsh = { version = "0.10.3", features = ["bytes"] }
 demo-stf = { path = "../../../demo-stf", default-features = false }
 sov-rollup-interface = { path = "../../../../rollup-interface" }
 risc0-adapter = { path = "../../../../adapters/risc0", default-features = false }
-const-rollup-config = { path = "../../../const-rollup-config" }
 
 # TODO: Just for test
 tracing = "0.1.37"

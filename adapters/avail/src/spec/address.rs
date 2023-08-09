@@ -1,10 +1,11 @@
 use core::fmt::{Display, Formatter};
+use std::hash::Hash;
 
 use primitive_types::H256;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::AddressTrait;
 
-#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Eq)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Eq, Hash)]
 pub struct AvailAddress(pub [u8; 32]);
 
 impl AddressTrait for AvailAddress {}

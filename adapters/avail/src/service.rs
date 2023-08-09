@@ -1,8 +1,7 @@
-use core::future::Future;
-use core::pin::Pin;
 use core::time::Duration;
 
 use anyhow::anyhow;
+use async_trait::async_trait;
 use avail_subxt::AvailConfig;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
@@ -106,6 +105,7 @@ async fn wait_for_appdata(appdata_url: &str, block: u32) -> anyhow::Result<Extri
     }
 }
 
+#[async_trait]
 impl DaService for DaProvider {
     type RuntimeConfig = RuntimeConfig;
 
@@ -113,52 +113,47 @@ impl DaService for DaProvider {
 
     type FilteredBlock = AvailBlock;
 
-    type Future<T> = Pin<Box<dyn Future<Output = Result<T, Self::Error>> + Send>>;
-
     type Error = anyhow::Error;
 
     // Make an RPC call to the node to get the finalized block at the given height, if one exists.
     // If no such block exists, block until one does.
-    fn get_finalized_at(&self, height: u64) -> Self::Future<Self::FilteredBlock> {
+    async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let node_client = self.node_client.clone();
         let confidence_url = self.confidence_url(height);
         let appdata_url = self.appdata_url(height);
 
-        Box::pin(async move {
-            // NOTE: Only supported case is when application data is present and verified
-            wait_for_confidence(&confidence_url).await?;
-            let appdata = wait_for_appdata(&appdata_url, height as u32).await?;
-            info!("Appdata: {:?}", appdata);
+        wait_for_confidence(&confidence_url).await?;
+        let appdata = wait_for_appdata(&appdata_url, height as u32).await?;
+        info!("Appdata: {:?}", appdata);
 
-            let hash = node_client
-                .rpc()
-                .block_hash(Some(height.into()))
-                .await?
-                .unwrap();
+        let hash = node_client
+            .rpc()
+            .block_hash(Some(height.into()))
+            .await?
+            .unwrap();
 
-            info!("Hash: {:?}", hash);
+        info!("Hash: {:?}", hash);
 
-            let header = node_client.rpc().header(Some(hash)).await?.unwrap();
+        let header = node_client.rpc().header(Some(hash)).await?.unwrap();
 
-            info!("Header: {:?}", header);
+        info!("Header: {:?}", header);
 
-            let header = AvailHeader::new(header, hash);
-            let transactions = appdata
-                .extrinsics
-                .iter()
-                .map(AvailBlobTransaction::new)
-                .collect();
-            Ok(AvailBlock {
-                header,
-                transactions,
-            })
+        let header = AvailHeader::new(header, hash);
+        let transactions = appdata
+            .extrinsics
+            .iter()
+            .map(AvailBlobTransaction::new)
+            .collect();
+        Ok(AvailBlock {
+            header,
+            transactions,
         })
     }
 
     // Make an RPC call to the node to get the block at the given height
     // If no such block exists, block until one does.
-    fn get_block_at(&self, height: u64) -> Self::Future<Self::FilteredBlock> {
-        self.get_finalized_at(height)
+    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+        self.get_finalized_at(height).await
     }
 
     // Extract the blob transactions relevant to a particular rollup from a block.
@@ -174,7 +169,7 @@ impl DaService for DaProvider {
     // Extract the inclusion and completenss proof for filtered block provided.
     // The output of this method will be passed to the verifier.
     // NOTE: The light client here has already completed DA sampling and verification of inclusion and soundness.
-    fn get_extraction_proof(
+    async fn get_extraction_proof(
         &self,
         _block: &Self::FilteredBlock,
         _blobs: &[<Self::Spec as DaSpec>::BlobTransaction],
@@ -185,7 +180,7 @@ impl DaService for DaProvider {
         ((), ())
     }
 
-    fn new(
+    async fn new(
         config: Self::RuntimeConfig,
         _chain_params: <Self::Spec as DaSpec>::ChainParams,
     ) -> Self {
@@ -198,33 +193,7 @@ impl DaService for DaProvider {
         }
     }
 
-    fn send_transaction(&self, _blob: &[u8]) -> Self::Future<()> {
+    async fn send_transaction(&self, _blob: &[u8]) -> Result<(), Self::Error> {
         unimplemented!("The avail light client does not currently support sending transactions");
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use avail_subxt::build_client;
-    use sov_rollup_interface::services::da::DaService;
-
-    use super::DaProvider;
-    use crate::service::RuntimeConfig;
-
-    #[tokio::test]
-    #[ignore]
-    async fn get_finalized_at() {
-        tracing_subscriber::fmt::init();
-
-        let node_ws = "ws://127.0.0.1:9944";
-        let light_client_url = "http://127.0.0.1:7000".to_string();
-        let node_client = Some(build_client(node_ws, false).await.unwrap());
-        let runtime_config = RuntimeConfig {
-            node_client,
-            light_client_url,
-        };
-        let da_service = DaProvider::new(runtime_config, ());
-        da_service.get_finalized_at(1).await.unwrap();
-        // panic!();
     }
 }

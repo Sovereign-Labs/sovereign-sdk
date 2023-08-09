@@ -1,4 +1,4 @@
-use demo_stf::runner_config::Config as RunnerConfig;
+use sov_stf_runner::RollupConfig;
 use serde::Deserialize;
 
 //TODO - replace with runtime config.
@@ -9,9 +9,8 @@ pub struct DaServiceConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct RollupConfig {
-    pub start_height: u64,
+pub struct Config {
+    pub rollup_config: RollupConfig,
     pub sequencer_da_address: String,
     pub da: DaServiceConfig,
-    pub runner: RunnerConfig,
 }

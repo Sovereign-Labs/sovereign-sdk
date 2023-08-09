@@ -8,7 +8,7 @@ use bytes::Bytes;
 use codec::Encode;
 use primitive_types::H256;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::da::{BlobTransactionTrait, CountedBufReader};
+use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
 
 use super::address::AvailAddress;
 
@@ -20,7 +20,7 @@ pub struct AvailBlobTransaction {
     address: AvailAddress,
 }
 
-impl BlobTransactionTrait for AvailBlobTransaction {
+impl BlobReaderTrait for AvailBlobTransaction {
     type Data = Bytes;
 
     type Address = AvailAddress;
