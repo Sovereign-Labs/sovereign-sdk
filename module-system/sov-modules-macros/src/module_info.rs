@@ -327,7 +327,7 @@ fn make_init_address(
             ),
         )),
         None => Ok(quote::quote! {
-            use ::sov_modules_api::digest::Digest;
+            use ::sov_modules_api::digest::Digest as _;
             let module_path = module_path!();
             let prefix = sov_modules_api::Prefix::new_module(module_path, stringify!(#struct_ident));
             let #field_ident : <#generic_param as sov_modules_api::Spec>::Address =
