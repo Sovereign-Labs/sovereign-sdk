@@ -32,7 +32,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         let block_env = self.block_env.get(working_set).unwrap_or_default();
         let cfg = self.cfg.get(working_set).unwrap_or_default();
-        let cfg_env = self.get_cfg_env(&block_env, cfg, None);
+        let cfg_env = get_cfg_env(&block_env, cfg, None);
         self.transactions.set(&tx.hash, &tx, working_set);
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
@@ -68,23 +68,22 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         Ok(CallResponse::default())
     }
+}
 
-    /// Get cfg env for a given block number
-    /// Returns correct config depending on spec for given block number
-    /// Copies context dependent values from template_cfg or default if not provided
-    pub(crate) fn get_cfg_env(
-        &self,
-        block_env: &BlockEnv,
-        cfg: EvmChainCfg,
-        template_cfg: Option<CfgEnv>,
-    ) -> CfgEnv {
-        CfgEnv {
-            chain_id: U256::from(cfg.chain_id),
-            limit_contract_code_size: cfg.limit_contract_code_size,
-            spec_id: get_spec_id(cfg.spec, block_env.number).into(),
-            // disable_gas_refund: !cfg.gas_refunds, // option disabled for now, we could add if needed
-            ..template_cfg.unwrap_or_default()
-        }
+/// Get cfg env for a given block number
+/// Returns correct config depending on spec for given block number
+/// Copies context dependent values from template_cfg or default if not provided
+pub(crate) fn get_cfg_env(
+    block_env: &BlockEnv,
+    cfg: EvmChainCfg,
+    template_cfg: Option<CfgEnv>,
+) -> CfgEnv {
+    CfgEnv {
+        chain_id: U256::from(cfg.chain_id),
+        limit_contract_code_size: cfg.limit_contract_code_size,
+        spec_id: get_spec_id(cfg.spec, block_env.number).into(),
+        // disable_gas_refund: !cfg.gas_refunds, // option disabled for now, we could add if needed
+        ..template_cfg.unwrap_or_default()
     }
 }
 

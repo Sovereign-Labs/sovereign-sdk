@@ -9,6 +9,7 @@ use sov_modules_api::macros::rpc_gen;
 use sov_state::WorkingSet;
 use tracing::info;
 
+use crate::call::get_cfg_env;
 use crate::evm::db::EvmDb;
 use crate::evm::{executor, prepare_call_env};
 use crate::Evm;
@@ -110,7 +111,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         let block_env = self.block_env.get(working_set).unwrap_or_default();
         let cfg = self.cfg.get(working_set).unwrap_or_default();
-        let cfg_env = self.get_cfg_env(&block_env, cfg, Some(Self::CALL_CFG_ENV_TEMPLATE));
+        let cfg_env = get_cfg_env(&block_env, cfg, Some(Self::CALL_CFG_ENV_TEMPLATE));
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
