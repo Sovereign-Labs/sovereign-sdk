@@ -1342,6 +1342,7 @@ dependencies = [
  "sov-sequencer",
  "sov-sequencer-registry",
  "sov-state",
+ "sov-stf-runner",
  "sov-value-setter",
  "tempfile",
  "tokio",
@@ -6244,6 +6245,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "demo-stf",
+ "directories",
+ "serde",
+ "serde_json",
+ "sov-modules-api",
+]
+
+[[package]]
 name = "sov-db"
 version = "0.1.0"
 dependencies = [
@@ -6273,6 +6287,7 @@ dependencies = [
  "demo-stf",
  "futures",
  "hex",
+ "jmt",
  "jsonrpsee 0.18.2",
  "jupiter",
  "prettytable-rs",
@@ -6292,6 +6307,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-state",
+ "sov-stf-runner",
  "sov-value-setter",
  "tempfile",
  "tendermint",
@@ -6401,6 +6417,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bech32 0.9.1",
+ "bincode",
  "borsh",
  "clap",
  "derive_more",
@@ -6550,6 +6567,36 @@ dependencies = [
  "sov-rollup-interface",
  "tempfile",
  "thiserror",
+]
+
+[[package]]
+name = "sov-stf-runner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "futures",
+ "hex",
+ "jsonrpsee 0.18.2",
+ "jupiter",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sov-accounts",
+ "sov-bank",
+ "sov-db",
+ "sov-election",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-rollup-interface",
+ "sov-sequencer-registry",
+ "sov-state",
+ "sov-value-setter",
+ "tempfile",
+ "tokio",
+ "toml 0.7.6",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

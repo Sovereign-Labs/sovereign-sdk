@@ -20,6 +20,7 @@ serde_json = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
 bytes = { workspace = true }
+jmt = { workspace = true }
 futures = "0.3"
 
 # Crates which only this package depends on 
@@ -32,6 +33,7 @@ sov-rollup-interface = { path = "../../rollup-interface" }
 sov-db = { path = "../../full-node/db/sov-db" }
 sov-ethereum = { path = "../../full-node/sov-ethereum", optional = true }
 sov-sequencer = { path = "../../full-node/sov-sequencer" }
+sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
 risc0-adapter = { path = "../../adapters/risc0" }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }
 

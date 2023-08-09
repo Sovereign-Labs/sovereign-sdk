@@ -20,6 +20,7 @@ pub struct FiFoStrictBatchBuilder<R, C: Context> {
 }
 
 impl<R, C: Context> FiFoStrictBatchBuilder<R, C> {
+    /// BatchBuilder constructor.
     pub fn new(
         max_batch_size_bytes: usize,
         mempool_max_txs_count: usize,
