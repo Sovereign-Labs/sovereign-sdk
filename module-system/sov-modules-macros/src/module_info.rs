@@ -132,7 +132,6 @@ impl<'a> StructDef<'a> {
         let fn_dependencies = make_fn_dependencies(modules);
 
         Ok(quote::quote! {
-            use ::sov_modules_api::AddressTrait;
             impl #impl_generics ::std::default::Default for #ident #type_generics #where_clause{
 
                 fn default() -> Self {
