@@ -5,6 +5,7 @@ pub mod call;
 pub mod genesis;
 
 mod context;
+mod router;
 
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;

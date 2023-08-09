@@ -2717,9 +2717,9 @@ dependencies = [
 
 [[package]]
 name = "ibc"
-version = "0.42.0"
+version = "0.44.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c08c44b986e0fb3e779adc52bb99b5680fd3997d0f71b7d756711418e5caf4e"
+checksum = "68116baf96e034adbbb3f826ca32893de082e5e185f5dc881f6cf5276b72a753"
 dependencies = [
  "borsh 0.9.3",
  "bytes",
@@ -2744,9 +2744,9 @@ dependencies = [
 
 [[package]]
 name = "ibc-derive"
-version = "0.1.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d85108c4f4eda7e033b9888971fda4355b0ba0403b4057a6e7b0c28c36241134"
+checksum = "92f1528535e9ca495badb76c143bdd4763c1c9d987f59d1f8b47963ba0c11674"
 dependencies = [
  "darling",
  "proc-macro2 1.0.66",

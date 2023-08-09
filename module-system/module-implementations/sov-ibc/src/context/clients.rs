@@ -52,14 +52,6 @@ impl ClientStateCommon for AnyClientState {
         todo!()
     }
 
-    fn confirm_not_frozen(&self) -> Result<(), ibc::core::ics02_client::error::ClientError> {
-        todo!()
-    }
-
-    fn expired(&self, elapsed: std::time::Duration) -> bool {
-        todo!()
-    }
-
     fn verify_upgrade_client(
         &self,
         upgraded_client_state: ibc::Any,
@@ -158,6 +150,14 @@ where
     ) -> Result<bool, ibc::core::ics02_client::error::ClientError> {
         todo!()
     }
+
+    fn status(
+        &self,
+        ctx: &IbcExecutionContext<'a, C>,
+        client_id: &ibc::core::ics24_host::identifier::ClientId,
+    ) -> Result<ibc::core::ics02_client::client_state::Status, ClientError> {
+        todo!()
+    }
 }
 
 impl<'a, C> ClientExecutionContext for IbcExecutionContext<'a, C>
@@ -187,7 +187,7 @@ where
         self.ibc.client_state_store.set(
             &client_state_path.to_string(),
             &client_state_bytes,
-            &mut self.working_set,
+            self.working_set,
         );
 
         Ok(())

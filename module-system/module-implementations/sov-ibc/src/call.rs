@@ -1,17 +1,18 @@
 use std::fmt::Debug;
 
-use anyhow::{Result, bail};
+use anyhow::{bail, Result};
 use ibc::clients::ics07_tendermint::client_state::TENDERMINT_CLIENT_STATE_TYPE_URL;
 use ibc::clients::ics07_tendermint::consensus_state::TENDERMINT_CONSENSUS_STATE_TYPE_URL;
 use ibc::core::ics02_client::msgs::create_client::MsgCreateClient;
 use ibc::core::ics02_client::msgs::ClientMsg;
-use ibc::core::{MsgEnvelope, dispatch};
+use ibc::core::{dispatch, MsgEnvelope};
 use ibc::Any;
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 use thiserror::Error;
 
 use crate::context::IbcExecutionContext;
+use crate::router::IbcRouter;
 use crate::IbcModule;
 
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
@@ -54,10 +55,12 @@ impl<C: sov_modules_api::Context> IbcModule<C> {
 
         let mut execution_context = IbcExecutionContext {
             ibc: self,
-            working_set: working_set,
+            working_set,
         };
 
-        match dispatch(&mut execution_context, domain_msg) {
+        let mut router = IbcRouter;
+
+        match dispatch(&mut execution_context, &mut router, domain_msg) {
             Ok(_) => Ok(CallResponse::default()),
             Err(e) => bail!(e.to_string()),
         }

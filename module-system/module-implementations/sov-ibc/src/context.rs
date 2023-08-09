@@ -1,19 +1,20 @@
-
 mod clients;
 
-use ibc::Height;
 use ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
 use ibc::core::events::IbcEvent;
 use ibc::core::ics03_connection::connection::ConnectionEnd;
 use ibc::core::ics04_channel::channel::ChannelEnd;
-use ibc::core::ics04_channel::commitment::{PacketCommitment, AcknowledgementCommitment};
-use ibc::core::ics04_channel::packet::{Sequence, Receipt};
+use ibc::core::ics04_channel::commitment::{AcknowledgementCommitment, PacketCommitment};
+use ibc::core::ics04_channel::packet::{Receipt, Sequence};
 use ibc::core::ics23_commitment::commitment::CommitmentPrefix;
 use ibc::core::ics24_host::identifier::{ClientId, ConnectionId};
-use ibc::core::ics24_host::path::{ClientConsensusStatePath, ChannelEndPath, SeqSendPath, SeqAckPath, SeqRecvPath, CommitmentPath, ReceiptPath, AckPath, ConnectionPath, ClientConnectionPath};
-use ibc::core::router::{Router, ModuleId};
+use ibc::core::ics24_host::path::{
+    AckPath, ChannelEndPath, ClientConnectionPath, ClientConsensusStatePath, CommitmentPath,
+    ConnectionPath, ReceiptPath, SeqAckPath, SeqRecvPath, SeqSendPath,
+};
 use ibc::core::timestamp::Timestamp;
-use ibc::core::{ValidationContext, ExecutionContext, ContextError};
+use ibc::core::{ContextError, ExecutionContext, ValidationContext};
+use ibc::Height;
 use sov_state::WorkingSet;
 
 use crate::IbcModule;
@@ -21,32 +22,6 @@ use crate::IbcModule;
 pub struct IbcExecutionContext<'a, C: sov_modules_api::Context> {
     pub ibc: &'a IbcModule<C>,
     pub working_set: &'a mut WorkingSet<C::Storage>,
-}
-
-impl<'a, C> Router for IbcExecutionContext<'a, C>
-where
-    C: sov_modules_api::Context,
-{
-    fn get_route(
-        &self,
-        module_id: &ModuleId,
-    ) -> Option<&dyn ibc::core::router::Module> {
-        todo!()
-    }
-
-    fn get_route_mut(
-        &mut self,
-        module_id: &ModuleId,
-    ) -> Option<&mut dyn ibc::core::router::Module> {
-        todo!()
-    }
-
-    fn lookup_module_by_port(
-        &self,
-        port_id: &ibc::core::ics24_host::identifier::PortId,
-    ) -> Option<ModuleId> {
-        todo!()
-    }
 }
 
 impl<'a, C> ValidationContext for IbcExecutionContext<'a, C>
@@ -62,10 +37,7 @@ where
         todo!()
     }
 
-    fn client_state(
-        &self,
-        client_id: &ClientId,
-    ) -> Result<Self::AnyClientState, ContextError> {
+    fn client_state(&self, client_id: &ClientId) -> Result<Self::AnyClientState, ContextError> {
         todo!()
     }
 
@@ -120,11 +92,7 @@ where
         todo!()
     }
 
-    fn connection_end(
-        &self,
-        conn_id: &ConnectionId,
-    ) -> Result<ConnectionEnd, ContextError>
-    {
+    fn connection_end(&self, conn_id: &ConnectionId) -> Result<ConnectionEnd, ContextError> {
         todo!()
     }
 
@@ -143,10 +111,7 @@ where
         todo!()
     }
 
-    fn channel_end(
-        &self,
-        channel_end_path: &ChannelEndPath,
-    ) -> Result<ChannelEnd, ContextError> {
+    fn channel_end(&self, channel_end_path: &ChannelEndPath) -> Result<ChannelEnd, ContextError> {
         todo!()
     }
 
@@ -164,35 +129,25 @@ where
         todo!()
     }
 
-    fn get_next_sequence_ack(
-        &self,
-        seq_ack_path: &SeqAckPath,
-    ) -> Result<Sequence, ContextError> {
+    fn get_next_sequence_ack(&self, seq_ack_path: &SeqAckPath) -> Result<Sequence, ContextError> {
         todo!()
     }
 
     fn get_packet_commitment(
         &self,
         commitment_path: &CommitmentPath,
-    ) -> Result<PacketCommitment, ContextError>
-    {
+    ) -> Result<PacketCommitment, ContextError> {
         todo!()
     }
 
-    fn get_packet_receipt(
-        &self,
-        receipt_path: &ReceiptPath,
-    ) -> Result<Receipt, ContextError> {
+    fn get_packet_receipt(&self, receipt_path: &ReceiptPath) -> Result<Receipt, ContextError> {
         todo!()
     }
 
     fn get_packet_acknowledgement(
         &self,
         ack_path: &AckPath,
-    ) -> Result<
-        AcknowledgementCommitment,
-        ContextError,
-    > {
+    ) -> Result<AcknowledgementCommitment, ContextError> {
         todo!()
     }
 
