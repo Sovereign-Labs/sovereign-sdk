@@ -1,22 +1,15 @@
 #[cfg(feature = "native")]
 use serde::{Deserialize, Serialize};
-#[cfg(feature = "native")]
+use sha2::Digest;
 use sov_rollup_interface::AddressTrait;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
-use sov_state::ZkStorage;
-#[cfg(feature = "native")]
-use sov_state::{ArrayWitness, DefaultStorageSpec};
+use sov_state::{ArrayWitness, DefaultStorageSpec, ZkStorage};
 
 #[cfg(feature = "native")]
 use crate::default_signature::private_key::DefaultPrivateKey;
 use crate::default_signature::{DefaultPublicKey, DefaultSignature};
-#[cfg(feature = "native")]
-use crate::digest::Digest;
-#[cfg(feature = "native")]
-use crate::Context;
-#[cfg(feature = "native")]
-use crate::{Address, PublicKey, Spec};
+use crate::{Address, Context, PublicKey, Spec};
 
 #[cfg(feature = "native")]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -73,7 +66,6 @@ impl Context for ZkDefaultContext {
     }
 }
 
-#[cfg(feature = "native")]
 impl PublicKey for DefaultPublicKey {
     fn to_address<A: AddressTrait>(&self) -> A {
         let pub_key_hash = {
