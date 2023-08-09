@@ -137,7 +137,7 @@ impl CliParserMacro {
             /// Borsh encode a transaction parsed from the CLI
             pub fn borsh_encode_cli_tx #impl_generics (cmd: CliTransactionParser #ty_generics) -> ::std::vec::Vec<u8>
             #where_clause {
-                use ::borsh::BorshSerialize;
+                use ::borsh::BorshSerialize as _;
                 match cmd {
                     #(#parse_match_arms)*
                     _ => panic!("unknown module name"),

@@ -10,7 +10,7 @@ pub fn derive_module_call_json_schema(
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
 
     let tokens = quote::quote! {
-        use ::schemars::JsonSchema;
+        use ::schemars::JsonSchema as _;
 
         impl #impl_generics ::sov_modules_api::ModuleCallJsonSchema for #ident #type_generics #where_clause {
             fn json_schema() -> ::std::string::String {
