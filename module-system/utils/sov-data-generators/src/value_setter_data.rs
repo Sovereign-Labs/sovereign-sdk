@@ -41,19 +41,18 @@ impl<C: Context> MessageGenerator for ValueSetterMessages<C> {
         let mut messages = Vec::default();
         for value_setter_message in &self.messages {
             let admin = value_setter_message.admin.clone();
-            let mut value_setter_admin_nonce = 0;
 
-            for new_value in &value_setter_message.messages {
+            for (value_setter_admin_nonce, new_value) in
+                value_setter_message.messages.iter().enumerate()
+            {
                 let set_value_msg: sov_value_setter::CallMessage =
                     sov_value_setter::CallMessage::SetValue(*new_value);
 
                 messages.push(Message::new(
                     admin.clone(),
                     set_value_msg,
-                    value_setter_admin_nonce,
+                    value_setter_admin_nonce.try_into().unwrap(),
                 ));
-
-                value_setter_admin_nonce += 1;
             }
         }
         messages
