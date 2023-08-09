@@ -3,7 +3,8 @@ use revm::primitives::SpecId;
 use sov_state::WorkingSet;
 
 use crate::evm::db_init::InitEvmDb;
-use crate::evm::{AccountInfo, EvmChainCfg, SpecIdWrapper};
+use crate::evm::{AccountInfo, EvmChainCfg};
+use crate::experimental::SpecIdWrapper;
 use crate::Evm;
 
 impl<C: sov_modules_api::Context> Evm<C> {

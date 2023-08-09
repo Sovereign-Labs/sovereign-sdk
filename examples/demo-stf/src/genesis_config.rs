@@ -1,6 +1,7 @@
 use sov_election::ElectionConfig;
+use sov_evm::SpecId;
 #[cfg(feature = "experimental")]
-use sov_evm::{AccountData, EvmConfig};
+use sov_evm::{AccountData, EvmConfig, SpecIdWrapper};
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::test_utils::generate_address;
@@ -78,6 +79,11 @@ pub fn create_demo_genesis_config<C: Context>(
                 code: vec![],
                 nonce: 0,
             }],
+            chain_id: 1,
+            limit_contract_code_size: None,
+            spec: vec![(0, SpecIdWrapper::from(SpecId::LATEST))]
+                .into_iter()
+                .collect(),
         },
     )
 }

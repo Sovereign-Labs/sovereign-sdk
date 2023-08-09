@@ -6,7 +6,8 @@ use sov_state::WorkingSet;
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
 use crate::evm::transaction::{BlockEnv, EvmTransaction};
-use crate::evm::{contract_address, EvmChainCfg, SpecIdWrapper};
+use crate::evm::{contract_address, EvmChainCfg};
+use crate::experimental::SpecIdWrapper;
 use crate::{Evm, TransactionReceipt};
 
 #[cfg_attr(
@@ -89,7 +90,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
 /// Get spec id for a given block number
 /// Returns the first spec id defined for block >= block_number
-fn get_spec_id(spec: Vec<(u64, SpecIdWrapper)>, block_number: u64) -> crate::evm::SpecIdWrapper {
+pub(crate) fn get_spec_id(spec: Vec<(u64, SpecIdWrapper)>, block_number: u64) -> SpecIdWrapper {
     let spec_id = match spec.binary_search_by(|&(k, _)| k.cmp(&block_number)) {
         Ok(index) => spec[index].1,
         Err(index) => {

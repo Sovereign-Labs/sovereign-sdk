@@ -2,7 +2,7 @@ use std::io::Read;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 
-use super::SpecIdWrapper;
+use crate::experimental::SpecIdWrapper;
 
 impl BorshSerialize for SpecIdWrapper {
     fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {

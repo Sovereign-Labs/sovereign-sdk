@@ -1,5 +1,4 @@
 use borsh::{BorshDeserialize, BorshSerialize};
-use derive_more::{From, Into};
 use revm::primitives::specification::SpecId;
 use revm::primitives::{ExecutionResult, Output, B160};
 use sov_state::Prefix;
@@ -21,6 +20,8 @@ pub(crate) type Bytes32 = [u8; 32];
 
 pub use conversions::prepare_call_env;
 pub use transaction::EvmTransaction;
+
+use crate::experimental::SpecIdWrapper;
 // Stores information about an EVM account
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Default)]
 pub(crate) struct AccountInfo {
@@ -72,10 +73,6 @@ pub(crate) fn contract_address(result: ExecutionResult) -> Option<B160> {
         _ => None,
     }
 }
-
-/// EVM SpecId and their activation block
-#[derive(Debug, PartialEq, Clone, Copy, From, Into)]
-pub struct SpecIdWrapper(SpecId);
 
 /// EVM Chain configuration
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]

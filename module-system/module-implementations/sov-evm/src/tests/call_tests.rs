@@ -1,14 +1,14 @@
-use ethers_core::types::Block;
 use revm::primitives::{CfgEnv, SpecId, KECCAK_EMPTY, U256};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::{Context, Module, PrivateKey, Spec};
 use sov_state::{ProverStorage, WorkingSet};
 
-use crate::call::CallMessage;
+use crate::call::{get_spec_id, CallMessage};
 use crate::evm::test_helpers::SimpleStorageContract;
 use crate::evm::transaction::{BlockEnv, EvmTransaction};
-use crate::evm::EthAddress;
+use crate::evm::{EthAddress, EvmChainCfg};
+use crate::experimental::SpecIdWrapper;
 use crate::{AccountData, Evm, EvmConfig};
 
 type C = DefaultContext;
@@ -123,7 +123,7 @@ fn cfg_test() {
         CfgEnv {
             chain_id: U256::from(1),
             disable_base_fee: true,
-            spec_id: SpecIdWrapper::new(SpecId::SHANGHAI),
+            spec_id: SpecId::SHANGHAI,
             limit_contract_code_size: Some(100),
             ..Default::default()
         }

@@ -13,22 +13,25 @@ mod receipt;
 #[cfg(test)]
 mod tests;
 #[cfg(feature = "experimental")]
-pub use experimental::{AccountData, Evm, EvmConfig};
+pub use experimental::{AccountData, Evm, EvmConfig, SpecIdWrapper};
 #[cfg(feature = "experimental")]
 pub use receipt::TransactionReceipt;
+#[cfg(feature = "experimental")]
+pub use revm::primitives::SpecId;
 
 #[cfg(feature = "experimental")]
 mod experimental {
     use std::collections::HashMap;
 
-    use revm::primitives::{KECCAK_EMPTY, U256};
+    use derive_more::{From, Into};
+    use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo};
     use sov_state::WorkingSet;
 
     use super::evm::db::EvmDb;
     use super::evm::transaction::BlockEnv;
     use super::evm::{DbAccount, EthAddress};
-    use crate::evm::{Bytes32, EvmChainCfg, EvmTransaction, SpecIdWrapper};
+    use crate::evm::{Bytes32, EvmChainCfg, EvmTransaction};
     use crate::TransactionReceipt;
 
     #[derive(Clone)]
@@ -56,6 +59,19 @@ mod experimental {
         pub chain_id: u64,
         pub limit_contract_code_size: Option<usize>,
         pub spec: HashMap<u64, SpecIdWrapper>,
+    }
+
+    impl Default for EvmConfig {
+        fn default() -> Self {
+            Self {
+                data: vec![],
+                chain_id: 1,
+                limit_contract_code_size: None,
+                spec: vec![(0, SpecIdWrapper::from(SpecId::LATEST))]
+                    .into_iter()
+                    .collect(),
+            }
+        }
     }
 
     #[allow(dead_code)]
@@ -112,6 +128,16 @@ mod experimental {
             working_set: &'a mut WorkingSet<C::Storage>,
         ) -> EvmDb<'a, C> {
             EvmDb::new(self.accounts.clone(), working_set)
+        }
+    }
+
+    /// EVM SpecId and their activation block
+    #[derive(Debug, PartialEq, Clone, Copy, From, Into)]
+    pub struct SpecIdWrapper(pub SpecId);
+
+    impl SpecIdWrapper {
+        pub fn new(value: SpecId) -> Self {
+            SpecIdWrapper(value)
         }
     }
 }
