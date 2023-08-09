@@ -21,9 +21,11 @@ mod tests_helpers;
 pub mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::mocks::TestValidityCond;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
+use sov_state::WorkingSet;
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]
 /// Structure that contains the information needed to represent a single state transition.
@@ -124,5 +126,25 @@ impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Mo
     for ChainState<Ctx, Cond>
 {
     type Context = Ctx;
+
     type Config = ChainStateConfig;
+
+    fn genesis(
+        &self,
+        config: &Self::Config,
+        working_set: &mut WorkingSet<Ctx::Storage>,
+    ) -> Result<(), Error> {
+        // The initialization logic
+        Ok(self.init_module(config, working_set)?)
+    }
+
+    fn call(
+        &self,
+        _msg: Self::CallMessage,
+        _context: &Self::Context,
+        _working_set: &mut WorkingSet<Ctx::Storage>,
+    ) -> Result<sov_modules_api::CallResponse, Error> {
+        // The call logic
+        Ok(sov_modules_api::CallResponse::default())
+    }
 }
