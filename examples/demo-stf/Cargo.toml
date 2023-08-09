@@ -37,7 +37,7 @@ sov-accounts = { path = "../../module-system/module-implementations/sov-accounts
 sov-state = { path = "../../module-system/sov-state", default-features = false }
 sov-modules-api = { path = "../../module-system/sov-modules-api", default-features = false, features = ["macros"] }
 sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
-sov-data-generators = { path = "../../module-system/utils/sov-data-generators" }
+sov-data-generators = { path = "../../module-system/utils/sov-data-generators", default-features = false }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner", optional = true }
 
 # Only enable the evm on "experimental" feature
@@ -62,6 +62,7 @@ native = [
     "sov-rollup-interface/mocks",
     "sov-sequencer",
     "sov-stf-runner",
+    "sov-data-generators/native",
     "clap",
     "serde_json",
     "jsonrpsee",
