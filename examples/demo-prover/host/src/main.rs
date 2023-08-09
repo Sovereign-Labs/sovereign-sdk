@@ -17,12 +17,12 @@ use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::Storage;
 use sov_stf_runner::{from_toml_path, Config as RunnerConfig};
 use tracing::{info, Level};
+use sov_stf_runner::RollupConfig;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct RollupConfig {
-    pub start_height: u64,
+pub struct Config {
+    pub rollup_config: RollupConfig,
     pub da: DaServiceConfig,
-    pub runner: RunnerConfig,
 }
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
@@ -41,11 +41,11 @@ async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
         .nth(1)
         .unwrap_or_else(|| "rollup_config.toml".to_string());
-    let rollup_config: RollupConfig =
+    let config: Config =
         from_toml_path(&rollup_config_path).context("Failed to read rollup configuration")?;
 
     let da_service = CelestiaService::new(
-        rollup_config.da.clone(),
+        config.da.clone(),
         RollupParams {
             namespace: ROLLUP_NAMESPACE,
         },
@@ -55,7 +55,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let sequencer_private_key = DefaultPrivateKey::generate();
 
     let app: App<Risc0Verifier, jupiter::BlobWithSender> =
-        App::new(rollup_config.runner.storage.clone());
+        App::new(config.rollup_config.runner.storage.clone());
 
     let is_storage_empty = app.get_storage().is_empty();
     let mut demo = app.stf;
@@ -77,7 +77,7 @@ async fn main() -> Result<(), anyhow::Error> {
         res.state_root.0
     };
 
-    for height in rollup_config.start_height.. {
+    for height in config.rollup_config.start_height.. {
         let mut host = Risc0Host::new(ROLLUP_ELF);
         host.write_to_guest(prev_state_root);
         info!(

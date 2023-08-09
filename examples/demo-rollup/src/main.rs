@@ -19,11 +19,13 @@ use sov_modules_stf_template::{SequencerOutcome, TxEffect};
 use sov_rollup_interface::services::da::DaService;
 use sov_sequencer::get_sequencer_rpc;
 use sov_state::storage::Storage;
-use sov_stf_runner::{from_toml_path, get_ledger_rpc, RollupConfig, StateTransitionRunner};
+use sov_stf_runner::{from_toml_path, get_ledger_rpc, StateTransitionRunner};
 use tracing::{debug, Level};
+use config::Config;
 
 #[cfg(test)]
 mod test_rpc;
+mod config;
 
 #[cfg(feature = "experimental")]
 const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
@@ -80,7 +82,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .unwrap_or_else(|| "rollup_config.toml".to_string());
 
     debug!("Starting demo rollup with config {}", rollup_config_path);
-    let rollup_config: RollupConfig =
+    let config: Config =
         from_toml_path(&rollup_config_path).context("Failed to read rollup configuration")?;
 
     // Initializing logging
@@ -91,10 +93,10 @@ async fn main() -> Result<(), anyhow::Error> {
         .map_err(|_err| eprintln!("Unable to set global default subscriber"))
         .expect("Cannot fail to set subscriber");
 
-    let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
+    let ledger_db = initialize_ledger(&config.rollup_config.runner.storage.path);
 
     let da_service = CelestiaService::new(
-        rollup_config.da.clone(),
+        config.da.clone(),
         RollupParams {
             namespace: ROLLUP_NAMESPACE,
         },
@@ -102,7 +104,7 @@ async fn main() -> Result<(), anyhow::Error> {
     .await;
 
     let mut app: App<Risc0Verifier, jupiter::BlobWithSender> =
-        App::new(rollup_config.runner.storage.clone());
+        App::new(config.rollup_config.runner.storage.clone());
 
     let storage = app.get_storage();
     let mut methods = get_rpc_methods::<DefaultContext>(storage);
@@ -112,14 +114,14 @@ async fn main() -> Result<(), anyhow::Error> {
         register_ledger(ledger_db.clone(), &mut methods)?;
         register_sequencer(da_service.clone(), &mut app, &mut methods)?;
         #[cfg(feature = "experimental")]
-        register_ethereum(rollup_config.da.clone(), &mut methods)?;
+        register_ethereum(config.da.clone(), &mut methods)?;
     }
 
     let storage = app.get_storage();
     let genesis_config = get_genesis_config();
 
     let mut runner = StateTransitionRunner::new(
-        rollup_config,
+        config.rollup_config,
         da_service,
         ledger_db,
         app.stf,
