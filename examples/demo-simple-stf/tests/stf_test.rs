@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use demo_simple_stf::{ApplyBlobResult, CheckHashPreimageStf};
+use demo_simple_stf::{ApplySlotResult, CheckHashPreimageStf};
 use sov_rollup_interface::mocks::{MockZkvm, TestBlob};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::AddressTrait;
@@ -73,5 +73,5 @@ fn test_stf() {
 
     assert_eq!(1, result.batch_receipts.len());
     let receipt = result.batch_receipts[0].clone();
-    assert_eq!(receipt.inner, ApplyBlobResult::Success);
+    assert_eq!(receipt.inner, ApplySlotResult::Success);
 }

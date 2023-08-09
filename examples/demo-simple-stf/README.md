@@ -10,14 +10,13 @@ The [State Transition Function
 interface](../../rollup-interface/specs/interfaces/stf.md) serves as the core component of our rollup, where the business logic will reside.
 Implementations of this trait can be integrated with any ZKVM and DA Layer resulting in a fully functional rollup. To begin, we will create a structure called `CheckHashPreimageStf`, and implement the `StateTransitionFunction` trait for it. You can find the complete code in the `lib.rs` file, but we will go over the most important parts here:
 
-```rust
+```rust, ignore
 pub struct CheckHashPreimageStf {}
 ```
 
 The `ApplyBlobResult` represents the outcome of the state transition, and its specific usage will be explained later:
 
-```rust
-
+```rust, ignore
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub enum ApplyBlobResult {
     Failure,
@@ -27,7 +26,7 @@ pub enum ApplyBlobResult {
 
 Now let's discuss the implementation. First, we define some types that are relevant to our rollup:
 
-```rust
+```rust, ignore
 impl StateTransitionFunction for CheckHashPreimageStf {
     // Since our rollup is stateless, we don't need to consider the StateRoot.
     type StateRoot = ();
@@ -52,8 +51,7 @@ impl StateTransitionFunction for CheckHashPreimageStf {
 
 Now that we have defined the necessary types, we need to implement the following functions:
 
-```rust
-
+```rust, ignore
     // Perform one-time initialization for the genesis block.
     fn init_chain(&mut self, _params: Self::InitialState) {
         // Do nothing
@@ -68,46 +66,62 @@ Now that we have defined the necessary types, we need to implement the following
 
 These functions handle the initialization and preparation stages of our rollup, but as we are not modifying the rollup state, their implementation is simply left empty.
 
-Next we need to write the core logic in `apply_blob`:
+Next we need to write the core logic in `apply_slot`:
 
-```rust
+```rust, ignore
     // The core logic of our rollup.
-    fn apply_blob(
+    fn apply_slot<'a, I>(
         &mut self,
-        blob: impl BlobTransactionTrait,
-        _misbehavior_hint: Option<Self::MisbehaviorProof>,
-    ) -> BatchReceipt<Self::BatchReceiptContents, Self::TxReceiptContents> {
-        let blob_data = blob.data();
-        let mut reader = blob_data.reader();
+        _witness: Self::Witness,
+        blobs: I,
+    ) -> SlotResult<
+        Self::StateRoot,
+        Self::BatchReceiptContents,
+        Self::TxReceiptContents,
+        Self::Witness,
+    >
+    where
+        I: IntoIterator<Item = &'a mut B>,
+    {
+        let mut receipts = vec![];
+        for blob in blobs {
+            let blob_data = blob.data_mut();
 
-        // Read the data from the blob as a byte vec.
-        let mut data = Vec::new();
+            // Read the data from the blob as a byte vec.
+            let mut data = Vec::new();
 
-        // Panicking within the `StateTransitionFunction` is generally not recommended.
-        // But here if we encounter an error while reading the bytes, it suggests a serious
-        // issue with the DA layer or our setup.
-        reader
-            .read_to_end(&mut data)
-            .unwrap_or_else(|e| panic!("Unable to read blob data {}", e));
+            // Panicking within the `StateTransitionFunction` is generally not recommended.
+            // But here, if we encounter an error while reading the bytes,
+            // it suggests a serious issue with the DA layer or our setup.
+            blob_data
+                .read_to_end(&mut data)
+                .unwrap_or_else(|e| panic!("Unable to read blob data {}", e));
 
-        // Check if the sender submitted the preimage of the hash.
-        let hash = sha2::Sha256::hash(&data);
-        let desired_hash = [
-            102, 104, 122, 173, 248, 98, 189, 119, 108, 143, 193, 139, 142, 159, 142, 32, 8, 151,
-            20, 133, 110, 226, 51, 179, 144, 42, 89, 29, 13, 95, 41, 37,
-        ];
+            // Check if the sender submitted the preimage of the hash.
+            let hash = sha2::Sha256::digest(&data).into();
+            let desired_hash = [
+                102, 104, 122, 173, 248, 98, 189, 119, 108, 143, 193, 139, 142, 159, 142, 32, 8,
+                151, 20, 133, 110, 226, 51, 179, 144, 42, 89, 29, 13, 95, 41, 37,
+            ];
 
-        let result = if hash == desired_hash {
-            ApplyBlobResult::Success
-        } else {
-            ApplyBlobResult::Failure
-        };
+            let result = if hash == desired_hash {
+                ApplySlotResult::Success
+            } else {
+                ApplySlotResult::Failure
+            };
 
-        // Return the `BatchReceipt`
-        BatchReceipt {
-            batch_hash: hash,
-            tx_receipts: vec![],
-            inner: result,
+            // Return the `BatchReceipt`
+            receipts.push(BatchReceipt {
+                batch_hash: hash,
+                tx_receipts: vec![],
+                inner: result,
+            });
+        }
+
+        SlotResult {
+            state_root: (),
+            batch_receipts: receipts,
+            witness: (),
         }
     }
 ```
@@ -116,7 +130,7 @@ The above function reads the data from the blob, computes the `hash`, compares i
 
 The last method is `end_slot`, like before the implementation is trivial:
 
-```rust
+```rust, ignore
    fn end_slot(
         &mut self,
     ) -> (
@@ -142,7 +156,7 @@ The `sov_rollup_interface::mocks` crate provides two utilities that are useful f
 1. The `MockZkvm` is an implementation of the `Zkvm` trait that can be used in tests.
 1. The `TestBlob` is an implementation of the `BlobTransactionTrait` trait that can be used in tests. It accepts an `Address` as a generic parameter. For testing purposes, we implement our own `Address` type as follows:
 
-```rust
+```rust, ignore
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
 pub struct DaAddress {
     pub addr: [u8; 32],
@@ -156,7 +170,7 @@ You can find more details in the `stf_test.rs` file.
 
 The following test checks the rollup logic. In the test, we call `init_chain, begin_slot, and end_slot` for completeness, even though these methods do nothing.
 
-```rust
+```rust, ignore
 #[test]
 fn test_stf() {
     let address = DaAddress { addr: [1; 32] };
