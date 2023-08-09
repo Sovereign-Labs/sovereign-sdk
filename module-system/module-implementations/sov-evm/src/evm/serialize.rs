@@ -1,6 +1,7 @@
 use std::io::Read;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use revm::primitives::SpecId;
 
 use crate::experimental::SpecIdWrapper;
 
@@ -14,7 +15,7 @@ impl BorshSerialize for SpecIdWrapper {
 impl BorshDeserialize for SpecIdWrapper {
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
         let value = u8::deserialize(buf)?;
-        Ok(SpecIdWrapper(unsafe { std::mem::transmute(value) }))
+        Ok(SpecIdWrapper(SpecId::try_from_u8(value).unwrap()))
     }
 
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> Result<Self, std::io::Error> {
