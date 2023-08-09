@@ -122,7 +122,7 @@ impl DaService for RngDaService {
                 prev_hash: TestHash([0u8; 32]),
             },
             height,
-            validity_cond: TestValidityCond { cond: true },
+            validity_cond: TestValidityCond { is_valid: true },
         };
 
         Ok(block)

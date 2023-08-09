@@ -21,11 +21,9 @@ mod tests_helpers;
 pub mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::mocks::TestValidityCond;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
-
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]
 /// Structure that contains the information needed to represent a single state transition.

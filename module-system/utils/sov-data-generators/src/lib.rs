@@ -26,6 +26,26 @@ pub fn has_tx_events(apply_blob_outcome: &BatchReceipt<SequencerOutcome, TxEffec
     events.peekable().peek().is_some()
 }
 
+/// A generic message object used to create transactions.
+pub struct Message<C: Context, Mod: Module> {
+    /// The sender's private key.
+    pub sender_key: Rc<<C as Spec>::PrivateKey>,
+    /// The message content.
+    pub content: Mod::CallMessage,
+    /// The message nonce.
+    pub nonce: u64,
+}
+
+impl<C: Context, Mod: Module> Message<C, Mod> {
+    fn new(sender_key: Rc<<C as Spec>::PrivateKey>, content: Mod::CallMessage, nonce: u64) -> Self {
+        Self {
+            sender_key,
+            content,
+            nonce,
+        }
+    }
+}
+
 /// Trait used to generate messages from the DA layer to automate module testing
 pub trait MessageGenerator {
     /// Module where the messages originate from.
@@ -35,16 +55,7 @@ pub trait MessageGenerator {
     type Context: Context;
 
     /// Generates a list of messages originating from the module.
-    /// We allow type complexity here because the return type is explicitly used in [`create_raw_txs`]
-    /// and associated default types are not supported yet.
-    #[allow(clippy::type_complexity)]
-    fn create_messages(
-        &self,
-    ) -> Vec<(
-        Rc<<Self::Context as Spec>::PrivateKey>,
-        <Self::Module as Module>::CallMessage,
-        u64,
-    )>;
+    fn create_messages(&self) -> Vec<Message<Self::Context, Self::Module>>;
 
     /// Creates a transaction object associated with a call message, for a given module.
     fn create_tx<Encoder: EncodeCall<Self::Module>>(
@@ -64,10 +75,15 @@ pub trait MessageGenerator {
     fn create_raw_txs<Encoder: EncodeCall<Self::Module>>(&self) -> Vec<RawTx> {
         let mut messages_iter = self.create_messages().into_iter().peekable();
         let mut serialized_messages = Vec::default();
-        while let Some((sender, m, nonce)) = messages_iter.next() {
+        while let Some(message) = messages_iter.next() {
             let is_last = messages_iter.peek().is_none();
 
-            let tx = self.create_tx::<Encoder>(&sender, m, nonce, is_last);
+            let tx = self.create_tx::<Encoder>(
+                &message.sender_key,
+                message.content,
+                message.nonce,
+                is_last,
+            );
 
             serialized_messages.push(RawTx {
                 data: tx.try_to_vec().unwrap(),

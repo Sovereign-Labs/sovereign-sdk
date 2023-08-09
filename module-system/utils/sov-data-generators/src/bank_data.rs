@@ -7,7 +7,7 @@ use sov_modules_api::transaction::Transaction;
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Context, EncodeCall, Module, PrivateKey, Spec};
 
-use crate::MessageGenerator;
+use crate::{Message, MessageGenerator};
 
 pub struct TransferData<C: Context> {
     pub sender_pkey: Rc<C::PrivateKey>,
@@ -83,23 +83,13 @@ impl<C: Context> MessageGenerator for BankMessageGenerator<C> {
     type Module = Bank<C>;
     type Context = C;
 
-    fn create_messages(
-        &self,
-    ) -> Vec<(
-        std::rc::Rc<C::PrivateKey>,
-        <Self::Module as Module>::CallMessage,
-        u64,
-    )> {
-        let mut messages = Vec::<(
-            std::rc::Rc<C::PrivateKey>,
-            <Self::Module as Module>::CallMessage,
-            u64,
-        )>::new();
+    fn create_messages(&self) -> Vec<Message<Self::Context, Self::Module>> {
+        let mut messages = Vec::<Message<C, Bank<C>>>::new();
 
         let mut nonce = 0;
 
         for mint_message in &self.token_mint_txs {
-            messages.push((
+            messages.push(Message::new(
                 mint_message.minter_pkey.clone(),
                 mint_token_tx::<C>(mint_message),
                 nonce,
@@ -108,7 +98,7 @@ impl<C: Context> MessageGenerator for BankMessageGenerator<C> {
         }
 
         for transfer_message in &self.transfer_txs {
-            messages.push((
+            messages.push(Message::new(
                 transfer_message.sender_pkey.clone(),
                 transfer_token_tx::<C>(transfer_message),
                 nonce,

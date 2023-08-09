@@ -201,7 +201,7 @@ impl ValidityCondition for TestValidityCond {
     type Error = Error;
     fn combine<H: Digest>(&self, rhs: Self) -> Result<Self, Self::Error> {
         Ok(TestValidityCond {
-            cond: self.cond & rhs.cond,
+            is_valid: self.is_valid & rhs.is_valid,
         })
     }
 }
@@ -216,7 +216,7 @@ impl ValidityConditionChecker<TestValidityCond> for TestValidityCondChecker<Test
     type Error = Error;
 
     fn check(&mut self, condition: &TestValidityCond) -> Result<(), Self::Error> {
-        if condition.cond {
+        if condition.is_valid {
             Ok(())
         } else {
             Err(anyhow::format_err!("Invalid mock validity condition"))

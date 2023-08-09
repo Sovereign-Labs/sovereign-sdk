@@ -37,13 +37,7 @@ impl<C: Context> MessageGenerator for ValueSetterMessages<C> {
     type Module = ValueSetter<C>;
     type Context = C;
 
-    fn create_messages(
-        &self,
-    ) -> Vec<(
-        Rc<C::PrivateKey>,
-        <Self::Module as Module>::CallMessage,
-        u64,
-    )> {
+    fn create_messages(&self) -> Vec<Message<Self::Context, Self::Module>> {
         let mut messages = Vec::default();
         for value_setter_message in &self.messages {
             let admin = value_setter_message.admin.clone();
@@ -53,7 +47,11 @@ impl<C: Context> MessageGenerator for ValueSetterMessages<C> {
                 let set_value_msg: sov_value_setter::CallMessage =
                     sov_value_setter::CallMessage::SetValue(*new_value);
 
-                messages.push((admin.clone(), set_value_msg, value_setter_admin_nonce));
+                messages.push(Message::new(
+                    admin.clone(),
+                    set_value_msg,
+                    value_setter_admin_nonce,
+                ));
 
                 value_setter_admin_nonce += 1;
             }

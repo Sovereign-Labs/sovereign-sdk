@@ -1,8 +1,6 @@
-
-
-use crate::{Context, Signature};
 #[cfg(feature = "native")]
-use crate::{PrivateKey};
+use crate::PrivateKey;
+use crate::{Context, Signature};
 
 /// A Transaction object that is compatible with the module-system/sov-default-stf.
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]

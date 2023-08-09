@@ -32,16 +32,14 @@ impl<C: Context> CallGenerator<C> {
         self.election_admin_nonce += 1;
     }
 
-    fn create_voters_and_vote(
-        &mut self,
-    ) -> Vec<(Rc<C::PrivateKey>, sov_election::CallMessage<C>, u64)> {
+    fn create_voters_and_vote(&mut self) -> Vec<Message<C, Election<C>>> {
         let mut messages = Vec::default();
 
         let set_candidates_message = sov_election::CallMessage::SetCandidates {
             names: vec!["candidate_1".to_owned(), "candidate_2".to_owned()],
         };
 
-        messages.push((
+        messages.push(Message::new(
             self.election_admin.clone(),
             set_candidates_message,
             self.election_admin_nonce,
@@ -52,25 +50,25 @@ impl<C: Context> CallGenerator<C> {
             let add_voter_message =
                 sov_election::CallMessage::AddVoter(voter.pub_key().to_address());
 
-            messages.push((
+            messages.push(Message::new(
                 self.election_admin.clone(),
                 add_voter_message,
                 self.election_admin_nonce,
             ));
 
             let vote_message = sov_election::CallMessage::Vote(1);
-            messages.push((voter, vote_message, 0));
+            messages.push(Message::new(voter, vote_message, 0));
             self.inc_nonce();
         }
 
         messages
     }
 
-    fn freeze_vote(&mut self) -> Vec<(Rc<C::PrivateKey>, sov_election::CallMessage<C>, u64)> {
+    fn freeze_vote(&mut self) -> Vec<Message<C, Election<C>>> {
         let mut messages = Vec::default();
 
         let freeze_message = sov_election::CallMessage::FreezeElection;
-        messages.push((
+        messages.push(Message::new(
             self.election_admin.clone(),
             freeze_message,
             self.election_admin_nonce,
@@ -80,7 +78,7 @@ impl<C: Context> CallGenerator<C> {
         messages
     }
 
-    fn all_messages(&mut self) -> Vec<(Rc<C::PrivateKey>, sov_election::CallMessage<C>, u64)> {
+    fn all_messages(&mut self) -> Vec<Message<C, Election<C>>> {
         let mut messages = Vec::default();
 
         messages.extend(self.create_voters_and_vote());
@@ -107,13 +105,7 @@ impl<C: Context> MessageGenerator for ElectionCallMessages<C> {
     type Module = Election<C>;
     type Context = C;
 
-    fn create_messages(
-        &self,
-    ) -> Vec<(
-        Rc<C::PrivateKey>,
-        <Self::Module as Module>::CallMessage,
-        u64,
-    )> {
+    fn create_messages(&self) -> Vec<Message<C, Election<C>>> {
         let call_generator = &mut CallGenerator::new(self.election_admin.clone());
         call_generator.all_messages()
     }
@@ -148,9 +140,7 @@ impl<C: Context> MessageGenerator for InvalidElectionCallMessages<C> {
     type Module = Election<C>;
     type Context = C;
 
-    fn create_messages(
-        &self,
-    ) -> Vec<(Rc<C::PrivateKey>, <Election<C> as Module>::CallMessage, u64)> {
+    fn create_messages(&self) -> Vec<Message<C, Election<C>>> {
         let call_generator = &mut CallGenerator::new(self.election_admin.clone());
 
         let mut messages = Vec::default();
@@ -163,7 +153,7 @@ impl<C: Context> MessageGenerator for InvalidElectionCallMessages<C> {
             let voter_ref: &Rc<<C as Spec>::PrivateKey> = &call_generator.voters[0];
             let voter = voter_ref.clone();
             let vote_message = sov_election::CallMessage::Vote(1);
-            messages.push((voter, vote_message, 1));
+            messages.push(Message::new(voter, vote_message, 1));
         }
 
         messages.extend(call_generator.freeze_vote());
@@ -200,9 +190,7 @@ impl<C: Context> MessageGenerator for BadSigElectionCallMessages<C> {
     type Module = Election<C>;
     type Context = C;
 
-    fn create_messages(
-        &self,
-    ) -> Vec<(Rc<C::PrivateKey>, <Election<C> as Module>::CallMessage, u64)> {
+    fn create_messages(&self) -> Vec<Message<C, Election<C>>> {
         let call_generator = &mut CallGenerator::new(self.election_admin.clone());
         call_generator.all_messages()
     }
@@ -248,9 +236,7 @@ impl<C: Context> MessageGenerator for BadNonceElectionCallMessages<C> {
     type Module = Election<C>;
     type Context = C;
 
-    fn create_messages(
-        &self,
-    ) -> Vec<(Rc<C::PrivateKey>, <Election<C> as Module>::CallMessage, u64)> {
+    fn create_messages(&self) -> Vec<Message<C, Election<C>>> {
         let call_generator = &mut CallGenerator::new(self.election_admin.clone());
         call_generator.all_messages()
     }
@@ -287,9 +273,7 @@ impl<C: Context> MessageGenerator for BadSerializationElectionCallMessages<C> {
     type Module = Election<C>;
     type Context = C;
 
-    fn create_messages(
-        &self,
-    ) -> Vec<(Rc<C::PrivateKey>, <Election<C> as Module>::CallMessage, u64)> {
+    fn create_messages(&self) -> Vec<Message<C, Election<C>>> {
         let call_generator = &mut CallGenerator::new(self.election_admin.clone());
         call_generator.all_messages()
     }
