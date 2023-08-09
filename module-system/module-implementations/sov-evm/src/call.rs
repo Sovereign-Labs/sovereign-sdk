@@ -91,7 +91,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 /// Get spec id for a given block number
 /// Returns the first spec id defined for block >= block_number
 pub(crate) fn get_spec_id(spec: Vec<(u64, SpecIdWrapper)>, block_number: u64) -> SpecIdWrapper {
-    let spec_id = match spec.binary_search_by(|&(k, _)| k.cmp(&block_number)) {
+    match spec.binary_search_by(|&(k, _)| k.cmp(&block_number)) {
         Ok(index) => spec[index].1,
         Err(index) => {
             if index > 0 {
@@ -101,6 +101,5 @@ pub(crate) fn get_spec_id(spec: Vec<(u64, SpecIdWrapper)>, block_number: u64) ->
                 panic!("EVM spec must start from block 0")
             }
         }
-    };
-    spec_id
+    }
 }

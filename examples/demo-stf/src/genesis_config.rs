@@ -1,7 +1,6 @@
 use sov_election::ElectionConfig;
-use sov_evm::SpecId;
 #[cfg(feature = "experimental")]
-use sov_evm::{AccountData, EvmConfig, SpecIdWrapper};
+use sov_evm::{AccountData, EvmConfig, SpecId, SpecIdWrapper};
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::test_utils::generate_address;
