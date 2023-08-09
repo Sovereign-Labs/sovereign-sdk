@@ -6361,6 +6361,7 @@ dependencies = [
  "borsh",
  "bytes",
  "clap",
+ "derive_more",
  "ethereum-types",
  "ethers",
  "ethers-contract",
