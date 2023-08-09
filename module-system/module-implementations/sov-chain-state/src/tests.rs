@@ -69,8 +69,7 @@ fn test_simple_value_setter() {
     let new_height_storage: u64 = app_template
         .runtime
         .chain_state
-        .slot_height(&mut working_set)
-        .unwrap();
+        .slot_height(&mut working_set);
 
     assert_eq!(new_height_storage, 0, "The initial height was not computed");
 
@@ -101,7 +100,7 @@ fn test_simple_value_setter() {
     assert_eq!(stored_root, init_root_hash.0, "Root hashes don't match");
 
     // Check the slot height
-    let new_height_storage: u64 = chain_state_ref.slot_height(&mut working_set).unwrap();
+    let new_height_storage: u64 = chain_state_ref.slot_height(&mut working_set);
 
     assert_eq!(new_height_storage, 1, "The new height did not update");
 
@@ -153,7 +152,7 @@ fn test_simple_value_setter() {
     assert_eq!(stored_root, init_root_hash.0, "Root hashes don't match");
 
     // Check the slot height
-    let new_height_storage: u64 = chain_state_ref.slot_height(&mut working_set).unwrap();
+    let new_height_storage: u64 = chain_state_ref.slot_height(&mut working_set);
     assert_eq!(new_height_storage, 2, "The new height did not update");
 
     // Check the tx in progress

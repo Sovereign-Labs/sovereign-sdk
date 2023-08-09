@@ -1,11 +1,9 @@
 use std::rc::Rc;
 
 use borsh::ser::BorshSerialize;
-use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 pub use sov_modules_api::EncodeCall;
-use sov_modules_api::{Address, Context, Module};
+use sov_modules_api::{Address, Context, Module, Spec};
 use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, TxEffect};
 use sov_rollup_interface::mocks::TestBlob;
 use sov_rollup_interface::stf::BatchReceipt;
@@ -33,11 +31,17 @@ pub trait MessageGenerator {
     /// Module where the messages originate from.
     type Module: Module;
 
+    /// Module context
+    type Context: Context;
+
     /// Generates a list of messages originating from the module.
+    /// We allow type complexity here because the return type is explicitly used in [`create_raw_txs`]
+    /// and associated default types are not supported yet.
+    #[allow(clippy::type_complexity)]
     fn create_messages(
         &self,
     ) -> Vec<(
-        Rc<DefaultPrivateKey>,
+        Rc<<Self::Context as Spec>::PrivateKey>,
         <Self::Module as Module>::CallMessage,
         u64,
     )>;
@@ -46,7 +50,7 @@ pub trait MessageGenerator {
     fn create_tx<Encoder: EncodeCall<Self::Module>>(
         &self,
         // Private key of the sender
-        sender: &DefaultPrivateKey,
+        sender: &<Self::Context as Spec>::PrivateKey,
         // The message itself
         message: <Self::Module as Module>::CallMessage,
         // The message nonce
@@ -54,7 +58,7 @@ pub trait MessageGenerator {
         // A boolean that indicates whether this message is the last one to be sent.
         // Useful to perform some operations specifically on the last message.
         is_last: bool,
-    ) -> Transaction<DefaultContext>;
+    ) -> Transaction<Self::Context>;
 
     /// Creates a vector of raw transactions from the module.
     fn create_raw_txs<Encoder: EncodeCall<Self::Module>>(&self) -> Vec<RawTx> {

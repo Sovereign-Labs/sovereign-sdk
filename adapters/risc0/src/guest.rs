@@ -38,7 +38,7 @@ impl Zkvm for Risc0Guest {
         _serialized_proof: &'a [u8],
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error> {
-        // Implement this method once risc0 supports recursion
+        // Implement this method once risc0 supports recursion: issue #633
         todo!("Implement once risc0 supports recursion")
     }
 
@@ -49,7 +49,7 @@ impl Zkvm for Risc0Guest {
         _serialized_proof: &[u8],
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
-        // Implement this method once risc0 supports recursion
+        // Implement this method once risc0 supports recursion: issue #633
         todo!("Implement once risc0 supports recursion")
     }
 }

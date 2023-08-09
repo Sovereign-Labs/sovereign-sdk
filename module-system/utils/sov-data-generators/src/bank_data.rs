@@ -10,7 +10,7 @@ use sov_modules_api::{Context, EncodeCall, Module, PrivateKey, Spec};
 use crate::MessageGenerator;
 
 pub struct TransferData<C: Context> {
-    pub sender_pkey: Rc<DefaultPrivateKey>,
+    pub sender_pkey: Rc<C::PrivateKey>,
     pub receiver_address: <C as Spec>::Address,
     pub token_address: <C as Spec>::Address,
     pub transfer_amount: u64,
@@ -21,7 +21,7 @@ pub struct MintData<C: Context> {
     pub salt: u64,
     pub initial_balance: u64,
     pub minter_address: <C as Spec>::Address,
-    pub minter_pkey: Rc<DefaultPrivateKey>,
+    pub minter_pkey: Rc<C::PrivateKey>,
     pub authorized_minters: Vec<<C as Spec>::Address>,
 }
 
@@ -81,16 +81,17 @@ pub(crate) fn transfer_token_tx<C: Context>(transfer_data: &TransferData<C>) -> 
 
 impl<C: Context> MessageGenerator for BankMessageGenerator<C> {
     type Module = Bank<C>;
+    type Context = C;
 
     fn create_messages(
         &self,
     ) -> Vec<(
-        std::rc::Rc<sov_modules_api::default_signature::private_key::DefaultPrivateKey>,
+        std::rc::Rc<C::PrivateKey>,
         <Self::Module as Module>::CallMessage,
         u64,
     )> {
         let mut messages = Vec::<(
-            std::rc::Rc<sov_modules_api::default_signature::private_key::DefaultPrivateKey>,
+            std::rc::Rc<C::PrivateKey>,
             <Self::Module as Module>::CallMessage,
             u64,
         )>::new();
@@ -120,12 +121,12 @@ impl<C: Context> MessageGenerator for BankMessageGenerator<C> {
 
     fn create_tx<Encoder: EncodeCall<Self::Module>>(
         &self,
-        sender: &sov_modules_api::default_signature::private_key::DefaultPrivateKey,
+        sender: &<Self::Context as Spec>::PrivateKey,
         message: <Self::Module as Module>::CallMessage,
         nonce: u64,
         _is_last: bool,
-    ) -> sov_modules_api::transaction::Transaction<DefaultContext> {
+    ) -> sov_modules_api::transaction::Transaction<C> {
         let message = Encoder::encode_call(message);
-        Transaction::<DefaultContext>::new_signed_tx(sender, message, nonce)
+        Transaction::<C>::new_signed_tx(sender, message, nonce)
     }
 }

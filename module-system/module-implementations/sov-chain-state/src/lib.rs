@@ -21,11 +21,11 @@ mod tests_helpers;
 pub mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::Error;
+
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::mocks::TestValidityCond;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
-use sov_state::WorkingSet;
+
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]
 /// Structure that contains the information needed to represent a single state transition.
@@ -54,8 +54,8 @@ impl StateTransitionId<TestValidityCond> {
 impl<Cond: ValidityCondition> StateTransitionId<Cond> {
     /// Compare the transition block hash and state root with the provided input couple. If
     /// the pairs are equal, return [`true`].
-    pub fn compare_hashes(&self, da_block_hash: [u8; 32], post_state_root: [u8; 32]) -> bool {
-        self.da_block_hash == da_block_hash && self.post_state_root == post_state_root
+    pub fn compare_hashes(&self, da_block_hash: &[u8; 32], post_state_root: &[u8; 32]) -> bool {
+        self.da_block_hash == *da_block_hash && self.post_state_root == *post_state_root
     }
 
     /// Returns the post state root of a state transition
@@ -110,36 +110,21 @@ pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
     #[state]
     pub in_progress_transition: sov_state::StateValue<TransitionInProgress<Cond>>,
 
-    /// The genesis root hash
+    /// The genesis root hash.
+    /// Set after the first transaction of the rollup is executed, using the `begin_slot` hook.
     #[state]
     pub genesis_hash: sov_state::StateValue<[u8; 32]>,
+}
+
+/// Initial configuration of the chain state
+pub struct ChainStateConfig {
+    /// Initial slot height
+    pub initial_slot_height: u64,
 }
 
 impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Module
     for ChainState<Ctx, Cond>
 {
     type Context = Ctx;
-
-    type Config = ();
-
-    type CallMessage = ();
-
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<Ctx::Storage>,
-    ) -> Result<(), Error> {
-        // The initialization logic
-        Ok(self.init_module(config, working_set)?)
-    }
-
-    fn call(
-        &self,
-        _msg: Self::CallMessage,
-        _context: &Self::Context,
-        _working_set: &mut WorkingSet<Ctx::Storage>,
-    ) -> Result<sov_modules_api::CallResponse, Error> {
-        // The call logic
-        Ok(sov_modules_api::CallResponse::default())
-    }
+    type Config = ChainStateConfig;
 }

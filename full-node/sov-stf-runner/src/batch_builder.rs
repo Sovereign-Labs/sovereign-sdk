@@ -169,7 +169,7 @@ mod tests {
         let msg = CallMessage::SetValue(value);
         let msg = <TestRuntime<C> as EncodeCall<ValueSetter<DefaultContext>>>::encode_call(msg);
 
-        Transaction::new_signed_tx(private_key, msg, 1)
+        Transaction::<DefaultContext>::new_signed_tx(private_key, msg, 1)
             .try_to_vec()
             .unwrap()
     }
@@ -184,7 +184,7 @@ mod tests {
 
     fn generate_signed_tx_with_invalid_payload(private_key: &DefaultPrivateKey) -> Vec<u8> {
         let msg = generate_random_bytes();
-        Transaction::new_signed_tx(private_key, msg, 1)
+        Transaction::<DefaultContext>::new_signed_tx(private_key, msg, 1)
             .try_to_vec()
             .unwrap()
     }

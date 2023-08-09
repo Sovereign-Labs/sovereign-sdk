@@ -10,7 +10,7 @@ use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::WorkingSet;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
-use crate::ChainState;
+use crate::{ChainState, ChainStateConfig};
 
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
@@ -78,8 +78,10 @@ pub(crate) fn create_demo_genesis_config<C: Context, Cond: ValidityCondition>(
     admin: <C as Spec>::Address,
 ) -> GenesisConfig<C, Cond> {
     let value_setter_config = ValueSetterConfig { admin };
-
-    GenesisConfig::new(value_setter_config, ())
+    let chain_state_config = ChainStateConfig {
+        initial_slot_height: 0,
+    };
+    GenesisConfig::new(value_setter_config, chain_state_config)
 }
 
 /// Clones the [`AppTemplate`]'s [`Storage`] and extract the underlying [`WorkingSet`]

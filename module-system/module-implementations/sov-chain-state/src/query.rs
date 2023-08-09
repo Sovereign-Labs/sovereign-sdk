@@ -12,9 +12,12 @@ pub struct Response {
 }
 
 impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
-    /// Get the height of the current slot
-    pub fn slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> Option<u64> {
-        self.slot_height.get(working_set)
+    /// Get the height of the current slot.
+    /// Panics if the slot height is not set
+    pub fn slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> u64 {
+        self.slot_height
+            .get(working_set)
+            .expect("Slot height should be set at initialization")
     }
 
     /// Return the genesis hash of the module.

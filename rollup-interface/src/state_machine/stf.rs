@@ -129,6 +129,13 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     /// which is why we use a generic here instead of an associated type.
     ///
     /// Commits state changes to the database
+    ///
+    /// For now, an error can be returned if the begin slot hook returns an error. In that case
+    /// the error raised gets propagated to that level.
+    ///
+    /// We allow type complexity for now as the type is completely derived from the trait's associated types
+    /// and the trait's associated types are already complex enough.
+    #[allow(clippy::type_complexity)]
     fn apply_slot<'a, I, Data>(
         &mut self,
         witness: Self::Witness,

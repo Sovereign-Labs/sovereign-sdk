@@ -64,7 +64,7 @@ impl<'prover> Zkvm for Risc0Host<'prover> {
         _serialized_proof: &[u8],
         _code_commitment: &Self::CodeCommitment,
     ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
-        todo!("Implement once risc0 supports recursion")
+        todo!("Implement once risc0 supports recursion, issue #633")
     }
 }
 

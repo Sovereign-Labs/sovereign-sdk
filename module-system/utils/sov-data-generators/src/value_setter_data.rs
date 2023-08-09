@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::vec;
 
 use sov_modules_api::default_context::DefaultContext;
@@ -9,22 +8,18 @@ use sov_value_setter::ValueSetter;
 use super::*;
 use crate::EncodeCall;
 
-pub struct ValueSetterMessage {
-    pub admin: Rc<DefaultPrivateKey>,
+pub struct ValueSetterMessage<C: Context> {
+    pub admin: Rc<C::PrivateKey>,
     pub messages: Vec<u32>,
 }
 
-pub struct ValueSetterMessages<C> {
-    pub messages: Vec<ValueSetterMessage>,
-    phantom_context: PhantomData<C>,
+pub struct ValueSetterMessages<C: Context> {
+    pub messages: Vec<ValueSetterMessage<C>>,
 }
 
 impl<C: Context> ValueSetterMessages<C> {
-    pub fn new(messages: Vec<ValueSetterMessage>) -> Self {
-        Self {
-            messages,
-            phantom_context: PhantomData,
-        }
+    pub fn new(messages: Vec<ValueSetterMessage<C>>) -> Self {
+        Self { messages }
     }
 }
 
@@ -40,11 +35,12 @@ impl Default for ValueSetterMessages<DefaultContext> {
 
 impl<C: Context> MessageGenerator for ValueSetterMessages<C> {
     type Module = ValueSetter<C>;
+    type Context = C;
 
     fn create_messages(
         &self,
     ) -> Vec<(
-        Rc<DefaultPrivateKey>,
+        Rc<C::PrivateKey>,
         <Self::Module as Module>::CallMessage,
         u64,
     )> {
@@ -67,12 +63,12 @@ impl<C: Context> MessageGenerator for ValueSetterMessages<C> {
 
     fn create_tx<Encoder: EncodeCall<Self::Module>>(
         &self,
-        sender: &DefaultPrivateKey,
+        sender: &C::PrivateKey,
         message: <Self::Module as Module>::CallMessage,
         nonce: u64,
         _is_last: bool,
-    ) -> Transaction<DefaultContext> {
+    ) -> Transaction<C> {
         let message = Encoder::encode_call(message);
-        Transaction::<DefaultContext>::new_signed_tx(sender, message, nonce)
+        Transaction::<C>::new_signed_tx(sender, message, nonce)
     }
 }

@@ -40,7 +40,7 @@ pub trait DispatchCall {
 /// A trait that specifies how a runtime should encode the data for each module
 pub trait EncodeCall<M: Module> {
     /// The encoding function
-    fn encode_call(data: M::CallMessage) -> std::vec::Vec<u8>;
+    fn encode_call(data: M::CallMessage) -> Vec<u8>;
 }
 
 /// A trait that needs to be implemented for a *runtime* to be used with the CLI wallet
