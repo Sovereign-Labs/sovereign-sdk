@@ -194,7 +194,7 @@ impl AddressTrait for MockAddress {}
 )]
 pub struct TestValidityCond {
     /// The associated validity condition field. If it is true, the validity condition is verified
-    pub cond: bool,
+    pub is_valid: bool,
 }
 
 impl ValidityCondition for TestValidityCond {
