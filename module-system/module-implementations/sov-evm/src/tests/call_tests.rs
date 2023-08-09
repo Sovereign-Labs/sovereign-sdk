@@ -158,8 +158,5 @@ fn spec_id_lookup() {
         get_spec_id(spec.clone(), 20),
         SpecIdWrapper::new(SpecId::LONDON)
     );
-    assert_eq!(
-        get_spec_id(spec.clone(), 25),
-        SpecIdWrapper::new(SpecId::LONDON)
-    );
+    assert_eq!(get_spec_id(spec, 25), SpecIdWrapper::new(SpecId::LONDON));
 }

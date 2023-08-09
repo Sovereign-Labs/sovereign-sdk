@@ -30,7 +30,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let mut spec = config
             .spec
             .iter()
-            .map(|(k, v)| (*k, v.clone()))
+            .map(|(k, v)| (*k, *v))
             .collect::<Vec<_>>();
 
         spec.sort_by(|a, b| a.0.cmp(&b.0));
