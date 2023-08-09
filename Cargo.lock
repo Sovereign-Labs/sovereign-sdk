@@ -6252,7 +6252,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
- "jsonrpsee 0.18.2",
  "serde",
  "serde_json",
  "sov-bank",
@@ -6264,7 +6263,6 @@ dependencies = [
  "sov-state",
  "sov-value-setter",
  "tempfile",
- "thiserror",
 ]
 
 [[package]]
@@ -6293,7 +6291,6 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "sov-value-setter",
- "thiserror",
 ]
 
 [[package]]

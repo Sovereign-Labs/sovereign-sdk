@@ -13,12 +13,11 @@ resolver = "2"
 
 
 [dependencies]
-thiserror = { workspace = true }
 sov-modules-api = { path = "../../sov-modules-api" }
-sov-bank = { path = "../../module-implementations/sov-bank" }
 sov-modules-stf-template = { path = "../../sov-modules-stf-template" }
 sov-value-setter = { path = "../../module-implementations/examples/sov-value-setter", default-features = false }
 sov-election = { path = "../../module-implementations/examples/sov-election", default-features = false }
+sov-bank = { path = "../../module-implementations/sov-bank", default-features = false }
 sov-state = { path = "../../sov-state" }
 sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"] }
 
