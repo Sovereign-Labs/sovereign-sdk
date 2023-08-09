@@ -150,7 +150,7 @@ fn test_sorting_modules_duplicate() {
     };
     let module_b = Module {
         address: Address::from([2; 32]),
-        dependencies: vec![module_a.address.clone()],
+        dependencies: vec![module_a.address],
     };
     let module_a2 = Module {
         address: Address::from([1; 32]),
