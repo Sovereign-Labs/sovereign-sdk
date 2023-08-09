@@ -1,4 +1,5 @@
 use sov_election::ElectionConfig;
+use sov_evm::SpecId;
 #[cfg(feature = "experimental")]
 use sov_evm::{AccountData, EvmConfig, SpecIdWrapper};
 pub use sov_modules_api::default_context::DefaultContext;
