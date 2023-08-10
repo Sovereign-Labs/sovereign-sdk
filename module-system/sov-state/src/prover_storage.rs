@@ -41,7 +41,7 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         })
     }
 
-    fn read_value(&self, key: StorageKey) -> Option<StorageValue> {
+    fn read_value(&self, key: &StorageKey) -> Option<StorageValue> {
         match self
             .db
             .get_value_option_by_key(self.db.get_next_version(), key.as_ref())
@@ -68,7 +68,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         Self::with_path(config.path.as_path())
     }
 
-    fn get(&self, key: StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
+    fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
         let val = self.read_value(key);
         witness.add_hint(val.clone());
         val
@@ -240,7 +240,7 @@ mod test {
                     .validate_and_commit(cache, &witness)
                     .expect("storage is valid");
 
-                assert_eq!(test.value, prover_storage.get(test.key, &witness).unwrap());
+                assert_eq!(test.value, prover_storage.get(&test.key, &witness).unwrap());
                 assert_eq!(prover_storage.db.get_next_version(), test.version + 1)
             }
         }
@@ -251,7 +251,7 @@ mod test {
             for test in tests {
                 assert_eq!(
                     test.value,
-                    storage.get(test.key, &Default::default()).unwrap()
+                    storage.get(&test.key, &Default::default()).unwrap()
                 );
             }
         }
@@ -284,7 +284,10 @@ mod test {
         {
             let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
             assert!(!prover_storage.is_empty());
-            assert_eq!(value, prover_storage.get(key, &Default::default()).unwrap());
+            assert_eq!(
+                value,
+                prover_storage.get(&key, &Default::default()).unwrap()
+            );
         }
     }
 }

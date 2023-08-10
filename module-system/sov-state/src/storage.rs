@@ -29,7 +29,13 @@ impl StorageKey {
         self.key.clone()
     }
 
-    pub fn as_cache_key(self) -> CacheKey {
+    pub fn as_cache_key(&self) -> &CacheKey {
+        // Safety: they are currently equivalent
+        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/643
+        unsafe { core::mem::transmute(self) }
+    }
+
+    pub fn to_cache_key(self) -> CacheKey {
         CacheKey { key: self.key }
     }
 }
@@ -137,7 +143,7 @@ pub trait Storage: Clone {
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error>;
 
     /// Returns the value corresponding to the key or None if key is absent.
-    fn get(&self, key: StorageKey, witness: &Self::Witness) -> Option<StorageValue>;
+    fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue>;
 
     /// Returns the latest state root hash from the storage.
     fn get_state_root(&self, witness: &Self::Witness) -> anyhow::Result<[u8; 32]>;
