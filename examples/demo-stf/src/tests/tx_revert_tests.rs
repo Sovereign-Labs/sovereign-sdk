@@ -42,7 +42,7 @@ fn test_tx_revert() {
         // TODO: Maybe complete with actual block data
         let _data = TestBlock::default();
 
-        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config).unwrap();
+        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
 
         let txs = simulate_da_with_revert_msg(election_admin_private_key);
         let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
@@ -121,7 +121,7 @@ fn test_nonce_incremented_on_revert() {
         // TODO: Maybe complete with actual block data
         let _data = TestBlock::default();
         let mut demo = create_new_demo(path);
-        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config).unwrap();
+        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
 
         let set_candidates_message =
             <Runtime<DefaultContext> as EncodeCall<Election<DefaultContext>>>::encode_call(
@@ -225,7 +225,7 @@ fn test_tx_bad_sig() {
         // TODO: Maybe complete with actual block data
         let _data = TestBlock::default();
 
-        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config).unwrap();
+        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
 
         let txs = simulate_da_with_bad_sig(election_admin_private_key);
 
@@ -288,7 +288,7 @@ fn test_tx_bad_serialization() {
     let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
     let sequencer_balance_before = {
         let mut demo = create_new_demo(path);
-        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config).unwrap();
+        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
         let mut working_set = WorkingSet::new(demo.current_storage);
         let coins = demo
             .runtime

@@ -14,19 +14,19 @@ pub struct Response {
 impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
     /// Get the height of the current slot.
     /// Panics if the slot height is not set
-    pub fn slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> u64 {
+    pub fn get_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> u64 {
         self.slot_height
             .get(working_set)
             .expect("Slot height should be set at initialization")
     }
 
     /// Return the genesis hash of the module.
-    pub fn genesis_hash(&self, working_set: &mut WorkingSet<C::Storage>) -> Option<[u8; 32]> {
+    pub fn get_genesis_hash(&self, working_set: &mut WorkingSet<C::Storage>) -> Option<[u8; 32]> {
         self.genesis_hash.get(working_set)
     }
 
     /// Returns the transition in progress of the module.
-    pub fn in_progress_transition(
+    pub fn get_in_progress_transition(
         &self,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Option<TransitionInProgress<Cond>> {
@@ -34,7 +34,7 @@ impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
     }
 
     /// Returns the completed transition associated with the provided `transition_num`.
-    pub fn historical_transitions(
+    pub fn get_historical_transitions(
         &self,
         transition_num: u64,
         working_set: &mut WorkingSet<C::Storage>,

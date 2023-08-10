@@ -30,7 +30,7 @@ pub mod test {
         {
             let mut demo = create_new_demo(path);
 
-            StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config).unwrap();
+            StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
 
             let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
             let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
@@ -93,7 +93,7 @@ pub mod test {
             &election_admin_private_key,
         );
 
-        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config).unwrap();
+        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
 
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
 
@@ -154,7 +154,7 @@ pub mod test {
         {
             let mut demo = create_new_demo(path);
 
-            StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config).unwrap();
+            StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
 
             let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
             let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
@@ -213,7 +213,7 @@ pub mod test {
 
         let mut demo = create_new_demo(path);
 
-        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config).unwrap();
+        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
 
         let some_sequencer: [u8; 32] = [121; 32];
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);

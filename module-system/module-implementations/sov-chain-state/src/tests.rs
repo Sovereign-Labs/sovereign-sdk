@@ -34,7 +34,7 @@ fn test_simple_chain_state() {
     let mut working_set = WorkingSet::new(storage.clone());
 
     // Check the slot height before any changes to the state.
-    let initial_height: u64 = chain_state.slot_height(&mut working_set);
+    let initial_height: u64 = chain_state.get_slot_height(&mut working_set);
 
     assert_eq!(
         initial_height, INIT_HEIGHT,
@@ -54,13 +54,13 @@ fn test_simple_chain_state() {
     chain_state.begin_slot_hook(&slot_data, &mut working_set);
 
     // Check that the root hash has been stored correctly
-    let stored_root: [u8; 32] = chain_state.genesis_hash(&mut working_set).unwrap();
+    let stored_root: [u8; 32] = chain_state.get_genesis_hash(&mut working_set).unwrap();
     let init_root_hash = storage.get_state_root(&Default::default()).unwrap();
 
     assert_eq!(stored_root, init_root_hash, "Genesis hashes don't match");
 
     // Check that the slot height have been updated
-    let new_height_storage: u64 = chain_state.slot_height(&mut working_set);
+    let new_height_storage: u64 = chain_state.get_slot_height(&mut working_set);
 
     assert_eq!(
         new_height_storage,
@@ -70,7 +70,7 @@ fn test_simple_chain_state() {
 
     // Check that the new state transition is being stored
     let new_tx_in_progress: TransitionInProgress<TestValidityCond> = chain_state
-        .in_progress_transition(&mut working_set)
+        .get_in_progress_transition(&mut working_set)
         .unwrap();
 
     assert_eq!(
@@ -100,7 +100,7 @@ fn test_simple_chain_state() {
     chain_state.begin_slot_hook(&new_slot_data, &mut working_set);
 
     // Check that the slot height have been updated correctly
-    let new_height_storage: u64 = chain_state.slot_height(&mut working_set);
+    let new_height_storage: u64 = chain_state.get_slot_height(&mut working_set);
     assert_eq!(
         new_height_storage,
         INIT_HEIGHT + 2,
@@ -109,7 +109,7 @@ fn test_simple_chain_state() {
 
     // Check the transition in progress
     let new_tx_in_progress: TransitionInProgress<TestValidityCond> = chain_state
-        .in_progress_transition(&mut working_set)
+        .get_in_progress_transition(&mut working_set)
         .unwrap();
 
     assert_eq!(
@@ -123,7 +123,7 @@ fn test_simple_chain_state() {
 
     // Check the transition stored
     let last_tx_stored: StateTransitionId<TestValidityCond> = chain_state
-        .historical_transitions(INIT_HEIGHT + 1, &mut working_set)
+        .get_historical_transitions(INIT_HEIGHT + 1, &mut working_set)
         .unwrap();
 
     assert_eq!(

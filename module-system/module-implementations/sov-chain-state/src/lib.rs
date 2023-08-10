@@ -13,14 +13,13 @@ pub mod hooks;
 #[cfg(test)]
 pub mod tests;
 
-#[cfg(feature = "native")]
 /// The query interface with the module
+#[cfg(feature = "native")]
 pub mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
-use sov_rollup_interface::mocks::TestValidityCond;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
 use sov_state::WorkingSet;
 
@@ -32,13 +31,13 @@ pub struct StateTransitionId<Cond: ValidityCondition> {
     validity_condition: Cond,
 }
 
-impl StateTransitionId<TestValidityCond> {
+impl<Cond: ValidityCondition> StateTransitionId<Cond> {
     /// Creates a new state transition. Only available for testing as we only want to create
     /// new state transitions from existing [`TransitionInProgress`].
     pub fn new(
         da_block_hash: [u8; 32],
         post_state_root: [u8; 32],
-        validity_condition: TestValidityCond,
+        validity_condition: Cond,
     ) -> Self {
         Self {
             da_block_hash,
