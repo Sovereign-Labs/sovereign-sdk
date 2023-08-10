@@ -72,7 +72,7 @@ impl From<&EvmTransactionSignedEcRecovered> for TxEnv {
             data: Bytes::from(tx.input().to_vec()),
             chain_id: tx.chain_id(),
             nonce: Some(tx.nonce()),
-            //TODO
+            // TODO handle access list
             access_list: vec![],
         }
     }
@@ -99,7 +99,7 @@ impl TryFrom<RawEvmTransaction> for Transaction {
             r: tx.signature().r.into(),
             s: tx.signature().s.into(),
             transaction_type: Some(1u64.into()),
-            // TODO
+            // // TODO handle access list
             access_list: None,
             max_priority_fee_per_gas: tx.max_priority_fee_per_gas().map(From::from),
             max_fee_per_gas: Some(tx.max_fee_per_gas().into()),
@@ -190,6 +190,7 @@ pub fn prepare_call_env(request: CallRequest) -> TxEnv {
             .unwrap_or_default(),
         chain_id: request.chain_id.map(|c| c.as_u64()),
         nonce: request.nonce.map(|n| TryInto::<u64>::try_into(n).unwrap()),
+        // TODO handle access list
         access_list: Default::default(),
     }
 }

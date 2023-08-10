@@ -42,13 +42,13 @@ pub struct RawEvmTransaction {
     pub tx: Vec<u8>,
 }
 
-/// Ec recovered evm transaction.
+/// EC recovered evm transaction.
 pub struct EvmTransactionSignedEcRecovered {
     tx: RethTransactionSignedEcRecovered,
 }
 
 impl EvmTransactionSignedEcRecovered {
-    ///
+    /// Creates a new EvmTransactionSignedEcRecovered.
     pub fn new(tx: RethTransactionSignedEcRecovered) -> Self {
         Self { tx }
     }

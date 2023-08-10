@@ -3,7 +3,6 @@ pub use experimental::{get_ethereum_rpc, Ethereum};
 
 #[cfg(feature = "experimental")]
 pub mod experimental {
-
     use std::collections::HashMap;
     use std::sync::Mutex;
 
