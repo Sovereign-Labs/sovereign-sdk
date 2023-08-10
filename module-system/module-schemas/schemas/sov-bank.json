@@ -153,7 +153,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Freeze a token so that the supply is frozen",
+      "description": "Freezes a token so that the supply is frozen",
       "type": "object",
       "required": [
         "Freeze"
@@ -199,6 +199,7 @@
       }
     },
     "Coins": {
+      "description": "Structure that stores information specifying a given `amount` (type [`Amount`]) of coins stored at a `token_address` (type [`Context::Address`]).",
       "type": "object",
       "required": [
         "amount",
@@ -206,12 +207,18 @@
       ],
       "properties": {
         "amount": {
+          "description": "An `amount` of coins stored.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0.0
         },
         "token_address": {
-          "$ref": "#/definitions/Address"
+          "description": "The address where the tokens are stored.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/Address"
+            }
+          ]
         }
       }
     }
