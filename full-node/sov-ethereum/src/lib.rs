@@ -23,6 +23,7 @@ pub mod experimental {
     use sov_evm::evm::{EthAddress, RawEvmTransaction};
     use sov_modules_api::transaction::Transaction;
     use sov_modules_api::utils::to_jsonrpsee_error_object;
+    use sov_modules_api::EncodeCall;
 
     const GAS_PER_BYTE: usize = 120;
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
@@ -66,7 +67,11 @@ pub mod experimental {
                 .or_insert(0);
 
             let tx = CallMessage { tx: raw_tx };
-            let message = Runtime::<DefaultContext>::encode_evm_call(tx);
+            let message =
+                <Runtime<DefaultContext> as EncodeCall<sov_evm::Evm<DefaultContext>>>::encode_call(
+                    tx,
+                );
+
             let tx = Transaction::<DefaultContext>::new_signed_tx(
                 &self.tx_signer_prov_key,
                 message,

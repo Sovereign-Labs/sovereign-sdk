@@ -35,7 +35,6 @@ several parameters that specify its exact behavior. In order, these generics are
    native mode we just read values straight from disk.
 2. `Runtime`: a collection of modules which make up the rollup's public interface
 
-
 To implement your state transition function, you simply need to specify values for each of these fields.
 
 So, a typical app definition looks like this:
@@ -78,22 +77,25 @@ initialization code for each module which will get run at your rollup's genesis.
 allow your runtime to dispatch transactions and queries, and tell it which serialization scheme to use.
 We recommend borsh, since it's both fast and safe for hashing.
 
-### Implementing Hooks for the Runtime: 
+### Implementing Hooks for the Runtime:
+
 The next step is to implement `Hooks` for `MyRuntime`. Hooks are abstractions that allows for the injection of custom logic into the transaction processing pipeline.
 
 There are two kind of hooks:
 
 `TxHooks`, which has the following methods:
+
 1. `pre_dispatch_tx_hook`: Invoked immediately before each transaction is processed. This is a good time to apply stateful transaction verification, like checking the nonce.
 2. `post_dispatch_tx_hook`: Invoked immediately after each transaction is executed. This is a good place to perform any post-execution operations, like incrementing the nonce.
 
-`ApplyBlobHooks`, which has the following methods: 
+`ApplyBlobHooks`, which has the following methods:
+
 1. `begin_blob_hook `Invoked at the beginning of the `apply_blob` function, before the blob is deserialized into a group of transactions. This is a good time to ensure that the sequencer is properly bonded.
 2. `end_blob_hook` invoked at the end of the `apply_blob` function. This is a good place to reward sequencers.
 
 To use the `AppTemplate`, the runtime needs to provide implementation of these hooks which specifies what needs to happen at each of these four stages.
 
-In this demo, we only rely on two modules which need access to the hooks - `sov-accounts` and `sequencer-registry`. 
+In this demo, we only rely on two modules which need access to the hooks - `sov-accounts` and `sequencer-registry`.
 
 The `sov-accounts` module implements `TxHooks` because it needs to check and increment the sender nonce for every transaction.
 The `sequencer-registry` implements `ApplyBlobHooks` since it is responsible for managing the sequencer bond.
@@ -152,7 +154,6 @@ complete State Transition Function!
 Your modules implement rpc methods via the `rpc_gen` macro, in order to enable the full-node to expose them, annotate the `Runtime` with `expose_rpc`.
 In the example above, you can see how to use the `expose_rpc` macro on the `native` `Runtime`.
 
-
 ## Make Full Node Itegrations Simpler with the State Transition Runner:
 
 Now that we have an app, we want to be able to run it. For any custom state transition, your full node implementation is going to need a little
@@ -171,7 +172,6 @@ The State Transition Runner struct contains logic related to initialization and 
 1. `new` - which consumes all the dependencies need for running the rollup.
 2. `run` - which runs the rollup.
 3. `start_rpc_server` - which exposes an RPC server.
-
 
 ```rust
 let mut app: App<Risc0Verifier, jupiter::BlobWithSender> =

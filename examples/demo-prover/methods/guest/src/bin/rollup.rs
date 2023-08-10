@@ -2,16 +2,17 @@
 
 #![no_main]
 
-use const_rollup_config::ROLLUP_NAMESPACE_RAW;
+use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::create_zk_app_template;
 use demo_stf::ArrayWitness;
 use jupiter::types::NamespaceId;
-use jupiter::verifier::{CelestiaSpec, CelestiaVerifier};
+use jupiter::verifier::{CelestiaSpec, CelestiaVerifier, ChainValidityCondition};
 use jupiter::{BlobWithSender, CelestiaHeader};
 use risc0_adapter::guest::Risc0Guest;
 use risc0_zkvm::guest::env;
 use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
+use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::{StateTransition, ZkvmGuest};
 
@@ -44,13 +45,15 @@ pub fn main() {
     env::write(&"blobs have been read\n");
 
     // Step 2: Apply blobs
-    let mut app = create_zk_app_template::<Risc0Guest, BlobWithSender>(prev_state_root_hash);
+    let mut app = create_zk_app_template::<Risc0Guest, ChainValidityCondition, BlobWithSender>(
+        prev_state_root_hash,
+    );
 
     let witness: ArrayWitness = guest.read_from_host();
     env::write(&"Witness have been read\n");
 
     env::write(&"Applying slot...\n");
-    let result = app.apply_slot(witness, &mut blobs);
+    let result = app.apply_slot(witness, &header, &mut blobs);
 
     env::write(&"Slot has been applied\n");
 
@@ -68,6 +71,8 @@ pub fn main() {
         initial_state_root: prev_state_root_hash,
         final_state_root: result.state_root.0,
         validity_condition,
+        rewarded_address: SEQUENCER_DA_ADDRESS.to_vec(),
+        slot_hash: header.hash(),
     };
     env::commit(&output);
     env::write(&"new state root committed\n");

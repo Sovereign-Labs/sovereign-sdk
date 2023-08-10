@@ -42,8 +42,8 @@ impl TestSequencer {
         working_set: &mut WorkingSet<<C as Spec>::Storage>,
     ) -> RpcResult<sov_bank::BalanceResponse> {
         self.bank.balance_of(
-            self.sequencer_config.seq_rollup_address.clone(),
-            self.sequencer_config.coins_to_lock.token_address.clone(),
+            self.sequencer_config.seq_rollup_address,
+            self.sequencer_config.coins_to_lock.token_address,
             working_set,
         )
     }
@@ -56,7 +56,7 @@ impl TestSequencer {
     ) -> RpcResult<sov_bank::BalanceResponse> {
         self.bank.balance_of(
             user_address,
-            self.sequencer_config.coins_to_lock.token_address.clone(),
+            self.sequencer_config.coins_to_lock.token_address,
             working_set,
         )
     }
@@ -68,7 +68,7 @@ pub fn create_bank_config() -> (sov_bank::BankConfig<C>, <C as Spec>::Address) {
     let token_config = sov_bank::TokenConfig {
         token_name: "InitialToken".to_owned(),
         address_and_balances: vec![
-            (seq_address.clone(), INITIAL_BALANCE),
+            (seq_address, INITIAL_BALANCE),
             (generate_address(ANOTHER_SEQUENCER_KEY), INITIAL_BALANCE),
             (generate_address(UNKNOWN_SEQUENCER_KEY), INITIAL_BALANCE),
             (generate_address(LOW_FUND_KEY), 3),

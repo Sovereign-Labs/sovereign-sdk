@@ -21,8 +21,10 @@ members = [
     "module-system/sov-modules-api",
     "module-system/module-schemas",
     "module-system/utils/sov-first-read-last-write-cache",
+    "module-system/utils/sov-data-generators",
     "module-system/module-implementations/sov-accounts",
     "module-system/module-implementations/sov-bank",
+    "module-system/module-implementations/sov-chain-state", 
     "module-system/module-implementations/sov-blob-storage",
     "module-system/module-implementations/sov-evm",
     "module-system/module-implementations/sov-prover-incentives",
@@ -48,7 +50,8 @@ rust-version = "1.66"
 
 [workspace.dependencies]
 # Dependencies maintained by sovereign
-jmt = "0.6.0"
+# TODO: replace by release number once available on crates.io: tracking issue https://github.com/Sovereign-Labs/sovereign-sdk/issues/632
+jmt = { git = "https://github.com/penumbra-zone/jmt", commit = "46b4b00" }
 
 # External dependencies
 async-trait = "0.1.71"

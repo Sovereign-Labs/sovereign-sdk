@@ -6,6 +6,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::da::{BlockHeaderTrait, DaSpec};
+use crate::zk::ValidityCondition;
 
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer
 /// It is *not* part of the logic that is zk-proven.
@@ -21,7 +22,10 @@ pub trait DaService {
     type Spec: DaSpec;
 
     /// A DA layer block, possibly excluding some irrelevant information.
-    type FilteredBlock: SlotData<BlockHeader = <Self::Spec as DaSpec>::BlockHeader>;
+    type FilteredBlock: SlotData<
+        BlockHeader = <Self::Spec as DaSpec>::BlockHeader,
+        Cond = <Self::Spec as DaSpec>::ValidityCondition,
+    >;
 
     /// The error type for fallible methods.
     type Error: fmt::Debug + Send + Sync;
@@ -100,8 +104,14 @@ pub trait SlotData:
     /// For these fields, we only ever store their *serialized* representation in memory or on disk. Only a few special
     /// fields like `data_root` are stored in decoded form in the `CelestiaHeader` struct.
     type BlockHeader: BlockHeaderTrait;
+
+    /// The validity condition associated with the slot data.
+    type Cond: ValidityCondition;
+
     /// The canonical hash of the DA layer block.
     fn hash(&self) -> [u8; 32];
     /// The header of the DA layer block.
     fn header(&self) -> &Self::BlockHeader;
+    /// Get the validity condition set associated with the slot
+    fn validity_condition(&self) -> Self::Cond;
 }
