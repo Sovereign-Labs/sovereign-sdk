@@ -52,10 +52,7 @@ fn priority_sequencer_flow() {
     let regular_sequencer_da = MockAddress::from([30u8; 32]);
     let regular_sequencer_rollup = generate_address(REGULAR_SEQUENCER_KEY);
 
-    let bank_config = get_bank_config(
-        preferred_sequencer_rollup.clone(),
-        regular_sequencer_rollup.clone(),
-    );
+    let bank_config = get_bank_config(preferred_sequencer_rollup, regular_sequencer_rollup);
 
     let token_address = sov_bank::get_genesis_token_address::<C>(
         &bank_config.tokens[0].token_name,
@@ -155,10 +152,7 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
     let regular_sequencer_rollup = generate_address(REGULAR_SEQUENCER_KEY);
     let some_sequencer = MockAddress::from([40u8; 32]);
 
-    let bank_config = get_bank_config(
-        preferred_sequencer_rollup.clone(),
-        regular_sequencer_rollup.clone(),
-    );
+    let bank_config = get_bank_config(preferred_sequencer_rollup, regular_sequencer_rollup);
 
     let token_address = sov_bank::get_genesis_token_address::<C>(
         &bank_config.tokens[0].token_name,
@@ -226,10 +220,7 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
     let regular_sequencer_da = MockAddress::from([30u8; 32]);
     let regular_sequencer_rollup = generate_address(REGULAR_SEQUENCER_KEY);
 
-    let bank_config = get_bank_config(
-        preferred_sequencer_rollup.clone(),
-        regular_sequencer_rollup.clone(),
-    );
+    let bank_config = get_bank_config(preferred_sequencer_rollup, regular_sequencer_rollup);
 
     let token_address = sov_bank::get_genesis_token_address::<C>(
         &bank_config.tokens[0].token_name,
@@ -298,10 +289,7 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
     let regular_sequencer_da = MockAddress::from([30u8; 32]);
     let regular_sequencer_rollup = generate_address(REGULAR_SEQUENCER_KEY);
 
-    let bank_config = get_bank_config(
-        preferred_sequencer_rollup.clone(),
-        regular_sequencer_rollup.clone(),
-    );
+    let bank_config = get_bank_config(preferred_sequencer_rollup, regular_sequencer_rollup);
 
     let token_address = sov_bank::get_genesis_token_address::<C>(
         &bank_config.tokens[0].token_name,
@@ -309,7 +297,7 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
     );
 
     let sequencer_registry_config = SequencerConfig {
-        seq_rollup_address: preferred_sequencer_rollup.clone(),
+        seq_rollup_address: preferred_sequencer_rollup,
         seq_da_address: preferred_sequencer_da.as_ref().to_vec(),
         coins_to_lock: sov_bank::Coins {
             amount: LOCKED_AMOUNT,
