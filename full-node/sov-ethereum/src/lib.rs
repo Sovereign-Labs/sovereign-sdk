@@ -125,7 +125,7 @@ pub mod experimental {
             |parameters, ethereum| async move {
                 let data: Bytes = parameters.one().unwrap();
 
-                let raw_evm_tx = RawEvmTransaction { tx: data.to_vec() };
+                let raw_evm_tx = RawEvmTransaction { rlp: data.to_vec() };
                 let (tx_hash, raw_tx) = ethereum
                     .make_raw_tx(raw_evm_tx)
                     .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;

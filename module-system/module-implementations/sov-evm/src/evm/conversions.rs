@@ -95,12 +95,11 @@ impl TryFrom<RawEvmTransaction> for Transaction {
             gas_price: Some(tx.effective_gas_price(None).into()),
 
             input: EthBytes::from(tx.input().to_vec()),
-            // TODO
-            v: tx.signature().v(None).into(),
+            v: tx.signature().v(tx.chain_id()).into(),
             r: tx.signature().r.into(),
             s: tx.signature().s.into(),
             transaction_type: Some(U64::from(tx.tx_type() as u8)),
-            // // TODO handle access list
+            // TODO handle access list
             access_list: None,
             max_priority_fee_per_gas: tx.max_priority_fee_per_gas().map(From::from),
             max_fee_per_gas: Some(tx.max_fee_per_gas().into()),
