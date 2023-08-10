@@ -1,0 +1,37 @@
+[package]
+name = "sov-chain-state"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+publish = false
+resolver = "2"
+
+[dependencies]
+anyhow = { workspace = true }
+sov-modules-api = { path = "../../sov-modules-api", default-features = false }
+sov-modules-macros = { path = "../../sov-modules-macros" }
+sov-state = { path = "../../sov-state", default-features = false }
+sov-rollup-interface = { path = "../../../rollup-interface" }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+borsh = { workspace = true, features = ["rc"] }
+
+
+[dev-dependencies]
+sov-modules-api = { path = "../../sov-modules-api" }
+sov-bank = { path = "../sov-bank", default-features = false }
+sov-value-setter = { path = "../examples/sov-value-setter" }
+sov-state = { path = "../../sov-state", default-features = false }
+sov-modules-stf-template = { path = "../../sov-modules-stf-template" }
+sov-data-generators = { path = "../../utils/sov-data-generators" }
+tempfile = { workspace = true }
+
+[features]
+default = ["native"]
+serde = ["dep:serde", "dep:serde_json"]
+native = ["serde", "sov-modules-api/native"]

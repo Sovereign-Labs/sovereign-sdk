@@ -11,6 +11,7 @@ use prost::bytes::Buf;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlockHeaderTrait as BlockHeader, CountedBufReader};
+use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::AddressTrait;
 pub use tendermint::block::Header as TendermintHeader;
 use tendermint::block::Height;
@@ -29,7 +30,7 @@ use crate::pfb::{BlobTx, MsgPayForBlobs, Tx};
 use crate::shares::{read_varint, BlobIterator, BlobRefIterator, NamespaceGroup};
 use crate::utils::BoxError;
 use crate::verifier::address::CelestiaAddress;
-use crate::verifier::{TmHash, PFB_NAMESPACE};
+use crate::verifier::{ChainValidityCondition, TmHash, PFB_NAMESPACE};
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct MarshalledDataAvailabilityHeader {
@@ -300,6 +301,30 @@ impl BlockHeader for CelestiaHeader {
 
     fn hash(&self) -> Self::Hash {
         TmHash(self.header.hash())
+    }
+}
+
+/// We implement [`SlotData`] for [`CelestiaHeader`] in a similar fashion as for [`FilteredCelestiaBlock`]
+impl SlotData for CelestiaHeader {
+    type BlockHeader = CelestiaHeader;
+    type Cond = ChainValidityCondition;
+
+    fn hash(&self) -> [u8; 32] {
+        match self.header.hash() {
+            tendermint::Hash::Sha256(h) => h,
+            tendermint::Hash::None => unreachable!("tendermint::Hash::None should not be possible"),
+        }
+    }
+
+    fn header(&self) -> &Self::BlockHeader {
+        self
+    }
+
+    fn validity_condition(&self) -> ChainValidityCondition {
+        ChainValidityCondition {
+            prev_hash: *self.header().prev_hash().inner(),
+            block_hash: <Self as SlotData>::hash(self),
+        }
     }
 }
 

@@ -35,7 +35,7 @@ impl From<ReVmAccountInfo> for AccountInfo {
 impl From<BlockEnv> for ReVmBlockEnv {
     fn from(block_env: BlockEnv) -> Self {
         Self {
-            number: U256::from_le_bytes(block_env.number),
+            number: U256::from(block_env.number),
             coinbase: B160::from_slice(&block_env.coinbase),
             timestamp: U256::from_le_bytes(block_env.timestamp),
             // TODO: handle difficulty

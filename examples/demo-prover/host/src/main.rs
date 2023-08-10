@@ -6,7 +6,7 @@ use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
-use jupiter::verifier::RollupParams;
+use jupiter::verifier::{ChainValidityCondition, RollupParams};
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::{Risc0Host, Risc0Verifier};
 use serde::Deserialize;
@@ -54,11 +54,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let app: App<Risc0Verifier, jupiter::BlobWithSender> =
+    let mut app: App<Risc0Verifier, ChainValidityCondition, jupiter::BlobWithSender> =
         App::new(rollup_config.runner.storage.clone());
 
     let is_storage_empty = app.get_storage().is_empty();
-    let mut demo = app.stf;
 
     if is_storage_empty {
         let genesis_config = create_demo_genesis_config(
@@ -69,13 +68,15 @@ async fn main() -> Result<(), anyhow::Error> {
             &sequencer_private_key,
         );
         info!("Starting from empty storage, initialization chain");
-        demo.init_chain(genesis_config);
+        app.stf
+            .init_chain(genesis_config)
+            .expect("Impossible to initialize the chain");
     }
 
-    let mut prev_state_root = {
-        let res = demo.apply_slot(Default::default(), []);
-        res.state_root.0
-    };
+    let mut prev_state_root = app
+        .get_storage()
+        .get_state_root(&Default::default())
+        .expect("The storage needs to have a state root");
 
     for height in rollup_config.start_height.. {
         let mut host = Risc0Host::new(ROLLUP_ELF);
@@ -103,7 +104,9 @@ async fn main() -> Result<(), anyhow::Error> {
         host.write_to_guest(&completeness_proof);
         host.write_to_guest(&blobs);
 
-        let result = demo.apply_slot(Default::default(), &mut blobs);
+        let result = app
+            .stf
+            .apply_slot(Default::default(), &filtered_block, &mut blobs);
 
         host.write_to_guest(&result.witness);
 

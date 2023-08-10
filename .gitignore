@@ -7,3 +7,4 @@ target/
 .DS_Store
 
 demo_data/
+/.vscode/*
