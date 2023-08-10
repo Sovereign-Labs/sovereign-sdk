@@ -15,10 +15,10 @@
       "description": "Rlp encoded evm transaction.",
       "type": "object",
       "required": [
-        "tx"
+        "rlp"
       ],
       "properties": {
-        "tx": {
+        "rlp": {
           "description": "Rlp data.",
           "type": "array",
           "items": {

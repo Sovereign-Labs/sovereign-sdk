@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use ethereum_types::U64;
 use ethers_core::types::{Bytes as EthBytes, OtherFields, Transaction};
 use reth_primitives::{
     Bytes as RethBytes, TransactionSigned as RethTransactionSigned,
@@ -98,7 +99,7 @@ impl TryFrom<RawEvmTransaction> for Transaction {
             v: tx.signature().v(None).into(),
             r: tx.signature().r.into(),
             s: tx.signature().s.into(),
-            transaction_type: Some(1u64.into()),
+            transaction_type: Some(U64::from(tx.tx_type() as u8)),
             // // TODO handle access list
             access_list: None,
             max_priority_fee_per_gas: tx.max_priority_fee_per_gas().map(From::from),
@@ -143,7 +144,7 @@ impl TryFrom<RawEvmTransaction> for RethTransactionSignedNoHash {
     type Error = RawEvmTxConversionError;
 
     fn try_from(data: RawEvmTransaction) -> Result<Self, Self::Error> {
-        let data = RethBytes::from(data.tx);
+        let data = RethBytes::from(data.rlp);
         if data.is_empty() {
             return Err(RawEvmTxConversionError::EmptyRawTransactionData);
         }

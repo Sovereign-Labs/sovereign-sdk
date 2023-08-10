@@ -73,7 +73,7 @@ impl DevSigner {
         let signed = self.sign_transaction(reth_tx)?;
 
         Ok(RawEvmTransaction {
-            tx: signed.envelope_encoded().to_vec(),
+            rlp: signed.envelope_encoded().to_vec(),
         })
     }
 }

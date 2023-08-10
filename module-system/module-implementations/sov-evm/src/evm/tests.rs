@@ -9,12 +9,11 @@ use sov_state::{ProverStorage, WorkingSet};
 use super::db::EvmDb;
 use super::db_init::InitEvmDb;
 use super::executor;
-use crate::dev_signer::DevSigner;
 use crate::evm::test_helpers::{output, SimpleStorageContract};
 use crate::evm::transaction::BlockEnv;
 use crate::evm::{contract_address, AccountInfo};
+use crate::tests::dev_signer::DevSigner;
 use crate::Evm;
-
 type C = sov_modules_api::default_context::DefaultContext;
 
 #[test]

@@ -39,7 +39,7 @@ impl Default for BlockEnv {
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct RawEvmTransaction {
     /// Rlp data.
-    pub tx: Vec<u8>,
+    pub rlp: Vec<u8>,
 }
 
 /// EC recovered evm transaction.

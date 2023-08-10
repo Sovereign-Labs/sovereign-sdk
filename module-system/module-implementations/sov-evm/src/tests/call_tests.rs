@@ -6,11 +6,10 @@ use sov_modules_api::{Context, Module, PrivateKey, Spec};
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::call::CallMessage;
-use crate::dev_signer::DevSigner;
 use crate::evm::test_helpers::SimpleStorageContract;
 use crate::evm::EthAddress;
+use crate::tests::dev_signer::DevSigner;
 use crate::{AccountData, Evm, EvmConfig};
-
 type C = DefaultContext;
 
 fn create_messages(
