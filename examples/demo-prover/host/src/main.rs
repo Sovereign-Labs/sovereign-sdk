@@ -6,7 +6,7 @@ use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
-use jupiter::verifier::{RollupParams, ChainValidityCondition};
+use jupiter::verifier::{ChainValidityCondition, RollupParams};
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::{Risc0Host, Risc0Verifier};
 use serde::Deserialize;
@@ -68,11 +68,15 @@ async fn main() -> Result<(), anyhow::Error> {
             &sequencer_private_key,
         );
         info!("Starting from empty storage, initialization chain");
-        app.stf.init_chain(genesis_config).expect("Impossible to initialize the chain");
+        app.stf
+            .init_chain(genesis_config)
+            .expect("Impossible to initialize the chain");
     }
 
-    let mut prev_state_root = app.get_storage().get_state_root(&Default::default())
-         .expect("The storage needs to have a state root");
+    let mut prev_state_root = app
+        .get_storage()
+        .get_state_root(&Default::default())
+        .expect("The storage needs to have a state root");
 
     for height in rollup_config.start_height.. {
         let mut host = Risc0Host::new(ROLLUP_ELF);
@@ -100,7 +104,9 @@ async fn main() -> Result<(), anyhow::Error> {
         host.write_to_guest(&completeness_proof);
         host.write_to_guest(&blobs);
 
-        let result = app.stf.apply_slot(Default::default(), &filtered_block, &mut blobs);
+        let result = app
+            .stf
+            .apply_slot(Default::default(), &filtered_block, &mut blobs);
 
         host.write_to_guest(&result.witness);
 
