@@ -2,7 +2,7 @@
 //! DA layer.
 use core::fmt::Debug;
 use std::cmp::min;
-use std::io::{self, Read};
+use std::io::Read;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Buf;
