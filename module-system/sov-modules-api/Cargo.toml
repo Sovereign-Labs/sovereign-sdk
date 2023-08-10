@@ -31,7 +31,7 @@ schemars = { workspace = true, optional = true, features = [] }
 ed25519-dalek = { version = "1.0.1", default-features = false, features = ["alloc", "u64_backend"] }
 rand = { version = "0.7", optional = true }
 
-zk-cycle-utils = {path = "../../zk-cycle-utils", optional=true }
+zk-cycle-macros = {path = "../../utils/zk-cycle-macros", optional=true }
 risc0-zkvm = { version = "0.16", default-features = false, features = ["std"],optional=true }
 risc0-zkvm-platform = { version = "0.16",optional=true}
 
@@ -39,7 +39,7 @@ risc0-zkvm-platform = { version = "0.16",optional=true}
 serde_json = { workspace = true }
 
 [features]
-bench = ["zk-cycle-utils","risc0-zkvm","risc0-zkvm-platform"]
+bench = ["zk-cycle-macros","risc0-zkvm","risc0-zkvm-platform"]
 default = ["native", "macros"]
 native = ["sov-state/native", "rand", "hex", "schemars", "ed25519-dalek/default", "clap", "jsonrpsee", "macros", "sov-modules-macros/native"]
 macros = ["sov-modules-macros"]

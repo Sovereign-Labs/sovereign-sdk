@@ -2,7 +2,6 @@ use std::collections::HashMap;
 
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
-use risc0_zkvm_platform::syscall::SyscallName;
 
 pub static GLOBAL_HASHMAP: Lazy<Mutex<HashMap<String, (u64, u64)>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
@@ -31,10 +30,4 @@ pub fn metrics_callback(input: &[u8]) -> Vec<u8> {
     let met_tuple = deserialize_custom(input);
     add_value(met_tuple.0, met_tuple.1);
     vec![]
-}
-
-pub fn get_syscall_name() -> SyscallName {
-    let cycle_string = "cycle_metrics\0";
-    let bytes = cycle_string.as_bytes();
-    unsafe { SyscallName::from_bytes_with_nul(bytes.as_ptr()) }
 }

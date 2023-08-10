@@ -19,6 +19,7 @@ const-rollup-config = { path = "../../../const-rollup-config" }
 sov-modules-stf-template = {path = "../../../../module-system/sov-modules-stf-template", optional=true}
 sov-state = {path = "../../../../module-system/sov-state", default-features = false, optional=true}
 sov-modules-api = {path = "../../../../module-system/sov-modules-api", default-features = false, optional=true}
+sov-sequencer-registry = {path = "../../../../module-system/module-implementations/sov-sequencer-registry", default-features = false, optional=true}
 
 # TODO: Just for test
 tracing = "0.1.37"
@@ -51,4 +52,4 @@ lto = true
 opt-level = 3
 
 [features]
-bench=["jupiter/bench", "sov-modules-stf-template/bench", "sov-state/bench", "sov-modules-api/bench"]
+bench=["jupiter/bench", "sov-modules-stf-template/bench", "sov-state/bench", "sov-modules-api/bench", "sov-sequencer-registry/bench"]

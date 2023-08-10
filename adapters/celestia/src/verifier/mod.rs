@@ -13,7 +13,7 @@ pub mod proofs;
 
 use proofs::*;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_utils::cycle_tracker;
+use zk_cycle_macros::cycle_tracker;
 
 use self::address::CelestiaAddress;
 use crate::share_commit::recreate_commitment;

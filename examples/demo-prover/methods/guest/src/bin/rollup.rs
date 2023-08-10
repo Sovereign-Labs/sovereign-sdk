@@ -34,6 +34,7 @@ pub fn main() {
     env::write(&"Start guest\n");
     let guest = Risc0Guest;
 
+    #[cfg(feature = "bench")]
     let start_cycles = env::get_cycle_count();
     let prev_state_root_hash: [u8; 32] = guest.read_from_host();
     env::write(&"Prev root hash read\n");
@@ -83,6 +84,7 @@ pub fn main() {
 
     env::write(&"new state root committed\n");
 
+    #[cfg(feature = "bench")]
     let end_cycles = env::get_cycle_count();
 
     #[cfg(feature = "bench")]

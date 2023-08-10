@@ -11,7 +11,8 @@ members = [
     "examples/demo-nft-module",
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
-    "zk-cycle-utils",
+    "utils/zk-cycle-macros",
+    "utils/zk-cycle-utils",
     "full-node/sov-ethereum",
 
     "module-system/sov-modules-stf-template",

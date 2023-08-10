@@ -6,12 +6,11 @@ use risc0_zkvm::{
     Executor, ExecutorEnvBuilder, LocalExecutor, SegmentReceipt, Session, SessionReceipt,
 };
 use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
-
-#[cfg(feature = "bench")]
-use crate::metrics::get_syscall_name;
 #[cfg(feature = "bench")]
 use crate::metrics::metrics_callback;
 use crate::Risc0MethodId;
+#[cfg(feature = "bench")]
+use zk_cycle_utils::{get_syscall_name, get_syscall_name_cycles, cycle_count_callback};
 
 pub struct Risc0Host<'a> {
     env: RefCell<ExecutorEnvBuilder<'a>>,
@@ -28,6 +27,10 @@ impl<'a> Risc0Host<'a> {
         {
             let metrics_syscall_name = get_syscall_name();
             default_env.io_callback(metrics_syscall_name, metrics_callback);
+
+            let cycles_syscall_name = get_syscall_name_cycles();
+            default_env.io_callback(cycles_syscall_name, cycle_count_callback);
+
         }
 
         Self {

@@ -14,11 +14,9 @@ use sov_rollup_interface::zk::Zkvm;
 use sov_state::{StateCheckpoint, Storage};
 use tracing::info;
 pub use tx_verifier::RawTx;
-#[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_utils::cycle_tracker;
 
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
-extern crate risc0_zkvm;
+use zk_cycle_macros::{cycle_tracker};
 
 /// The receipts of all the transactions in a batch.
 #[derive(Debug, Copy, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -111,7 +109,6 @@ where
             .expect("Storage update must succeed");
     }
 
-    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn apply_slot<'a, I>(
         &mut self,
         witness: Self::Witness,
@@ -125,11 +122,13 @@ where
     where
         I: IntoIterator<Item = &'a mut B>,
     {
-        self.begin_slot(witness);
 
+        self.begin_slot(witness);
         let mut batch_receipts = vec![];
+
         for (blob_idx, blob) in blobs.into_iter().enumerate() {
             let batch_receipt = self.apply_blob(blob).unwrap_or_else(Into::into);
+
             info!(
                 "blob #{} with blob_hash 0x{} has been applied with #{} transactions, sequencer outcome {:?}",
                 blob_idx,
@@ -149,7 +148,6 @@ where
         }
 
         let (state_root, witness) = self.end_slot();
-
         SlotResult {
             state_root,
             batch_receipts,

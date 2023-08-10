@@ -25,7 +25,7 @@ risc0-adapter = { path = "../../../adapters/risc0" }
 const-rollup-config = { path = "../../const-rollup-config" }
 sov-modules-api = { path = "../../../module-system/sov-modules-api", features = ["native"] }
 sov-state = { path = "../../../module-system/sov-state", features = ["native"] }
-zk-cycle-utils = { path = "../../../zk-cycle-utils", optional=true }
+zk-cycle-macros = { path = "../../../utils/zk-cycle-macros", optional=true }
 methods = { path = "../methods" }
 
 
@@ -41,5 +41,5 @@ name = "prover_bench"
 harness = false
 
 [features]
-bench = ["risc0-adapter/bench", "zk-cycle-utils/bench", "methods/bench"]
+bench = ["risc0-adapter/bench", "zk-cycle-macros/bench", "methods/bench"]
 
