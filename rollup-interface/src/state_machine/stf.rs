@@ -114,7 +114,8 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     type Condition: ValidityCondition;
 
     /// Perform one-time initialization for the genesis block and returns the resulting root hash wrapped in a result.
-    fn init_chain(&mut self, params: Self::InitialState) -> anyhow::Result<Self::StateRoot>;
+    /// If the init chain fails we panic.
+    fn init_chain(&mut self, params: Self::InitialState) -> Self::StateRoot;
 
     /// Called at each **DA-layer block** - whether or not that block contains any
     /// data relevant to the rollup.
@@ -129,12 +130,6 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     /// which is why we use a generic here instead of an associated type.
     ///
     /// Commits state changes to the database
-    ///
-    /// For now, an error can be returned if the begin slot hook returns an error. In that case
-    /// the error raised gets propagated to that level.
-    ///
-    /// We allow type complexity for now as the type is completely derived from the trait's associated types
-    /// and the trait's associated types are already complex enough.
     fn apply_slot<'a, I, Data>(
         &mut self,
         witness: Self::Witness,

@@ -15,7 +15,7 @@ impl<Ctx: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<Ctx, 
         slot: &impl SlotData<Cond = Cond>,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) {
-        if self.genesis_hash(working_set).is_none() {
+        if self.genesis_hash.get(working_set).is_none() {
             // The genesis hash is not set, hence this is the
             // first transition right after the genesis block
             self.genesis_hash.set(

@@ -108,7 +108,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let _prev_state_root = {
         // Check if the rollup has previously been initialized
         let prev_state_root = demo.init_chain(demo_genesis_config);
-        prev_state_root.unwrap()
+        prev_state_root
     };
 
     // data generation

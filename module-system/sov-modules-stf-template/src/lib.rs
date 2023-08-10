@@ -117,7 +117,7 @@ where
 
     type Condition = Cond;
 
-    fn init_chain(&mut self, params: Self::InitialState) -> anyhow::Result<jmt::RootHash> {
+    fn init_chain(&mut self, params: Self::InitialState) -> jmt::RootHash {
         let mut working_set = StateCheckpoint::new(self.current_storage.clone()).to_revertable();
 
         self.runtime
@@ -130,7 +130,7 @@ where
             .validate_and_commit(log, &witness)
             .expect("Storage update must succeed");
 
-        Ok(jmt::RootHash(genesis_hash))
+        jmt::RootHash(genesis_hash)
     }
 
     fn apply_slot<'a, I, Data>(

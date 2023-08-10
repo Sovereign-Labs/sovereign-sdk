@@ -73,7 +73,7 @@ where
             // Check if the rollup has previously been initialized
             if should_init_chain {
                 info!("No history detected. Initializing chain...");
-                let ret_hash = app.init_chain(genesis_config)?;
+                let ret_hash = app.init_chain(genesis_config);
                 info!("Chain initialization is done.");
                 ret_hash
             } else {
