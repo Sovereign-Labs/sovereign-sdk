@@ -68,9 +68,7 @@ async fn main() -> Result<(), anyhow::Error> {
             &sequencer_private_key,
         );
         info!("Starting from empty storage, initialization chain");
-        app.stf
-            .init_chain(genesis_config)
-            .expect("Impossible to initialize the chain");
+        app.stf.init_chain(genesis_config);
     }
 
     let mut prev_state_root = app

@@ -67,7 +67,7 @@ fn test_stf() {
     let data = TestBlock::default();
     let mut blobs = [test_blob];
 
-    StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::init_chain(stf, ()).unwrap();
+    StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::init_chain(stf, ());
 
     let result = StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::apply_slot(
         stf,

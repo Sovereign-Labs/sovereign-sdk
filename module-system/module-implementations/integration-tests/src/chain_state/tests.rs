@@ -41,9 +41,7 @@ fn test_simple_value_setter_with_chain_state() {
     let admin_pub_key = value_setter_messages.messages[0].admin.default_address();
 
     // Genesis
-    let init_root_hash = app_template
-        .init_chain(create_demo_genesis_config(admin_pub_key))
-        .unwrap();
+    let init_root_hash = app_template.init_chain(create_demo_genesis_config(admin_pub_key));
 
     const MOCK_SEQUENCER_DA_ADDRESS: [u8; 32] = [1_u8; 32];
 
@@ -69,7 +67,7 @@ fn test_simple_value_setter_with_chain_state() {
     let new_height_storage: u64 = app_template
         .runtime
         .chain_state
-        .slot_height(&mut working_set);
+        .get_slot_height(&mut working_set);
 
     assert_eq!(new_height_storage, 0, "The initial height was not computed");
 
@@ -93,18 +91,18 @@ fn test_simple_value_setter_with_chain_state() {
         .get_state_root(&Default::default());
 
     // Check that the root hash has been stored correctly
-    let stored_root: [u8; 32] = chain_state_ref.genesis_hash(&mut working_set).unwrap();
+    let stored_root: [u8; 32] = chain_state_ref.get_genesis_hash(&mut working_set).unwrap();
 
     assert_eq!(stored_root, init_root_hash.0, "Root hashes don't match");
 
     // Check the slot height
-    let new_height_storage: u64 = chain_state_ref.slot_height(&mut working_set);
+    let new_height_storage: u64 = chain_state_ref.get_slot_height(&mut working_set);
 
     assert_eq!(new_height_storage, 1, "The new height did not update");
 
     // Check the tx in progress
     let new_tx_in_progress: TransitionInProgress<TestValidityCond> = chain_state_ref
-        .in_progress_transition(&mut working_set)
+        .get_in_progress_transition(&mut working_set)
         .unwrap();
 
     assert_eq!(
@@ -140,17 +138,17 @@ fn test_simple_value_setter_with_chain_state() {
     let chain_state_ref = &app_template.runtime.chain_state;
 
     // Check that the root hash has been stored correctly
-    let stored_root: [u8; 32] = chain_state_ref.genesis_hash(&mut working_set).unwrap();
+    let stored_root: [u8; 32] = chain_state_ref.get_genesis_hash(&mut working_set).unwrap();
 
     assert_eq!(stored_root, init_root_hash.0, "Root hashes don't match");
 
     // Check the slot height
-    let new_height_storage: u64 = chain_state_ref.slot_height(&mut working_set);
+    let new_height_storage: u64 = chain_state_ref.get_slot_height(&mut working_set);
     assert_eq!(new_height_storage, 2, "The new height did not update");
 
     // Check the tx in progress
     let new_tx_in_progress: TransitionInProgress<TestValidityCond> = chain_state_ref
-        .in_progress_transition(&mut working_set)
+        .get_in_progress_transition(&mut working_set)
         .unwrap();
 
     assert_eq!(
@@ -160,7 +158,7 @@ fn test_simple_value_setter_with_chain_state() {
     );
 
     let last_tx_stored: StateTransitionId<TestValidityCond> = chain_state_ref
-        .historical_transitions(1, &mut working_set)
+        .get_historical_transitions(1, &mut working_set)
         .unwrap();
 
     assert_eq!(

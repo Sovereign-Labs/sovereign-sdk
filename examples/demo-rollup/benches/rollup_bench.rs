@@ -57,11 +57,8 @@ fn rollup_bench(_bench: &mut Criterion) {
         &sequencer_private_key,
         &sequencer_private_key,
     );
-    let _prev_state_root = {
-        // Check if the rollup has previously been initialized
-        let prev_state_root = demo.init_chain(demo_genesis_config);
-        prev_state_root.unwrap()
-    };
+
+    demo.init_chain(demo_genesis_config);
 
     // data generation
     let mut blobs = vec![];
