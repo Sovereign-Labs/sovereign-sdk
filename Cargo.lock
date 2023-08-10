@@ -1302,6 +1302,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "serde",
+ "sov-data-generators",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
@@ -1334,6 +1335,7 @@ dependencies = [
  "serde_json",
  "sov-accounts",
  "sov-bank",
+ "sov-data-generators",
  "sov-election",
  "sov-evm",
  "sov-modules-api",
@@ -2891,10 +2893,15 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "sov-chain-state",
+ "sov-data-generators",
  "sov-modules-api",
+ "sov-modules-macros",
+ "sov-modules-stf-template",
  "sov-rollup-interface",
  "sov-schema-db",
  "sov-state",
+ "sov-value-setter",
  "tempfile",
 ]
 
@@ -2948,11 +2955,11 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 [[package]]
 name = "jmt"
 version = "0.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e1a302f0defd323b833c9848c20ab40c3156128f50d7bf8eebeed2ef58167258"
+source = "git+https://github.com/penumbra-zone/jmt#46b4b0042f66506536097d689ac2201e3e430afd"
 dependencies = [
  "anyhow",
  "borsh",
+ "digest 0.10.7",
  "hashbrown 0.13.2",
  "hex",
  "ics23",
@@ -6245,6 +6252,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-chain-state"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "jsonrpsee 0.18.2",
+ "serde",
+ "serde_json",
+ "sov-bank",
+ "sov-data-generators",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-modules-stf-template",
+ "sov-rollup-interface",
+ "sov-state",
+ "sov-value-setter",
+ "tempfile",
+]
+
+[[package]]
 name = "sov-cli"
 version = "0.1.0"
 dependencies = [
@@ -6255,6 +6282,21 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
+]
+
+[[package]]
+name = "sov-data-generators"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "proptest",
+ "sov-bank",
+ "sov-election",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-rollup-interface",
+ "sov-state",
+ "sov-value-setter",
 ]
 
 [[package]]
@@ -6467,6 +6509,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
+ "thiserror",
  "tracing",
 ]
 

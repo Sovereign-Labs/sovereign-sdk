@@ -1,10 +1,6 @@
 #[cfg(feature = "native")]
-use crate::default_context::DefaultContext;
-#[cfg(feature = "native")]
-use crate::default_signature::private_key::DefaultPrivateKey;
+use crate::PrivateKey;
 use crate::{Context, Signature};
-#[cfg(feature = "native")]
-use crate::{PrivateKey, Spec};
 
 /// A Transaction object that is compatible with the module-system/sov-default-stf.
 #[derive(Debug, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
@@ -45,9 +41,9 @@ impl<C: Context> Transaction<C> {
 }
 
 #[cfg(feature = "native")]
-impl Transaction<DefaultContext> {
+impl<C: Context> Transaction<C> {
     /// New signed transaction.
-    pub fn new_signed_tx(priv_key: &DefaultPrivateKey, mut message: Vec<u8>, nonce: u64) -> Self {
+    pub fn new_signed_tx(priv_key: &C::PrivateKey, mut message: Vec<u8>, nonce: u64) -> Self {
         // Since we own the message already, try to add the serialized nonce in-place.
         // This lets us avoid a copy if the message vec has at least 8 bytes of extra capacity.
         let orignal_length = message.len();
@@ -69,9 +65,9 @@ impl Transaction<DefaultContext> {
 
     /// New transaction.
     pub fn new(
-        pub_key: <DefaultContext as Spec>::PublicKey,
+        pub_key: C::PublicKey,
         message: Vec<u8>,
-        signature: <DefaultContext as Spec>::Signature,
+        signature: C::Signature,
         nonce: u64,
     ) -> Self {
         Self {

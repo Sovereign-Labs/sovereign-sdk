@@ -24,7 +24,6 @@ serde = { workspace = true }
 bytes = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
 digest = { workspace = true }
-
 sha2 = { workspace = true, optional = true }
 
 anyhow = { workspace = true }

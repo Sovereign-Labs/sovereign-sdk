@@ -1,4 +1,6 @@
 use sov_rollup_interface::da::BlobReaderTrait;
+use sov_rollup_interface::services::da::SlotData;
+use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::WorkingSet;
 
 use crate::transaction::Transaction;
@@ -49,4 +51,17 @@ pub trait ApplyBlobHooks {
         result: Self::BlobResult,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()>;
+}
+
+/// Hooks that execute during the `StateTransitionFunction::begin_slot` and `end_slot` functions.
+pub trait SlotHooks<Condition: ValidityCondition> {
+    type Context: Context;
+
+    fn begin_slot_hook(
+        &self,
+        slot_data: &impl SlotData<Cond = Condition>,
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    );
+
+    fn end_slot_hook(&self, working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>);
 }

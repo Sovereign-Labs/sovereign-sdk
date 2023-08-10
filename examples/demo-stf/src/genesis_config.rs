@@ -3,7 +3,7 @@ use sov_election::ElectionConfig;
 use sov_evm::{AccountData, EvmConfig, SpecId};
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::test_utils::generate_address;
+use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Context, PrivateKey, PublicKey};
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;

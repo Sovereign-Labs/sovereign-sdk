@@ -13,6 +13,7 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
+thiserror = { workspace = true }
 borsh = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }

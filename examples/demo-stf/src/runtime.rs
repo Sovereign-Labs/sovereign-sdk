@@ -9,10 +9,12 @@ use sov_election::{ElectionRpcImpl, ElectionRpcServer};
 use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
+use sov_rollup_interface::zk::ValidityCondition;
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 #[cfg(feature = "native")]
@@ -87,4 +89,24 @@ pub struct Runtime<C: Context> {
     pub evm: sov_evm::Evm<C>,
 }
 
-impl<C: Context> sov_modules_stf_template::Runtime<C> for Runtime<C> {}
+impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for Runtime<C> {
+    type Context = C;
+
+    fn begin_slot_hook(
+        &self,
+        _slot_data: &impl sov_rollup_interface::services::da::SlotData,
+        _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+    ) {
+    }
+
+    fn end_slot_hook(
+        &self,
+        _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+    ) {
+    }
+}
+
+impl<C: Context, Cond: ValidityCondition> sov_modules_stf_template::Runtime<C, Cond>
+    for Runtime<C>
+{
+}
