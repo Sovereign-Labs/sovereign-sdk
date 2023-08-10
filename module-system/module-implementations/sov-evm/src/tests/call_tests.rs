@@ -18,8 +18,6 @@ fn create_messages(
     set_arg: u32,
     dev_signer: DevSigner,
 ) -> Vec<CallMessage> {
-    println!("Addr {:?}", hex::encode(dev_signer.address));
-
     let mut transactions = Vec::default();
     let contract = SimpleStorageContract::new();
 
