@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
 use std::io::Read;
 use std::marker::PhantomData;
 
@@ -7,14 +9,20 @@ use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{BatchReceipt, SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 
+/// An implementation of the
+/// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
+/// that is specifically designed to check if someone knows a preimage of a specific hash.
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub struct CheckHashPreimageStf<Cond> {
     phantom_data: PhantomData<Cond>,
 }
 
+/// Outcome of the apply_slot method.
 #[derive(serde::Serialize, serde::Deserialize, Clone, Debug, PartialEq, Eq)]
-pub enum ApplyBlobResult {
+pub enum ApplySlotResult {
+    /// Incorrect hash preimage was posted on the DA.
     Failure,
+    /// Correct hash preimage was posted on the DA.
     Success,
 }
 
@@ -31,7 +39,7 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
     type TxReceiptContents = ();
 
     // This is the type that will be returned as a result of `apply_blob`.
-    type BatchReceiptContents = ApplyBlobResult;
+    type BatchReceiptContents = ApplySlotResult;
 
     // This data is produced during actual batch execution or validated with proof during verification.
     // However, in this tutorial, we won't use it.
@@ -82,9 +90,9 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
             ];
 
             let result = if hash == desired_hash {
-                ApplyBlobResult::Success
+                ApplySlotResult::Success
             } else {
-                ApplyBlobResult::Failure
+                ApplySlotResult::Failure
             };
 
             // Return the `BatchReceipt`

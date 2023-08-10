@@ -1,12 +1,13 @@
 use anyhow::Result;
-use revm::primitives::CfgEnv;
+use revm::primitives::{CfgEnv, U256};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
-use crate::evm::contract_address;
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
-use crate::evm::transaction::EvmTransaction;
+use crate::evm::transaction::{BlockEnv, EvmTransaction};
+use crate::evm::{contract_address, EvmChainCfg};
+use crate::experimental::SpecIdWrapper;
 use crate::{Evm, TransactionReceipt};
 
 #[cfg_attr(
@@ -28,9 +29,10 @@ impl<C: sov_modules_api::Context> Evm<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/515
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/516
-        let cfg_env = CfgEnv::default();
+
         let block_env = self.block_env.get(working_set).unwrap_or_default();
+        let cfg = self.cfg.get(working_set).unwrap_or_default();
+        let cfg_env = get_cfg_env(&block_env, cfg, None);
         self.transactions.set(&tx.hash, &tx, working_set);
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
@@ -65,5 +67,38 @@ impl<C: sov_modules_api::Context> Evm<C> {
             .set(&receipt.transaction_hash, &receipt, working_set);
 
         Ok(CallResponse::default())
+    }
+}
+
+/// Get cfg env for a given block number
+/// Returns correct config depending on spec for given block number
+/// Copies context dependent values from template_cfg or default if not provided
+pub(crate) fn get_cfg_env(
+    block_env: &BlockEnv,
+    cfg: EvmChainCfg,
+    template_cfg: Option<CfgEnv>,
+) -> CfgEnv {
+    CfgEnv {
+        chain_id: U256::from(cfg.chain_id),
+        limit_contract_code_size: cfg.limit_contract_code_size,
+        spec_id: get_spec_id(cfg.spec, block_env.number).into(),
+        // disable_gas_refund: !cfg.gas_refunds, // option disabled for now, we could add if needed
+        ..template_cfg.unwrap_or_default()
+    }
+}
+
+/// Get spec id for a given block number
+/// Returns the first spec id defined for block >= block_number
+pub(crate) fn get_spec_id(spec: Vec<(u64, SpecIdWrapper)>, block_number: u64) -> SpecIdWrapper {
+    match spec.binary_search_by(|&(k, _)| k.cmp(&block_number)) {
+        Ok(index) => spec[index].1,
+        Err(index) => {
+            if index > 0 {
+                spec[index - 1].1
+            } else {
+                // this should never happen as we cover this in genesis
+                panic!("EVM spec must start from block 0")
+            }
+        }
     }
 }
