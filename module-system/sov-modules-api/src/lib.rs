@@ -10,7 +10,6 @@ pub mod hooks;
 mod prefix;
 mod response;
 mod serde_address;
-pub mod test_utils;
 #[cfg(test)]
 mod tests;
 pub mod transaction;
@@ -46,7 +45,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub use clap;
 #[cfg(feature = "native")]
 pub use dispatch::CliWallet;
-pub use dispatch::{DispatchCall, Genesis};
+pub use dispatch::{DispatchCall, EncodeCall, Genesis};
 pub use error::Error;
 pub use prefix::Prefix;
 pub use response::CallResponse;
@@ -66,7 +65,7 @@ impl AsRef<[u8]> for Address {
 impl AddressTrait for Address {}
 
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
-#[derive(PartialEq, Clone, Eq, borsh::BorshDeserialize, borsh::BorshSerialize, Hash)]
+#[derive(PartialEq, Clone, Copy, Eq, borsh::BorshDeserialize, borsh::BorshSerialize, Hash)]
 pub struct Address {
     addr: [u8; 32],
 }
@@ -421,7 +420,7 @@ impl<'a, C: Context> ModuleVisitor<'a, C> {
 }
 
 /// Sorts ModuleInfo objects by their dependencies
-pub fn sort_modules_by_dependencies<C: Context>(
+fn sort_modules_by_dependencies<C: Context>(
     modules: Vec<&dyn ModuleInfo<Context = C>>,
 ) -> Result<Vec<&dyn ModuleInfo<Context = C>>, anyhow::Error> {
     let mut module_visitor = ModuleVisitor::<C>::new();
@@ -446,7 +445,8 @@ where
     let mut value_map = HashMap::new();
 
     for module in module_value_tuples {
-        value_map.insert(module.0.address(), module.1);
+        let prev_entry = value_map.insert(module.0.address(), module.1);
+        anyhow::ensure!(prev_entry.is_none(), "Duplicate module address! Only one instance of each module is allowed in a given runtime. Module with address {} is duplicated", module.0.address());
     }
 
     let mut sorted_values = Vec::new();

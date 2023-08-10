@@ -24,6 +24,9 @@ pub trait DaSpec {
     /// The transaction type used by the DA layer.
     type BlobTransaction: BlobReaderTrait;
 
+    /// Any conditions imposed by the DA layer which need to be checked outside of the SNARK
+    type ValidityCondition: ValidityCondition;
+
     /// A proof that each tx in a set of blob transactions is included in a given block.
     type InclusionMultiProof: Serialize + DeserializeOwned;
 
@@ -52,9 +55,6 @@ pub trait DaVerifier {
     /// TODO: Should we add `std::Error` bound so it can be `()?` ?
     type Error: Debug;
 
-    /// Any conditions imposed by the DA layer which need to be checked outside of the SNARK
-    type ValidityCondition: ValidityCondition;
-
     /// Create a new da verifier with the given chain parameters
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self;
 
@@ -65,7 +65,7 @@ pub trait DaVerifier {
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
         inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
         completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
-    ) -> Result<Self::ValidityCondition, Self::Error>;
+    ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error>;
 }
 
 /// [`AccumulatorStatus`] is a wrapper around an accumulator vector that specifies
@@ -116,6 +116,11 @@ impl<B: Buf> CountedBufReader<B> {
     /// Getter: returns a reference to an accumulator of the blob data read by the rollup
     pub fn accumulator(&self) -> &Accumulator {
         &self.accumulator
+    }
+
+    /// Contains the total length of the data (length already read + length remaining)
+    pub fn total_len(&self) -> usize {
+        self.inner.remaining() + self.counter
     }
 }
 
@@ -172,10 +177,8 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
     /// This function returns a mutable reference to the blob data
     fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data>;
 
-    /// The raw data of the blob. For example, the "calldata" of an Ethereum rollup transaction
-    /// This function clones the data of the blob to an external BufWithCounter
-    ///
-    /// This function returns a simple reference to the blob data
+    /// Returns a reference to a `CountedBufReader`, which allows the caller to re-read
+    /// any data read so far, but not to advance the buffer
     fn data(&self) -> &CountedBufReader<Self::Data>;
 
     /// Returns the hash of the blob. If not provided with a hint, it is computed by hashing the blob data

@@ -2,6 +2,7 @@ use std::env;
 use std::sync::Arc;
 
 use anyhow::Context;
+use borsh::{BorshDeserialize, BorshSerialize};
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{App, DefaultContext, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
@@ -10,13 +11,15 @@ use jupiter::da_service::CelestiaService;
 #[cfg(feature = "experimental")]
 use jupiter::da_service::DaServiceConfig;
 use jupiter::types::NamespaceId;
-use jupiter::verifier::RollupParams;
+use jupiter::verifier::{ChainValidityCondition, RollupParams};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::get_ethereum_rpc;
 use sov_modules_stf_template::{SequencerOutcome, TxEffect};
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::zk::ValidityConditionChecker;
 use sov_sequencer::get_sequencer_rpc;
 use sov_state::storage::Storage;
 use sov_stf_runner::{from_toml_path, get_ledger_rpc, RollupConfig, StateTransitionRunner};
@@ -73,6 +76,23 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
     )
 }
 
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
+pub struct CelestiaChainChecker {
+    current_block_hash: [u8; 32],
+}
+
+impl ValidityConditionChecker<ChainValidityCondition> for CelestiaChainChecker {
+    type Error = anyhow::Error;
+
+    fn check(&mut self, condition: &ChainValidityCondition) -> Result<(), anyhow::Error> {
+        anyhow::ensure!(
+            condition.block_hash == self.current_block_hash,
+            "Invalid block hash"
+        );
+        Ok(())
+    }
+}
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
@@ -101,7 +121,7 @@ async fn main() -> Result<(), anyhow::Error> {
     )
     .await;
 
-    let mut app: App<Risc0Verifier, jupiter::BlobWithSender> =
+    let mut app: App<Risc0Verifier, ChainValidityCondition, jupiter::BlobWithSender> =
         App::new(rollup_config.runner.storage.clone());
 
     let storage = app.get_storage();
@@ -135,7 +155,11 @@ async fn main() -> Result<(), anyhow::Error> {
 
 fn register_sequencer<DA>(
     da_service: DA,
-    demo_runner: &mut App<Risc0Verifier, jupiter::BlobWithSender>,
+    demo_runner: &mut App<
+        Risc0Verifier,
+        <DA::Spec as DaSpec>::ValidityCondition,
+        jupiter::BlobWithSender,
+    >,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error>
 where

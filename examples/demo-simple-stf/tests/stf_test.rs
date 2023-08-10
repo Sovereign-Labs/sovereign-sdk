@@ -1,8 +1,8 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use demo_simple_stf::{ApplyBlobResult, CheckHashPreimageStf};
-use sov_rollup_interface::mocks::{MockZkvm, TestBlob};
+use demo_simple_stf::{ApplySlotResult, CheckHashPreimageStf};
+use sov_rollup_interface::mocks::{MockZkvm, TestBlob, TestBlock, TestValidityCond};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::AddressTrait;
 
@@ -62,16 +62,21 @@ fn test_stf() {
     let preimage = vec![0; 32];
 
     let test_blob = TestBlob::<DaAddress>::new(preimage, address, [0; 32]);
-    let stf = &mut CheckHashPreimageStf {};
+    let stf = &mut CheckHashPreimageStf::<TestValidityCond>::default();
 
+    let data = TestBlock::default();
     let mut blobs = [test_blob];
 
-    StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::init_chain(stf, ());
+    StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::init_chain(stf, ()).unwrap();
 
-    let result =
-        StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::apply_slot(stf, (), &mut blobs);
+    let result = StateTransitionFunction::<MockZkvm, TestBlob<DaAddress>>::apply_slot(
+        stf,
+        (),
+        &data,
+        &mut blobs,
+    );
 
     assert_eq!(1, result.batch_receipts.len());
     let receipt = result.batch_receipts[0].clone();
-    assert_eq!(receipt.inner, ApplyBlobResult::Success);
+    assert_eq!(receipt.inner, ApplySlotResult::Success);
 }
