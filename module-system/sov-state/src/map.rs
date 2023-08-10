@@ -52,6 +52,7 @@ where
     /// We can use as argument any type that can be borrowed by the key.
     ///
     /// ```rust
+    /// use sov_state::{StateMap, Storage, WorkingSet};
     ///
     /// fn foo<S>(map: StateMap<Vec<u8>, u64>, key: &[u8], ws: &mut WorkingSet<S>) -> Option<u64>
     /// where
@@ -59,7 +60,7 @@ where
     /// {
     ///     // we perform the `get` with a slice, and not the `Vec`. it is so because `Vec` borrows
     ///     // `[T]`.
-    ///     map.get(&key[..], ws)
+    ///     map.get(key, ws)
     /// }
     /// ```
     ///
@@ -67,6 +68,7 @@ where
     /// common types that will
     ///
     /// ```rust
+    /// use sov_state::{StateMap, Storage, WorkingSet};
     ///
     /// fn foo<S>(map: StateMap<Vec<u8>, u64>, key: [u8; 32], ws: &mut WorkingSet<S>) -> Option<u64>
     /// where
@@ -115,7 +117,7 @@ where
         Q: BorshSerialize + ?Sized,
         K: Borrow<Q>,
     {
-        self.remove(&key, working_set).ok_or_else(|| {
+        self.remove(key, working_set).ok_or_else(|| {
             Error::MissingValue(self.prefix().clone(), StorageKey::new(self.prefix(), &key))
         })
     }
