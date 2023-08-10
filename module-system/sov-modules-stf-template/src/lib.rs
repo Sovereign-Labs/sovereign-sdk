@@ -138,13 +138,11 @@ where
         witness: Self::Witness,
         slot_data: &Data,
         blobs: I,
-    ) -> anyhow::Result<
-        SlotResult<
-            Self::StateRoot,
-            Self::BatchReceiptContents,
-            Self::TxReceiptContents,
-            Self::Witness,
-        >,
+    ) -> SlotResult<
+        Self::StateRoot,
+        Self::BatchReceiptContents,
+        Self::TxReceiptContents,
+        Self::Witness,
     >
     where
         I: IntoIterator<Item = &'a mut B>,
@@ -175,11 +173,11 @@ where
 
         let (state_root, witness) = self.end_slot();
 
-        Ok(SlotResult {
+        SlotResult {
             state_root,
             batch_receipts,
             witness,
-        })
+        }
     }
 
     fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot> {

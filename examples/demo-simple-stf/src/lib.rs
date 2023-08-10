@@ -50,13 +50,11 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
         _witness: Self::Witness,
         _slot_data: &Data,
         blobs: I,
-    ) -> anyhow::Result<
-        SlotResult<
-            Self::StateRoot,
-            Self::BatchReceiptContents,
-            Self::TxReceiptContents,
-            Self::Witness,
-        >,
+    ) -> SlotResult<
+        Self::StateRoot,
+        Self::BatchReceiptContents,
+        Self::TxReceiptContents,
+        Self::Witness,
     >
     where
         I: IntoIterator<Item = &'a mut B>,
@@ -97,11 +95,11 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
             });
         }
 
-        Ok(SlotResult {
+        SlotResult {
             state_root: (),
             batch_receipts: receipts,
             witness: (),
-        })
+        }
     }
 
     fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot> {

@@ -135,19 +135,16 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     ///
     /// We allow type complexity for now as the type is completely derived from the trait's associated types
     /// and the trait's associated types are already complex enough.
-    #[allow(clippy::type_complexity)]
     fn apply_slot<'a, I, Data>(
         &mut self,
         witness: Self::Witness,
         slot_data: &Data,
         blobs: I,
-    ) -> anyhow::Result<
-        SlotResult<
-            Self::StateRoot,
-            Self::BatchReceiptContents,
-            Self::TxReceiptContents,
-            Self::Witness,
-        >,
+    ) -> SlotResult<
+        Self::StateRoot,
+        Self::BatchReceiptContents,
+        Self::TxReceiptContents,
+        Self::Witness,
     >
     where
         I: IntoIterator<Item = &'a mut B>,

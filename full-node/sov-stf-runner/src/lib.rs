@@ -131,9 +131,9 @@ where
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
 
-            let slot_result =
-                self.app
-                    .apply_slot(Default::default(), &filtered_block, &mut blobs)?;
+            let slot_result = self
+                .app
+                .apply_slot(Default::default(), &filtered_block, &mut blobs);
             for receipt in slot_result.batch_receipts {
                 data_to_commit.add_batch(receipt);
             }

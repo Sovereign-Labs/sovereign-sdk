@@ -54,8 +54,7 @@ fn test_tx_revert() {
             Default::default(),
             &data,
             &mut blobs,
-        )
-        .unwrap();
+        );
 
         // TODO: Check witness.
         assert_eq!(1, apply_block_result.batch_receipts.len());
@@ -172,8 +171,7 @@ fn test_nonce_incremented_on_revert() {
             Default::default(),
             &data,
             &mut blobs,
-        )
-        .unwrap();
+        );
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
@@ -240,8 +238,7 @@ fn test_tx_bad_sig() {
             Default::default(),
             &data,
             &mut blobs,
-        )
-        .unwrap();
+        );
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
@@ -325,8 +322,7 @@ fn test_tx_bad_serialization() {
             Default::default(),
             &data,
             &mut blobs,
-        )
-        .unwrap();
+        );
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();

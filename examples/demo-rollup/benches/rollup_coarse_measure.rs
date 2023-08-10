@@ -143,13 +143,11 @@ async fn main() -> Result<(), anyhow::Error> {
 
         let now = Instant::now();
 
-        let apply_block_results = demo
-            .apply_slot(
-                Default::default(),
-                data_to_commit.slot_data(),
-                &mut blobs[height as usize],
-            )
-            .unwrap();
+        let apply_block_results = demo.apply_slot(
+            Default::default(),
+            data_to_commit.slot_data(),
+            &mut blobs[height as usize],
+        );
 
         apply_block_time += now.elapsed();
         h_apply_block.observe(now.elapsed().as_secs_f64());
