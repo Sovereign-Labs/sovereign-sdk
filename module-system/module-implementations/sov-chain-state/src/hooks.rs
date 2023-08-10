@@ -15,13 +15,9 @@ impl<Ctx: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<Ctx, 
         slot: &impl SlotData<Cond = Cond>,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) {
-        let curr_height = self
-            .slot_height
-            .get_or_err(working_set)
-            .expect("Should have a slot height");
-
-        if curr_height == 0 {
-            // First transition right after the genesis block
+        if self.genesis_hash(working_set).is_none() {
+            // The genesis hash is not set, hence this is the
+            // first transition right after the genesis block
             self.genesis_hash.set(
                 &working_set
                     .backing()

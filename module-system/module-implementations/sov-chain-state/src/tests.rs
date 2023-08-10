@@ -10,7 +10,8 @@ use crate::{ChainState, ChainStateConfig, StateTransitionId, TransitionInProgres
 /// hook. For more complete integration tests, feel free to have a look at the integration tests folder.
 #[test]
 fn test_simple_chain_state() {
-    const INIT_HEIGHT: u64 = 0;
+    // The initial height can be any value.
+    const INIT_HEIGHT: u64 = 10;
     // Initialize the module.
     let tmpdir = tempfile::tempdir().unwrap();
 
