@@ -143,14 +143,4 @@ impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Mo
         // The initialization logic
         Ok(self.init_module(config, working_set)?)
     }
-
-    fn call(
-        &self,
-        _msg: Self::CallMessage,
-        _context: &Self::Context,
-        _working_set: &mut WorkingSet<Ctx::Storage>,
-    ) -> Result<sov_modules_api::CallResponse, Error> {
-        // The call logic
-        Ok(sov_modules_api::CallResponse::default())
-    }
 }
