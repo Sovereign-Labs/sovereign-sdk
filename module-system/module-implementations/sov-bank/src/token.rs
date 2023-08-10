@@ -12,8 +12,11 @@ use thiserror::Error;
 
 use crate::call::prefix_from_address_with_parent;
 
+/// Type alias to store an amount of token.
 pub type Amount = u64;
 
+/// Structure that stores information specifying
+/// a given `amount` (type [`Amount`]) of coins stored at a `token_address` (type [`Context::Address`]).
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
@@ -24,7 +27,9 @@ pub type Amount = u64;
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct Coins<C: sov_modules_api::Context> {
+    /// An `amount` of coins stored.
     pub amount: Amount,
+    /// The address where the tokens are stored.
     pub token_address: C::Address,
 }
 
@@ -108,6 +113,9 @@ pub(crate) struct Token<C: sov_modules_api::Context> {
 }
 
 impl<C: sov_modules_api::Context> Token<C> {
+    /// Transfer the amount `amount` of tokens from the address `from` to the address `to`.
+    /// First checks that there is enough token of that type stored in `from`. If so, update
+    /// the balances of the `from` and `to` accounts.
     pub(crate) fn transfer(
         &self,
         from: &C::Address,
@@ -130,7 +138,8 @@ impl<C: sov_modules_api::Context> Token<C> {
 
         Ok(())
     }
-
+    /// Burns a specified `amount` of token from the adress `from`. First check that the address has enough token to burn,
+    /// if not returns an error. Otherwise, update the balances by substracting the amount burnt.
     pub(crate) fn burn(
         &mut self,
         from: &C::Address,
@@ -155,6 +164,10 @@ impl<C: sov_modules_api::Context> Token<C> {
         Ok(())
     }
 
+    /// Mints a given `amount` of token sent by `sender` to the specified `minter_address`.
+    /// Checks that the `authorized_minters` set is not empty for the token and that the `sender`
+    /// is an `authorized_minter`. If so, update the balances of token for the `minter_address` by
+    /// adding the minted tokens. Updates the `total_supply` of that token.
     pub(crate) fn mint(
         &mut self,
         sender: &C::Address,
@@ -212,6 +225,11 @@ impl<C: sov_modules_api::Context> Token<C> {
         Ok(new_balance)
     }
 
+    /// Creates a token from a given set of parameters.
+    /// The `token_name`, `sender` address (as a `u8` slice), and the `salt` (`u64` number) are used as an input
+    /// to an hash function that computes the token address. Then the initial accounts and balances are populated
+    /// from the `address_and_balances` slice and the `total_supply` of tokens is updated each time.
+    /// Returns a tuple containing the computed `token_address` and the created `token` object.
     pub(crate) fn create(
         token_name: &str,
         address_and_balances: &[(C::Address, u64)],

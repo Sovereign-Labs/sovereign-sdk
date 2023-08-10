@@ -16,6 +16,7 @@ use sov_rollup_interface::mocks::{
 };
 use sov_rollup_interface::services::da::DaService;
 
+/// A simple DaService for a random number generator.
 pub struct RngDaService;
 
 fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
@@ -74,6 +75,7 @@ fn generate_create(start_nonce: u64) -> Vec<u8> {
 }
 
 impl RngDaService {
+    /// Instantiate a new [`RngDaService`]
     pub fn new() -> Self {
         RngDaService
     }
@@ -85,6 +87,7 @@ impl Default for RngDaService {
     }
 }
 
+/// A simple DaSpec for a random number generator.
 pub struct RngDaSpec;
 
 impl DaSpec for RngDaSpec {

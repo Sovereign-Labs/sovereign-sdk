@@ -95,10 +95,10 @@ ethers-providers = "=2.0.8"
 ethers-signers = { version = "=2.0.8", default-features = false }
 ethers-middleware = "=2.0.8"
 
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
-reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
-reth-rpc = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
-reth-revm = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alpha.4"}
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7"}
+reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7"}
+reth-rpc = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7"}
+reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7"}
 
 revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
 revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }

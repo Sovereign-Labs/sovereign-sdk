@@ -35,6 +35,7 @@ const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.j
 // You can change this constant to point your rollup at a different namespace
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
+/// Initializes a [`LedgerDB`] using the provided `path`.
 pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
     LedgerDB::with_path(path).expect("Ledger DB failed to open")
 }
@@ -76,6 +77,9 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
     )
 }
 
+/// Main demo runner. Initialize a DA chain, and starts a demo-rollup using the config provided
+/// (or a default config if not provided). Then start checking the blocks sent to the DA layer in
+/// the main event loop.
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct CelestiaChainChecker {
     current_block_hash: [u8; 32],

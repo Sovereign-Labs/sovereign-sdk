@@ -4,12 +4,7 @@
   "description": "This enumeration represents the available call messages for interacting with the `ExampleModule` module.",
   "oneOf": [
     {
-      "type": "string",
-      "enum": [
-        "UnbondProver"
-      ]
-    },
-    {
+      "description": "Bonds the prover with provided bond.",
       "type": "object",
       "required": [
         "BondProver"
@@ -24,6 +19,14 @@
       "additionalProperties": false
     },
     {
+      "description": "Unbonds the prover.",
+      "type": "string",
+      "enum": [
+        "UnbondProver"
+      ]
+    },
+    {
+      "description": "Verifies the provided proof (of format `Vec<u8>`)",
       "type": "object",
       "required": [
         "VerifyProof"
