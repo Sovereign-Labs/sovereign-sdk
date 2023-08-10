@@ -42,7 +42,6 @@ sov-stf-runner = { path = "../../full-node/sov-stf-runner", optional = true }
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", default-features = false, optional = true }
 
 [dev-dependencies]
-sov-data-generators = { path = "../../module-system/utils/sov-data-generators", default-features = false }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
 sov-data-generators = { path = "../../module-system/utils/sov-data-generators" }
 tempfile = { workspace = true }
