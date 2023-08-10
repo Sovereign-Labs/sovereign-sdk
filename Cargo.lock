@@ -2893,10 +2893,15 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "sov-chain-state",
+ "sov-data-generators",
  "sov-modules-api",
+ "sov-modules-macros",
+ "sov-modules-stf-template",
  "sov-rollup-interface",
  "sov-schema-db",
  "sov-state",
+ "sov-value-setter",
  "tempfile",
 ]
 

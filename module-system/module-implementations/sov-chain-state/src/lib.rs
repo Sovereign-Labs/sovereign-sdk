@@ -11,10 +11,7 @@ pub mod genesis;
 pub mod hooks;
 
 #[cfg(test)]
-mod tests;
-
-#[cfg(test)]
-mod tests_helpers;
+pub mod tests;
 
 #[cfg(feature = "native")]
 /// The query interface with the module
@@ -82,6 +79,16 @@ impl<Cond: ValidityCondition> StateTransitionId<Cond> {
 pub struct TransitionInProgress<Cond> {
     da_block_hash: [u8; 32],
     validity_condition: Cond,
+}
+
+impl<Cond> TransitionInProgress<Cond> {
+    /// Creates a new transition in progress
+    pub fn new(da_block_hash: [u8; 32], validity_condition: Cond) -> Self {
+        Self {
+            da_block_hash,
+            validity_condition,
+        }
+    }
 }
 
 /// A new module:
