@@ -678,7 +678,6 @@ dependencies = [
  "serde_json",
  "sov-accounts",
  "sov-bank",
- "sov-data-generators",
  "sov-election",
  "sov-modules-api",
  "sov-modules-stf-template",
@@ -3254,20 +3253,6 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "thiserror",
-]
-
-[[package]]
-name = "sov-data-generators"
-version = "0.1.0"
-dependencies = [
- "borsh",
- "sov-bank",
- "sov-election",
- "sov-modules-api",
- "sov-modules-stf-template",
- "sov-rollup-interface",
- "sov-state",
- "sov-value-setter",
 ]
 
 [[package]]

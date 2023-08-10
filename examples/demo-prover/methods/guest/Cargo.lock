@@ -396,7 +396,6 @@ dependencies = [
  "serde",
  "sov-accounts",
  "sov-bank",
- "sov-data-generators",
  "sov-election",
  "sov-modules-api",
  "sov-modules-stf-template",
@@ -2029,20 +2028,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-data-generators"
-version = "0.1.0"
-dependencies = [
- "borsh",
- "sov-bank",
- "sov-election",
- "sov-modules-api",
- "sov-modules-stf-template",
- "sov-rollup-interface",
- "sov-state",
- "sov-value-setter",
-]
-
-[[package]]
 name = "sov-demo-prover-guest"
 version = "0.1.0"
 dependencies = [
@@ -2141,7 +2126,6 @@ dependencies = [
  "digest 0.10.7",
  "hex",
  "serde",
- "sha2 0.10.7",
 ]
 
 [[package]]
