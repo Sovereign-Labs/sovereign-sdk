@@ -391,7 +391,7 @@ The next step is to initialize your state transition function.
   use sov_stf_runner::StorageConfig;
   use std::path::PathBuf;
 
-  let config = StorageConfig { path: PathBuf::from("path") };
+  let config = StorageConfig { path: PathBuf::from("path_readme") };
 
   let mut app: App<Risc0Verifier, ChainValidityCondition, jupiter::BlobWithSender> =
         App::new(config);
