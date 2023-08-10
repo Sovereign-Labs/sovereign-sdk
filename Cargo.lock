@@ -1067,7 +1067,7 @@ checksum = "67ba02a97a2bd10f4b59b25c7973101c79642302776489e030cd13cdab09ed15"
 [[package]]
 name = "codecs-derive"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "convert_case 0.6.0",
  "parity-scale-codec",
@@ -1517,6 +1517,7 @@ dependencies = [
  "sov-sequencer",
  "sov-sequencer-registry",
  "sov-state",
+ "sov-stf-runner",
  "sov-value-setter",
  "tempfile",
  "tokio",
@@ -5012,7 +5013,7 @@ checksum = "4389f1d5789befaf6029ebd9f7dac4af7f7e3d61b69d4f30e2ac02b57e7712b0"
 [[package]]
 name = "reth-beacon-consensus"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "futures",
  "reth-consensus-common",
@@ -5036,7 +5037,7 @@ dependencies = [
 [[package]]
 name = "reth-codecs"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "bytes",
  "codecs-derive",
@@ -5046,7 +5047,7 @@ dependencies = [
 [[package]]
 name = "reth-consensus-common"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "reth-interfaces",
  "reth-primitives",
@@ -5056,7 +5057,7 @@ dependencies = [
 [[package]]
 name = "reth-db"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "bytes",
  "derive_more",
@@ -5083,7 +5084,7 @@ dependencies = [
 [[package]]
 name = "reth-ecies"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "aes",
  "block-padding",
@@ -5114,7 +5115,7 @@ dependencies = [
 [[package]]
 name = "reth-eth-wire"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "async-trait",
  "bytes",
@@ -5139,7 +5140,7 @@ dependencies = [
 [[package]]
 name = "reth-interfaces"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "async-trait",
  "auto_impl",
@@ -5163,7 +5164,7 @@ dependencies = [
 [[package]]
 name = "reth-libmdbx"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "bitflags 2.3.3",
  "byteorder",
@@ -5178,7 +5179,7 @@ dependencies = [
 [[package]]
 name = "reth-mdbx-sys"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "bindgen 0.65.1",
  "cc",
@@ -5188,7 +5189,7 @@ dependencies = [
 [[package]]
 name = "reth-metrics"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "metrics",
  "reth-metrics-derive",
@@ -5197,7 +5198,7 @@ dependencies = [
 [[package]]
 name = "reth-metrics-derive"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "once_cell",
  "proc-macro2 1.0.66",
@@ -5209,7 +5210,7 @@ dependencies = [
 [[package]]
 name = "reth-net-common"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "pin-project",
  "reth-primitives",
@@ -5219,7 +5220,7 @@ dependencies = [
 [[package]]
 name = "reth-network-api"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "async-trait",
  "reth-eth-wire",
@@ -5233,7 +5234,7 @@ dependencies = [
 [[package]]
 name = "reth-payload-builder"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "futures-util",
  "reth-interfaces",
@@ -5253,7 +5254,7 @@ dependencies = [
 [[package]]
 name = "reth-primitives"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "bytes",
  "c-kzg",
@@ -5295,7 +5296,7 @@ dependencies = [
 [[package]]
 name = "reth-provider"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "auto_impl",
  "derive_more",
@@ -5316,7 +5317,7 @@ dependencies = [
 [[package]]
 name = "reth-prune"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "itertools 0.11.0",
  "rayon",
@@ -5332,7 +5333,7 @@ dependencies = [
 [[package]]
 name = "reth-revm"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "reth-consensus-common",
  "reth-interfaces",
@@ -5347,7 +5348,7 @@ dependencies = [
 [[package]]
 name = "reth-revm-inspectors"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "boa_engine",
  "boa_gc",
@@ -5364,7 +5365,7 @@ dependencies = [
 [[package]]
 name = "reth-revm-primitives"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "reth-primitives",
  "revm",
@@ -5373,7 +5374,7 @@ dependencies = [
 [[package]]
 name = "reth-rlp"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "arrayvec",
  "auto_impl",
@@ -5388,7 +5389,7 @@ dependencies = [
 [[package]]
 name = "reth-rlp-derive"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
@@ -5398,7 +5399,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "async-trait",
  "bytes",
@@ -5445,7 +5446,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-api"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "jsonrpsee 0.19.0",
  "reth-primitives",
@@ -5456,7 +5457,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-engine-api"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "async-trait",
  "jsonrpsee-core 0.19.0",
@@ -5477,7 +5478,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-types"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "itertools 0.11.0",
  "jsonrpsee-types 0.19.0",
@@ -5491,7 +5492,7 @@ dependencies = [
 [[package]]
 name = "reth-rpc-types-compat"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "reth-primitives",
  "reth-rlp",
@@ -5501,7 +5502,7 @@ dependencies = [
 [[package]]
 name = "reth-stages"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "aquamarine",
  "async-trait",
@@ -5527,7 +5528,7 @@ dependencies = [
 [[package]]
 name = "reth-tasks"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "dyn-clone",
  "futures-util",
@@ -5541,7 +5542,7 @@ dependencies = [
 [[package]]
 name = "reth-transaction-pool"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "aquamarine",
  "async-trait",
@@ -5568,7 +5569,7 @@ dependencies = [
 [[package]]
 name = "reth-trie"
 version = "0.1.0-alpha.6"
-source = "git+https://github.com/paradigmxyz/reth#628495ae8fadeea640b8a1c5c78ccb065b9213c3"
+source = "git+https://github.com/paradigmxyz/reth#499ca3d15378d2aff13d299ff4967fcab7b009a3"
 dependencies = [
  "derive_more",
  "hex",
@@ -6619,6 +6620,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "demo-stf",
+ "directories",
+ "serde",
+ "serde_json",
+ "sov-modules-api",
+]
+
+[[package]]
 name = "sov-db"
 version = "0.1.0"
 dependencies = [
@@ -6648,6 +6662,7 @@ dependencies = [
  "demo-stf",
  "futures",
  "hex",
+ "jmt",
  "jsonrpsee 0.18.2",
  "jupiter",
  "prettytable-rs",
@@ -6667,6 +6682,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-state",
+ "sov-stf-runner",
  "sov-value-setter",
  "tempfile",
  "tendermint",
@@ -6720,6 +6736,7 @@ dependencies = [
  "borsh",
  "bytes",
  "clap",
+ "derive_more",
  "ethereum-types",
  "ethers",
  "ethers-contract",
@@ -6775,6 +6792,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bech32 0.9.1",
+ "bincode",
  "borsh",
  "clap",
  "derive_more",
@@ -6938,6 +6956,36 @@ dependencies = [
  "tempfile",
  "thiserror",
  "zk-cycle-macros",
+]
+
+[[package]]
+name = "sov-stf-runner"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "futures",
+ "hex",
+ "jsonrpsee 0.18.2",
+ "jupiter",
+ "rand 0.8.5",
+ "serde",
+ "serde_json",
+ "sov-accounts",
+ "sov-bank",
+ "sov-db",
+ "sov-election",
+ "sov-modules-api",
+ "sov-modules-stf-template",
+ "sov-rollup-interface",
+ "sov-sequencer-registry",
+ "sov-state",
+ "sov-value-setter",
+ "tempfile",
+ "tokio",
+ "toml 0.7.6",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

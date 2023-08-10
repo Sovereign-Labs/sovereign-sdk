@@ -246,7 +246,12 @@ pub fn expose_rpc(_attr: TokenStream, input: TokenStream) -> TokenStream {
     handle_macro_error(expose_macro.generate_rpc(original, input))
 }
 
-/// Generates a CLI arguments parser for the specified runtime.
+/// Implements the `sov_modules_api::CliWallet` trait for the annotated runtime.
+/// Under the hood, this macro generates an enum called `CliTransactionParser` which derives the [`clap::Parser`] trait.
+/// This enum has one variant for each field of the `Runtime`, and uses the `sov_modules_api::CliWalletArg` trait to parse the
+/// arguments for each of these structs.
+///
+/// To exclude a module from the CLI, use the `#[cli_skip]` attribute.
 ///
 /// ## Examples
 /// ```

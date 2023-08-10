@@ -44,6 +44,21 @@ pub mod private_key {
         }
     }
 
+    impl serde::Serialize for DefaultPrivateKey {
+        fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            serializer.serialize_bytes(&self.key_pair.to_bytes())
+        }
+    }
+
+    impl<'de> serde::Deserialize<'de> for DefaultPrivateKey {
+        fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            use serde::de::Error;
+            let bytes = <&'de [u8] as serde::Deserialize>::deserialize(deserializer)?;
+            let key_pair = Keypair::from_bytes(bytes).map_err(D::Error::custom)?;
+            Ok(Self { key_pair })
+        }
+    }
+
     impl TryFrom<&[u8]> for DefaultPrivateKey {
         type Error = anyhow::Error;
 
@@ -240,4 +255,18 @@ impl FromStr for DefaultSignature {
             DalekSignature::from_bytes(&bytes).map_err(|_| anyhow::anyhow!("Invalid signature"))?;
         Ok(DefaultSignature { msg_sig })
     }
+}
+
+#[test]
+#[cfg(feature = "native")]
+fn test_privatekey_serde() {
+    use self::private_key::DefaultPrivateKey;
+    use crate::PrivateKey;
+
+    let key_pair = DefaultPrivateKey::generate();
+    let serialized = bincode::serialize(&key_pair).expect("Serialization to vec is infallible");
+    let output = bincode::deserialize::<DefaultPrivateKey>(&serialized)
+        .expect("Keypair is serialized correctly");
+
+    assert_eq!(key_pair.as_hex(), output.as_hex());
 }

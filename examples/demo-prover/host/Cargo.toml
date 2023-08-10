@@ -26,6 +26,8 @@ const-rollup-config = { path = "../../const-rollup-config" }
 sov-modules-api = { path = "../../../module-system/sov-modules-api", features = ["native"] }
 sov-state = { path = "../../../module-system/sov-state", features = ["native"] }
 zk-cycle-macros = { path = "../../../utils/zk-cycle-macros", optional=true }
+sov-stf-runner = { path = "../../../full-node/sov-stf-runner" }
+
 methods = { path = "../methods" }
 
 

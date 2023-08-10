@@ -37,6 +37,7 @@ risc0-zkvm-platform = { version = "0.16",optional=true}
 
 [dev-dependencies]
 serde_json = { workspace = true }
+bincode = { workspace = true }
 
 [features]
 bench = ["zk-cycle-macros","risc0-zkvm","risc0-zkvm-platform"]

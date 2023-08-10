@@ -2,7 +2,7 @@ use super::{Bytes32, EthAddress};
 
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub(crate) struct BlockEnv {
-    pub(crate) number: Bytes32,
+    pub(crate) number: u64,
     pub(crate) coinbase: EthAddress,
     pub(crate) timestamp: Bytes32,
     /// Prevrandao is used after Paris (aka TheMerge) instead of the difficulty value.
@@ -51,16 +51,16 @@ pub struct EvmTransaction {
     pub gas_price: u128,
     pub max_priority_fee_per_gas: u128,
     pub max_fee_per_gas: u128,
-    pub to: Option<[u8; 20]>,
+    pub to: Option<EthAddress>,
     pub value: u128,
     pub nonce: u64,
     pub access_lists: Vec<AccessListItem>,
     pub chain_id: u64,
     pub odd_y_parity: bool,
-    pub r: [u8; 32],
-    pub s: [u8; 32],
+    pub r: Bytes32,
+    pub s: Bytes32,
     // todo remove it
-    pub hash: [u8; 32],
+    pub hash: Bytes32,
 }
 
 impl Default for EvmTransaction {
