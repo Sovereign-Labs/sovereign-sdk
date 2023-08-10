@@ -344,16 +344,15 @@ pub async fn main() -> Result<(), anyhow::Error> {
 #[cfg(test)]
 mod test {
     use borsh::BorshDeserialize;
-    use demo_stf::app::{DemoApp, DemoAppRunner};
+    use demo_stf::app::App;
     use demo_stf::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
-    use demo_stf::runner_config::Config;
-    use demo_stf::runtime::GenesisConfig;
-    use sov_modules_api::{Address, PrivateKey};
-    use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome};
+    use demo_stf::runtime::{GenesisConfig, Runtime};
+    use sov_modules_api::Address;
+    use sov_modules_stf_template::{AppTemplate, Batch, RawTx, SequencerOutcome};
     use sov_rollup_interface::mocks::MockZkvm;
-    use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::WorkingSet;
+    use sov_stf_runner::Config;
 
     use super::*;
 
@@ -425,7 +424,7 @@ mod test {
     // Test helpers
     struct TestDemo {
         config: GenesisConfig<C>,
-        demo: DemoApp<C, MockZkvm, TestBlob>,
+        demo: AppTemplate<C, Runtime<C>, MockZkvm, TestBlob>,
     }
 
     impl TestDemo {
@@ -445,7 +444,7 @@ mod test {
 
             Self {
                 config: genesis_config,
-                demo: DemoAppRunner::<DefaultContext, MockZkvm, TestBlob>::new(runner_config).stf,
+                demo: App::<MockZkvm, TestBlob>::new(runner_config.storage).stf,
             }
         }
     }
@@ -501,7 +500,7 @@ mod test {
     }
 
     fn execute_txs(
-        demo: &mut DemoApp<C, MockZkvm, TestBlob>,
+        demo: &mut AppTemplate<C, Runtime<C>, MockZkvm, TestBlob>,
         config: GenesisConfig<C>,
         txs: Vec<RawTx>,
     ) {
@@ -527,7 +526,7 @@ mod test {
     }
 
     fn get_balance(
-        demo: &mut DemoApp<DefaultContext, MockZkvm, TestBlob>,
+        demo: &mut AppTemplate<C, Runtime<C>, MockZkvm, TestBlob>,
         token_deployer_address: &Address,
         user_address: Address,
     ) -> Option<u64> {

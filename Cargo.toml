@@ -12,7 +12,9 @@ members = [
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
     "full-node/sov-ethereum",
+    "full-node/sov-stf-runner",
     
+    "module-system/sov-cli",
     "module-system/sov-modules-stf-template",
     "module-system/sov-modules-macros",
     "module-system/sov-state",
@@ -98,8 +100,9 @@ reth-revm = { git = "https://github.com/paradigmxyz/reth", version = "0.1.0-alph
 revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
 revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
 
+secp256k1 = { version = "0.27.0", default-features = false, features = ["global-context", "rand-std", "recovery"] }
+
 [patch.crates-io]
 # See reth: https://github.com/paradigmxyz/reth/blob/main/Cargo.toml#L79
 revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
 revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
-

@@ -128,14 +128,43 @@ fn test_sorting_modules_cycle() {
         dependencies: vec![module_a.address.clone(), module_d.address.clone()],
     };
 
-    let modules: Vec<&dyn ModuleInfo<Context = DefaultContext>> =
-        vec![&module_b, &module_d, &module_a, &module_e];
+    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, i32)> = vec![
+        (&module_b, 2),
+        (&module_d, 3),
+        (&module_a, 1),
+        (&module_e, 4),
+    ];
 
-    let sorted_modules = crate::sort_modules_by_dependencies(modules);
+    let sorted_modules = crate::sort_values_by_modules_dependencies(modules);
 
     assert!(sorted_modules.is_err());
     let error_string = sorted_modules.err().unwrap().to_string();
     assert_eq!("Cyclic dependency of length 2 detected: [AddressBech32 { value: \"sov1qszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqnu4g3u\" }, AddressBech32 { value: \"sov1q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zs2pg9q5zskwvj87\" }]", error_string);
+}
+
+#[test]
+fn test_sorting_modules_duplicate() {
+    let module_a = Module {
+        address: Address::from([1; 32]),
+        dependencies: vec![],
+    };
+    let module_b = Module {
+        address: Address::from([2; 32]),
+        dependencies: vec![module_a.address.clone()],
+    };
+    let module_a2 = Module {
+        address: Address::from([1; 32]),
+        dependencies: vec![],
+    };
+
+    let modules: Vec<(&dyn ModuleInfo<Context = DefaultContext>, u32)> =
+        vec![(&module_b, 3), (&module_a, 1), (&module_a2, 2)];
+
+    let sorted_modules = crate::sort_values_by_modules_dependencies(modules);
+
+    assert!(sorted_modules.is_err());
+    let error_string = sorted_modules.err().unwrap().to_string();
+    assert_eq!("Duplicate module address! Only one instance of each module is allowed in a given runtime. Module with address sov1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs259tk3 is duplicated", error_string);
 }
 
 #[test]

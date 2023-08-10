@@ -1,7 +1,7 @@
 use quote::{format_ident, quote};
 use syn::{Data, DataEnum, DeriveInput, Fields, Ident, Type};
 
-use crate::common::{extract_ident, generics_for_field, StructFieldExtractor};
+use crate::common::{extract_ident, StructFieldExtractor};
 
 pub(crate) struct CliParserMacro {
     field_extractor: StructFieldExtractor,
@@ -29,9 +29,10 @@ impl CliParserMacro {
         let (_, ty_generics, _) = generics.split_for_impl();
 
         let mut module_command_arms = vec![];
-        let mut module_args = vec![];
+        // let mut module_args = vec![];
         let mut match_arms = vec![];
         let mut parse_match_arms = vec![];
+        let mut convert_match_arms = vec![];
         let mut deserialize_constraints: Vec<syn::WherePredicate> = vec![];
 
         // Loop over the fields
@@ -46,73 +47,69 @@ impl CliParserMacro {
             // For each type path we encounter, we need to extract the generic type parameters for that field
             // and construct a `Generics` struct that contains the bounds for each of those generic type parameters.
             if let syn::Type::Path(type_path) = &field.ty {
-                let mut module_path = type_path.path.clone();
-                if let Some(segment) = module_path.segments.last_mut() {
-                    let field_generic_types = &segment.arguments;
-                    let field_generics_with_bounds =
-                        generics_for_field(&generics, field_generic_types);
-
-                    let module_ident = segment.ident.clone();
-                    let module_args_ident = format_ident!("{}Args", module_ident);
-                    module_command_arms.push(quote! {
-                        #module_ident(#module_args_ident #field_generic_types)
-                    });
-                    module_args.push(quote! {
-                        #[derive(::clap::Parser)]
-                        pub struct #module_args_ident #field_generics_with_bounds {
-                            #[clap(subcommand)]
-                            /// Commands under #module
-                            command: <<#module_path as ::sov_modules_api::Module>::CallMessage as ::sov_modules_api::CliWalletArg>::CliStringRepr,
-                        }
+                let module_path = type_path.path.clone();
+                let field_name = field.ident.clone();
+                let doc_str = format!("Generates a transaction for the `{}` module", &field_name);
+                module_command_arms.push(quote! {
+                        #[clap(subcommand)]
+                        #[doc = #doc_str]
+                        #field_name(<<#module_path as ::sov_modules_api::Module>::CallMessage as ::sov_modules_api::CliWalletArg>::CliStringRepr)
                     });
 
-                    let field_name = field.ident.clone();
-                    let field_name_string = field_name.to_string();
-                    let encode_function_name = format_ident!("encode_{}_call", field_name_string);
+                let field_name_string = field_name.to_string();
+                let encode_function_name = format_ident!("encode_{}_call", field_name_string);
 
-                    let type_name_string = match &field.ty {
-                        Type::Path(type_path) => extract_ident(type_path).to_string(),
-                        _ => {
-                            return Err(syn::Error::new_spanned(
-                                field.ident.clone(),
-                                "expected a type path",
-                            ))
-                        }
-                    };
+                let type_name_string = match &field.ty {
+                    Type::Path(type_path) => extract_ident(type_path).to_string(),
+                    _ => {
+                        return Err(syn::Error::new_spanned(
+                            field.ident.clone(),
+                            "expected a type path",
+                        ))
+                    }
+                };
 
-                    // Build the `match` arm for the CLI's `clap` parse function
-                    parse_match_arms.push(quote! {
-                            CliTransactionParser::#module_ident(mod_args) => {
-                                let command_as_call_message: <#module_path as ::sov_modules_api::Module>::CallMessage = mod_args.command.into();
+                // Build the `match` arm for the CLI's `clap` parse function
+                parse_match_arms.push(quote! {
+                            CliTransactionParser::#field_name(mod_args) => {
+                                let command_as_call_message: <#module_path as ::sov_modules_api::Module>::CallMessage = mod_args.into();
                                 #ident:: #ty_generics ::#encode_function_name(
                                     command_as_call_message
                                 )
                             },
                          });
 
-                    // Build a constraint requiring that all call messages support serde deserialization
-                    let deserialization_constraint = {
-                        let type_path: syn::TypePath = syn::parse_quote! {<#module_path as ::sov_modules_api::Module>::CallMessage };
-                        let bounds: syn::TypeParamBound =
-                            syn::parse_quote! {::serde::de::DeserializeOwned};
-                        syn::WherePredicate::Type(syn::PredicateType {
-                            lifetimes: None,
-                            bounded_ty: syn::Type::Path(type_path),
-                            colon_token: Default::default(),
-                            bounds: vec![bounds].into_iter().collect(),
-                        })
-                    };
-                    deserialize_constraints.push(deserialization_constraint);
+                convert_match_arms.push(quote! {
+                            CliTransactionParser::#field_name(mod_args) => {
+                                let command_as_call_message: <#module_path as ::sov_modules_api::Module>::CallMessage = mod_args.into();
+                                <#ident #ty_generics as ::sov_modules_api::DispatchCall>::Decodable:: #field_name(
+                                    command_as_call_message
+                                )
+                            },
+                         });
 
-                    // Build the `match` arms for the CLI's json parser
-                    match_arms.push(quote! {
+                // Build a constraint requiring that all call messages support serde deserialization
+                let deserialization_constraint = {
+                    let type_path: syn::TypePath = syn::parse_quote! {<#module_path as ::sov_modules_api::Module>::CallMessage };
+                    let bounds: syn::TypeParamBound =
+                        syn::parse_quote! {::serde::de::DeserializeOwned};
+                    syn::WherePredicate::Type(syn::PredicateType {
+                        lifetimes: None,
+                        bounded_ty: syn::Type::Path(type_path),
+                        colon_token: Default::default(),
+                        bounds: vec![bounds].into_iter().collect(),
+                    })
+                };
+                deserialize_constraints.push(deserialization_constraint);
+
+                // Build the `match` arms for the CLI's json parser
+                match_arms.push(quote! {
                             #type_name_string => Ok({
                                 #ident:: #ty_generics ::#encode_function_name(
                                     ::serde_json::from_str::<<#module_path as ::sov_modules_api::Module>::CallMessage>(&call_data)?
                                 )
                             }),
                         });
-                }
             }
         }
 
@@ -131,21 +128,33 @@ impl CliParserMacro {
         };
         // Merge and generate the new code
         let expanded = quote! {
-            /// A CLI parser for transactions which can be sent to the runtime
+            /// Parse a transaction from command-line arguments
             #[derive(::clap::Parser)]
-            pub enum CliTransactionParser #generics {
+            #[allow(non_camel_case_types)]
+            pub enum CliTransactionParser #impl_generics #where_clause {
                 #( #module_command_arms, )*
             }
-            #( #module_args )*
 
             /// Borsh encode a transaction parsed from the CLI
             pub fn borsh_encode_cli_tx #impl_generics (cmd: CliTransactionParser #ty_generics) -> ::std::vec::Vec<u8>
             #where_clause {
-                use ::borsh::BorshSerialize;
+                use ::borsh::BorshSerialize as _;
                 match cmd {
                     #(#parse_match_arms)*
                     _ => panic!("unknown module name"),
                 }
+            }
+
+            impl #impl_generics From<CliTransactionParser #ty_generics> for <#ident #ty_generics as ::sov_modules_api::DispatchCall>::Decodable #where_clause {
+                fn from(cmd: CliTransactionParser #ty_generics) -> Self {
+                    match cmd {
+                        #(#convert_match_arms)*
+                    }
+                }
+            }
+
+            impl #impl_generics sov_modules_api::CliWallet for #ident #ty_generics #where_clause {
+                type CliStringRepr = CliTransactionParser #ty_generics;
             }
 
             /// Attempts to parse the provided call data as a [`sov_modules_api::Module::CallMessage`] for the given module.
@@ -158,7 +167,6 @@ impl CliParserMacro {
                 }
             }
         };
-
         Ok(expanded.into())
     }
 }
@@ -172,9 +180,9 @@ pub(crate) fn derive_cli_wallet_arg(
         &format!("{}WithNamedFields", item_name),
         proc_macro2::Span::call_site(),
     );
-    let is_generic = !generics.params.is_empty();
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
 
-    let (named_type_defn, conversion_logic) = match &ast.data {
+    let (named_type_defn, conversion_logic, subcommand_ident) = match &ast.data {
         // Creating an enum "_WithNamedFields" which is identical to the first enum
         // except that all fields are named.
         Data::Enum(DataEnum { variants, .. }) => {
@@ -236,6 +244,8 @@ pub(crate) fn derive_cli_wallet_arg(
             }
 
             let enum_defn = quote! {
+                /// An auto-generated version of the #ident_name::CallMessage enum which is guaranteed to have
+                /// no anonymous fields. This is necessary to enable `clap`'s automatic CLI parsing.
                 #[derive(::clap::Parser)]
                 pub enum #item_with_named_fields_ident #generics {
                     #(#variants_with_named_fields,)*
@@ -247,9 +257,10 @@ pub(crate) fn derive_cli_wallet_arg(
                     #(#convert_cases)*
                 }
             };
-            (enum_defn, from_body)
+            (enum_defn, from_body, item_with_named_fields_ident)
         }
         Data::Struct(s) => {
+            let item_as_subcommand_ident = format_ident!("{}Subcommand", item_name);
             let mut named_fields = StructFieldExtractor::get_or_generate_named_fields(&s.fields);
             named_fields
                 .iter_mut()
@@ -257,25 +268,46 @@ pub(crate) fn derive_cli_wallet_arg(
             let field_names = named_fields.iter().map(|f| &f.ident).collect::<Vec<_>>();
             let conversion_logic = match s.fields {
                 Fields::Named(_) => quote! {{
-                        let #item_with_named_fields_ident { #(#field_names),* } = item;
+                        let #item_as_subcommand_ident:: #item_name {
+                            args: #item_with_named_fields_ident { #(#field_names),* }
+                        } = item;
                         #item_name{#(#field_names),*}
                 }},
                 Fields::Unnamed(_) => {
                     quote! {
-                            let #item_with_named_fields_ident { #(#field_names),* } = item;
-                            #item_name(#(#field_names),*)
+                        let #item_as_subcommand_ident:: #item_name {
+                            args: #item_with_named_fields_ident { #(#field_names),* }
+                        } = item;
+                        #item_name(#(#field_names),*)
                     }
                 }
                 Fields::Unit => quote! { #item_name },
             };
 
+            let struct_docs = ast.attrs.iter().filter(|attr| attr.path.is_ident("doc"));
             let struct_defn = quote! {
-                #[derive(::clap::Parser)]
+
+                // An auto-generated version of the #ident_name::CallMessage struct which is guaranteed to have
+                // no anonymous fields. This is necessary to enable `clap`'s automatic CLI parsing.
+                #( #struct_docs )*
+                #[derive(::clap::Args)]
                 pub struct #item_with_named_fields_ident #generics {
                     #(#named_fields),*
                 }
+
+                /// An auto-generated single-variant enum wrapping a #ident_name::CallMessage struct. This enum
+                /// implements `clap::Subcommand`, which simplifies code generation for the CLI parser.
+                #[derive(::clap::Parser)]
+                pub enum #item_as_subcommand_ident #generics {
+                    #[command(arg_required_else_help(true))]
+                    #item_name {
+                        #[clap(flatten)]
+                        args: #item_with_named_fields_ident #ty_generics
+                    }
+                }
+
             };
-            (struct_defn, conversion_logic)
+            (struct_defn, conversion_logic, item_as_subcommand_ident)
         }
         Data::Union(_) => {
             return Err(syn::Error::new_spanned(
@@ -285,29 +317,21 @@ pub(crate) fn derive_cli_wallet_arg(
         }
     };
 
-    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
-
-    let clap_type = if is_generic {
-        quote! { #item_with_named_fields_ident #ty_generics }
-    } else {
-        quote! { #item_with_named_fields_ident }
-    };
-
     let expanded = quote! {
         // Create a new data type which matches the original, but with all fields named.
         // This is the type that Clap will parse the CLI args into
         #named_type_defn
 
         // Define a `From` implementation which converts from the named fields version to the original version
-        impl #impl_generics From<#clap_type> for #item_name #ty_generics #where_clause {
-            fn from(item: #item_with_named_fields_ident #ty_generics) -> Self {
+        impl #impl_generics From<#subcommand_ident #ty_generics> for #item_name #ty_generics #where_clause {
+            fn from(item: #subcommand_ident #ty_generics) -> Self {
                 #conversion_logic
             }
         }
 
         // Implement the `CliWalletArg` trait for the original type. This is what allows the original type to be used as a CLI arg.
         impl #impl_generics sov_modules_api::CliWalletArg for #item_name #ty_generics #where_clause {
-            type CliStringRepr = #clap_type;
+            type CliStringRepr = #subcommand_ident #ty_generics;
         }
     };
     Ok(expanded.into())

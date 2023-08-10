@@ -1,8 +1,12 @@
+use reth_primitives::{
+    TransactionSignedEcRecovered as RethTransactionSignedEcRecovered, H160, H256,
+};
+
 use super::{Bytes32, EthAddress};
 
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub(crate) struct BlockEnv {
-    pub(crate) number: Bytes32,
+    pub(crate) number: u64,
     pub(crate) coinbase: EthAddress,
     pub(crate) timestamp: Bytes32,
     /// Prevrandao is used after Paris (aka TheMerge) instead of the difficulty value.
@@ -25,6 +29,7 @@ impl Default for BlockEnv {
     }
 }
 
+/// Rlp encoded evm transaction.
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
@@ -32,47 +37,46 @@ impl Default for BlockEnv {
     derive(schemars::JsonSchema)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub struct AccessListItem {
-    pub address: EthAddress,
-    pub storage_keys: Vec<Bytes32>,
+pub struct RawEvmTransaction {
+    /// Rlp data.
+    pub tx: Vec<u8>,
 }
 
-#[cfg_attr(
-    feature = "native",
-    derive(serde::Serialize),
-    derive(serde::Deserialize),
-    derive(schemars::JsonSchema)
-)]
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub struct EvmTransaction {
-    pub sender: EthAddress,
-    pub data: Vec<u8>,
-    pub gas_limit: u64,
-    pub gas_price: u128,
-    pub max_priority_fee_per_gas: u128,
-    pub max_fee_per_gas: u128,
-    pub to: Option<[u8; 20]>,
-    pub value: u128,
-    pub nonce: u64,
-    pub access_lists: Vec<AccessListItem>,
-    pub chain_id: u64,
-    pub sig: Signature,
-    // todo remove it
-    pub hash: [u8; 32],
+/// Ec recovered evm transaction.
+pub struct EvmTransactionSignedEcRecovered {
+    tx: RethTransactionSignedEcRecovered,
 }
 
-#[cfg_attr(
-    feature = "native",
-    derive(serde::Serialize),
-    derive(serde::Deserialize),
-    derive(schemars::JsonSchema)
-)]
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub struct Signature {
-    /// The R field of the signature; the point on the curve.
-    pub r: [u8; 32],
-    /// The S field of the signature; the point on the curve.
-    pub s: [u8; 32],
-    /// yParity: Signature Y parity; formally Ty
-    pub odd_y_parity: bool,
+impl EvmTransactionSignedEcRecovered {
+    ///
+    pub fn new(tx: RethTransactionSignedEcRecovered) -> Self {
+        Self { tx }
+    }
+
+    /// Transaction hash. Used to identify transaction.
+    pub fn hash(&self) -> H256 {
+        self.tx.hash()
+    }
+
+    /// Signer of transaction recovered from signature.
+    pub fn signer(&self) -> H160 {
+        self.tx.signer()
+    }
+
+    /// Receiver of the transaction.
+    pub fn to(&self) -> Option<EthAddress> {
+        self.tx.to().map(|to| to.into())
+    }
+}
+
+impl AsRef<RethTransactionSignedEcRecovered> for EvmTransactionSignedEcRecovered {
+    fn as_ref(&self) -> &RethTransactionSignedEcRecovered {
+        &self.tx
+    }
+}
+
+impl From<EvmTransactionSignedEcRecovered> for RethTransactionSignedEcRecovered {
+    fn from(tx: EvmTransactionSignedEcRecovered) -> Self {
+        tx.tx
+    }
 }

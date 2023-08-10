@@ -151,7 +151,7 @@ impl TestClient {
 }
 
 // TODO enable in CI
-#[ignore]
+//#[ignore]
 #[tokio::test]
 async fn send_tx_test_to_eth() -> Result<(), Box<dyn std::error::Error>> {
     let chain_id: u64 = 1;

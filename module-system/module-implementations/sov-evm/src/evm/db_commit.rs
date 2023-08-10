@@ -27,6 +27,7 @@ impl<'a, C: sov_modules_api::Context> DatabaseCommit for EvmDb<'a, C> {
             for (key, value) in account.storage.into_iter() {
                 let key = key.to_le_bytes();
                 let value = value.present_value().to_le_bytes();
+
                 db_account.storage.set(&key, &value, self.working_set);
             }
 
