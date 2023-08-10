@@ -122,11 +122,6 @@ impl<B: Buf> CountedBufReader<B> {
     pub fn total_len(&self) -> usize {
         self.inner.remaining() + self.counter
     }
-
-    /// Contains the total length of the data (length already read + length remaining)
-    pub fn total_len(&self) -> usize {
-        self.inner.remaining() + self.counter
-    }
 }
 
 impl<B: Buf> Read for CountedBufReader<B> {
