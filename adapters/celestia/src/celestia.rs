@@ -317,13 +317,13 @@ impl SlotData for CelestiaHeader {
     }
 
     fn header(&self) -> &Self::BlockHeader {
-        &self
+        self
     }
 
     fn validity_condition(&self) -> ChainValidityCondition {
         ChainValidityCondition {
             prev_hash: *self.header().prev_hash().inner(),
-            block_hash: <Self as SlotData>::hash(&self),
+            block_hash: <Self as SlotData>::hash(self),
         }
     }
 }
