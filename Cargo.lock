@@ -1444,6 +1444,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "jsonrpsee 0.18.2",
  "serde",
  "sov-data-generators",
  "sov-modules-api",
