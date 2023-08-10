@@ -4,6 +4,7 @@ use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
 use crate::Risc0MethodId;
 
+/// Control struct for Risc0 guest
 pub struct Risc0Guest;
 
 #[cfg(target_os = "zkvm")]

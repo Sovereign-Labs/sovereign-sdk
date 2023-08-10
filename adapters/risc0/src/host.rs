@@ -13,6 +13,7 @@ use zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cy
 use crate::metrics::metrics_callback;
 use crate::Risc0MethodId;
 
+/// Allows to run prover code and send data to ZkVM
 pub struct Risc0Host<'a> {
     env: RefCell<ExecutorEnvBuilder<'a>>,
     elf: &'a [u8],
@@ -30,6 +31,7 @@ impl<'a> Risc0Host<'a> {
     }
 
     #[cfg(feature = "bench")]
+    /// Create a new host fo a given reference to an ELF file
     pub fn new(elf: &'a [u8]) -> Self {
         let mut default_env = ExecutorEnvBuilder::default();
 
@@ -80,6 +82,7 @@ impl<'prover> Zkvm for Risc0Host<'prover> {
     }
 }
 
+/// Making verification of Risc0 proofs
 pub struct Risc0Verifier;
 
 impl Zkvm for Risc0Verifier {
@@ -113,10 +116,13 @@ fn verify_from_slice<'a>(
     Ok(journal)
 }
 
-/// A convenience type which contains the same data a Risc0 [`SessionReceipt`] but borrows the journal
-/// data. This allows to avoid one unnecessary copy during proof verification.
+/// A convenience type which contains the same data a Risc0 [`SessionReceipt`]
+/// but borrows the journal data.
+/// This allows avoiding one unnecessary copy during proof verification.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Risc0Proof<'a> {
+    /// References to the segment receipts
     pub segment_receipts: Vec<Box<SegmentReceipt>>,
+    /// Reference to the journal
     pub journal: &'a [u8],
 }
