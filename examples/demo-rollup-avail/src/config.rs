@@ -1,11 +1,5 @@
-use sov_stf_runner::RollupConfig;
 use serde::Deserialize;
-
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct RpcConfig {
-    pub bind_host: String,
-    pub bind_port: u16,
-}
+use sov_stf_runner::RollupConfig;
 
 //TODO - replace with runtime config.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -26,7 +20,7 @@ mod tests {
     use std::io::Write;
     use std::path::PathBuf;
 
-    use demo_stf::runner_config::{from_toml_path, StorageConfig};
+    use sov_stf_runner::{from_toml_path, RpcConfig, StorageConfig, Config as RunnerConfig};
     use tempfile::NamedTempFile;
 
     use super::*;
@@ -40,34 +34,41 @@ mod tests {
     #[test]
     fn test_correct_config() {
         let config = r#"
-            start_height = 31337
-            [da]
-            light_client_url = "http://127.0.0.1:7000"
-            node_client_url = "ws://127.0.0.1:9944"
-            [runner.storage]
-            path = "/tmp"
-            [rpc_config]
-            bind_host = "127.0.0.1"
-            bind_port = 12345
+        sequencer_da_address = "b4dc7fc57630d2a7be7f358cbefc1e52bd6d0f250d19647cf264ecf2d8764d7b"
+        [rollup_config]
+        start_height = 2
+        [da]
+        light_client_url = "http://127.0.0.1:8000"
+        node_client_url = "wss://kate.avail.tools:443/ws"
+        [rollup_config.runner.storage]
+        path = "demo_data"
+        [rollup_config.rpc_config]
+        bind_host = "127.0.0.1"
+        bind_port = 12345
         "#;
 
         let config_file = create_config_from(config);
 
-        let config: RollupConfig = from_toml_path(config_file.path()).unwrap();
-        let expected = RollupConfig {
-            start_height: 31337,
+        let config: Config = from_toml_path(config_file.path()).unwrap();
+        let expected = Config {
+            sequencer_da_address: String::from(
+                "b4dc7fc57630d2a7be7f358cbefc1e52bd6d0f250d19647cf264ecf2d8764d7b",
+            ),
             da: DaServiceConfig {
-                light_client_url: "http://127.0.0.1:7000".to_string(),
-                node_client_url: "ws://127.0.0.1:9944".into(),
+                light_client_url: "http://127.0.0.1:8000".to_string(),
+                node_client_url: "wss://kate.avail.tools:443/ws".into(),
             },
-            runner: RunnerConfig {
-                storage: StorageConfig {
-                    path: PathBuf::from("/tmp"),
+            rollup_config: RollupConfig {
+                start_height: 2,
+                runner: RunnerConfig {
+                    storage: StorageConfig {
+                        path: PathBuf::from("demo_data"),
+                    },
                 },
-            },
-            rpc_config: RpcConfig {
-                bind_host: "127.0.0.1".to_string(),
-                bind_port: 12345,
+                rpc_config: RpcConfig {
+                    bind_host: "127.0.0.1".to_string(),
+                    bind_port: 12345,
+                },
             },
         };
         assert_eq!(config, expected);

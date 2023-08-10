@@ -45,3 +45,5 @@ const-rollup-config = { path = "../const-rollup-config" }
 
 [dev-dependencies]
 tempfile = "3.5.0"
+proptest = { workspace = true }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }

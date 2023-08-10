@@ -7491,6 +7491,7 @@ dependencies = [
  "hex",
  "jsonrpsee 0.18.2",
  "presence",
+ "proptest",
  "reqwest",
  "risc0-adapter",
  "serde",

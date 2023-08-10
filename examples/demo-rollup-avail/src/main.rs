@@ -3,22 +3,21 @@ use std::env;
 use std::sync::Arc;
 
 use anyhow::Context;
-use demo_stf::app::{
-    DefaultContext, DefaultPrivateKey, App,
-};
+use demo_stf::app::{App, DefaultContext, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
 use presence::service::DaProvider as AvailDaProvider;
 use presence::spec::transaction::AvailBlobTransaction;
 use risc0_adapter::host::Risc0Verifier;
-use sov_db::ledger_db::{LedgerDB};
-use sov_rollup_interface::services::da::{DaService};
+use sov_db::ledger_db::LedgerDB;
 use sov_modules_stf_template::{SequencerOutcome, TxEffect};
+use sov_rollup_interface::services::da::DaService;
 use sov_sequencer::get_sequencer_rpc;
-use sov_stf_runner::{from_toml_path, get_ledger_rpc, StateTransitionRunner};
-use crate::config::Config;
 use sov_state::Storage;
+use sov_stf_runner::{from_toml_path, get_ledger_rpc, StateTransitionRunner};
 use tracing::{debug, Level};
+
+use crate::config::Config;
 
 #[cfg(test)]
 mod test_rpc;
@@ -86,7 +85,9 @@ async fn main() -> Result<(), anyhow::Error> {
         light_client_url,
     };
 
-    let mut app = App::<Risc0Verifier, AvailBlobTransaction>::new(config.rollup_config.runner.storage.clone());
+    let mut app = App::<Risc0Verifier, AvailBlobTransaction>::new(
+        config.rollup_config.runner.storage.clone(),
+    );
 
     let storage = app.get_storage();
     let mut methods = get_rpc_methods::<DefaultContext>(storage);
