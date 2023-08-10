@@ -15,8 +15,8 @@ pub(crate) fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
     let mut evm = revm::new();
 
     let env = Env {
-        cfg: config_env,
         block: block_env.into(),
+        cfg: config_env,
         tx: tx.into(),
     };
 
