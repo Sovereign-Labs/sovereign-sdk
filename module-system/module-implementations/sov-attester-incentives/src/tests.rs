@@ -1,22 +1,11 @@
-
-
 use sov_modules_api::default_context::DefaultContext;
-
-
-use sov_rollup_interface::mocks::{
-    MockCodeCommitment, TestValidityCond, TestValidityCondChecker,
-};
+use sov_rollup_interface::mocks::{TestValidityCond, TestValidityCondChecker};
 use sov_rollup_interface::optimistic::Attestation;
-
 use sov_state::storage::{StorageKey, StorageProof};
 use sov_state::{ArrayWitness, ProverStorage, Storage, WorkingSet};
 
 use crate::helpers::{setup, BOND_AMOUNT, INITIAL_BOND_AMOUNT};
 
-
-type C = DefaultContext;
-
-const MOCK_CODE_COMMITMENT: MockCodeCommitment = MockCodeCommitment([0u8; 32]);
 const DEFAULT_MAX_LIGHT_CLIENT_HEIGHT: u64 = 6;
 
 /// Tests the different cases where an attestation is invalid and the
@@ -62,11 +51,8 @@ fn test_burn_on_invalid_attestation() {
             sender: attester_address,
         };
 
-        let proof = module.get_bond_proof(
-            attester_address,
-            &ArrayWitness::default(),
-            &mut working_set,
-        );
+        let proof =
+            module.get_bond_proof(attester_address, &ArrayWitness::default(), &mut working_set);
 
         let storage_proof = StorageProof {
             key: StorageKey::new(module.bonded_attesters.prefix(), &attester_address),
@@ -127,11 +113,8 @@ fn test_burn_on_invalid_proof() {
             sender: attester_address,
         };
 
-        let proof = module.get_bond_proof(
-            attester_address,
-            &ArrayWitness::default(),
-            &mut working_set,
-        );
+        let proof =
+            module.get_bond_proof(attester_address, &ArrayWitness::default(), &mut working_set);
 
         let storage_proof = StorageProof {
             key: StorageKey::new(module.bonded_attesters.prefix(), &attester_address),
@@ -192,11 +175,8 @@ fn test_valid_proof() {
             sender: attester_address,
         };
 
-        let proof = module.get_bond_proof(
-            attester_address,
-            &ArrayWitness::default(),
-            &mut working_set,
-        );
+        let proof =
+            module.get_bond_proof(attester_address, &ArrayWitness::default(), &mut working_set);
 
         let storage_proof = StorageProof {
             key: StorageKey::new(module.bonded_attesters.prefix(), &attester_address.clone()),
@@ -327,11 +307,8 @@ fn test_prover_not_bonded() {
 
     // Process a valid proof
     {
-        let proof = module.get_bond_proof(
-            attester_address,
-            &ArrayWitness::default(),
-            &mut working_set,
-        );
+        let proof =
+            module.get_bond_proof(attester_address, &ArrayWitness::default(), &mut working_set);
 
         let storage_proof = StorageProof {
             key: StorageKey::new(module.bonded_attesters.prefix(), &attester_address),
