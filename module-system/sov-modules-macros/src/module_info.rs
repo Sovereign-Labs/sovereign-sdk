@@ -113,7 +113,7 @@ fn impl_module_info(struct_def: &StructDef) -> Result<proc_macro2::TokenStream, 
 }
 
 fn default_codec_builder() -> syn::Path {
-    syn::parse_str("::sov_state::codec::BorshCodec::default").unwrap()
+    syn::parse_str("::core::default::Default::default").unwrap()
 }
 
 fn make_prefix_func(
