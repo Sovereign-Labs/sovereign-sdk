@@ -5,7 +5,7 @@ mod genesis;
 mod tests;
 
 #[cfg(feature = "native")]
-mod query;
+pub mod query;
 
 pub use call::CallMessage;
 #[cfg(feature = "native")]

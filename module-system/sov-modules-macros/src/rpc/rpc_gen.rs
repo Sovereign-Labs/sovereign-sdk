@@ -320,6 +320,7 @@ fn build_rpc_trait(
 
         }
     };
+    println!("rpc_output: {}", &rpc_output);
     Ok(rpc_output)
 }
 

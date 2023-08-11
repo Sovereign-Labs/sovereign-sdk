@@ -56,7 +56,9 @@ impl<C: sov_modules_api::Context> KeyWorkflow<C> {
                     key_path.display()
                 );
                 std::fs::write(&key_path, serde_json::to_string(&keys)?)?;
-                wallet_state.addresses.add(address, nickname, key_path);
+                wallet_state
+                    .addresses
+                    .add(address, nickname, keys.pub_key(), key_path);
             }
             KeyWorkflow::Import {
                 nickname,
@@ -64,11 +66,14 @@ impl<C: sov_modules_api::Context> KeyWorkflow<C> {
                 path,
             } => {
                 // Try to load the key as a sanity check.
-                let key = load_key::<C>(&path)?;
+                let private_key = load_key::<C>(&path)?;
+                let public_key = private_key.pub_key();
                 let address =
-                    address_override.unwrap_or_else(|| key.pub_key().to_address::<C::Address>());
+                    address_override.unwrap_or_else(|| public_key.to_address::<C::Address>());
                 println!("Imported key pair. address: {}", address);
-                wallet_state.addresses.add(address, nickname, path);
+                wallet_state
+                    .addresses
+                    .add(address, nickname, public_key, path);
             }
             KeyWorkflow::List => {
                 println!("{}", serde_json::to_string_pretty(&wallet_state.addresses)?)

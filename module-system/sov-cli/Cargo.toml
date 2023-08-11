@@ -21,6 +21,9 @@ demo-stf = { path = "../../examples/demo-stf" }
 sov-modules-api = { path = "../sov-modules-api", version = "0.1", features = ["native"] }
 directories = "5.0.1"
 anyhow = { workspace = true }
+hex = { workspace = true, features = ["serde"] }
 borsh = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+jsonrpsee = { workspace = true, features = ["client"] }
+tokio = { workspace = true }

@@ -1,9 +1,9 @@
 mod helpers;
 
 use helpers::*;
+use sov_bank::query::TotalSupplyResponse;
 use sov_bank::{
     get_genesis_token_address, get_token_address, Bank, BankConfig, CallMessage, Coins,
-    TotalSupplyResponse,
 };
 use sov_modules_api::test_utils::generate_address;
 use sov_modules_api::{Address, Context, Error, Module};

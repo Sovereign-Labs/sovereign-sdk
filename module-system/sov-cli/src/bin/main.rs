@@ -1,6 +1,8 @@
 use demo_stf::runtime::{Runtime, RuntimeCall};
+use jsonrpsee::http_client::HttpClientBuilder;
 use sov_cli::wallet_state::WalletState;
 use sov_cli::workflows::keys::KeyWorkflow;
+use sov_cli::workflows::rpc::RpcWorkflows;
 use sov_cli::workflows::transactions::TransactionWorkflow;
 use sov_cli::{clap, wallet_dir};
 use sov_modules_api::clap::Parser;
@@ -14,6 +16,8 @@ pub enum Workflows {
     Transactions(TransactionWorkflow<Runtime<Ctx>>),
     #[clap(subcommand)]
     Keys(KeyWorkflow<Ctx>),
+    #[clap(subcommand)]
+    Rpc(RpcWorkflows<Ctx>),
 }
 
 #[derive(clap::Parser)]
@@ -23,7 +27,8 @@ pub struct App {
     workflow: Workflows,
 }
 
-fn main() -> Result<(), anyhow::Error> {
+#[tokio::main]
+async fn main() -> Result<(), anyhow::Error> {
     let app_dir = wallet_dir()?;
     std::fs::create_dir_all(app_dir.as_ref())?;
     let wallet_state_path = app_dir.as_ref().join("wallet_state.json");
@@ -35,6 +40,9 @@ fn main() -> Result<(), anyhow::Error> {
     match invocation.workflow {
         Workflows::Transactions(tx) => tx.run(&mut wallet_state, app_dir)?,
         Workflows::Keys(inner) => inner.run(&mut wallet_state, app_dir)?,
+        Workflows::Rpc(inner) => {
+            let _res = inner.run(&mut wallet_state, app_dir).await?;
+        }
     }
     wallet_state.save(wallet_state_path)?;
 

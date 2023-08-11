@@ -1,6 +1,6 @@
 use borsh::BorshSerialize;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
-use sov_accounts::Response;
+use sov_accounts::query::Response;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
@@ -72,13 +72,13 @@ fn test_tx_revert() {
         // We sent 4 vote messages but one of them is invalid and should be reverted.
         let resp = runtime.election.number_of_votes(&mut working_set).unwrap();
 
-        assert_eq!(resp, sov_election::GetNbOfVotesResponse::Result(3));
+        assert_eq!(resp, sov_election::query::GetNbOfVotesResponse::Result(3));
 
         let resp = runtime.election.results(&mut working_set).unwrap();
 
         assert_eq!(
             resp,
-            sov_election::GetResultResponse::Result(Some(sov_election::Candidate {
+            sov_election::query::GetResultResponse::Result(Some(sov_election::Candidate {
                 name: "candidate_2".to_owned(),
                 count: 3
             }))
@@ -176,7 +176,7 @@ fn test_nonce_incremented_on_revert() {
         // No votes actually recorded, because there was invalid vote
         let resp = runtime.election.number_of_votes(&mut working_set).unwrap();
 
-        assert_eq!(resp, sov_election::GetNbOfVotesResponse::Result(0));
+        assert_eq!(resp, sov_election::query::GetNbOfVotesResponse::Result(0));
 
         let nonce = match runtime
             .accounts
@@ -246,7 +246,7 @@ fn test_tx_bad_sig() {
 
         assert_eq!(
             resp,
-            sov_election::GetResultResponse::Err("Election is not frozen".to_owned())
+            sov_election::query::GetResultResponse::Err("Election is not frozen".to_owned())
         );
 
         // TODO: Sequencer is slashed
@@ -325,7 +325,7 @@ fn test_tx_bad_serialization() {
 
         assert_eq!(
             resp,
-            sov_election::GetResultResponse::Err("Election is not frozen".to_owned())
+            sov_election::query::GetResultResponse::Err("Election is not frozen".to_owned())
         );
 
         // Sequencer is not in list of allowed sequencers
