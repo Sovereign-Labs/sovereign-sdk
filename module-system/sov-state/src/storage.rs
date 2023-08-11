@@ -184,10 +184,8 @@ impl From<&'static str> for StorageValue {
 }
 
 pub trait NativeStorage: Storage {
-    /// The object returned by `get_with_proof`. Should contain the returned value and the associated proof
-    type ValueWithProof;
-
     /// Returns the value corresponding to the key or None if key is absent and a proof to
     /// get the value. Panics if [`get_with_proof_opt`] returns `None` in place of the proof.
-    fn get_with_proof(&self, key: StorageKey, witness: &Self::Witness) -> Self::ValueWithProof;
+    fn get_with_proof(&self, key: StorageKey, witness: &Self::Witness)
+        -> StorageProof<Self::Proof>;
 }
