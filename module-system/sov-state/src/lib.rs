@@ -1,3 +1,4 @@
+pub mod codec;
 mod internal_cache;
 mod map;
 
@@ -15,8 +16,6 @@ mod utils;
 mod value;
 mod witness;
 
-pub use value::SingletonKey;
-
 mod zk_storage;
 
 pub use zk_storage::ZkStorage;
@@ -28,6 +27,7 @@ mod state_tests;
 use std::fmt::Display;
 use std::str;
 
+pub use codec::{BorshCodec, StateCodec, StateKeyCodec, StateValueCodec};
 pub use map::StateMap;
 #[cfg(feature = "native")]
 pub use prover_storage::{delete_storage, ProverStorage};

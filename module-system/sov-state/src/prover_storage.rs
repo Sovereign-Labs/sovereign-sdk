@@ -12,7 +12,7 @@ use crate::internal_cache::OrderedReadsAndWrites;
 use crate::storage::{NativeStorage, StorageKey, StorageProof, StorageValue};
 use crate::tree_db::TreeReadLogger;
 use crate::witness::Witness;
-use crate::{MerkleProofSpec, Storage};
+use crate::{BorshCodec, MerkleProofSpec, Storage};
 
 pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,
@@ -179,7 +179,10 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
                 self.db.get_next_version() - 1,
             )
             .unwrap();
-        (val_opt.as_ref().map(StorageValue::new), proof)
+        (
+            val_opt.as_ref().map(|v| StorageValue::new(v, &BorshCodec)),
+            proof,
+        )
     }
 }
 
