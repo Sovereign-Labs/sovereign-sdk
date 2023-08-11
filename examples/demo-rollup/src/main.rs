@@ -1,4 +1,5 @@
 use std::env;
+use std::str::FromStr;
 use std::sync::Arc;
 
 use anyhow::Context;
@@ -11,6 +12,7 @@ use jupiter::da_service::CelestiaService;
 #[cfg(feature = "experimental")]
 use jupiter::da_service::DaServiceConfig;
 use jupiter::types::NamespaceId;
+use jupiter::verifier::address::CelestiaAddress;
 use jupiter::verifier::{ChainValidityCondition, RollupParams};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::LedgerDB;
@@ -68,10 +70,11 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
         hex_key.address,
         "Inconsistent key data",
     );
+    let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
     create_demo_genesis_config(
         100000000,
         sequencer_private_key.default_address(),
-        SEQUENCER_DA_ADDRESS.to_vec(),
+        sequencer_da_address.as_ref().to_vec(),
         &sequencer_private_key,
         &sequencer_private_key,
     )
