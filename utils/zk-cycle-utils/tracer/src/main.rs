@@ -26,14 +26,13 @@ struct Args {
     /// Don't print raw (stack un-aware) instruction counts
     no_raw_counts: bool,
 
-    #[arg(short, long, required=true)]
+    #[arg(long, required=true)]
     /// Path to the riscv32 elf
     rollup_elf: String,
 
-    #[arg(short, long, required=true)]
+    #[arg(long, required=true)]
     /// Path to the rollup trace.
-    /// File must be of the format
-    /// PC==>> <cycle_count> <program_counter>
+    /// File must be one u64 program counter per line
     rollup_trace: String,
 
     #[arg(short, long)]
@@ -177,8 +176,7 @@ fn main() -> std::io::Result<()> {
         if c % &update_interval == 0 {
             pb.inc(update_interval as u64);
         }
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        let pc: u64 = parts[2].parse().unwrap();
+        let pc = line.parse().unwrap();
 
         // Raw counts without considering the callgraph at all
         // we're just checking if the PC belongs to a function

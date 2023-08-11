@@ -30,7 +30,6 @@ impl<'a> Risc0Host<'a> {
 
             let cycles_syscall_name = get_syscall_name_cycles();
             default_env.io_callback(cycles_syscall_name, cycle_count_callback);
-
         }
 
         Self {

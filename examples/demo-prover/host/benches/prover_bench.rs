@@ -2,14 +2,16 @@ use jupiter::types::FilteredCelestiaBlock;
 use borsh::de::BorshDeserialize;
 use std::fs::read_to_string;
 use std::path::PathBuf;
+use std::io::Write;
+use std::fs::File;
+use std::env;
 use tempfile::TempDir;
 use sov_modules_api::PrivateKey;
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
+use demo_stf::app::{DefaultPrivateKey, App};
 use demo_stf::genesis_config::create_demo_genesis_config;
-use demo_stf::runner_config::{from_toml_path, Config as RunnerConfig};
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
 use jupiter::verifier::RollupParams;
@@ -18,9 +20,68 @@ use methods::{ROLLUP_ELF};
 use risc0_adapter::host::Risc0Host;
 use serde::Deserialize;
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
+use sov_stf_runner::{from_toml_path, Config as RunnerConfig};
+use std::fs::OpenOptions;
+use std::sync::{Arc, Mutex};
+use std::path::Path;
+use std::fs::remove_file;
+
+use log4rs::{
+    config::{Appender, Config, Root},
+};
+use regex::Regex;
+
+#[derive(Debug)]
+struct RegexAppender {
+    regex: Regex,
+    file: Arc<Mutex<File>>
+}
+
+impl RegexAppender {
+    fn new(pattern: &str, file_path: &str) -> Self {
+        if Path::new(file_path).exists() {
+            remove_file(file_path).expect("Failed to remove existing file");
+        }
+        let file = Arc::new(Mutex::new(OpenOptions::new().create(true).append(true).open(file_path).unwrap()));
+        let regex = Regex::new(pattern).unwrap();
+        RegexAppender { regex, file }
+    }
+}
+
+impl log::Log for RegexAppender {
+
+    fn log(&self, record: &log::Record) {
+        if let Some(captures) = self.regex.captures(record.args().to_string().as_str()) {
+            if let Some(matched_pc) = captures.get(1) {
+                let pc_value_num = u64::from_str_radix(&matched_pc.as_str()[2..], 16).unwrap();
+                let pc_value =  format!("{}\n",pc_value_num);
+                let mut file_guard = self.file.lock().unwrap();
+                file_guard.write_all(pc_value.as_bytes()).unwrap();
+            }
+        }
+    }
+
+    fn enabled(&self, _metadata: &log::Metadata) -> bool {
+        true
+    }
+
+    fn flush(&self) {
+    }
+}
+
+fn get_config(rollup_trace: &str) -> Config {
+    let regex_pattern = r".*?pc: (0x[0-9a-fA-F]+), insn.*";
+    // let log_file = "/Users/dubbelosix/sovereign/examples/demo-prover/matched_pattern.log";
+
+    let custom_appender = RegexAppender::new(regex_pattern, rollup_trace);
+
+    Config::builder()
+        .appender(Appender::builder().build("custom_appender", Box::new(custom_appender)))
+        .build(Root::builder().appender("custom_appender").build(log::LevelFilter::Trace))
+        .unwrap()
+}
 
 #[cfg(feature = "bench")]
 use risc0_adapter::metrics::GLOBAL_HASHMAP;
@@ -80,6 +141,14 @@ fn chain_stats(
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    if let Some(rollup_trace) = env::var("ROLLUP_TRACE").ok() {
+        if let Err(e) = log4rs::init_config(get_config(&rollup_trace)) {
+            eprintln!("Error initializing logger: {:?}", e);
+        } else {
+            println!("LOG INIT SUCCEESS");
+        }
+    }
+
     let rollup_config_path = "benches/rollup_config.toml".to_string();
     let mut rollup_config: RollupConfig = from_toml_path(&rollup_config_path)
         .context("Failed to read rollup configuration")
@@ -102,8 +171,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let mut demo_runner = NativeAppRunner::<Risc0Host,BlobWithSender>::new(rollup_config.runner.clone());
-    let demo = demo_runner.inner_mut();
+    let app: App<Risc0Host, BlobWithSender> =
+        App::new(rollup_config.runner.storage.clone());
+
+    let mut demo = app.stf;
 
     let genesis_config = create_demo_genesis_config(
         100000000,
