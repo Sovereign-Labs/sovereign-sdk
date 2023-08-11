@@ -144,8 +144,6 @@ async fn main() -> Result<(), anyhow::Error> {
     if let Some(rollup_trace) = env::var("ROLLUP_TRACE").ok() {
         if let Err(e) = log4rs::init_config(get_config(&rollup_trace)) {
             eprintln!("Error initializing logger: {:?}", e);
-        } else {
-            println!("LOG INIT SUCCEESS");
         }
     }
 
