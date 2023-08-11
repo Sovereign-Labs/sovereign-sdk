@@ -6445,6 +6445,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-attester-incentives"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "borsh",
+ "jmt",
+ "serde",
+ "serde_json",
+ "sov-bank",
+ "sov-chain-state",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-state",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "sov-bank"
 version = "0.1.0"
 dependencies = [

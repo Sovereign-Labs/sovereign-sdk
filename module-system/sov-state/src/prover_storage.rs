@@ -169,9 +169,9 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 }
 
 impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
-    type ValueWithProof = (Option<StorageValue>, Self::Proof);
+    type KeyValueWithProof = (Option<StorageValue>, Self::Proof);
 
-    fn get_with_proof(&self, key: StorageKey, _witness: &Self::Witness) -> Self::ValueWithProof {
+    fn get_with_proof(&self, key: StorageKey, _witness: &Self::Witness) -> Self::KeyValueWithProof {
         let merkle = JellyfishMerkleTree::<StateDB, S::Hasher>::new(&self.db);
         let (val_opt, proof) = merkle
             .get_with_proof(
