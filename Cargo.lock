@@ -6720,6 +6720,7 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "syn 1.0.109",
+ "tempfile",
  "trybuild",
 ]
 

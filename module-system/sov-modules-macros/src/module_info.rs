@@ -37,7 +37,7 @@ fn impl_prefix_functions(struct_def: &StructDef) -> Result<proc_macro2::TokenStr
         .iter()
         // Don't generate prefix functions for modules or addresses; only state.
         .filter(|field| matches!(field.attr, ModuleFieldAttribute::State { .. }))
-        .map(|field| make_prefix_func(field, &ident));
+        .map(|field| make_prefix_func(field, ident));
 
     Ok(quote::quote! {
         impl #impl_generics #ident #type_generics #where_clause{
@@ -81,7 +81,7 @@ fn impl_module_info(struct_def: &StructDef) -> Result<proc_macro2::TokenStream, 
                 modules.push(&field.ident);
             }
             ModuleFieldAttribute::Address => {
-                impl_self_init.push(make_init_address(field, &ident, &generic_param)?);
+                impl_self_init.push(make_init_address(field, ident, generic_param)?);
                 impl_self_body.push(&field.ident);
             }
         };
@@ -262,10 +262,7 @@ pub mod parsing {
         pub fn module_address(&self) -> &ModuleField {
             self.fields
                 .iter()
-                .find(|field| match field.attr {
-                    ModuleFieldAttribute::Address => true,
-                    _ => false,
-                })
+                .find(|field| matches!(field.attr, ModuleFieldAttribute::Address))
                 .expect("Module address not found but it was validated already; this is a bug")
         }
     }
@@ -382,7 +379,7 @@ pub mod parsing {
                 address_fields[1].ident.clone(),
                 format!(
                     "The `address` attribute is defined more than once, revisit field: {}",
-                    address_fields[1].ident.to_string()
+                    address_fields[1].ident,
                 ),
             )),
         }
