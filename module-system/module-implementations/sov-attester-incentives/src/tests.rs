@@ -1,18 +1,18 @@
-use jmt::proof::SparseMerkleProof;
-use sov_chain_state::StateTransitionId;
+
+
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Address, Hasher, Module, Spec};
+
+
 use sov_rollup_interface::mocks::{
-    MockCodeCommitment, MockProof, MockZkvm, TestValidityCond, TestValidityCondChecker,
+    MockCodeCommitment, TestValidityCond, TestValidityCondChecker,
 };
 use sov_rollup_interface::optimistic::Attestation;
-use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
-use sov_state::storage::{StorageKey, StorageProof, StorageValue};
+
+use sov_state::storage::{StorageKey, StorageProof};
 use sov_state::{ArrayWitness, ProverStorage, Storage, WorkingSet};
 
 use crate::helpers::{setup, BOND_AMOUNT, INITIAL_BOND_AMOUNT};
-use crate::AttesterIncentives;
+
 
 type C = DefaultContext;
 
@@ -35,7 +35,7 @@ fn test_burn_on_invalid_attestation() {
     assert_eq!(
         module
             .get_bond_amount(
-                attester_address.clone(),
+                attester_address,
                 crate::call::Role::Attester,
                 &mut working_set
             )
@@ -59,11 +59,11 @@ fn test_burn_on_invalid_attestation() {
     // Process an invalid attestation
     {
         let context = DefaultContext {
-            sender: attester_address.clone(),
+            sender: attester_address,
         };
 
         let proof = module.get_bond_proof(
-            attester_address.clone(),
+            attester_address,
             &ArrayWitness::default(),
             &mut working_set,
         );
@@ -106,14 +106,14 @@ fn test_burn_on_invalid_attestation() {
 fn test_burn_on_invalid_proof() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, attester_address, challenger_address) =
+    let (module, attester_address, _challenger_address) =
         setup::<TestValidityCond, TestValidityCondChecker<TestValidityCond>>(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
     assert_eq!(
         module
             .get_bond_amount(
-                attester_address.clone(),
+                attester_address,
                 crate::call::Role::Attester,
                 &mut working_set
             )
@@ -124,11 +124,11 @@ fn test_burn_on_invalid_proof() {
     // Process an invalid proof
     {
         let context = DefaultContext {
-            sender: attester_address.clone(),
+            sender: attester_address,
         };
 
         let proof = module.get_bond_proof(
-            attester_address.clone(),
+            attester_address,
             &ArrayWitness::default(),
             &mut working_set,
         );
@@ -171,14 +171,14 @@ fn test_burn_on_invalid_proof() {
 fn test_valid_proof() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, attester_address, challenger_address) =
+    let (module, attester_address, _challenger_address) =
         setup::<TestValidityCond, TestValidityCondChecker<TestValidityCond>>(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
     assert_eq!(
         module
             .get_bond_amount(
-                attester_address.clone(),
+                attester_address,
                 crate::call::Role::Attester,
                 &mut working_set
             )
@@ -189,11 +189,11 @@ fn test_valid_proof() {
     // Process a valid proof
     {
         let context = DefaultContext {
-            sender: attester_address.clone(),
+            sender: attester_address,
         };
 
         let proof = module.get_bond_proof(
-            attester_address.clone(),
+            attester_address,
             &ArrayWitness::default(),
             &mut working_set,
         );
@@ -236,12 +236,12 @@ fn test_valid_proof() {
 fn test_unbonding() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, attester_address, challenger_address) =
+    let (module, attester_address, _challenger_address) =
         setup::<TestValidityCond, TestValidityCondChecker<TestValidityCond>>(&mut working_set);
     let context = DefaultContext {
-        sender: attester_address.clone(),
+        sender: attester_address,
     };
-    let token_address = module
+    let _token_address = module
         .bonding_token_address
         .get(&mut working_set)
         .expect("bonding token address was set at genesis");
@@ -250,7 +250,7 @@ fn test_unbonding() {
     assert_eq!(
         module
             .get_bond_amount(
-                attester_address.clone(),
+                attester_address,
                 crate::call::Role::Attester,
                 &mut working_set
             )
@@ -279,7 +279,7 @@ fn test_unbonding() {
     assert_eq!(
         module
             .get_bond_amount(
-                attester_address.clone(),
+                attester_address,
                 crate::call::Role::Attester,
                 &mut working_set
             )
@@ -302,10 +302,10 @@ fn test_unbonding() {
 fn test_prover_not_bonded() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, attester_address, challenger_address) =
+    let (module, attester_address, _challenger_address) =
         setup::<TestValidityCond, TestValidityCondChecker<TestValidityCond>>(&mut working_set);
     let context = DefaultContext {
-        sender: attester_address.clone(),
+        sender: attester_address,
     };
 
     // Unbond the prover
@@ -317,7 +317,7 @@ fn test_prover_not_bonded() {
     assert_eq!(
         module
             .get_bond_amount(
-                attester_address.clone(),
+                attester_address,
                 crate::call::Role::Attester,
                 &mut working_set
             )
@@ -328,7 +328,7 @@ fn test_prover_not_bonded() {
     // Process a valid proof
     {
         let proof = module.get_bond_proof(
-            attester_address.clone(),
+            attester_address,
             &ArrayWitness::default(),
             &mut working_set,
         );

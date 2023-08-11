@@ -183,7 +183,7 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
             .unwrap();
         StorageProof {
             key,
-            value: val_opt.map(|val| StorageValue::from(val)),
+            value: val_opt.map(StorageValue::from),
             proof,
         }
     }

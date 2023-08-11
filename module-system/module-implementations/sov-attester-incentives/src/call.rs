@@ -359,12 +359,11 @@ impl<
             // We can assume that the genesis hash is always set, otherwise we need to panic.
             // We don't need to prove that the attester was bonded, simply need to check that the current bond is higher than the
             // minimal bond and that the attester is not unbonding
-            if !(self
+            if self
                 .chain_state
                 .genesis_hash
                 .get(working_set)
-                .expect("The genesis hash should be set")
-                == attestation.initial_state_root)
+                .expect("The genesis hash should be set") != attestation.initial_state_root
             {
                 // Slash the attester, and burn the fees
                 return self.slash_burn_reward(attester, working_set);
@@ -373,9 +372,7 @@ impl<
         } else {
             // We need to check that the transition is legit, if it is,
             // then we can perform the height checks
-            if !(self.chain_state.historical_transitions.get(&(max_attested_height-1), working_set).unwrap().post_state_root()
-                 /* Always defined, due to loop invariant */
-                            == attestation.initial_state_root)
+            if self.chain_state.historical_transitions.get(&(max_attested_height-1), working_set).unwrap().post_state_root() != attestation.initial_state_root
             {
                 // The initial root hashes don't match, just slash the attester
                 return self.slash_burn_reward(attester, working_set);
