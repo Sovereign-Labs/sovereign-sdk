@@ -14,9 +14,8 @@ use sov_rollup_interface::zk::Zkvm;
 use sov_state::{StateCheckpoint, Storage};
 use tracing::info;
 pub use tx_verifier::RawTx;
-
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_macros::{cycle_tracker};
+use zk_cycle_macros::cycle_tracker;
 
 /// This trait has to be implemented by a runtime in order to be used in `AppTemplate`.
 pub trait Runtime<C: Context>:
@@ -128,7 +127,6 @@ where
     where
         I: IntoIterator<Item = &'a mut B>,
     {
-
         self.begin_slot(witness);
         let mut batch_receipts = vec![];
 

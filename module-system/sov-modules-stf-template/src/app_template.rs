@@ -14,7 +14,7 @@ use crate::{Batch, Runtime, SequencerOutcome, SlashingReason, TxEffect};
 type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
 
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_macros::{cycle_tracker};
+use zk_cycle_macros::cycle_tracker;
 
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
@@ -84,7 +84,6 @@ where
         &mut self,
         blob: &mut B,
     ) -> ApplyBatchResult<BatchReceipt<SequencerOutcome, TxEffect>> {
-
         debug!(
             "Applying batch from sequencer: 0x{}",
             hex::encode(blob.sender())
@@ -111,7 +110,6 @@ where
 
         // TODO: don't ignore these events: https://github.com/Sovereign-Labs/sovereign/issues/350
         let _ = batch_workspace.take_events();
-
 
         let (txs, messages) = match self.pre_process_batch(blob.data_mut()) {
             Ok((txs, messages)) => (txs, messages),
@@ -247,7 +245,6 @@ where
         ),
         SlashingReason,
     > {
-
         let batch = self.deserialize_batch(blob_data)?;
         debug!("Deserialized batch with {} txs", batch.txs.len());
 

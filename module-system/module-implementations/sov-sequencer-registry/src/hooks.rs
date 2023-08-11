@@ -2,10 +2,8 @@ use sov_modules_api::hooks::ApplyBlobHooks;
 use sov_modules_api::Context;
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_state::WorkingSet;
-
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_macros::{cycle_tracker};
-
+use zk_cycle_macros::cycle_tracker;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use zk_cycle_utils::print_cycle_count;
 
