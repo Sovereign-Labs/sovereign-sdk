@@ -1,5 +1,6 @@
 use std::env;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -50,10 +51,11 @@ fn rollup_bench(_bench: &mut Criterion) {
 
     let mut demo = demo_runner.stf;
     let sequencer_private_key = DefaultPrivateKey::generate();
+    let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
     let demo_genesis_config = create_demo_genesis_config(
         100000000,
         sequencer_private_key.default_address(),
-        SEQUENCER_DA_ADDRESS.to_vec(),
+        sequencer_da_address.as_ref().to_vec(),
         &sequencer_private_key,
         &sequencer_private_key,
     );
