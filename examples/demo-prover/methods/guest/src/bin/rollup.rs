@@ -2,10 +2,13 @@
 
 #![no_main]
 
+use std::str::FromStr;
+
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::create_zk_app_template;
 use demo_stf::ArrayWitness;
 use jupiter::types::NamespaceId;
+use jupiter::verifier::address::CelestiaAddress;
 use jupiter::verifier::{CelestiaSpec, CelestiaVerifier, ChainValidityCondition};
 use jupiter::{BlobWithSender, CelestiaHeader};
 use risc0_adapter::guest::Risc0Guest;
@@ -67,11 +70,13 @@ pub fn main() {
         .expect("Transaction list must be correct");
     env::write(&"Relevant txs verified\n");
 
+    // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/647
+    let rewarded_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
     let output = StateTransition {
         initial_state_root: prev_state_root_hash,
         final_state_root: result.state_root.0,
         validity_condition,
-        rewarded_address: SEQUENCER_DA_ADDRESS.to_vec(),
+        rewarded_address: rewarded_address.as_ref().to_vec(),
         slot_hash: header.hash(),
     };
     env::commit(&output);
