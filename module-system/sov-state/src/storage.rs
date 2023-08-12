@@ -31,8 +31,11 @@ impl StorageKey {
     }
 
     pub fn as_cache_key(&self) -> &CacheKey {
-        debug_assert_eq!(self.key, {
-            let CacheKey { key } = unsafe { core::mem::transmute(self) };
+        debug_assert_eq!({
+            let StorageKey { key } = self;
+            key
+        }, {
+            let CacheKey { key } = unsafe { core::mem::transmute::<_, &CacheKey>(self) };
             key
         }, "the structure of the CacheKey must be exactly equal to the StorageKey so the unsafe transformation will work as expected");
 
