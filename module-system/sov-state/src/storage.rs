@@ -14,6 +14,7 @@ use crate::Prefix;
 
 // `Key` type for the `Storage`
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
+#[repr(transparent)]
 pub struct StorageKey {
     key: Arc<Vec<u8>>,
 }
@@ -30,6 +31,11 @@ impl StorageKey {
     }
 
     pub fn as_cache_key(&self) -> &CacheKey {
+        debug_assert_eq!(self.key, {
+            let CacheKey { key } = unsafe { core::mem::transmute(self) };
+            key
+        }, "the structure of the CacheKey must be exactly equal to the StorageKey so the unsafe transformation will work as expected");
+
         // Safety: they are currently equivalent
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/643
         unsafe { core::mem::transmute(self) }
