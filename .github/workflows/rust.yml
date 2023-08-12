@@ -1,130 +1,155 @@
 name: Rust
 
+# On Rust, GitHub Actions, and caching
+# ===========
+# Here's a list of things to keep in mind if you find yourself maintaing this
+# CI:
+#
+# https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows#matching-a-cache-key
+#
+# - Always install and select the desired Rust toolchain *before* running
+#   `Swatinem/rust-cache`. This is because the active Rust toolchain is used as
+#   a cache key.
+# - You can use `rustup show` to install and select the right Rust toolchain if
+#   you have a `rust-toolchain.toml` file:
+#   https://github.com/rust-lang/rustup/issues/1397.
+# - When caching Rust compilation artifacts, keep in mind that different `cargo`
+#   commands will use different profiles
+#   (https://doc.rust-lang.org/cargo/reference/profiles.html). Learn what you
+#   can reuse between one job and another and don't assume two commands will
+#   just share caches without conflicts.
+# - Be extremely aware of cache thrashing a.k.a. churning. GitHub Actions' cache
+#   allows for 10GiB of data which is easily exceeded if not careful.
+#   Sometimes it's better not to cache than cache excessively.
+#   Disabling cache writes for non-default branches altogether if cache churning
+#   is unacceptably high is supposed to help with this.
+# - Learn cache invalidation rules of `Swatinem/rust-cache` before making
+#   changes, e.g. what happens when `rustc --version` changes or `Cargo.lock`
+#   changes (or is missing).
+# - The jobs dependency tree is the way it is to accomodate for sharing caches,
+#   not necessarily because it makes logical sense to run one job after the
+#   other. This is due to the fact that we can't share caches between jobs that
+#   run in parallel.
+# - `sccache` is a good alternative to `Swatinem/rust-cache`, but it behaves
+#   poorly with GHA and often incurs into cache requests rate limits. We should
+#   probably explore `sccache` with a different backend.
+# - If a job makes good use of extra cores, consider give it a bigger machine.
+#   GHA larger runners increase in cost linearly with the number of cores
+#   (https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions),
+#   so you're not wasting money unless several cores are sitting idle for long.
+
 on:
   push:
-    branches: ["main"]
+    branches: ["nightly", "stable"]
     paths-ignore:
       - "**.md"
   pull_request:
-    branches: ["main"]
+    branches: ["nightly", "stable"]
     paths-ignore:
       - "**.md"
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+# Automatically cancels a job if a new commit if pushed to the same PR, branch, or tag.
+# Source: <https://stackoverflow.com/a/72408109/5148606>
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   check:
-    runs-on: ubuntu-latest
     name: check
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 60
-    env:
-      RUSTFLAGS: -D warnings
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
+      - uses: rui314/setup-mold@v1
+      - name: Install Rust
+        run: rustup show
       - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
+        with:
+          shared-key: cargo-check
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+          workspaces: |
+            .
+            examples/demo-prover
       - name: Run lint
         run: |
           if ! make lint ; then
             echo "Linting or formatting errors detected, please run 'make lint-fix' to fix it";
             exit 1
           fi
-
-  # TODO: Temporary before migration to RiscZero 0.15: https://github.com/Sovereign-Labs/sovereign-sdk/issues/338
-  #   After that demo-prover should be integrated into workspace
-  check-demo-prover:
-    runs-on: ubuntu-latest
-    name: check demo prover
-    timeout-minutes: 90
-    env:
-      RUSTFLAGS: -D warnings
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-      - uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
-      - name: Run cargo check
-        run: cd examples/demo-prover && cargo check
-      - name: Run cargo fmt check
-        run: |
-          cd examples/demo-prover;
-          if ! cargo fmt --check ; then
-            echo "Formatting errors detected, please run 'cargo fmt' to fix it";
-            exit 1
-          fi
-
   # Check that every combination of features is working properly.
   hack:
-    runs-on: ubuntu-latest
     name: features
+    # `cargo-hack` uses the same profile as `cargo check` and doesn't require
+    # building dependencies, only chceking them, so we can share caches
+    # effectively.
+    needs: check
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 60
-    env:
-      RUSTFLAGS: -D warnings
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
-      - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
+      - uses: rui314/setup-mold@v1
+      - name: Install Rust
+        run: rustup show
       - name: cargo install cargo-hack
         uses: taiki-e/install-action@cargo-hack
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cargo-check
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+          workspaces: |
+            .
+            examples/demo-prover
       # intentionally no target specifier; see https://github.com/jonhoo/rust-ci-conf/pull/4
       - name: cargo hack
         run: make check-features
   test:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 60
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
     steps:
       - uses: actions/checkout@v3
+      - uses: rui314/setup-mold@v1
+      - name: Install Rust
+        run: rustup show
+      # `cargo-nextest` is much faster than standard `cargo test`.
+      - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
-      - uses: foundry-rs/foundry-toolchain@v1
         with:
-          version: v1.0.0
-      - name: Run cargo test
-        run: cargo test
-  coverage:
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
-    steps:
-      - uses: actions/checkout@v3
-        with:
-          submodules: true
-      - uses: foundry-rs/foundry-toolchain@v1
-      - name: add llvm component
-        run: rustup component add llvm-tools-preview
-      - uses: Swatinem/rust-cache@v2
-      - uses: mozilla-actions/sccache-action@v0.0.3
-      - name: cargo install cargo-llvm-cov
-        uses: taiki-e/install-action@cargo-llvm-cov
-      - name: cargo generate-lockfile
-        if: hashFiles('Cargo.lock') == ''
-        run: cargo generate-lockfile
-      - name: cargo llvm-cov
-        run: make coverage
-      - name: Upload to codecov.io
-        uses: codecov/codecov-action@v3
-        with:
-          # When retry is implemented, we can enable it again: https://github.com/codecov/codecov-action/issues/926
-          fail_ci_if_error: false
+          shared-key: cargo-build
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+          workspaces: |
+            .
+            examples/demo-prover
+      - run: cargo nextest run --workspace --all-features
+      # `cargo-nextest` does not support doctests (yet?), so we have to run them
+      # separately.
+      # TODO: https://github.com/nextest-rs/nextest/issues/16
+      - run: cargo test --workspace --doc --all-features
   demo-rollup-local:
-    runs-on: ubuntu-latest
-    env:
-      SCCACHE_GHA_ENABLED: "true"
-      RUSTC_WRAPPER: "sccache"
+    # `test` has already built dependencies, so we can share
+    # caches (the profile is `dev` in both cases).
+    needs: test
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
     steps:
       - uses: actions/checkout@v3
-      - uses: mozilla-actions/sccache-action@v0.0.3
+      - uses: rui314/setup-mold@v1
+      - name: Install Rust
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cargo-build
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+          workspaces: |
+            .
+            examples/demo-prover
       - name: start celestia local
         working-directory: ./examples/demo-rollup
         run: make start
@@ -136,33 +161,130 @@ jobs:
       - name: wait for service to be up
         run: |
           SECONDS=0
-          until curl -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_balanceOf","params":["sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6","sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsgscxvf"],"id":1}' http://127.0.0.1:12345; [ $? -eq 0 ] || [ $SECONDS -ge 1200 ]
+          while ((SECONDS <= 1200))
           do
-            echo "Curl failed or server not ready yet, sleeping for 5 seconds..."
-            sleep 5
+            if curl -f -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"],"id":1}' http://127.0.0.1:12345; then
+              echo "demo-rollup is up"
+              exit 0
+            fi
+            echo "Not up yet, sleeping for 3 seconds..."
+            sleep 3
+            SECONDS=$((SECONDS+3))
           done
+          echo "demo-rollup took too long to start; exiting"
+          exit 1
       - name: submit rollup transaction
         working-directory: ./examples/demo-rollup
         run: make test-create-token
-      - name: evaluate result
+      - name: check token supply
         # simple grep check on RPC to verify if the curl output contains "1000" which is the supply of token - could use jq and parse, but considering this won't change, it seems like a simple check to get it out quick
         # if we want more complex parsing in the future and validation, we can switch to jq or other tools
         run: |
           SECONDS=0
-          until curl -f -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_balanceOf","params":["sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqmlyjd6","sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsgscxvf"],"id":1}' http://127.0.0.1:12345 | grep 1000; [ $? -eq 0 ] || [ $SECONDS -ge 300 ]
+          while ((SECONDS <= 300))
           do
-            echo "Curl failed, retrying in 5 seconds..."
-            sleep 5
+            if curl -f -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"],"id":1}' http://127.0.0.1:12345 | grep -q 1000; then
+              echo "demo-rollup test succeeded"
+              exit 0
+            fi
+            echo "Not up yet, sleeping for 3 seconds..."
+            sleep 3
+            SECONDS=$((SECONDS+3))
           done
-  cargo-doc-artifact:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+          echo "demo-rollup took too long to process transaction; exiting"
+          exit 1
+  # TODO: Temporary before migration to RiscZero 0.15:
+  #   https://github.com/Sovereign-Labs/sovereign-sdk/issues/338.
+  # After that demo-prover should be integrated into workspace.
+  # Note that `demo-prover` has (at the time of writing) a different `dev`
+  # profile from the rest of the codebase, so caches can't be shared.
+  check-demo-prover:
+    name: check demo prover
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v3
+      - uses: rui314/setup-mold@v1
+      - name: Install Rust
+        run: rustup show
       - uses: Swatinem/rust-cache@v2
-      # The artifact tends to become quite large with all the dependencies, so
-      # we don't include them in the docs.
-      - run: cargo doc --no-deps
+        with:
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+          workspaces: |
+            .
+            examples/demo-prover
+      - name: Run cargo check
+        working-directory: examples/demo-prover
+        run: cargo check
+      - name: Run cargo fmt check
+        run: |
+          cd examples/demo-prover;
+          if ! cargo fmt --check ; then
+            echo "Formatting errors detected, please run 'cargo fmt' to fix it";
+            exit 1
+          fi
+  coverage:
+    runs-on:
+      group: 8-cores_32GB_Ubuntu Group
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: true
+      - uses: rui314/setup-mold@v1
+      - name: Install Rust
+        run: rustup show
+      - name: add llvm component
+        run: rustup component add llvm-tools-preview
+      - name: cargo install cargo-llvm-cov
+        uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+          workspaces: |
+            .
+            examples/demo-prover
+      - name: cargo generate-lockfile
+        if: hashFiles('Cargo.lock') == ''
+        run: cargo generate-lockfile
+      - name: cargo llvm-cov
+        run: make coverage
+      - name: Upload to codecov.io
+        uses: codecov/codecov-action@v3
+        with:
+          # When retry is implemented, we can enable it again: https://github.com/codecov/codecov-action/issues/926
+          fail_ci_if_error: false
+  check-licenses:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v3
+      - uses: taiki-e/install-action@cargo-deny
+      - run: cargo deny check licenses
+  cargo-doc-artifact:
+    runs-on: ubuntu-latest
+    # `cargo doc` requires `cargo check`, so we can share caches.
+    needs: check
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v3
+        # Not sure installing `mold` is actually needed, but it's what the
+        # `check` job does and their caches are shared, so it's best to keep
+        # things as similar as possible.
+      - uses: rui314/setup-mold@v1
+      - name: Install Rust
+        run: rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: cargo-check
+          save-if: ${{ github.ref == 'refs/heads/nightly' }}
+          workspaces: |
+            .
+            examples/demo-prover
+      # The docs' artifact tends to become quite large with all the
+      # dependencies, so we don't include them.
+      - run: cargo doc --no-deps --all-features
       - name: Add index.html
         # We're inside a Cargo workspace, so there's no index.html by default.
         # We must redirect to one of the workspace member crates' documentation.
@@ -178,8 +300,7 @@ jobs:
   deploy-github-pages:
     needs: cargo-doc-artifact
     timeout-minutes: 5
-    # No point in deploying if we're not on `main`, as it will just fail.
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/stable'
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
       pages: write # to deploy to Pages

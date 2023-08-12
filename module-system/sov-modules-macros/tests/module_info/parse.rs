@@ -1,6 +1,5 @@
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::{Context, ModuleInfo};
-use sov_modules_macros::ModuleInfo;
 use sov_state::{StateMap, StateValue};
 
 mod test_module {
@@ -65,12 +64,13 @@ fn main() {
         .into()
     );
 
-    use sov_modules_api::Hasher;
+    use sov_modules_api::digest::Digest;
     let mut hasher = <C as sov_modules_api::Spec>::Hasher::new();
     hasher.update("trybuild000::test_module/TestStruct/".as_bytes());
+    let hash: [u8; 32] = hasher.finalize().into();
 
     assert_eq!(
-        &sov_modules_api::Address::try_from(hasher.finalize().as_ref()).unwrap(),
+        &sov_modules_api::Address::try_from(hash).unwrap(),
         test_struct.address()
     );
 }

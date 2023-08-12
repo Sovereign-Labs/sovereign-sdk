@@ -4,13 +4,12 @@ use std::path::Path;
 use std::sync::Arc;
 
 use jmt::storage::TreeWriter;
-use jmt::{JellyfishMerkleTree, KeyHash};
+use jmt::{JellyfishMerkleTree, KeyHash, RootHash, Version};
 use sov_db::state_db::StateDB;
-use sov_rollup_interface::crypto::SimpleHasher;
 
 use crate::config::Config;
 use crate::internal_cache::OrderedReadsAndWrites;
-use crate::storage::{StorageKey, StorageValue};
+use crate::storage::{NativeStorage, StorageKey, StorageProof, StorageValue};
 use crate::tree_db::TreeReadLogger;
 use crate::witness::Witness;
 use crate::{MerkleProofSpec, Storage};
@@ -47,16 +46,23 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
             .db
             .get_value_option_by_key(self.db.get_next_version(), key.as_ref())
         {
-            Ok(value) => value.map(StorageValue::new_from_bytes),
+            Ok(value) => value.map(Into::into),
             // It is ok to panic here, we assume the db is available and consistent.
             Err(e) => panic!("Unable to read value from db: {e}"),
         }
+    }
+
+    fn get_root_hash(&self, version: Version) -> Result<RootHash, anyhow::Error> {
+        let temp_merkle: JellyfishMerkleTree<'_, StateDB, S::Hasher> =
+            JellyfishMerkleTree::new(&self.db);
+        temp_merkle.get_root_hash(version)
     }
 }
 
 impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type Witness = S::Witness;
     type RuntimeConfig = Config;
+    type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Self::with_path(config.path.as_path())
@@ -66,6 +72,11 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         let val = self.read_value(key);
         witness.add_hint(val.clone());
         val
+    }
+
+    fn get_state_root(&self, _witness: &Self::Witness) -> anyhow::Result<[u8; 32]> {
+        self.get_root_hash(self.db.get_next_version() - 1)
+            .map(|root| root.0)
     }
 
     fn validate_and_commit(
@@ -97,7 +108,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 
         // For each value that's been read from the tree, read it from the logged JMT to populate hints
         for (key, read_value) in state_accesses.ordered_reads {
-            let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
+            let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
             // TODO: Switch to the batch read API once it becomes available
             let (result, proof) = untracked_jmt.get_with_proof(key_hash, latest_version)?;
             if result.as_ref() != read_value.as_ref().map(|f| f.value.as_ref()) {
@@ -112,7 +123,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .ordered_writes
             .into_iter()
             .map(|(key, value)| {
-                let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
+                let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
                 self.db
                     .put_preimage(key_hash, key.key.as_ref())
                     .expect("preimage must succeed");
@@ -138,6 +149,37 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     // Based on assumption `validate_and_commit` increments version.
     fn is_empty(&self) -> bool {
         self.db.get_next_version() <= 1
+    }
+
+    fn open_proof(
+        &self,
+        state_root: [u8; 32],
+        state_proof: StorageProof<Self::Proof>,
+    ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {
+        let StorageProof { key, value, proof } = state_proof;
+        let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
+
+        proof.verify(
+            jmt::RootHash(state_root),
+            key_hash,
+            value.as_ref().map(|v| v.value()),
+        )?;
+        Ok((key, value))
+    }
+}
+
+impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
+    type ValueWithProof = (Option<StorageValue>, Self::Proof);
+
+    fn get_with_proof(&self, key: StorageKey, _witness: &Self::Witness) -> Self::ValueWithProof {
+        let merkle = JellyfishMerkleTree::<StateDB, S::Hasher>::new(&self.db);
+        let (val_opt, proof) = merkle
+            .get_with_proof(
+                KeyHash::with::<S::Hasher>(key.as_ref()),
+                self.db.get_next_version() - 1,
+            )
+            .unwrap();
+        (val_opt.as_ref().map(StorageValue::new), proof)
     }
 }
 

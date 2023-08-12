@@ -1,10 +1,10 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::crypto::SimpleHasher;
 use sov_rollup_interface::da::{
-    self, BlobTransactionTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, CountedBufReader,
-    DaSpec,
+    self, BlobReaderTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, CountedBufReader, DaSpec,
 };
+use sov_rollup_interface::digest::Digest;
 use sov_rollup_interface::zk::ValidityCondition;
 use sov_rollup_interface::Buf;
 use thiserror::Error;
@@ -27,7 +27,7 @@ pub struct CelestiaVerifier {
 pub const PFB_NAMESPACE: NamespaceId = NamespaceId(hex_literal::hex!("0000000000000004"));
 pub const PARITY_SHARES_NAMESPACE: NamespaceId = NamespaceId(hex_literal::hex!("ffffffffffffffff"));
 
-impl BlobTransactionTrait for BlobWithSender {
+impl BlobReaderTrait for BlobWithSender {
     type Data = BlobIterator;
     type Address = CelestiaAddress;
 
@@ -68,7 +68,7 @@ impl TmHash {
             tendermint::Hash::Sha256(ref h) => h,
             // Hack: when the hash is None, we return a hash of all 255s as a placeholder.
             // TODO: add special casing for the genesis block at a higher level
-            tendermint::Hash::None => &[255u8; 32],
+            tendermint::Hash::None => unreachable!("Only the genesis block has a None hash, and we use a placeholder in that corner case")
         }
     }
 }
@@ -98,6 +98,8 @@ impl DaSpec for CelestiaSpec {
     type CompletenessProof = Vec<RelevantRowProof>;
 
     type ChainParams = RollupParams;
+
+    type ValidityCondition = ChainValidityCondition;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -105,7 +107,18 @@ pub struct RollupParams {
     pub namespace: NamespaceId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    Hash,
+    BorshDeserialize,
+    BorshSerialize,
+)]
 /// A validity condition expressing that a chain of DA layer blocks is contiguous and canonical
 pub struct ChainValidityCondition {
     pub prev_hash: [u8; 32],
@@ -119,7 +132,7 @@ pub enum ValidityConditionError {
 
 impl ValidityCondition for ChainValidityCondition {
     type Error = ValidityConditionError;
-    fn combine<H: SimpleHasher>(&self, rhs: Self) -> Result<Self, Self::Error> {
+    fn combine<H: Digest>(&self, rhs: Self) -> Result<Self, Self::Error> {
         if self.block_hash != rhs.prev_hash {
             return Err(ValidityConditionError::BlocksNotConsecutive);
         }
@@ -132,21 +145,19 @@ impl da::DaVerifier for CelestiaVerifier {
 
     type Error = ValidationError;
 
-    type ValidityCondition = ChainValidityCondition;
-
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self {
         Self {
             rollup_namespace: params.namespace,
         }
     }
 
-    fn verify_relevant_tx_list<H: SimpleHasher>(
+    fn verify_relevant_tx_list<H: Digest>(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
         inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
         completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
-    ) -> Result<Self::ValidityCondition, Self::Error> {
+    ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error> {
         // Validate that the provided DAH is well-formed
         block_header.validate_dah()?;
         let validity_condition = ChainValidityCondition {
@@ -175,8 +186,10 @@ impl da::DaVerifier for CelestiaVerifier {
 
             // Verify each sub-proof and flatten the shares back into a sequential array
             // First, enforce that the sub-proofs cover a contiguous range of shares
-            for [l, r] in tx_proof.proof.array_windows::<2>() {
-                assert_eq!(l.start_share_idx + l.shares.len(), r.start_share_idx)
+            for i in 1..tx_proof.proof.len() {
+                let l = &tx_proof.proof[i - 1];
+                let r = &tx_proof.proof[i];
+                assert_eq!(l.start_share_idx + l.shares.len(), r.start_share_idx);
             }
             let mut tx_shares = Vec::new();
             // Then, verify the sub proofs
@@ -235,9 +248,17 @@ impl da::DaVerifier for CelestiaVerifier {
                 let mut blob_iter = blob_ref.data();
                 let mut blob_data = vec![0; blob_iter.remaining()];
                 blob_iter.copy_to_slice(blob_data.as_mut_slice());
-                let tx_data = tx.data().acc();
+                let tx_data = tx.data().accumulator();
 
-                assert_eq!(blob_data, *tx_data);
+                match tx_data {
+                    da::Accumulator::Completed(tx_data) => {
+                        assert_eq!(blob_data, *tx_data);
+                    }
+                    // For now we bail and return, maybe want to change that behaviour in the future
+                    da::Accumulator::InProgress(_) => {
+                        return Err(ValidationError::IncompleteData);
+                    }
+                }
 
                 // Link blob commitment to e-tx commitment
                 let expected_commitment =

@@ -1,11 +1,9 @@
-use std::io::Read;
-
 use borsh::{BorshDeserialize, BorshSerialize};
 
 use crate::NonInstantiable;
 
 impl BorshDeserialize for NonInstantiable {
-    fn deserialize_reader<R: Read>(_reader: &mut R) -> std::io::Result<Self> {
+    fn deserialize_reader<R: std::io::Read>(_reader: &mut R) -> std::io::Result<Self> {
         unreachable!()
     }
 }

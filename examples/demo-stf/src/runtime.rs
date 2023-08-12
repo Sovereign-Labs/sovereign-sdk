@@ -1,22 +1,24 @@
 #[cfg(feature = "native")]
-use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
+use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
-use sov_bank::query::{BankRpcImpl, BankRpcServer};
+use sov_bank::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
-use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
+use sov_election::{ElectionRpcImpl, ElectionRpcServer};
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
 use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::Context;
+use sov_modules_api::hooks::SlotHooks;
+use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
-use sov_modules_macros::{cli_parser, expose_rpc};
-use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
+use sov_modules_api::macros::{expose_rpc, CliWallet};
+use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
+use sov_rollup_interface::zk::ValidityCondition;
 #[cfg(feature = "native")]
-use sov_sequencer_registry::query::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
+use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 #[cfg(feature = "native")]
-use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
+use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
 /// The Rollup entrypoint.
 ///
@@ -54,13 +56,13 @@ use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 /// instead of going through the DA layer.
 
 #[cfg(not(feature = "experimental"))]
-#[cfg_attr(
-    feature = "native",
-    cli_parser(DefaultContext),
-    expose_rpc(DefaultContext)
-)]
+#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc(DefaultContext))]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
+#[cfg_attr(
+    feature = "native",
+    serialization(serde::Serialize, serde::Deserialize)
+)]
 pub struct Runtime<C: Context> {
     pub bank: sov_bank::Bank<C>,
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
@@ -70,18 +72,41 @@ pub struct Runtime<C: Context> {
 }
 
 #[cfg(feature = "experimental")]
-#[cfg_attr(
-    feature = "native",
-    cli_parser(DefaultContext),
-    expose_rpc(DefaultContext)
-)]
+#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc(DefaultContext))]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
+#[cfg_attr(
+    feature = "native",
+    serialization(serde::Serialize, serde::Deserialize)
+)]
 pub struct Runtime<C: Context> {
     pub bank: sov_bank::Bank<C>,
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
+    #[cfg_attr(feature = "native", cli_skip)]
     pub evm: sov_evm::Evm<C>,
+}
+
+impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for Runtime<C> {
+    type Context = C;
+
+    fn begin_slot_hook(
+        &self,
+        _slot_data: &impl sov_rollup_interface::services::da::SlotData,
+        _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+    ) {
+    }
+
+    fn end_slot_hook(
+        &self,
+        _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+    ) {
+    }
+}
+
+impl<C: Context, Cond: ValidityCondition> sov_modules_stf_template::Runtime<C, Cond>
+    for Runtime<C>
+{
 }

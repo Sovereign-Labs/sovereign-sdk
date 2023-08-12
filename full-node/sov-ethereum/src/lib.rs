@@ -1,127 +1,148 @@
-use borsh::ser::BorshSerialize;
-use const_rollup_config::ROLLUP_NAMESPACE_RAW;
-use demo_stf::app::DefaultPrivateKey;
-use demo_stf::runtime::{DefaultContext, Runtime};
-use ethers::types::transaction::eip2718::TypedTransaction;
-use ethers::types::Bytes;
-use ethers::utils::rlp::Rlp;
-use jsonrpsee::core::client::ClientT;
-use jsonrpsee::core::params::ArrayParams;
-use jsonrpsee::http_client::{HeaderMap, HttpClient};
-use jsonrpsee::RpcModule;
-use jupiter::da_service::DaServiceConfig;
-use sov_evm::call::CallMessage;
-use sov_evm::evm::EvmTransaction;
-use sov_modules_api::transaction::Transaction;
+#[cfg(feature = "experimental")]
+pub use experimental::{get_ethereum_rpc, Ethereum};
 
-const GAS_PER_BYTE: usize = 120;
+#[cfg(feature = "experimental")]
+pub mod experimental {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
 
-pub fn get_ethereum_rpc(config: DaServiceConfig) -> RpcModule<Ethereum> {
-    let mut rpc = RpcModule::new(Ethereum { config });
-    register_rpc_methods(&mut rpc).expect("Failed to register sequencer RPC methods");
-    rpc
-}
+    use borsh::ser::BorshSerialize;
+    use const_rollup_config::ROLLUP_NAMESPACE_RAW;
+    use demo_stf::app::DefaultPrivateKey;
+    use demo_stf::runtime::{DefaultContext, Runtime};
+    use ethers::types::{Bytes, H256};
+    use jsonrpsee::core::client::ClientT;
+    use jsonrpsee::core::params::ArrayParams;
+    use jsonrpsee::http_client::{HeaderMap, HttpClient};
+    use jsonrpsee::types::ErrorObjectOwned;
+    use jsonrpsee::RpcModule;
+    use jupiter::da_service::DaServiceConfig;
+    use reth_primitives::TransactionSignedNoHash as RethTransactionSignedNoHash;
+    use reth_rpc::eth::error::EthApiError;
+    use sov_evm::call::CallMessage;
+    use sov_evm::evm::{EthAddress, RawEvmTransaction};
+    use sov_modules_api::transaction::Transaction;
+    use sov_modules_api::utils::to_jsonrpsee_error_object;
+    use sov_modules_api::EncodeCall;
 
-pub struct Ethereum {
-    config: DaServiceConfig,
-}
+    const GAS_PER_BYTE: usize = 120;
+    const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 
-impl Ethereum {
-    fn make_client(&self) -> HttpClient {
-        let mut headers = HeaderMap::new();
-        headers.insert(
-            "Authorization",
-            format!("Bearer {}", self.config.celestia_rpc_auth_token.clone())
-                .parse()
-                .unwrap(),
-        );
-
-        jsonrpsee::http_client::HttpClientBuilder::default()
-            .set_headers(headers)
-            .max_request_body_size(default_max_response_size()) // 100 MB
-            .build(self.config.celestia_rpc_address.clone())
-            .expect("Client initialization is valid")
+    pub fn get_ethereum_rpc(
+        config: DaServiceConfig,
+        tx_signer_prov_key: DefaultPrivateKey,
+    ) -> RpcModule<Ethereum> {
+        let mut rpc = RpcModule::new(Ethereum {
+            config,
+            nonces: Default::default(),
+            tx_signer_prov_key,
+        });
+        register_rpc_methods(&mut rpc).expect("Failed to register sequencer RPC methods");
+        rpc
     }
 
-    async fn send_tx_to_da(
-        &self,
-        raw: Vec<u8>,
-    ) -> Result<serde_json::Value, jsonrpsee::core::Error> {
-        let blob = vec![raw].try_to_vec().unwrap();
-        let client = self.make_client();
-        let fee: u64 = 2000;
-        let namespace = ROLLUP_NAMESPACE_RAW.to_vec();
-        let gas_limit = (blob.len() + 512) * GAS_PER_BYTE + 1060;
-
-        let mut params = ArrayParams::new();
-        params.insert(namespace)?;
-        params.insert(blob)?;
-        params.insert(fee.to_string())?;
-        params.insert(gas_limit)?;
-        client
-            .request::<serde_json::Value, _>("state.SubmitPayForBlob", params)
-            .await
+    pub struct Ethereum {
+        config: DaServiceConfig,
+        nonces: Mutex<HashMap<EthAddress, u64>>,
+        tx_signer_prov_key: DefaultPrivateKey,
     }
-}
 
-fn register_rpc_methods(rpc: &mut RpcModule<Ethereum>) -> Result<(), jsonrpsee::core::Error> {
-    rpc.register_async_method(
-        "eth_sendRawTransaction",
-        |parameters, ethereum| async move {
-            let data: Bytes = parameters.one().unwrap();
-            let data = data.as_ref();
+    impl Ethereum {
+        fn make_raw_tx(
+            &self,
+            raw_tx: RawEvmTransaction,
+        ) -> Result<(H256, Vec<u8>), jsonrpsee::core::Error> {
+            let signed_transaction: RethTransactionSignedNoHash =
+                raw_tx.clone().try_into().map_err(EthApiError::from)?;
 
-            // todo handle panics and unwraps.
-            if data[0] > 0x7f {
-                panic!("Invalid transaction type")
-            }
+            let tx_hash = signed_transaction.hash();
+            let sender = signed_transaction
+                .recover_signer()
+                .ok_or(EthApiError::InvalidTransactionSignature)?;
 
-            let rlp = Rlp::new(data);
-            let (decoded_tx, _decoded_sig) = TypedTransaction::decode_signed(&rlp).unwrap();
-            let tx_hash = decoded_tx.sighash();
+            let mut nonces = self.nonces.lock().unwrap();
+            let nonce = *nonces
+                .entry(sender.into())
+                .and_modify(|n| *n += 1)
+                .or_insert(0);
 
-            let tx_request = match decoded_tx {
-                TypedTransaction::Legacy(_) => panic!("Legacy transaction type not supported"),
-                TypedTransaction::Eip2930(_) => panic!("Eip2930 not supported"),
-                TypedTransaction::Eip1559(request) => request,
-            };
+            let tx = CallMessage { tx: raw_tx };
+            let message =
+                <Runtime<DefaultContext> as EncodeCall<sov_evm::Evm<DefaultContext>>>::encode_call(
+                    tx,
+                );
 
-            let evm_tx = EvmTransaction {
-                caller: tx_request.from.unwrap().into(),
-                data: tx_request.data.unwrap().to_vec(),
-                // todo set `gas limit`
-                gas_limit: u64::MAX,
-                // todo set `gas price`
-                gas_price: Default::default(),
-                // todo set `max_priority_fee_per_gas`
-                max_priority_fee_per_gas: Default::default(),
-                // todo `set to`
-                to: None,
-                value: tx_request.value.unwrap().into(),
-                nonce: tx_request.nonce.unwrap().as_u64(),
-                access_lists: vec![],
-            };
+            let tx = Transaction::<DefaultContext>::new_signed_tx(
+                &self.tx_signer_prov_key,
+                message,
+                nonce,
+            );
+            Ok((H256::from(tx_hash), tx.try_to_vec()?))
+        }
+    }
 
-            // todo set nonce
-            let raw = make_raw_tx(evm_tx, 0).unwrap();
-            ethereum.send_tx_to_da(raw).await?;
+    impl Ethereum {
+        fn make_client(&self) -> HttpClient {
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                "Authorization",
+                format!("Bearer {}", self.config.celestia_rpc_auth_token.clone())
+                    .parse()
+                    .unwrap(),
+            );
 
-            Ok(tx_hash)
-        },
-    )?;
+            jsonrpsee::http_client::HttpClientBuilder::default()
+                .set_headers(headers)
+                .max_request_size(default_max_response_size())
+                .build(self.config.celestia_rpc_address.clone())
+                .expect("Client initialization is valid")
+        }
 
-    Ok(())
-}
+        async fn send_tx_to_da(
+            &self,
+            raw: Vec<u8>,
+        ) -> Result<serde_json::Value, jsonrpsee::core::Error> {
+            let blob = vec![raw].try_to_vec()?;
+            let client = self.make_client();
+            let fee: u64 = 2000;
+            let namespace = ROLLUP_NAMESPACE_RAW.to_vec();
+            let gas_limit = (blob.len() + 512) * GAS_PER_BYTE + 1060;
 
-fn make_raw_tx(evm_tx: EvmTransaction, nonce: u64) -> Result<Vec<u8>, std::io::Error> {
-    let tx = CallMessage { tx: evm_tx };
-    let message = Runtime::<DefaultContext>::encode_evm_call(tx);
-    // todo don't generate sender here.
-    let sender = DefaultPrivateKey::generate();
-    let tx = Transaction::<DefaultContext>::new_signed_tx(&sender, message, nonce);
-    tx.try_to_vec()
-}
+            let mut params = ArrayParams::new();
+            params.insert(namespace)?;
+            params.insert(blob)?;
+            params.insert(fee.to_string())?;
+            params.insert(gas_limit)?;
+            client
+                .request::<serde_json::Value, _>("state.SubmitPayForBlob", params)
+                .await
+        }
+    }
 
-fn default_max_response_size() -> u32 {
-    1024 * 1024 * 100 // 100 MB
+    fn register_rpc_methods(rpc: &mut RpcModule<Ethereum>) -> Result<(), jsonrpsee::core::Error> {
+        rpc.register_async_method(
+            "eth_sendRawTransaction",
+            |parameters, ethereum| async move {
+                let data: Bytes = parameters.one().unwrap();
+
+                let raw_evm_tx = RawEvmTransaction { rlp: data.to_vec() };
+                let (tx_hash, raw_tx) = ethereum
+                    .make_raw_tx(raw_evm_tx)
+                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+
+                ethereum
+                    .send_tx_to_da(raw_tx)
+                    .await
+                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+
+                Ok::<_, ErrorObjectOwned>(tx_hash)
+            },
+        )?;
+
+        Ok(())
+    }
+
+    fn default_max_response_size() -> u32 {
+        1024 * 1024 * 100 // 100 MB
+    }
 }

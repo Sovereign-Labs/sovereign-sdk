@@ -1,22 +1,23 @@
 use std::env;
+use std::str::FromStr;
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::{DefaultPrivateKey, NativeAppRunner};
+use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
-use demo_stf::runner_config::{from_toml_path, Config as RunnerConfig};
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
-use jupiter::verifier::RollupParams;
+use jupiter::verifier::address::CelestiaAddress;
+use jupiter::verifier::{ChainValidityCondition, RollupParams};
 use methods::{ROLLUP_ELF, ROLLUP_ID};
-use risc0_adapter::host::Risc0Host;
+use risc0_adapter::host::{Risc0Host, Risc0Verifier};
 use serde::Deserialize;
-use sov_modules_api::RpcRunner;
+use sov_modules_api::PrivateKey;
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::Storage;
+use sov_stf_runner::{from_toml_path, Config as RunnerConfig};
 use tracing::{info, Level};
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -50,29 +51,33 @@ async fn main() -> Result<(), anyhow::Error> {
         RollupParams {
             namespace: ROLLUP_NAMESPACE,
         },
-    );
+    )
+    .await;
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let mut demo_runner = NativeAppRunner::<Risc0Host>::new(rollup_config.runner.clone());
-    let is_storage_empty = demo_runner.get_storage().is_empty();
-    let demo = demo_runner.inner_mut();
+    let mut app: App<Risc0Verifier, ChainValidityCondition, jupiter::BlobWithSender> =
+        App::new(rollup_config.runner.storage.clone());
+
+    let is_storage_empty = app.get_storage().is_empty();
 
     if is_storage_empty {
+        let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
         let genesis_config = create_demo_genesis_config(
             100000000,
             sequencer_private_key.default_address(),
-            SEQUENCER_DA_ADDRESS.to_vec(),
+            sequencer_da_address.as_ref().to_vec(),
             &sequencer_private_key,
             &sequencer_private_key,
         );
         info!("Starting from empty storage, initialization chain");
-        demo.init_chain(genesis_config);
+        app.stf.init_chain(genesis_config);
     }
 
-    demo.begin_slot(Default::default());
-    let (prev_state_root, _) = demo.end_slot();
-    let mut prev_state_root = prev_state_root.0;
+    let mut prev_state_root = app
+        .get_storage()
+        .get_state_root(&Default::default())
+        .expect("The storage needs to have a state root");
 
     for height in rollup_config.start_height.. {
         let mut host = Risc0Host::new(ROLLUP_ELF);
@@ -85,40 +90,33 @@ async fn main() -> Result<(), anyhow::Error> {
         let filtered_block = da_service.get_finalized_at(height).await?;
         let header_hash = hex::encode(filtered_block.header.header.hash());
         host.write_to_guest(&filtered_block.header);
-        let (blob_txs, inclusion_proof, completeness_proof) =
-            da_service.extract_relevant_txs_with_proof(&filtered_block);
+        let (mut blobs, inclusion_proof, completeness_proof) = da_service
+            .extract_relevant_txs_with_proof(&filtered_block)
+            .await;
+
+        info!(
+            "Extracted {} relevant blobs at height {} header 0x{}",
+            blobs.len(),
+            height,
+            header_hash,
+        );
 
         host.write_to_guest(&inclusion_proof);
         host.write_to_guest(&completeness_proof);
+        host.write_to_guest(&blobs);
 
-        demo.begin_slot(Default::default());
-        if blob_txs.is_empty() {
-            info!(
-                "Block at height {} with header 0x{} has no batches, skip proving",
-                height, header_hash
-            );
-            continue;
-        }
-        info!("Block has {} batches", blob_txs.len());
-        for mut blob in blob_txs.clone() {
-            let receipt = demo.apply_blob(&mut blob, None);
-            info!(
-                "batch with hash=0x{} has been applied",
-                hex::encode(receipt.batch_hash)
-            );
-        }
-        // Write txs only after they been read, so verification can be done properly
-        host.write_to_guest(&blob_txs);
+        let result = app
+            .stf
+            .apply_slot(Default::default(), &filtered_block, &mut blobs);
 
-        let (next_state_root, witness) = demo.end_slot();
-        host.write_to_guest(&witness);
+        host.write_to_guest(&result.witness);
 
         info!("Starting proving...");
         let receipt = host.run().expect("Prover should run successfully");
         info!("Start verifying..");
-        receipt.verify(&ROLLUP_ID).expect("Receipt should be valid");
+        receipt.verify(ROLLUP_ID).expect("Receipt should be valid");
 
-        prev_state_root = next_state_root.0;
+        prev_state_root = result.state_root.0;
         info!("Completed proving and verifying block {height}");
     }
 

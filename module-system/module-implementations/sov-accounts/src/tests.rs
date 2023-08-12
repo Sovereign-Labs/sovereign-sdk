@@ -1,6 +1,6 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::{AddressBech32, Context, Module, PublicKey, Spec};
+use sov_modules_api::{AddressBech32, Context, Module, PrivateKey, PublicKey, Spec};
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::query::{self, Response};
@@ -26,7 +26,9 @@ fn test_config_account() {
         .init_module(&account_config, native_working_set)
         .unwrap();
 
-    let query_response = accounts.get_account(init_pub_key, native_working_set);
+    let query_response = accounts
+        .get_account(init_pub_key, native_working_set)
+        .unwrap();
 
     assert_eq!(
         query_response,
@@ -47,7 +49,7 @@ fn test_update_account() {
 
     let sender = priv_key.pub_key();
     let sender_addr = sender.to_address::<<C as Spec>::Address>();
-    let sender_context = C::new(sender_addr.clone());
+    let sender_context = C::new(sender_addr);
 
     // Test new account creation
     {
@@ -55,7 +57,9 @@ fn test_update_account() {
             .create_default_account(sender.clone(), native_working_set)
             .unwrap();
 
-        let query_response = accounts.get_account(sender.clone(), native_working_set);
+        let query_response = accounts
+            .get_account(sender.clone(), native_working_set)
+            .unwrap();
 
         assert_eq!(
             query_response,
@@ -70,7 +74,7 @@ fn test_update_account() {
     {
         let priv_key = DefaultPrivateKey::generate();
         let new_pub_key = priv_key.pub_key();
-        let sig = priv_key.sign(call::UPDATE_ACCOUNT_MSG);
+        let sig = priv_key.sign(&call::UPDATE_ACCOUNT_MSG);
         accounts
             .call(
                 call::CallMessage::<C>::UpdatePublicKey(new_pub_key.clone(), sig),
@@ -80,12 +84,14 @@ fn test_update_account() {
             .unwrap();
 
         // Account corresponding to the old public key does not exist
-        let query_response = accounts.get_account(sender, native_working_set);
+        let query_response = accounts.get_account(sender, native_working_set).unwrap();
 
         assert_eq!(query_response, query::Response::AccountEmpty);
 
         // New account with the new public key and an old address is created.
-        let query_response = accounts.get_account(new_pub_key, native_working_set);
+        let query_response = accounts
+            .get_account(new_pub_key, native_working_set)
+            .unwrap();
 
         assert_eq!(
             query_response,
@@ -112,7 +118,7 @@ fn test_update_account_fails() {
 
     let priv_key = DefaultPrivateKey::generate();
     let sender_2 = priv_key.pub_key();
-    let sig_2 = priv_key.sign(call::UPDATE_ACCOUNT_MSG);
+    let sig_2 = priv_key.sign(&call::UPDATE_ACCOUNT_MSG);
 
     accounts
         .create_default_account(sender_2.clone(), native_working_set)
@@ -129,14 +135,14 @@ fn test_update_account_fails() {
 }
 
 #[test]
-fn test_get_acc_after_pub_key_update() {
+fn test_get_account_after_pub_key_update() {
     let tmpdir = tempfile::tempdir().unwrap();
     let native_working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let accounts = &mut Accounts::<C>::default();
 
     let sender_1 = DefaultPrivateKey::generate().pub_key();
     let sender_1_addr = sender_1.to_address::<<C as Spec>::Address>();
-    let sender_context_1 = C::new(sender_1_addr.clone());
+    let sender_context_1 = C::new(sender_1_addr);
 
     accounts
         .create_default_account(sender_1, native_working_set)
@@ -144,7 +150,7 @@ fn test_get_acc_after_pub_key_update() {
 
     let priv_key = DefaultPrivateKey::generate();
     let new_pub_key = priv_key.pub_key();
-    let sig = priv_key.sign(call::UPDATE_ACCOUNT_MSG);
+    let sig = priv_key.sign(&call::UPDATE_ACCOUNT_MSG);
     accounts
         .call(
             call::CallMessage::<C>::UpdatePublicKey(new_pub_key.clone(), sig),

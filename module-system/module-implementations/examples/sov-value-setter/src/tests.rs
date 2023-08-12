@@ -12,11 +12,10 @@ fn test_value_setter() {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let admin = Address::from([1; 32]);
     // Test Native-Context
+    #[cfg(feature = "native")]
     {
-        let config = ValueSetterConfig {
-            admin: admin.clone(),
-        };
-        let context = DefaultContext::new(admin.clone());
+        let config = ValueSetterConfig { admin };
+        let context = DefaultContext::new(admin);
         test_value_setter_helper(context, &config, &mut working_set);
     }
 
@@ -24,9 +23,7 @@ fn test_value_setter() {
 
     // Test Zk-Context
     {
-        let config = ValueSetterConfig {
-            admin: admin.clone(),
-        };
+        let config = ValueSetterConfig { admin };
         let zk_context = ZkDefaultContext::new(admin);
         let mut zk_working_set = WorkingSet::with_witness(ZkStorage::new([0u8; 32]), witness);
         test_value_setter_helper(zk_context, &config, &mut zk_working_set);
@@ -53,7 +50,7 @@ fn test_value_setter_helper<C: Context>(
 
     // Test query
     {
-        let query_response = module.query_value(working_set);
+        let query_response = module.query_value(working_set).unwrap();
 
         assert_eq!(
             query::Response {
@@ -74,11 +71,12 @@ fn test_err_on_sender_is_not_admin() {
 
     let sender_not_admin = Address::from([2; 32]);
     // Test Native-Context
+    #[cfg(feature = "native")]
     {
         let config = ValueSetterConfig {
-            admin: sender_not_admin.clone(),
+            admin: sender_not_admin,
         };
-        let context = DefaultContext::new(sender.clone());
+        let context = DefaultContext::new(sender);
         test_err_on_sender_is_not_admin_helper(context, &config, &mut native_working_set);
     }
     let (_, witness) = native_working_set.checkpoint().freeze();

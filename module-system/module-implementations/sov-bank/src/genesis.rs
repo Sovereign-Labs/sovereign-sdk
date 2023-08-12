@@ -4,10 +4,13 @@ use sov_state::WorkingSet;
 use crate::token::Token;
 use crate::Bank;
 
-pub const SALT: u64 = 0;
-pub const DEPLOYER: [u8; 32] = [0; 32];
+/// The address of the deployment node. For now, set to [0; 32]
+pub(crate) const DEPLOYER: [u8; 32] = [0; 32];
 
 impl<C: sov_modules_api::Context> Bank<C> {
+    /// Init an instance of the bank module from the configuration `config`.
+    /// For each token in the `config`, calls the [`Token::create`] function to create
+    /// the token. Upon success, updates the token set if the token address doesn't already exist.
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,
@@ -18,15 +21,15 @@ impl<C: sov_modules_api::Context> Bank<C> {
             let (token_address, token) = Token::<C>::create(
                 &token_config.token_name,
                 &token_config.address_and_balances,
-                vec![C::Address::try_from(&DEPLOYER)?],
+                &token_config.authorized_minters,
                 &DEPLOYER,
-                SALT,
+                token_config.salt,
                 parent_prefix,
                 working_set,
             )?;
 
             if self.tokens.get(&token_address, working_set).is_some() {
-                bail!("Token address already exists");
+                bail!("Token address {} already exists", token_address);
             }
 
             self.tokens.set(&token_address, &token, working_set);

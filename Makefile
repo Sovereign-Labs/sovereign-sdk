@@ -19,26 +19,27 @@ install-dev-tools:  ## Installs all necessary cargo helpers
 	cargo install flaky-finder
 
 lint:  ## cargo check and clippy
-	cargo check --all-targets --all-features
+	## fmt first, because it's the cheapest
 	cargo fmt --all --check
+	cargo check --all-targets --all-features
 	cargo clippy --all-targets --all-features
 
 lint-fix:  ## cargo fmt, fix and clippy
-	cargo fix --allow-dirty
 	cargo fmt --all
+	cargo fix --allow-dirty
 	cargo clippy --fix --allow-dirty
 
 check-features: ## Checks that project compiles with all combinations of features
 	cargo hack --feature-powerset check
 
 find-unused-deps: ## Prints unused dependencies for project. Note: requires nightly
-	cargo udeps --all-targets
+	cargo udeps --all-targets --all-features
 
 find-flaky-tests:  ## Runs tests over and over to find if there's flaky tests
 	flaky-finder -j16 -r320 --continue "cargo test -- --nocapture"
 
 coverage: ## Coverage in lcov format
-	cargo llvm-cov --locked --all-features --lcov --output-path lcov.info
+	cargo llvm-cov --locked --lcov --output-path lcov.info
 
 coverage-html: ## Coverage in HTML format
 	cargo llvm-cov --locked --all-features --html

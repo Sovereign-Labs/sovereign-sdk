@@ -7,16 +7,17 @@ use proptest::{prop_compose, proptest};
 use reqwest::header::CONTENT_TYPE;
 use serde_json::json;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
+use sov_rollup_interface::mocks::TestValidityCond;
 #[cfg(test)]
 use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader, TestHash};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::fuzzing::BatchReceiptStrategyArgs;
 use sov_rollup_interface::stf::{BatchReceipt, Event, TransactionReceipt};
+#[cfg(test)]
+use sov_stf_runner::get_ledger_rpc;
+use sov_stf_runner::RpcConfig;
 use tendermint::crypto::Sha256;
 use tokio::sync::oneshot;
-
-use crate::config::RpcConfig;
-use crate::ledger_rpc;
 
 struct TestExpect {
     payload: serde_json::Value,
@@ -72,7 +73,7 @@ fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u
 
         populate_ledger(&mut ledger_db, slots);
 
-        let ledger_rpc_module = ledger_rpc::get_ledger_rpc::<u32, u32>(ledger_db.clone());
+        let ledger_rpc_module = get_ledger_rpc::<u32, u32>(ledger_db.clone());
 
         rt.spawn(async move {
             let server = jsonrpsee::server::ServerBuilder::default()
@@ -115,6 +116,7 @@ fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value)
             prev_hash: TestHash(sha2::Sha256::digest(b"prev_header")),
         },
         height: 0,
+        validity_cond: TestValidityCond::default(),
     })];
 
     let batches = vec![
@@ -317,7 +319,8 @@ prop_compose! {
                 header: TestBlockHeader {
                     prev_hash,
                 },
-                height: 0
+                height: 0,
+                validity_cond: TestValidityCond::default()
             });
 
             total_num_batches += batches.len();

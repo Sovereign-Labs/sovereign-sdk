@@ -1,5 +1,7 @@
 ## Remote setup
+
 This readme covers the steps necessary to setup the sovereign-sdk to work with a remote DA network which includes
+
 1. Running a celestia light client locally, on the same machine running the demo-rollup
 2. A remote celestia network (Arabica testnet in this case)
 
@@ -47,7 +49,7 @@ For testing, we can submit a transaction to the bank module to create a new toke
 2. `cargo build --release --bin sov-cli`
 3. `./target/release/sov-cli util create-private-key .` This is the rollup private key that's used to sign rollup transactions. It's important to make the distinction between this key and the sequencer private key.
 4. `ls -lahtr | grep sov1` - you should see a new json file created containing the keypair. We will refer to this in later commands as `<rollup_keypair.json>`
-5. `./target/release/sov-cli serialize-call <rollup_keypair.json> Bank examples/demo-stf/src/sov-cli/test_data/create_token.json 0`
+5. `./target/release/sov-cli generate-transaction-from-json <rollup_keypair.json> Bank examples/demo-stf/src/sov-cli/test_data/create_token.json 0`
 6. Get the token address from the above the command (on Step 4) eg: `sov1jzvd95rjx7xpcdun2h8kyqee2z5r988h3wy4gsdn6ukc5ae04dvsrad3jj`
 7. The binary serialized transaction is created at : `examples/demo-stf/src/sov-cli/test_data/create_token.dat`
 

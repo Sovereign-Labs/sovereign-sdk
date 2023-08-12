@@ -1,4 +1,4 @@
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::ModuleInfo;
 
 #[derive(ModuleInfo)]
 struct TestStruct {}

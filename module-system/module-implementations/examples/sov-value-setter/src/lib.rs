@@ -1,17 +1,23 @@
-pub mod call;
-pub mod genesis;
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
+mod call;
+mod genesis;
 
 #[cfg(test)]
 mod tests;
 
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 
-use sov_modules_api::Error;
-use sov_modules_macros::ModuleInfo;
+pub use call::CallMessage;
+#[cfg(feature = "native")]
+pub use query::{Response, ValueSetterRpcImpl, ValueSetterRpcServer};
+use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 
+/// Initial configuration for sov-value-setter module.
 pub struct ValueSetterConfig<C: sov_modules_api::Context> {
+    /// Admin of the module.
     pub admin: C::Address,
 }
 
@@ -19,6 +25,7 @@ pub struct ValueSetterConfig<C: sov_modules_api::Context> {
 /// - Must derive `ModuleInfo`
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
+#[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo)]
 pub struct ValueSetter<C: sov_modules_api::Context> {
     /// Address of the module.

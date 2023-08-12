@@ -3,7 +3,7 @@
 </div>
 
 <div align="center">
-  <a href="https://github.com/Sovereign-Labs/sovereign-sdk/blob/main/LICENSE">
+  <a href="https://github.com/Sovereign-Labs/sovereign-sdk/blob/stable/LICENSE">
     <img alt="License: Apache-2.0" src="https://img.shields.io/github/license/Sovereign-Labs/sovereign-sdk.svg" />
 </div>
 

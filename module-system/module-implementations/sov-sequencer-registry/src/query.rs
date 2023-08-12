@@ -1,10 +1,14 @@
+use jsonrpsee::core::RpcResult;
+use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::Context;
-use sov_modules_macros::rpc_gen;
 use sov_state::WorkingSet;
 
 use crate::SequencerRegistry;
 
-#[cfg_attr(feature = "native", derive(serde::Deserialize, serde::Serialize))]
+#[cfg_attr(
+    feature = "native",
+    derive(serde::Deserialize, serde::Serialize, Clone)
+)]
 #[derive(Debug, Eq, PartialEq)]
 pub struct SequencerAddressResponse<C: Context> {
     pub address: Option<C::Address>,
@@ -19,9 +23,9 @@ impl<C: Context> SequencerRegistry<C> {
         &self,
         da_address: Vec<u8>,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> SequencerAddressResponse<C> {
-        SequencerAddressResponse {
+    ) -> RpcResult<SequencerAddressResponse<C>> {
+        Ok(SequencerAddressResponse {
             address: self.allowed_sequencers.get(&da_address, working_set),
-        }
+        })
     }
 }

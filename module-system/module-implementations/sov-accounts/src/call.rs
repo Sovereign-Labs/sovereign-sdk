@@ -4,18 +4,31 @@ use sov_state::WorkingSet;
 
 use crate::Accounts;
 
+/// To update the account's public key, the sender must sign this message as proof of possession of the new key.
 pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
 
+/// Represents the available call messages for interacting with the sov-accounts module.
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
-    derive(serde::Deserialize)
+    derive(serde::Deserialize),
+    derive(schemars::JsonSchema),
+    derive(sov_modules_api::macros::CliWalletArg),
+    schemars(
+        bound = "C::PublicKey: ::schemars::JsonSchema, C::Signature: ::schemars::JsonSchema",
+        rename = "CallMessage"
+    )
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: sov_modules_api::Context> {
-    // Updates a PublicKey for the corresponding Account.
-    // The sender must be in possession of the new PublicKey.
-    UpdatePublicKey(C::PublicKey, C::Signature),
+    /// Updates a public key for the corresponding Account.
+    /// The sender must be in possession of the new key.
+    UpdatePublicKey(
+        /// The new public key
+        C::PublicKey,
+        /// A valid signature from the new public key
+        C::Signature,
+    ),
 }
 
 impl<C: sov_modules_api::Context> Accounts<C> {
@@ -38,7 +51,7 @@ impl<C: sov_modules_api::Context> Accounts<C> {
         );
 
         // Proof that the sender is in possession of the `new_pub_key`.
-        signature.verify(&new_pub_key, UPDATE_ACCOUNT_MSG)?;
+        signature.verify(&new_pub_key, &UPDATE_ACCOUNT_MSG)?;
 
         // Update the public key (account data remains the same).
         self.accounts.set(&new_pub_key, &account, working_set);

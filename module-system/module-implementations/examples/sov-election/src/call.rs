@@ -9,7 +9,10 @@ use super::Election;
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
-    derive(serde::Deserialize)
+    derive(serde::Deserialize),
+    derive(schemars::JsonSchema),
+    derive(sov_modules_api::macros::CliWalletArg),
+    schemars(bound = "C: sov_modules_api::Context", rename = "CallMessage")
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: Context> {

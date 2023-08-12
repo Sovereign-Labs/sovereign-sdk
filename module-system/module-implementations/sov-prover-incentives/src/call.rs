@@ -10,12 +10,16 @@ use sov_state::WorkingSet;
 use crate::ProverIncentives;
 
 /// This enumeration represents the available call messages for interacting with the `ExampleModule` module.
+#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 #[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq)]
 // TODO: allow call messages to borrow data
 //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/274
 pub enum CallMessage {
+    /// Bonds the prover with provided bond.
     BondProver(u64),
+    /// Unbonds the prover.
     UnbondProver,
+    /// Verifies the provided proof (of format `Vec<u8>`)
     VerifyProof(Vec<u8>),
 }
 

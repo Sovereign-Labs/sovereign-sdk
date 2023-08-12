@@ -1,7 +1,9 @@
 //! Defines mock instantiations of many important traits, which are useful
 //! for testing, fuzzing, and benchmarking.
+
 use std::fmt::Display;
 use std::io::Write;
+use std::marker::PhantomData;
 
 use anyhow::{ensure, Error};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -9,9 +11,9 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
-use crate::da::{BlobTransactionTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
+use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
 use crate::services::da::SlotData;
-use crate::zk::{Matches, Zkvm};
+use crate::zk::{Matches, ValidityCondition, ValidityConditionChecker, Zkvm};
 use crate::AddressTrait;
 
 /// A mock commitment to a particular zkVM program.
@@ -21,6 +23,29 @@ pub struct MockCodeCommitment(pub [u8; 32]);
 impl Matches<MockCodeCommitment> for MockCodeCommitment {
     fn matches(&self, other: &MockCodeCommitment) -> bool {
         self.0 == other.0
+    }
+}
+
+/// A mock validity condition that is always valid, used as a genesis validity condition for now.
+#[derive(Clone, Copy, Debug, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Default)]
+pub struct MockValidityCond;
+
+impl ValidityCondition for MockValidityCond {
+    type Error = anyhow::Error;
+
+    fn combine<H: Digest>(&self, _rhs: Self) -> Result<Self, Self::Error> {
+        Ok(MockValidityCond)
+    }
+}
+/// A mock validity condition checker that always return true.
+#[derive(Debug, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
+pub struct MockValidityCondChecker;
+
+impl ValidityConditionChecker<MockValidityCond> for MockValidityCondChecker {
+    type Error = anyhow::Error;
+
+    fn check(&mut self, _condition: &MockValidityCond) -> Result<(), Self::Error> {
+        Ok(())
     }
 }
 
@@ -85,6 +110,13 @@ impl Zkvm for MockZkvm {
         anyhow::ensure!(proof.is_valid, "Proof is not valid");
         Ok(proof.log)
     }
+
+    fn verify_and_extract_output<C, Add: AddressTrait>(
+        _serialized_proof: &[u8],
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<crate::zk::StateTransition<C, Add>, Self::Error> {
+        todo!("Need to specify an output format for the proof logs")
+    }
 }
 
 #[test]
@@ -103,9 +135,24 @@ fn test_mock_proof_roundtrip() {
 }
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
-#[derive(Debug, PartialEq, Clone, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize, Hash)]
 pub struct MockAddress {
     addr: [u8; 32],
+}
+
+impl core::str::FromStr for MockAddress {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let addr = hex::decode(s)?;
+        if addr.len() != 32 {
+            return Err(anyhow::anyhow!("Invalid address length"));
+        }
+
+        let mut array = [0; 32];
+        array.copy_from_slice(&addr);
+        Ok(MockAddress { addr: array })
+    }
 }
 
 impl<'a> TryFrom<&'a [u8]> for MockAddress {
@@ -141,9 +188,46 @@ impl Display for MockAddress {
 
 impl AddressTrait for MockAddress {}
 
+/// A trivial test validity condition structure that only contains a boolean
+#[derive(
+    Debug, BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Copy, Default,
+)]
+pub struct TestValidityCond {
+    /// The associated validity condition field. If it is true, the validity condition is verified
+    pub is_valid: bool,
+}
+
+impl ValidityCondition for TestValidityCond {
+    type Error = Error;
+    fn combine<H: Digest>(&self, rhs: Self) -> Result<Self, Self::Error> {
+        Ok(TestValidityCond {
+            is_valid: self.is_valid & rhs.is_valid,
+        })
+    }
+}
+
+#[derive(Debug, BorshDeserialize, BorshSerialize)]
+/// A mock validity condition checker that always evaluate to cond
+pub struct TestValidityCondChecker<MockValidityCond> {
+    phantom: PhantomData<MockValidityCond>,
+}
+
+impl ValidityConditionChecker<TestValidityCond> for TestValidityCondChecker<TestValidityCond> {
+    type Error = Error;
+
+    fn check(&mut self, condition: &TestValidityCond) -> Result<(), Self::Error> {
+        if condition.is_valid {
+            Ok(())
+        } else {
+            Err(anyhow::format_err!("Invalid mock validity condition"))
+        }
+    }
+}
+
 #[derive(
     Debug,
     Clone,
+    PartialEq,
     borsh::BorshDeserialize,
     borsh::BorshSerialize,
     serde::Serialize,
@@ -157,7 +241,7 @@ pub struct TestBlob<Address> {
     data: CountedBufReader<Bytes>,
 }
 
-impl<Address: AddressTrait> BlobTransactionTrait for TestBlob<Address> {
+impl<Address: AddressTrait> BlobReaderTrait for TestBlob<Address> {
     type Data = Bytes;
     type Address = Address;
 
@@ -202,7 +286,7 @@ impl AsRef<[u8]> for TestHash {
 impl BlockHashTrait for TestHash {}
 
 /// A mock block header used for testing.
-#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]
 pub struct TestBlockHeader {
     /// The hash of the previous block.
     pub prev_hash: TestHash,
@@ -221,7 +305,7 @@ impl BlockHeaderTrait for TestBlockHeader {
 }
 
 /// A mock block type used for testing.
-#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
+#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]
 pub struct TestBlock {
     /// The hash of this block.
     pub curr_hash: [u8; 32],
@@ -229,16 +313,37 @@ pub struct TestBlock {
     pub header: TestBlockHeader,
     /// The height of this block
     pub height: u64,
+    /// Validity condition
+    pub validity_cond: TestValidityCond,
+}
+
+impl Default for TestBlock {
+    fn default() -> Self {
+        Self {
+            curr_hash: [0; 32],
+            header: TestBlockHeader {
+                prev_hash: TestHash([0; 32]),
+            },
+            height: 0,
+            validity_cond: TestValidityCond::default(),
+        }
+    }
 }
 
 impl SlotData for TestBlock {
     type BlockHeader = TestBlockHeader;
+    type Cond = TestValidityCond;
+
     fn hash(&self) -> [u8; 32] {
         self.curr_hash
     }
 
     fn header(&self) -> &Self::BlockHeader {
         &self.header
+    }
+
+    fn validity_condition(&self) -> TestValidityCond {
+        self.validity_cond
     }
 }
 
@@ -247,6 +352,7 @@ pub struct MockDaSpec;
 
 impl DaSpec for MockDaSpec {
     type SlotHash = TestHash;
+    type ValidityCondition = TestValidityCond;
     type BlockHeader = TestBlockHeader;
     type BlobTransaction = TestBlob<MockAddress>;
     type InclusionMultiProof = [u8; 32];

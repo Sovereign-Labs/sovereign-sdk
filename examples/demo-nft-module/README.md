@@ -22,7 +22,7 @@ simplicity, each token represents only an ID and won't hold any metadata.
 ### Structure and dependencies
 
 The Sovereign SDK provides a [module-template](../../module-system/module-implementations/module-template/README.md),
-which is boilerplate that can be customised to easily build modules.
+which is boilerplate that can be customized to easily build modules.
 
 ```
 
@@ -41,8 +41,7 @@ Here are defining basic dependencies in `Cargo.toml` that module needs to get st
 ```toml
 [dependencies]
 anyhow = { anyhow = "1.0.62" }
-sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main", default-features = false }
-sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main" }
+sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", features = ["macros"] }
 ```
 
 ### Establishing the Root Module Structure
@@ -55,8 +54,7 @@ has private state, which it updates in response to input messages.
 NFT module is defined as the following:
 
 ```rust
-use sov_modules_api::Context;
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::{Context, ModuleInfo};
 
 #[derive(ModuleInfo, Clone)]
 pub struct NonFungibleToken<C: Context> {
@@ -121,14 +119,13 @@ Before we start implementing the `Module` trait, there are several preparatory s
     serde = { version = "1", features = ["derive"] }
     serde_json = "1"
 
-     sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main", default-features = false }
-     sov-modules-macros = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main" }
-     sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main", default-features = false }
+    sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", default-features = false, features = ["macros"] }
+    sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", default-features = false }
 
-     [features]
-     default = ["native"]
-     serde = ["dep:serde", "dep:serde_json"]
-     native = ["serde", "sov-state/native", "sov-modules-api/native"]
+    [features]
+    default = ["native"]
+    serde = ["dep:serde", "dep:serde_json"]
+    native = ["serde", "sov-state/native", "sov-modules-api/native"]
     ```
 
     This step is necessary to optimize the module for execution in ZK mode, where none of the RPC-related logic is
@@ -371,27 +368,24 @@ Temporary storage is needed for testing, so we enable the `temp` feature of `sov
 
 ```toml
 [dev-dependencies]
-sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "main", features = ["temp"] }
+sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", features = ["temp"] }
 ```
 
 Here is some boilerplate for NFT module integration tests:
 
 ```rust
-use demo_nft_module::call::CallMessage;
-use demo_nft_module::query::OwnerResponse;
+use demo_nft_module::CallMessage;
+use demo_nft_module::OwnerResponse;
 use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
 use serde::de::DeserializeOwned;
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Hasher, Module, ModuleInfo, Spec};
+use sov_modules_api::{Address, Context, Hasher, Module, ModuleInfo, Spec, test_utils::generate_address};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 pub type C = DefaultContext;
 pub type Storage = ProverStorage<DefaultStorageSpec>;
 
-pub fn generate_address(key: &str) -> <C as Spec>::Address {
-    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
-    Address::from(hash)
-}
+
 #[test]
 #[ignore = "Not implemented yet"]
 fn genesis_and_mint() {}
@@ -411,11 +405,11 @@ Here's an example of setting up a module and calling its methods:
 #[test]
 fn transfer() {
     // Preparation
-    let admin = generate_address("admin");
+    let admin = generate_address::<C>("admin");
     let admin_context = C::new(admin.clone());
-    let owner1 = generate_address("owner2");
+    let owner1 = generate_address::<C>("owner2");
     let owner1_context = C::new(owner1.clone());
-    let owner2 = generate_address("owner2");
+    let owner2 = generate_address::<C>("owner2");
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
         admin: admin.clone(),
         owners: vec![(0, admin.clone()), (1, owner1.clone()), (2, owner2.clone())],

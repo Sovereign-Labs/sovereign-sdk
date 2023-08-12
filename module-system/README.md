@@ -91,7 +91,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
 ### The `RPC` Macro: The Node-to-User Interface
 
 The third interface that modules expose is an rpc implementation. To generate an RPC implementation, simply annotate your `impl` block
-with the `#[rpc_gen]` macro from `sov_modules_macros`.
+with the `#[rpc_gen]` macro from `sov_modules_api::macros`.
 
 ```rust
 #[rpc_gen(client, server, namespace = "bank")]
@@ -102,10 +102,10 @@ impl<C: sov_modules_api::Context> Bank<C> {
         user_address: C::Address,
         token_address: C::Address,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> BalanceResponse {
-        BalanceResponse {
+    ) -> RpcResult<BalanceResponse> {
+        Ok(BalanceResponse {
             amount: self.get_balance_of(user_address, token_address, working_set),
-        }
+        })
     }
 }
 ```
@@ -189,7 +189,7 @@ pub trait Context: Spec + Clone + Debug + PartialEq {
 }
 ```
 
-Modules are expected to be generic over the `Context` type. This trait gives them a convenient handle to access all of the cryptographic operations
+Modules are expected to be generic over the `Context` type. If a module is generic over multiple type parameters, then the type bound over `Context` is always on the *first* of those type parameters. The `Context` trait gives them a convenient handle to access all of the cryptographic operations
 defined by a `Spec`, while also making it easy for the Module System to pass in authenticated transaction-specific information which
 would not otherwise be available to a module. Currently, a `Context` is only required to contain the `sender` (signer) of the transaction,
 but this trait might be extended in the future.

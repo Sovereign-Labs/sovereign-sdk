@@ -1,4 +1,6 @@
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
+#[cfg(feature = "native")]
+use sov_modules_api::macros::CliWalletArg;
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
@@ -8,7 +10,10 @@ use crate::{Amount, Bank, Coins, Token};
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
-    derive(serde::Deserialize)
+    derive(serde::Deserialize),
+    derive(CliWalletArg),
+    derive(schemars::JsonSchema),
+    schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<C: sov_modules_api::Context> {
@@ -48,7 +53,7 @@ pub enum CallMessage<C: sov_modules_api::Context> {
         minter_address: C::Address,
     },
 
-    /// Freeze a token so that the supply is frozen
+    /// Freezes a token so that the supply is frozen
     Freeze {
         /// Address of the token to be frozen
         token_address: C::Address,
@@ -56,6 +61,8 @@ pub enum CallMessage<C: sov_modules_api::Context> {
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
+    /// Creates a token from a set of configuration parameters.
+    /// Checks if a token already exists at that address. If so return an error.
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn create_token(
         &self,
@@ -70,7 +77,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         let (token_address, token) = Token::<C>::create(
             &token_name,
             &[(minter_address, initial_balance)],
-            authorized_minters,
+            &authorized_minters,
             context.sender().as_ref(),
             salt,
             self.tokens.prefix(),
@@ -89,6 +96,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
         Ok(CallResponse::default())
     }
 
+    /// Transfers the set of `coins` to the address specified by `to`.
+    /// Helper function that calls the [`transfer_from`] method from the bank module
     pub fn transfer(
         &self,
         to: C::Address,
@@ -99,20 +108,37 @@ impl<C: sov_modules_api::Context> Bank<C> {
         self.transfer_from(context.sender(), &to, coins, working_set)
     }
 
+    /// Burns the set of `coins`. If there is no token at the address specified in the
+    /// `Coins` structure, return an error.
+    /// Calls the [`Token::burn`] function and updates the total supply of tokens.
     pub(crate) fn burn(
         &self,
         coins: Coins<C>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        token.burn(context.sender(), coins.amount, working_set)?;
+        let context_logger = || {
+            format!(
+                "Failed burn coins({}) by sender {}",
+                coins,
+                context.sender()
+            )
+        };
+        let mut token = self
+            .tokens
+            .get_or_err(&coins.token_address, working_set)
+            .with_context(context_logger)?;
+        token
+            .burn(context.sender(), coins.amount, working_set)
+            .with_context(context_logger)?;
         token.total_supply -= coins.amount;
         self.tokens.set(&coins.token_address, &token, working_set);
 
         Ok(CallResponse::default())
     }
 
+    /// Mints the `coins` set by the address `minter_address`. If the token address doesn't exist return an error.
+    /// Calls the [`Token::mint`] function and update the `self.tokens` set to store the new minted address.
     pub(crate) fn mint(
         &self,
         coins: Coins<C>,
@@ -120,21 +146,49 @@ impl<C: sov_modules_api::Context> Bank<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let mut token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        token.mint(context.sender(), &minter_address, coins.amount, working_set)?;
+        let context_logger = || {
+            format!(
+                "Failed mint coins({}) to {} by minter {}",
+                coins,
+                minter_address,
+                context.sender()
+            )
+        };
+        let mut token = self
+            .tokens
+            .get_or_err(&coins.token_address, working_set)
+            .with_context(context_logger)?;
+        token
+            .mint(context.sender(), &minter_address, coins.amount, working_set)
+            .with_context(context_logger)?;
         self.tokens.set(&coins.token_address, &token, working_set);
 
         Ok(CallResponse::default())
     }
 
+    /// Tries to freeze the token address `token_address`.
+    /// Returns an error if the token address doesn't exist,
+    /// otherwise calls the [`Token::freeze`] function, and update the token set upon success.
     pub(crate) fn freeze(
         &self,
         token_address: C::Address,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let mut token = self.tokens.get_or_err(&token_address, working_set)?;
-        token.freeze(context.sender())?;
+        let context_logger = || {
+            format!(
+                "Failed freeze token_address={} by sender {}",
+                token_address,
+                context.sender()
+            )
+        };
+        let mut token = self
+            .tokens
+            .get_or_err(&token_address, working_set)
+            .with_context(context_logger)?;
+        token
+            .freeze(context.sender())
+            .with_context(context_logger)?;
         self.tokens.set(&token_address, &token, working_set);
 
         Ok(CallResponse::default())
@@ -142,6 +196,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
 }
 
 impl<C: sov_modules_api::Context> Bank<C> {
+    /// Transfers the set of `coins` from the address `from` to the address `to`.
+    /// Returns an error if the token address doesn't exist. Otherwise, call the [`Token::transfer`] function.
     pub fn transfer_from(
         &self,
         from: &C::Address,
@@ -149,12 +205,25 @@ impl<C: sov_modules_api::Context> Bank<C> {
         coins: Coins<C>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let token = self.tokens.get_or_err(&coins.token_address, working_set)?;
-        token.transfer(from, to, coins.amount, working_set)?;
+        let context_logger = || {
+            format!(
+                "Failed transfer from={} to={} of coins({})",
+                from, to, coins
+            )
+        };
+        let token = self
+            .tokens
+            .get_or_err(&coins.token_address, working_set)
+            .with_context(context_logger)?;
+        token
+            .transfer(from, to, coins.amount, working_set)
+            .with_context(context_logger)?;
         Ok(CallResponse::default())
     }
 }
 
+/// Creates a new prefix from an already existing prefix `parent_prefix` and a `token_address`
+/// by extending the parent prefix.
 pub(crate) fn prefix_from_address_with_parent<C: sov_modules_api::Context>(
     parent_prefix: &sov_state::Prefix,
     token_address: &C::Address,

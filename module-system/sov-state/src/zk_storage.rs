@@ -2,10 +2,9 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use jmt::{JellyfishMerkleTree, KeyHash, Version};
-use sov_rollup_interface::crypto::SimpleHasher;
 
 use crate::internal_cache::OrderedReadsAndWrites;
-use crate::storage::{StorageKey, StorageValue};
+use crate::storage::{StorageKey, StorageProof, StorageValue};
 use crate::witness::{TreeWitnessReader, Witness};
 use crate::{MerkleProofSpec, Storage};
 
@@ -37,12 +36,18 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
 
     type RuntimeConfig = [u8; 32];
 
+    type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
+
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Ok(Self::new(config))
     }
 
-    fn get(&self, _key: StorageKey, witness: &S::Witness) -> Option<StorageValue> {
+    fn get(&self, _key: StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
         witness.get_hint()
+    }
+
+    fn get_state_root(&self, witness: &Self::Witness) -> anyhow::Result<[u8; 32]> {
+        Ok(witness.get_hint())
     }
 
     fn validate_and_commit(
@@ -55,7 +60,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
 
         // For each value that's been read from the tree, verify the provided smt proof
         for (key, read_value) in state_accesses.ordered_reads {
-            let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
+            let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
             // TODO: Switch to the batch read API once it becomes available
             let proof: jmt::proof::SparseMerkleProof<S::Hasher> = witness.get_hint();
             match read_value {
@@ -73,7 +78,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
             .ordered_writes
             .into_iter()
             .map(|(key, value)| {
-                let key_hash = KeyHash(S::Hasher::hash(key.key.as_ref()));
+                let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
                 (
                     key_hash,
                     value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
@@ -94,5 +99,21 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
 
     fn is_empty(&self) -> bool {
         unimplemented!("Needs simplification in JellyfishMerkleTree: https://github.com/Sovereign-Labs/sovereign-sdk/issues/362")
+    }
+
+    fn open_proof(
+        &self,
+        state_root: [u8; 32],
+        state_proof: StorageProof<Self::Proof>,
+    ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {
+        let StorageProof { key, value, proof } = state_proof;
+        let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
+
+        proof.verify(
+            jmt::RootHash(state_root),
+            key_hash,
+            value.as_ref().map(|v| v.value()),
+        )?;
+        Ok((key, value))
     }
 }

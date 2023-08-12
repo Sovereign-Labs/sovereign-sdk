@@ -1,9 +1,13 @@
 use std::sync::{Arc, Mutex};
 
 use anyhow::anyhow;
+use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
+use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_rollup_interface::services::da::DaService;
+
+const SEQUENCER_RPC_ERROR: &str = "SEQUENCER_RPC_ERROR";
 
 /// Single data structure that manages mempool and batch producing.
 pub struct Sequencer<B: BatchBuilder, T: DaService> {
@@ -61,7 +65,7 @@ where
         batch_builder
             .submit_batch()
             .await
-            .map_err(|e| jsonrpsee::core::Error::Custom(e.to_string()))
+            .map_err(|e| to_jsonrpsee_error_object(e, SEQUENCER_RPC_ERROR))
     })?;
     rpc.register_method("sequencer_acceptTx", move |params, sequencer| {
         let tx: SubmitTransaction = params.one()?;
@@ -69,7 +73,7 @@ where
             Ok(()) => SubmitTransactionResponse::Registered,
             Err(e) => SubmitTransactionResponse::Failed(e.to_string()),
         };
-        Ok(response)
+        Ok::<_, ErrorObjectOwned>(response)
     })?;
 
     Ok(())
@@ -105,11 +109,10 @@ pub enum SubmitTransactionResponse {
 
 #[cfg(test)]
 mod tests {
-    use std::future::Future;
-    use std::pin::Pin;
     use std::sync::Arc;
 
     use anyhow::bail;
+    use async_trait::async_trait;
     use sov_rollup_interface::da::DaSpec;
     use sov_rollup_interface::mocks::{MockDaSpec, TestBlock};
 
@@ -135,25 +138,25 @@ mod tests {
         }
     }
 
+    #[async_trait]
     impl DaService for MockDaService {
         type RuntimeConfig = ();
         type Spec = MockDaSpec;
         type FilteredBlock = TestBlock;
-        type Future<T> = Pin<Box<dyn Future<Output = Result<T, Self::Error>> + Send>>;
         type Error = anyhow::Error;
 
-        fn new(
+        async fn new(
             _config: Self::RuntimeConfig,
             _chain_params: <Self::Spec as DaSpec>::ChainParams,
         ) -> Self {
             MockDaService::new()
         }
 
-        fn get_finalized_at(&self, _height: u64) -> Self::Future<Self::FilteredBlock> {
+        async fn get_finalized_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
             todo!()
         }
 
-        fn get_block_at(&self, _height: u64) -> Self::Future<Self::FilteredBlock> {
+        async fn get_block_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
             todo!()
         }
 
@@ -164,7 +167,7 @@ mod tests {
             todo!()
         }
 
-        fn get_extraction_proof(
+        async fn get_extraction_proof(
             &self,
             _block: &Self::FilteredBlock,
             _blobs: &[<Self::Spec as DaSpec>::BlobTransaction],
@@ -175,9 +178,9 @@ mod tests {
             todo!()
         }
 
-        fn send_transaction(&self, blob: &[u8]) -> Self::Future<()> {
+        async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
             self.submitted.lock().unwrap().push(blob.to_vec());
-            Box::pin(async move { Ok(()) })
+            Ok(())
         }
     }
 
@@ -224,8 +227,9 @@ mod tests {
         assert!(result.is_err());
         let error = result.err().unwrap();
         assert_eq!(
-            "RPC call failed: ErrorObject { code: ServerError(-32001), message: \"Custom error: Mock mempool is empty\", data: None }",
-            error.to_string());
+            "ErrorObject { code: ServerError(-32001), message: \"SEQUENCER_RPC_ERROR\", data: Some(RawValue(\"Mock mempool is empty\")) }",
+            error.to_string()
+        );
     }
 
     #[tokio::test]

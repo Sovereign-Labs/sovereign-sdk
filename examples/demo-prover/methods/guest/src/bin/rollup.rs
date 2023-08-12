@@ -2,18 +2,21 @@
 
 #![no_main]
 
-use const_rollup_config::ROLLUP_NAMESPACE_RAW;
-use demo_stf::app::ZkAppRunner;
+use std::str::FromStr;
+
+use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
+use demo_stf::app::create_zk_app_template;
 use demo_stf::ArrayWitness;
 use jupiter::types::NamespaceId;
-use jupiter::verifier::{CelestiaSpec, CelestiaVerifier};
+use jupiter::verifier::address::CelestiaAddress;
+use jupiter::verifier::{CelestiaSpec, CelestiaVerifier, ChainValidityCondition};
 use jupiter::{BlobWithSender, CelestiaHeader};
 use risc0_adapter::guest::Risc0Guest;
 use risc0_zkvm::guest::env;
 use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
-use sov_rollup_interface::services::stf_runner::StateTransitionRunner;
-use sov_rollup_interface::stf::{StateTransitionFunction, ZkConfig};
+use sov_rollup_interface::services::da::SlotData;
+use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::{StateTransition, ZkvmGuest};
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
@@ -36,46 +39,45 @@ pub fn main() {
     env::write(&"Prev root hash read\n");
     // Step 1: read tx list
     let header: CelestiaHeader = guest.read_from_host();
-    env::write(&"header read\n");
+    env::write(&"header has been read\n");
     let inclusion_proof: <CelestiaSpec as DaSpec>::InclusionMultiProof = guest.read_from_host();
-    env::write(&"inclusion proof read\n");
+    env::write(&"inclusion proof has been read\n");
     let completeness_proof: <CelestiaSpec as DaSpec>::CompletenessProof = guest.read_from_host();
-    env::write(&"completeness proof read\n");
+    env::write(&"completeness proof has been read\n");
     let mut blobs: Vec<BlobWithSender> = guest.read_from_host();
-    env::write(&"txs read\n");
+    env::write(&"blobs have been read\n");
 
     // Step 2: Apply blobs
-    let mut demo_runner = <ZkAppRunner<Risc0Guest> as StateTransitionRunner<
-        ZkConfig,
-        Risc0Guest,
-    >>::new(prev_state_root_hash);
-    let demo = demo_runner.inner_mut();
+    let mut app = create_zk_app_template::<Risc0Guest, ChainValidityCondition, BlobWithSender>(
+        prev_state_root_hash,
+    );
 
     let witness: ArrayWitness = guest.read_from_host();
-    env::write(&"Witness read\n");
+    env::write(&"Witness have been read\n");
 
-    demo.begin_slot(witness);
-    env::write(&"Slot has begun\n");
-    for blob in &mut blobs {
-        demo.apply_blob(blob, None);
-        env::write(&"Blob applied\n");
-    }
-    let (state_root, _) = demo.end_slot();
-    env::write(&"Slot has ended\n");
+    env::write(&"Applying slot...\n");
+    let result = app.apply_slot(witness, &header, &mut blobs);
+
+    env::write(&"Slot has been applied\n");
 
     // Step 3: Verify tx list
     let verifier = CelestiaVerifier::new(jupiter::verifier::RollupParams {
         namespace: ROLLUP_NAMESPACE,
     });
+
     let validity_condition = verifier
         .verify_relevant_tx_list::<NoOpHasher>(&header, &blobs, inclusion_proof, completeness_proof)
         .expect("Transaction list must be correct");
     env::write(&"Relevant txs verified\n");
 
+    // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/647
+    let rewarded_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
     let output = StateTransition {
         initial_state_root: prev_state_root_hash,
-        final_state_root: state_root.0,
+        final_state_root: result.state_root.0,
         validity_condition,
+        rewarded_address: rewarded_address.as_ref().to_vec(),
+        slot_hash: header.hash(),
     };
     env::commit(&output);
     env::write(&"new state root committed\n");

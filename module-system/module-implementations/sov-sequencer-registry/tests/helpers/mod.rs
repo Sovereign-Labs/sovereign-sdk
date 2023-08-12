@@ -1,5 +1,7 @@
+use jsonrpsee::core::RpcResult;
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Hasher, Module, Spec};
+use sov_modules_api::digest::Digest;
+use sov_modules_api::{Address, Module, Spec};
 use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
 use sov_state::WorkingSet;
 
@@ -38,10 +40,10 @@ impl TestSequencer {
     pub fn query_balance_via_bank(
         &mut self,
         working_set: &mut WorkingSet<<C as Spec>::Storage>,
-    ) -> sov_bank::query::BalanceResponse {
+    ) -> RpcResult<sov_bank::BalanceResponse> {
         self.bank.balance_of(
-            self.sequencer_config.seq_rollup_address.clone(),
-            self.sequencer_config.coins_to_lock.token_address.clone(),
+            self.sequencer_config.seq_rollup_address,
+            self.sequencer_config.coins_to_lock.token_address,
             working_set,
         )
     }
@@ -51,10 +53,10 @@ impl TestSequencer {
         &mut self,
         user_address: <DefaultContext as Spec>::Address,
         working_set: &mut WorkingSet<<C as Spec>::Storage>,
-    ) -> sov_bank::query::BalanceResponse {
+    ) -> RpcResult<sov_bank::BalanceResponse> {
         self.bank.balance_of(
             user_address,
-            self.sequencer_config.coins_to_lock.token_address.clone(),
+            self.sequencer_config.coins_to_lock.token_address,
             working_set,
         )
     }
@@ -66,11 +68,13 @@ pub fn create_bank_config() -> (sov_bank::BankConfig<C>, <C as Spec>::Address) {
     let token_config = sov_bank::TokenConfig {
         token_name: "InitialToken".to_owned(),
         address_and_balances: vec![
-            (seq_address.clone(), INITIAL_BALANCE),
+            (seq_address, INITIAL_BALANCE),
             (generate_address(ANOTHER_SEQUENCER_KEY), INITIAL_BALANCE),
             (generate_address(UNKNOWN_SEQUENCER_KEY), INITIAL_BALANCE),
             (generate_address(LOW_FUND_KEY), 3),
         ],
+        authorized_minters: vec![],
+        salt: 8,
     };
 
     (
@@ -92,6 +96,7 @@ pub fn create_sequencer_config(
             amount: LOCKED_AMOUNT,
             token_address,
         },
+        preferred_sequencer: None,
     }
 }
 
@@ -99,10 +104,9 @@ pub fn create_test_sequencer() -> TestSequencer {
     let bank = sov_bank::Bank::<C>::default();
     let (bank_config, seq_rollup_address) = create_bank_config();
 
-    let token_address = sov_bank::create_token_address::<C>(
+    let token_address = sov_bank::get_genesis_token_address::<C>(
         &bank_config.tokens[0].token_name,
-        &sov_bank::genesis::DEPLOYER,
-        sov_bank::genesis::SALT,
+        bank_config.tokens[0].salt,
     );
 
     let registry = SequencerRegistry::<C>::default();
@@ -117,6 +121,6 @@ pub fn create_test_sequencer() -> TestSequencer {
 }
 
 pub fn generate_address(key: &str) -> <C as Spec>::Address {
-    let hash = <C as Spec>::Hasher::hash(key.as_bytes());
+    let hash: [u8; 32] = <C as Spec>::Hasher::digest(key.as_bytes()).into();
     Address::from(hash)
 }

@@ -1,7 +1,8 @@
+use proc_macro2::Span;
 use syn::DeriveInput;
 
 use crate::common::{
-    get_serialization_attrs, parse_generic_params, StructDef, StructFieldExtractor, CALL,
+    get_generics_type_param, get_serialization_attrs, StructDef, StructFieldExtractor, CALL,
 };
 
 impl<'a> StructDef<'a> {
@@ -56,7 +57,6 @@ impl<'a> StructDef<'a> {
                 type Context = #generic_param;
                 type Decodable = #call_enum #ty_generics;
 
-
                 fn decode_call(serialized_message: &[u8]) -> core::result::Result<Self::Decodable, std::io::Error> {
                     let mut data = std::io::Cursor::new(serialized_message);
                     <#call_enum #ty_generics as ::borsh::BorshDeserialize>::deserialize_reader(&mut data)
@@ -110,7 +110,7 @@ impl DispatchCallMacro {
             ..
         } = input;
 
-        let generic_param = parse_generic_params(&generics)?;
+        let generic_param = get_generics_type_param(&generics, Span::call_site())?;
 
         let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
         let fields = self.field_extractor.get_fields_from_struct(&data)?;

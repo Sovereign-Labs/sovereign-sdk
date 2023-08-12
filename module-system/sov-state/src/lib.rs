@@ -1,15 +1,25 @@
 mod internal_cache;
 mod map;
+
 #[cfg(feature = "native")]
 mod prover_storage;
-mod scratchpad;
-pub mod storage;
+
 #[cfg(feature = "native")]
 mod tree_db;
+
+mod scratchpad;
+
+pub mod storage;
+
 mod utils;
 mod value;
 mod witness;
+
+pub use value::SingletonKey;
+
 mod zk_storage;
+
+pub use zk_storage::ZkStorage;
 
 pub mod config;
 #[cfg(test)]
@@ -23,10 +33,10 @@ pub use map::StateMap;
 pub use prover_storage::{delete_storage, ProverStorage};
 pub use scratchpad::*;
 pub use sov_first_read_last_write_cache::cache::CacheLog;
+use sov_rollup_interface::digest::Digest;
 pub use storage::Storage;
 use utils::AlignedVec;
 pub use value::StateValue;
-pub use zk_storage::ZkStorage;
 
 pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 
@@ -81,7 +91,7 @@ pub trait MerkleProofSpec {
     /// The structure that accumulates the witness data
     type Witness: Witness;
     /// The hash function used to compute the merkle root
-    type Hasher: sov_rollup_interface::crypto::SimpleHasher;
+    type Hasher: Digest<OutputSize = sha2::digest::typenum::U32>;
 }
 
 use sha2::Sha256;

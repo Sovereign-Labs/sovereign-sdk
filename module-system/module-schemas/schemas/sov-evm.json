@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "CallMessage",
+  "type": "object",
+  "required": [
+    "tx"
+  ],
+  "properties": {
+    "tx": {
+      "$ref": "#/definitions/RawEvmTransaction"
+    }
+  },
+  "definitions": {
+    "RawEvmTransaction": {
+      "description": "Rlp encoded evm transaction.",
+      "type": "object",
+      "required": [
+        "rlp"
+      ],
+      "properties": {
+        "rlp": {
+          "description": "Rlp data.",
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "format": "uint8",
+            "minimum": 0.0
+          }
+        }
+      }
+    }
+  }
+}

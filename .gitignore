@@ -1,5 +1,5 @@
 /target
-/Cargo.lock
+
 .idea/
 
 target/
@@ -7,3 +7,4 @@ target/
 .DS_Store
 
 demo_data/
+/.vscode/*

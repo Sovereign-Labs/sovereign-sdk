@@ -1,3 +1,6 @@
+use borsh::{BorshDeserialize, BorshSerialize};
+use revm::primitives::specification::SpecId;
+use revm::primitives::{ExecutionResult, Output, B160};
 use sov_state::Prefix;
 
 mod conversions;
@@ -5,16 +8,21 @@ pub(crate) mod db;
 mod db_commit;
 pub(crate) mod db_init;
 pub(crate) mod executor;
+mod serialize;
 #[cfg(test)]
 pub(crate) mod test_helpers;
 #[cfg(test)]
 mod tests;
 pub(crate) mod transaction;
 
-pub(crate) type EthAddress = [u8; 20];
+pub type EthAddress = [u8; 20];
 pub(crate) type Bytes32 = [u8; 32];
 
-pub use transaction::EvmTransaction;
+pub use conversions::prepare_call_env;
+pub use transaction::RawEvmTransaction;
+
+use crate::experimental::SpecIdWrapper;
+
 // Stores information about an EVM account
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone, Default)]
 pub(crate) struct AccountInfo {
@@ -54,5 +62,40 @@ impl DbAccount {
         let mut prefix = parent_prefix.as_aligned_vec().clone().into_inner();
         prefix.extend_from_slice(&address);
         Prefix::new(prefix)
+    }
+}
+
+pub(crate) fn contract_address(result: ExecutionResult) -> Option<B160> {
+    match result {
+        ExecutionResult::Success {
+            output: Output::Create(_, Some(addr)),
+            ..
+        } => Some(addr),
+        _ => None,
+    }
+}
+
+/// EVM Chain configuration
+#[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
+pub struct EvmChainCfg {
+    /// Unique chain id
+    /// Chains can be registered at https://github.com/ethereum-lists/chains
+    pub chain_id: u64,
+
+    /// Limits size of contract code size
+    /// By default it is 0x6000 (~25kb).
+    pub limit_contract_code_size: Option<usize>,
+
+    /// List of EVM hardforks by block number
+    pub spec: Vec<(u64, SpecIdWrapper)>,
+}
+
+impl Default for EvmChainCfg {
+    fn default() -> EvmChainCfg {
+        EvmChainCfg {
+            chain_id: 1,
+            limit_contract_code_size: None,
+            spec: vec![(0, SpecIdWrapper::from(SpecId::LATEST))],
+        }
     }
 }

@@ -1,6 +1,6 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::{Address, Context, Module, PublicKey};
+use sov_modules_api::{Address, Context, Module, PrivateKey, PublicKey};
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
 
 use super::call::CallMessage;
@@ -17,12 +17,15 @@ fn test_election() {
     let native_storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut native_working_set = WorkingSet::new(native_storage);
 
-    test_module::<DefaultContext>(admin.clone(), &mut native_working_set);
+    test_module::<DefaultContext>(admin, &mut native_working_set);
 
-    let (_log, witness) = native_working_set.checkpoint().freeze();
-    let zk_storage = ZkStorage::new([0u8; 32]);
-    let mut zk_working_set = WorkingSet::with_witness(zk_storage, witness);
-    test_module::<ZkDefaultContext>(admin, &mut zk_working_set);
+    // Zk context
+    {
+        let (_log, witness) = native_working_set.checkpoint().freeze();
+        let zk_storage = ZkStorage::new([0u8; 32]);
+        let mut zk_working_set = WorkingSet::with_witness(zk_storage, witness);
+        test_module::<ZkDefaultContext>(admin, &mut zk_working_set);
+    }
 }
 
 fn test_module<C: Context>(admin: C::Address, working_set: &mut WorkingSet<C::Storage>) {
@@ -97,7 +100,7 @@ fn test_module<C: Context>(admin: C::Address, working_set: &mut WorkingSet<C::St
 
     // Get result
     {
-        let query_response: GetResultResponse = election.results(working_set);
+        let query_response: GetResultResponse = election.results(working_set).unwrap();
 
         assert_eq!(
             query_response,

@@ -1,5 +1,5 @@
-use sov_bank::call::CallMessage;
-use sov_bank::{create_token_address, Bank};
+use sov_bank::{get_token_address, Bank, CallMessage};
+use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Context, Module};
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -15,19 +15,19 @@ fn initial_and_deployed_token() {
     let bank = Bank::default();
     bank.genesis(&bank_config, &mut working_set).unwrap();
 
-    let sender_address = generate_address("sender");
-    let sender_context = C::new(sender_address.clone());
-    let minter_address = generate_address("minter");
+    let sender_address = generate_address::<C>("sender");
+    let sender_context = C::new(sender_address);
+    let minter_address = generate_address::<C>("minter");
     let initial_balance = 500;
     let token_name = "Token1".to_owned();
     let salt = 1;
-    let token_address = create_token_address::<C>(&token_name, sender_address.as_ref(), salt);
+    let token_address = get_token_address::<C>(&token_name, sender_address.as_ref(), salt);
     let create_token_message = CallMessage::CreateToken::<C> {
         salt,
         token_name,
         initial_balance,
-        minter_address: minter_address.clone(),
-        authorized_minters: vec![minter_address.clone()],
+        minter_address,
+        authorized_minters: vec![minter_address],
     };
 
     bank.call(create_token_message, &sender_context, &mut working_set)
@@ -35,8 +35,7 @@ fn initial_and_deployed_token() {
 
     assert!(working_set.events().is_empty());
 
-    let sender_balance =
-        bank.get_balance_of(sender_address, token_address.clone(), &mut working_set);
+    let sender_balance = bank.get_balance_of(sender_address, token_address, &mut working_set);
     assert!(sender_balance.is_none());
 
     let minter_balance = bank.get_balance_of(minter_address, token_address, &mut working_set);

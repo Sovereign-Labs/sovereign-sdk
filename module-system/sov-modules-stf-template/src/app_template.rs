@@ -1,31 +1,38 @@
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
-use sov_modules_api::{Context, DispatchCall, Genesis};
-use sov_rollup_interface::da::{BlobTransactionTrait, CountedBufReader};
+use sov_modules_api::{Context, DispatchCall};
+use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
+use sov_rollup_interface::zk::ValidityCondition;
 use sov_rollup_interface::Buf;
 use sov_state::StateCheckpoint;
 use tracing::{debug, error};
 
 use crate::tx_verifier::{verify_txs_stateless, TransactionAndRawHash};
-use crate::{Batch, SequencerOutcome, SlashingReason, TxEffect};
+use crate::{Batch, Runtime, SequencerOutcome, SlashingReason, TxEffect};
 
 type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
 
-pub struct AppTemplate<C: Context, RT, Vm> {
+/// An implementation of the
+/// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
+/// that is specifically designed to work with the module-system.
+pub struct AppTemplate<C: Context, Cond: ValidityCondition, Vm, RT: Runtime<C, Cond>, B> {
+    /// State storage used by the rollup.
     pub current_storage: C::Storage,
+    /// The runtime includes all the modules that the rollup supports.
     pub runtime: RT,
     pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
+    phantom_cond: PhantomData<Cond>,
+    phantom_blob: PhantomData<B>,
 }
 
 pub(crate) enum ApplyBatchError {
-    /// Contains batch hash
+    // Contains batch hash
     Ignored([u8; 32]),
     Slashed {
-        /// Contains batch hash
+        // Contains batch hash
         hash: [u8; 32],
         reason: SlashingReason,
         sequencer_da_address: Vec<u8>,
@@ -56,25 +63,26 @@ impl From<ApplyBatchError> for BatchReceipt<SequencerOutcome, TxEffect> {
     }
 }
 
-impl<C: Context, RT, Vm> AppTemplate<C, RT, Vm>
+impl<C: Context, Vm, Cond: ValidityCondition, RT: Runtime<C, Cond>, B: BlobReaderTrait>
+    AppTemplate<C, Cond, Vm, RT, B>
 where
-    RT: DispatchCall<Context = C>
-        + Genesis<Context = C>
-        + TxHooks<Context = C>
-        + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>,
+    RT: Runtime<C, Cond>,
 {
+    /// [`AppTemplate`] constructor.
     pub fn new(storage: C::Storage, runtime: RT) -> Self {
         Self {
             runtime,
             current_storage: storage,
             checkpoint: None,
             phantom_vm: PhantomData,
+            phantom_cond: PhantomData,
+            phantom_blob: PhantomData,
         }
     }
 
     pub(crate) fn apply_blob(
         &mut self,
-        blob: &mut impl BlobTransactionTrait,
+        blob: &mut B,
     ) -> ApplyBatchResult<BatchReceipt<SequencerOutcome, TxEffect>> {
         debug!(
             "Applying batch from sequencer: 0x{}",
@@ -270,7 +278,7 @@ where
         &self,
         batch: Batch,
     ) -> Result<Vec<TransactionAndRawHash<C>>, SlashingReason> {
-        match verify_txs_stateless(batch.take_transactions()) {
+        match verify_txs_stateless(batch.txs) {
             Ok(txs) => Ok(txs),
             Err(e) => {
                 error!("Stateless verification error - the sequencer included a transaction which was known to be invalid. {}\n", e);

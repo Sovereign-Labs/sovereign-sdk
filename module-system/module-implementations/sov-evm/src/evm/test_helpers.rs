@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use ethers_contract::BaseContract;
 use ethers_core::abi::Abi;
 use ethers_core::types::Bytes;
-use revm::primitives::{ExecutionResult, Output, B160};
+use revm::primitives::{ExecutionResult, Output};
 
 pub(crate) fn output(result: ExecutionResult) -> bytes::Bytes {
     match result {
@@ -12,16 +12,6 @@ pub(crate) fn output(result: ExecutionResult) -> bytes::Bytes {
             Output::Create(out, _) => out,
         },
         _ => panic!("Expected successful ExecutionResult"),
-    }
-}
-
-pub(crate) fn contract_address(result: ExecutionResult) -> B160 {
-    match result {
-        ExecutionResult::Success {
-            output: Output::Create(_, Some(addr)),
-            ..
-        } => addr,
-        _ => panic!("Expected successful contract creation"),
     }
 }
 

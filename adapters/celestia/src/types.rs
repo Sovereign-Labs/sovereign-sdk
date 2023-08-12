@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 
 use anyhow::ensure;
+use base64::engine::general_purpose::STANDARD as B64_ENGINE;
+use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
+use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::Bytes;
 use tendermint::crypto::default::Sha256;
@@ -12,7 +15,7 @@ use tendermint::merkle;
 use crate::pfb::MsgPayForBlobs;
 use crate::shares::{NamespaceGroup, Share};
 use crate::utils::BoxError;
-use crate::verifier::PARITY_SHARES_NAMESPACE;
+use crate::verifier::{ChainValidityCondition, PARITY_SHARES_NAMESPACE};
 use crate::{CelestiaHeader, TxPosition};
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
@@ -79,6 +82,7 @@ pub struct FilteredCelestiaBlock {
 
 impl SlotData for FilteredCelestiaBlock {
     type BlockHeader = CelestiaHeader;
+    type Cond = ChainValidityCondition;
 
     fn hash(&self) -> [u8; 32] {
         match self.header.header.hash() {
@@ -89,6 +93,13 @@ impl SlotData for FilteredCelestiaBlock {
 
     fn header(&self) -> &Self::BlockHeader {
         &self.header
+    }
+
+    fn validity_condition(&self) -> ChainValidityCondition {
+        ChainValidityCondition {
+            prev_hash: *self.header().prev_hash().inner(),
+            block_hash: self.hash(),
+        }
     }
 }
 
@@ -121,6 +132,7 @@ pub enum ValidationError {
     MissingTx,
     InvalidRowProof,
     InvalidSigner,
+    IncompleteData,
 }
 
 impl CelestiaHeader {
@@ -199,7 +211,8 @@ impl From<JsonNamespaceProof> for NamespaceProof<NamespacedSha2Hasher> {
 
 fn ns_hash_from_b64(input: &str) -> NamespacedHash {
     let mut output = [0u8; NAMESPACED_HASH_LEN];
-    base64::decode_config_slice(input, base64::STANDARD, &mut output[..])
+    B64_ENGINE
+        .decode_slice(input, &mut output[..])
         .expect("must be valid b64");
     NamespacedHash(output)
 }
