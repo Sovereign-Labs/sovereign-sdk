@@ -135,6 +135,8 @@ impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Mo
 
     type Config = ChainStateConfig;
 
+    type CallMessage = sov_modules_api::NonInstantiable;
+
     fn genesis(
         &self,
         config: &Self::Config,

@@ -58,4 +58,5 @@ impl<C: sov_modules_api::Context> BlobStorage<C> {
 impl<C: sov_modules_api::Context> Module for BlobStorage<C> {
     type Context = C;
     type Config = ();
+    type CallMessage = sov_modules_api::NonInstantiable;
 }
