@@ -6585,7 +6585,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "sov-bank",
+ "sov-ibc-transfer",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
