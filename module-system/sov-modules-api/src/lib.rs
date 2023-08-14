@@ -1,6 +1,7 @@
 #![doc = include_str!("../README.md")]
 
 mod bech32;
+pub mod capabilities;
 pub mod default_context;
 pub mod default_signature;
 mod dispatch;
@@ -134,6 +135,7 @@ pub trait Signature {
 
 /// A type that can't be instantiated.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 pub enum NonInstantiable {}
 
 /// PublicKey used in the Module System.

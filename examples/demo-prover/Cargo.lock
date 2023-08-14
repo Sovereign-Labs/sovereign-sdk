@@ -736,6 +736,7 @@ dependencies = [
  "serde_json",
  "sov-accounts",
  "sov-bank",
+ "sov-blob-storage",
  "sov-election",
  "sov-modules-api",
  "sov-modules-stf-template",
@@ -3522,6 +3523,26 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "thiserror",
+]
+
+[[package]]
+name = "sov-blob-storage"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "borsh",
+ "hex",
+ "jsonrpsee 0.18.2",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-sequencer-registry",
+ "sov-state",
+ "tracing",
 ]
 
 [[package]]

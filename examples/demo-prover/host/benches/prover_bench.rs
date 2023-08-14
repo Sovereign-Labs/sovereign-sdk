@@ -1,44 +1,36 @@
-use jupiter::types::FilteredCelestiaBlock;
-use jupiter::verifier::address::CelestiaAddress;
-use std::fs::read_to_string;
-use std::path::PathBuf;
-use std::io::Write;
-use std::fs::File;
-use std::str::FromStr;
 use std::env;
-use tempfile::TempDir;
-use sov_modules_api::PrivateKey;
+use std::fs::{read_to_string, remove_file, File, OpenOptions};
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::str::FromStr;
+use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::{DefaultPrivateKey, App};
+use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
-use jupiter::types::NamespaceId;
+use jupiter::types::{FilteredCelestiaBlock, NamespaceId};
+use jupiter::verifier::address::CelestiaAddress;
 use jupiter::verifier::{ChainValidityCondition, RollupParams};
 use jupiter::BlobWithSender;
-use methods::{ROLLUP_ELF};
+use log4rs::config::{Appender, Config, Root};
+use methods::ROLLUP_ELF;
+use regex::Regex;
 use risc0_adapter::host::Risc0Host;
 use serde::Deserialize;
+use sov_modules_api::PrivateKey;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage::Storage;
 use sov_stf_runner::{from_toml_path, Config as RunnerConfig};
-use std::fs::OpenOptions;
-use std::sync::{Arc, Mutex};
-use std::path::Path;
-use std::fs::remove_file;
-
-use log4rs::{
-    config::{Appender, Config, Root},
-};
-use regex::Regex;
+use tempfile::TempDir;
 
 #[derive(Debug)]
 struct RegexAppender {
     regex: Regex,
-    file: Arc<Mutex<File>>
+    file: Arc<Mutex<File>>,
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
@@ -52,19 +44,24 @@ impl RegexAppender {
         if Path::new(file_path).exists() {
             remove_file(file_path).expect("Failed to remove existing file");
         }
-        let file = Arc::new(Mutex::new(OpenOptions::new().create(true).append(true).open(file_path).unwrap()));
+        let file = Arc::new(Mutex::new(
+            OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(file_path)
+                .unwrap(),
+        ));
         let regex = Regex::new(pattern).unwrap();
         RegexAppender { regex, file }
     }
 }
 
 impl log::Log for RegexAppender {
-
     fn log(&self, record: &log::Record) {
         if let Some(captures) = self.regex.captures(record.args().to_string().as_str()) {
             if let Some(matched_pc) = captures.get(1) {
                 let pc_value_num = u64::from_str_radix(&matched_pc.as_str()[2..], 16).unwrap();
-                let pc_value =  format!("{}\n",pc_value_num);
+                let pc_value = format!("{}\n", pc_value_num);
                 let mut file_guard = self.file.lock().unwrap();
                 file_guard.write_all(pc_value.as_bytes()).unwrap();
             }
@@ -75,8 +72,7 @@ impl log::Log for RegexAppender {
         true
     }
 
-    fn flush(&self) {
-    }
+    fn flush(&self) {}
 }
 
 fn get_config(rollup_trace: &str) -> Config {
@@ -87,14 +83,18 @@ fn get_config(rollup_trace: &str) -> Config {
 
     Config::builder()
         .appender(Appender::builder().build("custom_appender", Box::new(custom_appender)))
-        .build(Root::builder().appender("custom_appender").build(log::LevelFilter::Trace))
+        .build(
+            Root::builder()
+                .appender("custom_appender")
+                .build(log::LevelFilter::Trace),
+        )
         .unwrap()
 }
 
+use std::collections::HashMap;
+
 #[cfg(feature = "bench")]
 use risc0_adapter::metrics::GLOBAL_HASHMAP;
-
-use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RollupConfig {
@@ -111,12 +111,18 @@ extern crate prettytable;
 
 use prettytable::Table;
 
-fn print_cycle_averages(
-    metric_map: HashMap<String, (u64,u64)>
-) {
-
-    let mut metrics_vec: Vec<(String, (u64,u64))> = metric_map.iter()
-        .map(|(k, (sum, count))| (k.clone(), (((*sum as f64)/(*count as f64)).round() as u64, count.clone())))
+fn print_cycle_averages(metric_map: HashMap<String, (u64, u64)>) {
+    let mut metrics_vec: Vec<(String, (u64, u64))> = metric_map
+        .iter()
+        .map(|(k, (sum, count))| {
+            (
+                k.clone(),
+                (
+                    ((*sum as f64) / (*count as f64)).round() as u64,
+                    count.clone(),
+                ),
+            )
+        })
         .collect();
 
     metrics_vec.sort_by(|a, b| b.1.cmp(&a.1));
@@ -124,27 +130,22 @@ fn print_cycle_averages(
     let mut table = Table::new();
     table.add_row(row!["Function", "Average Cycles", "Num Calls"]);
     for (k, (avg, count)) in metrics_vec {
-        table.add_row(row![k, format!("{}", avg),  format!("{}",count)]);
+        table.add_row(row![k, format!("{}", avg), format!("{}", count)]);
     }
     table.printstd();
-
 }
 
-fn chain_stats(
-    num_blocks: usize,
-    num_blocks_with_txns : usize,
-    num_txns: usize,
-    num_blobs: usize
-) {
-
+fn chain_stats(num_blocks: usize, num_blocks_with_txns: usize, num_txns: usize, num_blobs: usize) {
     let mut table = Table::new();
     table.add_row(row!["Total blocks", num_blocks]);
     table.add_row(row!["Blocks with transactions", num_blocks_with_txns]);
     table.add_row(row!["Number of blobs", num_blobs]);
     table.add_row(row!["Total number of transactions", num_txns]);
-    table.add_row(row!["Average number of transactions per block", ((num_txns as f64) / (num_blocks_with_txns as f64)) as u64]);
+    table.add_row(row![
+        "Average number of transactions per block",
+        ((num_txns as f64) / (num_blocks_with_txns as f64)) as u64
+    ]);
     table.printstd();
-
 }
 
 #[tokio::main]
@@ -173,12 +174,12 @@ async fn main() -> Result<(), anyhow::Error> {
         RollupParams {
             namespace: ROLLUP_NAMESPACE,
         },
-    ).await;
-
+    )
+    .await;
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let mut app: App<Risc0Host, ChainValidityCondition,BlobWithSender> =
+    let mut app: App<Risc0Host, ChainValidityCondition, BlobWithSender> =
         App::new(rollup_config.runner.storage.clone());
 
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
@@ -210,7 +211,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .collect();
 
     for height in 2..(bincoded_blocks.len() as u64) {
-        num_blocks+=1;
+        num_blocks += 1;
         let mut host = Risc0Host::new(ROLLUP_ELF);
         host.write_to_guest(prev_state_root);
         println!(
@@ -221,23 +222,24 @@ async fn main() -> Result<(), anyhow::Error> {
         let filtered_block = &bincoded_blocks[height as usize];
         let _header_hash = hex::encode(filtered_block.header.header.hash());
         host.write_to_guest(&filtered_block.header);
-        let (mut blob_txs, inclusion_proof, completeness_proof) =
-            da_service.extract_relevant_txs_with_proof(&filtered_block).await;
+        let (mut blob_txs, inclusion_proof, completeness_proof) = da_service
+            .extract_relevant_txs_with_proof(&filtered_block)
+            .await;
 
         host.write_to_guest(&inclusion_proof);
         host.write_to_guest(&completeness_proof);
         host.write_to_guest(&blob_txs);
 
         if !blob_txs.is_empty() {
-            num_blobs+=blob_txs.len();
+            num_blobs += blob_txs.len();
         }
 
         let result = demo.apply_slot(Default::default(), filtered_block, &mut blob_txs);
         for r in result.batch_receipts {
             let num_tx = r.tx_receipts.len();
-            num_total_transactions+=num_tx;
+            num_total_transactions += num_tx;
             if num_tx > 0 {
-                num_blocks_with_txns+=1;
+                num_blocks_with_txns += 1;
             }
         }
         // println!("{:?}",result.batch_receipts);
@@ -245,10 +247,11 @@ async fn main() -> Result<(), anyhow::Error> {
         host.write_to_guest(&result.witness);
 
         println!("Skipping prover at block {height} to capture cycle counts\n");
-        let _receipt = host.run_without_proving().expect("Prover should run successfully");
+        let _receipt = host
+            .run_without_proving()
+            .expect("Prover should run successfully");
         println!("==================================================\n");
         prev_state_root = result.state_root.0;
-
     }
 
     #[cfg(feature = "bench")]
@@ -257,11 +260,15 @@ async fn main() -> Result<(), anyhow::Error> {
         let metric_map = hashmap_guard.clone();
         let total_cycles = metric_map.get("Cycles per block").unwrap().0;
         println!("\nBlock stats\n");
-        chain_stats(num_blocks, num_blocks_with_txns, num_total_transactions, num_blobs);
+        chain_stats(
+            num_blocks,
+            num_blocks_with_txns,
+            num_total_transactions,
+            num_blobs,
+        );
         println!("\nCycle Metrics\n");
         print_cycle_averages(metric_map);
         println!("\nTotal cycles consumed for test: {}\n", total_cycles);
-
     }
 
     Ok(())

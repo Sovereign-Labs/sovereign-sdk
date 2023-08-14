@@ -66,6 +66,7 @@ pub fn create_demo_genesis_config<C: Context>(
     GenesisConfig::new(
         bank_config,
         sequencer_registry_config,
+        (),
         election_config,
         value_setter_config,
         sov_accounts::AccountConfig { pub_keys: vec![] },

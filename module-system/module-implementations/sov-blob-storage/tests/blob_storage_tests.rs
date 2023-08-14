@@ -50,22 +50,25 @@ fn store_and_retrieve_standard() {
     let blob_4 = B::new(vec![9, 9, 9], sender, dummy_hash);
     let blob_5 = B::new(vec![0, 1, 0], sender, dummy_hash);
 
-    let block_2_blobs = vec![blob_1, blob_2, blob_3];
-    let block_3_blobs = vec![blob_4];
-    let block_4_blobs = vec![blob_5];
+    let slot_2_blobs = vec![blob_1, blob_2, blob_3];
+    let slot_2_blob_refs: Vec<&TestBlob<MockAddress>> = slot_2_blobs.iter().collect();
+    let slot_3_blobs = vec![blob_4];
+    let slot_3_blob_refs: Vec<&TestBlob<MockAddress>> = slot_3_blobs.iter().collect();
+    let slot_4_blobs = vec![blob_5];
+    let slot_4_blob_refs: Vec<&TestBlob<MockAddress>> = slot_4_blobs.iter().collect();
 
     blob_storage
-        .store_blobs(2, &block_2_blobs, &mut working_set)
+        .store_blobs(2, &slot_2_blob_refs, &mut working_set)
         .unwrap();
     blob_storage
-        .store_blobs(3, &block_3_blobs, &mut working_set)
+        .store_blobs(3, &slot_3_blob_refs, &mut working_set)
         .unwrap();
     blob_storage
-        .store_blobs(4, &block_4_blobs, &mut working_set)
+        .store_blobs(4, &slot_4_blob_refs, &mut working_set)
         .unwrap();
 
     assert_eq!(
-        block_2_blobs,
+        slot_2_blobs,
         blob_storage.take_blobs_for_block_number(2, &mut working_set)
     );
     assert!(blob_storage
@@ -73,7 +76,7 @@ fn store_and_retrieve_standard() {
         .is_empty());
 
     assert_eq!(
-        block_3_blobs,
+        slot_3_blobs,
         blob_storage.take_blobs_for_block_number(3, &mut working_set)
     );
     assert!(blob_storage
@@ -81,7 +84,7 @@ fn store_and_retrieve_standard() {
         .is_empty());
 
     assert_eq!(
-        block_4_blobs,
+        slot_4_blobs,
         blob_storage.take_blobs_for_block_number(4, &mut working_set)
     );
     assert!(blob_storage
