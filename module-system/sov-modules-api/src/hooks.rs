@@ -32,7 +32,7 @@ pub trait TxHooks {
 /// Hooks related to the Sequencer functionality.
 /// In essence, the sequencer locks a bond at the beginning of the `StateTransitionFunction::apply_blob`,
 /// and is rewarded once a blob of transactions is processed.
-pub trait ApplyBlobHooks {
+pub trait ApplyBlobHooks<B: BlobReaderTrait> {
     type Context: Context;
     type BlobResult;
 
@@ -40,7 +40,7 @@ pub trait ApplyBlobHooks {
     /// If this hook returns Err, batch is not applied
     fn begin_blob_hook(
         &self,
-        blob: &mut impl BlobReaderTrait,
+        blob: &mut B,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()>;
 

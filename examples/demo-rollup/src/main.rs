@@ -183,7 +183,7 @@ fn register_ledger(
     ledger_db: LedgerDB,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error> {
-    let ledger_rpc = get_ledger_rpc::<SequencerOutcome, TxEffect>(ledger_db);
+    let ledger_rpc = get_ledger_rpc::<SequencerOutcome<CelestiaAddress>, TxEffect>(ledger_db);
     methods
         .merge(ledger_rpc)
         .context("Failed to merge ledger RPC modules")
