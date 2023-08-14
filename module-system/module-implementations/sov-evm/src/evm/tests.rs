@@ -1,5 +1,6 @@
 use std::convert::Infallible;
 
+use reth_primitives::TransactionKind;
 use revm::db::CacheDB;
 use revm::primitives::{CfgEnv, KECCAK_EMPTY, U256};
 use revm::{Database, DatabaseCommit};
@@ -9,10 +10,10 @@ use super::db::EvmDb;
 use super::db_init::InitEvmDb;
 use super::executor;
 use crate::evm::test_helpers::{output, SimpleStorageContract};
-use crate::evm::transaction::{BlockEnv, EvmTransaction};
+use crate::evm::transaction::BlockEnv;
 use crate::evm::{contract_address, AccountInfo};
+use crate::tests::dev_signer::DevSigner;
 use crate::Evm;
-
 type C = sov_modules_api::default_context::DefaultContext;
 
 #[test]
@@ -36,7 +37,8 @@ fn simple_contract_execution_in_memory_state() {
 fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit + InitEvmDb>(
     mut evm_db: DB,
 ) {
-    let caller: [u8; 20] = [11; 20];
+    let dev_signer = DevSigner::new_random();
+    let caller = dev_signer.address;
     evm_db.insert_account_info(
         caller,
         AccountInfo {
@@ -50,12 +52,11 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
     let contract = SimpleStorageContract::new();
 
     let contract_address = {
-        let tx = EvmTransaction {
-            to: None,
-            data: contract.byte_code().to_vec(),
-            ..Default::default()
-        };
+        let tx = dev_signer
+            .sign_default_transaction(TransactionKind::Create, contract.byte_code().to_vec(), 1)
+            .unwrap();
 
+        let tx = &tx.try_into().unwrap();
         let result =
             executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
         contract_address(result).expect("Expected successful contract creation")
@@ -66,26 +67,30 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
     {
         let call_data = contract.set_call_data(set_arg);
 
-        let tx = EvmTransaction {
-            to: Some(*contract_address.as_fixed_bytes()),
-            data: hex::decode(hex::encode(&call_data)).unwrap(),
-            nonce: 1,
-            ..Default::default()
-        };
+        let tx = dev_signer
+            .sign_default_transaction(
+                TransactionKind::Call(contract_address.as_fixed_bytes().into()),
+                hex::decode(hex::encode(&call_data)).unwrap(),
+                2,
+            )
+            .unwrap();
 
+        let tx = &tx.try_into().unwrap();
         executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
     }
 
     let get_res = {
         let call_data = contract.get_call_data();
 
-        let tx = EvmTransaction {
-            to: Some(*contract_address.as_fixed_bytes()),
-            data: hex::decode(hex::encode(&call_data)).unwrap(),
-            nonce: 2,
-            ..Default::default()
-        };
+        let tx = dev_signer
+            .sign_default_transaction(
+                TransactionKind::Call(contract_address.as_fixed_bytes().into()),
+                hex::decode(hex::encode(&call_data)).unwrap(),
+                3,
+            )
+            .unwrap();
 
+        let tx = &tx.try_into().unwrap();
         let result =
             executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
 

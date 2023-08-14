@@ -19,6 +19,7 @@ sov-state = { path = "../../module-system/sov-state", default-features = false }
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface" }
+sov-data-generators = { path = "../../module-system/utils/sov-data-generators" }
 tempfile = { workspace = true }
 
 

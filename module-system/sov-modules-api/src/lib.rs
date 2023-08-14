@@ -10,7 +10,6 @@ pub mod hooks;
 mod prefix;
 mod response;
 mod serde_address;
-pub mod test_utils;
 #[cfg(test)]
 mod tests;
 pub mod transaction;
@@ -46,7 +45,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub use clap;
 #[cfg(feature = "native")]
 pub use dispatch::CliWallet;
-pub use dispatch::{DispatchCall, Genesis};
+pub use dispatch::{DispatchCall, EncodeCall, Genesis};
 pub use error::Error;
 pub use prefix::Prefix;
 pub use response::CallResponse;
@@ -66,7 +65,7 @@ impl AsRef<[u8]> for Address {
 impl AddressTrait for Address {}
 
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
-#[derive(PartialEq, Clone, Eq, borsh::BorshDeserialize, borsh::BorshSerialize, Hash)]
+#[derive(PartialEq, Clone, Copy, Eq, borsh::BorshDeserialize, borsh::BorshSerialize, Hash)]
 pub struct Address {
     addr: [u8; 32],
 }

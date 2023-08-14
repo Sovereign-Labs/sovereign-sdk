@@ -1,3 +1,4 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{
@@ -99,6 +100,8 @@ impl DaSpec for CelestiaSpec {
     type CompletenessProof = Vec<RelevantRowProof>;
 
     type ChainParams = RollupParams;
+
+    type ValidityCondition = ChainValidityCondition;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -106,7 +109,18 @@ pub struct RollupParams {
     pub namespace: NamespaceId,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Hash)]
+#[derive(
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    Serialize,
+    Deserialize,
+    Hash,
+    BorshDeserialize,
+    BorshSerialize,
+)]
 /// A validity condition expressing that a chain of DA layer blocks is contiguous and canonical
 pub struct ChainValidityCondition {
     pub prev_hash: [u8; 32],
@@ -133,8 +147,6 @@ impl da::DaVerifier for CelestiaVerifier {
 
     type Error = ValidationError;
 
-    type ValidityCondition = ChainValidityCondition;
-
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self {
         Self {
             rollup_namespace: params.namespace,
@@ -148,7 +160,7 @@ impl da::DaVerifier for CelestiaVerifier {
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
         inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
         completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
-    ) -> Result<Self::ValidityCondition, Self::Error> {
+    ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error> {
         // Validate that the provided DAH is well-formed
         block_header.validate_dah()?;
         let validity_condition = ChainValidityCondition {
@@ -240,11 +252,17 @@ impl da::DaVerifier for CelestiaVerifier {
                 let mut blob_data = vec![0; blob_iter.remaining()];
                 blob_iter.copy_to_slice(blob_data.as_mut_slice());
 
-                // println!("a: {:?}",tx);
-                // println!("b: {:?}",tx.data());
-                // println!("c: {:?}",tx.data().acc());
-                // let tx_data = tx.data().acc();
-                // assert_eq!(blob_data, *tx_data);
+                let tx_data = tx.data().accumulator();
+
+                match tx_data {
+                    da::Accumulator::Completed(tx_data) => {
+                        assert_eq!(blob_data, *tx_data);
+                    }
+                    // For now we bail and return, maybe want to change that behaviour in the future
+                    da::Accumulator::InProgress(_) => {
+                        return Err(ValidationError::IncompleteData);
+                    }
+                }
 
                 // Link blob commitment to e-tx commitment
                 let expected_commitment =

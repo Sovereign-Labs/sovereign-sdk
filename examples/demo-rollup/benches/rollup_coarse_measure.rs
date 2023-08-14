@@ -1,5 +1,6 @@
 use std::env;
 use std::path::PathBuf;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -14,7 +15,9 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_demo_rollup::rng_xfers::RngDaService;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
-use sov_rollup_interface::mocks::{TestBlob, TestBlock, TestBlockHeader, TestHash};
+use sov_rollup_interface::mocks::{
+    TestBlob, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
+};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_stf_runner::{from_toml_path, RollupConfig};
@@ -90,25 +93,22 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let da_service = Arc::new(RngDaService::new());
 
-    let demo_runner =
-        App::<Risc0Verifier, TestBlob<CelestiaAddress>>::new(rollup_config.runner.storage);
+    let demo_runner = App::<Risc0Verifier, TestValidityCond, TestBlob<CelestiaAddress>>::new(
+        rollup_config.runner.storage,
+    );
 
     let mut demo = demo_runner.stf;
     let sequencer_private_key = DefaultPrivateKey::generate();
+    let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
     let demo_genesis_config = create_demo_genesis_config(
         100000000,
         sequencer_private_key.default_address(),
-        SEQUENCER_DA_ADDRESS.to_vec(),
+        sequencer_da_address.as_ref().to_vec(),
         &sequencer_private_key,
         &sequencer_private_key,
     );
-    let _prev_state_root = {
-        // Check if the rollup has previously been initialized
-        demo.init_chain(demo_genesis_config);
-        let apply_block_result = demo.apply_slot(Default::default(), []);
-        let prev_state_root = apply_block_result.state_root;
-        prev_state_root.0
-    };
+
+    demo.init_chain(demo_genesis_config);
 
     // data generation
     let mut blobs = vec![];
@@ -124,8 +124,9 @@ async fn main() -> Result<(), anyhow::Error> {
                 prev_hash: TestHash([0u8; 32]),
             },
             height,
+            validity_cond: TestValidityCond::default(),
         };
-        blocks.push(filtered_block.clone());
+        blocks.push(filtered_block);
 
         let blob_txs = da_service.extract_relevant_txs(&filtered_block);
         blobs.push(blob_txs);
@@ -137,11 +138,15 @@ async fn main() -> Result<(), anyhow::Error> {
     for height in start_height..end_height {
         let filtered_block = &blocks[height as usize];
 
-        let mut data_to_commit = SlotCommit::new(filtered_block.clone());
+        let mut data_to_commit = SlotCommit::new(*filtered_block);
 
         let now = Instant::now();
 
-        let apply_block_results = demo.apply_slot(Default::default(), &mut blobs[height as usize]);
+        let apply_block_results = demo.apply_slot(
+            Default::default(),
+            data_to_commit.slot_data(),
+            &mut blobs[height as usize],
+        );
 
         apply_block_time += now.elapsed();
         h_apply_block.observe(now.elapsed().as_secs_f64());

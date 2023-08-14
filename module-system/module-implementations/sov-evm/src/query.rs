@@ -6,6 +6,7 @@ use reth_rpc_types::state::StateOverride;
 use reth_rpc_types::{BlockOverrides, CallRequest, TransactionRequest};
 use revm::primitives::{CfgEnv, ExecutionResult};
 use sov_modules_api::macros::rpc_gen;
+use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_state::WorkingSet;
 use tracing::info;
 
@@ -62,7 +63,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
     ) -> RpcResult<Option<Transaction>> {
         info!("evm module: eth_getTransactionByHash");
         let evm_transaction = self.transactions.get(&hash.into(), working_set);
-        Ok(evm_transaction.map(|tx| tx.into()))
+        let result = evm_transaction.map(Transaction::try_from).transpose();
+        result.map_err(|e| to_jsonrpsee_error_object(e, "ETH_RPC_ERROR"))
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502

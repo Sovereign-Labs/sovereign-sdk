@@ -4,6 +4,7 @@ use borsh::BorshDeserialize;
 use sov_modules_api::{Context, DispatchCall};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
+use sov_rollup_interface::zk::ValidityCondition;
 use sov_rollup_interface::Buf;
 use sov_state::StateCheckpoint;
 use tracing::{debug, error};
@@ -19,13 +20,14 @@ use zk_cycle_macros::cycle_tracker;
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to work with the module-system.
-pub struct AppTemplate<C: Context, RT, Vm, B> {
+pub struct AppTemplate<C: Context, Cond: ValidityCondition, Vm, RT: Runtime<C, Cond>, B> {
     /// State storage used by the rollup.
     pub current_storage: C::Storage,
     /// The runtime includes all the modules that the rollup supports.
     pub runtime: RT,
     pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
+    phantom_cond: PhantomData<Cond>,
     phantom_blob: PhantomData<B>,
 }
 
@@ -64,9 +66,10 @@ impl From<ApplyBatchError> for BatchReceipt<SequencerOutcome, TxEffect> {
     }
 }
 
-impl<C: Context, RT, Vm, B: BlobReaderTrait> AppTemplate<C, RT, Vm, B>
+impl<C: Context, Vm, Cond: ValidityCondition, RT: Runtime<C, Cond>, B: BlobReaderTrait>
+    AppTemplate<C, Cond, Vm, RT, B>
 where
-    RT: Runtime<C>,
+    RT: Runtime<C, Cond>,
 {
     /// [`AppTemplate`] constructor.
     pub fn new(storage: C::Storage, runtime: RT) -> Self {
@@ -75,6 +78,7 @@ where
             current_storage: storage,
             checkpoint: None,
             phantom_vm: PhantomData,
+            phantom_cond: PhantomData,
             phantom_blob: PhantomData,
         }
     }
