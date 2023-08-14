@@ -2717,9 +2717,9 @@ dependencies = [
 
 [[package]]
 name = "ibc"
-version = "0.44.0"
+version = "0.44.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68116baf96e034adbbb3f826ca32893de082e5e185f5dc881f6cf5276b72a753"
+checksum = "18b0357f6a0c6241c4a5bcd52f82147a216d405f8bffd3d3066472fa25bb96f9"
 dependencies = [
  "borsh 0.9.3",
  "bytes",
@@ -6582,6 +6582,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh 0.10.3",
+ "ibc",
  "schemars",
  "serde",
  "serde_json",

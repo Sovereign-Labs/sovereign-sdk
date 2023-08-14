@@ -13,6 +13,7 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
+ibc = { workspace = true }
 sov-ibc-transfer = { path = "../sov-ibc-transfer", default-features = false }
 sov-modules-api = { path = "../../sov-modules-api", default-features = false, features = ["macros"] }
 sov-state = { path = "../../sov-state", default-features = false }

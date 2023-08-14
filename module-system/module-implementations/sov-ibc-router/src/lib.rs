@@ -5,6 +5,7 @@ mod genesis;
 mod tests;
 
 pub use call::CallMessage;
+use ibc::core::{router::{Router, ModuleId, self}, ics24_host::identifier::PortId};
 use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 
@@ -54,6 +55,20 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcRouter<C> {
     ) -> Result<sov_modules_api::CallResponse, Error> {
         // Note: I don't think we need to support a `call()`?
         // We mainly expect the `sov_ibc::Ibc` module to use the router directly
+        todo!()
+    }
+}
+
+impl<C> Router for IbcRouter<C> where C: sov_modules_api::Context {
+    fn get_route(&self, module_id: &ModuleId) -> Option<&dyn router::Module> {
+        todo!()
+    }
+
+    fn get_route_mut(&mut self, module_id: &ModuleId) -> Option<&mut dyn router::Module> {
+        todo!()
+    }
+
+    fn lookup_module(&self, port_id: &PortId) -> Option<ModuleId> {
         todo!()
     }
 }
