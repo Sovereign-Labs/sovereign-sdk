@@ -20,19 +20,25 @@ pub struct Risc0Host<'a> {
 }
 
 impl<'a> Risc0Host<'a> {
+    #[cfg(not(feature = "bench"))]
     pub fn new(elf: &'a [u8]) -> Self {
-        #[cfg(not(feature = "bench"))]
         let default_env = ExecutorEnvBuilder::default();
-        #[cfg(feature = "bench")]
-        let mut default_env = ExecutorEnvBuilder::default();
-        #[cfg(feature = "bench")]
-        {
-            let metrics_syscall_name = get_syscall_name();
-            default_env.io_callback(metrics_syscall_name, metrics_callback);
 
-            let cycles_syscall_name = get_syscall_name_cycles();
-            default_env.io_callback(cycles_syscall_name, cycle_count_callback);
+        Self {
+            env: RefCell::new(default_env),
+            elf,
         }
+    }
+
+    #[cfg(feature = "bench")]
+    pub fn new(elf: &'a [u8]) -> Self {
+        let mut default_env = ExecutorEnvBuilder::default();
+
+        let metrics_syscall_name = get_syscall_name();
+        default_env.io_callback(metrics_syscall_name, metrics_callback);
+
+        let cycles_syscall_name = get_syscall_name_cycles();
+        default_env.io_callback(cycles_syscall_name, cycle_count_callback);
 
         Self {
             env: RefCell::new(default_env),

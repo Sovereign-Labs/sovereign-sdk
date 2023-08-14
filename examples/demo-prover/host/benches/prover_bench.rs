@@ -9,7 +9,7 @@ use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
-use jupiter::da_service::{CelestiaService, DaServiceConfig};
+use jupiter::da_service::CelestiaService;
 use jupiter::types::{FilteredCelestiaBlock, NamespaceId};
 use jupiter::verifier::address::CelestiaAddress;
 use jupiter::verifier::{ChainValidityCondition, RollupParams};
@@ -18,25 +18,18 @@ use log4rs::config::{Appender, Config, Root};
 use methods::ROLLUP_ELF;
 use regex::Regex;
 use risc0_adapter::host::Risc0Host;
-use serde::Deserialize;
 use sov_modules_api::PrivateKey;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage::Storage;
-use sov_stf_runner::{from_toml_path, Config as RunnerConfig};
+use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
 
 #[derive(Debug)]
 struct RegexAppender {
     regex: Regex,
     file: Arc<Mutex<File>>,
-}
-
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-struct HexKey {
-    hex_priv_key: String,
-    address: String,
 }
 
 impl RegexAppender {
@@ -96,12 +89,12 @@ use std::collections::HashMap;
 #[cfg(feature = "bench")]
 use risc0_adapter::metrics::GLOBAL_HASHMAP;
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct RollupConfig {
-    pub start_height: u64,
-    pub da: DaServiceConfig,
-    pub runner: RunnerConfig,
-}
+// #[derive(Debug, Clone, PartialEq, Deserialize)]
+// pub struct RollupConfig {
+//     pub start_height: u64,
+//     pub da: DaServiceConfig,
+//     pub runner: RunnerConfig,
+// }
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);

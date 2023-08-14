@@ -1,9 +1,23 @@
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::{parse_macro_input, ItemFn};
 
+/// This macro is used to annotate functions that we want to track the number of riscV cycles being
+/// generated inside the VM. The purpose of the this macro is to measure how many cycles a rust
+/// function takes because prover time is directly proportional to the number of riscv cycles
+/// generated. It does this by making use of a risc0 provided function
+/// ```
+/// risc0_zkvm::guest::env::get_cycle_count
+/// ```
+/// The macro essentially generates new function with the same name by wrapping the body with a get_cycle_count
+/// at the beginning and end of the function, subtracting it and then emitting it out using the
+/// a custom syscall that is generated when the prover is run with the `bench` feature.
+/// `send_recv_slice` is used to communicate and pass a slice to the syscall that we defined.
+/// The handler for the syscall can be seen in adapters/risc0/src/host.rs and adapters/risc0/src/metrics.rs
 #[proc_macro_attribute]
 pub fn cycle_tracker(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as ItemFn);
