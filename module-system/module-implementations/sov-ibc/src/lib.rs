@@ -23,10 +23,6 @@ pub struct IbcModule<C: sov_modules_api::Context> {
     #[address]
     pub address: C::Address,
 
-    // Q: Can I aggregate a bunch of state fields into one JMT?
-    // ClientId -> ClientState store
-    // ClientStates are stored already proto-encoded (we don't want them borsh-serialized, at least for the Merkle proofs)
-    //  - Is there a better way to do this?
     #[state]
     pub client_state_store: sov_state::StateMap<String, Vec<u8>>,
 }

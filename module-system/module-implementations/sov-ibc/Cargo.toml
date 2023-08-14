@@ -23,7 +23,7 @@ serde_json = { workspace = true, optional = true }
 thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 
-ibc = {version = "0.44", default-features = false, features = ["borsh"] }
+ibc = {version = "0.44", features = ["borsh", "serde"] }
 ibc-proto = { version = "0.32.1", default-features = false, features = ["borsh"] }
 tendermint-proto = {version = "0.32", default-features = false}
 derive_more = { version = "0.99", default-features = false, features = ["from", "try_into"] }
