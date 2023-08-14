@@ -239,7 +239,7 @@ impl da::DaVerifier for CelestiaVerifier {
                     continue;
                 }
                 let tx: &BlobWithSender = tx_iter.next().ok_or(ValidationError::MissingTx)?;
-                if tx.sender.as_ref() != pfb.signer.as_bytes() {
+                if tx.sender.to_string() != pfb.signer {
                     return Err(ValidationError::InvalidSigner);
                 }
 
