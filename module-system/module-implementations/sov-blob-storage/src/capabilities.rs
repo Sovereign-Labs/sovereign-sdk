@@ -29,6 +29,8 @@ impl<C: Context> BlobSelector for BlobStorage<C> {
         let preferred_sequencer = if let Some(sequencer) = preferred_sequencer {
             sequencer
         } else {
+            // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/654
+            // Prevent double number of blobs being executed
             return Ok(past_deferred
                 .into_iter()
                 .map(Into::into)
@@ -51,6 +53,8 @@ impl<C: Context> BlobSelector for BlobStorage<C> {
         self.slot_number.set(&(current_slot + 1), working_set);
 
         if !to_defer.is_empty() {
+            // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/655
+            // Gas metering suppose to prevent saving blobs from not allowed senders if they exit mid-slot
             let to_defer: Vec<&B> = to_defer
                 .iter()
                 .filter(|b| {
