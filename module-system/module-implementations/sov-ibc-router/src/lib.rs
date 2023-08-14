@@ -4,8 +4,12 @@ mod genesis;
 #[cfg(test)]
 mod tests;
 
+use std::borrow::Borrow;
+
 pub use call::CallMessage;
-use ibc::core::{router::{Router, ModuleId, self}, ics24_host::identifier::PortId};
+use ibc::applications::transfer::{MODULE_ID_STR, PORT_ID_STR};
+use ibc::core::ics24_host::identifier::PortId;
+use ibc::core::router::{self, ModuleId, Router};
 use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 
@@ -59,16 +63,31 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcRouter<C> {
     }
 }
 
-impl<C> Router for IbcRouter<C> where C: sov_modules_api::Context {
+impl<C> Router for IbcRouter<C>
+where
+    C: sov_modules_api::Context,
+{
     fn get_route(&self, module_id: &ModuleId) -> Option<&dyn router::Module> {
-        todo!()
+        if *module_id == ModuleId::new(MODULE_ID_STR.to_string()) {
+            Some(&self.transfer)
+        } else {
+            None
+        }
     }
 
     fn get_route_mut(&mut self, module_id: &ModuleId) -> Option<&mut dyn router::Module> {
-        todo!()
+        if *module_id == ModuleId::new(MODULE_ID_STR.to_string()) {
+            Some(&mut self.transfer)
+        } else {
+            None
+        }
     }
 
     fn lookup_module(&self, port_id: &PortId) -> Option<ModuleId> {
-        todo!()
+        if port_id.as_str() == PORT_ID_STR {
+            Some(ModuleId::new(MODULE_ID_STR.to_string()))
+        } else {
+            None
+        }
     }
 }
