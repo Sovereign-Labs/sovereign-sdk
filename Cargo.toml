@@ -27,6 +27,7 @@ members = [
     "module-system/module-implementations/sov-evm",
     "module-system/module-implementations/sov-ibc",
     "module-system/module-implementations/sov-ibc-router",
+    "module-system/module-implementations/sov-ibc-transfer",
     "module-system/module-implementations/sov-prover-incentives",
     "module-system/module-implementations/sov-sequencer-registry",
     "module-system/module-implementations/module-template",

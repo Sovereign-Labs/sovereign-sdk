@@ -6594,6 +6594,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-ibc-transfer"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh 0.10.3",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sov-bank",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "sov-state",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "sov-module-schemas"
 version = "0.1.0"
 dependencies = [
