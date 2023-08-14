@@ -6600,6 +6600,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh 0.10.3",
+ "ibc",
  "schemars",
  "serde",
  "serde_json",
