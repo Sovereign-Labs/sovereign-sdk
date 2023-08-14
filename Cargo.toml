@@ -54,7 +54,7 @@ rust-version = "1.66"
 jmt = { git = "https://github.com/penumbra-zone/jmt", commit = "46b4b00" }
 
 # External dependencies
-async-trait = "0.1.71"
+async-trait = "0.1.73"
 anyhow = "1.0.68"
 borsh = { version = "0.10.3", features = ["rc", "bytes"] }
 # TODO: Consider replacing this serialization format
