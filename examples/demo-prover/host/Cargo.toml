@@ -8,6 +8,7 @@ resolver = "2"
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true }
+bincode = {workspace = true}
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
 risc0-zkvm = { workspace = true }

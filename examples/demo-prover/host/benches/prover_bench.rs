@@ -1,9 +1,10 @@
 use jupiter::types::FilteredCelestiaBlock;
-use borsh::de::BorshDeserialize;
+use jupiter::verifier::address::CelestiaAddress;
 use std::fs::read_to_string;
 use std::path::PathBuf;
 use std::io::Write;
 use std::fs::File;
+use std::str::FromStr;
 use std::env;
 use tempfile::TempDir;
 use sov_modules_api::PrivateKey;
@@ -14,7 +15,7 @@ use demo_stf::app::{DefaultPrivateKey, App};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
-use jupiter::verifier::RollupParams;
+use jupiter::verifier::{ChainValidityCondition, RollupParams};
 use jupiter::BlobWithSender;
 use methods::{ROLLUP_ELF};
 use risc0_adapter::host::Risc0Host;
@@ -22,6 +23,7 @@ use serde::Deserialize;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
+use sov_state::storage::Storage;
 use sov_stf_runner::{from_toml_path, Config as RunnerConfig};
 use std::fs::OpenOptions;
 use std::sync::{Arc, Mutex};
@@ -37,6 +39,12 @@ use regex::Regex;
 struct RegexAppender {
     regex: Regex,
     file: Arc<Mutex<File>>
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct HexKey {
+    hex_priv_key: String,
+    address: String,
 }
 
 impl RegexAppender {
@@ -167,38 +175,41 @@ async fn main() -> Result<(), anyhow::Error> {
         },
     ).await;
 
+
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let app: App<Risc0Host, BlobWithSender> =
+    let mut app: App<Risc0Host, ChainValidityCondition,BlobWithSender> =
         App::new(rollup_config.runner.storage.clone());
 
-    let mut demo = app.stf;
+    let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 
     let genesis_config = create_demo_genesis_config(
         100000000,
         sequencer_private_key.default_address(),
-        SEQUENCER_DA_ADDRESS.to_vec(),
+        sequencer_da_address.as_ref().to_vec(),
         &sequencer_private_key,
         &sequencer_private_key,
     );
     println!("Starting from empty storage, initialization chain");
-    demo.init_chain(genesis_config);
+    app.stf.init_chain(genesis_config);
 
-    let mut prev_state_root = {
-        let res = demo.apply_slot(Default::default(), []);
-        res.state_root.0
-    };
+    let mut prev_state_root = app
+        .get_storage()
+        .get_state_root(&Default::default())
+        .expect("The storage needs to have a state root");
+
+    let mut demo = app.stf;
 
     let hex_data = read_to_string("benches/blocks.hex").expect("Failed to read data");
-    let borshed_blocks: Vec<FilteredCelestiaBlock> = hex_data
+    let bincoded_blocks: Vec<FilteredCelestiaBlock> = hex_data
         .lines()
         .map(|line| {
             let bytes = hex::decode(line).expect("Failed to decode hex data");
-            FilteredCelestiaBlock::try_from_slice(&bytes).expect("Failed to deserialize data")
+            bincode::deserialize(&bytes).expect("Failed to deserialize data")
         })
         .collect();
 
-    for height in 2..(borshed_blocks.len() as u64) {
+    for height in 2..(bincoded_blocks.len() as u64) {
         num_blocks+=1;
         let mut host = Risc0Host::new(ROLLUP_ELF);
         host.write_to_guest(prev_state_root);
@@ -207,7 +218,7 @@ async fn main() -> Result<(), anyhow::Error> {
             height,
             hex::encode(prev_state_root)
         );
-        let filtered_block = &borshed_blocks[height as usize];
+        let filtered_block = &bincoded_blocks[height as usize];
         let _header_hash = hex::encode(filtered_block.header.header.hash());
         host.write_to_guest(&filtered_block.header);
         let (mut blob_txs, inclusion_proof, completeness_proof) =
@@ -220,7 +231,8 @@ async fn main() -> Result<(), anyhow::Error> {
         if !blob_txs.is_empty() {
             num_blobs+=blob_txs.len();
         }
-        let result = demo.apply_slot(Default::default(), &mut blob_txs);
+
+        let result = demo.apply_slot(Default::default(), filtered_block, &mut blob_txs);
         for r in result.batch_receipts {
             let num_tx = r.tx_receipts.len();
             num_total_transactions+=num_tx;

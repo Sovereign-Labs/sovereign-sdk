@@ -152,7 +152,6 @@ where
         I: IntoIterator<Item = &'a mut B>,
         Data: SlotData<Cond = Self::Condition>,
     {
-
         self.begin_slot(slot_data, witness);
 
         let mut batch_receipts = vec![];
