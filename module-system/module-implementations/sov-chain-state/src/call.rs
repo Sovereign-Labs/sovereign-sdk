@@ -10,7 +10,7 @@ impl<
     > ChainState<Ctx, Cond>
 {
     /// Increment the current slot height
-    pub(crate) fn increment_slot_height(&self, working_set: &mut WorkingSet<Ctx::Storage>) {
+    pub fn increment_slot_height(&self, working_set: &mut WorkingSet<Ctx::Storage>) {
         let current_height = self
             .slot_height
             .get(working_set)
@@ -19,7 +19,7 @@ impl<
     }
 
     /// Store the previous state transition
-    pub(crate) fn store_state_transition(
+    pub fn store_state_transition(
         &self,
         height: u64,
         transition: StateTransitionId<Cond>,

@@ -2,9 +2,9 @@ use sov_bank::{BankConfig, TokenConfig};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Address, Genesis, Spec};
-use sov_rollup_interface::mocks::{MockCodeCommitment, MockZkvm};
+use sov_rollup_interface::mocks::{MockCodeCommitment, MockZkvm, TestValidityCond};
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
-use sov_state::WorkingSet;
+use sov_state::{DefaultStorageSpec, MerkleProofSpec, ProverStorage, Storage, WorkingSet};
 
 use crate::AttesterIncentives;
 
@@ -16,6 +16,22 @@ pub const DEFAULT_CHAIN_HEIGHT: u64 = 12;
 pub const INITIAL_BOND_AMOUNT: u64 = 5 * BOND_AMOUNT;
 pub const SALT: u64 = 5;
 pub const DEFAULT_ROLLUP_FINALITY: u64 = 3;
+pub const INIT_HEIGHT: u64 = 0;
+
+/// Consumes and commit the existing working set on the underlying storage
+/// `storage` must be the underlying storage defined on the working set for this method to work.
+pub(crate) fn commit_get_new_working_set(
+    storage: &ProverStorage<DefaultStorageSpec>,
+    working_set: WorkingSet<<C as Spec>::Storage>,
+) -> WorkingSet<<C as Spec>::Storage> {
+    let (reads_writes, witness) = working_set.checkpoint().freeze();
+
+    storage
+        .validate_and_commit(reads_writes, &witness)
+        .expect("Should be able to commit");
+
+    WorkingSet::new(storage.clone())
+}
 
 pub(crate) fn create_bank_config_with_token(
     token_name: String,
@@ -70,6 +86,16 @@ pub(crate) fn setup<Cond: ValidityCondition, Checker: ValidityConditionChecker<C
 
     let token_address = sov_bank::get_genesis_token_address::<DefaultContext>(TOKEN_NAME, SALT);
 
+    // Initialize chain state
+    let chain_state_config = sov_chain_state::ChainStateConfig {
+        initial_slot_height: INIT_HEIGHT,
+    };
+
+    let chain_state = sov_chain_state::ChainState::<C, TestValidityCond>::default();
+    chain_state
+        .genesis(&chain_state_config, working_set)
+        .expect("Chain state genesis must succeed");
+
     // initialize prover incentives
     let module = AttesterIncentives::<C, MockZkvm, Cond, Checker>::default();
     let config = crate::AttesterIncentivesConfig {
@@ -79,6 +105,8 @@ pub(crate) fn setup<Cond: ValidityCondition, Checker: ValidityConditionChecker<C
         commitment_to_allowed_challenge_method: MockCodeCommitment([0u8; 32]),
         initial_attesters: vec![(attester_address, BOND_AMOUNT)],
         rollup_finality_period: DEFAULT_ROLLUP_FINALITY,
+        maximum_attested_height: INIT_HEIGHT,
+        light_client_finalized_height: INIT_HEIGHT,
     };
 
     module

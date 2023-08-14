@@ -4,7 +4,6 @@ use sov_state::WorkingSet;
 use super::ChainState;
 use crate::{StateTransitionId, TransitionInProgress};
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq)]
 /// Structure returned by the query methods.
 pub struct Response {
     /// Value returned by the queries

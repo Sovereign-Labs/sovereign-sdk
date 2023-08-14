@@ -47,6 +47,12 @@ where
             self.bond_user_helper(*bond, attester, Role::Attester, working_set)?;
         }
 
+        self.maximum_attested_height
+            .set(&config.maximum_attested_height, working_set);
+
+        self.light_client_finalized_height
+            .set(&config.light_client_finalized_height, working_set);
+
         Ok(())
     }
 }

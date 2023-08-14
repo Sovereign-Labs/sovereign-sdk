@@ -30,6 +30,10 @@ pub struct AttesterIncentivesConfig<C: Context, Vm: Zkvm> {
     pub initial_attesters: Vec<(C::Address, u64)>,
     /// The finality period of the rollup (constant)
     pub rollup_finality_period: u64,
+    /// The current maximum attested height
+    pub maximum_attested_height: u64,
+    /// The light client finalized height
+    pub light_client_finalized_height: u64,
 }
 
 /// A wrapper around a code commitment which implements borsh serialization

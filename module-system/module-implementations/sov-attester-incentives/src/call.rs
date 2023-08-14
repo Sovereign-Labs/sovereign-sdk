@@ -85,6 +85,15 @@ impl<
         reward
     }
 
+    fn increase_attested_height(&self, working_set: &mut WorkingSet<C::Storage>) {
+        let max_attested_height = self
+            .maximum_attested_height
+            .get(working_set)
+            .expect("Maximum attested height should be set");
+        self.maximum_attested_height
+            .set(&(max_attested_height + 1), working_set)
+    }
+
     fn slash_burn_reward(
         &self,
         attester: &C::Address,
@@ -279,16 +288,19 @@ impl<
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
         let bonding_root = {
-            if attestation.proof_of_bond.transition_num == 0 {
+            // If we cannot get the transition before the current one, it means that we are trying
+            // to get the genesis state root
+            if let Some(transition) = self
+                .chain_state
+                .historical_transitions
+                .get(&(attestation.proof_of_bond.transition_num - 1), working_set)
+            {
+                transition.post_state_root()
+            } else {
                 self.chain_state
                     .genesis_hash
                     .get(working_set)
                     .expect("The genesis hash should be set")
-            } else {
-                self.chain_state
-                    .historical_transitions
-                    .get_or_err(&(attestation.proof_of_bond.transition_num - 1), working_set)?
-                    .post_state_root()
             }
         };
 
@@ -306,7 +318,7 @@ impl<
         let bond = bond_opt.unwrap_or_default();
         let bond = bond.value();
 
-        ensure!(bond.len() < 8, "The bond is not a 64 bits number");
+        ensure!(bond.len() <= 8, "The bond is not a 64 bits number");
 
         let bond_u64 = {
             let mut bond_slice = [0_u8; 8];
@@ -354,8 +366,18 @@ impl<
         attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
-        // Genesis state
-        if max_attested_height == 0 {
+        // Normal state
+        if let Some(transition) = self
+            .chain_state
+            .historical_transitions
+            .get(&(max_attested_height - 1), working_set)
+        {
+            if transition.post_state_root() != attestation.initial_state_root {
+                // The initial root hashes don't match, just slash the attester
+                return self.slash_burn_reward(attester, working_set);
+            }
+        } else {
+            // Genesis state
             // We can assume that the genesis hash is always set, otherwise we need to panic.
             // We don't need to prove that the attester was bonded, simply need to check that the current bond is higher than the
             // minimal bond and that the attester is not unbonding
@@ -363,21 +385,15 @@ impl<
                 .chain_state
                 .genesis_hash
                 .get(working_set)
-                .expect("The genesis hash should be set") != attestation.initial_state_root
+                .expect("The genesis hash should be set")
+                != attestation.initial_state_root
             {
                 // Slash the attester, and burn the fees
                 return self.slash_burn_reward(attester, working_set);
             }
-        // Normal state
-        } else {
-            // We need to check that the transition is legit, if it is,
-            // then we can perform the height checks
-            if self.chain_state.historical_transitions.get(&(max_attested_height-1), working_set).unwrap().post_state_root() != attestation.initial_state_root
-            {
-                // The initial root hashes don't match, just slash the attester
-                return self.slash_burn_reward(attester, working_set);
-            }
+            // Normal state
         }
+
         Ok(CallResponse::default())
     }
 
@@ -392,7 +408,7 @@ impl<
         self.check_bonding_proof(&attestation, context, working_set)?;
 
         // We suppose that these values are always defined, otherwise we panic
-        let old_max_attested_height = self.maximum_attested_height.get_or_err(working_set)?;
+        let height_to_attest = self.maximum_attested_height.get_or_err(working_set)? + 1;
         let current_finalized_height =
             self.light_client_finalized_height.get_or_err(working_set)?;
         let finality = self.rollup_finality_period.get_or_err(working_set)?;
@@ -404,11 +420,9 @@ impl<
         };
 
         // Update the max_attested_height in case the blocks have already been finalized
-        let new_max_attested_height = max(&old_max_attested_height, &min_height);
+        let new_max_attested_height = max(&height_to_attest, &min_height);
         self.maximum_attested_height
             .set(new_max_attested_height, working_set);
-
-        let max_attested_height = self.maximum_attested_height.get(working_set).unwrap();
 
         // We have to check the following order invariant is respected:
         // min_height <= bonding_proof.transition_num <= max_attested_height
@@ -421,7 +435,7 @@ impl<
 
         // First compare the initial hashes
         self.check_initial_hash(
-            max_attested_height,
+            *new_max_attested_height,
             context.sender(),
             &attestation,
             working_set,
@@ -429,7 +443,7 @@ impl<
 
         // Then compare the transition
         self.check_transition(
-            max_attested_height,
+            *new_max_attested_height,
             context.sender(),
             &attestation,
             working_set,
@@ -443,7 +457,7 @@ impl<
         {
             return self.slash_and_invalidate_attestation(
                 context.sender(),
-                max_attested_height,
+                *new_max_attested_height,
                 working_set,
             );
         }
@@ -452,6 +466,9 @@ impl<
             "processed_valid_attestation",
             &format!("attester: {:?}", context.sender()),
         );
+
+        // Increase the attested height
+        self.increase_attested_height(working_set);
 
         // Reward the sender
         self.reward_sender(

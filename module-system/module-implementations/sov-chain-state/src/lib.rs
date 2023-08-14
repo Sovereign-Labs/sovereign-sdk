@@ -14,7 +14,6 @@ pub mod hooks;
 pub mod tests;
 
 /// The query interface with the module
-#[cfg(feature = "native")]
 pub mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
