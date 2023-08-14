@@ -1478,6 +1478,7 @@ dependencies = [
  "serde_json",
  "sov-accounts",
  "sov-bank",
+ "sov-blob-storage",
  "sov-data-generators",
  "sov-election",
  "sov-evm",
@@ -6469,11 +6470,21 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "borsh",
+ "clap",
+ "hex",
+ "jsonrpsee 0.18.2",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sov-bank",
  "sov-modules-api",
  "sov-modules-macros",
  "sov-rollup-interface",
+ "sov-sequencer-registry",
  "sov-state",
  "tempfile",
+ "tracing",
 ]
 
 [[package]]

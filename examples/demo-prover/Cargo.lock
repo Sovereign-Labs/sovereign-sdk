@@ -429,10 +429,12 @@ dependencies = [
 
 [[package]]
 name = "cc"
-version = "1.0.79"
-source = "git+https://github.com/rust-lang/cc-rs?rev=e5bbdfa#e5bbdfa1fa468c028cb38fee6c35a3cf2e5a2736"
+version = "1.0.82"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "305fe645edc1442a0fa8b6726ba61d422798d37a52e12eaecf4b022ebbb88f01"
 dependencies = [
  "jobserver",
+ "libc",
 ]
 
 [[package]]
@@ -677,6 +679,7 @@ dependencies = [
  "serde_json",
  "sov-accounts",
  "sov-bank",
+ "sov-blob-storage",
  "sov-election",
  "sov-modules-api",
  "sov-modules-stf-template",
@@ -3252,6 +3255,26 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "thiserror",
+]
+
+[[package]]
+name = "sov-blob-storage"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "borsh",
+ "hex",
+ "jsonrpsee 0.18.2",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-sequencer-registry",
+ "sov-state",
+ "tracing",
 ]
 
 [[package]]

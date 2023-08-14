@@ -9,14 +9,18 @@ build: ## Build the the project
 clean: ## Cleans compiled
 	@cargo clean
 
-test: ## Runs test suite with output from tests printed
+test-legacy: ## Runs test suite with output from tests printed
 	@cargo test -- --nocapture -Zunstable-options --report-time
+
+test:  ## Runs test suite using next test
+	@cargo nextest run --workspace --all-features
 
 install-dev-tools:  ## Installs all necessary cargo helpers
 	cargo install cargo-llvm-cov
 	cargo install cargo-hack
 	cargo install cargo-udeps
 	cargo install flaky-finder
+	cargo install cargo-nextest --locked
 
 lint:  ## cargo check and clippy
 	## fmt first, because it's the cheapest
