@@ -86,6 +86,9 @@ pub trait StateValueCodec<V> {
 
 /// A market trait for types that implement both [`StateKeyCodec`] and
 /// [`StateValueCodec`].
+///
+/// This trait is blanket-implemented for all types that implement both of the
+/// above.
 pub trait StateCodec<K, V>: StateKeyCodec<K> + StateValueCodec<V> {}
 
 impl<K, V, C> StateCodec<K, V> for C where C: StateKeyCodec<K> + StateValueCodec<V> {}
