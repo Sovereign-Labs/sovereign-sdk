@@ -1,14 +1,17 @@
 use std::fmt::Display;
-use anyhow::{Error};
+use std::sync::{Arc, Mutex};
+
+use anyhow::{bail, Error};
+use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
 use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
-use crate::services::da::SlotData;
-use crate::AddressTrait;
 use crate::mocks::TestValidityCond;
-
+use crate::services::batch_builder::BatchBuilder;
+use crate::services::da::{DaService, SlotData};
+use crate::AddressTrait;
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
 #[derive(Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize, Hash)]
@@ -198,4 +201,105 @@ impl DaSpec for MockDaSpec {
     type InclusionMultiProof = [u8; 32];
     type CompletenessProof = ();
     type ChainParams = ();
+}
+
+///TODO
+pub struct MockDaService {
+    submitted: Arc<Mutex<Vec<Vec<u8>>>>,
+}
+
+impl MockDaService {
+    ///TODO
+    pub fn new() -> Self {
+        MockDaService {
+            submitted: Arc::new(Mutex::new(Vec::new())),
+        }
+    }
+
+    ///TODO
+    pub fn is_empty(&self) -> bool {
+        self.submitted.lock().unwrap().is_empty()
+    }
+
+    ///TODO
+    pub fn get_submitted(&self) -> Vec<Vec<u8>> {
+        self.submitted.lock().unwrap().clone()
+    }
+}
+
+#[async_trait]
+impl DaService for MockDaService {
+    type RuntimeConfig = ();
+    type Spec = MockDaSpec;
+    type FilteredBlock = TestBlock;
+    type Error = anyhow::Error;
+
+    async fn new(
+        _config: Self::RuntimeConfig,
+        _chain_params: <Self::Spec as DaSpec>::ChainParams,
+    ) -> Self {
+        MockDaService::new()
+    }
+
+    async fn get_finalized_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+        todo!()
+    }
+
+    async fn get_block_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+        todo!()
+    }
+
+    fn extract_relevant_txs(
+        &self,
+        _block: &Self::FilteredBlock,
+    ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
+        todo!()
+    }
+
+    async fn get_extraction_proof(
+        &self,
+        _block: &Self::FilteredBlock,
+        _blobs: &[<Self::Spec as DaSpec>::BlobTransaction],
+    ) -> (
+        <Self::Spec as DaSpec>::InclusionMultiProof,
+        <Self::Spec as DaSpec>::CompletenessProof,
+    ) {
+        todo!()
+    }
+
+    async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
+        self.submitted.lock().unwrap().push(blob.to_vec());
+        Ok(())
+    }
+}
+///TODO
+pub struct MockBatchBuilder {
+    ///TODO
+    pub mempool: Vec<Vec<u8>>,
+}
+
+/// It only takes the first byte of the tx, when submits it.
+/// This allows to show effect of batch builder
+impl BatchBuilder for MockBatchBuilder {
+    fn accept_tx(&mut self, tx: Vec<u8>) -> anyhow::Result<()> {
+        self.mempool.push(tx);
+        Ok(())
+    }
+
+    fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
+        if self.mempool.is_empty() {
+            bail!("Mock mempool is empty");
+        }
+        let txs = std::mem::take(&mut self.mempool)
+            .into_iter()
+            .filter_map(|tx| {
+                if !tx.is_empty() {
+                    Some(vec![tx[0]])
+                } else {
+                    None
+                }
+            })
+            .collect();
+        Ok(txs)
+    }
 }
