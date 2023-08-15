@@ -6,7 +6,10 @@ struct TestStruct<C: Context> {
     #[address]
     address: C::Address,
 
-    #[other]
+    // Unsupported attributes should be ignored to guarantee compatibility with
+    // other macros.
+    #[allow(dead_code)]
+    #[state]
     test_state1: StateMap<u32, String>,
 
     #[state]
