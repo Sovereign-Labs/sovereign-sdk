@@ -11,7 +11,6 @@ use std::sync::Arc;
 pub use access::MergeError;
 
 #[derive(Error, Debug, Eq, PartialEq, Clone, Hash, PartialOrd, Ord)]
-#[repr(transparent)]
 pub struct CacheKey {
     pub key: Arc<Vec<u8>>,
 }

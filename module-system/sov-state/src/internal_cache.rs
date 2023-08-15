@@ -46,8 +46,8 @@ impl StorageInternalCache {
         value_reader: &S,
         witness: &S::Witness,
     ) -> Option<StorageValue> {
-        let cache_key = key.as_cache_key();
-        let cache_value = self.get_value_from_cache(cache_key);
+        let cache_key = key.to_cache_key();
+        let cache_value = self.get_value_from_cache(&cache_key);
 
         match cache_value {
             cache::ValueExists::Yes(cache_value_exists) => cache_value_exists.map(Into::into),
@@ -56,25 +56,25 @@ impl StorageInternalCache {
                 let storage_value = value_reader.get(key, witness);
                 let cache_value = storage_value.as_ref().map(|v| v.clone().as_cache_value());
 
-                self.add_read(cache_key.clone(), cache_value);
+                self.add_read(cache_key, cache_value);
                 storage_value
             }
         }
     }
 
     pub fn try_get(&self, key: &StorageKey) -> ValueExists {
-        let cache_key = key.as_cache_key();
-        self.get_value_from_cache(cache_key)
+        let cache_key = key.to_cache_key();
+        self.get_value_from_cache(&cache_key)
     }
 
     pub(crate) fn set(&mut self, key: StorageKey, value: StorageValue) {
-        let cache_key = key.to_cache_key();
+        let cache_key = key.into_cache_key();
         let cache_value = value.as_cache_value();
         self.tx_cache.add_write(cache_key, Some(cache_value));
     }
 
     pub(crate) fn delete(&mut self, key: StorageKey) {
-        let cache_key = key.to_cache_key();
+        let cache_key = key.into_cache_key();
         self.tx_cache.add_write(cache_key, None);
     }
 
