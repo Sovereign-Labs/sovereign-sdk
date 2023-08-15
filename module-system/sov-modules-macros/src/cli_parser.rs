@@ -136,14 +136,26 @@ impl CliParserMacro {
         let (impl_generics_with_inner, ty_generics_with_inner, where_clause_with_inner_as_clap) =
             generics_with_inner.split_for_impl();
 
-        // Generics identical to generics_with_inner, but with the `__Inner` type renamed to `__Source`.
+        // Generics identical to generics_with_inner, but with the `__Inner` type renamed to `__Dest`.
         // This type is used in the the try_map conversion
-        let generics_for_source = {
+        let generics_for_dest = {
             let mut generics = generics.clone();
-            generics.params.insert(0, syn::parse_quote! {__Source});
+            generics.params.insert(0, syn::parse_quote! {__Dest});
             generics
         };
-        let (_, ty_generics_for_source, _) = generics_for_source.split_for_impl();
+        let (_, ty_generics_for_dest, _) = generics_for_dest.split_for_impl();
+
+        let generics_with_inner_and_dest = {
+            let mut generics = generics_with_inner.clone();
+            generics.params.insert(0, syn::parse_quote! {__Dest});
+            generics.where_clause.as_mut().map(|c| {
+                c.predicates
+                    .push(syn::parse_quote! { __Dest: ::core::convert::TryFrom<__Inner> })
+            });
+            generics
+        };
+        let (impl_generics_with_inner_and_dest, _, where_clause_with_inner_clap_and_try_from) =
+            generics_with_inner_and_dest.split_for_impl();
 
         // Generics identical to `generics_with_inner`, with the `__Inner` type bound to `JsonStringArg`
         let generics_for_json = {
@@ -184,21 +196,7 @@ impl CliParserMacro {
                 ____phantom(::std::marker::PhantomData<#ident #ty_generics>)
             }
 
-            // /// Parses a module call from a JSON string
-            // #[derive(::clap::Parser)]
-            // #[allow(non_camel_case_types)]
-            // pub struct RuntimeJsonParser #impl_generics #where_clause{
-            //     /// Parse a module call from a JSON string
-            //     #[clap(subcommand)]
-            //     inner: RuntimeSubcommand #ty_generics_for_json
-            // }
-
-            // impl #impl_generics ::core::convert::From<RuntimeSubcommand #ty_generics_for_json> for RuntimeJsonParser #ty_generics #where_clause {
-            //     fn from(item: RuntimeSubcommand #ty_generics_for_json) -> Self {
-            //         RuntimeJsonParser { inner: item }
-            //     }
-            // }
-
+            // Implement TryFrom<RuntimeMessage<JsonStringArg>> for the runtime's call message. Uses serde_json to deserialize the json string.
             impl #impl_generics ::core::convert::TryFrom<RuntimeMessage #ty_generics_for_json> for <#ident #ty_generics as ::sov_modules_api::DispatchCall>::Decodable #where_clause_with_deserialize_bounds {
                 type Error = ::serde_json::Error;
                 fn try_from(item: RuntimeMessage #ty_generics_for_json ) -> Result<Self, Self::Error> {
@@ -209,14 +207,17 @@ impl CliParserMacro {
                 }
             }
 
-
-            impl #impl_generics_with_inner RuntimeMessage #ty_generics_with_inner #where_clause {
+            // Allow arbitrary conversions from the `clap`-enabled `RuntimeSubcommand` to the less constrained `RuntimeMessage` enum.
+            // This allows us to (for example), accept a `JsonStringArgs` or a `FileNameArgs` as a CLI argument, and then
+            // use fallible logic to convert it into the final JSON string to be parsed into a callmessage.
+            impl #impl_generics_with_inner_and_dest From<RuntimeSubcommand #ty_generics_with_inner> for RuntimeMessage #ty_generics_for_dest #where_clause_with_inner_clap_and_try_from {
+                type Error = <__Dest as ::core::convert::TryFrom<__Inner>>::Error;
                 /// Convert a `RuntimeSubcommand` to a `RuntimeSubcommand` with a different `__Inner` type using `try_from`.
                 ///
                 /// This method is called `try_map` instead of `try_from` to avoid conflicting with the `TryFrom` trait in
                 /// the corner case where the source and destination types are the same.
-                pub fn try_from_subcommand<__Source: ::clap::Args> (item: RuntimeSubcommand #ty_generics_for_source ) -> Result<Self, <__Inner as ::core::convert::TryFrom<__Source>>::Error>
-                where __Inner:  ::core::convert::TryFrom<__Source> {
+                fn try_from(item: RuntimeSubcommand #ty_generics_with_inner ) -> Result<Self, Self::Error>
+                 {
                     Ok(match item {
                         #( #try_from_subcommand_match_arms )*
                         RuntimeSubcommand::____phantom(_) => unreachable!(),
@@ -229,8 +230,22 @@ impl CliParserMacro {
                 ///
                 /// This method is called `try_map` instead of `try_from` to avoid conflicting with the `TryFrom` trait in
                 /// the corner case where the source and destination types are the same.
-                pub fn try_map<__Source>(item: RuntimeMessage #ty_generics_for_source ) -> Result<Self, <__Inner as ::core::convert::TryFrom<__Source>>::Error>
-                where __Inner:  ::core::convert::TryFrom<__Source> {
+                pub fn try_from_subcommand<__Dest: ::clap::Args> (item: RuntimeSubcommand #ty_generics_for_dest ) -> Result<Self, <__Inner as ::core::convert::TryFrom<__Dest>>::Error>
+                where __Inner:  ::core::convert::TryFrom<__Dest> {
+                    Ok(match item {
+                        #( #try_from_subcommand_match_arms )*
+                        RuntimeSubcommand::____phantom(_) => unreachable!(),
+                    })
+                }
+            }
+
+            impl #impl_generics_with_inner RuntimeMessage #ty_generics_with_inner #where_clause {
+                /// Convert a `RuntimeSubcommand` to a `RuntimeSubcommand` with a different `__Inner` type using `try_from`.
+                ///
+                /// This method is called `try_map` instead of `try_from` to avoid conflicting with the `TryFrom` trait in
+                /// the corner case where the source and destination types are the same.
+                pub fn try_map<__Dest>(item: RuntimeMessage #ty_generics_for_dest ) -> Result<Self, <__Inner as ::core::convert::TryFrom<__Dest>>::Error>
+                where __Inner:  ::core::convert::TryFrom<__Dest> {
                     Ok(match item {
                         #( #try_map_match_arms )*
                         RuntimeMessage::____phantom(_) => unreachable!(),
