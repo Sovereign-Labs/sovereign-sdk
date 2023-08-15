@@ -42,5 +42,5 @@ pub trait DispatchCall {
 pub trait CliWallet: DispatchCall {
     /// The type that is used to represent this type in the CLI. Typically,
     /// this type implements the clap::Subcommand trait.
-    type CliStringRepr: Into<<Self as DispatchCall>::Decodable>;
+    type CliStringRepr<T>;
 }
