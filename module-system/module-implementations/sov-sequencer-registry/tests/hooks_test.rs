@@ -58,9 +58,12 @@ fn begin_blob_hook_unknown_sequencer() {
         .registry
         .begin_blob_hook(&mut test_blob, working_set);
     assert!(result.is_err());
-    let expected_message_part = "Value not found for prefix: \"sov_sequencer_registry/SequencerRegistry/allowed_sequencers/\"";
+    let expected_message = format!(
+        "sender {} is not allowed to submit blobs",
+        Address::from(UNKNOWN_SEQUENCER_DA_ADDRESS)
+    );
     let actual_message = result.err().unwrap().to_string();
-    assert!(actual_message.contains(expected_message_part));
+    assert_eq!(expected_message, actual_message);
 }
 
 #[test]
