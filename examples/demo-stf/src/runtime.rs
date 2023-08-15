@@ -115,8 +115,11 @@ impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for Runtime<C> {
     }
 }
 
-impl<C: Context, Cond: ValidityCondition> sov_modules_stf_template::Runtime<C, Cond>
-    for Runtime<C>
+impl<C, Cond, B> sov_modules_stf_template::Runtime<C, Cond, B> for Runtime<C>
+where
+    C: Context,
+    Cond: ValidityCondition,
+    B: BlobReaderTrait,
 {
 }
 

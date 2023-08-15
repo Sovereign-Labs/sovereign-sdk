@@ -39,13 +39,15 @@ impl<C: Context, Cond: ValidityCondition> TxHooks for TestRuntime<C, Cond> {
     }
 }
 
-impl<C: Context, Cond: ValidityCondition> ApplyBlobHooks for TestRuntime<C, Cond> {
+impl<C: Context, Cond: ValidityCondition, B: BlobReaderTrait> ApplyBlobHooks<B>
+    for TestRuntime<C, Cond>
+{
     type Context = C;
-    type BlobResult = SequencerOutcome;
+    type BlobResult = SequencerOutcome<B::Address>;
 
     fn begin_blob_hook(
         &self,
-        _blob: &mut impl BlobReaderTrait,
+        _blob: &mut B,
         _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
         Ok(())
@@ -90,7 +92,10 @@ impl<C: Context, Cond: ValidityCondition> BlobSelector for TestRuntime<C, Cond> 
     }
 }
 
-impl<C: Context, Cond: ValidityCondition> Runtime<C, Cond> for TestRuntime<C, Cond> {}
+impl<C: Context, Cond: ValidityCondition, B: BlobReaderTrait> Runtime<C, Cond, B>
+    for TestRuntime<C, Cond>
+{
+}
 
 pub(crate) fn create_demo_genesis_config<C: Context, Cond: ValidityCondition>(
     admin: <C as Spec>::Address,

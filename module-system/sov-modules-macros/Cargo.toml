@@ -21,7 +21,8 @@ path = "tests/all_tests.rs"
 
 [dev-dependencies]
 serde_json = "1"
-jsonrpsee = { workspace = true, features = ["macros", "http-client", "server"]}
+tempfile = "3"
+jsonrpsee = { workspace = true, features = ["macros", "http-client", "server"] }
 trybuild = "1.0"
 
 sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
