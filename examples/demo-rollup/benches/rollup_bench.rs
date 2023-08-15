@@ -1,3 +1,4 @@
+mod rng_xfers;
 use std::env;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -11,8 +12,8 @@ use demo_stf::app::App;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use jupiter::verifier::address::CelestiaAddress;
 use risc0_adapter::host::Risc0Verifier;
+use rng_xfers::RngDaService;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_demo_rollup::rng_xfers::RngDaService;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
 use sov_rollup_interface::mocks::{
