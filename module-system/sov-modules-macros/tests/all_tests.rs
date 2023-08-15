@@ -5,6 +5,7 @@ fn module_info_tests() {
     t.pass("tests/module_info/mod_and_state.rs");
     t.pass("tests/module_info/use_address_trait.rs");
     t.pass("tests/module_info/not_supported_attribute.rs");
+    t.pass("tests/module_info/custom_codec_builder.rs");
     t.compile_fail("tests/module_info/derive_on_enum_not_supported.rs");
     t.compile_fail("tests/module_info/field_missing_attribute.rs");
     t.compile_fail("tests/module_info/missing_address.rs");
