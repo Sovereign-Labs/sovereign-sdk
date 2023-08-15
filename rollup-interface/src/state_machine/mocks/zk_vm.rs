@@ -1,9 +1,9 @@
-
 use std::io::Write;
 
-use anyhow::{ensure};
+use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
+
 use crate::zk::{Matches, Zkvm};
 use crate::AddressTrait;
 
