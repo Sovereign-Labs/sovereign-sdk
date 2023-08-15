@@ -203,7 +203,7 @@ impl DaSpec for MockDaSpec {
     type ChainParams = ();
 }
 
-///TODO
+/// DaService used in tests.
 pub struct MockDaService {
     submitted: Arc<Mutex<Vec<Vec<u8>>>>,
 }
@@ -217,12 +217,12 @@ impl Default for MockDaService {
 }
 
 impl MockDaService {
-    ///TODO
+    /// Checks if DaService contains unprocessed blobs.
     pub fn is_empty(&self) -> bool {
         self.submitted.lock().unwrap().is_empty()
     }
 
-    ///TODO
+    /// Returns serialized blobs from the DaService.
     pub fn get_submitted(&self) -> Vec<Vec<u8>> {
         self.submitted.lock().unwrap().clone()
     }
@@ -273,9 +273,9 @@ impl DaService for MockDaService {
         Ok(())
     }
 }
-/// TODO
+/// BatchBuilder used in tests.
 pub struct MockBatchBuilder {
-    ///TODO
+    /// Mempool with transactions.
     pub mempool: Vec<Vec<u8>>,
 }
 
