@@ -1,18 +1,10 @@
-
 use sov_modules_api::default_context::DefaultContext;
-
-use sov_rollup_interface::mocks::{
-    TestValidityCond, TestValidityCondChecker,
-};
+use sov_rollup_interface::mocks::{TestValidityCond, TestValidityCondChecker};
 use sov_rollup_interface::optimistic::Attestation;
-
 use sov_state::storage::{StorageKey, StorageProof};
 use sov_state::{ArrayWitness, ProverStorage, Storage, WorkingSet};
 
-use crate::helpers::{
-    execution_simulation, setup, BOND_AMOUNT, INITIAL_BOND_AMOUNT,
-    INIT_HEIGHT,
-};
+use crate::helpers::{execution_simulation, setup, BOND_AMOUNT, INITIAL_BOND_AMOUNT, INIT_HEIGHT};
 
 /// Start by testing the positive case where the attestations are valid
 #[test]
