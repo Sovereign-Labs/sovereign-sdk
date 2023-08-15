@@ -5,19 +5,25 @@ use sov_modules_api::{Context, DispatchCall};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
 use sov_rollup_interface::zk::ValidityCondition;
-use sov_rollup_interface::Buf;
+use sov_rollup_interface::{AddressTrait, Buf};
 use sov_state::StateCheckpoint;
 use tracing::{debug, error};
 
 use crate::tx_verifier::{verify_txs_stateless, TransactionAndRawHash};
 use crate::{Batch, Runtime, SequencerOutcome, SlashingReason, TxEffect};
 
-type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
+type ApplyBatchResult<T, A> = Result<T, ApplyBatchError<A>>;
 
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to work with the module-system.
-pub struct AppTemplate<C: Context, Cond: ValidityCondition, Vm, RT: Runtime<C, Cond>, B> {
+pub struct AppTemplate<
+    C: Context,
+    Cond: ValidityCondition,
+    Vm,
+    RT: Runtime<C, Cond, B>,
+    B: BlobReaderTrait,
+> {
     /// State storage used by the rollup.
     pub current_storage: C::Storage,
     /// The runtime includes all the modules that the rollup supports.
@@ -28,19 +34,19 @@ pub struct AppTemplate<C: Context, Cond: ValidityCondition, Vm, RT: Runtime<C, C
     phantom_blob: PhantomData<B>,
 }
 
-pub(crate) enum ApplyBatchError {
+pub(crate) enum ApplyBatchError<A: AddressTrait> {
     // Contains batch hash
     Ignored([u8; 32]),
     Slashed {
         // Contains batch hash
         hash: [u8; 32],
         reason: SlashingReason,
-        sequencer_da_address: Vec<u8>,
+        sequencer_da_address: A,
     },
 }
 
-impl From<ApplyBatchError> for BatchReceipt<SequencerOutcome, TxEffect> {
-    fn from(value: ApplyBatchError) -> Self {
+impl<A: AddressTrait> From<ApplyBatchError<A>> for BatchReceipt<SequencerOutcome<A>, TxEffect> {
+    fn from(value: ApplyBatchError<A>) -> Self {
         match value {
             ApplyBatchError::Ignored(hash) => BatchReceipt {
                 batch_hash: hash,
@@ -63,10 +69,12 @@ impl From<ApplyBatchError> for BatchReceipt<SequencerOutcome, TxEffect> {
     }
 }
 
-impl<C: Context, Vm, Cond: ValidityCondition, RT: Runtime<C, Cond>, B: BlobReaderTrait>
-    AppTemplate<C, Cond, Vm, RT, B>
+impl<C, Vm, Cond, RT, B> AppTemplate<C, Cond, Vm, RT, B>
 where
-    RT: Runtime<C, Cond>,
+    C: Context,
+    Cond: ValidityCondition,
+    B: BlobReaderTrait,
+    RT: Runtime<C, Cond, B>,
 {
     /// [`AppTemplate`] constructor.
     pub fn new(storage: C::Storage, runtime: RT) -> Self {
@@ -83,7 +91,7 @@ where
     pub(crate) fn apply_blob(
         &mut self,
         blob: &mut B,
-    ) -> ApplyBatchResult<BatchReceipt<SequencerOutcome, TxEffect>> {
+    ) -> ApplyBatchResult<BatchReceipt<SequencerOutcome<B::Address>, TxEffect>, B::Address> {
         debug!(
             "Applying batch from sequencer: 0x{}",
             hex::encode(blob.sender())
@@ -116,7 +124,7 @@ where
             Err(reason) => {
                 // Explicitly revert on slashing, even though nothing has changed in pre_process.
                 let mut batch_workspace = batch_workspace.revert().to_revertable();
-                let sequencer_da_address = blob.sender().as_ref().to_vec();
+                let sequencer_da_address = blob.sender();
                 let sequencer_outcome = SequencerOutcome::Slashed {
                     reason,
                     sequencer_da_address: sequencer_da_address.clone(),

@@ -249,16 +249,16 @@ impl<Address: AddressTrait> BlobReaderTrait for TestBlob<Address> {
         self.address.clone()
     }
 
-    fn hash(&self) -> [u8; 32] {
-        self.hash
-    }
-
     fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
         &mut self.data
     }
 
     fn data(&self) -> &CountedBufReader<Self::Data> {
         &self.data
+    }
+
+    fn hash(&self) -> [u8; 32] {
+        self.hash
     }
 }
 

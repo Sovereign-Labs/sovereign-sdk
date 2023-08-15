@@ -5,13 +5,13 @@ use sov_state::WorkingSet;
 
 use crate::{SequencerOutcome, SequencerRegistry};
 
-impl<C: Context> ApplyBlobHooks for SequencerRegistry<C> {
+impl<C: Context, B: BlobReaderTrait> ApplyBlobHooks<B> for SequencerRegistry<C> {
     type Context = C;
     type BlobResult = SequencerOutcome;
 
     fn begin_blob_hook(
         &self,
-        blob: &mut impl BlobReaderTrait,
+        blob: &mut B,
         working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
     ) -> anyhow::Result<()> {
         if !self.is_sender_allowed(&blob.sender(), working_set) {

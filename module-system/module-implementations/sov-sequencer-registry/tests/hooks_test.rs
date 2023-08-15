@@ -89,10 +89,12 @@ fn end_blob_hook_success() {
         .begin_blob_hook(&mut test_blob, working_set)
         .unwrap();
 
-    test_sequencer
-        .registry
-        .end_blob_hook(SequencerOutcome::Completed, working_set)
-        .unwrap();
+    <SequencerRegistry<C> as ApplyBlobHooks<TestBlob<Address>>>::end_blob_hook(
+        &test_sequencer.registry,
+        SequencerOutcome::Completed,
+        working_set,
+    )
+    .unwrap();
     let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
     assert_eq!(balance_after_genesis, resp.amount.unwrap());
     let resp = test_sequencer
@@ -128,10 +130,12 @@ fn end_blob_hook_slash() {
     let result = SequencerOutcome::Slashed {
         sequencer: GENESIS_SEQUENCER_DA_ADDRESS.to_vec(),
     };
-    test_sequencer
-        .registry
-        .end_blob_hook(result, working_set)
-        .unwrap();
+    <SequencerRegistry<C> as ApplyBlobHooks<TestBlob<Address>>>::end_blob_hook(
+        &test_sequencer.registry,
+        result,
+        working_set,
+    )
+    .unwrap();
 
     let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
     assert_eq!(balance_after_genesis, resp.amount.unwrap());
@@ -187,10 +191,12 @@ fn end_blob_hook_slash_preferred_sequencer() {
     let result = SequencerOutcome::Slashed {
         sequencer: GENESIS_SEQUENCER_DA_ADDRESS.to_vec(),
     };
-    test_sequencer
-        .registry
-        .end_blob_hook(result, working_set)
-        .unwrap();
+    <SequencerRegistry<C> as ApplyBlobHooks<TestBlob<Address>>>::end_blob_hook(
+        &test_sequencer.registry,
+        result,
+        working_set,
+    )
+    .unwrap();
 
     let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
     assert_eq!(balance_after_genesis, resp.amount.unwrap());
@@ -233,10 +239,12 @@ fn end_blob_hook_slash_unknown_sequencer() {
     let result = SequencerOutcome::Slashed {
         sequencer: UNKNOWN_SEQUENCER_DA_ADDRESS.to_vec(),
     };
-    test_sequencer
-        .registry
-        .end_blob_hook(result, working_set)
-        .unwrap();
+    <SequencerRegistry<C> as ApplyBlobHooks<TestBlob<Address>>>::end_blob_hook(
+        &test_sequencer.registry,
+        result,
+        working_set,
+    )
+    .unwrap();
 
     let resp = test_sequencer
         .registry
