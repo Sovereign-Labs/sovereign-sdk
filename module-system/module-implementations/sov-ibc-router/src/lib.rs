@@ -4,8 +4,6 @@ mod genesis;
 #[cfg(test)]
 mod tests;
 
-use std::borrow::Borrow;
-
 pub use call::CallMessage;
 use ibc::applications::transfer::{MODULE_ID_STR, PORT_ID_STR};
 use ibc::core::ics24_host::identifier::PortId;
