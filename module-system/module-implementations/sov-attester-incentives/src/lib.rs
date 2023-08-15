@@ -20,6 +20,8 @@ use sov_state::{Storage, WorkingSet};
 pub struct AttesterIncentivesConfig<C: Context, Vm: Zkvm> {
     /// The address of the token to be used for bonding.
     pub bonding_token_address: C::Address,
+    /// The address of the account holding the reward token supply
+    pub reward_token_supply_address: C::Address,
     /// The minimum bond for an attester.
     pub minimum_attester_bond: u64,
     /// The minimum bond for a challenger.
@@ -91,6 +93,12 @@ pub struct AttesterIncentives<
     /// The address of the token used for bonding provers
     #[state]
     pub bonding_token_address: sov_state::StateValue<C::Address>,
+
+    /// The address of the account holding the reward token supply
+    /// TODO: maybe mint the token before transfering it? The mint method is private in bank
+    /// so we need a reward address that contains the supply.
+    #[state]
+    pub reward_token_supply_address: sov_state::StateValue<C::Address>,
 
     /// The code commitment to be used for verifying proofs
     #[state]

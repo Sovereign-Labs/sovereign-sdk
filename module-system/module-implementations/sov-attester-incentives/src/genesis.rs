@@ -43,6 +43,9 @@ where
         self.bonding_token_address
             .set(&config.bonding_token_address, working_set);
 
+        self.reward_token_supply_address
+            .set(&config.reward_token_supply_address, working_set);
+
         for (attester, bond) in config.initial_attesters.iter() {
             self.bond_user_helper(*bond, attester, Role::Attester, working_set)?;
         }

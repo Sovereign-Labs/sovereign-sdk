@@ -220,6 +220,20 @@ impl<C: sov_modules_api::Context> Bank<C> {
             .with_context(context_logger)?;
         Ok(CallResponse::default())
     }
+
+    /// Helper function used by the rpc method [`balance_of`] to return the balance of the token stored at `token_address`
+    /// for the user having the address `user_address` from the underlying storage. If the token address doesn't exist, or
+    /// if the user doesn't have tokens of that type, return `None`. Otherwise, wrap the resulting balance in `Some`.
+    pub fn get_balance_of(
+        &self,
+        user_address: C::Address,
+        token_address: C::Address,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Option<u64> {
+        self.tokens
+            .get(&token_address, working_set)
+            .and_then(|token| token.balances.get(&user_address, working_set))
+    }
 }
 
 /// Creates a new prefix from an already existing prefix `parent_prefix` and a `token_address`

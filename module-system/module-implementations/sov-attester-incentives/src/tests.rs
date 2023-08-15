@@ -13,15 +13,13 @@ use crate::helpers::{
     commit_get_new_working_set, setup, BOND_AMOUNT, INITIAL_BOND_AMOUNT, INIT_HEIGHT,
 };
 
-const DEFAULT_MAX_LIGHT_CLIENT_HEIGHT: u64 = 6;
-
 /// Start by testing the positive case where the attestations are valid
 #[test]
 fn test_process_valid_attestation() {
     let tmpdir = tempfile::tempdir().unwrap();
     let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
-    let (module, attester_address, _) =
+    let (module, token_address, attester_address, _) =
         setup::<TestValidityCond, TestValidityCondChecker<TestValidityCond>>(&mut working_set);
 
     // Assert that the attester has the correct bond amount before processing the proof
@@ -168,13 +166,35 @@ fn test_process_valid_attestation() {
             .value,
         BOND_AMOUNT
     );
+
+    // Assert that the attester has been awarded the tokens
+    assert_eq!(
+        module
+            .bank
+            .get_balance_of(attester_address, token_address, &mut working_set)
+            .unwrap(),
+        // The attester is bonded at the beginning so he loses BOND_AMOUNT
+        INITIAL_BOND_AMOUNT - BOND_AMOUNT + 2 * BOND_AMOUNT
+    );
+
+    assert_eq!(
+        module
+            .bank
+            .get_balance_of(
+                module.get_reward_token_supply_address(&mut working_set),
+                token_address,
+                &mut working_set
+            )
+            .unwrap(),
+        INITIAL_BOND_AMOUNT - 2 * BOND_AMOUNT
+    );
 }
 
 #[test]
 fn test_burn_on_invalid_proof() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, attester_address, _challenger_address) =
+    let (module, _token_address, attester_address, _challenger_address) =
         setup::<TestValidityCond, TestValidityCondChecker<TestValidityCond>>(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
@@ -236,7 +256,7 @@ fn test_burn_on_invalid_proof() {
 fn test_valid_proof() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, attester_address, _challenger_address) =
+    let (module, _token_address, attester_address, _challenger_address) =
         setup::<TestValidityCond, TestValidityCondChecker<TestValidityCond>>(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
@@ -298,7 +318,7 @@ fn test_valid_proof() {
 fn test_unbonding() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, attester_address, _challenger_address) =
+    let (module, _token_address, attester_address, _challenger_address) =
         setup::<TestValidityCond, TestValidityCondChecker<TestValidityCond>>(&mut working_set);
     let context = DefaultContext {
         sender: attester_address,
@@ -364,7 +384,7 @@ fn test_unbonding() {
 fn test_prover_not_bonded() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, attester_address, _challenger_address) =
+    let (module, _token_address, attester_address, _challenger_address) =
         setup::<TestValidityCond, TestValidityCondChecker<TestValidityCond>>(&mut working_set);
     let context = DefaultContext {
         sender: attester_address,

@@ -4,7 +4,7 @@ use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Address, Genesis, Spec};
 use sov_rollup_interface::mocks::{MockCodeCommitment, MockZkvm, TestValidityCond};
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
-use sov_state::{DefaultStorageSpec, MerkleProofSpec, ProverStorage, Storage, WorkingSet};
+use sov_state::{DefaultStorageSpec, ProverStorage, Storage, WorkingSet};
 
 use crate::AttesterIncentives;
 
@@ -73,16 +73,18 @@ pub(crate) fn setup<Cond: ValidityCondition, Checker: ValidityConditionChecker<C
     AttesterIncentives<C, MockZkvm, Cond, Checker>,
     Address,
     Address,
+    Address,
 ) {
     // Initialize bank
     let (bank_config, mut addresses) =
-        create_bank_config_with_token(TOKEN_NAME.to_string(), SALT, 2, INITIAL_BOND_AMOUNT);
+        create_bank_config_with_token(TOKEN_NAME.to_string(), SALT, 3, INITIAL_BOND_AMOUNT);
     let bank = sov_bank::Bank::<C>::default();
     bank.genesis(&bank_config, working_set)
         .expect("bank genesis must succeed");
 
     let attester_address = addresses.pop().unwrap();
     let challenger_address = addresses.pop().unwrap();
+    let reward_supply = addresses.pop().unwrap();
 
     let token_address = sov_bank::get_genesis_token_address::<DefaultContext>(TOKEN_NAME, SALT);
 
@@ -100,6 +102,7 @@ pub(crate) fn setup<Cond: ValidityCondition, Checker: ValidityConditionChecker<C
     let module = AttesterIncentives::<C, MockZkvm, Cond, Checker>::default();
     let config = crate::AttesterIncentivesConfig {
         bonding_token_address: token_address,
+        reward_token_supply_address: reward_supply,
         minimum_attester_bond: BOND_AMOUNT,
         minimum_challenger_bond: BOND_AMOUNT,
         commitment_to_allowed_challenge_method: MockCodeCommitment([0u8; 32]),
@@ -112,5 +115,6 @@ pub(crate) fn setup<Cond: ValidityCondition, Checker: ValidityConditionChecker<C
     module
         .genesis(&config, working_set)
         .expect("prover incentives genesis must succeed");
-    (module, attester_address, challenger_address)
+
+    (module, token_address, attester_address, challenger_address)
 }

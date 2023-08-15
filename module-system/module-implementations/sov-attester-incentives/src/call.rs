@@ -66,6 +66,15 @@ impl<
         Checker: ValidityConditionChecker<Cond> + BorshDeserialize + BorshSerialize,
     > AttesterIncentives<C, Vm, Cond, Checker>
 {
+    pub fn get_reward_token_supply_address(
+        &self,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> C::Address {
+        self.reward_token_supply_address
+            .get(working_set)
+            .expect("The reward token supply address should be set at genesis")
+    }
+
     /// A helper function that simply slashes an attester and returns a reward value
     fn slash_attester_helper(
         &self,
@@ -83,15 +92,6 @@ impl<
         working_set.add_event("slashed_attester", &format!("address {attester:?}"));
 
         reward
-    }
-
-    fn increase_attested_height(&self, working_set: &mut WorkingSet<C::Storage>) {
-        let max_attested_height = self
-            .maximum_attested_height
-            .get(working_set)
-            .expect("Maximum attested height should be set");
-        self.maximum_attested_height
-            .set(&(max_attested_height + 1), working_set)
     }
 
     fn slash_burn_reward(
@@ -118,8 +118,15 @@ impl<
         };
         // Try to unbond the entire balance
         // If the unbonding fails, no state is changed
-        self.bank
-            .transfer_from(&self.address, context.sender(), coins, working_set)?;
+        self.bank.transfer_from(
+            &self
+                .reward_token_supply_address
+                .get(working_set)
+                .expect("The reward supply address must be set at genesis"),
+            context.sender(),
+            coins,
+            working_set,
+        )?;
 
         Ok(CallResponse::default())
     }
@@ -466,9 +473,6 @@ impl<
             "processed_valid_attestation",
             &format!("attester: {:?}", context.sender()),
         );
-
-        // Increase the attested height
-        self.increase_attested_height(working_set);
 
         // Reward the sender
         self.reward_sender(
