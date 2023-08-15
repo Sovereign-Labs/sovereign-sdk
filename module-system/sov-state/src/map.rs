@@ -1,8 +1,9 @@
 use core::marker::PhantomData;
+use std::borrow::Borrow;
 
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, StateCodec};
+use crate::codec::{BorshCodec, StateCodec, StateKeyEncodePreservingBorrow};
 use crate::storage::StorageKey;
 use crate::{Prefix, Storage, WorkingSet};
 
@@ -68,7 +69,12 @@ where
     }
 
     /// Inserts a key-value pair into the map.
-    pub fn set<S: Storage>(&self, key: &K, value: &V, working_set: &mut WorkingSet<S>) {
+    pub fn set<S, Q>(&self, key: &Q, value: &V, working_set: &mut WorkingSet<S>)
+    where
+        S: Storage,
+        K: Borrow<Q>,
+        C: StateKeyEncodePreservingBorrow<K, Q>,
+    {
         working_set.set_value(self.prefix(), &self.codec, key, value)
     }
 
@@ -104,16 +110,24 @@ where
     ///     map.get(&key[..], ws)
     /// }
     /// ```
-    pub fn get<S: Storage>(&self, key: &K, working_set: &mut WorkingSet<S>) -> Option<V> {
+    pub fn get<S, Q>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Option<V>
+    where
+        S: Storage,
+        K: Borrow<Q>,
+        C: StateKeyEncodePreservingBorrow<K, Q>,
+    {
         working_set.get_value(self.prefix(), &self.codec, key)
     }
 
     /// Returns the value corresponding to the key or Error if key is absent in the StateMap.
-    pub fn get_or_err<S: Storage>(
-        &self,
-        key: &K,
-        working_set: &mut WorkingSet<S>,
-    ) -> Result<V, Error> {
+    ///
+    /// For reference, check [Self::get].
+    pub fn get_or_err<S, Q>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Result<V, Error>
+    where
+        S: Storage,
+        K: Borrow<Q>,
+        C: StateKeyEncodePreservingBorrow<K, Q>,
+    {
         self.get(key, working_set).ok_or_else(|| {
             Error::MissingValue(
                 self.prefix().clone(),
@@ -123,16 +137,22 @@ where
     }
 
     /// Removes a key from the StateMap, returning the corresponding value (or None if the key is absent).
-    pub fn remove<S: Storage>(&self, key: &K, working_set: &mut WorkingSet<S>) -> Option<V> {
+    pub fn remove<S, Q>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Option<V>
+    where
+        S: Storage,
+        K: Borrow<Q>,
+        C: StateKeyEncodePreservingBorrow<K, Q>,
+    {
         working_set.remove_value(self.prefix(), &self.codec, key)
     }
 
     /// Removes a key from the StateMap, returning the corresponding value (or Error if the key is absent).
-    pub fn remove_or_err<S: Storage>(
-        &self,
-        key: &K,
-        working_set: &mut WorkingSet<S>,
-    ) -> Result<V, Error> {
+    pub fn remove_or_err<S, Q>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Result<V, Error>
+    where
+        S: Storage,
+        K: Borrow<Q>,
+        C: StateKeyEncodePreservingBorrow<K, Q>,
+    {
         self.remove(key, working_set).ok_or_else(|| {
             Error::MissingValue(
                 self.prefix().clone(),
@@ -142,7 +162,12 @@ where
     }
 
     /// Deletes a key from the StateMap.
-    pub fn delete<S: Storage>(&self, key: &K, working_set: &mut WorkingSet<S>) {
+    pub fn delete<S, Q>(&self, key: &Q, working_set: &mut WorkingSet<S>)
+    where
+        S: Storage,
+        K: Borrow<Q>,
+        C: StateKeyEncodePreservingBorrow<K, Q>,
+    {
         working_set.delete_value(self.prefix(), &self.codec, key);
     }
 }

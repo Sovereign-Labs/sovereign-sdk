@@ -7,7 +7,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
-use crate::codec::{StateKeyCodec, StateValueCodec};
+use crate::codec::{StateKeyEncode, StateValueCodec};
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::utils::AlignedVec;
 use crate::witness::Witness;
@@ -57,7 +57,7 @@ impl StorageKey {
     /// Creates a new StorageKey that combines a prefix and a key.
     pub fn new<K, C>(prefix: &Prefix, key: &K, codec: &C) -> Self
     where
-        C: StateKeyCodec<K>,
+        C: StateKeyEncode<K>,
     {
         let encoded_key = codec.encode_key(key);
         let encoded_key = AlignedVec::new(encoded_key);

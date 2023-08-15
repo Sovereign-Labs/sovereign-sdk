@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, StateKeyCodec, StateValueCodec};
+use crate::codec::{BorshCodec, StateKeyCodec, StateKeyEncode, StateValueCodec};
 use crate::{Prefix, Storage, WorkingSet};
 
 /// Container for a single value.
@@ -106,12 +106,14 @@ impl<'a, VC> SingletonCodec<'a, VC> {
     }
 }
 
-impl<'a, VC> StateKeyCodec<SingletonKey> for SingletonCodec<'a, VC> {
-    type KeyError = std::io::Error;
-
+impl<'a, VC> StateKeyEncode<SingletonKey> for SingletonCodec<'a, VC> {
     fn encode_key(&self, _: &SingletonKey) -> Vec<u8> {
         vec![]
     }
+}
+
+impl<'a, VC> StateKeyCodec<SingletonKey> for SingletonCodec<'a, VC> {
+    type KeyError = std::io::Error;
 
     fn try_decode_key(&self, bytes: &[u8]) -> Result<SingletonKey, Self::KeyError> {
         if bytes.is_empty() {

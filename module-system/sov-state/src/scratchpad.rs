@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 use sov_rollup_interface::stf::Event;
 
-use crate::codec::{StateCodec, StateKeyCodec, StateValueCodec};
+use crate::codec::{StateKeyEncode, StateValueCodec};
 use crate::internal_cache::{OrderedReadsAndWrites, StorageInternalCache};
 use crate::storage::{StorageKey, StorageValue};
 use crate::{Prefix, Storage};
@@ -142,7 +142,7 @@ impl<S: Storage> WorkingSet<S> {
         storage_key: &K,
         value: &V,
     ) where
-        C: StateCodec<K, V>,
+        C: StateKeyEncode<K> + StateValueCodec<V>,
     {
         let storage_key = StorageKey::new(prefix, storage_key, codec);
         let storage_value = StorageValue::new(value, codec);
@@ -156,7 +156,7 @@ impl<S: Storage> WorkingSet<S> {
         storage_key: &K,
     ) -> Option<V>
     where
-        C: StateCodec<K, V>,
+        C: StateKeyEncode<K> + StateValueCodec<V>,
     {
         let storage_key = StorageKey::new(prefix, storage_key, codec);
         self.get_decoded(codec, storage_key)
@@ -169,7 +169,7 @@ impl<S: Storage> WorkingSet<S> {
         storage_key: &K,
     ) -> Option<V>
     where
-        C: StateCodec<K, V>,
+        C: StateKeyEncode<K> + StateValueCodec<V>,
     {
         let storage_key = StorageKey::new(prefix, storage_key, codec);
         let storage_value = self.get_decoded(codec, storage_key.clone())?;
@@ -179,7 +179,7 @@ impl<S: Storage> WorkingSet<S> {
 
     pub(crate) fn delete_value<K, C>(&mut self, prefix: &Prefix, codec: &C, storage_key: &K)
     where
-        C: StateKeyCodec<K>,
+        C: StateKeyEncode<K>,
     {
         let storage_key = StorageKey::new(prefix, storage_key, codec);
         self.delete(storage_key);

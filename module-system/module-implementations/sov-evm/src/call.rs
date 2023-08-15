@@ -35,7 +35,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
         let hash = evm_tx_recovered.hash();
-        self.transactions.set(&hash[..], &tx, working_set);
+        self.transactions
+            .set(hash.as_fixed_bytes(), &tx, working_set);
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 

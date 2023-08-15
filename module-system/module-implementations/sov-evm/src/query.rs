@@ -62,7 +62,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<Transaction>> {
         info!("evm module: eth_getTransactionByHash");
-        let evm_transaction = self.transactions.get(&hash[..], working_set);
+        let evm_transaction = self.transactions.get(hash.as_fixed_bytes(), working_set);
         let result = evm_transaction.map(Transaction::try_from).transpose();
         result.map_err(|e| to_jsonrpsee_error_object(e, "ETH_RPC_ERROR"))
     }
@@ -75,7 +75,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<TransactionReceipt>> {
         info!("evm module: eth_getTransactionReceipt");
-        let receipt = self.receipts.get(&hash[..], working_set);
+        let receipt = self.receipts.get(hash.as_fixed_bytes(), working_set);
         Ok(receipt.map(|r| r.into()))
     }
 
