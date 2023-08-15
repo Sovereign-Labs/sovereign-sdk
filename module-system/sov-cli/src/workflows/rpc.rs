@@ -4,13 +4,15 @@ use std::path::Path;
 
 use anyhow::Context;
 use demo_stf::runtime::query::accounts::{self, AccountsRpcClient};
-use demo_stf::runtime::query::bank::BankRpcClient;
-use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
+use demo_stf::runtime::query::bank::{BalanceResponse, BankRpcClient};
+use jsonrpsee::http_client::HttpClientBuilder;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_modules_api::clap;
 
 use crate::wallet_state::{KeyIdentifier, WalletState};
+const NO_ACCOUNTS_FOUND: &'static str =
+    "No accounts found. You can generate one with the `keys generate` subcommand";
 
 /// Query the current state of the rollup and send transactions
 #[derive(clap::Subcommand)]
@@ -41,11 +43,11 @@ impl<C: sov_modules_api::Context + Serialize + DeserializeOwned + Send + Sync> R
     pub async fn run<Tx>(
         &self,
         wallet_state: &mut WalletState<Tx, C>,
-        app_dir: impl AsRef<Path>,
+        _app_dir: impl AsRef<Path>,
     ) -> Result<(), anyhow::Error> {
         match self {
             RpcWorkflows::SetUrl { rpc_url } => {
-                let client = HttpClientBuilder::default()
+                let _client = HttpClientBuilder::default()
                     .build(rpc_url)
                     .context("Invalid rpc url: ")?;
                 wallet_state.rpc_url = Some(rpc_url.clone());
@@ -59,9 +61,10 @@ impl<C: sov_modules_api::Context + Serialize + DeserializeOwned + Send + Sync> R
                     })?;
                     addr
                 } else {
-                    wallet_state.addresses.default_address().ok_or_else(|| {
-						anyhow::format_err!("No accounts found. You can generate one with the `keys generate` subcommand")
-					})?
+                    wallet_state
+                        .addresses
+                        .default_address()
+                        .ok_or_else(|| anyhow::format_err!(NO_ACCOUNTS_FOUND))?
                 };
                 let rpc_url = wallet_state.rpc_url.as_ref().ok_or(anyhow::format_err!(
                     "No rpc url set. Use the `rpc set-url` subcommand to set one"
@@ -84,14 +87,31 @@ impl<C: sov_modules_api::Context + Serialize + DeserializeOwned + Send + Sync> R
                 account,
                 token_address,
             } => {
-                todo!()
-                // let account = account
-                //     .as_ref()
-                //     .map(|id| wallet_state.get_address(id))
-                //     .transpose()?
-                //     .unwrap_or_else(|| wallet_state.get_default_address().unwrap().address);
-                // let balance = wallet_state.get_balance(account, *token_address)?;
-                // println!("Balance for account {} is {}", account, balance);
+                let account = if let Some(id) = account {
+                    let addr = wallet_state.addresses.get_address(id);
+                    let addr = addr.ok_or_else(|| {
+                        anyhow::format_err!("No account found matching identifier: {}", id)
+                    })?;
+                    addr
+                } else {
+                    wallet_state
+                        .addresses
+                        .default_address()
+                        .ok_or_else(|| anyhow::format_err!(NO_ACCOUNTS_FOUND))?
+                };
+                let rpc_url = wallet_state.rpc_url.as_ref().ok_or(anyhow::format_err!(
+                    "No rpc url set. Use the `rpc set-url` subcommand to set one"
+                ))?;
+                let client = HttpClientBuilder::default().build(rpc_url)?;
+                let BalanceResponse { amount } = BankRpcClient::<C>::balance_of(&client, account.address.clone(), token_address.clone()).await.context(
+                    "Unable to connect to provided rpc. You can change to a different rpc url with the `rpc set-url` subcommand ",
+                )?;
+
+                println!(
+                    "Balance for account {} is {}",
+                    account.address,
+                    amount.unwrap_or_default()
+                );
             }
         }
         Ok(())

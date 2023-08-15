@@ -1,5 +1,4 @@
 use demo_stf::runtime::{Runtime, RuntimeCall};
-use jsonrpsee::http_client::HttpClientBuilder;
 use sov_cli::wallet_state::WalletState;
 use sov_cli::workflows::keys::KeyWorkflow;
 use sov_cli::workflows::rpc::RpcWorkflows;

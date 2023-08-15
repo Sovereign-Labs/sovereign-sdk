@@ -17,6 +17,21 @@ pub struct WalletState<Tx, Ctx: sov_modules_api::Context> {
     pub rpc_url: Option<String>,
 }
 
+impl<Tx: Serialize + DeserializeOwned, Ctx: sov_modules_api::Context> Default
+    for WalletState<Tx, Ctx>
+{
+    fn default() -> Self {
+        Self {
+            unsent_transactions: Vec::new(),
+            addresses: AddressList {
+                other_addresses: Vec::new(),
+                active_address: None,
+            },
+            rpc_url: None,
+        }
+    }
+}
+
 impl<Tx: Serialize + DeserializeOwned, Ctx: sov_modules_api::Context> WalletState<Tx, Ctx> {
     /// Load the wallet state from the given path on disk
     pub fn load(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
@@ -26,14 +41,7 @@ impl<Tx: Serialize + DeserializeOwned, Ctx: sov_modules_api::Context> WalletStat
             let state = serde_json::from_slice(data.as_slice())?;
             Ok(state)
         } else {
-            Ok(Self {
-                unsent_transactions: Vec::new(),
-                addresses: AddressList {
-                    other_addresses: Vec::new(),
-                    active_address: None,
-                },
-                rpc_url: None,
-            })
+            Ok(Default::default())
         }
     }
 

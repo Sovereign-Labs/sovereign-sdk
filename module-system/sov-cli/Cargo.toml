@@ -27,3 +27,6 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 jsonrpsee = { workspace = true, features = ["client"] }
 tokio = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
