@@ -16,15 +16,9 @@ use crate::SequencerRegistry;
     derive(schemars::JsonSchema)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub enum CallMessage<A: AddressTrait + borsh::BorshSerialize + borsh::BorshDeserialize> {
-    Register {
-        // #[serde(bound(deserialize = ""))]
-        da_address: A,
-    },
-    Exit {
-        // #[serde(bound(deserialize = ""))]
-        da_address: A,
-    },
+pub enum CallMessage {
+    Register { da_address: Vec<u8> },
+    Exit { da_address: Vec<u8> },
 }
 
 impl<

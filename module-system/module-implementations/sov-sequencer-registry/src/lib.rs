@@ -69,7 +69,7 @@ impl<
 
     type Config = SequencerConfig<C, A>;
 
-    type CallMessage = CallMessage<A>;
+    type CallMessage = CallMessage;
 
     fn genesis(
         &self,
@@ -87,9 +87,13 @@ impl<
     ) -> Result<CallResponse, Error> {
         Ok(match message {
             CallMessage::Register { da_address } => {
+                let da_address = A::try_from(&da_address[..])?;
                 self.register(&da_address, context, working_set)?
             }
-            CallMessage::Exit { da_address } => self.exit(&da_address, context, working_set)?,
+            CallMessage::Exit { da_address } => {
+                let da_address = A::try_from(&da_address[..])?;
+                self.exit(&da_address, context, working_set)?
+            }
         })
     }
 }
