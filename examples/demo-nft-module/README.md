@@ -24,7 +24,7 @@ simplicity, each token represents only an ID and won't hold any metadata.
 The Sovereign SDK provides a [module-template](../../module-system/module-implementations/module-template/README.md),
 which is boilerplate that can be customized to easily build modules.
 
-```
+```ignore
 
 ├── Cargo.toml
 ├── README.md
@@ -38,7 +38,7 @@ which is boilerplate that can be customized to easily build modules.
 
 Here are defining basic dependencies in `Cargo.toml` that module needs to get started:
 
-```toml
+```toml, ignore
 [dependencies]
 anyhow = { anyhow = "1.0.62" }
 sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", features = ["macros"] }
@@ -54,22 +54,20 @@ has private state, which it updates in response to input messages.
 NFT module is defined as the following:
 
 ```rust
-use sov_modules_api::{Context, ModuleInfo};
-
-#[derive(ModuleInfo, Clone)]
-pub struct NonFungibleToken<C: Context> {
+#[derive(sov_modules_api::ModuleInfo, Clone)]
+pub struct NonFungibleToken<C: sov_modules_api::Context> {
     #[address]
-    pub address: C::Address,
+    address: C::Address,
 
     #[state]
-    pub(crate) admin: sov_state::StateValue<C::Address>,
+    admin: sov_state::StateValue<C::Address>,
 
     #[state]
-    pub(crate) owners: sov_state::StateMap<u64, C::Address>,
+    owners: sov_state::StateMap<u64, C::Address>,
 
     // If the module needs to refer to another module
     // #[module]
-    // pub(crate) bank: sov_bank::Bank<C>,
+    // bank: sov_bank::Bank<C>,
 }
 ```
 
@@ -112,7 +110,7 @@ Before we start implementing the `Module` trait, there are several preparatory s
 
 1.  Define `native` feature in `Cargo.toml` and add additional dependencies:
 
-    ```toml
+    ```toml, ignore
     [dependencies]
     anyhow = "1.0.62"
     borsh = { version = "0.10.3", features = ["bytes"] }
@@ -137,11 +135,9 @@ Before we start implementing the `Module` trait, there are several preparatory s
 
     ```rust
     // in call.rs
-    use sov_modules_api::Context;
-
     #[cfg_attr(feature = "native", derive(serde::Serialize), derive(serde::Deserialize))]
     #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-    pub enum CallMessage<C: Context> {
+    pub enum CallMessage<C: sov_modules_api::Context> {
         Mint {
             /// The id of new token. Caller is an owner
             id: u64
@@ -168,7 +164,7 @@ Before we start implementing the `Module` trait, there are several preparatory s
 
     ```rust
     // in lib.rs
-    pub struct NonFungibleTokenConfig<C: Context> {
+    pub struct NonFungibleTokenConfig<C: sov_modules_api::Context> {
         pub admin: C::Address,
         pub owners: Vec<(u64, C::Address)>,
     }
@@ -178,19 +174,17 @@ Before we start implementing the `Module` trait, there are several preparatory s
 
 Plugging together all types and features, we get this `Module` trait implementation in `lib.rs`:
 
-```rust
-impl<C: Context> Module for NonFungibleToken<C> {
+```rust, ignore
+impl<C: sov_modules_api::Context> Module for NonFungibleToken<C> {
     type Context = C;
-
     type Config = NonFungibleTokenConfig<C>;
-
-    type CallMessage = call::CallMessage<C>;
+    type CallMessage = CallMessage<C>;
 
     fn genesis(
         &self,
         _config: &Self::Config,
         _working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), Error> {
+    ) -> anyhow::Result<(), Error> {
         Ok(())
     }
 
@@ -199,8 +193,8 @@ impl<C: Context> Module for NonFungibleToken<C> {
         _msg: Self::CallMessage,
         _context: &Self::Context,
         _working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse, Error> {
-        Ok(CallResponse::default())
+    ) -> anyhow::Result<sov_modules_api::CallResponse, Error> {
+        Ok(sov_modules_api::CallResponse::default())
     }
 }
 ```
@@ -214,11 +208,15 @@ which takes a config argument specifying the initial state to configure.
 Since it modifies state, `genesis` also takes a working set as an argument.
 `Genesis` is called only once, during the rollup deployment.
 
-```rust
+```rust, ignore
+use sov_state::WorkingSet;
 
 // in lib.rs
-impl<C: Context> Module for NonFungibleToken<C> {
-    // ...
+impl<C: sov_modules_api::Context> sov_modules_api::Module for NonFungibleToken<C> {
+    type Context = C;
+    type Config = NonFungibleTokenConfig<C>;
+    type CallMessage = CallMessage<C>;
+    
     fn genesis(
         &self,
         config: &Self::Config,
@@ -229,16 +227,16 @@ impl<C: Context> Module for NonFungibleToken<C> {
 }
 
 // in genesis.rs
-impl<C: Context> NonFungibleToken<C> {
+impl<C: sov_modules_api::Context> NonFungibleToken<C> {
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         self.admin.set(&config.admin, working_set);
         for (id, owner) in config.owners.iter() {
             if self.owners.get(id, working_set).is_some() {
-                bail!("Token id {} already exists", id);
+                anyhow::bail!("Token id {} already exists", id);
             }
             self.owners.set(id, owner, working_set);
         }
@@ -252,15 +250,16 @@ impl<C: Context> NonFungibleToken<C> {
 
 First, we need to implement actual logic of handling different cases. Let's add `mint`, `transfer` and `burn` methods:
 
-```rust
+```rust, ignore
+use sov_state::WorkingSet;
 
-impl<C: Context> NonFungibleToken<C> {
+impl<C: sov_modules_api::Context> NonFungibleToken<C> {
     pub(crate) fn mint(
         &self,
         id: u64,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse> {
+    ) -> anyhow::Result<sov_modules_api::CallResponse> {
         if self.owners.get(&id, working_set).is_some() {
             bail!("Token with id {} already exists", id);
         }
@@ -268,7 +267,7 @@ impl<C: Context> NonFungibleToken<C> {
         self.owners.set(&id, context.sender(), working_set);
 
         working_set.add_event("NFT mint", &format!("A token with id {id} was minted"));
-        Ok(CallResponse::default())
+        Ok(sov_modules_api::CallResponse::default())
     }
 
     pub(crate) fn transfer(
@@ -277,22 +276,22 @@ impl<C: Context> NonFungibleToken<C> {
         to: C::Address,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse> {
+    ) -> anyhow::Result<sov_modules_api::CallResponse> {
         let token_owner = match self.owners.get(&id, working_set) {
             None => {
-                bail!("Token with id {} does not exist", id);
+                anyhow::bail!("Token with id {} does not exist", id);
             }
             Some(owner) => owner,
         };
         if &token_owner != context.sender() {
-            bail!("Only token owner can transfer token");
+            anyhow::bail!("Only token owner can transfer token");
         }
         self.owners.set(&id, &to, working_set);
         working_set.add_event(
             "NFT transfer",
             &format!("A token with id {id} was transferred"),
         );
-        Ok(CallResponse::default())
+        Ok(sov_modules_api::CallResponse::default())
     }
 
     pub(crate) fn burn(
@@ -300,40 +299,41 @@ impl<C: Context> NonFungibleToken<C> {
         id: u64,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse> {
+    ) -> anyhow::Result<sov_modules_api::CallResponse> {
         let token_owner = match self.owners.get(&id, working_set) {
             None => {
-                bail!("Token with id {} does not exist", id);
+                anyhow::bail!("Token with id {} does not exist", id);
             }
             Some(owner) => owner,
         };
         if &token_owner != context.sender() {
-            bail!("Only token owner can burn token");
+            anyhow::bail!("Only token owner can burn token");
         }
         self.owners.remove(&id, working_set);
 
         working_set.add_event("NFT burn", &format!("A token with id {id} was burned"));
-        Ok(CallResponse::default())
+        Ok(sov_modules_api::CallResponse::default())
     }
 }
 ```
 
 And then make them accessible to users via the `call` function:
 
-```rust
-impl<C: Context> Module for NonFungibleToken<C> {
-    // ...
+```rust, ignore
+impl<C: sov_modules_api::Context> sov_modules_api::Module for NonFungibleToken<C> {
+    type Context = C;
+    type Config = NonFungibleTokenConfig<C>;
 
     fn call(
         &self,
         msg: Self::CallMessage,
         context: &Self::Context,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse, Error> {
+    ) -> Result<sov_modules_api::CallResponse, Error> {
         let call_result = match msg {
-            call::CallMessage::Mint { id } => self.mint(id, context, working_set),
-            call::CallMessage::Transfer { to, id } => self.transfer(id, to, context, working_set),
-            call::CallMessage::Burn { id } => self.burn(id, context, working_set),
+            CallMessage::Mint { id } => self.mint(id, context, working_set),
+            CallMessage::Transfer { to, id } => self.transfer(id, to, context, working_set),
+            CallMessage::Burn { id } => self.burn(id, context, working_set),
         };
         Ok(call_result?)
     }
@@ -345,16 +345,31 @@ impl<C: Context> Module for NonFungibleToken<C> {
 We also want other modules to be able to query the owner of a token, so we add a public method for that.
 This method is only available to other modules: it is not currently exposed via RPC.
 
-```rust
-impl<C: Context> NonFungibleToken<C> {
+```rust, ignore
+use jsonrpsee::core::RpcResult;
+use sov_modules_api::macros::rpc_gen;
+use sov_modules_api::Context;
+use sov_state::WorkingSet;
+
+
+#[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
+/// Response for `getOwner` method
+pub struct OwnerResponse<C: Context> {
+    /// Optional owner address
+    pub owner: Option<C::Address>,
+}
+
+#[rpc_gen(client, server, namespace = "nft")]
+impl<C: sov_modules_api::Context> NonFungibleToken<C> {
+    #[rpc_method(name = "getOwner")]
     pub fn get_owner(
         &self,
         token_id: u64,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> OwnerResponse<C> {
-        OwnerResponse {
+    ) -> RpcResult<OwnerResponse<C>> {
+        Ok(OwnerResponse {
             owner: self.owners.get(&token_id, working_set),
-        }
+        })
     }
 }
 ```
@@ -366,7 +381,7 @@ that all public APIs function as intended.
 
 Temporary storage is needed for testing, so we enable the `temp` feature of `sov-state` as a `dev-dependency`
 
-```toml
+```toml, ignore
 [dev-dependencies]
 sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", features = ["temp"] }
 ```
@@ -374,12 +389,10 @@ sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branc
 Here is some boilerplate for NFT module integration tests:
 
 ```rust
-use demo_nft_module::CallMessage;
-use demo_nft_module::OwnerResponse;
-use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
-use serde::de::DeserializeOwned;
+use demo_nft_module::{CallMessage, NonFungibleToken, NonFungibleTokenConfig, OwnerResponse};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Hasher, Module, ModuleInfo, Spec, test_utils::generate_address};
+use sov_modules_api::{Address, Context, Module};
+use sov_rollup_interface::stf::Event;
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 pub type C = DefaultContext;
@@ -427,7 +440,7 @@ fn transfer() {
     let transfer_attempt = nft.call(transfer_message.clone(), &admin_context, &mut working_set);
 
     assert!(transfer_attempt.is_err());
-    /// ... rest of the tests
+    // ... rest of the tests
 }
 ```
 
@@ -435,10 +448,12 @@ fn transfer() {
 
 Now this module can be added to rollup's `Runtime`:
 
-```rust
+```rust, ignore
+use sov_modules_api::{DispatchCall, Genesis, MessageCodec};
+
 #[derive(Genesis, DispatchCall, MessageCodec)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub struct Runtime<C: Context> {
+pub struct Runtime<C: sov_modules_api::Context> {
     #[allow(unused)]
     sequencer: sov_sequencer_registry::Sequencer<C>,
 
@@ -446,14 +461,14 @@ pub struct Runtime<C: Context> {
     bank: sov_bank::Bank<C>,
 
     #[allow(unused)]
-    nft: nft::NonFungibleToken<C>,
+    nft: demo_nft_module::NonFungibleToken<C>,
 }
 ```
 
 And then this `Runtime` can be used in the State Transition Function runner to execute transactions.
 Here's an example of how to do it with `AppTemplate` from `sov-default-stf`:
 
-```rust
+```rust, ignore
     fn new(runtime_config: Self::RuntimeConfig) -> Self {
     let runtime = Runtime::new();
     let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
