@@ -87,9 +87,9 @@ impl<
     ) -> Result<CallResponse, Error> {
         Ok(match message {
             CallMessage::Register { da_address } => {
-                self.register(da_address, context, working_set)?
+                self.register(&da_address, context, working_set)?
             }
-            CallMessage::Exit { da_address } => self.exit(da_address, context, working_set)?,
+            CallMessage::Exit { da_address } => self.exit(&da_address, context, working_set)?,
         })
     }
 }

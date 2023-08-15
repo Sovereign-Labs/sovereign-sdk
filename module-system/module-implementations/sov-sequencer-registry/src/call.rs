@@ -17,8 +17,14 @@ use crate::SequencerRegistry;
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage<A: AddressTrait + borsh::BorshSerialize + borsh::BorshDeserialize> {
-    Register { da_address: A },
-    Exit { da_address: A },
+    Register {
+        // #[serde(bound(deserialize = ""))]
+        da_address: A,
+    },
+    Exit {
+        // #[serde(bound(deserialize = ""))]
+        da_address: A,
+    },
 }
 
 impl<
