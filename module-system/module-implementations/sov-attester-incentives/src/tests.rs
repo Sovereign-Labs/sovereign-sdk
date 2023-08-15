@@ -1,16 +1,17 @@
-use sov_chain_state::{StateTransitionId, TransitionInProgress};
+
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::hooks::SlotHooks;
+
 use sov_rollup_interface::mocks::{
-    TestBlock, TestBlockHeader, TestHash, TestValidityCond, TestValidityCondChecker,
+    TestValidityCond, TestValidityCondChecker,
 };
 use sov_rollup_interface::optimistic::Attestation;
-use sov_rollup_interface::services::da::SlotData;
+
 use sov_state::storage::{StorageKey, StorageProof};
 use sov_state::{ArrayWitness, ProverStorage, Storage, WorkingSet};
 
 use crate::helpers::{
-    commit_get_new_working_set, setup, BOND_AMOUNT, INITIAL_BOND_AMOUNT, INIT_HEIGHT,
+    execution_simulation, setup, BOND_AMOUNT, INITIAL_BOND_AMOUNT,
+    INIT_HEIGHT,
 };
 
 /// Start by testing the positive case where the attestations are valid
@@ -34,84 +35,10 @@ fn test_process_valid_attestation() {
         BOND_AMOUNT
     );
 
-    // Commit the working set
-    let mut working_set = commit_get_new_working_set(&storage, working_set);
-
-    // First get the bond proof that the attester was bonded at genesis.
-    let proof_genesis =
-        module.get_bond_proof(attester_address, &ArrayWitness::default(), &mut working_set);
-
-    // Then process the first transaction. Only sets the genesis hash and a transition in progress.
-    let slot_data = TestBlock {
-        curr_hash: [1; 32],
-        header: TestBlockHeader {
-            prev_hash: TestHash([0; 32]),
-        },
-        height: INIT_HEIGHT + 1,
-        validity_cond: TestValidityCond { is_valid: true },
-    };
-    module
-        .chain_state
-        .begin_slot_hook(&slot_data, &mut working_set);
-
-    // Commit the working set
-    let mut working_set = commit_get_new_working_set(&storage, working_set);
-
-    // Get bond proof that the attester was bonded after first transition
-    let proof_transition_1 =
-        module.get_bond_proof(attester_address, &ArrayWitness::default(), &mut working_set);
-
-    // Then process the next transition. Store the first transition and a new transition in progress.
-    let slot_data = TestBlock {
-        curr_hash: [2; 32],
-        header: TestBlockHeader {
-            prev_hash: TestHash([1; 32]),
-        },
-        height: INIT_HEIGHT + 2,
-        validity_cond: TestValidityCond { is_valid: true },
-    };
-    module
-        .chain_state
-        .begin_slot_hook(&slot_data, &mut working_set);
-
-    // Commit the working set
-    let mut working_set = commit_get_new_working_set(&storage, working_set);
-
-    // Process one last transition so that we can store the slot data.
-    let slot_data = TestBlock {
-        curr_hash: [3; 32],
-        header: TestBlockHeader {
-            prev_hash: TestHash([2; 32]),
-        },
-        height: INIT_HEIGHT + 3,
-        validity_cond: TestValidityCond { is_valid: true },
-    };
-    module
-        .chain_state
-        .begin_slot_hook(&slot_data, &mut working_set);
-
-    // Commit the working set
-    let mut working_set = commit_get_new_working_set(&storage, working_set);
-
-    // Get the roots of the transitions
-    let initial_state_root = module
-        .chain_state
-        .get_genesis_hash(&mut working_set)
-        .expect("Should have a genesis hash");
-
-    let transition_1 = module
-        .chain_state
-        .get_historical_transitions(INIT_HEIGHT + 1, &mut working_set)
-        .unwrap();
-
-    let root_transition_1 = transition_1.post_state_root();
-
-    let transition_2 = module
-        .chain_state
-        .get_historical_transitions(INIT_HEIGHT + 2, &mut working_set)
-        .unwrap();
-
-    let root_transition_2 = transition_2.post_state_root();
+    // Simulate the execution of a chain, with the genesis hash and two transitions after.
+    // Update the chain_state module and the optimistic module accordingly
+    let (exec_vars, mut working_set) =
+        execution_simulation(&module, &storage, attester_address, working_set);
 
     // Process a valid attestation for the first transition
     {
@@ -120,12 +47,12 @@ fn test_process_valid_attestation() {
         };
 
         let attestation = Attestation {
-            initial_state_root,
+            initial_state_root: exec_vars.initial_state_root,
             da_block_hash: [1; 32],
-            post_state_root: root_transition_1,
+            post_state_root: exec_vars.transition_1_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
                 transition_num: INIT_HEIGHT + 1,
-                proof: proof_genesis,
+                proof: exec_vars.initial_state_proof,
             },
         };
 
@@ -141,12 +68,12 @@ fn test_process_valid_attestation() {
         };
 
         let attestation = Attestation {
-            initial_state_root: root_transition_1,
+            initial_state_root: exec_vars.transition_1_root,
             da_block_hash: [2; 32],
-            post_state_root: root_transition_2,
+            post_state_root: exec_vars.transition_2_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
                 transition_num: INIT_HEIGHT + 2,
-                proof: proof_transition_1,
+                proof: exec_vars.transition_1_proof,
             },
         };
 
@@ -191,7 +118,7 @@ fn test_process_valid_attestation() {
 }
 
 #[test]
-fn test_burn_on_invalid_proof() {
+fn test_burn_on_invalid_attestation() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let (module, _token_address, attester_address, _challenger_address) =

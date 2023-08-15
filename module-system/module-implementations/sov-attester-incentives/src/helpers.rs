@@ -1,10 +1,15 @@
+use jmt::proof::{SparseMerkleProof};
 use sov_bank::{BankConfig, TokenConfig};
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Address, Genesis, Spec};
-use sov_rollup_interface::mocks::{MockCodeCommitment, MockZkvm, TestValidityCond};
+use sov_rollup_interface::mocks::{
+    MockCodeCommitment, MockZkvm, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
+};
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
-use sov_state::{DefaultStorageSpec, ProverStorage, Storage, WorkingSet};
+use sov_state::storage::StorageProof;
+use sov_state::{ArrayWitness, DefaultStorageSpec, ProverStorage, Storage, WorkingSet};
 
 use crate::AttesterIncentives;
 
@@ -117,4 +122,109 @@ pub(crate) fn setup<Cond: ValidityCondition, Checker: ValidityConditionChecker<C
         .expect("prover incentives genesis must succeed");
 
     (module, token_address, attester_address, challenger_address)
+}
+
+pub(crate) struct ExecutionSimulationVars {
+    pub initial_state_root: [u8; 32],
+    pub initial_state_proof: StorageProof<SparseMerkleProof<<C as Spec>::Hasher>>,
+    pub transition_1_root: [u8; 32],
+    pub transition_1_proof: StorageProof<SparseMerkleProof<<C as Spec>::Hasher>>,
+    pub transition_2_root: [u8; 32],
+}
+
+pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<TestValidityCond>>(
+    module: &AttesterIncentives<C, MockZkvm, TestValidityCond, Checker>,
+    storage: &ProverStorage<DefaultStorageSpec>,
+    attester_address: <C as Spec>::Address,
+    working_set: WorkingSet<<C as Spec>::Storage>,
+) -> (ExecutionSimulationVars, WorkingSet<<C as Spec>::Storage>) {
+    // Commit the working set
+    let mut working_set = commit_get_new_working_set(storage, working_set);
+
+    // First get the bond proof that the attester was bonded at genesis.
+    let initial_state_proof =
+        module.get_bond_proof(attester_address, &ArrayWitness::default(), &mut working_set);
+
+    // Then process the first transaction. Only sets the genesis hash and a transition in progress.
+    let slot_data = TestBlock {
+        curr_hash: [1; 32],
+        header: TestBlockHeader {
+            prev_hash: TestHash([0; 32]),
+        },
+        height: INIT_HEIGHT + 1,
+        validity_cond: TestValidityCond { is_valid: true },
+    };
+    module
+        .chain_state
+        .begin_slot_hook(&slot_data, &mut working_set);
+
+    // Commit the working set
+    let mut working_set = commit_get_new_working_set(storage, working_set);
+
+    // Get bond proof that the attester was bonded after first transition
+    let transition_1_proof =
+        module.get_bond_proof(attester_address, &ArrayWitness::default(), &mut working_set);
+
+    // Then process the next transition. Store the first transition and a new transition in progress.
+    let slot_data = TestBlock {
+        curr_hash: [2; 32],
+        header: TestBlockHeader {
+            prev_hash: TestHash([1; 32]),
+        },
+        height: INIT_HEIGHT + 2,
+        validity_cond: TestValidityCond { is_valid: true },
+    };
+    module
+        .chain_state
+        .begin_slot_hook(&slot_data, &mut working_set);
+
+    // Commit the working set
+    let mut working_set = commit_get_new_working_set(storage, working_set);
+
+    // Process one last transition so that we can store the slot data.
+    let slot_data = TestBlock {
+        curr_hash: [3; 32],
+        header: TestBlockHeader {
+            prev_hash: TestHash([2; 32]),
+        },
+        height: INIT_HEIGHT + 3,
+        validity_cond: TestValidityCond { is_valid: true },
+    };
+    module
+        .chain_state
+        .begin_slot_hook(&slot_data, &mut working_set);
+
+    // Commit the working set
+    let mut working_set = commit_get_new_working_set(storage, working_set);
+
+    // Get the roots of the transitions
+    let initial_state_root = module
+        .chain_state
+        .get_genesis_hash(&mut working_set)
+        .expect("Should have a genesis hash");
+
+    let transition_1 = module
+        .chain_state
+        .get_historical_transitions(INIT_HEIGHT + 1, &mut working_set)
+        .unwrap();
+
+    let transition_1_root = transition_1.post_state_root();
+
+    let transition_2 = module
+        .chain_state
+        .get_historical_transitions(INIT_HEIGHT + 2, &mut working_set)
+        .unwrap();
+
+    let transition_2_root = transition_2.post_state_root();
+
+    (
+        ExecutionSimulationVars {
+            initial_state_root,
+            initial_state_proof,
+            transition_1_root,
+            transition_1_proof,
+            transition_2_root,
+        },
+        working_set,
+    )
 }
