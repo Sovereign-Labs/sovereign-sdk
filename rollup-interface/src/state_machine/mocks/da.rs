@@ -208,14 +208,15 @@ pub struct MockDaService {
     submitted: Arc<Mutex<Vec<Vec<u8>>>>,
 }
 
-impl MockDaService {
-    ///TODO
-    pub fn new() -> Self {
-        MockDaService {
+impl Default for MockDaService {
+    fn default() -> Self {
+        Self {
             submitted: Arc::new(Mutex::new(Vec::new())),
         }
     }
+}
 
+impl MockDaService {
     ///TODO
     pub fn is_empty(&self) -> bool {
         self.submitted.lock().unwrap().is_empty()
@@ -238,7 +239,7 @@ impl DaService for MockDaService {
         _config: Self::RuntimeConfig,
         _chain_params: <Self::Spec as DaSpec>::ChainParams,
     ) -> Self {
-        MockDaService::new()
+        MockDaService::default()
     }
 
     async fn get_finalized_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
@@ -272,14 +273,14 @@ impl DaService for MockDaService {
         Ok(())
     }
 }
-///TODO
+/// TODO
 pub struct MockBatchBuilder {
     ///TODO
     pub mempool: Vec<Vec<u8>>,
 }
 
-/// It only takes the first byte of the tx, when submits it.
-/// This allows to show effect of batch builder
+// It only takes the first byte of the tx, when submits it.
+// This allows to show effect of batch builder
 impl BatchBuilder for MockBatchBuilder {
     fn accept_tx(&mut self, tx: Vec<u8>) -> anyhow::Result<()> {
         self.mempool.push(tx);

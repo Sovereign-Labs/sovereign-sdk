@@ -118,7 +118,7 @@ mod tests {
     #[tokio::test]
     async fn test_submit_on_empty_mempool() {
         let batch_builder = MockBatchBuilder { mempool: vec![] };
-        let da_service = Arc::new(MockDaService::new());
+        let da_service = Arc::new(MockDaService::default());
         assert!(da_service.is_empty());
         let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
@@ -140,7 +140,7 @@ mod tests {
         let batch_builder = MockBatchBuilder {
             mempool: vec![tx1.clone(), tx2.clone()],
         };
-        let da_service = Arc::new(MockDaService::new());
+        let da_service = Arc::new(MockDaService::default());
         assert!(da_service.is_empty());
         let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
@@ -159,7 +159,7 @@ mod tests {
     #[tokio::test]
     async fn test_accept_tx() {
         let batch_builder = MockBatchBuilder { mempool: vec![] };
-        let da_service = Arc::new(MockDaService::new());
+        let da_service = Arc::new(MockDaService::default());
 
         let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
         assert!(da_service.is_empty());
