@@ -1,6 +1,7 @@
-#![feature(associated_type_defaults)]
+#![doc = include_str!("../README.md")]
 
 mod bech32;
+pub mod capabilities;
 pub mod default_context;
 pub mod default_signature;
 mod dispatch;
@@ -134,6 +135,7 @@ pub trait Signature {
 
 /// A type that can't be instantiated.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 pub enum NonInstantiable {}
 
 /// PublicKey used in the Module System.
@@ -294,7 +296,7 @@ pub trait Module {
     type Config;
 
     /// Module defined argument to the call method.
-    type CallMessage: Debug + BorshSerialize + BorshDeserialize = NonInstantiable;
+    type CallMessage: Debug + BorshSerialize + BorshDeserialize;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(
