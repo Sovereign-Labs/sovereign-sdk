@@ -2,8 +2,9 @@ use std::marker::PhantomData;
 
 use thiserror::Error;
 
+use crate::codec::{BorshCodec, StateCodec};
 use crate::storage::StorageKey;
-use crate::{BorshCodec, Prefix, StateCodec, Storage, WorkingSet};
+use crate::{Prefix, Storage, WorkingSet};
 
 /// A container that maps keys to values.
 ///

@@ -7,10 +7,11 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
+use crate::codec::{StateKeyCodec, StateValueCodec};
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::utils::AlignedVec;
 use crate::witness::Witness;
-use crate::{Prefix, StateKeyCodec, StateValueCodec};
+use crate::Prefix;
 
 // `Key` type for the `Storage`
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]

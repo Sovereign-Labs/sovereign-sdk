@@ -7,12 +7,13 @@ use jmt::storage::TreeWriter;
 use jmt::{JellyfishMerkleTree, KeyHash, RootHash, Version};
 use sov_db::state_db::StateDB;
 
+use crate::codec::BorshCodec;
 use crate::config::Config;
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::storage::{NativeStorage, StorageKey, StorageProof, StorageValue};
 use crate::tree_db::TreeReadLogger;
 use crate::witness::Witness;
-use crate::{BorshCodec, MerkleProofSpec, Storage};
+use crate::{MerkleProofSpec, Storage};
 
 pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,
