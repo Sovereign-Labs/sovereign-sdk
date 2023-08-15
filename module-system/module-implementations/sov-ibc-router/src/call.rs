@@ -1,6 +1,6 @@
 use std::fmt::Debug;
 
-use crate::IbcRouter;
+use crate::IbcRouterModule;
 
 /// This enumeration represents the available call messages for interacting with
 /// the `ExampleModule` module.
@@ -12,4 +12,4 @@ pub enum CallMessage {
     SetValue(u32),
 }
 
-impl<C: sov_modules_api::Context> IbcRouter<C> {}
+impl<C: sov_modules_api::Context> IbcRouterModule<C> {}

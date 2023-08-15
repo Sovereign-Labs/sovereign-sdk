@@ -1,9 +1,9 @@
 use anyhow::Result;
 use sov_state::WorkingSet;
 
-use crate::IbcRouter;
+use crate::IbcRouterModule;
 
-impl<C: sov_modules_api::Context> IbcRouter<C> {
+impl<C: sov_modules_api::Context> IbcRouterModule<C> {
     pub(crate) fn init_module(
         &self,
         _config: &<Self as sov_modules_api::Module>::Config,

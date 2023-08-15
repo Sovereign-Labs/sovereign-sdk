@@ -8,6 +8,7 @@ pub use call::CallMessage;
 use ibc::applications::transfer::{MODULE_ID_STR, PORT_ID_STR};
 use ibc::core::ics24_host::identifier::PortId;
 use ibc::core::router::{self, ModuleId, Router};
+use sov_ibc_transfer::context::TransferContext;
 use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 
@@ -23,7 +24,7 @@ pub struct ExampleModuleConfig {}
 ///   etc.).
 #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo)]
-pub struct IbcRouter<C: sov_modules_api::Context> {
+pub struct IbcRouterModule<C: sov_modules_api::Context> {
     /// Address of the module.
     #[address]
     pub address: C::Address,
@@ -33,7 +34,7 @@ pub struct IbcRouter<C: sov_modules_api::Context> {
     pub(crate) transfer: sov_ibc_transfer::Transfer<C>,
 }
 
-impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcRouter<C> {
+impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcRouterModule<C> {
     type Context = C;
 
     type Config = ExampleModuleConfig;
@@ -61,13 +62,31 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcRouter<C> {
     }
 }
 
-impl<C> Router for IbcRouter<C>
+pub struct IbcRouter<'t, 'ws, C: sov_modules_api::Context> {
+    pub transfer_ctx: TransferContext<'t, 'ws, C>,
+}
+
+impl<'t, 'ws, C> IbcRouter<'t, 'ws, C>
+where
+    C: sov_modules_api::Context,
+{
+    pub fn new(
+        router_mod: &'t IbcRouterModule<C>,
+        working_set: &'ws mut WorkingSet<C::Storage>,
+    ) -> IbcRouter<'t, 'ws, C> {
+        IbcRouter {
+            transfer_ctx: router_mod.transfer.to_context(working_set),
+        }
+    }
+}
+
+impl<'r, 'ws, C> Router for IbcRouter<'r, 'ws, C>
 where
     C: sov_modules_api::Context,
 {
     fn get_route(&self, module_id: &ModuleId) -> Option<&dyn router::Module> {
         if *module_id == ModuleId::new(MODULE_ID_STR.to_string()) {
-            Some(&self.transfer)
+            Some(&self.transfer_ctx)
         } else {
             None
         }
@@ -75,7 +94,7 @@ where
 
     fn get_route_mut(&mut self, module_id: &ModuleId) -> Option<&mut dyn router::Module> {
         if *module_id == ModuleId::new(MODULE_ID_STR.to_string()) {
-            Some(&mut self.transfer)
+            Some(&mut self.transfer_ctx)
         } else {
             None
         }

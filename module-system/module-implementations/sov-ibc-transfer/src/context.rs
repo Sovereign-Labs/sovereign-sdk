@@ -1,14 +1,44 @@
 use ibc::applications::transfer::context::{
-    TokenTransferExecutionContext, TokenTransferValidationContext,
+    on_acknowledgement_packet_validate, on_chan_open_ack_validate, on_chan_open_confirm_validate,
+    on_chan_open_init_execute, on_chan_open_init_validate, on_chan_open_try_execute,
+    on_chan_open_try_validate, on_recv_packet_execute, on_timeout_packet_execute,
+    on_timeout_packet_validate, TokenTransferExecutionContext, TokenTransferValidationContext,
 };
 use ibc::applications::transfer::error::TokenTransferError;
-use ibc::applications::transfer::{PrefixedCoin, PORT_ID_STR};
-use ibc::core::ics24_host::identifier::{ChannelId, PortId};
+use ibc::applications::transfer::{PrefixedCoin, PORT_ID_STR, VERSION};
+use ibc::core::ics04_channel::acknowledgement::Acknowledgement;
+use ibc::core::ics04_channel::channel::{Counterparty, Order};
+use ibc::core::ics04_channel::error::{ChannelError, PacketError};
+use ibc::core::ics04_channel::packet::Packet;
+use ibc::core::ics04_channel::Version as ChannelVersion;
+use ibc::core::ics24_host::identifier::{ChannelId, ConnectionId, PortId};
+use ibc::core::router::ModuleExtras;
 use ibc::Signer;
+use sov_state::WorkingSet;
 
 use crate::Transfer;
 
-impl<C> TokenTransferValidationContext for Transfer<C>
+/// We need to create a wrapper around the `Transfer` module and `WorkingSet`,
+/// because we only get the `WorkingSet` at call-time from the Sovereign SDK,
+/// which must be passed to `TokenTransferValidationContext` methods through
+/// the `self` argument.
+pub struct TransferContext<'t, 'ws, C: sov_modules_api::Context> {
+    pub transfer_mod: &'t Transfer<C>,
+    pub working_set: &'ws mut WorkingSet<C::Storage>,
+}
+
+impl<'t, 'ws, C> core::fmt::Debug for TransferContext<'t, 'ws, C>
+where
+    C: sov_modules_api::Context,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("TransferContext")
+            .field("transfer_mod", &self.transfer_mod)
+            .finish()
+    }
+}
+
+impl<'t, 'ws, C> TokenTransferValidationContext for TransferContext<'t, 'ws, C>
 where
     C: sov_modules_api::Context,
 {
@@ -23,6 +53,7 @@ where
         port_id: &PortId,
         channel_id: &ChannelId,
     ) -> Result<Self::AccountId, TokenTransferError> {
+        // TODO: Which account to use?
         todo!()
     }
 
@@ -40,6 +71,8 @@ where
         to_account: &Self::AccountId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
+        let token_name = coin.to_string();
+
         todo!()
     }
 
@@ -60,7 +93,7 @@ where
     }
 }
 
-impl<C> TokenTransferExecutionContext for Transfer<C>
+impl<'t, 'ws, C> TokenTransferExecutionContext for TransferContext<'t, 'ws, C>
 where
     C: sov_modules_api::Context,
 {
@@ -106,5 +139,238 @@ where
         Ok(Address {
             address: signer.as_ref().parse()?,
         })
+    }
+}
+
+impl<'t, 'ws, C> ibc::core::router::Module for TransferContext<'t, 'ws, C>
+where
+    C: sov_modules_api::Context,
+{
+    fn on_chan_open_init_validate(
+        &self,
+        order: Order,
+        connection_hops: &[ConnectionId],
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        counterparty: &Counterparty,
+        version: &ChannelVersion,
+    ) -> Result<ChannelVersion, ChannelError> {
+        on_chan_open_init_validate(
+            self,
+            order,
+            connection_hops,
+            port_id,
+            channel_id,
+            counterparty,
+            version,
+        )
+        .map_err(|e: TokenTransferError| ChannelError::AppModule {
+            description: e.to_string(),
+        })?;
+
+        Ok(ChannelVersion::new(VERSION.to_string()))
+    }
+
+    fn on_chan_open_init_execute(
+        &mut self,
+        order: Order,
+        connection_hops: &[ConnectionId],
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        counterparty: &Counterparty,
+        version: &ChannelVersion,
+    ) -> Result<(ModuleExtras, ChannelVersion), ChannelError> {
+        on_chan_open_init_execute(
+            self,
+            order,
+            connection_hops,
+            port_id,
+            channel_id,
+            counterparty,
+            version,
+        )
+        .map_err(|e: TokenTransferError| ChannelError::AppModule {
+            description: e.to_string(),
+        })
+    }
+
+    fn on_chan_open_try_validate(
+        &self,
+        order: Order,
+        connection_hops: &[ConnectionId],
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        counterparty: &Counterparty,
+        counterparty_version: &ChannelVersion,
+    ) -> Result<ChannelVersion, ChannelError> {
+        on_chan_open_try_validate(
+            self,
+            order,
+            connection_hops,
+            port_id,
+            channel_id,
+            counterparty,
+            counterparty_version,
+        )
+        .map_err(|e: TokenTransferError| ChannelError::AppModule {
+            description: e.to_string(),
+        })?;
+        Ok(ChannelVersion::new(VERSION.to_string()))
+    }
+
+    fn on_chan_open_try_execute(
+        &mut self,
+        order: Order,
+        connection_hops: &[ConnectionId],
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        counterparty: &Counterparty,
+        counterparty_version: &ChannelVersion,
+    ) -> Result<(ModuleExtras, ChannelVersion), ChannelError> {
+        on_chan_open_try_execute(
+            self,
+            order,
+            connection_hops,
+            port_id,
+            channel_id,
+            counterparty,
+            counterparty_version,
+        )
+        .map_err(|e: TokenTransferError| ChannelError::AppModule {
+            description: e.to_string(),
+        })
+    }
+
+    fn on_chan_open_ack_validate(
+        &self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        counterparty_version: &ChannelVersion,
+    ) -> Result<(), ChannelError> {
+        on_chan_open_ack_validate(self, port_id, channel_id, counterparty_version).map_err(
+            |e: TokenTransferError| ChannelError::AppModule {
+                description: e.to_string(),
+            },
+        )
+    }
+
+    fn on_chan_open_ack_execute(
+        &mut self,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+        _counterparty_version: &ChannelVersion,
+    ) -> Result<ModuleExtras, ChannelError> {
+        Ok(ModuleExtras::empty())
+    }
+
+    fn on_chan_open_confirm_validate(
+        &self,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+    ) -> Result<(), ChannelError> {
+        on_chan_open_confirm_validate(self, port_id, channel_id).map_err(|e: TokenTransferError| {
+            ChannelError::AppModule {
+                description: e.to_string(),
+            }
+        })
+    }
+
+    fn on_chan_open_confirm_execute(
+        &mut self,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+    ) -> Result<ModuleExtras, ChannelError> {
+        Ok(ModuleExtras::empty())
+    }
+
+    fn on_chan_close_init_validate(
+        &self,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+    ) -> Result<(), ChannelError> {
+        Ok(())
+    }
+
+    fn on_chan_close_init_execute(
+        &mut self,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+    ) -> Result<ModuleExtras, ChannelError> {
+        Ok(ModuleExtras::empty())
+    }
+
+    fn on_chan_close_confirm_validate(
+        &self,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+    ) -> Result<(), ChannelError> {
+        Ok(())
+    }
+
+    fn on_chan_close_confirm_execute(
+        &mut self,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+    ) -> Result<ModuleExtras, ChannelError> {
+        Ok(ModuleExtras::empty())
+    }
+
+    fn on_recv_packet_execute(
+        &mut self,
+        packet: &Packet,
+        _relayer: &Signer,
+    ) -> (ModuleExtras, Acknowledgement) {
+        on_recv_packet_execute(self, packet)
+    }
+
+    fn on_acknowledgement_packet_validate(
+        &self,
+        packet: &Packet,
+        acknowledgement: &Acknowledgement,
+        relayer: &Signer,
+    ) -> Result<(), PacketError> {
+        on_acknowledgement_packet_validate(self, packet, acknowledgement, relayer).map_err(
+            |e: TokenTransferError| PacketError::AppModule {
+                description: e.to_string(),
+            },
+        )
+    }
+
+    fn on_acknowledgement_packet_execute(
+        &mut self,
+        _packet: &Packet,
+        _acknowledgement: &Acknowledgement,
+        _relayer: &Signer,
+    ) -> (ModuleExtras, Result<(), PacketError>) {
+        (ModuleExtras::empty(), Ok(()))
+    }
+
+    /// Note: `MsgTimeout` and `MsgTimeoutOnClose` use the same callback
+    fn on_timeout_packet_validate(
+        &self,
+        packet: &Packet,
+        relayer: &Signer,
+    ) -> Result<(), PacketError> {
+        on_timeout_packet_validate(self, packet, relayer).map_err(|e: TokenTransferError| {
+            PacketError::AppModule {
+                description: e.to_string(),
+            }
+        })
+    }
+
+    /// Note: `MsgTimeout` and `MsgTimeoutOnClose` use the same callback
+    fn on_timeout_packet_execute(
+        &mut self,
+        packet: &Packet,
+        relayer: &Signer,
+    ) -> (ModuleExtras, Result<(), PacketError>) {
+        let res = on_timeout_packet_execute(self, packet, relayer);
+        (
+            res.0,
+            res.1
+                .map_err(|e: TokenTransferError| PacketError::AppModule {
+                    description: e.to_string(),
+                }),
+        )
     }
 }
