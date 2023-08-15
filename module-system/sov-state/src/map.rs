@@ -13,7 +13,10 @@ use crate::{BorshCodec, Prefix, StateCodec, Storage, WorkingSet};
 /// - a value type (`V`);
 /// - a [`StateCodec`] (`C`).
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub struct StateMap<K, V, C = BorshCodec> {
+pub struct StateMap<K, V, C = BorshCodec>
+where
+    C: StateCodec<K, V>,
+{
     _phantom: (PhantomData<K>, PhantomData<V>),
     codec: C,
     prefix: Prefix,
@@ -26,7 +29,10 @@ pub enum Error {
     MissingValue(Prefix, StorageKey),
 }
 
-impl<K, V> StateMap<K, V> {
+impl<K, V> StateMap<K, V>
+where
+    BorshCodec: StateCodec<K, V>,
+{
     /// Creates a new [`StateMap`] with the given prefix and the default
     /// [`StateCodec`] (i.e. [`BorshCodec`]).
     pub fn new(prefix: Prefix) -> Self {
@@ -38,7 +44,10 @@ impl<K, V> StateMap<K, V> {
     }
 }
 
-impl<K, V, C> StateMap<K, V, C> {
+impl<K, V, C> StateMap<K, V, C>
+where
+    C: StateCodec<K, V>,
+{
     /// Creates a new [`StateMap`] with the given prefix and codec.
     ///
     /// Note that `codec` must implement both [`StateKeyCodec`] and
@@ -56,12 +65,7 @@ impl<K, V, C> StateMap<K, V, C> {
     pub fn prefix(&self) -> &Prefix {
         &self.prefix
     }
-}
 
-impl<K, V, C> StateMap<K, V, C>
-where
-    C: StateCodec<K, V>,
-{
     /// Inserts a key-value pair into the map.
     pub fn set<S: Storage>(&self, key: &K, value: &V, working_set: &mut WorkingSet<S>) {
         working_set.set_value(self.prefix(), &self.codec, key, value)

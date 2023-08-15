@@ -20,7 +20,10 @@ pub enum Error {
     MissingValue(Prefix),
 }
 
-impl<V> StateValue<V> {
+impl<V> StateValue<V>
+where
+    BorshCodec: StateValueCodec<V>,
+{
     /// Crates a new [`StateValue`] with the given prefix and the default
     /// [`StateCodec`] (i.e. [`BorshCodec`]).
     pub fn new(prefix: Prefix) -> Self {
@@ -32,7 +35,10 @@ impl<V> StateValue<V> {
     }
 }
 
-impl<V, C> StateValue<V, C> {
+impl<V, C> StateValue<V, C>
+where
+    C: StateValueCodec<V>,
+{
     /// Creates a new [`StateValue`] with the given prefix and codec.
     pub fn with_codec(prefix: Prefix, codec: C) -> Self {
         Self {
@@ -46,12 +52,7 @@ impl<V, C> StateValue<V, C> {
     pub fn prefix(&self) -> &Prefix {
         &self.prefix
     }
-}
 
-impl<V, C> StateValue<V, C>
-where
-    C: StateValueCodec<V>,
-{
     fn internal_codec(&self) -> SingletonCodec<C> {
         SingletonCodec::new(&self.codec)
     }
