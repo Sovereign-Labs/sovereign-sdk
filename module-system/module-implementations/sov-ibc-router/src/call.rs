@@ -12,6 +12,4 @@ pub enum CallMessage {
     SetValue(u32),
 }
 
-
-impl<C: sov_modules_api::Context> IbcRouter<C> {
-}
+impl<C: sov_modules_api::Context> IbcRouter<C> {}
