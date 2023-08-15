@@ -1,6 +1,4 @@
-use demo_nft_module::call::CallMessage;
-use demo_nft_module::query::OwnerResponse;
-use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
+use demo_nft_module::{CallMessage, NonFungibleToken, NonFungibleTokenConfig, OwnerResponse};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address as gen_addr_generic;
 use sov_modules_api::{Address, Context, Module};
@@ -32,10 +30,10 @@ fn genesis_and_mint() {
     let genesis_result = nft.genesis(&config, &mut working_set);
     assert!(genesis_result.is_ok());
 
-    let query1: OwnerResponse<C> = nft.get_owner(0, &mut working_set);
+    let query1: OwnerResponse<C> = nft.get_owner(0, &mut working_set).unwrap();
     assert_eq!(query1.owner, Some(owner1));
 
-    let query2: OwnerResponse<C> = nft.get_owner(1, &mut working_set);
+    let query2: OwnerResponse<C> = nft.get_owner(1, &mut working_set).unwrap();
     assert!(query2.owner.is_none());
 
     // Mint, anybody can mint
@@ -48,7 +46,7 @@ fn genesis_and_mint() {
         working_set.events()[0],
         Event::new("NFT mint", "A token with id 1 was minted")
     );
-    let query3: OwnerResponse<C> = nft.get_owner(1, &mut working_set);
+    let query3: OwnerResponse<C> = nft.get_owner(1, &mut working_set).unwrap();
     assert_eq!(query3.owner, Some(owner2));
 
     // Try to mint again same token, should fail
@@ -87,7 +85,7 @@ fn transfer() {
 
     let query_token_owner =
         |token_id: u64, working_set: &mut WorkingSet<Storage>| -> Option<Address> {
-            let query: OwnerResponse<C> = nft.get_owner(token_id, working_set);
+            let query: OwnerResponse<C> = nft.get_owner(token_id, working_set).unwrap();
             query.owner
         };
 
@@ -150,7 +148,7 @@ fn burn() {
         working_set.events()[0],
         Event::new("NFT burn", "A token with id 0 was burned")
     );
-    let query: OwnerResponse<C> = nft.get_owner(0, &mut working_set);
+    let query: OwnerResponse<C> = nft.get_owner(0, &mut working_set).unwrap();
 
     assert!(query.owner.is_none());
 
