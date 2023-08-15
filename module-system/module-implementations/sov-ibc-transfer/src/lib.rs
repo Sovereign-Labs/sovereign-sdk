@@ -47,10 +47,6 @@ pub struct Transfer<C: sov_modules_api::Context> {
     #[address]
     pub address: C::Address,
 
-    /// Some value kept in the state.
-    #[state]
-    pub value: sov_state::StateValue<u32>,
-
     /// Reference to the Bank module.
     #[module]
     pub(crate) _bank: sov_bank::Bank<C>,
@@ -78,11 +74,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Transfer<C> {
         context: &Self::Context,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
-        match msg {
-            call::CallMessage::SetValue(new_value) => {
-                Ok(self.set_value(new_value, context, working_set)?)
-            }
-        }
+        todo!()
     }
 }
 
@@ -94,7 +86,6 @@ where
         // FIXME: put real values here, or remove `Debug` requirement from router::Module
         f.debug_struct("Transfer")
             .field("address", &self.address)
-            .field("value", &self.value)
             .finish()
     }
 }

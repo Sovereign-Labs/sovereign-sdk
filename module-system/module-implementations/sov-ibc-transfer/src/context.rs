@@ -93,7 +93,7 @@ where
 /// Address type, which wraps C::Address. This is needed to implement
 /// `TryFrom<Signer>` (circumventing the orphan rule).
 pub struct Address<C: sov_modules_api::Context> {
-    address: C::Address,
+    pub address: C::Address,
 }
 
 impl<C> TryFrom<Signer> for Address<C>

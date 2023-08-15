@@ -1,5 +1,3 @@
-use sov_state::WorkingSet;
-
 use super::Transfer;
 
 #[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq)]
@@ -8,10 +6,4 @@ pub struct Response {
 }
 
 impl<C: sov_modules_api::Context> Transfer<C> {
-    /// Queries the state of the module.
-    pub fn query_value(&self, working_set: &mut WorkingSet<C::Storage>) -> Response {
-        Response {
-            value: self.value.get(working_set),
-        }
-    }
 }
