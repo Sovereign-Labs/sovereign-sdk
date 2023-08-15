@@ -1,13 +1,19 @@
 use sov_modules_api::hooks::ApplyBlobHooks;
 use sov_modules_api::Context;
 use sov_rollup_interface::da::BlobReaderTrait;
+use sov_rollup_interface::AddressTrait;
 use sov_state::WorkingSet;
 
 use crate::{SequencerOutcome, SequencerRegistry};
 
-impl<C: Context, B: BlobReaderTrait> ApplyBlobHooks<B> for SequencerRegistry<C> {
+impl<
+        C: Context,
+        B: BlobReaderTrait,
+        A: AddressTrait + borsh::BorshSerialize + borsh::BorshDeserialize,
+    > ApplyBlobHooks<B> for SequencerRegistry<C, A>
+{
     type Context = C;
-    type BlobResult = SequencerOutcome;
+    type BlobResult = SequencerOutcome<A>;
 
     fn begin_blob_hook(
         &self,
@@ -28,7 +34,7 @@ impl<C: Context, B: BlobReaderTrait> ApplyBlobHooks<B> for SequencerRegistry<C> 
         match result {
             SequencerOutcome::Completed => (),
             SequencerOutcome::Slashed { sequencer } => {
-                self.delete(sequencer, working_set);
+                self.delete(&sequencer, working_set);
             }
         }
         Ok(())

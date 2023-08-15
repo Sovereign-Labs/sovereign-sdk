@@ -2,6 +2,7 @@ use anyhow::{bail, Result};
 #[cfg(feature = "native")]
 use sov_modules_api::macros::CliWalletArg;
 use sov_modules_api::CallResponse;
+use sov_rollup_interface::AddressTrait;
 use sov_state::WorkingSet;
 
 use crate::SequencerRegistry;
@@ -15,16 +16,19 @@ use crate::SequencerRegistry;
     derive(schemars::JsonSchema)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-// TODO: Replace with DA address generic, when AddressTrait is split
-pub enum CallMessage {
-    Register { da_address: Vec<u8> },
-    Exit { da_address: Vec<u8> },
+pub enum CallMessage<A: AddressTrait + borsh::BorshSerialize + borsh::BorshDeserialize> {
+    Register { da_address: A },
+    Exit { da_address: A },
 }
 
-impl<C: sov_modules_api::Context> SequencerRegistry<C> {
+impl<
+        C: sov_modules_api::Context,
+        A: AddressTrait + borsh::BorshSerialize + borsh::BorshDeserialize,
+    > SequencerRegistry<C, A>
+{
     pub(crate) fn register(
         &self,
-        da_address: Vec<u8>,
+        da_address: &A,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
@@ -35,7 +39,7 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
 
     pub(crate) fn exit(
         &self,
-        da_address: Vec<u8>,
+        da_address: &A,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
@@ -45,7 +49,7 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
 
         let belongs_to = self
             .allowed_sequencers
-            .get_or_err(&da_address, working_set)?;
+            .get_or_err(da_address, working_set)?;
 
         if sequencer != &belongs_to {
             bail!("Unauthorized exit attempt");
@@ -59,11 +63,11 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
         Ok(CallResponse::default())
     }
 
-    pub(crate) fn delete(&self, da_address: Vec<u8>, working_set: &mut WorkingSet<C::Storage>) {
-        self.allowed_sequencers.delete(&da_address, working_set);
+    pub(crate) fn delete(&self, da_address: &A, working_set: &mut WorkingSet<C::Storage>) {
+        self.allowed_sequencers.delete(da_address, working_set);
 
         if let Some(preferred_sequencer) = self.preferred_sequencer.get(working_set) {
-            if da_address == preferred_sequencer {
+            if da_address == &preferred_sequencer {
                 self.preferred_sequencer.delete(working_set);
             }
         }
