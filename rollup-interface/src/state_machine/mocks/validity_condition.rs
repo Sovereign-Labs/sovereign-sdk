@@ -11,15 +11,15 @@ use crate::zk::{ValidityCondition, ValidityConditionChecker};
 #[derive(
     Debug, BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Copy, Default,
 )]
-pub struct TestValidityCond {
+pub struct MockValidityCond {
     /// The associated validity condition field. If it is true, the validity condition is verified
     pub is_valid: bool,
 }
 
-impl ValidityCondition for TestValidityCond {
+impl ValidityCondition for MockValidityCond {
     type Error = Error;
     fn combine<H: Digest>(&self, rhs: Self) -> Result<Self, Self::Error> {
-        Ok(TestValidityCond {
+        Ok(MockValidityCond {
             is_valid: self.is_valid & rhs.is_valid,
         })
     }
@@ -31,10 +31,10 @@ pub struct TestValidityCondChecker<MockValidityCond> {
     phantom: PhantomData<MockValidityCond>,
 }
 
-impl ValidityConditionChecker<TestValidityCond> for TestValidityCondChecker<TestValidityCond> {
+impl ValidityConditionChecker<MockValidityCond> for TestValidityCondChecker<MockValidityCond> {
     type Error = Error;
 
-    fn check(&mut self, condition: &TestValidityCond) -> Result<(), Self::Error> {
+    fn check(&mut self, condition: &MockValidityCond) -> Result<(), Self::Error> {
         if condition.is_valid {
             Ok(())
         } else {

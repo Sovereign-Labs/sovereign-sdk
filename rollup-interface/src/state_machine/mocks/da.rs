@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
 use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
-use crate::mocks::TestValidityCond;
+use crate::mocks::MockValidityCond;
 use crate::services::batch_builder::BatchBuilder;
 use crate::services::da::{DaService, SlotData};
 use crate::AddressTrait;
@@ -78,13 +78,13 @@ impl AddressTrait for MockAddress {}
 )]
 
 /// A mock BlobTransaction from a DA layer used for testing.
-pub struct TestBlob<Address> {
+pub struct MockBlob<Address> {
     address: Address,
     hash: [u8; 32],
     data: CountedBufReader<Bytes>,
 }
 
-impl<Address: AddressTrait> BlobReaderTrait for TestBlob<Address> {
+impl<Address: AddressTrait> BlobReaderTrait for MockBlob<Address> {
     type Data = Bytes;
     type Address = Address;
 
@@ -105,7 +105,7 @@ impl<Address: AddressTrait> BlobReaderTrait for TestBlob<Address> {
     }
 }
 
-impl<Address: AddressTrait> TestBlob<Address> {
+impl<Address: AddressTrait> MockBlob<Address> {
     /// Creates a new mock blob with the given data, claiming to have been published by the provided address.
     pub fn new(data: Vec<u8>, address: Address, hash: [u8; 32]) -> Self {
         Self {
@@ -118,64 +118,64 @@ impl<Address: AddressTrait> TestBlob<Address> {
 
 /// A mock hash digest.
 #[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
-pub struct TestHash(pub [u8; 32]);
+pub struct MockHash(pub [u8; 32]);
 
-impl AsRef<[u8]> for TestHash {
+impl AsRef<[u8]> for MockHash {
     fn as_ref(&self) -> &[u8] {
         &self.0
     }
 }
 
-impl BlockHashTrait for TestHash {}
+impl BlockHashTrait for MockHash {}
 
 /// A mock block header used for testing.
 #[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]
-pub struct TestBlockHeader {
+pub struct MockBlockHeader {
     /// The hash of the previous block.
-    pub prev_hash: TestHash,
+    pub prev_hash: MockHash,
 }
 
-impl BlockHeaderTrait for TestBlockHeader {
-    type Hash = TestHash;
+impl BlockHeaderTrait for MockBlockHeader {
+    type Hash = MockHash;
 
     fn prev_hash(&self) -> Self::Hash {
         self.prev_hash
     }
 
     fn hash(&self) -> Self::Hash {
-        TestHash(sha2::Sha256::digest(self.prev_hash.0).into())
+        MockHash(sha2::Sha256::digest(self.prev_hash.0).into())
     }
 }
 
 /// A mock block type used for testing.
 #[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]
-pub struct TestBlock {
+pub struct MockBlock {
     /// The hash of this block.
     pub curr_hash: [u8; 32],
     /// The header of this block.
-    pub header: TestBlockHeader,
+    pub header: MockBlockHeader,
     /// The height of this block
     pub height: u64,
     /// Validity condition
-    pub validity_cond: TestValidityCond,
+    pub validity_cond: MockValidityCond,
 }
 
-impl Default for TestBlock {
+impl Default for MockBlock {
     fn default() -> Self {
         Self {
             curr_hash: [0; 32],
-            header: TestBlockHeader {
-                prev_hash: TestHash([0; 32]),
+            header: MockBlockHeader {
+                prev_hash: MockHash([0; 32]),
             },
             height: 0,
-            validity_cond: TestValidityCond::default(),
+            validity_cond: MockValidityCond::default(),
         }
     }
 }
 
-impl SlotData for TestBlock {
-    type BlockHeader = TestBlockHeader;
-    type Cond = TestValidityCond;
+impl SlotData for MockBlock {
+    type BlockHeader = MockBlockHeader;
+    type Cond = MockValidityCond;
 
     fn hash(&self) -> [u8; 32] {
         self.curr_hash
@@ -185,7 +185,7 @@ impl SlotData for TestBlock {
         &self.header
     }
 
-    fn validity_condition(&self) -> TestValidityCond {
+    fn validity_condition(&self) -> MockValidityCond {
         self.validity_cond
     }
 }
@@ -194,10 +194,10 @@ impl SlotData for TestBlock {
 pub struct MockDaSpec;
 
 impl DaSpec for MockDaSpec {
-    type SlotHash = TestHash;
-    type ValidityCondition = TestValidityCond;
-    type BlockHeader = TestBlockHeader;
-    type BlobTransaction = TestBlob<MockAddress>;
+    type SlotHash = MockHash;
+    type ValidityCondition = MockValidityCond;
+    type BlockHeader = MockBlockHeader;
+    type BlobTransaction = MockBlob<MockAddress>;
     type InclusionMultiProof = [u8; 32];
     type CompletenessProof = ();
     type ChainParams = ();
@@ -231,7 +231,7 @@ impl MockDaService {
 impl DaService for MockDaService {
     type RuntimeConfig = ();
     type Spec = MockDaSpec;
-    type FilteredBlock = TestBlock;
+    type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
 
     async fn new(

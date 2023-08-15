@@ -5,7 +5,7 @@ mod helpers;
 
 use helpers::*;
 use sov_modules_api::Address;
-use sov_rollup_interface::mocks::TestBlob;
+use sov_rollup_interface::mocks::MockBlob;
 use sov_sequencer_registry::{SequencerOutcome, SequencerRegistry};
 
 #[test]
@@ -21,7 +21,7 @@ fn begin_blob_hook_known_sequencer() {
     };
     assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
 
-    let mut test_blob = TestBlob::new(
+    let mut test_blob = MockBlob::new(
         Vec::new(),
         Address::from(GENESIS_SEQUENCER_DA_ADDRESS),
         [0_u8; 32],
@@ -48,7 +48,7 @@ fn begin_blob_hook_unknown_sequencer() {
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
 
-    let mut test_blob = TestBlob::new(
+    let mut test_blob = MockBlob::new(
         Vec::new(),
         Address::from(UNKNOWN_SEQUENCER_DA_ADDRESS),
         [0_u8; 32],
@@ -78,7 +78,7 @@ fn end_blob_hook_success() {
     };
     assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
 
-    let mut test_blob = TestBlob::new(
+    let mut test_blob = MockBlob::new(
         Vec::new(),
         Address::from(GENESIS_SEQUENCER_DA_ADDRESS),
         [0_u8; 32],
@@ -114,7 +114,7 @@ fn end_blob_hook_slash() {
     };
     assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
 
-    let mut test_blob = TestBlob::new(
+    let mut test_blob = MockBlob::new(
         Vec::new(),
         Address::from(GENESIS_SEQUENCER_DA_ADDRESS),
         [0_u8; 32],
@@ -173,7 +173,7 @@ fn end_blob_hook_slash_preferred_sequencer() {
     };
     assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
 
-    let mut test_blob = TestBlob::new(
+    let mut test_blob = MockBlob::new(
         Vec::new(),
         Address::from(GENESIS_SEQUENCER_DA_ADDRESS),
         [0_u8; 32],
@@ -213,7 +213,7 @@ fn end_blob_hook_slash_unknown_sequencer() {
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
 
-    let mut test_blob = TestBlob::new(
+    let mut test_blob = MockBlob::new(
         Vec::new(),
         Address::from(GENESIS_SEQUENCER_DA_ADDRESS),
         [0_u8; 32],

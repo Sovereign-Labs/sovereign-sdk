@@ -11,7 +11,7 @@ use sov_modules_api::{Context, Module, Spec};
 #[cfg(feature = "native")]
 use sov_modules_stf_template::RawTx;
 use sov_modules_stf_template::{Batch, SequencerOutcome, TxEffect};
-use sov_rollup_interface::mocks::TestBlob;
+use sov_rollup_interface::mocks::MockBlob;
 use sov_rollup_interface::stf::BatchReceipt;
 
 #[cfg(feature = "native")]
@@ -21,10 +21,10 @@ pub mod election_data;
 #[cfg(feature = "native")]
 pub mod value_setter_data;
 
-pub fn new_test_blob_from_batch(batch: Batch, address: &[u8], hash: [u8; 32]) -> TestBlob<Address> {
+pub fn new_test_blob_from_batch(batch: Batch, address: &[u8], hash: [u8; 32]) -> MockBlob<Address> {
     let address = Address::try_from(address).unwrap();
     let data = batch.try_to_vec().unwrap();
-    TestBlob::new(data, address, hash)
+    MockBlob::new(data, address, hash)
 }
 
 pub fn has_tx_events(apply_blob_outcome: &BatchReceipt<SequencerOutcome, TxEffect>) -> bool {
