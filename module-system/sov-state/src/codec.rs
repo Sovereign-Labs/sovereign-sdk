@@ -136,6 +136,8 @@ impl<K> StateKeyEncodePreservingBorrow<K, K> for BorshCodec where K: borsh::Bors
 impl<K> StateKeyEncodePreservingBorrow<Arc<K>, K> for BorshCodec where K: borsh::BorshSerialize {}
 impl<K> StateKeyEncodePreservingBorrow<Box<K>, K> for BorshCodec where K: borsh::BorshSerialize {}
 impl<K> StateKeyEncodePreservingBorrow<Rc<K>, K> for BorshCodec where K: borsh::BorshSerialize {}
+// Note: we're specifically *not* implementing it for `<[u8; _], [u8]>` because
+// arrays and slices have different representations in Borsh.
 impl<K> StateKeyEncodePreservingBorrow<Vec<K>, [K]> for BorshCodec where K: borsh::BorshSerialize {}
 
 /// A [`StateCodec`] that uses two different codecs under the hood, one for keys
