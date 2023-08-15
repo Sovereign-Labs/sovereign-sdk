@@ -10,7 +10,7 @@ use crate::NonFungibleToken;
     derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-/// Operations available to NFT: Mint, Transfer, Burn
+/// A transaction handled by the NFT module. Mints, Transfers, or Burns an NFT by id
 pub enum CallMessage<C: Context> {
     /// Mint a new token
     Mint {
