@@ -2,10 +2,9 @@ use sov_chain_state::{StateTransitionId, TransitionInProgress};
 use sov_data_generators::value_setter_data::ValueSetterMessages;
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch, MessageGenerator};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::Spec;
 use sov_modules_stf_template::{AppTemplate, SequencerOutcome};
 use sov_rollup_interface::mocks::{
-    MockZkvm, TestBlob, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
+    MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockValidityCond, MockZkvm,
 };
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::{ProverStorage, Storage};
@@ -27,16 +26,13 @@ fn test_simple_value_setter_with_chain_state() {
     let storage: ProverStorage<sov_state::DefaultStorageSpec> =
         ProverStorage::with_path(tmpdir.path()).unwrap();
 
-    let mut app_template = AppTemplate::<
-        C,
-        TestValidityCond,
-        MockZkvm,
-        TestRuntime<C, TestValidityCond>,
-        TestBlob<<DefaultContext as Spec>::Address>,
-    >::new(storage, runtime);
+    let mut app_template =
+        AppTemplate::<C, MockDaSpec, MockZkvm, TestRuntime<C, MockValidityCond>>::new(
+            storage, runtime,
+        );
 
     let value_setter_messages = ValueSetterMessages::default();
-    let value_setter = value_setter_messages.create_raw_txs::<TestRuntime<C, TestValidityCond>>();
+    let value_setter = value_setter_messages.create_raw_txs::<TestRuntime<C, MockValidityCond>>();
 
     let admin_pub_key = value_setter_messages.messages[0].admin.default_address();
 
@@ -51,13 +47,13 @@ fn test_simple_value_setter_with_chain_state() {
         [2; 32],
     );
 
-    let slot_data: TestBlock = TestBlock {
+    let slot_data: MockBlock = MockBlock {
         curr_hash: [10; 32],
-        header: TestBlockHeader {
-            prev_hash: TestHash([0; 32]),
+        header: MockBlockHeader {
+            prev_hash: MockHash([0; 32]),
         },
         height: 0,
-        validity_cond: TestValidityCond::default(),
+        validity_cond: MockValidityCond::default(),
     };
 
     // Computes the initial working set
@@ -101,26 +97,26 @@ fn test_simple_value_setter_with_chain_state() {
     assert_eq!(new_height_storage, 1, "The new height did not update");
 
     // Check the tx in progress
-    let new_tx_in_progress: TransitionInProgress<TestValidityCond> = chain_state_ref
+    let new_tx_in_progress: TransitionInProgress<MockValidityCond> = chain_state_ref
         .get_in_progress_transition(&mut working_set)
         .unwrap();
 
     assert_eq!(
         new_tx_in_progress,
-        TransitionInProgress::<TestValidityCond>::new([10; 32], TestValidityCond::default()),
+        TransitionInProgress::<MockValidityCond>::new([10; 32], MockValidityCond::default()),
         "The new transition has not been correctly stored"
     );
 
     assert!(has_tx_events(&apply_blob_outcome),);
 
     // We apply a new transaction with the same values
-    let new_slot_data: TestBlock = TestBlock {
+    let new_slot_data: MockBlock = MockBlock {
         curr_hash: [20; 32],
-        header: TestBlockHeader {
-            prev_hash: TestHash([10; 32]),
+        header: MockBlockHeader {
+            prev_hash: MockHash([10; 32]),
         },
         height: 1,
-        validity_cond: TestValidityCond::default(),
+        validity_cond: MockValidityCond::default(),
     };
 
     let result = app_template.apply_slot(Default::default(), &new_slot_data, &mut [blob]);
@@ -147,17 +143,17 @@ fn test_simple_value_setter_with_chain_state() {
     assert_eq!(new_height_storage, 2, "The new height did not update");
 
     // Check the tx in progress
-    let new_tx_in_progress: TransitionInProgress<TestValidityCond> = chain_state_ref
+    let new_tx_in_progress: TransitionInProgress<MockValidityCond> = chain_state_ref
         .get_in_progress_transition(&mut working_set)
         .unwrap();
 
     assert_eq!(
         new_tx_in_progress,
-        TransitionInProgress::<TestValidityCond>::new([20; 32], TestValidityCond::default()),
+        TransitionInProgress::<MockValidityCond>::new([20; 32], MockValidityCond::default()),
         "The new transition has not been correctly stored"
     );
 
-    let last_tx_stored: StateTransitionId<TestValidityCond> = chain_state_ref
+    let last_tx_stored: StateTransitionId<MockValidityCond> = chain_state_ref
         .get_historical_transitions(1, &mut working_set)
         .unwrap();
 
@@ -166,7 +162,7 @@ fn test_simple_value_setter_with_chain_state() {
         StateTransitionId::new(
             [10; 32],
             new_root_hash.unwrap(),
-            TestValidityCond::default()
+            MockValidityCond::default()
         )
     );
 }

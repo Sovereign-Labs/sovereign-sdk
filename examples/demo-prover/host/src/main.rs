@@ -8,7 +8,7 @@ use demo_stf::genesis_config::create_demo_genesis_config;
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
 use jupiter::verifier::address::CelestiaAddress;
-use jupiter::verifier::{ChainValidityCondition, RollupParams};
+use jupiter::verifier::{CelestiaSpec, RollupParams};
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::{Risc0Host, Risc0Verifier};
 use serde::Deserialize;
@@ -32,6 +32,7 @@ const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    let skip_prover = env::var("SKIP_PROVER").is_ok();
     // Initializing logging
     let subscriber = tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
@@ -56,8 +57,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let mut app: App<Risc0Verifier, ChainValidityCondition, jupiter::BlobWithSender> =
-        App::new(rollup_config.runner.storage.clone());
+    let mut app: App<Risc0Verifier, CelestiaSpec> = App::new(rollup_config.runner.storage.clone());
 
     let is_storage_empty = app.get_storage().is_empty();
 
@@ -111,10 +111,16 @@ async fn main() -> Result<(), anyhow::Error> {
 
         host.write_to_guest(&result.witness);
 
-        info!("Starting proving...");
-        let receipt = host.run().expect("Prover should run successfully");
-        info!("Start verifying..");
-        receipt.verify(ROLLUP_ID).expect("Receipt should be valid");
+        if !skip_prover {
+            info!("Starting proving...");
+            let receipt = host.run().expect("Prover should run successfully");
+            info!("Start verifying..");
+            receipt.verify(ROLLUP_ID).expect("Receipt should be valid");
+        } else {
+            let _receipt = host
+                .run_without_proving()
+                .expect("Prover should run successfully");
+        }
 
         prev_state_root = result.state_root.0;
         info!("Completed proving and verifying block {height}");

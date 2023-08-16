@@ -1,3 +1,4 @@
+pub mod codec;
 mod internal_cache;
 mod map;
 
@@ -14,8 +15,6 @@ pub mod storage;
 mod utils;
 mod value;
 mod witness;
-
-pub use value::SingletonKey;
 
 mod zk_storage;
 
