@@ -8,9 +8,9 @@ use sov_rollup_interface::mocks::{
     MockCodeCommitment, MockZkvm, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
     TestValidityCondChecker,
 };
-use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
+use sov_rollup_interface::zk::{ValidityConditionChecker};
 use sov_state::storage::StorageProof;
-use sov_state::{ArrayWitness, DefaultStorageSpec, ProverStorage, Storage, WorkingSet};
+use sov_state::{DefaultStorageSpec, ProverStorage, Storage, WorkingSet};
 
 use crate::AttesterIncentives;
 

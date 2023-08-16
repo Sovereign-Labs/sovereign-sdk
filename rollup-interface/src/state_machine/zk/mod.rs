@@ -10,9 +10,9 @@ use core::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use digest::Digest;
-use serde::de::value::BytesDeserializer;
+
 use serde::de::DeserializeOwned;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Serialize};
 
 use crate::AddressTrait;
 

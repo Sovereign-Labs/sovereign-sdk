@@ -1,6 +1,6 @@
 use core::result::Result::Ok;
-use std::cmp::{max, min};
-use std::fmt::{self, Debug};
+use std::cmp::{max};
+use std::fmt::{Debug};
 
 use anyhow::{ensure, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -164,8 +164,8 @@ impl<
         self.bank
             .mint(
                 &coins,
-                &context.sender(),
-                &C::new(reward_address.clone()),
+                context.sender(),
+                &C::new(reward_address),
                 working_set,
             )
             .map_err(|_err| AttesterIncentiveErrors::MintFailure)?;

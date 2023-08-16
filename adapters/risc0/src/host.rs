@@ -6,7 +6,7 @@ use risc0_zkvm::{
     Executor, ExecutorEnvBuilder, LocalExecutor, SegmentReceipt, Session, SessionReceipt,
 };
 use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
-use sov_rollup_interface::AddressTrait;
+
 
 use crate::Risc0MethodId;
 

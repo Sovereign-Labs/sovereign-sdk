@@ -7,9 +7,9 @@ use std::marker::PhantomData;
 
 use anyhow::{ensure, Error};
 use borsh::{BorshDeserialize, BorshSerialize};
-use bytes::{Buf, Bytes};
-use serde::de::value::BytesDeserializer;
-use serde::{Deserialize, Deserializer, Serialize};
+use bytes::{Bytes};
+
+use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
 use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};

@@ -1,23 +1,23 @@
-use std::marker::PhantomData;
 
-use anyhow::anyhow;
+
+
 use borsh::BorshSerialize;
-use jmt::proof::SparseMerkleProof;
-use serde::Serialize;
-use sov_chain_state::StateTransitionId;
+
+
+
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::Spec;
+
 use sov_rollup_interface::mocks::{
     MockCodeCommitment, MockProof, TestValidityCond, TestValidityCondChecker,
 };
 use sov_rollup_interface::optimistic::Attestation;
 use sov_rollup_interface::zk::StateTransition;
-use sov_state::storage::{StorageKey, StorageProof};
-use sov_state::{ArrayWitness, ProverStorage, Storage, WorkingSet};
+
+use sov_state::{ProverStorage, Storage, WorkingSet};
 
 use crate::call::{AttesterIncentiveErrors, SlashingReason};
 use crate::helpers::{
-    commit_get_new_working_set, execution_simulation, setup, BOND_AMOUNT, DEFAULT_ROLLUP_FINALITY,
+    commit_get_new_working_set, execution_simulation, setup, BOND_AMOUNT,
     INITIAL_BOND_AMOUNT, INIT_HEIGHT,
 };
 
@@ -116,7 +116,7 @@ fn test_burn_on_invalid_attestation() {
     let tmpdir = tempfile::tempdir().unwrap();
     let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
-    let (module, token_address, attester_address, _) = setup(&mut working_set);
+    let (module, _token_address, attester_address, _) = setup(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
     assert_eq!(
@@ -456,7 +456,7 @@ fn test_invalid_challenge() {
     let tmpdir = tempfile::tempdir().unwrap();
     let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
-    let (module, token_address, attester_address, challenger_address) = setup(&mut working_set);
+    let (module, _token_address, attester_address, challenger_address) = setup(&mut working_set);
 
     let working_set = commit_get_new_working_set(&storage, working_set);
 
@@ -553,7 +553,7 @@ fn test_invalid_challenge() {
 
         // An invalid proof
         let proof = &MockProof {
-            program_id: commitment.clone(),
+            program_id: commitment,
             is_valid: true,
             log: bad_transition.as_slice(),
         }
@@ -632,7 +632,7 @@ fn test_unbonding() {
     let tmpdir = tempfile::tempdir().unwrap();
     let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
-    let (module, token_address, attester_address, _) = setup(&mut working_set);
+    let (module, _token_address, attester_address, _) = setup(&mut working_set);
 
     // Assert that the attester has the correct bond amount before processing the proof
     assert_eq!(
@@ -650,7 +650,7 @@ fn test_unbonding() {
 
     // Simulate the execution of a chain, with the genesis hash and two transitions after.
     // Update the chain_state module and the optimistic module accordingly
-    let (mut exec_vars, mut working_set) =
+    let (exec_vars, mut working_set) =
         execution_simulation(20, &module, &storage, attester_address, working_set);
 
     let context = DefaultContext {
@@ -665,9 +665,9 @@ fn test_unbonding() {
     // Process a valid attestation for the first transition *should fail*
     {
         let attestation = Attestation {
-            initial_state_root: exec_vars[0].state_root.clone(),
+            initial_state_root: exec_vars[0].state_root,
             da_block_hash: [1; 32],
-            post_state_root: exec_vars[1].state_root.clone(),
+            post_state_root: exec_vars[1].state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
                 transition_num: INIT_HEIGHT + 1,
                 proof: exec_vars[usize::try_from(INIT_HEIGHT).unwrap()]

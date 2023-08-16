@@ -13,7 +13,7 @@ pub mod query;
 use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use call::{AttesterIncentiveErrors, Role};
+use call::{Role};
 use sov_modules_api::{Context, Error};
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker, Zkvm};
