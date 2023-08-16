@@ -37,15 +37,6 @@ several parameters that specify its exact behavior. In order, these generics are
 
 To implement your state transition function, you simply need to specify values for each of these fields.
 
-So, a typical app definition looks like this:
-
-```rust
-pub type MyNativeStf = AppTemplate<DefaultContext, MyRuntime<DefaultContext>>;
-pub type MyZkStf = AppTemplate<ZkDefaultContext, MyRuntime<ZkDefaultContext>>;
-```
-
-Note that `DefaultContext` and `ZkDefaultContext` are exported by the `sov_modules_api` crate.
-
 In the remainder of this section, we'll walk you through implementing each of the remaining generics.
 
 ## Implementing Runtime: Pick Your Modules
@@ -173,23 +164,6 @@ The State Transition Runner struct contains logic related to initialization and 
 2. `run` - which runs the rollup.
 3. `start_rpc_server` - which exposes an RPC server.
 
-```rust
-let mut app: App<Risc0Verifier, jupiter::BlobWithSender> =
-    App::new(rollup_config.runner.storage.clone());
-...
-let mut runner = StateTransitionRunner::new(
-    rollup_config,
-    da_service,
-    ledger_db,
-    app.stf,
-    storage.is_empty(),
-    genesis_config,
-)?;
-
-runner.start_rpc_server(methods).await;
-runner.run().await?;
-
-```
 
 ## Wrapping Up
 

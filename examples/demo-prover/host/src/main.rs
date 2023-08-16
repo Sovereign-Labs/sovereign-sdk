@@ -8,7 +8,7 @@ use demo_stf::genesis_config::create_demo_genesis_config;
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
 use jupiter::verifier::address::CelestiaAddress;
-use jupiter::verifier::{ChainValidityCondition, RollupParams};
+use jupiter::verifier::{CelestiaSpec, RollupParams};
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::{Risc0Host, Risc0Verifier};
 use serde::Deserialize;
@@ -57,8 +57,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let mut app: App<Risc0Verifier, ChainValidityCondition, jupiter::BlobWithSender> =
-        App::new(rollup_config.runner.storage.clone());
+    let mut app: App<Risc0Verifier, CelestiaSpec> = App::new(rollup_config.runner.storage.clone());
 
     let is_storage_empty = app.get_storage().is_empty();
 

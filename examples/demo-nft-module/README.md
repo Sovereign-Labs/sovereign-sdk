@@ -464,22 +464,3 @@ pub struct Runtime<C: sov_modules_api::Context> {
     nft: demo_nft_module::NonFungibleToken<C>,
 }
 ```
-
-And then this `Runtime` can be used in the State Transition Function runner to execute transactions.
-Here's an example of how to do it with `AppTemplate` from `sov-default-stf`:
-
-```rust, ignore
-    fn new(runtime_config: Self::RuntimeConfig) -> Self {
-    let runtime = Runtime::new();
-    let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
-    let app: AppTemplate<
-        ZkDefaultContext,
-        Runtime<ZkDefaultContext>,
-        Vm,
-    > = AppTemplate::new(storage, runtime);
-    Self(app)
-}
-```
-
-The `AppTemplate` uses `runtime` to dispatch calls during execution of the `apply_batch` method.
-Detailed instructions on how to set up a rollup can be found in the [`demo-rollup` documentation](../demo-rollup/README.md).
