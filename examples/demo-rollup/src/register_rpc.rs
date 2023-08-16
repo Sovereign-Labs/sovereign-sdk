@@ -15,11 +15,7 @@ use sov_stf_runner::get_ledger_rpc;
 ///
 pub fn register_sequencer<DA>(
     da_service: DA,
-    demo_runner: &mut App<
-        Risc0Verifier,
-        <DA::Spec as DaSpec>::ValidityCondition,
-        <DA::Spec as DaSpec>::BlobTransaction,
-    >,
+    demo_runner: &mut App<Risc0Verifier, DA::Spec>,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error>
 where

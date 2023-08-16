@@ -120,7 +120,6 @@ where
             info!("Requesting data for height {}", height,);
 
             let filtered_block = self.da_service.get_finalized_at(height).await?;
-
             let mut blobs = self.da_service.extract_relevant_txs(&filtered_block);
 
             info!(

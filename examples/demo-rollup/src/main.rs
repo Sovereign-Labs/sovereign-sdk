@@ -7,7 +7,7 @@ use demo_stf::runtime::get_rpc_methods;
 use jupiter::da_service::CelestiaService;
 #[cfg(feature = "experimental")]
 use jupiter::da_service::DaServiceConfig;
-use jupiter::verifier::{ChainValidityCondition, RollupParams};
+use jupiter::verifier::{CelestiaSpec, ChainValidityCondition, RollupParams};
 use risc0_adapter::host::Risc0Verifier;
 use sov_demo_rollup::register_rpc::{register_ledger, register_sequencer};
 use sov_demo_rollup::{get_genesis_config, initialize_ledger, ROLLUP_NAMESPACE};
@@ -70,8 +70,7 @@ async fn main() -> Result<(), anyhow::Error> {
     )
     .await;
 
-    let mut app: App<Risc0Verifier, ChainValidityCondition, jupiter::BlobWithSender> =
-        App::new(rollup_config.runner.storage.clone());
+    let mut app: App<Risc0Verifier, CelestiaSpec> = App::new(rollup_config.runner.storage.clone());
 
     let storage = app.get_storage();
     let mut methods = get_rpc_methods::<DefaultContext>(storage);

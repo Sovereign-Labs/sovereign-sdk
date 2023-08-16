@@ -350,19 +350,20 @@ mod test {
     use demo_stf::runtime::{GenesisConfig, Runtime};
     use sov_modules_api::Address;
     use sov_modules_stf_template::{AppTemplate, Batch, RawTx, SequencerOutcome};
-    use sov_rollup_interface::mocks::{MockValidityCond, MockZkvm};
+    use sov_rollup_interface::da::DaSpec;
+    use sov_rollup_interface::mocks::{
+        MockAddress, MockBlob, MockDaSpec, MockValidityCond, MockZkvm,
+    };
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::WorkingSet;
     use sov_stf_runner::Config;
 
     use super::*;
 
-    type TestBlob = sov_rollup_interface::mocks::MockBlob<Address>;
-
-    fn new_test_blob(batch: Batch, address: &[u8]) -> TestBlob {
-        let address = Address::try_from(address).unwrap();
+    fn new_test_blob(batch: Batch, address: &[u8]) -> MockBlob<MockAddress> {
+        let address = MockAddress::try_from(address).unwrap();
         let data = batch.try_to_vec().unwrap();
-        TestBlob::new(data, address, [0; 32])
+        MockBlob::new(data, address, [0; 32])
     }
 
     #[test]
@@ -425,7 +426,13 @@ mod test {
     // Test helpers
     struct TestDemo {
         config: GenesisConfig<C>,
-        demo: AppTemplate<C, MockValidityCond, MockZkvm, Runtime<C>, TestBlob>,
+        demo: AppTemplate<
+            C,
+            MockValidityCond,
+            MockZkvm,
+            Runtime<C>,
+            <MockDaSpec as DaSpec>::BlobTransaction,
+        >,
     }
 
     impl TestDemo {
@@ -445,7 +452,7 @@ mod test {
 
             Self {
                 config: genesis_config,
-                demo: App::<MockZkvm, MockValidityCond, TestBlob>::new(runner_config.storage).stf,
+                demo: App::<MockZkvm, MockDaSpec>::new(runner_config.storage).stf,
             }
         }
     }
@@ -501,22 +508,28 @@ mod test {
     }
 
     fn execute_txs(
-        demo: &mut AppTemplate<C, MockValidityCond, MockZkvm, Runtime<C>, TestBlob>,
+        demo: &mut AppTemplate<
+            C,
+            MockValidityCond,
+            MockZkvm,
+            Runtime<C>,
+            <MockDaSpec as DaSpec>::BlobTransaction,
+        >,
         config: GenesisConfig<C>,
         txs: Vec<RawTx>,
     ) {
-        StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(demo, config);
+        StateTransitionFunction::<MockZkvm, <MockDaSpec as DaSpec>::BlobTransaction>::init_chain(
+            demo, config,
+        );
 
         let data = MockBlock::default();
         let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
         let mut blobs = [blob];
 
-        let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
-            demo,
-            Default::default(),
-            &data,
-            &mut blobs,
-        );
+        let apply_block_result = StateTransitionFunction::<
+            MockZkvm,
+            <MockDaSpec as DaSpec>::BlobTransaction,
+        >::apply_slot(demo, Default::default(), &data, &mut blobs);
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
@@ -529,7 +542,13 @@ mod test {
     }
 
     fn get_balance(
-        demo: &mut AppTemplate<C, MockValidityCond, MockZkvm, Runtime<C>, TestBlob>,
+        demo: &mut AppTemplate<
+            C,
+            MockValidityCond,
+            MockZkvm,
+            Runtime<C>,
+            <MockDaSpec as DaSpec>::BlobTransaction,
+        >,
         token_deployer_address: &Address,
         user_address: Address,
     ) -> Option<u64> {

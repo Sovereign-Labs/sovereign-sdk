@@ -7,7 +7,9 @@ use risc0_adapter::host::Risc0Verifier;
 use sov_demo_rollup::register_rpc::{register_ledger, register_sequencer};
 use sov_demo_rollup::{get_genesis_config, initialize_ledger};
 use sov_modules_api::default_context::DefaultContext;
-use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockDaService, MockValidityCond};
+use sov_rollup_interface::mocks::{
+    MockAddress, MockBlob, MockDaService, MockDaSpec, MockValidityCond,
+};
 use sov_state::storage::Storage;
 use sov_stf_runner::{from_toml_path, RollupConfig, StateTransitionRunner};
 use tracing::debug;
@@ -25,8 +27,7 @@ async fn rollup_test() -> Result<(), anyhow::Error> {
     let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
 
     let da_service = MockDaService::default();
-    let mut app: App<Risc0Verifier, MockValidityCond, MockBlob<MockAddress>> =
-        App::new(rollup_config.runner.storage.clone());
+    let mut app: App<Risc0Verifier, MockDaSpec> = App::new(rollup_config.runner.storage.clone());
 
     let storage = app.get_storage();
     let mut methods = get_rpc_methods::<DefaultContext>(storage);
