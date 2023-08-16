@@ -10,6 +10,8 @@ mod tests;
 #[cfg(feature = "native")]
 pub mod query;
 
+use std::marker::PhantomData;
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use call::{AttesterIncentiveErrors, Role};
 use sov_modules_api::{Context, Error};
@@ -17,7 +19,12 @@ use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker, Zkvm};
 use sov_state::{Storage, WorkingSet};
 
-pub struct AttesterIncentivesConfig<C: Context, Vm: Zkvm> {
+pub struct AttesterIncentivesConfig<
+    C: Context,
+    Vm: Zkvm,
+    Cond: ValidityCondition,
+    Checker: ValidityConditionChecker<Cond>,
+> {
     /// The address of the token to be used for bonding.
     pub bonding_token_address: C::Address,
     /// The address of the account holding the reward token supply
@@ -36,6 +43,10 @@ pub struct AttesterIncentivesConfig<C: Context, Vm: Zkvm> {
     pub maximum_attested_height: u64,
     /// The light client finalized height
     pub light_client_finalized_height: u64,
+    /// The validity condition checker used to check validity conditions
+    pub validity_condition_checker: Checker,
+    /// Phantom data that contains the validity condition
+    phantom_data: PhantomData<Cond>,
 }
 
 /// A wrapper around a code commitment which implements borsh serialization
@@ -162,7 +173,7 @@ where
 {
     type Context = C;
 
-    type Config = AttesterIncentivesConfig<C, Vm>;
+    type Config = AttesterIncentivesConfig<C, Vm, Cond, Checker>;
 
     type CallMessage = call::CallMessage<C>;
 
@@ -199,9 +210,9 @@ where
                 .process_attestation(attestation, context, working_set)
                 .map_err(|error| error.into()),
 
-            call::CallMessage::ProcessChallenge(proof, transition) => {
-                self.process_challenge(&proof, transition, context, working_set)
-            }
+            call::CallMessage::ProcessChallenge(proof, transition) => self
+                .process_challenge(&proof, transition, context, working_set)
+                .map_err(|error| error.into()),
         }
         .map_err(|e| e.into())
     }

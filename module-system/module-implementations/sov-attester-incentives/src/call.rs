@@ -47,13 +47,19 @@ pub enum SlashingReason {
 
     #[error("Attester is unbonding")]
     AttesterIsUnbonding,
+
+    #[error("The proof outputs cannot be deserialized")]
+    InvalidProofOutputs,
+
+    #[error("No invalid transition to challenge")]
+    NoInvalidTransition,
 }
 
 /// Error raised while processessing the attester incentives
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AttesterIncentiveErrors {
     #[error("Attester slashed")]
-    AttesterSlashed(#[source] SlashingReason),
+    UserSlashed(#[source] SlashingReason),
 
     #[error("Invalid bonding proof")]
     InvalidBondingProof,
@@ -64,8 +70,8 @@ pub enum AttesterIncentiveErrors {
     #[error("The bond is not a 64 bits number")]
     InvalidBondFormat,
 
-    #[error("Attester is not bonded at the time of the attestation")]
-    AttesterNotBonded,
+    #[error("User is not bonded at the time of the attestation")]
+    UserNotBonded,
 
     #[error("Transition invariant not respected")]
     InvalidTransitionInvariant,
@@ -103,32 +109,36 @@ impl<
     }
 
     /// A helper function that simply slashes an attester and returns a reward value
-    fn slash_attester_helper(
+    fn slash_user_helper(
         &self,
-        attester: &C::Address,
+        user: &C::Address,
+        role: Role,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> u64 {
+        let bonded_set = match role {
+            Role::Attester => &self.bonded_attesters,
+            Role::Challenger => &self.bonded_challengers,
+        };
+
         // We have to deplete the attester's bonded account, it amounts to removing the attester from the bonded set
-        let reward = self
-            .bonded_attesters
-            .get(attester, working_set)
-            .unwrap_or_default();
-        self.bonded_attesters.remove(attester, working_set);
+        let reward = bonded_set.get(user, working_set).unwrap_or_default();
+        bonded_set.remove(user, working_set);
 
         // We raise an event
-        working_set.add_event("slashed_attester", &format!("address {attester:?}"));
+        working_set.add_event("user_slashed", &format!("address {user:?}"));
 
         reward
     }
 
     fn slash_burn_reward(
         &self,
-        attester: &C::Address,
+        user: &C::Address,
+        role: Role,
         reason: SlashingReason,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
-        self.slash_attester_helper(attester, working_set);
-        Err(AttesterIncentiveErrors::AttesterSlashed(reason))
+        self.slash_user_helper(user, role, working_set);
+        Err(AttesterIncentiveErrors::UserSlashed(reason))
     }
 
     fn reward_sender(
@@ -150,16 +160,15 @@ impl<
             amount,
         };
 
-        // Start by minting some tokens before sending them
+        // Mint tokens and send them
         self.bank
-            .mint(&coins, &reward_address, context, working_set)
+            .mint(
+                &coins,
+                &context.sender(),
+                &C::new(reward_address.clone()),
+                working_set,
+            )
             .map_err(|_err| AttesterIncentiveErrors::MintFailure)?;
-
-        // Try to unbond the entire balance
-        // If the unbonding fails, no state is changed
-        self.bank
-            .transfer_from(&reward_address, context.sender(), coins, working_set)
-            .map_err(|_err| AttesterIncentiveErrors::TransferFailure)?;
 
         Ok(CallResponse::default())
     }
@@ -172,7 +181,7 @@ impl<
         reason: SlashingReason,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
-        let reward = self.slash_attester_helper(attester, working_set);
+        let reward = self.slash_user_helper(attester, Role::Attester, working_set);
 
         let curr_reward_value = self
             .bad_transition_pool
@@ -182,7 +191,7 @@ impl<
         self.bad_transition_pool
             .set(&transition_nb, &(curr_reward_value + reward), working_set);
 
-        Err(AttesterIncentiveErrors::AttesterSlashed(reason))
+        Err(AttesterIncentiveErrors::UserSlashed(reason))
     }
 
     /// A helper function for the `bond_challenger/attester` call. Also used to bond challengers/attesters
@@ -367,7 +376,7 @@ impl<
 
         // We then have to check that the bond was greater than the minimum bond
         if bond < minimum_bond {
-            return Err(AttesterIncentiveErrors::AttesterNotBonded);
+            return Err(AttesterIncentiveErrors::UserNotBonded);
         }
 
         Ok(())
@@ -399,7 +408,12 @@ impl<
             }
             Ok(CallResponse::default())
         } else {
-            self.slash_burn_reward(attester, SlashingReason::TransitionNotFound, working_set)
+            self.slash_burn_reward(
+                attester,
+                Role::Attester,
+                SlashingReason::TransitionNotFound,
+                working_set,
+            )
         }
     }
 
@@ -420,6 +434,7 @@ impl<
                 // The initial root hashes don't match, just slash the attester
                 return self.slash_burn_reward(
                     attester,
+                    Role::Attester,
                     SlashingReason::InvalidInitialHash,
                     working_set,
                 );
@@ -438,6 +453,7 @@ impl<
                 // Slash the attester, and burn the fees
                 return self.slash_burn_reward(
                     attester,
+                    Role::Attester,
                     SlashingReason::InvalidInitialHash,
                     working_set,
                 );
@@ -546,37 +562,44 @@ impl<
         transition_num: u64,
         condition_checker: &mut impl ValidityConditionChecker<Cond>,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<()> {
+    ) -> Result<(), SlashingReason> {
         let transition = self
             .chain_state
             .historical_transitions
-            .get_or_err(&transition_num, working_set)?;
+            .get_or_err(&transition_num, working_set)
+            .map_err(|_| SlashingReason::TransitionInvalid)?;
+
         let initial_hash = {
-            if transition_num == 0 {
+            if let Some(prev_transition) = self
+                .chain_state
+                .historical_transitions
+                .get(&(transition_num - 1), working_set)
+            {
+                prev_transition.post_state_root()
+            } else {
                 self.chain_state
                     .genesis_hash
                     .get(working_set)
                     .expect("The genesis hash should be set")
-            } else {
-                self.chain_state
-                    .historical_transitions
-                    .get_or_err(&(transition_num - 1), working_set)?
-                    .post_state_root()
             }
         };
 
-        ensure!(
-            public_outputs.initial_state_root == initial_hash,
-            "Not the same initial root"
-        );
-        ensure!(public_outputs.slot_hash == transition.da_block_hash());
+        if public_outputs.initial_state_root != initial_hash {
+            return Err(SlashingReason::InvalidInitialHash);
+        }
+
+        if public_outputs.slot_hash != transition.da_block_hash() {
+            return Err(SlashingReason::TransitionInvalid);
+        }
+
         // TODO: Should we compare the validity conditions of the public outputs with the ones of the recorded transition?
-        ensure!(
-            condition_checker
-                .check(&public_outputs.validity_condition)
-                .is_ok(),
-            "Unable to verify the validity conditions"
-        );
+        if condition_checker
+            .check(&public_outputs.validity_condition)
+            .is_err()
+        {
+            return Err(SlashingReason::TransitionInvalid);
+        }
+
         Ok(())
     }
 
@@ -587,27 +610,43 @@ impl<
         transition_num: u64,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse> {
+    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
         // Get the challenger's old balance.
         // Revert if they aren't bonded
         let old_balance = self
             .bonded_challengers
-            .get_or_err(context.sender(), working_set)?;
+            .get_or_err(context.sender(), working_set)
+            .map_err(|_| AttesterIncentiveErrors::UserNotBonded)?;
 
         // Check that the challenger has enough balance to process the proof.
-        let minimum_bond = self.minimum_challenger_bond.get_or_err(working_set)?;
+        let minimum_bond = self
+            .minimum_challenger_bond
+            .get(working_set)
+            .expect("Should be set at genesis");
 
-        anyhow::ensure!(old_balance >= minimum_bond, "Prover is not bonded");
+        if old_balance < minimum_bond {
+            return Err(AttesterIncentiveErrors::UserNotBonded);
+        }
+
         let code_commitment = self
             .commitment_to_allowed_challenge_method
             .get(working_set)
-            .expect("Should be defined at genesis")
+            .expect("Should be set at genesis")
             .commitment;
 
         // Find the faulty attestation pool and get the associated reward
         let attestation_reward: u64 = self
             .bad_transition_pool
-            .get_or_err(&transition_num, working_set)?;
+            .get_or_err(&transition_num, working_set)
+            .map_err(|_| {
+                self.slash_burn_reward(
+                    context.sender(),
+                    Role::Challenger,
+                    SlashingReason::NoInvalidTransition,
+                    working_set,
+                )
+                .unwrap_err()
+            })?;
 
         let public_outputs_opt: Result<StateTransition<Cond, C::Address>> =
             Vm::verify_and_extract_output::<Cond, C::Address>(proof, &code_commitment)
@@ -617,7 +656,10 @@ impl<
         match public_outputs_opt {
             Ok(public_output) => {
                 // We get the validity condition checker from the state
-                let mut validity_checker = self.validity_cond_checker.get_or_err(working_set)?;
+                let mut validity_checker = self
+                    .validity_cond_checker
+                    .get(working_set)
+                    .expect("Should be defined at genesis");
 
                 // We have to perform the checks to ensure that the challenge is valid while the attestation isn't.
                 self.check_challenge_outputs_against_transition(
@@ -625,7 +667,11 @@ impl<
                     transition_num,
                     &mut validity_checker,
                     working_set,
-                )?;
+                )
+                .map_err(|err| {
+                    self.slash_burn_reward(context.sender(), Role::Challenger, err, working_set)
+                        .unwrap_err()
+                })?;
 
                 // Reward the challenger with half of the attestation reward (avoid DOS)
                 self.reward_sender(attestation_reward / 2, context, working_set)?;
@@ -637,12 +683,11 @@ impl<
             }
             Err(_err) => {
                 // Slash the challenger
-                self.bonded_challengers
-                    .remove(context.sender(), working_set);
-
-                working_set.add_event(
-                    "processed_invalid_proof",
-                    &format!("challenger: {:?}", context.sender()),
+                return self.slash_burn_reward(
+                    context.sender(),
+                    Role::Challenger,
+                    SlashingReason::InvalidProofOutputs,
+                    working_set,
                 );
             }
         }

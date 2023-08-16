@@ -1,16 +1,23 @@
 use std::marker::PhantomData;
 
 use anyhow::anyhow;
+use borsh::BorshSerialize;
 use jmt::proof::SparseMerkleProof;
+use serde::Serialize;
+use sov_chain_state::StateTransitionId;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Spec;
-use sov_rollup_interface::mocks::{TestValidityCond, TestValidityCondChecker};
+use sov_rollup_interface::mocks::{MockProof, TestValidityCond, TestValidityCondChecker};
 use sov_rollup_interface::optimistic::Attestation;
+use sov_rollup_interface::zk::StateTransition;
 use sov_state::storage::{StorageKey, StorageProof};
 use sov_state::{ArrayWitness, ProverStorage, Storage, WorkingSet};
 
 use crate::call::AttesterIncentiveErrors;
-use crate::helpers::{execution_simulation, setup, BOND_AMOUNT, INITIAL_BOND_AMOUNT, INIT_HEIGHT};
+use crate::helpers::{
+    commit_get_new_working_set, execution_simulation, setup, BOND_AMOUNT, INITIAL_BOND_AMOUNT,
+    INIT_HEIGHT,
+};
 
 /// Start by testing the positive case where the attestations are valid
 #[test]
@@ -18,8 +25,7 @@ fn test_process_valid_attestation() {
     let tmpdir = tempfile::tempdir().unwrap();
     let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
-    let (module, token_address, attester_address, _) =
-        setup::<TestValidityCond, TestValidityCondChecker<TestValidityCond>>(&mut working_set);
+    let (module, token_address, attester_address, _) = setup(&mut working_set);
 
     // Assert that the attester has the correct bond amount before processing the proof
     assert_eq!(
@@ -104,8 +110,7 @@ fn test_burn_on_invalid_attestation() {
     let tmpdir = tempfile::tempdir().unwrap();
     let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
     let mut working_set = WorkingSet::new(storage.clone());
-    let (module, token_address, attester_address, _) =
-        setup::<TestValidityCond, TestValidityCondChecker<TestValidityCond>>(&mut working_set);
+    let (module, token_address, attester_address, _) = setup(&mut working_set);
 
     // Assert that the prover has the correct bond amount before processing the proof
     assert_eq!(
@@ -200,9 +205,7 @@ fn test_burn_on_invalid_attestation() {
 
         assert_eq!(
             attestation_error,
-            AttesterIncentiveErrors::AttesterSlashed(
-                crate::call::SlashingReason::InvalidInitialHash
-            )
+            AttesterIncentiveErrors::UserSlashed(crate::call::SlashingReason::InvalidInitialHash)
         )
     }
 
@@ -255,9 +258,7 @@ fn test_burn_on_invalid_attestation() {
 
         assert_eq!(
             attestation_error,
-            AttesterIncentiveErrors::AttesterSlashed(
-                crate::call::SlashingReason::TransitionInvalid
-            )
+            AttesterIncentiveErrors::UserSlashed(crate::call::SlashingReason::TransitionInvalid)
         )
     }
 
@@ -288,71 +289,98 @@ fn test_burn_on_invalid_attestation() {
 #[test]
 fn test_valid_challenge() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, _token_address, attester_address, _challenger_address) =
-        setup::<TestValidityCond, TestValidityCondChecker<TestValidityCond>>(&mut working_set);
+    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
+    let mut working_set = WorkingSet::new(storage.clone());
+    let (module, token_address, attester_address, challenger_address) = setup(&mut working_set);
 
-    // Assert that the prover has the correct bond amount before processing the proof
+    let working_set = commit_get_new_working_set(&storage, working_set);
+
+    // Simulate the execution of a chain, with the genesis hash and two transitions after.
+    // Update the chain_state module and the optimistic module accordingly
+    let (exec_vars, mut working_set) =
+        execution_simulation(&module, &storage, attester_address, working_set);
+
+    module
+        .bond_user_helper(
+            BOND_AMOUNT,
+            &challenger_address,
+            crate::call::Role::Challenger,
+            &mut working_set,
+        )
+        .unwrap();
+
+    // Assert that the challenger has the correct bond amount before processing the proof
     assert_eq!(
         module
             .get_bond_amount(
-                attester_address,
-                crate::call::Role::Attester,
+                challenger_address,
+                crate::call::Role::Challenger,
                 &mut working_set
             )
             .value,
         BOND_AMOUNT
     );
 
-    // Process a valid proof
+    // Set a bad transition to get a reward from
+    module
+        .bad_transition_pool
+        .set(&(INIT_HEIGHT + 1), &BOND_AMOUNT, &mut working_set);
+
+    // Process a correct challenge
+    let context = DefaultContext {
+        sender: challenger_address,
+    };
+
     {
-        let context = DefaultContext {
-            sender: attester_address,
+        let transition = StateTransition {
+            initial_state_root: exec_vars.initial_state_root,
+            slot_hash: [1; 32],
+            final_state_root: exec_vars.transition_1_root,
+            rewarded_address: challenger_address,
+            validity_condition: TestValidityCond { is_valid: true },
         };
 
-        let proof =
-            module.get_bond_proof(attester_address, &ArrayWitness::default(), &mut working_set);
+        let serialized_transition = transition.try_to_vec().unwrap();
 
-        let storage_proof = StorageProof {
-            key: StorageKey::new(module.bonded_attesters.prefix(), &attester_address.clone()),
-            value: Some(INITIAL_BOND_AMOUNT.to_le_bytes().to_vec().into()),
-            proof: proof.proof,
-        };
+        let commitment = module
+            .commitment_to_allowed_challenge_method
+            .get(&mut working_set)
+            .expect("Should be set at genesis")
+            .commitment;
 
-        let attestation = Attestation {
-            initial_state_root: [0; 32],
-            da_block_hash: [0; 32],
-            post_state_root: [0; 32],
-            proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
-                transition_num: 0,
-                proof: storage_proof,
-            },
-        };
+        let proof = &MockProof {
+            program_id: commitment,
+            is_valid: true,
+            log: serialized_transition.as_slice(),
+        }
+        .encode_to_vec();
 
         module
-            .process_attestation(attestation, &context, &mut working_set)
-            .expect("An invalid proof is not an error");
-    }
-
-    // Assert that the prover's bond amount has not been burned
-    assert_eq!(
-        module
-            .get_bond_amount(
-                attester_address,
-                crate::call::Role::Attester,
-                &mut working_set
+            .process_challenge(
+                proof.as_slice(),
+                INIT_HEIGHT + 1,
+                &context,
+                &mut working_set,
             )
-            .value,
-        BOND_AMOUNT
-    );
+            .expect("Should not fail");
+
+        // Check that the challenger was rewarded
+        assert_eq!(
+            module
+                .bank
+                .get_balance_of(challenger_address, token_address, &mut working_set)
+                .unwrap(),
+            INITIAL_BOND_AMOUNT - BOND_AMOUNT + BOND_AMOUNT / 2,
+            "The challenger should have been rewarded"
+        )
+    }
 }
 
 #[test]
 fn test_unbonding() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, _token_address, attester_address, _challenger_address) =
-        setup::<TestValidityCond, TestValidityCondChecker<TestValidityCond>>(&mut working_set);
+    let (module, _token_address, attester_address, _challenger_address) = setup(&mut working_set);
     let context = DefaultContext {
         sender: attester_address,
     };
@@ -417,8 +445,7 @@ fn test_unbonding() {
 fn test_prover_not_bonded() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, _token_address, attester_address, _challenger_address) =
-        setup::<TestValidityCond, TestValidityCondChecker<TestValidityCond>>(&mut working_set);
+    let (module, _token_address, attester_address, _challenger_address) = setup(&mut working_set);
     let context = DefaultContext {
         sender: attester_address,
     };

@@ -56,16 +56,6 @@ impl<'prover> Zkvm for Risc0Host<'prover> {
     ) -> Result<&'a [u8], Self::Error> {
         verify_from_slice(serialized_proof, code_commitment)
     }
-
-    fn verify_and_extract_output<
-        C: sov_rollup_interface::zk::ValidityCondition,
-        Add: AddressTrait,
-    >(
-        _serialized_proof: &[u8],
-        _code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
-        todo!("Implement once risc0 supports recursion, issue https://github.com/Sovereign-Labs/sovereign-sdk/issues/633")
-    }
 }
 
 pub struct Risc0Verifier;
@@ -80,18 +70,6 @@ impl Zkvm for Risc0Verifier {
         code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error> {
         verify_from_slice(serialized_proof, code_commitment)
-    }
-
-    fn verify_and_extract_output<
-        C: sov_rollup_interface::zk::ValidityCondition,
-        Add: AddressTrait,
-    >(
-        _serialized_proof: &[u8],
-        _code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
-        // Method to implement: not clear how to deserialize the proof output.
-        // Issue https://github.com/Sovereign-Labs/sovereign-sdk/issues/621
-        todo!("not clear how to deserialize the proof output. Issue https://github.com/Sovereign-Labs/sovereign-sdk/issues/621")
     }
 }
 

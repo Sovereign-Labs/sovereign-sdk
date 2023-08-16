@@ -41,15 +41,4 @@ impl Zkvm for Risc0Guest {
         // Implement this method once risc0 supports recursion: issue #633
         todo!("Implement once risc0 supports recursion: https://github.com/Sovereign-Labs/sovereign-sdk/issues/633")
     }
-
-    fn verify_and_extract_output<
-        C: sov_rollup_interface::zk::ValidityCondition,
-        Add: AddressTrait,
-    >(
-        _serialized_proof: &[u8],
-        _code_commitment: &Self::CodeCommitment,
-    ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
-        // Implement this method once risc0 supports recursion: issue https://github.com/Sovereign-Labs/sovereign-sdk/issues/633
-        todo!("Implement once risc0 supports recursion: https://github.com/Sovereign-Labs/sovereign-sdk/issues/633")
-    }
 }

@@ -9,7 +9,7 @@ use anyhow::{ensure, Error};
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::{Buf, Bytes};
 use serde::de::value::BytesDeserializer;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use sha2::Digest;
 
 use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
@@ -111,16 +111,6 @@ impl Zkvm for MockZkvm {
         anyhow::ensure!(proof.is_valid, "Proof is not valid");
         Ok(proof.log)
     }
-
-    fn verify_and_extract_output<C: ValidityCondition, Add: AddressTrait>(
-        serialized_proof: &[u8],
-        code_commitment: &Self::CodeCommitment,
-    ) -> Result<crate::zk::StateTransition<C, Add>, Self::Error> {
-        let output = MockZkvm::verify(serialized_proof, code_commitment)?;
-        Ok(crate::zk::StateTransition::<C, Add>::deserialize(
-            BytesDeserializer::<serde::de::value::Error>::new(output),
-        )?)
-    }
 }
 
 #[test]
@@ -212,8 +202,17 @@ impl ValidityCondition for TestValidityCond {
 
 #[derive(Debug, BorshDeserialize, BorshSerialize)]
 /// A mock validity condition checker that always evaluate to cond
-pub struct TestValidityCondChecker<MockValidityCond> {
-    phantom: PhantomData<MockValidityCond>,
+pub struct TestValidityCondChecker<Cond> {
+    phantom: PhantomData<Cond>,
+}
+
+impl<Cond> TestValidityCondChecker<Cond> {
+    /// Creates new test validity condition
+    pub fn new() -> Self {
+        Self {
+            phantom: Default::default(),
+        }
+    }
 }
 
 impl ValidityConditionChecker<TestValidityCond> for TestValidityCondChecker<TestValidityCond> {

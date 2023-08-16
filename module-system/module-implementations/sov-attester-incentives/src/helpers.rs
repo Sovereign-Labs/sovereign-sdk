@@ -6,6 +6,7 @@ use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Address, Genesis, Spec};
 use sov_rollup_interface::mocks::{
     MockCodeCommitment, MockZkvm, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
+    TestValidityCondChecker,
 };
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
 use sov_state::storage::StorageProof;
@@ -55,7 +56,7 @@ pub(crate) fn create_bank_config_with_token(
     let token_config = TokenConfig {
         token_name,
         address_and_balances: address_and_balances.clone(),
-        authorized_minters: vec![address_and_balances.last().unwrap().0],
+        authorized_minters: vec![address_and_balances.first().unwrap().0],
         salt,
     };
 
@@ -72,10 +73,10 @@ pub(crate) fn create_bank_config_with_token(
 
 /// Creates a bank config with a token, and a prover incentives module.
 /// Returns the prover incentives module and the attester and challenger's addresses.
-pub(crate) fn setup<Cond: ValidityCondition, Checker: ValidityConditionChecker<Cond>>(
+pub(crate) fn setup(
     working_set: &mut WorkingSet<<C as Spec>::Storage>,
 ) -> (
-    AttesterIncentives<C, MockZkvm, Cond, Checker>,
+    AttesterIncentives<C, MockZkvm, TestValidityCond, TestValidityCondChecker<TestValidityCond>>,
     Address,
     Address,
     Address,
@@ -104,7 +105,12 @@ pub(crate) fn setup<Cond: ValidityCondition, Checker: ValidityConditionChecker<C
         .expect("Chain state genesis must succeed");
 
     // initialize prover incentives
-    let module = AttesterIncentives::<C, MockZkvm, Cond, Checker>::default();
+    let module = AttesterIncentives::<
+        C,
+        MockZkvm,
+        TestValidityCond,
+        TestValidityCondChecker<TestValidityCond>,
+    >::default();
     let config = crate::AttesterIncentivesConfig {
         bonding_token_address: token_address,
         reward_token_supply_address: reward_supply,
@@ -115,6 +121,8 @@ pub(crate) fn setup<Cond: ValidityCondition, Checker: ValidityConditionChecker<C
         rollup_finality_period: DEFAULT_ROLLUP_FINALITY,
         maximum_attested_height: INIT_HEIGHT,
         light_client_finalized_height: INIT_HEIGHT,
+        validity_condition_checker: TestValidityCondChecker::<TestValidityCond>::new(),
+        phantom_data: Default::default(),
     };
 
     module
