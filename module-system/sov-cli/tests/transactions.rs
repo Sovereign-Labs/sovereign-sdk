@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use demo_stf::runtime::{ModuleJsonParser, Runtime, RuntimeCall};
+use demo_stf::runtime::{JsonStringArg, Runtime, RuntimeCall, RuntimeSubcommand};
 use sov_cli::wallet_state::WalletState;
 use sov_cli::workflows::transactions::TransactionWorkflow;
 use sov_modules_api::default_context::DefaultContext;
@@ -13,10 +13,14 @@ fn test_import_transaction() {
     let test_token_path = make_test_path("requests/create_token.json");
     let test_token_calldata = std::fs::read_to_string(test_token_path).unwrap();
 
-    let workflow = TransactionWorkflow::<Runtime<DefaultContext>>::Import(ModuleJsonParser::bank {
-        json: test_token_calldata,
+    let workflow = TransactionWorkflow::Import(RuntimeSubcommand::<_, DefaultContext>::bank {
+        contents: JsonStringArg {
+            json: test_token_calldata,
+        },
     });
-    workflow.run(&mut wallet_state, app_dir).unwrap();
+    workflow
+        .run::<Runtime<DefaultContext>, _, _, _, _>(&mut wallet_state, app_dir)
+        .unwrap();
 
     assert_eq!(wallet_state.unsent_transactions.len(), 1);
 }

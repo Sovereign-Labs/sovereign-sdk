@@ -173,7 +173,7 @@ impl CliParserMacro {
             pub struct JsonStringArg {
                 /// The json formatted transaction data
                 #[arg(long, help = "The JSON formatted transaction")]
-                json: String
+                pub json: String
             }
 
             /// An enum expressing the subcommands available to this runtime. Contains
@@ -187,8 +187,8 @@ impl CliParserMacro {
                 ____phantom(::std::marker::PhantomData<#ident #ty_generics>)
             }
 
-            /// An enum expressing the subcommands available to this runtime. Contains
-            /// one subcommand for each module, except modules annotated with the #[cli_skip] attribute
+            /// An intermediate enum between the RuntimeSubcommand (which must implement `clap`) and the
+            /// final RT::Decodable type. Like the RuntimeSubcommand, this type contains one variant for each cli-enabled module.
             #[allow(non_camel_case_types)]
             pub enum RuntimeMessage #impl_generics_with_inner #where_clause {
                 #( #module_message_arms, )*
@@ -210,7 +210,7 @@ impl CliParserMacro {
             // Allow arbitrary conversions from the `clap`-enabled `RuntimeSubcommand` to the less constrained `RuntimeMessage` enum.
             // This allows us to (for example), accept a `JsonStringArgs` or a `FileNameArgs` as a CLI argument, and then
             // use fallible logic to convert it into the final JSON string to be parsed into a callmessage.
-            impl #impl_generics_with_inner_and_dest From<RuntimeSubcommand #ty_generics_with_inner> for RuntimeMessage #ty_generics_for_dest #where_clause_with_inner_clap_and_try_from {
+            impl #impl_generics_with_inner_and_dest ::core::convert::TryFrom<RuntimeSubcommand #ty_generics_with_inner> for RuntimeMessage #ty_generics_for_dest #where_clause_with_inner_clap_and_try_from {
                 type Error = <__Dest as ::core::convert::TryFrom<__Inner>>::Error;
                 /// Convert a `RuntimeSubcommand` to a `RuntimeSubcommand` with a different `__Inner` type using `try_from`.
                 ///
@@ -224,35 +224,6 @@ impl CliParserMacro {
                     })
                 }
             }
-
-            impl #impl_generics_with_inner RuntimeMessage #ty_generics_with_inner #where_clause {
-                /// Convert a `RuntimeSubcommand` to a `RuntimeSubcommand` with a different `__Inner` type using `try_from`.
-                ///
-                /// This method is called `try_map` instead of `try_from` to avoid conflicting with the `TryFrom` trait in
-                /// the corner case where the source and destination types are the same.
-                pub fn try_from_subcommand<__Dest: ::clap::Args> (item: RuntimeSubcommand #ty_generics_for_dest ) -> Result<Self, <__Inner as ::core::convert::TryFrom<__Dest>>::Error>
-                where __Inner:  ::core::convert::TryFrom<__Dest> {
-                    Ok(match item {
-                        #( #try_from_subcommand_match_arms )*
-                        RuntimeSubcommand::____phantom(_) => unreachable!(),
-                    })
-                }
-            }
-
-            impl #impl_generics_with_inner RuntimeMessage #ty_generics_with_inner #where_clause {
-                /// Convert a `RuntimeSubcommand` to a `RuntimeSubcommand` with a different `__Inner` type using `try_from`.
-                ///
-                /// This method is called `try_map` instead of `try_from` to avoid conflicting with the `TryFrom` trait in
-                /// the corner case where the source and destination types are the same.
-                pub fn try_map<__Dest>(item: RuntimeMessage #ty_generics_for_dest ) -> Result<Self, <__Inner as ::core::convert::TryFrom<__Dest>>::Error>
-                where __Inner:  ::core::convert::TryFrom<__Dest> {
-                    Ok(match item {
-                        #( #try_map_match_arms )*
-                        RuntimeMessage::____phantom(_) => unreachable!(),
-                    })
-                }
-            }
-
 
             impl #impl_generics ::sov_modules_api::CliWallet for #ident #ty_generics #where_clause_with_deserialize_bounds {
                 type CliStringRepr<__Inner> = RuntimeMessage #ty_generics_with_inner;
