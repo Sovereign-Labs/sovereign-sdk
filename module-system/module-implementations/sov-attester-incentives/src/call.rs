@@ -34,20 +34,47 @@ where
     ProcessChallenge(Vec<u8>, u64),
 }
 
-/// Error raised while processessing the attester incentives
-#[derive(Debug, Clone, Error)]
-enum AttesterIncentiveErrors {
-    AttesterSlashed,
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum SlashingReason {
+    #[error("Transition not found")]
+    TransitionNotFound,
+
+    #[error("The attestation does not contain the right block hash and post state transition")]
+    TransitionInvalid,
+
+    #[error("The initial hash of the transition is invalid")]
+    InvalidInitialHash,
+
+    #[error("Attester is unbonding")]
+    AttesterIsUnbonding,
 }
 
-impl fmt::Display for AttesterIncentiveErrors {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let error_msg = match self {
-            Self::AttesterSlashed => "Attester slashed",
-        };
+/// Error raised while processessing the attester incentives
+#[derive(Debug, Error, PartialEq, Eq)]
+pub enum AttesterIncentiveErrors {
+    #[error("Attester slashed")]
+    AttesterSlashed(#[source] SlashingReason),
 
-        write!(f, "{error_msg}")
-    }
+    #[error("Invalid bonding proof")]
+    InvalidBondingProof,
+
+    #[error("The sender key doesn't match the attester key provided in the proof")]
+    InvalidSender,
+
+    #[error("The bond is not a 64 bits number")]
+    InvalidBondFormat,
+
+    #[error("Attester is not bonded at the time of the attestation")]
+    AttesterNotBonded,
+
+    #[error("Transition invariant not respected")]
+    InvalidTransitionInvariant,
+
+    #[error("Error occured when transfered funds")]
+    TransferFailure,
+
+    #[error("Error when trying to mint the reward token")]
+    MintFailure,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -97,10 +124,11 @@ impl<
     fn slash_burn_reward(
         &self,
         attester: &C::Address,
+        reason: SlashingReason,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse> {
+    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
         self.slash_attester_helper(attester, working_set);
-        Err(AttesterIncentiveErrors::AttesterSlashed.into())
+        Err(AttesterIncentiveErrors::AttesterSlashed(reason))
     }
 
     fn reward_sender(
@@ -108,7 +136,12 @@ impl<
         amount: u64,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse> {
+    ) -> Result<CallResponse, AttesterIncentiveErrors> {
+        let reward_address = self
+            .reward_token_supply_address
+            .get(working_set)
+            .expect("The reward supply address must be set at genesis");
+
         let coins = Coins {
             token_address: self
                 .bonding_token_address
@@ -116,17 +149,17 @@ impl<
                 .expect("Bonding token address must be set"),
             amount,
         };
+
+        // Start by minting some tokens before sending them
+        self.bank
+            .mint(&coins, &reward_address, context, working_set)
+            .map_err(|_err| AttesterIncentiveErrors::MintFailure)?;
+
         // Try to unbond the entire balance
         // If the unbonding fails, no state is changed
-        self.bank.transfer_from(
-            &self
-                .reward_token_supply_address
-                .get(working_set)
-                .expect("The reward supply address must be set at genesis"),
-            context.sender(),
-            coins,
-            working_set,
-        )?;
+        self.bank
+            .transfer_from(&reward_address, context.sender(), coins, working_set)
+            .map_err(|_err| AttesterIncentiveErrors::TransferFailure)?;
 
         Ok(CallResponse::default())
     }
@@ -136,8 +169,9 @@ impl<
         &self,
         attester: &C::Address,
         transition_nb: u64,
+        reason: SlashingReason,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse> {
+    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
         let reward = self.slash_attester_helper(attester, working_set);
 
         let curr_reward_value = self
@@ -148,7 +182,7 @@ impl<
         self.bad_transition_pool
             .set(&transition_nb, &(curr_reward_value + reward), working_set);
 
-        Err(AttesterIncentiveErrors::AttesterSlashed.into())
+        Err(AttesterIncentiveErrors::AttesterSlashed(reason))
     }
 
     /// A helper function for the `bond_challenger/attester` call. Also used to bond challengers/attesters
@@ -293,7 +327,7 @@ impl<
         attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<()> {
+    ) -> Result<(), AttesterIncentiveErrors> {
         let bonding_root = {
             // If we cannot get the transition before the current one, it means that we are trying
             // to get the genesis state root
@@ -307,39 +341,34 @@ impl<
                 self.chain_state
                     .genesis_hash
                     .get(working_set)
-                    .expect("The genesis hash should be set")
+                    .expect("The genesis hash should be set at genesis")
             }
         };
 
         // This proof checks that the attester was bonded at the given transition num
         let (attester_key, bond_opt) = working_set
             .backing()
-            .open_proof(bonding_root, attestation.proof_of_bond.proof.clone())?;
+            .open_proof(bonding_root, attestation.proof_of_bond.proof.clone())
+            .map_err(|_err| AttesterIncentiveErrors::InvalidBondingProof)?;
 
         // We have to check that the storage key is the same as the sender's
-        ensure!(
-            attester_key == StorageKey::new(self.bonded_attesters.prefix(), context.sender()),
-            "The sender key doesn't match the attester key provided in the proof"
-        );
+        if attester_key != StorageKey::new(self.bonded_attesters.prefix(), context.sender()) {
+            return Err(AttesterIncentiveErrors::InvalidSender);
+        }
 
         let bond = bond_opt.unwrap_or_default();
-        let bond = bond.value();
+        let bond: u64 = BorshDeserialize::deserialize(&mut bond.value())
+            .map_err(|_err| AttesterIncentiveErrors::InvalidBondFormat)?;
 
-        ensure!(bond.len() <= 8, "The bond is not a 64 bits number");
-
-        let bond_u64 = {
-            let mut bond_slice = [0_u8; 8];
-            bond_slice[..min(bond.len(), 8)].copy_from_slice(bond);
-            u64::from_le_bytes(bond_slice)
-        };
-
-        let minimum_bond = self.minimum_attester_bond.get_or_err(working_set)?;
+        let minimum_bond = self
+            .minimum_attester_bond
+            .get_or_err(working_set)
+            .expect("The minimum bond should be set at genesis");
 
         // We then have to check that the bond was greater than the minimum bond
-        ensure!(
-            bond_u64 >= minimum_bond,
-            "Attester is not bonded at the time of the attestation"
-        );
+        if bond < minimum_bond {
+            return Err(AttesterIncentiveErrors::AttesterNotBonded);
+        }
 
         Ok(())
     }
@@ -350,20 +379,28 @@ impl<
         attester: &C::Address,
         attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse> {
-        let curr_tx = self
+    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
+        if let Some(curr_tx) = self
             .chain_state
             .historical_transitions
-            .get_or_err(&max_attested_height, working_set)?;
-        // We first need to compare the initial block hash to the previous post state root
-        if !curr_tx.compare_hashes(&attestation.da_block_hash, &attestation.post_state_root) {
-            // It is the right attestation, we have to compare the initial block hash to the
-            // previous post state root
-            // Slash the attester
-            self.slash_and_invalidate_attestation(attester, max_attested_height, working_set)?;
+            .get(&max_attested_height, working_set)
+        {
+            // We first need to compare the initial block hash to the previous post state root
+            if !curr_tx.compare_hashes(&attestation.da_block_hash, &attestation.post_state_root) {
+                // It is the right attestation, we have to compare the initial block hash to the
+                // previous post state root
+                // Slash the attester
+                self.slash_and_invalidate_attestation(
+                    attester,
+                    max_attested_height,
+                    SlashingReason::TransitionInvalid,
+                    working_set,
+                )?;
+            }
+            Ok(CallResponse::default())
+        } else {
+            self.slash_burn_reward(attester, SlashingReason::TransitionNotFound, working_set)
         }
-
-        Ok(CallResponse::default())
     }
 
     fn check_initial_hash(
@@ -372,7 +409,7 @@ impl<
         attester: &C::Address,
         attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse> {
+    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
         // Normal state
         if let Some(transition) = self
             .chain_state
@@ -381,7 +418,11 @@ impl<
         {
             if transition.post_state_root() != attestation.initial_state_root {
                 // The initial root hashes don't match, just slash the attester
-                return self.slash_burn_reward(attester, working_set);
+                return self.slash_burn_reward(
+                    attester,
+                    SlashingReason::InvalidInitialHash,
+                    working_set,
+                );
             }
         } else {
             // Genesis state
@@ -390,13 +431,16 @@ impl<
             // minimal bond and that the attester is not unbonding
             if self
                 .chain_state
-                .genesis_hash
-                .get(working_set)
-                .expect("The genesis hash should be set")
+                .get_genesis_hash(working_set)
+                .expect("The initial hash should be set")
                 != attestation.initial_state_root
             {
                 // Slash the attester, and burn the fees
-                return self.slash_burn_reward(attester, working_set);
+                return self.slash_burn_reward(
+                    attester,
+                    SlashingReason::InvalidInitialHash,
+                    working_set,
+                );
             }
             // Normal state
         }
@@ -410,15 +454,23 @@ impl<
         attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse> {
+    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
         // We first need to check the bonding proof (because we can't slash the attester if he's not bonded)
         self.check_bonding_proof(&attestation, context, working_set)?;
 
         // We suppose that these values are always defined, otherwise we panic
-        let height_to_attest = self.maximum_attested_height.get_or_err(working_set)? + 1;
-        let current_finalized_height =
-            self.light_client_finalized_height.get_or_err(working_set)?;
-        let finality = self.rollup_finality_period.get_or_err(working_set)?;
+        let height_to_attest = self
+            .maximum_attested_height
+            .get(working_set)
+            .expect("The maximum attested height should be set at genesis");
+        let current_finalized_height = self
+            .light_client_finalized_height
+            .get(working_set)
+            .expect("The light client finalized height should be set at genesis");
+        let finality = self
+            .rollup_finality_period
+            .get(working_set)
+            .expect("The rollup finality period should be set at genesis");
 
         let min_height = if current_finalized_height > finality {
             current_finalized_height - finality
@@ -427,22 +479,20 @@ impl<
         };
 
         // Update the max_attested_height in case the blocks have already been finalized
-        let new_max_attested_height = max(&height_to_attest, &min_height);
-        self.maximum_attested_height
-            .set(new_max_attested_height, working_set);
+        let new_max_attested_height = max(height_to_attest, min_height) + 1;
 
         // We have to check the following order invariant is respected:
         // min_height <= bonding_proof.transition_num <= max_attested_height
         // If this invariant is respected, we can be sure that the attester was bonded at max_attested_height.
-        ensure!(
-            min_height <= attestation.proof_of_bond.transition_num
-                && attestation.proof_of_bond.transition_num <= *new_max_attested_height,
-            "Transition invariant not respected"
-        );
+        if !(min_height <= attestation.proof_of_bond.transition_num
+            && attestation.proof_of_bond.transition_num <= new_max_attested_height)
+        {
+            return Err(AttesterIncentiveErrors::InvalidTransitionInvariant);
+        }
 
         // First compare the initial hashes
         self.check_initial_hash(
-            *new_max_attested_height,
+            new_max_attested_height,
             context.sender(),
             &attestation,
             working_set,
@@ -450,7 +500,7 @@ impl<
 
         // Then compare the transition
         self.check_transition(
-            *new_max_attested_height,
+            new_max_attested_height,
             context.sender(),
             &attestation,
             working_set,
@@ -464,7 +514,8 @@ impl<
         {
             return self.slash_and_invalidate_attestation(
                 context.sender(),
-                *new_max_attested_height,
+                new_max_attested_height,
+                SlashingReason::AttesterIsUnbonding,
                 working_set,
             );
         }
@@ -473,6 +524,10 @@ impl<
             "processed_valid_attestation",
             &format!("attester: {:?}", context.sender()),
         );
+
+        // Update the maximum attested height
+        self.maximum_attested_height
+            .set(&(new_max_attested_height), working_set);
 
         // Reward the sender
         self.reward_sender(
@@ -545,7 +600,8 @@ impl<
         anyhow::ensure!(old_balance >= minimum_bond, "Prover is not bonded");
         let code_commitment = self
             .commitment_to_allowed_challenge_method
-            .get_or_err(working_set)?
+            .get(working_set)
+            .expect("Should be defined at genesis")
             .commitment;
 
         // Find the faulty attestation pool and get the associated reward

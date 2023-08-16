@@ -1,4 +1,4 @@
-use jmt::proof::{SparseMerkleProof};
+use jmt::proof::SparseMerkleProof;
 use sov_bank::{BankConfig, TokenConfig};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
@@ -55,7 +55,7 @@ pub(crate) fn create_bank_config_with_token(
     let token_config = TokenConfig {
         token_name,
         address_and_balances: address_and_balances.clone(),
-        authorized_minters: vec![],
+        authorized_minters: vec![address_and_balances.last().unwrap().0],
         salt,
     };
 

@@ -11,7 +11,7 @@ mod tests;
 pub mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use call::Role;
+use call::{AttesterIncentiveErrors, Role};
 use sov_modules_api::{Context, Error};
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker, Zkvm};
@@ -195,9 +195,10 @@ where
                 self.bond_user_helper(bond_amount, context.sender(), Role::Challenger, working_set)
             }
             call::CallMessage::UnbondChallenger => self.unbond_challenger(context, working_set),
-            call::CallMessage::ProcessAttestation(attestation) => {
-                self.process_attestation(attestation, context, working_set)
-            }
+            call::CallMessage::ProcessAttestation(attestation) => self
+                .process_attestation(attestation, context, working_set)
+                .map_err(|error| error.into()),
+
             call::CallMessage::ProcessChallenge(proof, transition) => {
                 self.process_challenge(&proof, transition, context, working_set)
             }

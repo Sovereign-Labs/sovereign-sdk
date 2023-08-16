@@ -7,7 +7,8 @@ use std::marker::PhantomData;
 
 use anyhow::{ensure, Error};
 use borsh::{BorshDeserialize, BorshSerialize};
-use bytes::Bytes;
+use bytes::{Buf, Bytes};
+use serde::de::value::BytesDeserializer;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
@@ -111,11 +112,14 @@ impl Zkvm for MockZkvm {
         Ok(proof.log)
     }
 
-    fn verify_and_extract_output<C, Add: AddressTrait>(
-        _serialized_proof: &[u8],
-        _code_commitment: &Self::CodeCommitment,
+    fn verify_and_extract_output<C: ValidityCondition, Add: AddressTrait>(
+        serialized_proof: &[u8],
+        code_commitment: &Self::CodeCommitment,
     ) -> Result<crate::zk::StateTransition<C, Add>, Self::Error> {
-        todo!("Need to specify an output format for the proof logs")
+        let output = MockZkvm::verify(serialized_proof, code_commitment)?;
+        Ok(crate::zk::StateTransition::<C, Add>::deserialize(
+            BytesDeserializer::<serde::de::value::Error>::new(output),
+        )?)
     }
 }
 

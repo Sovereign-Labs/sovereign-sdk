@@ -139,10 +139,10 @@ impl<C: sov_modules_api::Context> Bank<C> {
 
     /// Mints the `coins` set by the address `minter_address`. If the token address doesn't exist return an error.
     /// Calls the [`Token::mint`] function and update the `self.tokens` set to store the new minted address.
-    pub(crate) fn mint(
+    pub fn mint(
         &self,
-        coins: Coins<C>,
-        minter_address: C::Address,
+        coins: &Coins<C>,
+        minter_address: &C::Address,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
@@ -159,7 +159,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
             .get_or_err(&coins.token_address, working_set)
             .with_context(context_logger)?;
         token
-            .mint(context.sender(), &minter_address, coins.amount, working_set)
+            .mint(context.sender(), minter_address, coins.amount, working_set)
             .with_context(context_logger)?;
         self.tokens.set(&coins.token_address, &token, working_set);
 
