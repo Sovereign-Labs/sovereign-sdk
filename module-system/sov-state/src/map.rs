@@ -119,8 +119,8 @@ where
 #[cfg(feature = "arbitrary")]
 impl<'a, K, V> StateMap<K, V>
 where
-    K: arbitrary::Arbitrary<'a> + BorshSerialize,
-    V: arbitrary::Arbitrary<'a> + BorshSerialize + BorshDeserialize,
+    K: arbitrary::Arbitrary<'a> + borsh::BorshSerialize + borsh::BorshDeserialize,
+    V: arbitrary::Arbitrary<'a> + borsh::BorshSerialize + borsh::BorshDeserialize,
 {
     pub fn arbitrary_workset<S>(
         u: &mut arbitrary::Unstructured<'a>,
