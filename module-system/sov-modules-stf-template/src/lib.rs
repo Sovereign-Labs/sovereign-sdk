@@ -17,6 +17,8 @@ use sov_rollup_interface::AddressTrait;
 use sov_state::{StateCheckpoint, Storage, WorkingSet};
 use tracing::info;
 pub use tx_verifier::RawTx;
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+use zk_cycle_macros::cycle_tracker;
 
 /// This trait has to be implemented by a runtime in order to be used in `AppTemplate`.
 pub trait Runtime<C: Context, Cond: ValidityCondition, B: BlobReaderTrait>:
@@ -73,6 +75,7 @@ where
     DA: DaSpec,
     RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
 {
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_slot(
         &mut self,
         slot_data: &impl SlotData<Cond = DA::ValidityCondition>,
@@ -87,6 +90,7 @@ where
         self.checkpoint = Some(working_set.checkpoint());
     }
 
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn end_slot(&mut self) -> (jmt::RootHash, <<C as Spec>::Storage as Storage>::Witness) {
         let (cache_log, witness) = self.checkpoint.take().unwrap().freeze();
         let root_hash = self
@@ -189,11 +193,10 @@ where
                     tx_receipt.receipt
                 );
             }
-            batch_receipts.push(batch_receipt);
+            batch_receipts.push(batch_receipt.clone());
         }
 
         let (state_root, witness) = self.end_slot();
-
         SlotResult {
             state_root,
             batch_receipts,

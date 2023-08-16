@@ -1,3 +1,6 @@
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+use zk_cycle_macros::cycle_tracker;
+
 #[cfg(feature = "native")]
 use crate::PrivateKey;
 use crate::{Context, Signature};
@@ -29,6 +32,7 @@ impl<C: Context> Transaction<C> {
     }
 
     /// Check whether the transaction has been signed correctly.
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     pub fn verify(&self) -> anyhow::Result<()> {
         let mut serialized_tx =
             Vec::with_capacity(self.runtime_msg().len() + std::mem::size_of::<u64>());

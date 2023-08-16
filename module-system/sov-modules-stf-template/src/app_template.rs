@@ -18,6 +18,8 @@ type ApplyBatch<DA: DaSpec> = ApplyBatchResult<
     BatchReceipt<SequencerOutcome<<DA::BlobTransaction as BlobReaderTrait>::Address>, TxEffect>,
     <DA::BlobTransaction as BlobReaderTrait>::Address,
 >;
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+use zk_cycle_macros::cycle_tracker;
 
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
@@ -90,6 +92,7 @@ where
         }
     }
 
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     pub(crate) fn apply_blob(&mut self, blob: &mut DA::BlobTransaction) -> ApplyBatch<DA> {
         debug!(
             "Applying batch from sequencer: 0x{}",
@@ -233,6 +236,7 @@ where
         };
 
         self.checkpoint = Some(batch_workspace.checkpoint());
+
         Ok(BatchReceipt {
             batch_hash: blob.hash(),
             tx_receipts,
