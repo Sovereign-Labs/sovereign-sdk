@@ -98,7 +98,7 @@ where
         })
     }
 
-    /// Starts an rpc server with provided rpc methods.
+    /// Starts a RPC server with provided rpc methods.
     pub async fn start_rpc_server(&self, methods: RpcModule<()>) {
         let listen_address = self.listen_address;
         let _handle = tokio::spawn(async move {

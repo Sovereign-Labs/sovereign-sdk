@@ -1,13 +1,20 @@
 use module_template::{CallMessage, ExampleModule, ExampleModuleConfig, Response};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
+#[cfg(feature = "native")]
+use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::{Address, Context, Module};
 use sov_rollup_interface::stf::Event;
-use sov_state::{ProverStorage, WorkingSet, ZkStorage};
+use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet, ZkStorage};
 
 #[test]
 fn test_value_setter() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
+
+    #[cfg(feature = "native")]
+    let mut working_set =
+        WorkingSet::new(ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap());
+
     let admin = Address::from([1; 32]);
     // Test Native-Context
     #[cfg(feature = "native")]
@@ -47,6 +54,7 @@ fn test_value_setter_helper<C: Context>(
     }
 
     // Test query
+    #[cfg(feature = "native")]
     {
         let query_response = module.query_value(working_set);
         assert_eq!(

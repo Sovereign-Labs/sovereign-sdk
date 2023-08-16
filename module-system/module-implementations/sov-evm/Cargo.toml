@@ -14,8 +14,8 @@ resolver = "2"
 
 [dependencies]
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false, features = ["macros"] }
-sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-state = { path = "../../sov-state", version = "0.1" }
 
 anyhow = { workspace = true }
 thiserror = { workspace = true }
@@ -47,18 +47,16 @@ reth-revm = { workspace = true }
 
 
 [dev-dependencies]
-
 primitive-types = "0.12.1"
 tokio = { workspace = true }
 tempfile = { workspace = true }
 bytes = { workspace = true }
 secp256k1 = { workspace = true }
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", features = ["macros"] }
 
 [features]
-default = ["native"]
+default = []
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-state/native", "dep:jsonrpsee", "dep:schemars", "sov-modules-api/native", "dep:clap"]
+native = ["serde", "dep:jsonrpsee", "dep:schemars", "dep:clap", "sov-state/native", "sov-modules-api/native", ]
 experimental = ["native"]
 
