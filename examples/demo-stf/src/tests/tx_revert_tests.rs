@@ -7,7 +7,8 @@ use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{EncodeCall, PrivateKey, PublicKey};
 use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, SlashingReason};
-use sov_rollup_interface::mocks::{MockZkvm, TestBlock};
+use sov_rollup_interface::da::BlobReaderTrait;
+use sov_rollup_interface::mocks::{MockBlock, MockZkvm};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -41,14 +42,14 @@ fn test_tx_revert() {
     {
         let mut demo = create_new_demo(path);
         // TODO: Maybe complete with actual block data
-        let _data = TestBlock::default();
+        let _data = MockBlock::default();
 
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
 
         let txs = simulate_da_with_revert_msg(election_admin_private_key);
         let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
-        let data = TestBlock::default();
+        let data = MockBlock::default();
 
         let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
@@ -120,7 +121,7 @@ fn test_nonce_incremented_on_revert() {
 
     {
         // TODO: Maybe complete with actual block data
-        let _data = TestBlock::default();
+        let _data = MockBlock::default();
         let mut demo = create_new_demo(path);
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
 
@@ -166,7 +167,7 @@ fn test_nonce_incremented_on_revert() {
         let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
 
-        let data = TestBlock::default();
+        let data = MockBlock::default();
         let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
             Default::default(),
@@ -224,16 +225,17 @@ fn test_tx_bad_sig() {
     {
         let mut demo = create_new_demo(path);
         // TODO: Maybe complete with actual block data
-        let _data = TestBlock::default();
+        let _data = MockBlock::default();
 
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(&mut demo, config);
 
         let txs = simulate_da_with_bad_sig(election_admin_private_key);
 
         let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
+        let blob_sender = blob.sender();
         let mut blobs = [blob];
 
-        let data = TestBlock::default();
+        let data = MockBlock::default();
         let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
             Default::default(),
@@ -247,7 +249,7 @@ fn test_tx_bad_sig() {
         assert_eq!(
             SequencerOutcome::Slashed{
                 reason:SlashingReason::StatelessVerificationFailed,
-                sequencer_da_address: DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
+                sequencer_da_address: blob_sender,
             },
             apply_blob_outcome.inner,
             "Unexpected outcome: Stateless verification should have failed due to invalid signature"
@@ -309,15 +311,16 @@ fn test_tx_bad_serialization() {
 
     {
         // TODO: Maybe complete with actual block data
-        let _data = TestBlock::default();
+        let _data = MockBlock::default();
 
         let mut demo = create_new_demo(path);
 
         let txs = simulate_da_with_bad_serialization(election_admin_private_key);
         let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
+        let blob_sender = blob.sender();
         let mut blobs = [blob];
 
-        let data = TestBlock::default();
+        let data = MockBlock::default();
         let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
             Default::default(),
@@ -331,7 +334,7 @@ fn test_tx_bad_serialization() {
         assert_eq!(
             SequencerOutcome::Slashed {
                 reason: SlashingReason::InvalidTransactionEncoding ,
-                sequencer_da_address: DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
+                sequencer_da_address: blob_sender,
             },
             apply_blob_outcome.inner,
             "Unexpected outcome: Stateless verification should have failed due to invalid signature"

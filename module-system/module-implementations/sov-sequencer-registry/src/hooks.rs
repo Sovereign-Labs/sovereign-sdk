@@ -9,14 +9,14 @@ use zk_cycle_utils::print_cycle_count;
 
 use crate::{SequencerOutcome, SequencerRegistry};
 
-impl<C: Context> ApplyBlobHooks for SequencerRegistry<C> {
+impl<C: Context, B: BlobReaderTrait> ApplyBlobHooks<B> for SequencerRegistry<C> {
     type Context = C;
     type BlobResult = SequencerOutcome;
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_blob_hook(
         &self,
-        blob: &mut impl BlobReaderTrait,
+        blob: &mut B,
         working_set: &mut WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
     ) -> anyhow::Result<()> {
         #[cfg(all(target_os = "zkvm", feature = "bench"))]

@@ -1,7 +1,7 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::Genesis;
-use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader, TestHash, TestValidityCond};
+use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash, MockValidityCond};
 use sov_state::{ProverStorage, Storage, WorkingSet};
 
 use crate::{ChainState, ChainStateConfig, StateTransitionId, TransitionInProgress};
@@ -20,7 +20,7 @@ fn test_simple_chain_state() {
 
     let mut working_set = WorkingSet::new(storage.clone());
 
-    let chain_state = ChainState::<DefaultContext, TestValidityCond>::default();
+    let chain_state = ChainState::<DefaultContext, MockValidityCond>::default();
     let config = ChainStateConfig {
         initial_slot_height: INIT_HEIGHT,
     };
@@ -42,13 +42,13 @@ fn test_simple_chain_state() {
     );
 
     // Then simulate a transaction execution: call the begin_slot hook on a mock slot_data.
-    let slot_data = TestBlock {
+    let slot_data = MockBlock {
         curr_hash: [1; 32],
-        header: TestBlockHeader {
-            prev_hash: TestHash([0; 32]),
+        header: MockBlockHeader {
+            prev_hash: MockHash([0; 32]),
         },
         height: INIT_HEIGHT,
-        validity_cond: TestValidityCond { is_valid: true },
+        validity_cond: MockValidityCond { is_valid: true },
     };
 
     chain_state.begin_slot_hook(&slot_data, &mut working_set);
@@ -69,13 +69,13 @@ fn test_simple_chain_state() {
     );
 
     // Check that the new state transition is being stored
-    let new_tx_in_progress: TransitionInProgress<TestValidityCond> = chain_state
+    let new_tx_in_progress: TransitionInProgress<MockValidityCond> = chain_state
         .get_in_progress_transition(&mut working_set)
         .unwrap();
 
     assert_eq!(
         new_tx_in_progress,
-        TransitionInProgress::<TestValidityCond>::new([1; 32], TestValidityCond { is_valid: true }),
+        TransitionInProgress::<MockValidityCond>::new([1; 32], MockValidityCond { is_valid: true }),
         "The new transition has not been correctly stored"
     );
 
@@ -88,13 +88,13 @@ fn test_simple_chain_state() {
     let mut working_set = WorkingSet::new(storage);
 
     // And we simulate a new slot application by calling the `begin_slot` hook.
-    let new_slot_data = TestBlock {
+    let new_slot_data = MockBlock {
         curr_hash: [2; 32],
-        header: TestBlockHeader {
-            prev_hash: TestHash([1; 32]),
+        header: MockBlockHeader {
+            prev_hash: MockHash([1; 32]),
         },
         height: INIT_HEIGHT,
-        validity_cond: TestValidityCond { is_valid: false },
+        validity_cond: MockValidityCond { is_valid: false },
     };
 
     chain_state.begin_slot_hook(&new_slot_data, &mut working_set);
@@ -108,21 +108,21 @@ fn test_simple_chain_state() {
     );
 
     // Check the transition in progress
-    let new_tx_in_progress: TransitionInProgress<TestValidityCond> = chain_state
+    let new_tx_in_progress: TransitionInProgress<MockValidityCond> = chain_state
         .get_in_progress_transition(&mut working_set)
         .unwrap();
 
     assert_eq!(
         new_tx_in_progress,
-        TransitionInProgress::<TestValidityCond>::new(
+        TransitionInProgress::<MockValidityCond>::new(
             [2; 32],
-            TestValidityCond { is_valid: false }
+            MockValidityCond { is_valid: false }
         ),
         "The new transition has not been correctly stored"
     );
 
     // Check the transition stored
-    let last_tx_stored: StateTransitionId<TestValidityCond> = chain_state
+    let last_tx_stored: StateTransitionId<MockValidityCond> = chain_state
         .get_historical_transitions(INIT_HEIGHT + 1, &mut working_set)
         .unwrap();
 
@@ -131,7 +131,7 @@ fn test_simple_chain_state() {
         StateTransitionId::new(
             [1; 32],
             new_root_hash.unwrap(),
-            TestValidityCond { is_valid: true }
+            MockValidityCond { is_valid: true }
         )
     );
 }

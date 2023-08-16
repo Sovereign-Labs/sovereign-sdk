@@ -16,7 +16,7 @@ use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{AddressBech32, PrivateKey, PublicKey, Spec};
 use sov_modules_stf_template::RawTx;
 #[cfg(test)]
-use sov_rollup_interface::mocks::TestBlock;
+use sov_rollup_interface::mocks::MockBlock;
 use sov_sequencer::SubmitTransaction;
 type C = DefaultContext;
 type Address = <C as Spec>::Address;
@@ -350,14 +350,14 @@ mod test {
     use demo_stf::runtime::{GenesisConfig, Runtime};
     use sov_modules_api::Address;
     use sov_modules_stf_template::{AppTemplate, Batch, RawTx, SequencerOutcome};
-    use sov_rollup_interface::mocks::{MockZkvm, TestValidityCond};
+    use sov_rollup_interface::mocks::{MockValidityCond, MockZkvm};
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::WorkingSet;
     use sov_stf_runner::Config;
 
     use super::*;
 
-    type TestBlob = sov_rollup_interface::mocks::TestBlob<Address>;
+    type TestBlob = sov_rollup_interface::mocks::MockBlob<Address>;
 
     fn new_test_blob(batch: Batch, address: &[u8]) -> TestBlob {
         let address = Address::try_from(address).unwrap();
@@ -425,7 +425,7 @@ mod test {
     // Test helpers
     struct TestDemo {
         config: GenesisConfig<C>,
-        demo: AppTemplate<C, TestValidityCond, MockZkvm, Runtime<C>, TestBlob>,
+        demo: AppTemplate<C, MockValidityCond, MockZkvm, Runtime<C>, TestBlob>,
     }
 
     impl TestDemo {
@@ -445,7 +445,7 @@ mod test {
 
             Self {
                 config: genesis_config,
-                demo: App::<MockZkvm, TestValidityCond, TestBlob>::new(runner_config.storage).stf,
+                demo: App::<MockZkvm, MockValidityCond, TestBlob>::new(runner_config.storage).stf,
             }
         }
     }
@@ -501,13 +501,13 @@ mod test {
     }
 
     fn execute_txs(
-        demo: &mut AppTemplate<C, TestValidityCond, MockZkvm, Runtime<C>, TestBlob>,
+        demo: &mut AppTemplate<C, MockValidityCond, MockZkvm, Runtime<C>, TestBlob>,
         config: GenesisConfig<C>,
         txs: Vec<RawTx>,
     ) {
         StateTransitionFunction::<MockZkvm, TestBlob>::init_chain(demo, config);
 
-        let data = TestBlock::default();
+        let data = MockBlock::default();
         let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
         let mut blobs = [blob];
 
@@ -529,7 +529,7 @@ mod test {
     }
 
     fn get_balance(
-        demo: &mut AppTemplate<C, TestValidityCond, MockZkvm, Runtime<C>, TestBlob>,
+        demo: &mut AppTemplate<C, MockValidityCond, MockZkvm, Runtime<C>, TestBlob>,
         token_deployer_address: &Address,
         user_address: Address,
     ) -> Option<u64> {

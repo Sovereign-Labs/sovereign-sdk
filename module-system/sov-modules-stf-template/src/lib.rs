@@ -13,6 +13,7 @@ use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
+use sov_rollup_interface::AddressTrait;
 use sov_state::{StateCheckpoint, Storage, WorkingSet};
 use tracing::info;
 pub use tx_verifier::RawTx;
@@ -20,12 +21,12 @@ pub use tx_verifier::RawTx;
 use zk_cycle_macros::cycle_tracker;
 
 /// This trait has to be implemented by a runtime in order to be used in `AppTemplate`.
-pub trait Runtime<C: Context, Cond: ValidityCondition>:
+pub trait Runtime<C: Context, Cond: ValidityCondition, B: BlobReaderTrait>:
     DispatchCall<Context = C>
     + Genesis<Context = C>
     + TxHooks<Context = C>
     + SlotHooks<Cond, Context = C>
-    + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>
+    + ApplyBlobHooks<B, Context = C, BlobResult = SequencerOutcome<B::Address>>
     + BlobSelector<Context = C>
 {
 }
@@ -40,20 +41,17 @@ pub enum TxEffect {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-// TODO: Should be generic for Address for pretty printing https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
 /// Represents the different outcomes that can occur for a sequencer after batch processing.
-pub enum SequencerOutcome {
+pub enum SequencerOutcome<A: AddressTrait> {
     /// Sequencer receives reward amount in defined token and can withdraw its deposit
     Rewarded(u64),
     /// Sequencer loses its deposit and receives no reward
     Slashed {
         /// Reason why sequencer was slashed.
         reason: SlashingReason,
-        // Keep this comment for so it doesn't need to investigate serde issue again.
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
-        // #[serde(bound(deserialize = ""))]
+        #[serde(bound(deserialize = ""))]
         /// Sequencer address on DA.
-        sequencer_da_address: Vec<u8>,
+        sequencer_da_address: A,
     },
     /// Batch was ignored, sequencer deposit left untouched.
     Ignored,
@@ -70,10 +68,13 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-impl<C: Context, RT, Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait>
-    AppTemplate<C, Cond, Vm, RT, B>
+impl<C, RT, Vm, Cond, B> AppTemplate<C, Cond, Vm, RT, B>
 where
-    RT: Runtime<C, Cond>,
+    C: Context,
+    Vm: Zkvm,
+    Cond: ValidityCondition,
+    B: BlobReaderTrait,
+    RT: Runtime<C, Cond, B>,
 {
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_slot(
@@ -106,10 +107,13 @@ where
     }
 }
 
-impl<C: Context, RT, Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait>
-    StateTransitionFunction<Vm, B> for AppTemplate<C, Cond, Vm, RT, B>
+impl<C, RT, Vm, Cond, B> StateTransitionFunction<Vm, B> for AppTemplate<C, Cond, Vm, RT, B>
 where
-    RT: Runtime<C, Cond>,
+    C: Context,
+    Vm: Zkvm,
+    Cond: ValidityCondition,
+    B: BlobReaderTrait,
+    RT: Runtime<C, Cond, B>,
 {
     type StateRoot = jmt::RootHash;
 
@@ -117,7 +121,7 @@ where
 
     type TxReceiptContents = TxEffect;
 
-    type BatchReceiptContents = SequencerOutcome;
+    type BatchReceiptContents = SequencerOutcome<B::Address>;
 
     type Witness = <<C as Spec>::Storage as Storage>::Witness;
 

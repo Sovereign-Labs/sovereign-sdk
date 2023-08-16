@@ -1,11 +1,11 @@
 use sov_blob_storage::BlobStorage;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Genesis;
-use sov_rollup_interface::mocks::{MockAddress, TestBlob};
+use sov_rollup_interface::mocks::{MockAddress, MockBlob};
 use sov_state::{ProverStorage, WorkingSet};
 
 type C = DefaultContext;
-type B = TestBlob<MockAddress>;
+type B = MockBlob<MockAddress>;
 
 #[test]
 fn empty_test() {
@@ -51,11 +51,11 @@ fn store_and_retrieve_standard() {
     let blob_5 = B::new(vec![0, 1, 0], sender, dummy_hash);
 
     let slot_2_blobs = vec![blob_1, blob_2, blob_3];
-    let slot_2_blob_refs: Vec<&TestBlob<MockAddress>> = slot_2_blobs.iter().collect();
+    let slot_2_blob_refs: Vec<&MockBlob<MockAddress>> = slot_2_blobs.iter().collect();
     let slot_3_blobs = vec![blob_4];
-    let slot_3_blob_refs: Vec<&TestBlob<MockAddress>> = slot_3_blobs.iter().collect();
+    let slot_3_blob_refs: Vec<&MockBlob<MockAddress>> = slot_3_blobs.iter().collect();
     let slot_4_blobs = vec![blob_5];
-    let slot_4_blob_refs: Vec<&TestBlob<MockAddress>> = slot_4_blobs.iter().collect();
+    let slot_4_blob_refs: Vec<&MockBlob<MockAddress>> = slot_4_blobs.iter().collect();
 
     blob_storage
         .store_blobs(2, &slot_2_blob_refs, &mut working_set)

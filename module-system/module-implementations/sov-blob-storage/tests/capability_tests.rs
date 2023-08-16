@@ -7,12 +7,12 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::digest::Digest;
 use sov_modules_api::{Address, Context, Module, Spec};
 use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::mocks::{MockAddress, TestBlob};
+use sov_rollup_interface::mocks::{MockAddress, MockBlob};
 use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
 use sov_state::{ProverStorage, WorkingSet};
 
 type C = DefaultContext;
-type B = TestBlob<MockAddress>;
+type B = MockBlob<MockAddress>;
 
 const PREFERRED_SEQUENCER_KEY: &str = "preferred";
 const REGULAR_SEQUENCER_KEY: &str = "regular";

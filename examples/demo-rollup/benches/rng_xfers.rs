@@ -13,7 +13,7 @@ use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Address, AddressBech32, EncodeCall, PrivateKey, PublicKey, Spec};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::mocks::{
-    TestBlob, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
+    MockBlob, MockBlock, MockBlockHeader, MockHash, MockValidityCond,
 };
 use sov_rollup_interface::services::da::DaService;
 
@@ -92,20 +92,20 @@ impl Default for RngDaService {
 pub struct RngDaSpec;
 
 impl DaSpec for RngDaSpec {
-    type SlotHash = TestHash;
-    type BlockHeader = TestBlockHeader;
-    type BlobTransaction = TestBlob<CelestiaAddress>;
+    type SlotHash = MockHash;
+    type BlockHeader = MockBlockHeader;
+    type BlobTransaction = MockBlob<CelestiaAddress>;
     type InclusionMultiProof = [u8; 32];
     type CompletenessProof = ();
     type ChainParams = ();
-    type ValidityCondition = TestValidityCond;
+    type ValidityCondition = MockValidityCond;
 }
 
 #[async_trait]
 impl DaService for RngDaService {
     type RuntimeConfig = ();
     type Spec = RngDaSpec;
-    type FilteredBlock = TestBlock;
+    type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
 
     async fn new(
@@ -120,13 +120,13 @@ impl DaService for RngDaService {
         let mut barray = [0u8; 32];
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
 
-        let block = TestBlock {
+        let block = MockBlock {
             curr_hash: barray,
-            header: TestBlockHeader {
-                prev_hash: TestHash([0u8; 32]),
+            header: MockBlockHeader {
+                prev_hash: MockHash([0u8; 32]),
             },
             height,
-            validity_cond: TestValidityCond { is_valid: true },
+            validity_cond: MockValidityCond { is_valid: true },
         };
 
         Ok(block)
@@ -156,7 +156,7 @@ impl DaService for RngDaService {
         };
 
         let address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
-        let blob = TestBlob::new(data, address, [0u8; 32]);
+        let blob = MockBlob::new(data, address, [0u8; 32]);
 
         vec![blob]
     }
