@@ -118,7 +118,9 @@ async fn main() -> Result<(), anyhow::Error> {
             info!("Start verifying..");
             receipt.verify(ROLLUP_ID).expect("Receipt should be valid");
         } else {
-            let _receipt = host.run_without_proving().expect("Prover should run successfully");
+            let _receipt = host
+                .run_without_proving()
+                .expect("Prover should run successfully");
         }
 
         prev_state_root = result.state_root.0;
