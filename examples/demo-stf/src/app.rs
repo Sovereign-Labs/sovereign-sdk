@@ -19,6 +19,7 @@ use sov_stf_runner::StorageConfig;
 
 use crate::runtime::Runtime;
 
+//TODO CHANGE B TO DaSpec
 #[cfg(feature = "native")]
 pub struct App<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> {
     pub stf: AppTemplate<DefaultContext, Cond, Vm, Runtime<DefaultContext>, B>,
