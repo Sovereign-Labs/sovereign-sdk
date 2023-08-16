@@ -43,7 +43,7 @@ impl<'a, B: BlobReaderTrait> From<&'a mut B> for BlobRefOrOwned<'a, B> {
 }
 
 /// BlobSelector decides which blobs to process in a current slot.
-pub trait BlobSelector {
+pub trait BlobSelector<B: BlobReaderTrait> {
     /// Context type
     type Context: Context;
 
@@ -51,7 +51,7 @@ pub trait BlobSelector {
     /// 1. `current_blobs` - blobs that were received from the network for the current slot.
     /// 2. `working_set` - the working to access storage.
     /// It returns a vector containing a mix of borrowed and owned blobs.
-    fn get_blobs_for_this_slot<'a, I, B>(
+    fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,

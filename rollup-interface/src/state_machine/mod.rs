@@ -5,6 +5,8 @@ pub mod da;
 pub mod stf;
 pub mod zk;
 
+use std::str::FromStr;
+
 pub use bytes::{Buf, BufMut, Bytes, BytesMut};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -18,6 +20,7 @@ pub trait AddressTrait:
     + core::fmt::Debug
     + Clone
     + AsRef<[u8]>
+    + FromStr
     + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
     + Eq
     + Serialize

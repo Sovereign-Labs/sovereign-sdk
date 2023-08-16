@@ -25,7 +25,7 @@ pub trait Runtime<C: Context, Cond: ValidityCondition, B: BlobReaderTrait>:
     + TxHooks<Context = C>
     + SlotHooks<Cond, Context = C>
     + ApplyBlobHooks<B, Context = C, BlobResult = SequencerOutcome<B::Address>>
-    + BlobSelector<Context = C>
+    + BlobSelector<B, Context = C>
 {
 }
 

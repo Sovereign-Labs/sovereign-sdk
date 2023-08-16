@@ -5,7 +5,12 @@ use sov_state::WorkingSet;
 
 use crate::{SequencerOutcome, SequencerRegistry};
 
-impl<C: Context, B: BlobReaderTrait> ApplyBlobHooks<B> for SequencerRegistry<C, B::Address> {
+// trait BB: BlobReaderTrait + borsh::BorshSerialize + borsh::BorshDeserialize {};
+
+impl<C: Context, B: BlobReaderTrait> ApplyBlobHooks<B> for SequencerRegistry<C, B::Address>
+where
+    B::Address: borsh::BorshSerialize + borsh::BorshDeserialize,
+{
     type Context = C;
     type BlobResult = SequencerOutcome<B::Address>;
 
