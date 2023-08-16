@@ -77,7 +77,6 @@ impl<A: AddressTrait> From<ApplyBatchError<A>> for BatchReceipt<SequencerOutcome
 impl<C, Vm, DA, RT> AppTemplate<C, DA, Vm, RT>
 where
     C: Context,
-
     DA: DaSpec,
     RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
 {

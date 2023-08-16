@@ -1,4 +1,4 @@
-//! Module specific RPC methods.
+//! Full-Node specific RPC methods.
 use std::sync::Arc;
 
 use anyhow::Context;
