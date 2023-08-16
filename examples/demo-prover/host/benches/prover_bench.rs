@@ -1,8 +1,8 @@
+use std::collections::HashMap;
 use std::env;
 use std::fs::{read_to_string, remove_file, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
