@@ -1,6 +1,8 @@
 #![feature(associated_type_defaults)]
 
 mod bech32;
+#[cfg(feature = "native")]
+pub mod cli;
 pub mod default_context;
 pub mod default_signature;
 mod dispatch;

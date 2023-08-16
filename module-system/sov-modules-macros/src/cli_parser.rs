@@ -187,6 +187,10 @@ impl CliParserMacro {
                 ____phantom(::std::marker::PhantomData<#ident #ty_generics>)
             }
 
+            impl #impl_generics_with_inner ::sov_modules_api::cli::CliFrontEnd<__Inner> for RuntimeSubcommand #ty_generics_with_inner #where_clause_with_inner_as_clap {
+                type CliIntermediateRepr<__Dest> = RuntimeMessage #ty_generics_for_dest;
+            }
+
             /// An intermediate enum between the RuntimeSubcommand (which must implement `clap`) and the
             /// final RT::Decodable type. Like the RuntimeSubcommand, this type contains one variant for each cli-enabled module.
             #[allow(non_camel_case_types)]

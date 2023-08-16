@@ -2,12 +2,8 @@
 
 use std::path::Path;
 
-use anyhow::Context;
-use demo_stf::runtime::{JsonStringArg, RuntimeSubcommand};
-use serde::de::DeserializeOwned;
 use serde::Serialize;
-use serde_json::error;
-use sov_modules_api::clap::{self, Args, Subcommand};
+use sov_modules_api::clap::{self, Subcommand};
 use sov_modules_api::CliWallet;
 
 use crate::wallet_state::WalletState;
