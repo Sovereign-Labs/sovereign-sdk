@@ -42,7 +42,7 @@ pub fn register_ledger(
 }
 
 #[cfg(feature = "experimental")]
-/// register ledger ethereum methods.
+/// register ethereum methods.
 pub fn register_ethereum(
     da_config: jupiter::da_service::DaServiceConfig,
     methods: &mut jsonrpsee::RpcModule<()>,
