@@ -17,8 +17,8 @@ use sov_state::{ArrayWitness, ProverStorage, Storage, WorkingSet};
 
 use crate::call::{AttesterIncentiveErrors, SlashingReason};
 use crate::helpers::{
-    commit_get_new_working_set, execution_simulation, setup, BOND_AMOUNT, INITIAL_BOND_AMOUNT,
-    INIT_HEIGHT,
+    commit_get_new_working_set, execution_simulation, setup, BOND_AMOUNT, DEFAULT_ROLLUP_FINALITY,
+    INITIAL_BOND_AMOUNT, INIT_HEIGHT,
 };
 
 /// Start by testing the positive case where the attestations are valid
@@ -43,22 +43,26 @@ fn test_process_valid_attestation() {
 
     // Simulate the execution of a chain, with the genesis hash and two transitions after.
     // Update the chain_state module and the optimistic module accordingly
-    let (exec_vars, mut working_set) =
-        execution_simulation(&module, &storage, attester_address, working_set);
+    let (mut exec_vars, mut working_set) =
+        execution_simulation(3, &module, &storage, attester_address, working_set);
 
     let context = DefaultContext {
         sender: attester_address,
     };
 
+    let transition_2 = exec_vars.pop().unwrap();
+    let transition_1 = exec_vars.pop().unwrap();
+    let initial_transition = exec_vars.pop().unwrap();
+
     // Process a valid attestation for the first transition
     {
         let attestation = Attestation {
-            initial_state_root: exec_vars.initial_state_root,
+            initial_state_root: initial_transition.state_root,
             da_block_hash: [1; 32],
-            post_state_root: exec_vars.transition_1_root,
+            post_state_root: transition_1.state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
                 transition_num: INIT_HEIGHT + 1,
-                proof: exec_vars.initial_state_proof,
+                proof: initial_transition.state_proof,
             },
         };
 
@@ -70,12 +74,12 @@ fn test_process_valid_attestation() {
     // We can now proceed with the next attestation
     {
         let attestation = Attestation {
-            initial_state_root: exec_vars.transition_1_root,
+            initial_state_root: transition_1.state_root,
             da_block_hash: [2; 32],
-            post_state_root: exec_vars.transition_2_root,
+            post_state_root: transition_2.state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
                 transition_num: INIT_HEIGHT + 2,
-                proof: exec_vars.transition_1_proof,
+                proof: transition_1.state_proof,
             },
         };
 
@@ -128,8 +132,12 @@ fn test_burn_on_invalid_attestation() {
 
     // Simulate the execution of a chain, with the genesis hash and two transitions after.
     // Update the chain_state module and the optimistic module accordingly
-    let (exec_vars, mut working_set) =
-        execution_simulation(&module, &storage, attester_address, working_set);
+    let (mut exec_vars, mut working_set) =
+        execution_simulation(3, &module, &storage, attester_address, working_set);
+
+    let transition_2 = exec_vars.pop().unwrap();
+    let transition_1 = exec_vars.pop().unwrap();
+    let initial_transition = exec_vars.pop().unwrap();
 
     let context = DefaultContext {
         sender: attester_address,
@@ -140,12 +148,12 @@ fn test_burn_on_invalid_attestation() {
     // sender is bonded or not.
     {
         let attestation = Attestation {
-            initial_state_root: exec_vars.initial_state_root,
+            initial_state_root: initial_transition.state_root,
             da_block_hash: [1; 32],
-            post_state_root: exec_vars.transition_1_root,
+            post_state_root: transition_1.state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
                 transition_num: INIT_HEIGHT + 1,
-                proof: exec_vars.transition_1_proof.clone(),
+                proof: transition_1.state_proof.clone(),
             },
         };
 
@@ -175,12 +183,12 @@ fn test_burn_on_invalid_attestation() {
     // Now proccess a valid attestation for genesis.
     {
         let attestation = Attestation {
-            initial_state_root: exec_vars.initial_state_root,
+            initial_state_root: initial_transition.state_root,
             da_block_hash: [1; 32],
-            post_state_root: exec_vars.transition_1_root,
+            post_state_root: transition_1.state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
                 transition_num: INIT_HEIGHT + 1,
-                proof: exec_vars.initial_state_proof,
+                proof: initial_transition.state_proof,
             },
         };
 
@@ -192,12 +200,12 @@ fn test_burn_on_invalid_attestation() {
     // Then process a new attestation having the wrong initial state root. The attester must be slashed, and the fees burnt
     {
         let attestation = Attestation {
-            initial_state_root: exec_vars.initial_state_root,
+            initial_state_root: initial_transition.state_root,
             da_block_hash: [2; 32],
-            post_state_root: exec_vars.transition_2_root,
+            post_state_root: transition_2.state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
                 transition_num: INIT_HEIGHT + 2,
-                proof: exec_vars.transition_1_proof.clone(),
+                proof: transition_1.state_proof.clone(),
             },
         };
 
@@ -245,12 +253,12 @@ fn test_burn_on_invalid_attestation() {
     // Process an attestation that has the right bonding proof and initial hash but has a faulty post transition hash.
     {
         let attestation = Attestation {
-            initial_state_root: exec_vars.transition_1_root,
+            initial_state_root: transition_1.state_root,
             da_block_hash: [2; 32],
-            post_state_root: exec_vars.transition_1_root,
+            post_state_root: transition_1.state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
                 transition_num: INIT_HEIGHT + 2,
-                proof: exec_vars.transition_1_proof,
+                proof: transition_1.state_proof,
             },
         };
 
@@ -299,8 +307,12 @@ fn test_valid_challenge() {
 
     // Simulate the execution of a chain, with the genesis hash and two transitions after.
     // Update the chain_state module and the optimistic module accordingly
-    let (exec_vars, mut working_set) =
-        execution_simulation(&module, &storage, attester_address, working_set);
+    let (mut exec_vars, mut working_set) =
+        execution_simulation(3, &module, &storage, attester_address, working_set);
+
+    let _ = exec_vars.pop().unwrap();
+    let transition_1 = exec_vars.pop().unwrap();
+    let initial_transition = exec_vars.pop().unwrap();
 
     module
         .bond_user_helper(
@@ -335,9 +347,9 @@ fn test_valid_challenge() {
 
     {
         let transition = StateTransition {
-            initial_state_root: exec_vars.initial_state_root,
+            initial_state_root: initial_transition.state_root,
             slot_hash: [1; 32],
-            final_state_root: exec_vars.transition_1_root,
+            final_state_root: transition_1.state_root,
             rewarded_address: challenger_address,
             validity_condition: TestValidityCond { is_valid: true },
         };
@@ -450,8 +462,12 @@ fn test_invalid_challenge() {
 
     // Simulate the execution of a chain, with the genesis hash and two transitions after.
     // Update the chain_state module and the optimistic module accordingly
-    let (exec_vars, mut working_set) =
-        execution_simulation(&module, &storage, attester_address, working_set);
+    let (mut exec_vars, mut working_set) =
+        execution_simulation(3, &module, &storage, attester_address, working_set);
+
+    let _ = exec_vars.pop().unwrap();
+    let transition_1 = exec_vars.pop().unwrap();
+    let initial_transition = exec_vars.pop().unwrap();
 
     // Set a bad transition to get a reward from
     module
@@ -464,9 +480,9 @@ fn test_invalid_challenge() {
     };
 
     let transition = StateTransition {
-        initial_state_root: exec_vars.initial_state_root,
+        initial_state_root: initial_transition.state_root,
         slot_hash: [1; 32],
-        final_state_root: exec_vars.transition_1_root,
+        final_state_root: transition_1.state_root,
         rewarded_address: challenger_address,
         validity_condition: TestValidityCond { is_valid: true },
     };
@@ -526,9 +542,9 @@ fn test_invalid_challenge() {
 
         // Bad slot hash
         let bad_transition = StateTransition {
-            initial_state_root: exec_vars.initial_state_root,
+            initial_state_root: initial_transition.state_root,
             slot_hash: [2; 32],
-            final_state_root: exec_vars.transition_1_root,
+            final_state_root: transition_1.state_root,
             rewarded_address: challenger_address,
             validity_condition: TestValidityCond { is_valid: true },
         }
@@ -554,9 +570,9 @@ fn test_invalid_challenge() {
 
         // Bad validity condition
         let bad_transition = StateTransition {
-            initial_state_root: exec_vars.initial_state_root,
+            initial_state_root: initial_transition.state_root,
             slot_hash: [1; 32],
-            final_state_root: exec_vars.transition_1_root,
+            final_state_root: transition_1.state_root,
             rewarded_address: challenger_address,
             validity_condition: TestValidityCond { is_valid: false },
         }
@@ -582,9 +598,9 @@ fn test_invalid_challenge() {
 
         // Bad initial root
         let bad_transition = StateTransition {
-            initial_state_root: exec_vars.transition_1_root,
+            initial_state_root: transition_1.state_root,
             slot_hash: [1; 32],
-            final_state_root: exec_vars.transition_1_root,
+            final_state_root: transition_1.state_root,
             rewarded_address: challenger_address,
             validity_condition: TestValidityCond { is_valid: true },
         }
@@ -610,20 +626,15 @@ fn test_invalid_challenge() {
     }
 }
 
+// Test the transition invariant and the two phase unbonding for the attester
 #[test]
 fn test_unbonding() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, _token_address, attester_address, _challenger_address) = setup(&mut working_set);
-    let context = DefaultContext {
-        sender: attester_address,
-    };
-    let _token_address = module
-        .bonding_token_address
-        .get(&mut working_set)
-        .expect("bonding token address was set at genesis");
+    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
+    let mut working_set = WorkingSet::new(storage.clone());
+    let (module, token_address, attester_address, _) = setup(&mut working_set);
 
-    // Assert that the prover has bonded tokens
+    // Assert that the attester has the correct bond amount before processing the proof
     assert_eq!(
         module
             .get_bond_amount(
@@ -635,42 +646,75 @@ fn test_unbonding() {
         BOND_AMOUNT
     );
 
-    // Get their *unlocked* balance before undbonding
-    // let initial_unlocked_balance = {
-    //     module
-    //         .bank
-    //         .get_balance_of(
-    //             attester_address.clone(),
-    //             token_address.clone(),
-    //             &mut working_set,
-    //         )
-    //         .unwrap_or_default()
-    // };
+    const NEW_LIGHT_CLIENT_HEIGHT: u64 = 5;
 
-    // Unbond the prover
+    // Simulate the execution of a chain, with the genesis hash and two transitions after.
+    // Update the chain_state module and the optimistic module accordingly
+    let (mut exec_vars, mut working_set) =
+        execution_simulation(20, &module, &storage, attester_address, working_set);
+
+    let context = DefaultContext {
+        sender: attester_address,
+    };
+
+    // Update the finalized height and try to prove the INIT_HEIGHT: should fail
     module
-        .unbond_challenger(&context, &mut working_set)
-        .expect("Unbonding should succeed");
+        .light_client_finalized_height
+        .set(&(INIT_HEIGHT + NEW_LIGHT_CLIENT_HEIGHT), &mut working_set);
 
-    // Assert that the prover no longer has bonded tokens
-    assert_eq!(
-        module
-            .get_bond_amount(
-                attester_address,
-                crate::call::Role::Attester,
-                &mut working_set
-            )
-            .value,
-        0
-    );
+    // Process a valid attestation for the first transition *should fail*
+    {
+        let attestation = Attestation {
+            initial_state_root: exec_vars[0].state_root.clone(),
+            da_block_hash: [1; 32],
+            post_state_root: exec_vars[1].state_root.clone(),
+            proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
+                transition_num: INIT_HEIGHT + 1,
+                proof: exec_vars[usize::try_from(INIT_HEIGHT).unwrap()]
+                    .state_proof
+                    .clone(),
+            },
+        };
 
-    // Assert that the prover's unlocked balance has increased by the amount they unbonded
-    // let unlocked_balance =
+        let err = module
+            .process_attestation(attestation, &context, &mut working_set)
+            .unwrap_err();
+
+        assert_eq!(
+            err,
+            AttesterIncentiveErrors::InvalidTransitionInvariant,
+            "Incorrect error raised"
+        );
+
+        // The attester should not be slashed
+        assert_eq!(
+            module
+                .get_bond_amount(
+                    attester_address,
+                    crate::call::Role::Attester,
+                    &mut working_set
+                )
+                .value,
+            BOND_AMOUNT
+        );
+    }
+
+    // The attester should be able to process multiple attestations with the same bonding proof
+    // for i in 1..usize::try_from(DEFAULT_ROLLUP_FINALITY).unwrap() {
+    //     println!("{i}");
+    //     let new_height = usize::try_from(INIT_HEIGHT + NEW_LIGHT_CLIENT_HEIGHT + 2).unwrap();
+    //     let attestation = Attestation {
+    //         initial_state_root: exec_vars[new_height + i].state_root.clone(),
+    //         da_block_hash: [new_height.try_into().unwrap(); 32],
+    //         post_state_root: exec_vars[new_height + i + 1].state_root.clone(),
+    //         proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
+    //             transition_num: new_height.try_into().unwrap(),
+    //             proof: exec_vars[new_height - 1].state_proof.clone(),
+    //         },
+    //     };
+
     //     module
-    //         .bank
-    //         .get_balance_of(attester_address, token_address, &mut working_set);
-    // assert_eq!(
-    //     unlocked_balance,
-    //     Some(BOND_AMOUNT + initial_unlocked_balance)
-    // );
+    //         .process_attestation(attestation, &context, &mut working_set)
+    //         .unwrap();
+    // }
 }
