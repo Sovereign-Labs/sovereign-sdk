@@ -10,7 +10,7 @@ use syn::{parse_macro_input, ItemFn};
 /// generated inside the VM. The purpose of the this macro is to measure how many cycles a rust
 /// function takes because prover time is directly proportional to the number of riscv cycles
 /// generated. It does this by making use of a risc0 provided function
-/// ```
+/// ```rust,ignore
 /// risc0_zkvm::guest::env::get_cycle_count
 /// ```
 /// The macro essentially generates new function with the same name by wrapping the body with a get_cycle_count

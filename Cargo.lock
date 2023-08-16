@@ -8263,7 +8263,12 @@ dependencies = [
  "borsh",
  "proc-macro2 1.0.66",
  "quote 1.0.32",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
  "syn 1.0.109",
+ "trybuild",
+ "zk-cycle-macros",
+ "zk-cycle-utils",
 ]
 
 [[package]]

@@ -16,7 +16,7 @@ bench = ["zk-cycle-macros/bench","zk-cycle-utils", "risc0-zkvm","risc0-zkvm-plat
 * If the `bench` feature is not enabled, the risc0 host will not be built with the necessary syscalls to support tracking cycles
 * The additional imports are necessary because the macro wraps the user function with the necessary code for tracking the number of cycles before and after the function execution
 * The rust code that needs to use the `cycle_tracker` macro needs to import it and then annotate the function with it
-```rust
+```rust,ignore
 //
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use zk_cycle_macros::cycle_tracker;
