@@ -32,6 +32,7 @@ const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    let skip_prover = env::var("SKIP_PROVER").is_ok();
     // Initializing logging
     let subscriber = tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
@@ -111,10 +112,14 @@ async fn main() -> Result<(), anyhow::Error> {
 
         host.write_to_guest(&result.witness);
 
-        info!("Starting proving...");
-        let receipt = host.run().expect("Prover should run successfully");
-        info!("Start verifying..");
-        receipt.verify(ROLLUP_ID).expect("Receipt should be valid");
+        if !skip_prover {
+            info!("Starting proving...");
+            let receipt = host.run().expect("Prover should run successfully");
+            info!("Start verifying..");
+            receipt.verify(ROLLUP_ID).expect("Receipt should be valid");
+        } else {
+            let _receipt = host.run_without_proving().expect("Prover should run successfully");
+        }
 
         prev_state_root = result.state_root.0;
         info!("Completed proving and verifying block {height}");
