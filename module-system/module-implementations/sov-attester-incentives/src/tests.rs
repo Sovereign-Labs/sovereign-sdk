@@ -7,13 +7,15 @@ use serde::Serialize;
 use sov_chain_state::StateTransitionId;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Spec;
-use sov_rollup_interface::mocks::{MockProof, TestValidityCond, TestValidityCondChecker};
+use sov_rollup_interface::mocks::{
+    MockCodeCommitment, MockProof, TestValidityCond, TestValidityCondChecker,
+};
 use sov_rollup_interface::optimistic::Attestation;
 use sov_rollup_interface::zk::StateTransition;
 use sov_state::storage::{StorageKey, StorageProof};
 use sov_state::{ArrayWitness, ProverStorage, Storage, WorkingSet};
 
-use crate::call::AttesterIncentiveErrors;
+use crate::call::{AttesterIncentiveErrors, SlashingReason};
 use crate::helpers::{
     commit_get_new_working_set, execution_simulation, setup, BOND_AMOUNT, INITIAL_BOND_AMOUNT,
     INIT_HEIGHT,
@@ -372,7 +374,239 @@ fn test_valid_challenge() {
                 .unwrap(),
             INITIAL_BOND_AMOUNT - BOND_AMOUNT + BOND_AMOUNT / 2,
             "The challenger should have been rewarded"
+        );
+
+        // Check that the challenge set is empty
+        assert_eq!(
+            module
+                .bad_transition_pool
+                .get(&(INIT_HEIGHT + 1), &mut working_set),
+            None,
+            "The transition should have disappeared"
         )
+    }
+
+    {
+        // Now try to unbond the challenger
+        module
+            .unbond_challenger(&context, &mut working_set)
+            .expect("The challenger should be able to unbond");
+
+        // Check the final balance of the challenger
+        assert_eq!(
+            module
+                .bank
+                .get_balance_of(challenger_address, token_address, &mut working_set)
+                .unwrap(),
+            INITIAL_BOND_AMOUNT + BOND_AMOUNT / 2,
+            "The challenger should have been unbonded"
+        )
+    }
+}
+
+fn invalid_proof_helper(
+    proof: &Vec<u8>,
+    reason: SlashingReason,
+    challenger_address: sov_modules_api::Address,
+    context: &DefaultContext,
+    module: &crate::AttesterIncentives<
+        DefaultContext,
+        sov_rollup_interface::mocks::MockZkvm,
+        TestValidityCond,
+        TestValidityCondChecker<TestValidityCond>,
+    >,
+    working_set: &mut WorkingSet<ProverStorage<sov_state::DefaultStorageSpec>>,
+) {
+    // Let's bond the challenger and try to publish a false challenge
+    module
+        .bond_user_helper(
+            BOND_AMOUNT,
+            &challenger_address,
+            crate::call::Role::Challenger,
+            working_set,
+        )
+        .expect("Should be able to bond");
+
+    let err = module
+        .process_challenge(proof.as_slice(), INIT_HEIGHT + 1, context, working_set)
+        .unwrap_err();
+
+    // Check the error raised
+    assert_eq!(
+        err,
+        AttesterIncentiveErrors::UserSlashed(reason),
+        "The challenge processing should fail with an invalid proof error"
+    )
+}
+
+#[test]
+fn test_invalid_challenge() {
+    let tmpdir = tempfile::tempdir().unwrap();
+    let storage = ProverStorage::with_path(tmpdir.path()).unwrap();
+    let mut working_set = WorkingSet::new(storage.clone());
+    let (module, token_address, attester_address, challenger_address) = setup(&mut working_set);
+
+    let working_set = commit_get_new_working_set(&storage, working_set);
+
+    // Simulate the execution of a chain, with the genesis hash and two transitions after.
+    // Update the chain_state module and the optimistic module accordingly
+    let (exec_vars, mut working_set) =
+        execution_simulation(&module, &storage, attester_address, working_set);
+
+    // Set a bad transition to get a reward from
+    module
+        .bad_transition_pool
+        .set(&(INIT_HEIGHT + 1), &BOND_AMOUNT, &mut working_set);
+
+    // Process a correct challenge but without a bonded attester
+    let context = DefaultContext {
+        sender: challenger_address,
+    };
+
+    let transition = StateTransition {
+        initial_state_root: exec_vars.initial_state_root,
+        slot_hash: [1; 32],
+        final_state_root: exec_vars.transition_1_root,
+        rewarded_address: challenger_address,
+        validity_condition: TestValidityCond { is_valid: true },
+    };
+
+    let serialized_transition = transition.try_to_vec().unwrap();
+
+    let commitment = module
+        .commitment_to_allowed_challenge_method
+        .get(&mut working_set)
+        .expect("Should be set at genesis")
+        .commitment;
+
+    {
+        // A valid proof
+        let proof = &MockProof {
+            program_id: commitment.clone(),
+            is_valid: true,
+            log: serialized_transition.as_slice(),
+        }
+        .encode_to_vec();
+
+        let err = module
+            .process_challenge(
+                proof.as_slice(),
+                INIT_HEIGHT + 1,
+                &context,
+                &mut working_set,
+            )
+            .unwrap_err();
+
+        // Check the error raised
+        assert_eq!(
+            err,
+            AttesterIncentiveErrors::UserNotBonded,
+            "The challenge processing should fail with an unbonded error"
+        )
+    }
+
+    // Invalid proofs
+    {
+        // An invalid proof
+        let proof = &MockProof {
+            program_id: commitment.clone(),
+            is_valid: false,
+            log: serialized_transition.as_slice(),
+        }
+        .encode_to_vec();
+
+        invalid_proof_helper(
+            proof,
+            SlashingReason::InvalidProofOutputs,
+            challenger_address,
+            &context,
+            &module,
+            &mut working_set,
+        );
+
+        // Bad slot hash
+        let bad_transition = StateTransition {
+            initial_state_root: exec_vars.initial_state_root,
+            slot_hash: [2; 32],
+            final_state_root: exec_vars.transition_1_root,
+            rewarded_address: challenger_address,
+            validity_condition: TestValidityCond { is_valid: true },
+        }
+        .try_to_vec()
+        .unwrap();
+
+        // An invalid proof
+        let proof = &MockProof {
+            program_id: commitment.clone(),
+            is_valid: true,
+            log: bad_transition.as_slice(),
+        }
+        .encode_to_vec();
+
+        invalid_proof_helper(
+            proof,
+            SlashingReason::TransitionInvalid,
+            challenger_address,
+            &context,
+            &module,
+            &mut working_set,
+        );
+
+        // Bad validity condition
+        let bad_transition = StateTransition {
+            initial_state_root: exec_vars.initial_state_root,
+            slot_hash: [1; 32],
+            final_state_root: exec_vars.transition_1_root,
+            rewarded_address: challenger_address,
+            validity_condition: TestValidityCond { is_valid: false },
+        }
+        .try_to_vec()
+        .unwrap();
+
+        // An invalid proof
+        let proof = &MockProof {
+            program_id: MockCodeCommitment([0; 32]),
+            is_valid: true,
+            log: bad_transition.as_slice(),
+        }
+        .encode_to_vec();
+
+        invalid_proof_helper(
+            proof,
+            SlashingReason::TransitionInvalid,
+            challenger_address,
+            &context,
+            &module,
+            &mut working_set,
+        );
+
+        // Bad initial root
+        let bad_transition = StateTransition {
+            initial_state_root: exec_vars.transition_1_root,
+            slot_hash: [1; 32],
+            final_state_root: exec_vars.transition_1_root,
+            rewarded_address: challenger_address,
+            validity_condition: TestValidityCond { is_valid: true },
+        }
+        .try_to_vec()
+        .unwrap();
+
+        // An invalid proof
+        let proof = &MockProof {
+            program_id: MockCodeCommitment([0; 32]),
+            is_valid: true,
+            log: bad_transition.as_slice(),
+        }
+        .encode_to_vec();
+
+        invalid_proof_helper(
+            proof,
+            SlashingReason::InvalidInitialHash,
+            challenger_address,
+            &context,
+            &module,
+            &mut working_set,
+        );
     }
 }
 
@@ -439,57 +673,4 @@ fn test_unbonding() {
     //     unlocked_balance,
     //     Some(BOND_AMOUNT + initial_unlocked_balance)
     // );
-}
-
-#[test]
-fn test_prover_not_bonded() {
-    let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let (module, _token_address, attester_address, _challenger_address) = setup(&mut working_set);
-    let context = DefaultContext {
-        sender: attester_address,
-    };
-
-    // Unbond the prover
-    module
-        .unbond_challenger(&context, &mut working_set)
-        .expect("Unbonding should succeed");
-
-    // Assert that the prover no longer has bonded tokens
-    assert_eq!(
-        module
-            .get_bond_amount(
-                attester_address,
-                crate::call::Role::Attester,
-                &mut working_set
-            )
-            .value,
-        0
-    );
-
-    // Process a valid proof
-    {
-        let proof =
-            module.get_bond_proof(attester_address, &ArrayWitness::default(), &mut working_set);
-
-        let storage_proof = StorageProof {
-            key: StorageKey::new(module.bonded_attesters.prefix(), &attester_address),
-            value: Some(INITIAL_BOND_AMOUNT.to_le_bytes().to_vec().into()),
-            proof: proof.proof,
-        };
-
-        let attestation = Attestation {
-            initial_state_root: [0; 32],
-            da_block_hash: [0; 32],
-            post_state_root: [0; 32],
-            proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
-                transition_num: 0,
-                proof: storage_proof,
-            },
-        };
-
-        module
-            .process_attestation(attestation, &context, &mut working_set)
-            .expect("An invalid proof is not an error");
-    }
 }

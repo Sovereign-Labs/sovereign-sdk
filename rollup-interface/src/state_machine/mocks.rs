@@ -28,7 +28,9 @@ impl Matches<MockCodeCommitment> for MockCodeCommitment {
 }
 
 /// A mock validity condition that is always valid, used as a genesis validity condition for now.
-#[derive(Clone, Copy, Debug, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Default)]
+#[derive(
+    Clone, Copy, Debug, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Default, PartialEq,
+)]
 pub struct MockValidityCond;
 
 impl ValidityCondition for MockValidityCond {

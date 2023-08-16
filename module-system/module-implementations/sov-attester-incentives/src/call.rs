@@ -676,6 +676,10 @@ impl<
                 // Reward the challenger with half of the attestation reward (avoid DOS)
                 self.reward_sender(attestation_reward / 2, context, working_set)?;
 
+                // Now remove the bad transition from the pool
+                self.bad_transition_pool
+                    .remove(&transition_num, working_set);
+
                 working_set.add_event(
                     "processed_valid_proof",
                     &format!("challenger: {:?}", context.sender()),
