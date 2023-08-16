@@ -13,6 +13,7 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["rc"] }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
@@ -31,5 +32,6 @@ tempfile = { workspace = true }
 
 [features]
 default = ["native"]
+arbitrary = ["dep:arbitrary", "sov-state/arbitrary"]
 serde = ["dep:serde", "dep:serde_json"]
 native = ["serde", "sov-state/native", "sov-modules-api/native", "dep:jsonrpsee", "dep:schemars", "dep:clap"]

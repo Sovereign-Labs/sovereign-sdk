@@ -11,11 +11,12 @@ cargo-fuzz = true
 libfuzzer-sys = "0.4"
 serde_json = "1"
 tempfile = "3"
+rand = "0.8"
 
 # Sovereign-maintained dependencies.
 jupiter = { path = "../adapters/celestia" }
-sov-modules-api = { path = "../module-system/sov-modules-api" }
-sov-accounts = { path = "../module-system/module-implementations/sov-accounts" }
+sov-modules-api = { path = "../module-system/sov-modules-api", features = ["arbitrary"] }
+sov-accounts = { path = "../module-system/module-implementations/sov-accounts", features = ["arbitrary"] }
 sov-bank = { path = "../module-system/module-implementations/sov-bank" }
 sov-state = { path = "../module-system/sov-state" }
 
@@ -66,6 +67,12 @@ test = false
 doc = false
 
 [[bin]]
+name = "accounts_call_random"
+path = "fuzz_targets/accounts_call_random.rs"
+test = false
+doc = false
+
+[[bin]]
 name = "bank_parse_call_message"
 path = "fuzz_targets/bank_parse_call_message.rs"
 test = false
@@ -74,5 +81,11 @@ doc = false
 [[bin]]
 name = "accounts_parse_call_message"
 path = "fuzz_targets/accounts_parse_call_message.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "accounts_parse_call_message_random"
+path = "fuzz_targets/accounts_parse_call_message_random.rs"
 test = false
 doc = false

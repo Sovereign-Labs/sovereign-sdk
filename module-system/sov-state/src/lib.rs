@@ -44,8 +44,8 @@ pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 // All the collection types in this crate are backed by the same storage instance, this means that insertions of the same key
 // to two different `StorageMaps` would collide with each other. We solve it by instantiating every collection type with a unique
 // prefix that is prepended to each key.
-
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct Prefix {
     prefix: AlignedVec,
 }

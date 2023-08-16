@@ -8,9 +8,17 @@ pub struct AlignedVec {
 }
 
 impl AlignedVec {
-    // Creates a new AlignedVec whose length is aligned to 4 bytes.
-    pub fn new(vector: Vec<u8>) -> Self {
-        // TODO pad the vector to
+    /// The length of the chunks of the aligned vector.
+    pub const ALIGNMENT: usize = 4;
+
+    // Creates a new AlignedVec whose length is aligned to [Self::ALIGNMENT] bytes.
+    pub fn new(mut vector: Vec<u8>) -> Self {
+        let len = vector.len();
+        let pad = (len % Self::ALIGNMENT) != 0;
+        let len = (pad as usize + len / Self::ALIGNMENT) * Self::ALIGNMENT;
+
+        vector.resize(len, 0);
+
         Self { inner: vector }
     }
 
@@ -18,6 +26,11 @@ impl AlignedVec {
     pub fn extend(&mut self, other: &Self) {
         // TODO check if the standard extend method does the right thing.
         self.inner.extend(&other.inner);
+        debug_assert_eq!(
+            self.inner.len() % Self::ALIGNMENT,
+            0,
+            "`AlignedVec` is expected to have well-formed chunks"
+        );
     }
 
     pub fn into_inner(self) -> Vec<u8> {
@@ -37,5 +50,12 @@ impl AlignedVec {
 impl AsRef<Vec<u8>> for AlignedVec {
     fn as_ref(&self) -> &Vec<u8> {
         &self.inner
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl<'a> arbitrary::Arbitrary<'a> for AlignedVec {
+    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        u.arbitrary().map(Self::new)
     }
 }

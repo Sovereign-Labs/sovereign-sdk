@@ -1,5 +1,5 @@
 use anyhow::{ensure, Result};
-use sov_modules_api::{CallResponse, Signature};
+use sov_modules_api::{CallResponse, Context, Signature};
 use sov_state::WorkingSet;
 
 use crate::Accounts;
@@ -20,7 +20,7 @@ pub const UPDATE_ACCOUNT_MSG: [u8; 32] = [1; 32];
     )
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub enum CallMessage<C: sov_modules_api::Context> {
+pub enum CallMessage<C: Context> {
     /// Updates a public key for the corresponding Account.
     /// The sender must be in possession of the new key.
     UpdatePublicKey(
@@ -31,7 +31,7 @@ pub enum CallMessage<C: sov_modules_api::Context> {
     ),
 }
 
-impl<C: sov_modules_api::Context> Accounts<C> {
+impl<C: Context> Accounts<C> {
     pub(crate) fn update_public_key(
         &self,
         new_pub_key: C::PublicKey,
@@ -70,5 +70,23 @@ impl<C: sov_modules_api::Context> Accounts<C> {
             "New PublicKey already exists"
         );
         Ok(())
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl<'a, C> arbitrary::Arbitrary<'a> for CallMessage<C>
+where
+    C: Context,
+    C::PrivateKey: arbitrary::Arbitrary<'a>,
+{
+    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        use sov_modules_api::PrivateKey;
+
+        let secret = C::PrivateKey::arbitrary(u)?;
+        let public = secret.pub_key();
+        let payload = <Vec<u8>>::arbitrary(u)?;
+        let signature = secret.sign(&payload);
+
+        Ok(Self::UpdatePublicKey(public, signature))
     }
 }

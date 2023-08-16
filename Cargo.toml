@@ -56,6 +56,7 @@ jmt = { git = "https://github.com/penumbra-zone/jmt", commit = "46b4b00" }
 # External dependencies
 async-trait = "0.1.71"
 anyhow = "1.0.68"
+arbitrary = { version = "1.3.0", features = ["derive"] }
 borsh = { version = "0.10.3", features = ["rc", "bytes"] }
 # TODO: Consider replacing this serialization format
 #     https://github.com/Sovereign-Labs/sovereign-sdk/issues/283

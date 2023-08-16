@@ -111,6 +111,40 @@ pub mod private_key {
             self.pub_key().to_address::<Address>()
         }
     }
+
+    #[cfg(feature = "arbitrary")]
+    impl<'a> arbitrary::Arbitrary<'a> for DefaultPrivateKey {
+        fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+            use rand::rngs::StdRng;
+            use rand::SeedableRng;
+
+            // it is important to generate the secret deterministically from the arbitrary argument
+            // so keys and signatures will be reproductible for a given seed. this unlocks fuzzy
+            // replay
+            let seed = <[u8; 32]>::arbitrary(u)?;
+            let rng = &mut StdRng::from_seed(seed);
+            let key_pair = Keypair::generate(rng);
+
+            Ok(Self { key_pair })
+        }
+    }
+
+    #[cfg(feature = "arbitrary")]
+    impl<'a> arbitrary::Arbitrary<'a> for DefaultPublicKey {
+        fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+            DefaultPrivateKey::arbitrary(u).map(|p| p.pub_key())
+        }
+    }
+
+    #[cfg(feature = "arbitrary")]
+    impl<'a> arbitrary::Arbitrary<'a> for DefaultSignature {
+        fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+            // the secret/public pair is lost; it is impossible to verify this signature
+            // to run a verification, generate the keys+payload individually
+            let payload = <Vec<u8>>::arbitrary(u)?;
+            DefaultPrivateKey::arbitrary(u).map(|s| s.sign(&payload))
+        }
+    }
 }
 
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]

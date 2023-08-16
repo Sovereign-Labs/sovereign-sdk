@@ -75,3 +75,32 @@ impl<K: BorshSerialize, V: BorshSerialize + BorshDeserialize> StateMap<K, V> {
         &self.prefix
     }
 }
+
+#[cfg(feature = "arbitrary")]
+impl<'a, K, V> StateMap<K, V>
+where
+    K: arbitrary::Arbitrary<'a> + BorshSerialize,
+    V: arbitrary::Arbitrary<'a> + BorshSerialize + BorshDeserialize,
+{
+    pub fn arbitrary_workset<S>(
+        u: &mut arbitrary::Unstructured<'a>,
+        working_set: &mut WorkingSet<S>,
+    ) -> arbitrary::Result<Self>
+    where
+        S: Storage,
+    {
+        use arbitrary::Arbitrary;
+
+        let prefix = Prefix::arbitrary(u)?;
+        let len = u.arbitrary_len::<(K, V)>()?;
+
+        (0..len).try_fold(Self::new(prefix), |map, _| {
+            let key = K::arbitrary(u)?;
+            let value = V::arbitrary(u)?;
+
+            map.set(&key, &value, working_set);
+
+            Ok(map)
+        })
+    }
+}

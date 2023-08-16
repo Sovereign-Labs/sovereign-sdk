@@ -6,6 +6,8 @@ use sov_modules_api::default_context::DefaultContext;
 
 type C = DefaultContext;
 
-fuzz_target!(|input: &[u8]| {
-    serde_json::from_slice::<CallMessage<C>>(input).ok();
+fuzz_target!(|input: CallMessage<C>| {
+    let json = serde_json::to_vec(&input).unwrap();
+    let msg = serde_json::from_slice::<CallMessage<C>>(&json).unwrap();
+    assert_eq!(input, msg);
 });
