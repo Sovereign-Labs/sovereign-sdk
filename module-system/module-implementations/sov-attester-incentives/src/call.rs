@@ -361,7 +361,13 @@ impl<
             .map_err(|_err| AttesterIncentiveErrors::InvalidBondingProof)?;
 
         // We have to check that the storage key is the same as the sender's
-        if attester_key != StorageKey::new(self.bonded_attesters.prefix(), context.sender()) {
+        if attester_key
+            != StorageKey::new(
+                self.bonded_attesters.prefix(),
+                context.sender(),
+                &self.bonded_attesters.codec,
+            )
+        {
             return Err(AttesterIncentiveErrors::InvalidSender);
         }
 

@@ -1,4 +1,5 @@
 use sov_chain_state::{ChainState, ChainStateConfig};
+use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
@@ -6,7 +7,7 @@ use sov_modules_api::{Context, PublicKey, Spec};
 use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
 use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
 use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::mocks::{MockZkvm, TestBlob};
+use sov_rollup_interface::mocks::{MockBlob, MockZkvm};
 use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::WorkingSet;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
@@ -38,13 +39,15 @@ impl<C: Context, Cond: ValidityCondition> TxHooks for TestRuntime<C, Cond> {
     }
 }
 
-impl<C: Context, Cond: ValidityCondition> ApplyBlobHooks for TestRuntime<C, Cond> {
+impl<C: Context, Cond: ValidityCondition, B: BlobReaderTrait> ApplyBlobHooks<B>
+    for TestRuntime<C, Cond>
+{
     type Context = C;
-    type BlobResult = SequencerOutcome;
+    type BlobResult = SequencerOutcome<B::Address>;
 
     fn begin_blob_hook(
         &self,
-        _blob: &mut impl BlobReaderTrait,
+        _blob: &mut B,
         _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
         Ok(())
@@ -73,7 +76,26 @@ impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for TestRuntime<C, Con
     fn end_slot_hook(&self, _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>) {}
 }
 
-impl<C: Context, Cond: ValidityCondition> Runtime<C, Cond> for TestRuntime<C, Cond> {}
+impl<C: Context, Cond: ValidityCondition> BlobSelector for TestRuntime<C, Cond> {
+    type Context = C;
+
+    fn get_blobs_for_this_slot<'a, I, B>(
+        &self,
+        current_blobs: I,
+        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, B>>>
+    where
+        B: BlobReaderTrait,
+        I: IntoIterator<Item = &'a mut B>,
+    {
+        Ok(current_blobs.into_iter().map(Into::into).collect())
+    }
+}
+
+impl<C: Context, Cond: ValidityCondition, B: BlobReaderTrait> Runtime<C, Cond, B>
+    for TestRuntime<C, Cond>
+{
+}
 
 pub(crate) fn create_demo_genesis_config<C: Context, Cond: ValidityCondition>(
     admin: <C as Spec>::Address,
@@ -92,7 +114,7 @@ pub(crate) fn get_working_set<C: Context, Cond: ValidityCondition>(
         Cond,
         MockZkvm,
         TestRuntime<C, Cond>,
-        TestBlob<<DefaultContext as Spec>::Address>,
+        MockBlob<<DefaultContext as Spec>::Address>,
     >,
 ) -> WorkingSet<<C as Spec>::Storage> {
     WorkingSet::new(app_template.current_storage.clone())

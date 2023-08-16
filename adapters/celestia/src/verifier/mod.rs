@@ -13,6 +13,8 @@ pub mod address;
 pub mod proofs;
 
 use proofs::*;
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+use zk_cycle_macros::cycle_tracker;
 
 use self::address::CelestiaAddress;
 use crate::share_commit::recreate_commitment;
@@ -151,6 +153,7 @@ impl da::DaVerifier for CelestiaVerifier {
         }
     }
 
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn verify_relevant_tx_list<H: Digest>(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
@@ -239,7 +242,7 @@ impl da::DaVerifier for CelestiaVerifier {
                     continue;
                 }
                 let tx: &BlobWithSender = tx_iter.next().ok_or(ValidationError::MissingTx)?;
-                if tx.sender.as_ref() != pfb.signer.as_bytes() {
+                if tx.sender.to_string() != pfb.signer {
                     return Err(ValidationError::InvalidSigner);
                 }
 
@@ -248,6 +251,7 @@ impl da::DaVerifier for CelestiaVerifier {
                 let mut blob_iter = blob_ref.data();
                 let mut blob_data = vec![0; blob_iter.remaining()];
                 blob_iter.copy_to_slice(blob_data.as_mut_slice());
+
                 let tx_data = tx.data().accumulator();
 
                 match tx_data {

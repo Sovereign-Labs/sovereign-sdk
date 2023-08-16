@@ -16,6 +16,5 @@ hex = { workspace = true }
 
 sov-rollup-interface = { path = "../../rollup-interface" }
 
-
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }

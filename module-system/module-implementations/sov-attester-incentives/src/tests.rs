@@ -1,7 +1,7 @@
 use borsh::BorshSerialize;
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::mocks::{
-    MockCodeCommitment, MockProof, TestValidityCond, TestValidityCondChecker,
+    MockCodeCommitment, MockProof, MockValidityCond, MockValidityCondChecker,
 };
 use sov_rollup_interface::optimistic::Attestation;
 use sov_rollup_interface::zk::StateTransition;
@@ -343,7 +343,7 @@ fn test_valid_challenge() {
             slot_hash: [1; 32],
             final_state_root: transition_1.state_root,
             rewarded_address: challenger_address,
-            validity_condition: TestValidityCond { is_valid: true },
+            validity_condition: MockValidityCond { is_valid: true },
         };
 
         let serialized_transition = transition.try_to_vec().unwrap();
@@ -416,8 +416,8 @@ fn invalid_proof_helper(
     module: &crate::AttesterIncentives<
         DefaultContext,
         sov_rollup_interface::mocks::MockZkvm,
-        TestValidityCond,
-        TestValidityCondChecker<TestValidityCond>,
+        MockValidityCond,
+        MockValidityCondChecker<MockValidityCond>,
     >,
     working_set: &mut WorkingSet<ProverStorage<sov_state::DefaultStorageSpec>>,
 ) {
@@ -476,7 +476,7 @@ fn test_invalid_challenge() {
         slot_hash: [1; 32],
         final_state_root: transition_1.state_root,
         rewarded_address: challenger_address,
-        validity_condition: TestValidityCond { is_valid: true },
+        validity_condition: MockValidityCond { is_valid: true },
     };
 
     let serialized_transition = transition.try_to_vec().unwrap();
@@ -538,7 +538,7 @@ fn test_invalid_challenge() {
             slot_hash: [2; 32],
             final_state_root: transition_1.state_root,
             rewarded_address: challenger_address,
-            validity_condition: TestValidityCond { is_valid: true },
+            validity_condition: MockValidityCond { is_valid: true },
         }
         .try_to_vec()
         .unwrap();
@@ -566,7 +566,7 @@ fn test_invalid_challenge() {
             slot_hash: [1; 32],
             final_state_root: transition_1.state_root,
             rewarded_address: challenger_address,
-            validity_condition: TestValidityCond { is_valid: false },
+            validity_condition: MockValidityCond { is_valid: false },
         }
         .try_to_vec()
         .unwrap();
@@ -594,7 +594,7 @@ fn test_invalid_challenge() {
             slot_hash: [1; 32],
             final_state_root: transition_1.state_root,
             rewarded_address: challenger_address,
-            validity_condition: TestValidityCond { is_valid: true },
+            validity_condition: MockValidityCond { is_valid: true },
         }
         .try_to_vec()
         .unwrap();

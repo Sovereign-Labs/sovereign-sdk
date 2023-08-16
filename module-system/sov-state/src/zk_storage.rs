@@ -2,11 +2,16 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use jmt::{JellyfishMerkleTree, KeyHash, Version};
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+use zk_cycle_macros::cycle_tracker;
 
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::storage::{StorageKey, StorageProof, StorageValue};
 use crate::witness::{TreeWitnessReader, Witness};
 use crate::{MerkleProofSpec, Storage};
+
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+extern crate risc0_zkvm;
 
 pub struct ZkStorage<S: MerkleProofSpec> {
     prev_state_root: [u8; 32],
@@ -50,6 +55,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         Ok(witness.get_hint())
     }
 
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn validate_and_commit(
         &self,
         state_accesses: OrderedReadsAndWrites,
@@ -93,7 +99,6 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         let (new_root, _tree_update) = jmt
             .put_value_set(batch, next_version)
             .expect("JMT update must succeed");
-
         Ok(new_root.0)
     }
 

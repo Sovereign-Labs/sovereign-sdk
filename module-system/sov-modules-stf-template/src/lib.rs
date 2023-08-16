@@ -6,23 +6,28 @@ mod tx_verifier;
 
 pub use app_template::AppTemplate;
 pub use batch::Batch;
+use sov_modules_api::capabilities::BlobSelector;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
+use sov_rollup_interface::AddressTrait;
 use sov_state::{StateCheckpoint, Storage, WorkingSet};
 use tracing::info;
 pub use tx_verifier::RawTx;
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+use zk_cycle_macros::cycle_tracker;
 
 /// This trait has to be implemented by a runtime in order to be used in `AppTemplate`.
-pub trait Runtime<C: Context, Cond: ValidityCondition>:
+pub trait Runtime<C: Context, Cond: ValidityCondition, B: BlobReaderTrait>:
     DispatchCall<Context = C>
     + Genesis<Context = C>
     + TxHooks<Context = C>
     + SlotHooks<Cond, Context = C>
-    + ApplyBlobHooks<Context = C, BlobResult = SequencerOutcome>
+    + ApplyBlobHooks<B, Context = C, BlobResult = SequencerOutcome<B::Address>>
+    + BlobSelector<Context = C>
 {
 }
 
@@ -36,20 +41,17 @@ pub enum TxEffect {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-// TODO: Should be generic for Address for pretty printing https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
 /// Represents the different outcomes that can occur for a sequencer after batch processing.
-pub enum SequencerOutcome {
+pub enum SequencerOutcome<A: AddressTrait> {
     /// Sequencer receives reward amount in defined token and can withdraw its deposit
     Rewarded(u64),
     /// Sequencer loses its deposit and receives no reward
     Slashed {
         /// Reason why sequencer was slashed.
         reason: SlashingReason,
-        // Keep this comment for so it doesn't need to investigate serde issue again.
-        // https://github.com/Sovereign-Labs/sovereign-sdk/issues/465
-        // #[serde(bound(deserialize = ""))]
+        #[serde(bound(deserialize = ""))]
         /// Sequencer address on DA.
-        sequencer_da_address: Vec<u8>,
+        sequencer_da_address: A,
     },
     /// Batch was ignored, sequencer deposit left untouched.
     Ignored,
@@ -66,11 +68,15 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-impl<C: Context, RT, Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait>
-    AppTemplate<C, Cond, Vm, RT, B>
+impl<C, RT, Vm, Cond, B> AppTemplate<C, Cond, Vm, RT, B>
 where
-    RT: Runtime<C, Cond>,
+    C: Context,
+    Vm: Zkvm,
+    Cond: ValidityCondition,
+    B: BlobReaderTrait,
+    RT: Runtime<C, Cond, B>,
 {
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_slot(
         &mut self,
         slot_data: &impl SlotData<Cond = Cond>,
@@ -85,6 +91,7 @@ where
         self.checkpoint = Some(working_set.checkpoint());
     }
 
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn end_slot(&mut self) -> (jmt::RootHash, <<C as Spec>::Storage as Storage>::Witness) {
         let (cache_log, witness) = self.checkpoint.take().unwrap().freeze();
         let root_hash = self
@@ -100,10 +107,13 @@ where
     }
 }
 
-impl<C: Context, RT, Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait>
-    StateTransitionFunction<Vm, B> for AppTemplate<C, Cond, Vm, RT, B>
+impl<C, RT, Vm, Cond, B> StateTransitionFunction<Vm, B> for AppTemplate<C, Cond, Vm, RT, B>
 where
-    RT: Runtime<C, Cond>,
+    C: Context,
+    Vm: Zkvm,
+    Cond: ValidityCondition,
+    B: BlobReaderTrait,
+    RT: Runtime<C, Cond, B>,
 {
     type StateRoot = jmt::RootHash;
 
@@ -111,7 +121,7 @@ where
 
     type TxReceiptContents = TxEffect;
 
-    type BatchReceiptContents = SequencerOutcome;
+    type BatchReceiptContents = SequencerOutcome<B::Address>;
 
     type Witness = <<C as Spec>::Storage as Storage>::Witness;
 
@@ -150,11 +160,28 @@ where
     {
         self.begin_slot(slot_data, witness);
 
+        // Initialize batch workspace
+        let mut batch_workspace = self
+            .checkpoint
+            .take()
+            .expect("Working_set was initialized in begin_slot")
+            .to_revertable();
+
+        let selected_blobs = self
+            .runtime
+            .get_blobs_for_this_slot(blobs, &mut batch_workspace)
+            .expect("blob selection must succeed, probably serialization failed");
+
+        self.checkpoint = Some(batch_workspace.checkpoint());
+
         let mut batch_receipts = vec![];
-        for (blob_idx, blob) in blobs.into_iter().enumerate() {
-            let batch_receipt = self.apply_blob(blob).unwrap_or_else(Into::into);
+
+        for (blob_idx, mut blob) in selected_blobs.into_iter().enumerate() {
+            let batch_receipt = self
+                .apply_blob(blob.as_mut_ref())
+                .unwrap_or_else(Into::into);
             info!(
-                "blob #{} with blob_hash 0x{} has been applied with #{} transactions, sequencer outcome {:?}",
+                "priority blob #{} with blob_hash 0x{} has been applied with #{} transactions, sequencer outcome {:?}",
                 blob_idx,
                 hex::encode(batch_receipt.batch_hash),
                 batch_receipt.tx_receipts.len(),
@@ -168,11 +195,10 @@ where
                     tx_receipt.receipt
                 );
             }
-            batch_receipts.push(batch_receipt);
+            batch_receipts.push(batch_receipt.clone());
         }
 
         let (state_root, witness) = self.end_slot();
-
         SlotResult {
             state_root,
             batch_receipts,

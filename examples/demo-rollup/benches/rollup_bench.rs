@@ -1,3 +1,4 @@
+mod rng_xfers;
 use std::env;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -11,12 +12,12 @@ use demo_stf::app::App;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use jupiter::verifier::address::CelestiaAddress;
 use risc0_adapter::host::Risc0Verifier;
+use rng_xfers::RngDaService;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_demo_rollup::rng_xfers::RngDaService;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
 use sov_rollup_interface::mocks::{
-    TestBlob, TestBlock, TestBlockHeader, TestHash, TestValidityCond,
+    MockBlob, MockBlock, MockBlockHeader, MockHash, MockValidityCond,
 };
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -45,7 +46,7 @@ fn rollup_bench(_bench: &mut Criterion) {
 
     let da_service = Arc::new(RngDaService::new());
 
-    let demo_runner = App::<Risc0Verifier, TestValidityCond, TestBlob<CelestiaAddress>>::new(
+    let demo_runner = App::<Risc0Verifier, MockValidityCond, MockBlob<CelestiaAddress>>::new(
         rollup_config.runner.storage,
     );
 
@@ -69,13 +70,13 @@ fn rollup_bench(_bench: &mut Criterion) {
         let num_bytes = height.to_le_bytes();
         let mut barray = [0u8; 32];
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
-        let filtered_block = TestBlock {
+        let filtered_block = MockBlock {
             curr_hash: barray,
-            header: TestBlockHeader {
-                prev_hash: TestHash([0u8; 32]),
+            header: MockBlockHeader {
+                prev_hash: MockHash([0u8; 32]),
             },
             height,
-            validity_cond: TestValidityCond::default(),
+            validity_cond: MockValidityCond::default(),
         };
         blocks.push(filtered_block);
 

@@ -61,7 +61,11 @@ where
         C::Storage: NativeStorage,
     {
         working_set.backing().get_with_proof(
-            StorageKey::new(self.bonded_attesters.prefix(), &address),
+            StorageKey::new(
+                self.bonded_attesters.prefix(),
+                &address,
+                &self.bonded_attesters.codec,
+            ),
             witness,
         )
     }

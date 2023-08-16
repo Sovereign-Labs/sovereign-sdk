@@ -6,7 +6,7 @@ pub mod test {
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_api::PrivateKey;
     use sov_modules_stf_template::{Batch, SequencerOutcome};
-    use sov_rollup_interface::mocks::{MockZkvm, TestBlock};
+    use sov_rollup_interface::mocks::{MockBlock, MockZkvm};
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::{ProverStorage, WorkingSet};
 
@@ -37,7 +37,7 @@ pub mod test {
 
             let mut blobs = [blob];
 
-            let data = TestBlock::default();
+            let data = MockBlock::default();
 
             let result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
                 &mut demo,
@@ -99,7 +99,7 @@ pub mod test {
 
         let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
-        let data = TestBlock::default();
+        let data = MockBlock::default();
 
         let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
@@ -159,7 +159,7 @@ pub mod test {
             let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
             let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
             let mut blobs = [blob];
-            let data = TestBlock::default();
+            let data = MockBlock::default();
 
             let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
                 &mut demo,
@@ -219,7 +219,7 @@ pub mod test {
         let txs = simulate_da(value_setter_admin_private_key, election_admin_private_key);
         let blob = new_test_blob_from_batch(Batch { txs }, &some_sequencer, [0; 32]);
         let mut blobs = [blob];
-        let data = TestBlock::default();
+        let data = MockBlock::default();
 
         let apply_block_result = StateTransitionFunction::<MockZkvm, TestBlob>::apply_slot(
             &mut demo,
