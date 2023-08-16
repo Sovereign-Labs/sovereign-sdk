@@ -6,7 +6,6 @@ use risc0_zkvm::{
     Executor, ExecutorEnvBuilder, LocalExecutor, SegmentReceipt, Session, SessionReceipt,
 };
 use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
-
 #[cfg(feature = "bench")]
 use zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cycles};
 
