@@ -1,4 +1,4 @@
-//! TODO
+//! Module specific RPC methods.
 use std::sync::Arc;
 
 use anyhow::Context;
