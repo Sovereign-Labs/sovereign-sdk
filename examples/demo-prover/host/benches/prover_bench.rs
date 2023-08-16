@@ -2,6 +2,7 @@ use std::env;
 use std::fs::{read_to_string, remove_file, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
@@ -84,17 +85,8 @@ fn get_config(rollup_trace: &str) -> Config {
         .unwrap()
 }
 
-use std::collections::HashMap;
-
 #[cfg(feature = "bench")]
 use risc0_adapter::metrics::GLOBAL_HASHMAP;
-
-// #[derive(Debug, Clone, PartialEq, Deserialize)]
-// pub struct RollupConfig {
-//     pub start_height: u64,
-//     pub da: DaServiceConfig,
-//     pub runner: RunnerConfig,
-// }
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
