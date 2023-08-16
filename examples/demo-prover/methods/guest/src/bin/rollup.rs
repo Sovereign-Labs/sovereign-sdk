@@ -52,9 +52,7 @@ pub fn main() {
     env::write(&"blobs have been read\n");
 
     // Step 2: Apply blobs
-    let mut app = create_zk_app_template::<Risc0Guest, ChainValidityCondition, BlobWithSender>(
-        prev_state_root_hash,
-    );
+    let mut app = create_zk_app_template::<Risc0Guest, CelestiaSpec>(prev_state_root_hash);
 
     let witness: ArrayWitness = guest.read_from_host();
     env::write(&"Witness have been read\n");
