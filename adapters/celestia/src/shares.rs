@@ -279,16 +279,18 @@ impl std::error::Error for ShareParsingError {}
 impl NamespaceGroup {
     pub fn from_b64(b64: &str) -> Result<Self, ShareParsingError> {
         let mut decoded = Vec::with_capacity((b64.len() + 3) / 4 * 3);
+        if b64.is_empty() {
+            error!("Empty input");
+            return Err(ShareParsingError::ErrWrongLength);
+        }
+
         // unsafe { decoded.set_len((b64.len() / 4 * 3)) }
         if let Err(err) = B64_ENGINE.decode_slice(b64, &mut decoded) {
             info!("Error decoding NamespaceGroup from base64: {}", err);
             return Err(ShareParsingError::ErrInvalidBase64);
         }
         let mut output: Bytes = decoded.into();
-        if output.is_empty() {
-            error!("Empty input");
-            return Err(ShareParsingError::ErrWrongLength);
-        } else if output.len() % SHARE_SIZE != 0 {
+        if output.len() % SHARE_SIZE != 0 {
             error!(
                 "Wrong length: Expected a multiple of 512, got: {}",
                 output.len()

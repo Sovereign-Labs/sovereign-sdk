@@ -23,9 +23,6 @@ sov-state = { path = "../module-system/sov-state" }
 [workspace]
 members = ["."]
 
-[profile.release]
-debug = 1
-
 [[bin]]
 name = "namespace_group_from_b64"
 path = "fuzz_targets/namespace_group_from_b64.rs"

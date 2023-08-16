@@ -29,8 +29,11 @@ lint-fix:  ## cargo fmt, fix and clippy
 	cargo fix --allow-dirty
 	cargo clippy --fix --allow-dirty
 
-check-features: ## Checks that project compiles with all combinations of features
+check-features: check-fuzz ## Checks that project compiles with all combinations of features
 	cargo hack --feature-powerset check
+
+check-fuzz: ## Checks that fuzz member compiles
+	$(MAKE) -C fuzz check
 
 find-unused-deps: ## Prints unused dependencies for project. Note: requires nightly
 	cargo udeps --all-targets --all-features

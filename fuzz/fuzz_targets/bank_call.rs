@@ -1,8 +1,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use sov_bank::call::CallMessage;
-use sov_bank::Bank;
+use sov_bank::{Bank, CallMessage};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Module;
 use sov_state::{ProverStorage, WorkingSet};
