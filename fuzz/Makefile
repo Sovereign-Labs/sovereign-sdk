@@ -10,15 +10,18 @@ help: ## Display this help message
 check: ## Checks that fuzz member compiles
 	cargo check
 
+build-target: ## Build the target fuzz
+	cargo rustc --bin $(TARGET) $(ARGS) -- \
+		-C debuginfo=full \
+		-C debug-assertions \
+		-C passes='sancov-module' \
+		-C llvm-args='-sanitizer-coverage-level=3' \
+		-C llvm-args='-sanitizer-coverage-inline-8bit-counters' \
+		-Z sanitizer=address
+
 build: ## Build the fuzz targets
 	@for t in $(BINARIES); do \
-		cargo rustc --bin $$t $(ARGS) -- \
-			-C debuginfo=full \
-			-C debug-assertions \
-			-C passes='sancov-module' \
-			-C llvm-args='-sanitizer-coverage-level=3' \
-			-C llvm-args='-sanitizer-coverage-inline-8bit-counters' \
-			-Z sanitizer=address ; \
+		$(MAKE) build-target TARGET=$$t; \
     done
 
 targets: ## Prints all fuzz targets
@@ -26,5 +29,5 @@ targets: ## Prints all fuzz targets
 		echo $$t; \
 	done
 
-run: build ## Run the fuzz target
-	./target/$(PROFILE)/$(TARGET)
+run: build-target ## Run the fuzz target
+	./target/$(PROFILE)/$(TARGET) -artifact_prefix=artifacts/

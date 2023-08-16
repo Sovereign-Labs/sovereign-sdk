@@ -84,8 +84,10 @@ where
 
         let secret = C::PrivateKey::arbitrary(u)?;
         let public = secret.pub_key();
-        let payload = <Vec<u8>>::arbitrary(u)?;
-        let signature = secret.sign(&payload);
+
+        let payload_len = u.arbitrary_len::<u8>()?;
+        let payload = u.bytes(payload_len)?;
+        let signature = secret.sign(payload);
 
         Ok(Self::UpdatePublicKey(public, signature))
     }

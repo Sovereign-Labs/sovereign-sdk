@@ -133,7 +133,7 @@ where
         let accounts = Self {
             address,
             public_keys: sov_state::StateMap::new(prefix.clone()),
-            accounts: sov_state::StateMap::new(prefix.clone()),
+            accounts: sov_state::StateMap::new(prefix),
         };
 
         accounts

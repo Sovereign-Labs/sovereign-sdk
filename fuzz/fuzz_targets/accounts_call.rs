@@ -30,8 +30,7 @@ fuzz_target!(|input: (u16, [u8; 32], Vec<DefaultPrivateKey>)| -> Corpus {
         .into_iter()
         .map(|k| (k.as_hex(), k))
         .collect::<HashMap<_, _>>()
-        .into_iter()
-        .map(|(_, k)| k)
+        .into_values()
         .collect::<Vec<_>>();
 
     if keys.is_empty() {
@@ -56,7 +55,7 @@ fuzz_target!(|input: (u16, [u8; 32], Vec<DefaultPrivateKey>)| -> Corpus {
     for _ in 0..iterations {
         // we use slices for better select performance
         let sender = addresses.choose(rng).unwrap();
-        let context = C::new(sender.clone());
+        let context = C::new(*sender);
 
         // clear previous state
         let previous = state.get(sender).unwrap().as_hex();
@@ -75,7 +74,7 @@ fuzz_target!(|input: (u16, [u8; 32], Vec<DefaultPrivateKey>)| -> Corpus {
 
         let public = secret.pub_key();
         let sig = secret.sign(&UPDATE_ACCOUNT_MSG);
-        state.insert(sender.clone(), secret);
+        state.insert(*sender, secret);
 
         let msg = CallMessage::<C>::UpdatePublicKey(public.clone(), sig);
         accounts.call(msg, &context, working_set).unwrap();

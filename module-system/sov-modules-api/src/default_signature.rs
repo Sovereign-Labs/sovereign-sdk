@@ -141,8 +141,9 @@ pub mod private_key {
         fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
             // the secret/public pair is lost; it is impossible to verify this signature
             // to run a verification, generate the keys+payload individually
-            let payload = <Vec<u8>>::arbitrary(u)?;
-            DefaultPrivateKey::arbitrary(u).map(|s| s.sign(&payload))
+            let payload_len = u.arbitrary_len::<u8>()?;
+            let payload = u.bytes(payload_len)?;
+            DefaultPrivateKey::arbitrary(u).map(|s| s.sign(payload))
         }
     }
 }
