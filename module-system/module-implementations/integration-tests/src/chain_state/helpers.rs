@@ -7,7 +7,7 @@ use sov_modules_api::{Context, PublicKey, Spec};
 use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
 use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
 use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::mocks::{MockZkvm, TestBlob};
+use sov_rollup_interface::mocks::{MockBlob, MockZkvm};
 use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::WorkingSet;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
@@ -114,7 +114,7 @@ pub(crate) fn get_working_set<C: Context, Cond: ValidityCondition>(
         Cond,
         MockZkvm,
         TestRuntime<C, Cond>,
-        TestBlob<<DefaultContext as Spec>::Address>,
+        MockBlob<<DefaultContext as Spec>::Address>,
     >,
 ) -> WorkingSet<<C as Spec>::Storage> {
     WorkingSet::new(app_template.current_storage.clone())

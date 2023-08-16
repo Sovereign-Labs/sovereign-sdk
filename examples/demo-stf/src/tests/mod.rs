@@ -3,7 +3,7 @@ use std::path::Path;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Address;
 use sov_modules_stf_template::AppTemplate;
-use sov_rollup_interface::mocks::TestValidityCond;
+use sov_rollup_interface::mocks::MockValidityCond;
 use sov_state::ProverStorage;
 
 use crate::runtime::Runtime;
@@ -13,13 +13,13 @@ mod stf_tests;
 mod tx_revert_tests;
 pub(crate) type C = DefaultContext;
 
-pub type TestBlob = sov_rollup_interface::mocks::TestBlob<Address>;
+pub type TestBlob = sov_rollup_interface::mocks::MockBlob<Address>;
 
 pub fn create_new_demo(
     path: impl AsRef<Path>,
 ) -> AppTemplate<
     DefaultContext,
-    TestValidityCond,
+    MockValidityCond,
     sov_rollup_interface::mocks::MockZkvm,
     Runtime<DefaultContext>,
     TestBlob,
