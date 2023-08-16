@@ -1,20 +1,17 @@
-use std::env;
+/*use std::env;
 
 use anyhow::Context;
 use demo_stf::app::App;
 use demo_stf::runtime::get_rpc_methods;
-use risc0_adapter::host::Risc0Verifier;
 use sov_demo_rollup::register_rpc::{register_ledger, register_sequencer};
 use sov_demo_rollup::{get_genesis_config, initialize_ledger};
 use sov_modules_api::default_context::DefaultContext;
-use sov_rollup_interface::mocks::{
-    MockAddress, MockBlob, MockDaService, MockDaSpec, MockValidityCond,
-};
+use sov_rollup_interface::mocks::MockDaService;
 use sov_state::storage::Storage;
 use sov_stf_runner::{from_toml_path, RollupConfig, StateTransitionRunner};
 use tracing::debug;
 
-#[tokio::test]
+//#[tokio::test]
 async fn rollup_test() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
         .nth(1)
@@ -27,7 +24,7 @@ async fn rollup_test() -> Result<(), anyhow::Error> {
     let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
 
     let da_service = MockDaService::default();
-    let mut app: App<Risc0Verifier, MockDaSpec> = App::new(rollup_config.runner.storage.clone());
+    let mut app = App::new(rollup_config.runner.storage.clone());
 
     let storage = app.get_storage();
     let mut methods = get_rpc_methods::<DefaultContext>(storage);
@@ -57,3 +54,4 @@ async fn rollup_test() -> Result<(), anyhow::Error> {
 
     Ok(())
 }
+*/

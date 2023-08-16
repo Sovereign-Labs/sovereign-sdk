@@ -1,6 +1,8 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
 
+pub mod register_rpc;
+
 use std::str::FromStr;
 
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
@@ -11,10 +13,6 @@ use jupiter::types::NamespaceId;
 use jupiter::verifier::address::CelestiaAddress;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::default_context::DefaultContext;
-pub mod register_rpc;
-
-#[cfg(feature = "experimental")]
-const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
 
 /// The rollup stores its data in the namespace b"sov-test" on Celestia
 /// You can change this constant to point your rollup at a different namespace
@@ -40,7 +38,7 @@ pub struct HexKey {
 /// address, simply change the value of the SEQUENCER_DA_ADDRESS to your own address.
 /// For example:
 /// ```rust,no_run
-/// const SEQUENCER_DA_ADDRESS: [u8;47] = *b"celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208"
+/// const SEQUENCER_DA_ADDRESS: [u8;47] = *b"celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208";
 /// ```
 pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
     let hex_key: HexKey = serde_json::from_slice(include_bytes!(

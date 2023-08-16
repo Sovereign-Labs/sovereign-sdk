@@ -350,10 +350,7 @@ mod test {
     use demo_stf::runtime::{GenesisConfig, Runtime};
     use sov_modules_api::Address;
     use sov_modules_stf_template::{AppTemplate, Batch, RawTx, SequencerOutcome};
-    use sov_rollup_interface::da::DaSpec;
-    use sov_rollup_interface::mocks::{
-        MockAddress, MockBlob, MockDaSpec, MockValidityCond, MockZkvm,
-    };
+    use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockDaSpec, MockZkvm};
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::WorkingSet;
     use sov_stf_runner::Config;
@@ -426,13 +423,7 @@ mod test {
     // Test helpers
     struct TestDemo {
         config: GenesisConfig<C>,
-        demo: AppTemplate<
-            C,
-            MockValidityCond,
-            MockZkvm,
-            Runtime<C>,
-            <MockDaSpec as DaSpec>::BlobTransaction,
-        >,
+        demo: AppTemplate<C, MockDaSpec, MockZkvm, Runtime<C>>,
     }
 
     impl TestDemo {
@@ -508,28 +499,17 @@ mod test {
     }
 
     fn execute_txs(
-        demo: &mut AppTemplate<
-            C,
-            MockValidityCond,
-            MockZkvm,
-            Runtime<C>,
-            <MockDaSpec as DaSpec>::BlobTransaction,
-        >,
+        demo: &mut AppTemplate<C, MockDaSpec, MockZkvm, Runtime<C>>,
         config: GenesisConfig<C>,
         txs: Vec<RawTx>,
     ) {
-        StateTransitionFunction::<MockZkvm, <MockDaSpec as DaSpec>::BlobTransaction>::init_chain(
-            demo, config,
-        );
+        demo.init_chain(config);
 
         let data = MockBlock::default();
         let blob = new_test_blob(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS);
         let mut blobs = [blob];
 
-        let apply_block_result = StateTransitionFunction::<
-            MockZkvm,
-            <MockDaSpec as DaSpec>::BlobTransaction,
-        >::apply_slot(demo, Default::default(), &data, &mut blobs);
+        let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
@@ -542,13 +522,7 @@ mod test {
     }
 
     fn get_balance(
-        demo: &mut AppTemplate<
-            C,
-            MockValidityCond,
-            MockZkvm,
-            Runtime<C>,
-            <MockDaSpec as DaSpec>::BlobTransaction,
-        >,
+        demo: &mut AppTemplate<C, MockDaSpec, MockZkvm, Runtime<C>>,
         token_deployer_address: &Address,
         user_address: Address,
     ) -> Option<u64> {

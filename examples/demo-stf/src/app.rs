@@ -7,8 +7,8 @@ pub use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::Spec;
 use sov_modules_stf_template::AppTemplate;
 pub use sov_modules_stf_template::Batch;
-use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
+use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::zk::Zkvm;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
 use sov_state::{Storage, ZkStorage};
@@ -19,16 +19,9 @@ use sov_stf_runner::StorageConfig;
 
 use crate::runtime::Runtime;
 
-//TODO CHANGE B TO DaSpec
 #[cfg(feature = "native")]
 pub struct App<Vm: Zkvm, DA: DaSpec> {
-    pub stf: AppTemplate<
-        DefaultContext,
-        DA::ValidityCondition,
-        Vm,
-        Runtime<DefaultContext>,
-        DA::BlobTransaction,
-    >,
+    pub stf: AppTemplate<DefaultContext, DA, Vm, Runtime<DefaultContext>>,
     pub batch_builder: Option<FiFoStrictBatchBuilder<Runtime<DefaultContext>, DefaultContext>>,
 }
 
@@ -56,9 +49,9 @@ impl<Vm: Zkvm, DA: DaSpec> App<Vm, DA> {
     }
 }
 
-pub fn create_zk_app_template<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait>(
+pub fn create_zk_app_template<Vm: Zkvm, DA: DaSpec>(
     runtime_config: [u8; 32],
-) -> AppTemplate<ZkDefaultContext, Cond, Vm, Runtime<ZkDefaultContext>, B> {
+) -> AppTemplate<ZkDefaultContext, DA, Vm, Runtime<ZkDefaultContext>> {
     let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
     AppTemplate::new(storage, Runtime::default())
 }

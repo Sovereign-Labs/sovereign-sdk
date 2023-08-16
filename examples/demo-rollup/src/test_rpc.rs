@@ -1,4 +1,4 @@
-/*use std::collections::HashMap;
+use std::collections::HashMap;
 use std::net::SocketAddr;
 
 use proptest::prelude::any_with;
@@ -580,4 +580,3 @@ proptest!(
         test_helper(vec![TestExpect{payload, expected}], slots);
     }
 );
-*/
