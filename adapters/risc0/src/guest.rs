@@ -2,7 +2,6 @@
 use risc0_zkvm::guest::env;
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
-
 use crate::Risc0MethodId;
 
 pub struct Risc0Guest;

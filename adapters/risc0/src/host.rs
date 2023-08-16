@@ -7,7 +7,6 @@ use risc0_zkvm::{
 };
 use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
 
-
 use crate::Risc0MethodId;
 
 pub struct Risc0Host<'a> {

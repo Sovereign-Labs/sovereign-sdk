@@ -1,24 +1,16 @@
-
-
-
 use borsh::BorshSerialize;
-
-
-
 use sov_modules_api::default_context::DefaultContext;
-
 use sov_rollup_interface::mocks::{
     MockCodeCommitment, MockProof, TestValidityCond, TestValidityCondChecker,
 };
 use sov_rollup_interface::optimistic::Attestation;
 use sov_rollup_interface::zk::StateTransition;
-
-use sov_state::{ProverStorage, Storage, WorkingSet};
+use sov_state::{ProverStorage, WorkingSet};
 
 use crate::call::{AttesterIncentiveErrors, SlashingReason};
 use crate::helpers::{
-    commit_get_new_working_set, execution_simulation, setup, BOND_AMOUNT,
-    INITIAL_BOND_AMOUNT, INIT_HEIGHT,
+    commit_get_new_working_set, execution_simulation, setup, BOND_AMOUNT, INITIAL_BOND_AMOUNT,
+    INIT_HEIGHT,
 };
 
 /// Start by testing the positive case where the attestations are valid

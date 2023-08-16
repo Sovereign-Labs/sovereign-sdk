@@ -7,8 +7,7 @@ use std::marker::PhantomData;
 
 use anyhow::{ensure, Error};
 use borsh::{BorshDeserialize, BorshSerialize};
-use bytes::{Bytes};
-
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 
@@ -214,6 +213,12 @@ impl<Cond> TestValidityCondChecker<Cond> {
         Self {
             phantom: Default::default(),
         }
+    }
+}
+
+impl<Cond> Default for TestValidityCondChecker<Cond> {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

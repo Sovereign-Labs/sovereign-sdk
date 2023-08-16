@@ -10,7 +10,6 @@ use core::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use digest::Digest;
-
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 

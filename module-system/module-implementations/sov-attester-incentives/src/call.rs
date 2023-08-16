@@ -1,6 +1,6 @@
 use core::result::Result::Ok;
-use std::cmp::{max};
-use std::fmt::{Debug};
+use std::cmp::max;
+use std::fmt::Debug;
 
 use anyhow::{ensure, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
