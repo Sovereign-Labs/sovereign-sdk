@@ -4,6 +4,7 @@ use std::path::Path;
 
 use serde::Serialize;
 use sov_modules_api::clap::{self, Subcommand};
+use sov_modules_api::cli::CliFrontEnd;
 use sov_modules_api::CliWallet;
 
 use crate::wallet_state::WalletState;
@@ -24,6 +25,7 @@ impl<T: Subcommand> TransactionWorkflow<T> {
         _app_dir: impl AsRef<Path>,
     ) -> Result<(), anyhow::Error>
     where
+        T: CliFrontEnd<RT::CliStringRepr<U>>,
         T: TryInto<RT::CliStringRepr<U>, Error = E1>,
         RT::CliStringRepr<U>: TryInto<RT::Decodable, Error = E2>,
         RT::Decodable: Serialize,
