@@ -14,6 +14,9 @@ use crate::{Batch, Runtime, SequencerOutcome, SlashingReason, TxEffect};
 
 type ApplyBatchResult<T, A> = Result<T, ApplyBatchError<A>>;
 
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+use zk_cycle_macros::cycle_tracker;
+
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to work with the module-system.
@@ -88,6 +91,7 @@ where
         }
     }
 
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     pub(crate) fn apply_blob(
         &mut self,
         blob: &mut B,
@@ -234,6 +238,7 @@ where
         };
 
         self.checkpoint = Some(batch_workspace.checkpoint());
+
         Ok(BatchReceipt {
             batch_hash: blob.hash(),
             tx_receipts,

@@ -19,6 +19,7 @@ use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::{StateTransition, ZkvmGuest};
 
+
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
@@ -32,9 +33,12 @@ risc0_zkvm::guest::entry!(main);
 //  5. Call end_slot
 //  6. Output (Da hash, start_root, end_root, event_root)
 pub fn main() {
+
     env::write(&"Start guest\n");
     let guest = Risc0Guest;
 
+    #[cfg(feature = "bench")]
+    let start_cycles = env::get_cycle_count();
     let prev_state_root_hash: [u8; 32] = guest.read_from_host();
     env::write(&"Prev root hash read\n");
     // Step 1: read tx list
@@ -55,10 +59,12 @@ pub fn main() {
     let witness: ArrayWitness = guest.read_from_host();
     env::write(&"Witness have been read\n");
 
+
     env::write(&"Applying slot...\n");
     let result = app.apply_slot(witness, &header, &mut blobs);
 
     env::write(&"Slot has been applied\n");
+
 
     // Step 3: Verify tx list
     let verifier = CelestiaVerifier::new(jupiter::verifier::RollupParams {
@@ -80,5 +86,27 @@ pub fn main() {
         slot_hash: header.hash(),
     };
     env::commit(&output);
+
     env::write(&"new state root committed\n");
+
+    #[cfg(feature = "bench")]
+    let end_cycles = env::get_cycle_count();
+
+    #[cfg(feature = "bench")]
+    {
+        let tuple = ("Cycles per block".to_string(), (end_cycles - start_cycles) as u64);
+        let mut serialized = Vec::new();
+        serialized.extend(tuple.0.as_bytes());
+        serialized.push(0);
+        let size_bytes = tuple.1.to_ne_bytes();
+        serialized.extend(&size_bytes);
+
+        // calculate the syscall name.
+        let cycle_string = String::from("cycle_metrics\0");
+        let metrics_syscall_name = unsafe {
+            risc0_zkvm_platform::syscall::SyscallName::from_bytes_with_nul(cycle_string.as_ptr())
+        };
+
+        risc0_zkvm::guest::env::send_recv_slice::<u8, u8>(metrics_syscall_name, &serialized);
+    }
 }

@@ -3370,6 +3370,8 @@ dependencies = [
  "prost",
  "prost-build",
  "prost-types",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
  "serde",
  "serde_json",
  "sha2 0.10.7",
@@ -3380,6 +3382,7 @@ dependencies = [
  "tokio",
  "tracing",
  "wiremock",
+ "zk-cycle-macros",
 ]
 
 [[package]]
@@ -5554,11 +5557,16 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "bytemuck",
+ "once_cell",
+ "parking_lot 0.11.2",
  "risc0-circuit-rv32im",
  "risc0-zkp",
  "risc0-zkvm",
+ "risc0-zkvm-platform",
  "serde",
  "sov-rollup-interface",
+ "zk-cycle-utils",
 ]
 
 [[package]]
@@ -6715,6 +6723,8 @@ dependencies = [
  "hex",
  "jsonrpsee 0.18.2",
  "rand 0.7.3",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
  "schemars",
  "serde",
  "serde_json",
@@ -6723,6 +6733,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "thiserror",
+ "zk-cycle-macros",
 ]
 
 [[package]]
@@ -6754,12 +6765,16 @@ dependencies = [
  "borsh",
  "hex",
  "jmt",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
  "serde",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
  "thiserror",
  "tracing",
+ "zk-cycle-macros",
+ "zk-cycle-utils",
 ]
 
 [[package]]
@@ -6834,6 +6849,8 @@ dependencies = [
  "borsh",
  "clap",
  "jsonrpsee 0.18.2",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
  "schemars",
  "serde",
  "serde_json",
@@ -6842,6 +6859,8 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "tempfile",
+ "zk-cycle-macros",
+ "zk-cycle-utils",
 ]
 
 [[package]]
@@ -6852,6 +6871,8 @@ dependencies = [
  "borsh",
  "hex",
  "jmt",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
  "serde",
  "sha2 0.10.7",
  "sov-db",
@@ -6859,6 +6880,7 @@ dependencies = [
  "sov-rollup-interface",
  "tempfile",
  "thiserror",
+ "zk-cycle-macros",
 ]
 
 [[package]]
@@ -8242,6 +8264,30 @@ dependencies = [
  "sha1",
  "time",
  "zstd 0.11.2+zstd.1.5.2",
+]
+
+[[package]]
+name = "zk-cycle-macros"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "proc-macro2 1.0.66",
+ "quote 1.0.32",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "syn 1.0.109",
+ "trybuild",
+ "zk-cycle-macros",
+ "zk-cycle-utils",
+]
+
+[[package]]
+name = "zk-cycle-utils"
+version = "0.1.0"
+dependencies = [
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
 ]
 
 [[package]]
