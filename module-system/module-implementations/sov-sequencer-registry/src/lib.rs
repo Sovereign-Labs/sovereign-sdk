@@ -3,9 +3,7 @@
 //! sequencer is supported. The sequencer's address and bond are registered
 //! during the rollup deployment.
 //!
-//! The `sov-sequencer-registry` module does not expose any call messages, and
-//! rollup users cannot directly modify the state of the sequencer. Instead, the
-//! module implements the [`sov_modules_api::hooks::ApplyBlobHooks`] trait.
+//! The module implements the [`sov_modules_api::hooks::ApplyBlobHooks`] trait.
 
 #![deny(missing_docs)]
 
