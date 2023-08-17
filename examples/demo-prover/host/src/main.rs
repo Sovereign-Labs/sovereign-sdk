@@ -2,13 +2,13 @@ use std::env;
 use std::str::FromStr;
 
 use anyhow::Context;
-use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::{App, DefaultPrivateKey};
-use demo_stf::genesis_config::create_demo_genesis_config;
 use celestia::da_service::{CelestiaService, DaServiceConfig};
 use celestia::types::NamespaceId;
 use celestia::verifier::address::CelestiaAddress;
 use celestia::verifier::{CelestiaSpec, RollupParams};
+use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
+use demo_stf::app::{App, DefaultPrivateKey};
+use demo_stf::genesis_config::create_demo_genesis_config;
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::{Risc0Host, Risc0Verifier};
 use serde::Deserialize;

@@ -7,14 +7,14 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
-use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::{App, DefaultPrivateKey};
-use demo_stf::genesis_config::create_demo_genesis_config;
 use celestia::da_service::CelestiaService;
 use celestia::types::{FilteredCelestiaBlock, NamespaceId};
 use celestia::verifier::address::CelestiaAddress;
 use celestia::verifier::{ChainValidityCondition, RollupParams};
 use celestia::BlobWithSender;
+use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
+use demo_stf::app::{App, DefaultPrivateKey};
+use demo_stf::genesis_config::create_demo_genesis_config;
 use log4rs::config::{Appender, Config, Root};
 use methods::ROLLUP_ELF;
 use regex::Regex;
