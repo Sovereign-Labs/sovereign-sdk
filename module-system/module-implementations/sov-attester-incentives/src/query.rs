@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::Spec;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker, Zkvm};
-use sov_state::storage::{NativeStorage, StorageKey, StorageProof};
+use sov_state::storage::{NativeStorage, StorageProof};
 use sov_state::{Storage, WorkingSet};
 
 use super::AttesterIncentives;
@@ -60,12 +60,9 @@ where
     where
         C::Storage: NativeStorage,
     {
-        working_set.backing().get_with_proof(
-            StorageKey::new(
-                self.bonded_attesters.prefix(),
-                &address,
-                &self.bonded_attesters.codec,
-            ),
+        working_set.backing().get_with_proof_from_state_map(
+            &address,
+            &self.bonded_attesters,
             witness,
         )
     }

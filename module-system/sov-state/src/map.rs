@@ -19,7 +19,7 @@ where
     C: StateCodec<K, V>,
 {
     _phantom: (PhantomData<K>, PhantomData<V>),
-    pub codec: C,
+    pub(crate) codec: C,
     prefix: Prefix,
 }
 

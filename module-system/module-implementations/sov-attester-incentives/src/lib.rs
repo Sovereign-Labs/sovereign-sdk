@@ -20,7 +20,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use call::Role;
 use sov_modules_api::{Context, Error};
 use sov_modules_macros::ModuleInfo;
-use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker, Zkvm};
+use sov_rollup_interface::zk::{
+    StoredCodeCommitment, ValidityCondition, ValidityConditionChecker, Zkvm,
+};
 use sov_state::{Storage, WorkingSet};
 
 /// Configuration of the attester incentives module
@@ -52,28 +54,6 @@ pub struct AttesterIncentivesConfig<
     pub validity_condition_checker: Checker,
     /// Phantom data that contains the validity condition
     phantom_data: PhantomData<Cond>,
-}
-
-/// A wrapper around a code commitment which implements borsh serialization
-#[derive(Clone, Debug)]
-pub struct StoredCodeCommitment<Vm: Zkvm> {
-    commitment: Vm::CodeCommitment,
-}
-
-impl<Vm: Zkvm> BorshSerialize for StoredCodeCommitment<Vm> {
-    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        bincode::serialize_into(writer, &self.commitment)
-            .expect("Serialization to vec is infallible");
-        Ok(())
-    }
-}
-
-impl<Vm: Zkvm> BorshDeserialize for StoredCodeCommitment<Vm> {
-    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
-        let commitment: Vm::CodeCommitment = bincode::deserialize_from(reader)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        Ok(Self { commitment })
-    }
 }
 
 /// The information about an attester's unbonding

@@ -6469,7 +6469,6 @@ name = "sov-attester-incentives"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "bincode",
  "borsh",
  "jmt",
  "serde",
@@ -6820,6 +6819,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "bincode",
  "borsh",
  "bytes",
  "digest 0.10.7",

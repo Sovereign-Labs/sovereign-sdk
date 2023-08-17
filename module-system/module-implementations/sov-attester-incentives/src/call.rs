@@ -10,7 +10,7 @@ use sov_rollup_interface::optimistic::Attestation;
 use sov_rollup_interface::zk::{
     StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
 };
-use sov_state::storage::{StorageKey, StorageProof};
+use sov_state::storage::StorageProof;
 use sov_state::{Storage, WorkingSet};
 use thiserror::Error;
 
@@ -173,9 +173,9 @@ impl<
         role: Role,
         reason: SlashingReason,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
+    ) -> AttesterIncentiveErrors {
         self.slash_user(user, role, working_set);
-        Err(AttesterIncentiveErrors::UserSlashed(reason))
+        AttesterIncentiveErrors::UserSlashed(reason)
     }
 
     /// A helper function that is used to slash an attester, and put the associated attestation in the slashed pool
@@ -185,7 +185,7 @@ impl<
         transition_nb: u64,
         reason: SlashingReason,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
+    ) -> AttesterIncentiveErrors {
         let reward = self.slash_user(attester, Role::Attester, working_set);
 
         let curr_reward_value = self
@@ -196,7 +196,7 @@ impl<
         self.bad_transition_pool
             .set(&transition_nb, &(curr_reward_value + reward), working_set);
 
-        Err(AttesterIncentiveErrors::UserSlashed(reason))
+        AttesterIncentiveErrors::UserSlashed(reason)
     }
 
     fn reward_sender(
@@ -351,12 +351,12 @@ impl<
                     .expect("Should be defined at genesis");
 
                 if begin_unbond_height + finality_period > curr_height {
-                    return self.slash_burn_reward(
+                    return Err(self.slash_burn_reward(
                         context.sender(),
                         Role::Attester,
                         SlashingReason::UnbondingNotFinalized,
                         working_set,
-                    );
+                    ));
                 }
 
                 // Get the user's old balance.
@@ -378,12 +378,12 @@ impl<
                     );
                 }
             } else {
-                return self.slash_burn_reward(
+                return Err(self.slash_burn_reward(
                     context.sender(),
                     Role::Attester,
                     SlashingReason::AttesterIsNotUnbonding,
                     working_set,
-                );
+                ));
             }
         }
         Ok(CallResponse::default())
@@ -416,21 +416,15 @@ impl<
         };
 
         // This proof checks that the attester was bonded at the given transition num
-        let (attester_key, bond_opt) = working_set
+        let bond_opt = working_set
             .backing()
-            .open_proof(bonding_root, attestation.proof_of_bond.proof.clone())
-            .map_err(|_err| AttesterIncentiveErrors::InvalidBondingProof)?;
-
-        // We have to check that the storage key is the same as the sender's
-        if attester_key
-            != StorageKey::new(
-                self.bonded_attesters.prefix(),
+            .verify_proof(
+                bonding_root,
+                attestation.proof_of_bond.proof.clone(),
                 context.sender(),
-                &self.bonded_attesters.codec,
+                &self.bonded_attesters,
             )
-        {
-            return Err(AttesterIncentiveErrors::InvalidSender);
-        }
+            .map_err(|_err| AttesterIncentiveErrors::InvalidBondingProof)?;
 
         let bond = bond_opt.unwrap_or_default();
         let bond: u64 = BorshDeserialize::deserialize(&mut bond.value())
@@ -466,21 +460,21 @@ impl<
                 // It is the right attestation, we have to compare the initial block hash to the
                 // previous post state root
                 // Slash the attester
-                self.slash_and_invalidate_attestation(
+                return Err(self.slash_and_invalidate_attestation(
                     attester,
                     max_attested_height,
                     SlashingReason::TransitionInvalid,
                     working_set,
-                )?;
+                ));
             }
             Ok(CallResponse::default())
         } else {
-            self.slash_burn_reward(
+            Err(self.slash_burn_reward(
                 attester,
                 Role::Attester,
                 SlashingReason::TransitionNotFound,
                 working_set,
-            )
+            ))
         }
     }
 
@@ -499,12 +493,12 @@ impl<
         {
             if transition.post_state_root() != attestation.initial_state_root {
                 // The initial root hashes don't match, just slash the attester
-                return self.slash_burn_reward(
+                return Err(self.slash_burn_reward(
                     attester,
                     Role::Attester,
                     SlashingReason::InvalidInitialHash,
                     working_set,
-                );
+                ));
             }
         } else {
             // Genesis state
@@ -518,12 +512,12 @@ impl<
                 != attestation.initial_state_root
             {
                 // Slash the attester, and burn the fees
-                return self.slash_burn_reward(
+                return Err(self.slash_burn_reward(
                     attester,
                     Role::Attester,
                     SlashingReason::InvalidInitialHash,
                     working_set,
-                );
+                ));
             }
             // Normal state
         }
@@ -599,12 +593,12 @@ impl<
             .get(context.sender(), working_set)
             .is_some()
         {
-            return self.slash_and_invalidate_attestation(
+            return Err(self.slash_and_invalidate_attestation(
                 context.sender(),
                 new_height_to_attest,
                 SlashingReason::AttesterIsUnbonding,
                 working_set,
-            );
+            ));
         }
 
         working_set.add_event(
@@ -666,12 +660,9 @@ impl<
         }
 
         // TODO: Should we compare the validity conditions of the public outputs with the ones of the recorded transition?
-        if condition_checker
+        condition_checker
             .check(&public_outputs.validity_condition)
-            .is_err()
-        {
-            return Err(SlashingReason::TransitionInvalid);
-        }
+            .map_err(|_err| SlashingReason::TransitionInvalid)?;
 
         Ok(())
     }
@@ -718,7 +709,6 @@ impl<
                     SlashingReason::NoInvalidTransition,
                     working_set,
                 )
-                .unwrap_err()
             })?;
 
         let public_outputs_opt: Result<StateTransition<Cond, C::Address>> =
@@ -743,7 +733,6 @@ impl<
                 )
                 .map_err(|err| {
                     self.slash_burn_reward(context.sender(), Role::Challenger, err, working_set)
-                        .unwrap_err()
                 })?;
 
                 // Reward the challenger with half of the attestation reward (avoid DOS)
@@ -760,12 +749,12 @@ impl<
             }
             Err(_err) => {
                 // Slash the challenger
-                return self.slash_burn_reward(
+                return Err(self.slash_burn_reward(
                     context.sender(),
                     Role::Challenger,
                     SlashingReason::InvalidProofOutputs,
                     working_set,
-                );
+                ));
             }
         }
 
