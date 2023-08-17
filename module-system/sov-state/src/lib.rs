@@ -14,6 +14,7 @@ pub mod storage;
 
 mod utils;
 mod value;
+mod vec;
 mod witness;
 
 mod zk_storage;
@@ -36,6 +37,7 @@ use sov_rollup_interface::digest::Digest;
 pub use storage::Storage;
 use utils::AlignedVec;
 pub use value::StateValue;
+pub use vec::StateVec;
 
 pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 
