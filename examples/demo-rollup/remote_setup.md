@@ -1,3 +1,18 @@
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+**Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
+
+- [Remote setup](#remote-setup)
+  - [Set up Celestia](#set-up-celestia)
+  - [Submitting transactions](#submitting-transactions)
+  - [Install celestia-appd](#install-celestia-appd)
+  - [Create local keypair](#create-local-keypair)
+  - [Create bank transaction](#create-bank-transaction)
+  - [Submit blob to celestia](#submit-blob-to-celestia)
+  - [Verify the supply of the new token created](#verify-the-supply-of-the-new-token-created)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 ## Remote setup
 
 This readme covers the steps necessary to setup the sovereign-sdk to work with a remote DA network which includes

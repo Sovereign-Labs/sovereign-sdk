@@ -28,5 +28,5 @@ pub trait CliFrontEnd<RT>
 where
     RT: CliWallet,
 {
-    type CliIntermediateRepr<U> = RT::CliStringRepr<U>;
+    type CliIntermediateRepr<U>; 
 }

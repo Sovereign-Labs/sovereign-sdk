@@ -1,8 +1,9 @@
-#![feature(associated_type_defaults)]
+#![doc = include_str!("../README.md")]
 
 mod bech32;
 #[cfg(feature = "native")]
 pub mod cli;
+pub mod capabilities;
 pub mod default_context;
 pub mod default_signature;
 mod dispatch;
@@ -12,7 +13,6 @@ pub mod hooks;
 mod prefix;
 mod response;
 mod serde_address;
-pub mod test_utils;
 #[cfg(test)]
 mod tests;
 pub mod transaction;
@@ -48,7 +48,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub use clap;
 #[cfg(feature = "native")]
 pub use dispatch::CliWallet;
-pub use dispatch::{DispatchCall, Genesis};
+pub use dispatch::{DispatchCall, EncodeCall, Genesis};
 pub use error::Error;
 pub use prefix::Prefix;
 pub use response::CallResponse;
@@ -68,7 +68,7 @@ impl AsRef<[u8]> for Address {
 impl AddressTrait for Address {}
 
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
-#[derive(PartialEq, Clone, Eq, borsh::BorshDeserialize, borsh::BorshSerialize, Hash)]
+#[derive(PartialEq, Clone, Copy, Eq, borsh::BorshDeserialize, borsh::BorshSerialize, Hash)]
 pub struct Address {
     addr: [u8; 32],
 }
@@ -137,6 +137,7 @@ pub trait Signature {
 
 /// A type that can't be instantiated.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 pub enum NonInstantiable {}
 
 /// PublicKey used in the Module System.
@@ -297,7 +298,7 @@ pub trait Module {
     type Config;
 
     /// Module defined argument to the call method.
-    type CallMessage: Debug + BorshSerialize + BorshDeserialize = NonInstantiable;
+    type CallMessage: Debug + BorshSerialize + BorshDeserialize;
 
     /// Genesis is called when a rollup is deployed and can be used to set initial state values in the module.
     fn genesis(

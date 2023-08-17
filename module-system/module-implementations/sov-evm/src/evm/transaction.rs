@@ -1,8 +1,12 @@
+use reth_primitives::{
+    TransactionSignedEcRecovered as RethTransactionSignedEcRecovered, H160, H256,
+};
+
 use super::{Bytes32, EthAddress};
 
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub(crate) struct BlockEnv {
-    pub(crate) number: Bytes32,
+    pub(crate) number: u64,
     pub(crate) coinbase: EthAddress,
     pub(crate) timestamp: Bytes32,
     /// Prevrandao is used after Paris (aka TheMerge) instead of the difficulty value.
@@ -25,6 +29,7 @@ impl Default for BlockEnv {
     }
 }
 
+/// Rlp encoded evm transaction.
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
@@ -32,55 +37,46 @@ impl Default for BlockEnv {
     derive(schemars::JsonSchema)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub struct AccessListItem {
-    pub address: EthAddress,
-    pub storage_keys: Vec<Bytes32>,
+pub struct RawEvmTransaction {
+    /// Rlp data.
+    pub rlp: Vec<u8>,
 }
 
-#[cfg_attr(
-    feature = "native",
-    derive(serde::Serialize),
-    derive(serde::Deserialize),
-    derive(schemars::JsonSchema)
-)]
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub struct EvmTransaction {
-    pub sender: EthAddress,
-    pub data: Vec<u8>,
-    pub gas_limit: u64,
-    pub gas_price: u128,
-    pub max_priority_fee_per_gas: u128,
-    pub max_fee_per_gas: u128,
-    pub to: Option<[u8; 20]>,
-    pub value: u128,
-    pub nonce: u64,
-    pub access_lists: Vec<AccessListItem>,
-    pub chain_id: u64,
-    pub odd_y_parity: bool,
-    pub r: [u8; 32],
-    pub s: [u8; 32],
-    // todo remove it
-    pub hash: [u8; 32],
+/// EC recovered evm transaction.
+pub struct EvmTransactionSignedEcRecovered {
+    tx: RethTransactionSignedEcRecovered,
 }
 
-impl Default for EvmTransaction {
-    fn default() -> Self {
-        Self {
-            sender: Default::default(),
-            data: Default::default(),
-            gas_limit: u64::MAX,
-            gas_price: Default::default(),
-            max_priority_fee_per_gas: Default::default(),
-            max_fee_per_gas: Default::default(),
-            to: Default::default(),
-            value: Default::default(),
-            nonce: Default::default(),
-            access_lists: Default::default(),
-            chain_id: 1,
-            hash: Default::default(),
-            odd_y_parity: Default::default(),
-            r: Default::default(),
-            s: Default::default(),
-        }
+impl EvmTransactionSignedEcRecovered {
+    /// Creates a new EvmTransactionSignedEcRecovered.
+    pub fn new(tx: RethTransactionSignedEcRecovered) -> Self {
+        Self { tx }
+    }
+
+    /// Transaction hash. Used to identify transaction.
+    pub fn hash(&self) -> H256 {
+        self.tx.hash()
+    }
+
+    /// Signer of transaction recovered from signature.
+    pub fn signer(&self) -> H160 {
+        self.tx.signer()
+    }
+
+    /// Receiver of the transaction.
+    pub fn to(&self) -> Option<EthAddress> {
+        self.tx.to().map(|to| to.into())
+    }
+}
+
+impl AsRef<RethTransactionSignedEcRecovered> for EvmTransactionSignedEcRecovered {
+    fn as_ref(&self) -> &RethTransactionSignedEcRecovered {
+        &self.tx
+    }
+}
+
+impl From<EvmTransactionSignedEcRecovered> for RethTransactionSignedEcRecovered {
+    fn from(tx: EvmTransactionSignedEcRecovered) -> Self {
+        tx.tx
     }
 }

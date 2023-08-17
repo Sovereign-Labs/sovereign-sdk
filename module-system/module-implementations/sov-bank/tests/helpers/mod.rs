@@ -1,6 +1,6 @@
 use sov_bank::{BankConfig, TokenConfig};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::test_utils::generate_address as gen_address_generic;
+use sov_modules_api::utils::generate_address as gen_address_generic;
 use sov_modules_api::Address;
 
 pub type C = DefaultContext;

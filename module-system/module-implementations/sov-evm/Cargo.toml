@@ -28,6 +28,7 @@ borsh = { workspace = true, features = ["rc"] }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 tracing = { workspace = true }
+derive_more = { workspace = true }
 
 # TODO: move these dependencies to the workspace when the EVM module is no longer in the experimental stage
 ethereum-types = "0.14.1"
@@ -36,9 +37,6 @@ ethers-contract = { workspace = true }
 ethers-middleware = { workspace = true }
 ethers-providers = { workspace = true }
 ethers-signers = { workspace = true }
-
-
-
 ethers = { workspace = true }
 
 revm = { workspace = true }
@@ -47,12 +45,14 @@ reth-rpc-types = { workspace = true }
 reth-rpc = { workspace = true }
 reth-revm = { workspace = true }
 
+
 [dev-dependencies]
 
 primitive-types = "0.12.1"
 tokio = { workspace = true }
 tempfile = { workspace = true }
 bytes = { workspace = true }
+secp256k1 = { workspace = true }
 
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1", features = ["macros"] }
 

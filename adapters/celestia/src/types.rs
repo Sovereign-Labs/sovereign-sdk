@@ -6,6 +6,7 @@ use base64::Engine;
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
+use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::Bytes;
 use tendermint::crypto::default::Sha256;
@@ -14,7 +15,7 @@ use tendermint::merkle;
 use crate::pfb::MsgPayForBlobs;
 use crate::shares::{NamespaceGroup, Share};
 use crate::utils::BoxError;
-use crate::verifier::PARITY_SHARES_NAMESPACE;
+use crate::verifier::{ChainValidityCondition, PARITY_SHARES_NAMESPACE};
 use crate::{CelestiaHeader, TxPosition};
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize)]
@@ -81,6 +82,7 @@ pub struct FilteredCelestiaBlock {
 
 impl SlotData for FilteredCelestiaBlock {
     type BlockHeader = CelestiaHeader;
+    type Cond = ChainValidityCondition;
 
     fn hash(&self) -> [u8; 32] {
         match self.header.header.hash() {
@@ -91,6 +93,13 @@ impl SlotData for FilteredCelestiaBlock {
 
     fn header(&self) -> &Self::BlockHeader {
         &self.header
+    }
+
+    fn validity_condition(&self) -> ChainValidityCondition {
+        ChainValidityCondition {
+            prev_hash: *self.header().prev_hash().inner(),
+            block_hash: self.hash(),
+        }
     }
 }
 
@@ -123,6 +132,7 @@ pub enum ValidationError {
     MissingTx,
     InvalidRowProof,
     InvalidSigner,
+    IncompleteData,
 }
 
 impl CelestiaHeader {

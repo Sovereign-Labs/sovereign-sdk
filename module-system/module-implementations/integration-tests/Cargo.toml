@@ -8,8 +8,8 @@ repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
 readme = "README.md"
-resolver = "2"
 publish = false
+resolver = "2"
 
 [dev-dependencies]
 anyhow = { workspace = true }
@@ -20,3 +20,9 @@ sov-modules-api = { path = "../../sov-modules-api" }
 sov-state = { path = "../../sov-state" }
 sov-rollup-interface = { path = "../../../rollup-interface" }
 sov-schema-db = { path = "../../../full-node/db/sov-schema-db" }
+sov-data-generators = { path = "../../utils/sov-data-generators" }
+sov-modules-stf-template = { path = "../../sov-modules-stf-template" }
+sov-modules-macros = { path = "../../sov-modules-macros" }
+
+sov-chain-state = { path = "../sov-chain-state" }
+sov-value-setter = { path = "../examples/sov-value-setter" }

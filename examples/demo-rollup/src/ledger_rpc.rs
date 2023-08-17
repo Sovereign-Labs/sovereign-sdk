@@ -60,6 +60,8 @@ fn register_ledger_rpc_methods<
     Ok(())
 }
 
+/// Register rpc methods for the provided `ledger_db`.
+/// Calls the internal [`register_ledger_rpc_methods`] function.
 pub fn get_ledger_rpc<
     B: Serialize + DeserializeOwned + Clone + 'static,
     T: Serialize + DeserializeOwned + Clone + 'static,
@@ -76,6 +78,7 @@ mod query_args {
     use serde::de::DeserializeOwned;
     use sov_rollup_interface::rpc::QueryMode;
 
+    /// A structure containing serialized query arguments for RPC queries.
     #[derive(serde::Deserialize)]
     pub struct QueryArgs<I>(pub Vec<I>, #[serde(default)] pub QueryMode);
 
