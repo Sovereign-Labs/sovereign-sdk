@@ -7,6 +7,7 @@ pub mod genesis;
 mod context;
 mod router;
 
+use ibc::core::ics24_host::path::ClientConsensusStatePath;
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
@@ -29,6 +30,26 @@ pub struct IbcModule<C: sov_modules_api::Context> {
     /// borsh v0.9 and the Sovereign SDK uses v0.10.
     #[state]
     pub client_state_store: sov_state::StateMap<String, Vec<u8>>,
+
+    #[state]
+    pub consensus_state_store: sov_state::StateMap<ConsensusStateKey, Vec<u8>>,
+}
+
+#[derive(borsh::BorshSerialize)]
+pub struct ConsensusStateKey {
+    pub client_id: String,
+    pub epoch: u64,
+    pub height: u64,
+}
+
+impl From<ClientConsensusStatePath> for ConsensusStateKey {
+    fn from(path: ClientConsensusStatePath) -> Self {
+        Self {
+            client_id: path.client_id.to_string(),
+            epoch: path.epoch,
+            height: path.height,
+        }
+    }
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcModule<C> {

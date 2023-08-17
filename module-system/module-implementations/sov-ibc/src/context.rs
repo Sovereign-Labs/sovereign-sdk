@@ -3,6 +3,7 @@ mod clients;
 use std::cell::RefCell;
 
 use ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
+use ibc::clients::ics07_tendermint::consensus_state::ConsensusState as TmConsensusState;
 use ibc::core::events::IbcEvent;
 use ibc::core::ics02_client::error::ClientError;
 use ibc::core::ics03_connection::connection::ConnectionEnd;
@@ -21,7 +22,7 @@ use ibc::{Any, Height};
 use ibc_proto::protobuf::Protobuf;
 use sov_state::WorkingSet;
 
-use crate::IbcModule;
+use crate::{ConsensusStateKey, IbcModule};
 
 pub struct IbcExecutionContext<'a, C: sov_modules_api::Context> {
     pub ibc: &'a IbcModule<C>,
@@ -73,7 +74,26 @@ where
         &self,
         client_cons_state_path: &ClientConsensusStatePath,
     ) -> Result<Self::AnyConsensusState, ContextError> {
-        todo!()
+        let key: ConsensusStateKey = client_cons_state_path.clone().into();
+
+        let consensus_state_bytes = self
+            .ibc
+            .consensus_state_store
+            .get(&key, *self.working_set.borrow_mut())
+            .ok_or(ClientError::ConsensusStateNotFound {
+                client_id: client_cons_state_path.client_id.clone(),
+                height: Height::new(client_cons_state_path.epoch, client_cons_state_path.height)
+                    .map_err(|_| ClientError::InvalidHeight)?,
+            })?;
+
+        let tm_consensus_state: TmConsensusState = <TmConsensusState as Protobuf<Any>>::decode(
+            consensus_state_bytes.as_ref(),
+        )
+        .map_err(|e| ClientError::Other {
+            description: "failed to decode client state".to_string(),
+        })?;
+
+        Ok(tm_consensus_state.into())
     }
 
     fn client_update_time(
