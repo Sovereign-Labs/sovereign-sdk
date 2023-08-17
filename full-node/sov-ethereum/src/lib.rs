@@ -4,7 +4,7 @@ pub use experimental::{get_ethereum_rpc, Ethereum};
 #[cfg(feature = "experimental")]
 pub mod experimental {
     use std::collections::HashMap;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Mutex;
 
     use borsh::ser::BorshSerialize;
     use demo_stf::app::DefaultPrivateKey;
@@ -24,7 +24,7 @@ pub mod experimental {
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 
     pub fn get_ethereum_rpc<DA: DaService>(
-        da_service: Arc<DA>,
+        da_service: DA,
         tx_signer_prov_key: DefaultPrivateKey,
     ) -> RpcModule<Ethereum<DA>> {
         let mut rpc = RpcModule::new(Ethereum {
@@ -39,7 +39,7 @@ pub mod experimental {
     pub struct Ethereum<DA: DaService> {
         nonces: Mutex<HashMap<EthAddress, u64>>,
         tx_signer_prov_key: DefaultPrivateKey,
-        da_service: Arc<DA>,
+        da_service: DA,
     }
 
     impl<DA: DaService> Ethereum<DA> {
