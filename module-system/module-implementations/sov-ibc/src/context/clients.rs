@@ -22,6 +22,7 @@ use ibc::Any;
 use ibc_proto::protobuf::Protobuf;
 
 use super::IbcExecutionContext;
+use crate::ConsensusStateKey;
 
 // Q: How do we enable users to set the light clients they want?
 #[derive(From, TryInto, ConsensusState)]
@@ -233,7 +234,10 @@ where
             <TmClientState as Protobuf<Any>>::encode_vec(&tm_client_state)
         };
 
-        // FIXME: Not sure if using the store like this results in a proper Merkle proof
+        // FIXME: storing like this does NOT result in a proper Merkle proof The
+        // SDK will BorshSerialize our bytes before storing. We need to wait for
+        // the SDK to allow us to store raw bytes (i.e. to choose our encoding
+        // format)
         self.ibc.client_state_store.set(
             &client_state_path.to_string(),
             &client_state_bytes,
@@ -248,7 +252,28 @@ where
         consensus_state_path: ClientConsensusStatePath,
         consensus_state: Self::AnyConsensusState,
     ) -> Result<(), ContextError> {
-        todo!()
+        let key: ConsensusStateKey = consensus_state_path.clone().into();
+
+        let consensus_state_bytes = {
+            let tm_consensus_state: TmConsensusState =
+                consensus_state.try_into().map_err(|e: &str| {
+                    ContextError::ClientError(ClientError::Other {
+                        description: e.to_string(),
+                    })
+                })?;
+
+            <TmConsensusState as Protobuf<Any>>::encode_vec(&tm_consensus_state)
+        };
+
+        // FIXME: storing like this does NOT result in a proper Merkle proof The
+        // SDK will BorshSerialize our bytes before storing. We need to wait for
+        // the SDK to allow us to store raw bytes (i.e. to choose our encoding
+        // format)
+        self.ibc
+            .consensus_state_store
+            .set(&key, &consensus_state_bytes, self.working_set.get_mut());
+
+        Ok(())
     }
 }
 
