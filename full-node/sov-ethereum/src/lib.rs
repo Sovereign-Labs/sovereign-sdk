@@ -7,16 +7,11 @@ pub mod experimental {
     use std::sync::{Arc, Mutex};
 
     use borsh::ser::BorshSerialize;
-    use const_rollup_config::ROLLUP_NAMESPACE_RAW;
     use demo_stf::app::DefaultPrivateKey;
     use demo_stf::runtime::{DefaultContext, Runtime};
     use ethers::types::{Bytes, H256};
-    use jsonrpsee::core::client::ClientT;
-    use jsonrpsee::core::params::ArrayParams;
-    use jsonrpsee::http_client::{HeaderMap, HttpClient};
     use jsonrpsee::types::ErrorObjectOwned;
     use jsonrpsee::RpcModule;
-    use jupiter::da_service::DaServiceConfig;
     use reth_primitives::TransactionSignedNoHash as RethTransactionSignedNoHash;
     use reth_rpc::eth::error::EthApiError;
     use sov_evm::call::CallMessage;
@@ -26,16 +21,13 @@ pub mod experimental {
     use sov_modules_api::EncodeCall;
     use sov_rollup_interface::services::da::DaService;
 
-    const GAS_PER_BYTE: usize = 120;
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 
     pub fn get_ethereum_rpc<DA: DaService + DaService + Send + Sync + 'static>(
-        config: DaServiceConfig,
-        tx_signer_prov_key: DefaultPrivateKey,
         da_service: Arc<DA>,
+        tx_signer_prov_key: DefaultPrivateKey,
     ) -> RpcModule<Ethereum<DA>> {
         let mut rpc = RpcModule::new(Ethereum {
-            config,
             nonces: Default::default(),
             tx_signer_prov_key,
             da_service,
@@ -45,7 +37,6 @@ pub mod experimental {
     }
 
     pub struct Ethereum<DA: DaService> {
-        config: DaServiceConfig,
         nonces: Mutex<HashMap<EthAddress, u64>>,
         tx_signer_prov_key: DefaultPrivateKey,
         da_service: Arc<DA>,
@@ -83,42 +74,6 @@ pub mod experimental {
             );
             Ok((H256::from(tx_hash), tx.try_to_vec()?))
         }
-
-        /*fn make_client(&self) -> HttpClient {
-            let mut headers = HeaderMap::new();
-            headers.insert(
-                "Authorization",
-                format!("Bearer {}", self.config.celestia_rpc_auth_token.clone())
-                    .parse()
-                    .unwrap(),
-            );
-
-            jsonrpsee::http_client::HttpClientBuilder::default()
-                .set_headers(headers)
-                .max_request_size(default_max_response_size())
-                .build(self.config.celestia_rpc_address.clone())
-                .expect("Client initialization is valid")
-        }*/
-
-        /*async fn send_tx_to_da(
-            &self,
-            raw: Vec<u8>,
-        ) -> Result<serde_json::Value, jsonrpsee::core::Error> {
-            let blob = vec![raw].try_to_vec()?;
-            let client = self.make_client();
-            let fee: u64 = 2000;
-            let namespace = ROLLUP_NAMESPACE_RAW.to_vec();
-            let gas_limit = (blob.len() + 512) * GAS_PER_BYTE + 1060;
-
-            let mut params = ArrayParams::new();
-            params.insert(namespace)?;
-            params.insert(blob)?;
-            params.insert(fee.to_string())?;
-            params.insert(gas_limit)?;
-            client
-                .request::<serde_json::Value, _>("state.SubmitPayForBlob", params)
-                .await
-        }*/
     }
 
     fn register_rpc_methods<DA: DaService + Send + Sync + 'static>(
@@ -146,9 +101,5 @@ pub mod experimental {
         )?;
 
         Ok(())
-    }
-
-    fn default_max_response_size() -> u32 {
-        1024 * 1024 * 100 // 100 MB
     }
 }
