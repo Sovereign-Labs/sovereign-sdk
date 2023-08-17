@@ -132,7 +132,7 @@ impl<
     }
 
     /// A helper function that simply slashes an attester and returns a reward value
-    fn slash_user_helper(
+    fn slash_user(
         &self,
         user: &C::Address,
         role: Role,
@@ -160,14 +160,35 @@ impl<
         reason: SlashingReason,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
-        self.slash_user_helper(user, role, working_set);
+        self.slash_user(user, role, working_set);
+        Err(AttesterIncentiveErrors::UserSlashed(reason))
+    }
+
+    /// A helper function that is used to slash an attester, and put the associated attestation in the slashed pool
+    fn slash_and_invalidate_attestation(
+        &self,
+        attester: &C::Address,
+        transition_nb: u64,
+        reason: SlashingReason,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
+        let reward = self.slash_user(attester, Role::Attester, working_set);
+
+        let curr_reward_value = self
+            .bad_transition_pool
+            .get(&transition_nb, working_set)
+            .unwrap_or_default();
+
+        self.bad_transition_pool
+            .set(&transition_nb, &(curr_reward_value + reward), working_set);
+
         Err(AttesterIncentiveErrors::UserSlashed(reason))
     }
 
     fn reward_sender(
         &self,
-        amount: u64,
         context: &C,
+        amount: u64,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse, AttesterIncentiveErrors> {
         let reward_address = self
@@ -194,27 +215,6 @@ impl<
             .map_err(|_err| AttesterIncentiveErrors::MintFailure)?;
 
         Ok(CallResponse::default())
-    }
-
-    /// A helper function that is used to slash an attester, and put the associated attestation in the slashed pool
-    fn slash_and_invalidate_attestation(
-        &self,
-        attester: &C::Address,
-        transition_nb: u64,
-        reason: SlashingReason,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
-        let reward = self.slash_user_helper(attester, Role::Attester, working_set);
-
-        let curr_reward_value = self
-            .bad_transition_pool
-            .get(&transition_nb, working_set)
-            .unwrap_or_default();
-
-        self.bad_transition_pool
-            .set(&transition_nb, &(curr_reward_value + reward), working_set);
-
-        Err(AttesterIncentiveErrors::UserSlashed(reason))
     }
 
     /// A helper function for the `bond_challenger/attester` call. Also used to bond challengers/attesters
@@ -268,7 +268,7 @@ impl<
         if let Some(old_balance) = self.bonded_challengers.get(context.sender(), working_set) {
             // Transfer the bond amount from the sender to the module's address.
             // On failure, no state is changed
-            self.reward_sender(old_balance, context, working_set)?;
+            self.reward_sender(context, old_balance, working_set)?;
 
             // Update our internal tracking of the total bonded amount for the sender.
             self.bonded_challengers
@@ -320,8 +320,14 @@ impl<
             .get_or_err(context.sender(), working_set)
         {
             // These two constants should always be set beforehand, hence we can panic if they're not set
-            let curr_height = self.light_client_finalized_height.get(working_set).unwrap();
-            let finality_period = self.rollup_finality_period.get(working_set).unwrap();
+            let curr_height = self
+                .light_client_finalized_height
+                .get(working_set)
+                .expect("Should be defined at genesis");
+            let finality_period = self
+                .rollup_finality_period
+                .get(working_set)
+                .expect("Should be defined at genesis");
 
             ensure!(
                 begin_unbond_height + finality_period < curr_height,
@@ -332,7 +338,7 @@ impl<
             if let Some(old_balance) = self.bonded_challengers.get(context.sender(), working_set) {
                 // Transfer the bond amount from the sender to the module's address.
                 // On failure, no state is changed
-                self.reward_sender(old_balance, context, working_set)?;
+                self.reward_sender(context, old_balance, working_set)?;
 
                 // Update our internal tracking of the total bonded amount for the sender.
                 self.bonded_challengers
@@ -356,8 +362,8 @@ impl<
     /// the bonding proof one and the current state.
     fn check_bonding_proof(
         &self,
-        attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         context: &C,
+        attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(), AttesterIncentiveErrors> {
         let bonding_root = {
@@ -496,12 +502,12 @@ impl<
     /// Try to process an attestation, if the attester is bonded
     pub(crate) fn process_attestation(
         &self,
-        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         context: &C,
+        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
         // We first need to check the bonding proof (because we can't slash the attester if he's not bonded)
-        self.check_bonding_proof(&attestation, context, working_set)?;
+        self.check_bonding_proof(context, &attestation, working_set)?;
 
         // We suppose that these values are always defined, otherwise we panic
         let height_to_attest = self
@@ -576,8 +582,10 @@ impl<
 
         // Reward the sender
         self.reward_sender(
-            self.minimum_attester_bond.get(working_set).unwrap(),
             context,
+            self.minimum_attester_bond
+                .get(working_set)
+                .expect("Should be defined at genesis"),
             working_set,
         )?;
 
@@ -635,9 +643,9 @@ impl<
     /// Try to process a zk proof, if the challenger is bonded.
     pub(crate) fn process_challenge(
         &self,
+        context: &C,
         proof: &[u8],
         transition_num: u64,
-        context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
         // Get the challenger's old balance.
@@ -703,7 +711,7 @@ impl<
                 })?;
 
                 // Reward the challenger with half of the attestation reward (avoid DOS)
-                self.reward_sender(attestation_reward / 2, context, working_set)?;
+                self.reward_sender(context, attestation_reward / 2, working_set)?;
 
                 // Now remove the bad transition from the pool
                 self.bad_transition_pool

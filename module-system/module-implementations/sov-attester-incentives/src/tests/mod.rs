@@ -62,7 +62,7 @@ fn test_process_valid_attestation() {
         };
 
         module
-            .process_attestation(attestation, &context, &mut working_set)
+            .process_attestation(&context, attestation, &mut working_set)
             .expect("An invalid proof is an error");
     }
 
@@ -79,7 +79,7 @@ fn test_process_valid_attestation() {
         };
 
         module
-            .process_attestation(attestation, &context, &mut working_set)
+            .process_attestation(&context, attestation, &mut working_set)
             .expect("An invalid proof is an error");
     }
 
@@ -153,7 +153,7 @@ fn test_burn_on_invalid_attestation() {
         };
 
         let attestation_error = module
-            .process_attestation(attestation, &context, &mut working_set)
+            .process_attestation(&context, attestation, &mut working_set)
             .unwrap_err();
 
         assert_eq!(
@@ -188,7 +188,7 @@ fn test_burn_on_invalid_attestation() {
         };
 
         module
-            .process_attestation(attestation, &context, &mut working_set)
+            .process_attestation(&context, attestation, &mut working_set)
             .expect("An invalid proof is an error");
     }
 
@@ -205,7 +205,7 @@ fn test_burn_on_invalid_attestation() {
         };
 
         let attestation_error = module
-            .process_attestation(attestation, &context, &mut working_set)
+            .process_attestation(&context, attestation, &mut working_set)
             .unwrap_err();
 
         assert_eq!(
@@ -258,7 +258,7 @@ fn test_burn_on_invalid_attestation() {
         };
 
         let attestation_error = module
-            .process_attestation(attestation, &context, &mut working_set)
+            .process_attestation(&context, attestation, &mut working_set)
             .unwrap_err();
 
         assert_eq!(
@@ -366,9 +366,9 @@ fn test_valid_challenge() {
 
         module
             .process_challenge(
+                &context,
                 proof.as_slice(),
                 INIT_HEIGHT + 1,
-                &context,
                 &mut working_set,
             )
             .expect("Should not fail");
@@ -412,10 +412,10 @@ fn test_valid_challenge() {
 }
 
 fn invalid_proof_helper(
+    context: &DefaultContext,
     proof: &Vec<u8>,
     reason: SlashingReason,
     challenger_address: sov_modules_api::Address,
-    context: &DefaultContext,
     module: &crate::AttesterIncentives<
         DefaultContext,
         sov_rollup_interface::mocks::MockZkvm,
@@ -435,7 +435,7 @@ fn invalid_proof_helper(
         .expect("Should be able to bond");
 
     let err = module
-        .process_challenge(proof.as_slice(), INIT_HEIGHT + 1, context, working_set)
+        .process_challenge(context, proof.as_slice(), INIT_HEIGHT + 1, working_set)
         .unwrap_err();
 
     // Check the error raised
@@ -501,9 +501,9 @@ fn test_invalid_challenge() {
 
         let err = module
             .process_challenge(
+                &context,
                 proof.as_slice(),
                 INIT_HEIGHT + 1,
-                &context,
                 &mut working_set,
             )
             .unwrap_err();
@@ -527,10 +527,10 @@ fn test_invalid_challenge() {
         .encode_to_vec();
 
         invalid_proof_helper(
+            &context,
             proof,
             SlashingReason::InvalidProofOutputs,
             challenger_address,
-            &context,
             &module,
             &mut working_set,
         );
@@ -555,10 +555,10 @@ fn test_invalid_challenge() {
         .encode_to_vec();
 
         invalid_proof_helper(
+            &context,
             proof,
             SlashingReason::TransitionInvalid,
             challenger_address,
-            &context,
             &module,
             &mut working_set,
         );
@@ -583,10 +583,10 @@ fn test_invalid_challenge() {
         .encode_to_vec();
 
         invalid_proof_helper(
+            &context,
             proof,
             SlashingReason::TransitionInvalid,
             challenger_address,
-            &context,
             &module,
             &mut working_set,
         );
@@ -611,10 +611,10 @@ fn test_invalid_challenge() {
         .encode_to_vec();
 
         invalid_proof_helper(
+            &context,
             proof,
             SlashingReason::InvalidInitialHash,
             challenger_address,
-            &context,
             &module,
             &mut working_set,
         );
@@ -672,7 +672,7 @@ fn test_unbonding() {
         };
 
         let err = module
-            .process_attestation(attestation, &context, &mut working_set)
+            .process_attestation(&context, attestation, &mut working_set)
             .unwrap_err();
 
         assert_eq!(

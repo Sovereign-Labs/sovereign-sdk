@@ -213,11 +213,11 @@ where
             }
             call::CallMessage::UnbondChallenger => self.unbond_challenger(context, working_set),
             call::CallMessage::ProcessAttestation(attestation) => self
-                .process_attestation(attestation, context, working_set)
+                .process_attestation(context, attestation, working_set)
                 .map_err(|error| error.into()),
 
             call::CallMessage::ProcessChallenge(proof, transition) => self
-                .process_challenge(&proof, transition, context, working_set)
+                .process_challenge(context, &proof, transition, working_set)
                 .map_err(|error| error.into()),
         }
         .map_err(|e| e.into())
