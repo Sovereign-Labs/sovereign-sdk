@@ -2,9 +2,8 @@ use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
 use sov_modules_api::{Context, DispatchCall};
-use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
+use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader, DaSpec};
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
-use sov_rollup_interface::zk::ValidityCondition;
 use sov_rollup_interface::{AddressTrait, Buf};
 use sov_state::StateCheckpoint;
 use tracing::{debug, error};
@@ -14,15 +13,22 @@ use crate::{Batch, Runtime, SequencerOutcome, SlashingReason, TxEffect};
 
 type ApplyBatchResult<T, A> = Result<T, ApplyBatchError<A>>;
 
+#[allow(type_alias_bounds)]
+type ApplyBatch<DA: DaSpec> = ApplyBatchResult<
+    BatchReceipt<SequencerOutcome<<DA::BlobTransaction as BlobReaderTrait>::Address>, TxEffect>,
+    <DA::BlobTransaction as BlobReaderTrait>::Address,
+>;
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+use zk_cycle_macros::cycle_tracker;
+
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to work with the module-system.
 pub struct AppTemplate<
     C: Context,
-    Cond: ValidityCondition,
+    DA: DaSpec,
     Vm,
-    RT: Runtime<C, Cond, B>,
-    B: BlobReaderTrait,
+    RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
 > {
     /// State storage used by the rollup.
     pub current_storage: C::Storage,
@@ -30,8 +36,7 @@ pub struct AppTemplate<
     pub runtime: RT,
     pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
-    phantom_cond: PhantomData<Cond>,
-    phantom_blob: PhantomData<B>,
+    phantom_da: PhantomData<DA>,
 }
 
 pub(crate) enum ApplyBatchError<A: AddressTrait> {
@@ -69,12 +74,11 @@ impl<A: AddressTrait> From<ApplyBatchError<A>> for BatchReceipt<SequencerOutcome
     }
 }
 
-impl<C, Vm, Cond, RT, B> AppTemplate<C, Cond, Vm, RT, B>
+impl<C, Vm, DA, RT> AppTemplate<C, DA, Vm, RT>
 where
     C: Context,
-    Cond: ValidityCondition,
-    B: BlobReaderTrait,
-    RT: Runtime<C, Cond, B>,
+    DA: DaSpec,
+    RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
 {
     /// [`AppTemplate`] constructor.
     pub fn new(storage: C::Storage, runtime: RT) -> Self {
@@ -83,15 +87,12 @@ where
             current_storage: storage,
             checkpoint: None,
             phantom_vm: PhantomData,
-            phantom_cond: PhantomData,
-            phantom_blob: PhantomData,
+            phantom_da: PhantomData,
         }
     }
 
-    pub(crate) fn apply_blob(
-        &mut self,
-        blob: &mut B,
-    ) -> ApplyBatchResult<BatchReceipt<SequencerOutcome<B::Address>, TxEffect>, B::Address> {
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
+    pub(crate) fn apply_blob(&mut self, blob: &mut DA::BlobTransaction) -> ApplyBatch<DA> {
         debug!(
             "Applying batch from sequencer: 0x{}",
             hex::encode(blob.sender())
@@ -234,6 +235,7 @@ where
         };
 
         self.checkpoint = Some(batch_workspace.checkpoint());
+
         Ok(BatchReceipt {
             batch_hash: blob.hash(),
             tx_receipts,

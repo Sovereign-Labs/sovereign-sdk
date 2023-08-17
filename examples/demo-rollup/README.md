@@ -32,8 +32,7 @@ This is a demo full node running a simple Sovereign SDK rollup on [Celestia](htt
   - [Remote setup](#remote-setup)
 - [How to Customize This Example](#how-to-customize-this-example)
   - [1. Initialize the DA Service](#1-initialize-the-da-service)
-  - [2. Initialize the State Transition Function](#2-initialize-the-state-transition-function)
-  - [3. Run the Main Loop](#3-run-the-main-loop)
+  - [2. Run the Main Loop](#2-run-the-main-loop)
 - [Disclaimer](#disclaimer)
 - [Interacting with your Node via RPC](#interacting-with-your-node-via-rpc)
   - [Key Concepts](#key-concepts)
@@ -380,24 +379,7 @@ a remote node. Whichever option you pick, simply place the URL and authenticatio
 in the `rollup_config.toml` file and it will be
 automatically picked up by the node implementation. For this tutorial, the Makefile below (which also helps start a local Celestia instance) handles this step for you.
 
-### 2. Initialize the State Transition Function
-
-The next step is to initialize your state transition function.
-
-```rust
-  use demo_stf::app::App;
-  use risc0_adapter::host::Risc0Verifier;
-  use jupiter::verifier::ChainValidityCondition;
-  use sov_stf_runner::StorageConfig;
-  use std::path::PathBuf;
-
-  let config = StorageConfig { path: PathBuf::from("path_readme") };
-
-  let mut app: App<Risc0Verifier, ChainValidityCondition, jupiter::BlobWithSender> =
-        App::new(config);
-```
-
-### 3. Run the Main Loop
+### 2. Run the Main Loop
 
 The full node implements a simple loop for processing blocks. The workflow is:
 

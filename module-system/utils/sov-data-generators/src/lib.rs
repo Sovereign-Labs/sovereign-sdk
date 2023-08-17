@@ -4,14 +4,14 @@ use std::rc::Rc;
 use borsh::ser::BorshSerialize;
 #[cfg(feature = "native")]
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::Address;
 pub use sov_modules_api::EncodeCall;
 #[cfg(feature = "native")]
 use sov_modules_api::{Context, Module, Spec};
 #[cfg(feature = "native")]
 use sov_modules_stf_template::RawTx;
 use sov_modules_stf_template::{Batch, SequencerOutcome, TxEffect};
-use sov_rollup_interface::mocks::MockBlob;
+use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockDaSpec};
 use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::AddressTrait;
 
@@ -22,8 +22,12 @@ pub mod election_data;
 #[cfg(feature = "native")]
 pub mod value_setter_data;
 
-pub fn new_test_blob_from_batch(batch: Batch, address: &[u8], hash: [u8; 32]) -> MockBlob<Address> {
-    let address = Address::try_from(address).unwrap();
+pub fn new_test_blob_from_batch(
+    batch: Batch,
+    address: &[u8],
+    hash: [u8; 32],
+) -> <MockDaSpec as DaSpec>::BlobTransaction {
+    let address = MockAddress::try_from(address).unwrap();
     let data = batch.try_to_vec().unwrap();
     MockBlob::new(data, address, hash)
 }

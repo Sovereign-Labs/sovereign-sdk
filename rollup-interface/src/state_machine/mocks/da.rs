@@ -203,6 +203,7 @@ impl DaSpec for MockDaSpec {
     type ChainParams = ();
 }
 
+#[derive(Clone)]
 /// DaService used in tests.
 pub struct MockDaService {
     submitted: Arc<Mutex<Vec<Vec<u8>>>>,

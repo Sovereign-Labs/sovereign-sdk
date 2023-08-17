@@ -1,13 +1,12 @@
 use sov_chain_state::{ChainState, ChainStateConfig};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
-use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, PublicKey, Spec};
 use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
 use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
-use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::mocks::{MockBlob, MockZkvm};
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
+use sov_rollup_interface::mocks::MockZkvm;
 use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::WorkingSet;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
@@ -108,14 +107,8 @@ pub(crate) fn create_demo_genesis_config<C: Context, Cond: ValidityCondition>(
 }
 
 /// Clones the [`AppTemplate`]'s [`Storage`] and extract the underlying [`WorkingSet`]
-pub(crate) fn get_working_set<C: Context, Cond: ValidityCondition>(
-    app_template: &AppTemplate<
-        C,
-        Cond,
-        MockZkvm,
-        TestRuntime<C, Cond>,
-        MockBlob<<DefaultContext as Spec>::Address>,
-    >,
+pub(crate) fn get_working_set<C: Context, DA: DaSpec>(
+    app_template: &AppTemplate<C, DA, MockZkvm, TestRuntime<C, DA::ValidityCondition>>,
 ) -> WorkingSet<<C as Spec>::Storage> {
     WorkingSet::new(app_template.current_storage.clone())
 }

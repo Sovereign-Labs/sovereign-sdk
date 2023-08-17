@@ -1,0 +1,37 @@
+[package]
+name = "zk-cycle-macros"
+description = "cycle counting utils"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+resolver = "2"
+autotests = false
+
+[lib]
+proc-macro = true
+
+[[test]]
+name = "tests"
+path = "tests/all_tests.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+syn = { version = "1.0", features = ["full"] }
+quote = "1.0"
+proc-macro2 = "1.0"
+borsh = { workspace = true }
+
+[dev-dependencies]
+trybuild = "1.0"
+zk-cycle-macros = {path = "../../utils/zk-cycle-macros"}
+risc0-zkvm = { version = "0.16", default-features = false, features = ["std"]}
+risc0-zkvm-platform = { version = "0.16"}
+zk-cycle-utils = {path = "../../utils/zk-cycle-utils"}
+
+[features]
+bench=[]
