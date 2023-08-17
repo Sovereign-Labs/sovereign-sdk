@@ -1,13 +1,17 @@
-pub mod call;
-pub mod genesis;
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
 
-#[cfg(test)]
-pub mod helpers;
+/// Call methods for the module
+pub mod call;
+
+/// Methods used to instantiate the module
+pub mod genesis;
 
 #[cfg(test)]
 mod tests;
 
 #[cfg(feature = "native")]
+#[allow(missing_docs)]
 pub mod query;
 
 use std::marker::PhantomData;
@@ -19,6 +23,7 @@ use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker, Zkvm};
 use sov_state::{Storage, WorkingSet};
 
+/// Configuration of the attester incentives module
 pub struct AttesterIncentivesConfig<
     C: Context,
     Vm: Zkvm,
@@ -115,6 +120,7 @@ pub struct AttesterIncentives<
     #[state]
     pub commitment_to_allowed_challenge_method: sov_state::StateValue<StoredCodeCommitment<Vm>>,
 
+    /// Constant validity condition checker for the module.
     #[state]
     pub validity_cond_checker: sov_state::StateValue<Checker>,
 

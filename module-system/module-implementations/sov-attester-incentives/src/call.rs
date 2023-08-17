@@ -25,33 +25,47 @@ pub enum CallMessage<C>
 where
     C: Context,
 {
+    /// Bonds an attester, the parameter is the bond amount
     BondAttester(u64),
+    /// Start the first phase of the two phase unbonding process
     BeginUnbondingAttester,
+    /// Finish the two phase unbonding
     EndUnbondingAttester,
+    /// Bonds a challenger, the parameter is the bond amount
     BondChallenger(u64),
+    /// Unbonds a challenger
     UnbondChallenger,
+    /// Proccesses an attestation.
     ProcessAttestation(Attestation<StorageProof<<<C as Spec>::Storage as Storage>::Proof>>),
+    /// Processes a challenge. The challenge is encoded as a [`Vec<u8>`]. The second parameter is the transition number
     ProcessChallenge(Vec<u8>, u64),
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
+/// Error type that explains why an user is slashed
 pub enum SlashingReason {
     #[error("Transition not found")]
+    /// The specified transition does not exist
     TransitionNotFound,
 
     #[error("The attestation does not contain the right block hash and post state transition")]
+    /// The specified transition is invalid (block hash, post root hash or validity condition)
     TransitionInvalid,
 
     #[error("The initial hash of the transition is invalid")]
+    /// The initial hash of the transition is invalid.
     InvalidInitialHash,
 
     #[error("Attester is unbonding")]
+    /// The attester is in the first unbonding phase
     AttesterIsUnbonding,
 
-    #[error("The proof outputs cannot be deserialized")]
+    #[error("The proof opening raised an error")]
+    /// The proof verification raised an error
     InvalidProofOutputs,
 
     #[error("No invalid transition to challenge")]
+    /// No invalid transition to challenge.
     NoInvalidTransition,
 }
 
@@ -59,27 +73,35 @@ pub enum SlashingReason {
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AttesterIncentiveErrors {
     #[error("Attester slashed")]
+    /// The user was slashed. Reason specified by [`SlashingReason`]
     UserSlashed(#[source] SlashingReason),
 
     #[error("Invalid bonding proof")]
+    /// The bonding proof was invalid
     InvalidBondingProof,
 
     #[error("The sender key doesn't match the attester key provided in the proof")]
+    /// The sender key doesn't match the attester key provided in the proof
     InvalidSender,
 
     #[error("The bond is not a 64 bits number")]
+    /// The bond is not a 64 bits number
     InvalidBondFormat,
 
     #[error("User is not bonded at the time of the attestation")]
+    /// User is not bonded at the time of the attestation
     UserNotBonded,
 
     #[error("Transition invariant not respected")]
+    /// Transition invariant not respected
     InvalidTransitionInvariant,
 
     #[error("Error occured when transfered funds")]
+    /// An error occured when transfered funds
     TransferFailure,
 
     #[error("Error when trying to mint the reward token")]
+    /// An error occured when trying to mint the reward token
     MintFailure,
 }
 
@@ -99,6 +121,7 @@ impl<
         Checker: ValidityConditionChecker<Cond> + BorshDeserialize + BorshSerialize,
     > AttesterIncentives<C, Vm, Cond, Checker>
 {
+    /// This returns the address of the reward token supply
     pub fn get_reward_token_supply_address(
         &self,
         working_set: &mut WorkingSet<C::Storage>,

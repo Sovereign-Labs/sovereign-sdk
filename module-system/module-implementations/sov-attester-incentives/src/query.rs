@@ -13,7 +13,7 @@ pub struct BondAmountResponse {
     pub value: u64,
 }
 
-// TODO: adapt rpc_gen macro to accept structure definitions having multiple generics
+// TODO: implement rpc_gen macro
 impl<C, Vm, Cond, Checker> AttesterIncentives<C, Vm, Cond, Checker>
 where
     C: sov_modules_api::Context,

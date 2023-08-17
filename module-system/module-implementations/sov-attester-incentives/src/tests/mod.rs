@@ -1,4 +1,11 @@
 use borsh::BorshSerialize;
+
+mod helpers;
+
+use helpers::{
+    commit_get_new_working_set, execution_simulation, setup, BOND_AMOUNT, INITIAL_BOND_AMOUNT,
+    INIT_HEIGHT,
+};
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::mocks::{
     MockCodeCommitment, MockProof, MockValidityCond, MockValidityCondChecker,
@@ -8,10 +15,6 @@ use sov_rollup_interface::zk::StateTransition;
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::call::{AttesterIncentiveErrors, SlashingReason};
-use crate::helpers::{
-    commit_get_new_working_set, execution_simulation, setup, BOND_AMOUNT, INITIAL_BOND_AMOUNT,
-    INIT_HEIGHT,
-};
 
 /// Start by testing the positive case where the attestations are valid
 #[test]

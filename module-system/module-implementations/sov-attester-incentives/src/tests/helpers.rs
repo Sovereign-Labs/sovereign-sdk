@@ -18,7 +18,6 @@ type C = DefaultContext;
 
 pub const TOKEN_NAME: &str = "TEST_TOKEN";
 pub const BOND_AMOUNT: u64 = 1000;
-pub const DEFAULT_CHAIN_HEIGHT: u64 = 12;
 pub const INITIAL_BOND_AMOUNT: u64 = 5 * BOND_AMOUNT;
 pub const SALT: u64 = 5;
 pub const DEFAULT_ROLLUP_FINALITY: u64 = 3;
