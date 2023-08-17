@@ -147,6 +147,13 @@ impl BlockHeaderTrait for MockBlockHeader {
     }
 }
 
+/// A Mock namespace type that is used to specify the origin of the data of a MockBlock
+#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]
+pub enum MockNamespace {
+    Default,
+    External,
+}
+
 /// A mock block type used for testing.
 #[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]
 pub struct MockBlock {
@@ -158,6 +165,8 @@ pub struct MockBlock {
     pub height: u64,
     /// Validity condition
     pub validity_cond: MockValidityCond,
+    /// Namespace
+    pub namespace: MockNamespace,
 }
 
 impl Default for MockBlock {
@@ -169,6 +178,7 @@ impl Default for MockBlock {
             },
             height: 0,
             validity_cond: MockValidityCond::default(),
+            namespace: MockNamespace::Default,
         }
     }
 }
@@ -176,6 +186,7 @@ impl Default for MockBlock {
 impl SlotData for MockBlock {
     type BlockHeader = MockBlockHeader;
     type Cond = MockValidityCond;
+    type Namespace = MockNamespace;
 
     fn hash(&self) -> [u8; 32] {
         self.curr_hash
@@ -187,6 +198,10 @@ impl SlotData for MockBlock {
 
     fn validity_condition(&self) -> MockValidityCond {
         self.validity_cond
+    }
+
+    fn namespace(&self) -> Self::Namespace {
+        self.namespace
     }
 }
 

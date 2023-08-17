@@ -309,6 +309,9 @@ impl SlotData for CelestiaHeader {
     type BlockHeader = CelestiaHeader;
     type Cond = ChainValidityCondition;
 
+    // TODO: specify a namespace for Celestia's adapter
+    type Namespace = ();
+
     fn hash(&self) -> [u8; 32] {
         match self.header.hash() {
             tendermint::Hash::Sha256(h) => h,
@@ -326,6 +329,8 @@ impl SlotData for CelestiaHeader {
             block_hash: <Self as SlotData>::hash(self),
         }
     }
+
+    fn namespace(&self) {}
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]

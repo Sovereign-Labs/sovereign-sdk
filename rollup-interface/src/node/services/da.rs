@@ -108,10 +108,18 @@ pub trait SlotData:
     /// The validity condition associated with the slot data.
     type Cond: ValidityCondition;
 
+    /// The namespace from which the slot comes from
+    /// So far we have two namespaces by default:
+    /// - the execution namespace: that contains the standard transactions and update the rollup state accordingly.
+    /// - the sync namespace: that contains the attestations for the optimistic rollup mode.
+    type Namespace;
+
     /// The canonical hash of the DA layer block.
     fn hash(&self) -> [u8; 32];
     /// The header of the DA layer block.
     fn header(&self) -> &Self::BlockHeader;
     /// Get the validity condition set associated with the slot
     fn validity_condition(&self) -> Self::Cond;
+    /// Get the namespace associated with the slot
+    fn namespace(&self) -> Self::Namespace;
 }
