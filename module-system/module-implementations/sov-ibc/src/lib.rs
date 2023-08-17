@@ -14,6 +14,24 @@ use sov_state::WorkingSet;
 
 pub struct ExampleModuleConfig {}
 
+#[derive(borsh::BorshSerialize)]
+pub struct ConsensusStateKey {
+    pub client_id: String,
+    pub epoch: u64,
+    pub height: u64,
+}
+
+impl From<ClientConsensusStatePath> for ConsensusStateKey {
+    fn from(path: ClientConsensusStatePath) -> Self {
+        Self {
+            client_id: path.client_id.to_string(),
+            epoch: path.epoch,
+            height: path.height,
+        }
+    }
+}
+
+
 /// A new module:
 /// - Must derive `ModuleInfo`
 /// - Must contain `[address]` field
@@ -33,23 +51,6 @@ pub struct IbcModule<C: sov_modules_api::Context> {
 
     #[state]
     pub consensus_state_store: sov_state::StateMap<ConsensusStateKey, Vec<u8>>,
-}
-
-#[derive(borsh::BorshSerialize)]
-pub struct ConsensusStateKey {
-    pub client_id: String,
-    pub epoch: u64,
-    pub height: u64,
-}
-
-impl From<ClientConsensusStatePath> for ConsensusStateKey {
-    fn from(path: ClientConsensusStatePath) -> Self {
-        Self {
-            client_id: path.client_id.to_string(),
-            epoch: path.epoch,
-            height: path.height,
-        }
-    }
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcModule<C> {
