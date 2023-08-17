@@ -59,7 +59,7 @@ fn register_txs_rpc_methods<B, D>(
 ) -> Result<(), jsonrpsee::core::Error>
 where
     B: BatchBuilder + Send + Sync + 'static,
-    D: DaService + Send + Sync + 'static,
+    D: DaService,
 {
     rpc.register_async_method("sequencer_publishBatch", |_, batch_builder| async move {
         batch_builder
@@ -82,7 +82,7 @@ where
 pub fn get_sequencer_rpc<B, D>(batch_builder: B, da_service: Arc<D>) -> RpcModule<Sequencer<B, D>>
 where
     B: BatchBuilder + Send + Sync + 'static,
-    D: DaService + Send + Sync + 'static,
+    D: DaService,
 {
     let sequencer = Sequencer::new(batch_builder, da_service);
     let mut rpc = RpcModule::new(sequencer);

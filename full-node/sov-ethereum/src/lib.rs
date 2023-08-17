@@ -23,7 +23,7 @@ pub mod experimental {
 
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 
-    pub fn get_ethereum_rpc<DA: DaService + DaService + Send + Sync + 'static>(
+    pub fn get_ethereum_rpc<DA: DaService>(
         da_service: Arc<DA>,
         tx_signer_prov_key: DefaultPrivateKey,
     ) -> RpcModule<Ethereum<DA>> {
@@ -76,7 +76,7 @@ pub mod experimental {
         }
     }
 
-    fn register_rpc_methods<DA: DaService + Send + Sync + 'static>(
+    fn register_rpc_methods<DA: DaService>(
         rpc: &mut RpcModule<Ethereum<DA>>,
     ) -> Result<(), jsonrpsee::core::Error> {
         rpc.register_async_method(

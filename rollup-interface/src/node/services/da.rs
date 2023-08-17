@@ -14,7 +14,7 @@ use crate::zk::ValidityCondition;
 /// The DaService has two responsibilities - fetching data from the DA layer, transforming the
 /// data into a representation that can be efficiently verified in circuit.
 #[async_trait]
-pub trait DaService {
+pub trait DaService: Send + Sync + 'static {
     /// A handle to the types used by the DA layer.
     type RuntimeConfig: DeserializeOwned;
 
