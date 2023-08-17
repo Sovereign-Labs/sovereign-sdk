@@ -89,7 +89,10 @@ pub mod experimental {
                     .make_raw_tx(raw_evm_tx)
                     .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
-                let blob = vec![raw_tx].try_to_vec().unwrap();
+                let blob = vec![raw_tx]
+                    .try_to_vec()
+                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+
                 ethereum
                     .da_service
                     .send_transaction(&blob)
