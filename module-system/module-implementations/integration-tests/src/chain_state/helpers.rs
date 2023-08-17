@@ -1,4 +1,4 @@
-use sov_chain_state::{ChainState, ChainStateConfig};
+use sov_chain_state::{ChainState, ChainStateConfig, TransitionHeight};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
@@ -101,7 +101,7 @@ pub(crate) fn create_demo_genesis_config<C: Context, Cond: ValidityCondition>(
 ) -> GenesisConfig<C, Cond> {
     let value_setter_config = ValueSetterConfig { admin };
     let chain_state_config = ChainStateConfig {
-        initial_slot_height: 0,
+        initial_slot_height: TransitionHeight(0),
     };
     GenesisConfig::new(value_setter_config, chain_state_config)
 }

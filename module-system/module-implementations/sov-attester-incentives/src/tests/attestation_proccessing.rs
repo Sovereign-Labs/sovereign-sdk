@@ -1,3 +1,4 @@
+use sov_chain_state::TransitionHeight;
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::optimistic::Attestation;
 use sov_state::{ProverStorage, WorkingSet};
@@ -221,7 +222,7 @@ fn test_burn_on_invalid_attestation() {
     assert!(
         module
             .bad_transition_pool
-            .get(&(INIT_HEIGHT + 2), &mut working_set)
+            .get(&TransitionHeight(INIT_HEIGHT + 2), &mut working_set)
             .is_none(),
         "The transition should not exist in the pool"
     );
@@ -274,7 +275,7 @@ fn test_burn_on_invalid_attestation() {
     assert_eq!(
         module
             .bad_transition_pool
-            .get(&(INIT_HEIGHT + 2), &mut working_set)
+            .get(&TransitionHeight(INIT_HEIGHT + 2), &mut working_set)
             .unwrap(),
         BOND_AMOUNT,
         "The transition should not exist in the pool"

@@ -1,4 +1,5 @@
 use borsh::BorshSerialize;
+use sov_chain_state::TransitionHeight;
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::mocks::{
     MockCodeCommitment, MockProof, MockValidityCond, MockValidityCondChecker,
@@ -53,9 +54,11 @@ fn test_valid_challenge() {
     );
 
     // Set a bad transition to get a reward from
-    module
-        .bad_transition_pool
-        .set(&(INIT_HEIGHT + 1), &BOND_AMOUNT, &mut working_set);
+    module.bad_transition_pool.set(
+        &TransitionHeight(INIT_HEIGHT + 1),
+        &BOND_AMOUNT,
+        &mut working_set,
+    );
 
     // Process a correct challenge
     let context = DefaultContext {
@@ -90,7 +93,7 @@ fn test_valid_challenge() {
             .process_challenge(
                 &context,
                 proof.as_slice(),
-                INIT_HEIGHT + 1,
+                &TransitionHeight(INIT_HEIGHT + 1),
                 &mut working_set,
             )
             .expect("Should not fail");
@@ -109,7 +112,7 @@ fn test_valid_challenge() {
         assert_eq!(
             module
                 .bad_transition_pool
-                .get(&(INIT_HEIGHT + 1), &mut working_set),
+                .get(&TransitionHeight(INIT_HEIGHT + 1), &mut working_set),
             None,
             "The transition should have disappeared"
         )
@@ -157,7 +160,12 @@ fn invalid_proof_helper(
         .expect("Should be able to bond");
 
     let err = module
-        .process_challenge(context, proof.as_slice(), INIT_HEIGHT + 1, working_set)
+        .process_challenge(
+            context,
+            proof.as_slice(),
+            &TransitionHeight(INIT_HEIGHT + 1),
+            working_set,
+        )
         .unwrap_err();
 
     // Check the error raised
@@ -187,9 +195,11 @@ fn test_invalid_challenge() {
     let initial_transition = exec_vars.pop().unwrap();
 
     // Set a bad transition to get a reward from
-    module
-        .bad_transition_pool
-        .set(&(INIT_HEIGHT + 1), &BOND_AMOUNT, &mut working_set);
+    module.bad_transition_pool.set(
+        &TransitionHeight(INIT_HEIGHT + 1),
+        &BOND_AMOUNT,
+        &mut working_set,
+    );
 
     // Process a correct challenge but without a bonded attester
     let context = DefaultContext {
@@ -225,7 +235,7 @@ fn test_invalid_challenge() {
             .process_challenge(
                 &context,
                 proof.as_slice(),
-                INIT_HEIGHT + 1,
+                &TransitionHeight(INIT_HEIGHT + 1),
                 &mut working_set,
             )
             .unwrap_err();

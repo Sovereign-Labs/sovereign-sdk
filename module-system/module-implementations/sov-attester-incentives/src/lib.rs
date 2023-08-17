@@ -18,6 +18,8 @@ use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use call::Role;
+use sov_bank::Amount;
+use sov_chain_state::TransitionHeight;
 use sov_modules_api::{Context, Error};
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::zk::{
@@ -37,19 +39,19 @@ pub struct AttesterIncentivesConfig<
     /// The address of the account holding the reward token supply
     pub reward_token_supply_address: C::Address,
     /// The minimum bond for an attester.
-    pub minimum_attester_bond: u64,
+    pub minimum_attester_bond: Amount,
     /// The minimum bond for a challenger.
-    pub minimum_challenger_bond: u64,
+    pub minimum_challenger_bond: Amount,
     /// A code commitment to be used for verifying proofs
     pub commitment_to_allowed_challenge_method: Vm::CodeCommitment,
     /// A list of initial provers and their bonded amount.
-    pub initial_attesters: Vec<(C::Address, u64)>,
+    pub initial_attesters: Vec<(C::Address, Amount)>,
     /// The finality period of the rollup (constant) in the number of DA layer slots processed.
-    pub rollup_finality_period: u64,
+    pub rollup_finality_period: TransitionHeight,
     /// The current maximum attested height
-    pub maximum_attested_height: u64,
+    pub maximum_attested_height: TransitionHeight,
     /// The light client finalized height
-    pub light_client_finalized_height: u64,
+    pub light_client_finalized_height: TransitionHeight,
     /// The validity condition checker used to check validity conditions
     pub validity_condition_checker: Checker,
     /// Phantom data that contains the validity condition
@@ -60,9 +62,9 @@ pub struct AttesterIncentivesConfig<
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug)]
 pub struct UnbondingInfo {
     /// The height at which an attester started unbonding
-    pub unbonding_initiated_height: u64,
+    pub unbonding_initiated_height: TransitionHeight,
     /// The number of tokens that the attester may withdraw
-    pub amount: u64,
+    pub amount: Amount,
 }
 
 /// A new module:
@@ -82,9 +84,9 @@ pub struct AttesterIncentives<
 
     /// The amount of time it takes to a light client to be confident
     /// that an attested state transition won't be challenged. Measured in
-    /// number of blocks.
+    /// number of slots.
     #[state]
-    pub rollup_finality_period: sov_state::StateValue<u64>,
+    pub rollup_finality_period: sov_state::StateValue<TransitionHeight>,
 
     /// The address of the token used for bonding provers
     #[state]
@@ -106,7 +108,7 @@ pub struct AttesterIncentives<
 
     /// The set of bonded attesters and their bonded amount.
     #[state]
-    pub bonded_attesters: sov_state::StateMap<C::Address, u64>,
+    pub bonded_attesters: sov_state::StateMap<C::Address, Amount>,
 
     /// The set of unbonding attesters, and the unbonding information (ie the
     /// height of the chain where they started the unbonding and their associated bond).
@@ -115,29 +117,29 @@ pub struct AttesterIncentives<
 
     /// The current maximum attestation height
     #[state]
-    pub maximum_attested_height: sov_state::StateValue<u64>,
+    pub maximum_attested_height: sov_state::StateValue<TransitionHeight>,
 
     /// Challengers now challenge a transition and not a specific attestation
     /// Mapping from a transition number to the associated reward value.
     /// This mapping is populated when the attestations are processed by the rollup
     #[state]
-    pub bad_transition_pool: sov_state::StateMap<u64, u64>,
+    pub bad_transition_pool: sov_state::StateMap<TransitionHeight, Amount>,
 
     /// The set of bonded challengers and their bonded amount.
     #[state]
-    pub bonded_challengers: sov_state::StateMap<C::Address, u64>,
+    pub bonded_challengers: sov_state::StateMap<C::Address, Amount>,
 
     /// The minimum bond for an attester to be eligble
     #[state]
-    pub minimum_attester_bond: sov_state::StateValue<u64>,
+    pub minimum_attester_bond: sov_state::StateValue<Amount>,
 
     /// The minimum bond for an attester to be eligble
     #[state]
-    pub minimum_challenger_bond: sov_state::StateValue<u64>,
+    pub minimum_challenger_bond: sov_state::StateValue<Amount>,
 
     /// The height of the most recent block which light clients know to be finalized
     #[state]
-    pub light_client_finalized_height: sov_state::StateValue<u64>,
+    pub light_client_finalized_height: sov_state::StateValue<TransitionHeight>,
 
     /// Reference to the Bank module.
     #[module]
@@ -199,7 +201,7 @@ where
                 .map_err(|error| error.into()),
 
             call::CallMessage::ProcessChallenge(proof, transition) => self
-                .process_challenge(context, &proof, transition, working_set)
+                .process_challenge(context, &proof, &transition, working_set)
                 .map_err(|error| error.into()),
         }
         .map_err(|e| e.into())
