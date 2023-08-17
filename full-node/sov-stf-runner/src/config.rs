@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use jupiter::da_service::DaServiceConfig;
+use celestia::da_service::DaServiceConfig;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 pub use sov_state::config::Config as StorageConfig;
