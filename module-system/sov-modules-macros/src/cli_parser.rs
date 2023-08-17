@@ -234,7 +234,6 @@ impl CliParserMacro {
             }
 
         };
-        println!("{}", expanded);
         Ok(expanded.into())
     }
 }

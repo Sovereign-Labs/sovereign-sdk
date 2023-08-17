@@ -2,7 +2,7 @@ use demo_stf::runtime::{Runtime, RuntimeCall, RuntimeSubcommand};
 use sov_cli::wallet_state::WalletState;
 use sov_cli::workflows::keys::KeyWorkflow;
 use sov_cli::workflows::rpc::RpcWorkflows;
-use sov_cli::workflows::transactions::{ImportTransaction, TransactionWorkflow};
+use sov_cli::workflows::transactions::TransactionWorkflow;
 use sov_cli::{clap, wallet_dir};
 use sov_modules_api::clap::Parser;
 use sov_modules_api::cli::{FileStringArg, JsonStringArg};
@@ -20,8 +20,6 @@ pub enum Workflows {
             RuntimeSubcommand<JsonStringArg, DefaultContext>,
         >,
     ),
-    // #[clap(subcommand)]
-    // Transactions(TransactionWorkflow<RuntimeSubcommand<JsonStringArg, DefaultContext>>),
     #[clap(subcommand)]
     Keys(KeyWorkflow<Ctx>),
     #[clap(subcommand)]
