@@ -137,8 +137,7 @@ fn test_transition_invariant() {
     let attestation = Attestation {
         initial_state_root: exec_vars[new_height + finality_usize].state_root,
         da_block_hash: [(new_height + finality_usize + 1).try_into().unwrap(); 32],
-        post_state_root: exec_vars[new_height + finality_usize + 1]
-            .state_root,
+        post_state_root: exec_vars[new_height + finality_usize + 1].state_root,
         proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
             transition_num: new_height.try_into().unwrap(),
             proof: exec_vars[new_height - 1].state_proof.clone(),
@@ -182,8 +181,7 @@ fn test_transition_invariant() {
     let attestation = Attestation {
         initial_state_root: exec_vars[new_height + finality_usize].state_root,
         da_block_hash: [(new_height + finality_usize + 1).try_into().unwrap(); 32],
-        post_state_root: exec_vars[new_height + finality_usize + 1]
-            .state_root,
+        post_state_root: exec_vars[new_height + finality_usize + 1].state_root,
         proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
             transition_num: (new_height + finality_usize + 2).try_into().unwrap(),
             proof: exec_vars[new_height + finality_usize + 1]
