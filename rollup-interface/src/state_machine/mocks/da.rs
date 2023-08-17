@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{bail, Error};
 use async_trait::async_trait;
+use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -11,7 +12,7 @@ use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufRea
 use crate::mocks::MockValidityCond;
 use crate::services::batch_builder::BatchBuilder;
 use crate::services::da::{DaService, SlotData};
-use crate::AddressTrait;
+use crate::{AddressTrait, NamespaceTrait};
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
 #[derive(Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize, Hash)]
@@ -148,11 +149,27 @@ impl BlockHeaderTrait for MockBlockHeader {
 }
 
 /// A Mock namespace type that is used to specify the origin of the data of a MockBlock
-#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]
-pub enum MockNamespace {
+#[derive(
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
+    Eq,
+    PartialEq,
+    core::fmt::Debug,
+    Clone,
+    Copy,
     Default,
+)]
+pub enum MockNamespace {
+    #[default]
+    /// The default namespace
+    Default,
+    /// Another namespace for testing
     External,
 }
+
+impl NamespaceTrait for MockNamespace {}
 
 /// A mock block type used for testing.
 #[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]

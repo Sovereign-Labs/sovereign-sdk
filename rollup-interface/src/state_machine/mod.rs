@@ -5,6 +5,9 @@ pub mod da;
 pub mod stf;
 pub mod zk;
 
+use std::fmt::{Debug, Display};
+
+use borsh::{BorshDeserialize, BorshSerialize};
 pub use bytes::{Buf, BufMut, Bytes, BytesMut};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -17,7 +20,7 @@ pub mod optimistic;
 /// A marker trait for addresses.
 pub trait AddressTrait:
     PartialEq
-    + core::fmt::Debug
+    + Debug
     + Clone
     + AsRef<[u8]>
     + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
@@ -27,8 +30,14 @@ pub trait AddressTrait:
     + From<[u8; 32]>
     + Send
     + Sync
-    + core::fmt::Display
+    + Display
     + std::hash::Hash
     + 'static
+{
+}
+
+/// A marker trait for namespaces.
+pub trait NamespaceTrait:
+    PartialEq + Debug + Clone + Copy + Eq + BorshSerialize + BorshDeserialize
 {
 }

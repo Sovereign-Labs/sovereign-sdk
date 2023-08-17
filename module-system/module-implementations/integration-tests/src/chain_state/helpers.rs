@@ -8,17 +8,20 @@ use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::mocks::MockZkvm;
 use sov_rollup_interface::zk::ValidityCondition;
+use sov_rollup_interface::NamespaceTrait;
 use sov_state::WorkingSet;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub(crate) struct TestRuntime<C: Context, Cond: ValidityCondition> {
+pub(crate) struct TestRuntime<C: Context, Cond: ValidityCondition, Namespace: NamespaceTrait> {
     pub value_setter: ValueSetter<C>,
-    pub chain_state: ChainState<C, Cond>,
+    pub chain_state: ChainState<C, Cond, Namespace>,
 }
 
-impl<C: Context, Cond: ValidityCondition> TxHooks for TestRuntime<C, Cond> {
+impl<C: Context, Cond: ValidityCondition, Namespace: NamespaceTrait> TxHooks
+    for TestRuntime<C, Cond, Namespace>
+{
     type Context = C;
 
     fn pre_dispatch_tx_hook(
@@ -38,8 +41,8 @@ impl<C: Context, Cond: ValidityCondition> TxHooks for TestRuntime<C, Cond> {
     }
 }
 
-impl<C: Context, Cond: ValidityCondition, B: BlobReaderTrait> ApplyBlobHooks<B>
-    for TestRuntime<C, Cond>
+impl<C: Context, Cond: ValidityCondition, B: BlobReaderTrait, N: NamespaceTrait> ApplyBlobHooks<B>
+    for TestRuntime<C, Cond, N>
 {
     type Context = C;
     type BlobResult = SequencerOutcome<B::Address>;
@@ -61,7 +64,9 @@ impl<C: Context, Cond: ValidityCondition, B: BlobReaderTrait> ApplyBlobHooks<B>
     }
 }
 
-impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for TestRuntime<C, Cond> {
+impl<C: Context, Cond: ValidityCondition, N: NamespaceTrait> SlotHooks<Cond>
+    for TestRuntime<C, Cond, N>
+{
     type Context = C;
 
     fn begin_slot_hook(
@@ -75,7 +80,9 @@ impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for TestRuntime<C, Con
     fn end_slot_hook(&self, _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>) {}
 }
 
-impl<C: Context, Cond: ValidityCondition> BlobSelector for TestRuntime<C, Cond> {
+impl<C: Context, Cond: ValidityCondition, N: NamespaceTrait> BlobSelector
+    for TestRuntime<C, Cond, N>
+{
     type Context = C;
 
     fn get_blobs_for_this_slot<'a, I, B>(
@@ -91,14 +98,14 @@ impl<C: Context, Cond: ValidityCondition> BlobSelector for TestRuntime<C, Cond> 
     }
 }
 
-impl<C: Context, Cond: ValidityCondition, B: BlobReaderTrait> Runtime<C, Cond, B>
-    for TestRuntime<C, Cond>
+impl<C: Context, Cond: ValidityCondition, B: BlobReaderTrait, N: NamespaceTrait> Runtime<C, Cond, B>
+    for TestRuntime<C, Cond, N>
 {
 }
 
-pub(crate) fn create_demo_genesis_config<C: Context, Cond: ValidityCondition>(
+pub(crate) fn create_demo_genesis_config<C: Context, Cond: ValidityCondition, N: NamespaceTrait>(
     admin: <C as Spec>::Address,
-) -> GenesisConfig<C, Cond> {
+) -> GenesisConfig<C, Cond, N> {
     let value_setter_config = ValueSetterConfig { admin };
     let chain_state_config = ChainStateConfig {
         initial_slot_height: 0,
@@ -107,8 +114,8 @@ pub(crate) fn create_demo_genesis_config<C: Context, Cond: ValidityCondition>(
 }
 
 /// Clones the [`AppTemplate`]'s [`Storage`] and extract the underlying [`WorkingSet`]
-pub(crate) fn get_working_set<C: Context, DA: DaSpec>(
-    app_template: &AppTemplate<C, DA, MockZkvm, TestRuntime<C, DA::ValidityCondition>>,
+pub(crate) fn get_working_set<C: Context, DA: DaSpec, N: NamespaceTrait>(
+    app_template: &AppTemplate<C, DA, MockZkvm, TestRuntime<C, DA::ValidityCondition, N>>,
 ) -> WorkingSet<<C as Spec>::Storage> {
     WorkingSet::new(app_template.current_storage.clone())
 }

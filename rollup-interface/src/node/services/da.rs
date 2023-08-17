@@ -7,6 +7,7 @@ use serde::Serialize;
 
 use crate::da::{BlockHeaderTrait, DaSpec};
 use crate::zk::ValidityCondition;
+use crate::NamespaceTrait;
 
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer
 /// It is *not* part of the logic that is zk-proven.

@@ -1,7 +1,9 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::Genesis;
-use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash, MockValidityCond};
+use sov_rollup_interface::mocks::{
+    MockBlock, MockBlockHeader, MockHash, MockNamespace, MockValidityCond,
+};
 use sov_state::{ProverStorage, Storage, WorkingSet};
 
 use crate::{ChainState, ChainStateConfig, StateTransitionId, TransitionInProgress};
@@ -20,7 +22,7 @@ fn test_simple_chain_state() {
 
     let mut working_set = WorkingSet::new(storage.clone());
 
-    let chain_state = ChainState::<DefaultContext, MockValidityCond>::default();
+    let chain_state = ChainState::<DefaultContext, MockValidityCond, MockNamespace>::default();
     let config = ChainStateConfig {
         initial_slot_height: INIT_HEIGHT,
     };
@@ -49,6 +51,7 @@ fn test_simple_chain_state() {
         },
         height: INIT_HEIGHT,
         validity_cond: MockValidityCond { is_valid: true },
+        namespace: Default::default(),
     };
 
     chain_state.begin_slot_hook(&slot_data, &mut working_set);
@@ -95,6 +98,7 @@ fn test_simple_chain_state() {
         },
         height: INIT_HEIGHT,
         validity_cond: MockValidityCond { is_valid: false },
+        namespace: Default::default(),
     };
 
     chain_state.begin_slot_hook(&new_slot_data, &mut working_set);

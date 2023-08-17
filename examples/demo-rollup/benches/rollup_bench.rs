@@ -73,6 +73,7 @@ fn rollup_bench(_bench: &mut Criterion) {
             },
             height,
             validity_cond: MockValidityCond::default(),
+            namespace: Default::default(),
         };
         blocks.push(filtered_block);
 

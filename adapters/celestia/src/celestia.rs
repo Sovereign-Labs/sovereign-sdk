@@ -309,7 +309,7 @@ impl SlotData for CelestiaHeader {
     type BlockHeader = CelestiaHeader;
     type Cond = ChainValidityCondition;
 
-    // TODO: specify a namespace for Celestia's adapter
+    // TODO: specify a namespace for Celestia's adapter: https://github.com/Sovereign-Labs/sovereign-sdk/issues/671
     type Namespace = ();
 
     fn hash(&self) -> [u8; 32] {
