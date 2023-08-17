@@ -86,9 +86,9 @@ fn test_transition_invariant() {
     // The attester should be able to process multiple attestations with the same bonding proof
     for i in 0..usize::try_from(DEFAULT_ROLLUP_FINALITY).unwrap() {
         let attestation = Attestation {
-            initial_state_root: exec_vars[new_height + i].state_root.clone(),
+            initial_state_root: exec_vars[new_height + i].state_root,
             da_block_hash: [(new_height + i + 1).try_into().unwrap(); 32],
-            post_state_root: exec_vars[new_height + i + 1].state_root.clone(),
+            post_state_root: exec_vars[new_height + i + 1].state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
                 transition_num: new_height.try_into().unwrap(),
                 proof: exec_vars[new_height - 1].state_proof.clone(),
@@ -135,11 +135,10 @@ fn test_transition_invariant() {
 
     // Now the transition invariant is no longer respected: the transition number is below the minimum height
     let attestation = Attestation {
-        initial_state_root: exec_vars[new_height + finality_usize].state_root.clone(),
+        initial_state_root: exec_vars[new_height + finality_usize].state_root,
         da_block_hash: [(new_height + finality_usize + 1).try_into().unwrap(); 32],
         post_state_root: exec_vars[new_height + finality_usize + 1]
-            .state_root
-            .clone(),
+            .state_root,
         proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
             transition_num: new_height.try_into().unwrap(),
             proof: exec_vars[new_height - 1].state_proof.clone(),
@@ -181,11 +180,10 @@ fn test_transition_invariant() {
 
     // Now we do the same, except that the proof of bond refers to a transition above the transition to prove
     let attestation = Attestation {
-        initial_state_root: exec_vars[new_height + finality_usize].state_root.clone(),
+        initial_state_root: exec_vars[new_height + finality_usize].state_root,
         da_block_hash: [(new_height + finality_usize + 1).try_into().unwrap(); 32],
         post_state_root: exec_vars[new_height + finality_usize + 1]
-            .state_root
-            .clone(),
+            .state_root,
         proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
             transition_num: (new_height + finality_usize + 2).try_into().unwrap(),
             proof: exec_vars[new_height + finality_usize + 1]

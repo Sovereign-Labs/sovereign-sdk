@@ -307,7 +307,7 @@ impl<
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
         // First get the bonded attester
-        if let Some(_) = self.bonded_attesters.get(context.sender(), working_set) {
+        if self.bonded_attesters.get(context.sender(), working_set).is_some() {
             // Then add the bonded attester to the unbonding set, with the current finalized height
             let finalized_height = self
                 .light_client_finalized_height
@@ -326,7 +326,7 @@ impl<
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
         // We first have to ensure that the attester is bonded
-        if let Some(_) = self.bonded_attesters.get(context.sender(), working_set) {
+        if self.bonded_attesters.get(context.sender(), working_set).is_some() {
             // We have to ensure that the attester is unbonding, and that the unbonding transaction
             // occurred at least `finality_period` blocks ago to let the attester unbond
             if let Some(begin_unbond_height) =
