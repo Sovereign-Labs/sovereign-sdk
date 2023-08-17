@@ -1,7 +1,10 @@
 mod clients;
 
+use std::cell::RefCell;
+
 use ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
 use ibc::core::events::IbcEvent;
+use ibc::core::ics02_client::error::ClientError;
 use ibc::core::ics03_connection::connection::ConnectionEnd;
 use ibc::core::ics04_channel::channel::ChannelEnd;
 use ibc::core::ics04_channel::commitment::{AcknowledgementCommitment, PacketCommitment};
@@ -14,14 +17,15 @@ use ibc::core::ics24_host::path::{
 };
 use ibc::core::timestamp::Timestamp;
 use ibc::core::{ContextError, ExecutionContext, ValidationContext};
-use ibc::Height;
+use ibc::{Any, Height};
+use ibc_proto::protobuf::Protobuf;
 use sov_state::WorkingSet;
 
 use crate::IbcModule;
 
 pub struct IbcExecutionContext<'a, C: sov_modules_api::Context> {
     pub ibc: &'a IbcModule<C>,
-    pub working_set: &'a mut WorkingSet<C::Storage>,
+    pub working_set: RefCell<&'a mut WorkingSet<C::Storage>>,
 }
 
 impl<'a, C> ValidationContext for IbcExecutionContext<'a, C>
@@ -34,11 +38,26 @@ where
     type AnyClientState = clients::AnyClientState;
 
     fn get_client_validation_context(&self) -> &Self::ClientValidationContext {
-        todo!()
+        self
     }
 
     fn client_state(&self, client_id: &ClientId) -> Result<Self::AnyClientState, ContextError> {
-        todo!()
+        let client_state_bytes = self
+            .ibc
+            .client_state_store
+            .get(&client_id.to_string(), *self.working_set.borrow_mut())
+            .ok_or(ClientError::ClientStateNotFound {
+                client_id: client_id.clone(),
+            })?;
+
+        let tm_client_state: TmClientState =
+            <TmClientState as Protobuf<Any>>::decode(client_state_bytes.as_ref()).map_err(|e| {
+                ClientError::Other {
+                    description: "failed to decode client state".to_string(),
+                }
+            })?;
+
+        Ok(tm_client_state.into())
     }
 
     fn decode_client_state(

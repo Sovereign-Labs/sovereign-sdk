@@ -237,7 +237,7 @@ where
         self.ibc.client_state_store.set(
             &client_state_path.to_string(),
             &client_state_bytes,
-            self.working_set,
+            self.working_set.get_mut(),
         );
 
         Ok(())

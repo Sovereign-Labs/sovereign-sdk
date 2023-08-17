@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::fmt::Debug;
 
 use anyhow::{bail, Result};
@@ -55,7 +56,7 @@ impl<C: sov_modules_api::Context> IbcModule<C> {
 
         let mut execution_context = IbcExecutionContext {
             ibc: self,
-            working_set,
+            working_set: RefCell::new(working_set),
         };
 
         let mut router = IbcRouter;
