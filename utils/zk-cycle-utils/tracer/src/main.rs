@@ -38,6 +38,10 @@ struct Args {
     #[arg(short, long)]
     /// Strip the hashes from the function name while printing
     strip_hashes: bool,
+
+    #[arg(short, long)]
+    /// Function name to target for getting stack counts
+    function_name: Option<String>,
 }
 
 fn strip_hash(name_with_hash: &str) -> String {
@@ -45,11 +49,11 @@ fn strip_hash(name_with_hash: &str) -> String {
     re.replace(name_with_hash, "").to_string()
 }
 
-fn print_intruction_counts(count_vec: Vec<(&String, &usize)>, top_n: usize, strip_hashes: bool) {
+fn print_intruction_counts(first_header: &str, count_vec: Vec<(String, usize)>, top_n: usize, strip_hashes: bool) {
     let mut table = Table::new();
     table.set_format(*format::consts::FORMAT_DEFAULT);
     table.set_titles(Row::new(vec![
-        Cell::new("Function Name"),
+        Cell::new(first_header),
         Cell::new("Instruction Count"),
     ]));
 
@@ -75,7 +79,18 @@ fn print_intruction_counts(count_vec: Vec<(&String, &usize)>, top_n: usize, stri
     table.printstd();
 }
 
-fn _build_lookups_radare_2(
+fn focused_stack_counts(function_stack: &[String],
+                        filtered_stack_counts: &mut HashMap<Vec<String>, usize>,
+                        function_name: &str) {
+    if let Some(last_function) = function_stack.last() {
+        if last_function == function_name {
+            let count = filtered_stack_counts.entry(function_stack.to_vec().clone()).or_insert(0);
+            *count += 1;
+        }
+    }
+}
+
+fn _build_radare2_lookups(
     start_lookup: &mut HashMap<u64, String>,
     end_lookup: &mut HashMap<u64, String>,
     func_range_lookup: &mut HashMap<String, (u64, u64)>,
@@ -130,10 +145,17 @@ fn build_goblin_lookups(
     Ok(())
 }
 
-fn increment_stack_counts(instruction_counts: &mut HashMap<String, usize>, function_stack: &[String]) {
-    for function_name in function_stack {
-        *instruction_counts.entry(function_name.clone()).or_insert(0) += 1;
+fn increment_stack_counts(instruction_counts: &mut HashMap<String, usize>,
+                          function_stack: &[String],
+                          filtered_stack_counts: &mut HashMap<Vec<String>, usize>,
+                          function_name: &Option<String>) {
+    for f in function_stack {
+        *instruction_counts.entry(f.clone()).or_insert(0) += 1;
     }
+    if let Some(f) = function_name {
+        focused_stack_counts(function_stack, filtered_stack_counts, &f)
+    }
+
 }
 
 fn main() -> std::io::Result<()> {
@@ -145,6 +167,7 @@ fn main() -> std::io::Result<()> {
     let no_stack_counts = args.no_stack_counts;
     let no_raw_counts = args.no_raw_counts;
     let strip_hashes = args.strip_hashes;
+    let function_name = args.function_name;
 
     let mut start_lookup = HashMap::new();
     let mut end_lookup = HashMap::new();
@@ -153,7 +176,7 @@ fn main() -> std::io::Result<()> {
 
     let mut function_ranges: Vec<(u64, u64, String)> = func_range_lookup
         .iter()
-        .map(|(function_name, &(start, end))| (start, end, function_name.clone()))
+        .map(|(f, &(start, end))| (start, end, f.clone()))
         .collect();
 
     function_ranges.sort_by_key(|&(start, _, _)| start);
@@ -162,6 +185,7 @@ fn main() -> std::io::Result<()> {
     let mut function_stack: Vec<String> = Vec::new();
     let mut instruction_counts: HashMap<String, usize> = HashMap::new();
     let mut counts_without_callgraph: HashMap<String, usize> = HashMap::new();
+    let mut filtered_stack_counts: HashMap<Vec<String>, usize> = HashMap::new();
     let total_lines = file_content.lines().count() as u64;
     let mut current_function_range : (u64,u64) = (0,0);
 
@@ -204,17 +228,17 @@ fn main() -> std::io::Result<()> {
 
         // we are still in the current function
         if pc > current_function_range.0 && pc <= current_function_range.1 {
-            increment_stack_counts(&mut instruction_counts, &function_stack);
+            increment_stack_counts(&mut instruction_counts, &function_stack, &mut filtered_stack_counts, &function_name);
             continue;
         }
 
         // jump to a new function (or the same one)
-        if let Some(function_name) = start_lookup.get(&pc) {
-            increment_stack_counts(&mut instruction_counts, &function_stack);
+        if let Some(f) = start_lookup.get(&pc) {
+            increment_stack_counts(&mut instruction_counts, &function_stack, &mut filtered_stack_counts, &function_name);
             // jump to a new function (not recursive)
-            if !function_stack.contains(&function_name) {
-                function_stack.push(function_name.clone());
-                current_function_range = *func_range_lookup.get(function_name).unwrap();
+            if !function_stack.contains(&f) {
+                function_stack.push(f.clone());
+                current_function_range = *func_range_lookup.get(f).unwrap();
             }
         } else {
             // this means pc now points to an instruction that is
@@ -237,33 +261,62 @@ fn main() -> std::io::Result<()> {
             if unwind_found {
 
                 function_stack.truncate(unwind_point + 1);
-                increment_stack_counts(&mut instruction_counts, &function_stack);
+                increment_stack_counts(&mut instruction_counts, &function_stack, &mut filtered_stack_counts, &function_name);
                 continue;
             }
 
             // if no unwind point has been found, that means we jumped to some random location
             // so we'll just increment the counts for everything in the stack
-            increment_stack_counts(&mut instruction_counts, &function_stack);
+            increment_stack_counts(&mut instruction_counts, &function_stack, &mut filtered_stack_counts, &function_name);
         }
 
     }
 
     pb.finish_with_message("done");
 
-    let mut raw_counts: Vec<(&String, &usize)> = instruction_counts.iter().collect();
+    let mut raw_counts: Vec<(String, usize)> = instruction_counts
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
     raw_counts.sort_by(|a, b| b.1.cmp(&a.1));
 
     println!("\n\nTotal instructions in trace: {}", total_lines);
     if !no_stack_counts {
         println!("\n\n Instruction counts considering call graph");
-        print_intruction_counts(raw_counts, top_n, strip_hashes);
+        print_intruction_counts("Function Name", raw_counts, top_n, strip_hashes);
     }
 
-    let mut raw_counts: Vec<(&String, &usize)> = counts_without_callgraph.iter().collect();
+    let mut raw_counts: Vec<(String, usize)> = counts_without_callgraph
+        .iter()
+        .map(|(key, value)| (key.clone(), value.clone()))
+        .collect();
     raw_counts.sort_by(|a, b| b.1.cmp(&a.1));
     if !no_raw_counts {
         println!("\n\n Instruction counts ignoring call graph");
-        print_intruction_counts(raw_counts, top_n, strip_hashes);
+        print_intruction_counts("Function Name",raw_counts, top_n, strip_hashes);
+    }
+
+    let mut raw_counts: Vec<(String, usize)> = filtered_stack_counts
+        .iter()
+        .map(|(stack, count)| {
+            let numbered_stack = stack
+                .iter()
+                .rev()
+                .enumerate()
+                .map(|(index, line)| {
+                    let modified_line = if strip_hashes { strip_hash(line) } else { line.clone() };
+                    format!("({}) {}", index + 1, modified_line)
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            (numbered_stack, *count)
+        })
+        .collect();
+
+    raw_counts.sort_by(|a, b| b.1.cmp(&a.1));
+    if let Some(f) = function_name {
+        println!("\n\n Stack patterns for function '{f}' ");
+        print_intruction_counts("Function Stack",raw_counts, top_n, strip_hashes);
     }
     Ok(())
 }
