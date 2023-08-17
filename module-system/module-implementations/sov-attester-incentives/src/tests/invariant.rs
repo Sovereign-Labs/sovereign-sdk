@@ -53,7 +53,7 @@ fn test_transition_invariant() {
             da_block_hash: [(init_height_usize + 1).try_into().unwrap(); 32],
             post_state_root: exec_vars[init_height_usize + 1].state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
-                transition_num: INIT_HEIGHT + 1,
+                claimed_transition_num: INIT_HEIGHT + 1,
                 proof: exec_vars[init_height_usize].state_proof.clone(),
             },
         };
@@ -90,7 +90,7 @@ fn test_transition_invariant() {
             da_block_hash: [(new_height + i + 1).try_into().unwrap(); 32],
             post_state_root: exec_vars[new_height + i + 1].state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
-                transition_num: new_height.try_into().unwrap(),
+                claimed_transition_num: new_height.try_into().unwrap(),
                 proof: exec_vars[new_height - 1].state_proof.clone(),
             },
         };
@@ -114,7 +114,7 @@ fn test_transition_invariant() {
         // We have to check the following order invariant is respected:
         // min_height <= bonding_proof.transition_num <= new_height_to_attest
         // If this invariant is respected, we can be sure that the attester was bonded at new_height_to_attest.
-        let transition_num = attestation.proof_of_bond.transition_num;
+        let transition_num = attestation.proof_of_bond.claimed_transition_num;
 
         assert!(
             min_height <= transition_num,
@@ -139,7 +139,7 @@ fn test_transition_invariant() {
         da_block_hash: [(new_height + finality_usize + 1).try_into().unwrap(); 32],
         post_state_root: exec_vars[new_height + finality_usize + 1].state_root,
         proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
-            transition_num: new_height.try_into().unwrap(),
+            claimed_transition_num: new_height.try_into().unwrap(),
             proof: exec_vars[new_height - 1].state_proof.clone(),
         },
     };
@@ -160,7 +160,7 @@ fn test_transition_invariant() {
         0
     };
 
-    let transition_num = attestation.proof_of_bond.transition_num;
+    let transition_num = attestation.proof_of_bond.claimed_transition_num;
 
     assert!(
         min_height > transition_num,
@@ -183,14 +183,14 @@ fn test_transition_invariant() {
         da_block_hash: [(new_height + finality_usize + 1).try_into().unwrap(); 32],
         post_state_root: exec_vars[new_height + finality_usize + 1].state_root,
         proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
-            transition_num: (new_height + finality_usize + 2).try_into().unwrap(),
+            claimed_transition_num: (new_height + finality_usize + 2).try_into().unwrap(),
             proof: exec_vars[new_height + finality_usize + 1]
                 .state_proof
                 .clone(),
         },
     };
 
-    let transition_num = attestation.proof_of_bond.transition_num;
+    let transition_num = attestation.proof_of_bond.claimed_transition_num;
 
     assert!(
         transition_num > new_height_to_attest,

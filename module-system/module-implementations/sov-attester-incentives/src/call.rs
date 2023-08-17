@@ -16,11 +16,8 @@ use thiserror::Error;
 
 use crate::{AttesterIncentives, UnbondingInfo};
 
-/// This enumeration represents the available call messages for interacting with the `ExampleModule` module.
+/// This enumeration represents the available call messages for interacting with the `AttesterIncentives` module.
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
-// TODO: allow call messages to borrow data
-//     https://github.com/Sovereign-Labs/sovereign-sdk/issues/274
-
 pub enum CallMessage<C>
 where
     C: Context,
@@ -63,14 +60,6 @@ pub enum SlashingReason {
     #[error("No invalid transition to challenge")]
     /// No invalid transition to challenge.
     NoInvalidTransition,
-
-    #[error("User is not trying to unbond at the time of the transaction")]
-    /// User is not trying to unbond at the time of the transaction
-    AttesterIsNotUnbonding,
-
-    #[error("First phase unbonding has not been finalized")]
-    /// The attester is trying to finish the two phase unbonding too soon
-    UnbondingNotFinalized,
 }
 
 /// Error raised while processessing the attester incentives
@@ -92,8 +81,16 @@ pub enum AttesterIncentiveErrors {
     /// The attester is in the first unbonding phase
     AttesterIsUnbonding,
 
-    #[error("The bond is not a 64 bits number")]
-    /// The bond is not a 64 bits number
+    #[error("User is not trying to unbond at the time of the transaction")]
+    /// User is not trying to unbond at the time of the transaction
+    AttesterIsNotUnbonding,
+
+    #[error("First phase unbonding has not been finalized")]
+    /// The attester is trying to finish the two phase unbonding too soon
+    UnbondingNotFinalized,
+
+    #[error("The bond is not a 64 bit number")]
+    /// The bond is not a 64 bit number
     InvalidBondFormat,
 
     #[error("User is not bonded at the time of the transaction")]
@@ -250,7 +247,7 @@ impl<
             return Err(AttesterIncentiveErrors::AttesterIsUnbonding);
         }
 
-        // Transfer the bond amount from the sender to the module's address.
+        // Transfer the bond amount from the module's token minting address to the sender.
         // On failure, no state is changed
         let coins = Coins {
             token_address: self
@@ -361,12 +358,7 @@ impl<
                 .expect("Should be defined at genesis");
 
             if unbonding_info.unbonding_initiated_height + finality_period > curr_height {
-                return Err(self.slash_burn_reward(
-                    context.sender(),
-                    Role::Attester,
-                    SlashingReason::UnbondingNotFinalized,
-                    working_set,
-                ));
+                return Err(AttesterIncentiveErrors::UnbondingNotFinalized);
             }
 
             // Get the user's old balance.
@@ -385,12 +377,7 @@ impl<
                 &format!("amount_withdrawn: {:?}", amount)
             });
         } else {
-            return Err(self.slash_burn_reward(
-                context.sender(),
-                Role::Attester,
-                SlashingReason::AttesterIsNotUnbonding,
-                working_set,
-            ));
+            return Err(AttesterIncentiveErrors::AttesterIsNotUnbonding);
         }
         Ok(CallResponse::default())
     }
@@ -407,11 +394,10 @@ impl<
         let bonding_root = {
             // If we cannot get the transition before the current one, it means that we are trying
             // to get the genesis state root
-            if let Some(transition) = self
-                .chain_state
-                .historical_transitions
-                .get(&(attestation.proof_of_bond.transition_num - 1), working_set)
-            {
+            if let Some(transition) = self.chain_state.historical_transitions.get(
+                &(attestation.proof_of_bond.claimed_transition_num - 1),
+                working_set,
+            ) {
                 transition.post_state_root()
             } else {
                 self.chain_state
@@ -432,7 +418,7 @@ impl<
             )
             .map_err(|_err| AttesterIncentiveErrors::InvalidBondingProof)?;
 
-        let bond = bond_opt.unwrap_or_default();
+        let bond = bond_opt.ok_or(AttesterIncentiveErrors::UserNotBonded)?;
         let bond: u64 = BorshDeserialize::deserialize(&mut bond.value())
             .map_err(|_err| AttesterIncentiveErrors::InvalidBondFormat)?;
 
@@ -463,9 +449,9 @@ impl<
         {
             // We first need to compare the initial block hash to the previous post state root
             if !curr_tx.compare_hashes(&attestation.da_block_hash, &attestation.post_state_root) {
-                // It is the right attestation, we have to compare the initial block hash to the
-                // previous post state root
-                // Slash the attester
+                // Check if the attestation has the same da_block_hash and post_state_root as the actual transition
+                // that we found in state. If not, slash the attester.
+                // If so, the attestation is valid, so return Ok
                 return Err(self.slash_and_invalidate_attestation(
                     attester,
                     max_attested_height,
@@ -475,6 +461,7 @@ impl<
             }
             Ok(CallResponse::default())
         } else {
+            // Case where we cannot get the transition from the chain state historical transitions.
             Err(self.slash_burn_reward(
                 attester,
                 Role::Attester,
@@ -495,7 +482,7 @@ impl<
         if let Some(transition) = self
             .chain_state
             .historical_transitions
-            .get(&(max_attested_height - 1), working_set)
+            .get(&(max_attested_height.saturating_sub(1)), working_set)
         {
             if transition.post_state_root() != attestation.initial_state_root {
                 // The initial root hashes don't match, just slash the attester
@@ -547,7 +534,7 @@ impl<
             return Err(AttesterIncentiveErrors::UserNotBonded);
         }
 
-        // We first need to check the bonding proof (because we can't slash the attester if he's not bonded)
+        // If the bonding proof in the attestation is invalid, light clients will ignore the attestation. In that case, we should too.
         self.check_bonding_proof(context, &attestation, working_set)?;
 
         // We suppose that these values are always defined, otherwise we panic
@@ -569,7 +556,7 @@ impl<
 
         // Minimum height at which the proof of bond can be valid
         let min_height = if new_height_to_attest > finality {
-            new_height_to_attest - finality
+            new_height_to_attest.saturating_sub(finality)
         } else {
             0
         };
@@ -580,8 +567,8 @@ impl<
         // Which with our variable gives:
         // min_height <= bonding_proof.transition_num <= new_height_to_attest
         // If this invariant is respected, we can be sure that the attester was bonded at new_height_to_attest.
-        if !(min_height <= attestation.proof_of_bond.transition_num
-            && attestation.proof_of_bond.transition_num <= new_height_to_attest)
+        if !(min_height <= attestation.proof_of_bond.claimed_transition_num
+            && attestation.proof_of_bond.claimed_transition_num <= new_height_to_attest)
         {
             return Err(AttesterIncentiveErrors::InvalidTransitionInvariant);
         }

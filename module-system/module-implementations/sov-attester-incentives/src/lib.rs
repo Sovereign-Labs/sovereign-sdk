@@ -44,7 +44,7 @@ pub struct AttesterIncentivesConfig<
     pub commitment_to_allowed_challenge_method: Vm::CodeCommitment,
     /// A list of initial provers and their bonded amount.
     pub initial_attesters: Vec<(C::Address, u64)>,
-    /// The finality period of the rollup (constant)
+    /// The finality period of the rollup (constant) in the number of DA layer slots processed.
     pub rollup_finality_period: u64,
     /// The current maximum attested height
     pub maximum_attested_height: u64,
@@ -59,7 +59,7 @@ pub struct AttesterIncentivesConfig<
 /// The information about an attester's unbonding
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug)]
 pub struct UnbondingInfo {
-    /// The height at which an attester is allowed to withdraw their tokens
+    /// The height at which an attester started unbonding
     pub unbonding_initiated_height: u64,
     /// The number of tokens that the attester may withdraw
     pub amount: u64,
