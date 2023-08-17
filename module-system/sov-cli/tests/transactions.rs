@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use demo_stf::runtime::{Runtime, RuntimeCall, RuntimeSubcommand};
 use sov_cli::wallet_state::WalletState;
 use sov_cli::workflows::transactions::{ImportTransaction, TransactionWorkflow};
-use sov_modules_api::cli::{FileStringArg, JsonStringArg};
+use sov_modules_api::cli::{FileNameArg, JsonStringArg};
 use sov_modules_api::default_context::DefaultContext;
 
 #[test]
@@ -35,8 +35,8 @@ fn test_import_transaction_from_file() {
     let mut wallet_state = WalletState::<RuntimeCall<DefaultContext>, DefaultContext>::default();
 
     let test_token_path = make_test_path("requests/create_token.json");
-    let subcommand = RuntimeSubcommand::<FileStringArg, DefaultContext>::bank {
-        contents: FileStringArg {
+    let subcommand = RuntimeSubcommand::<FileNameArg, DefaultContext>::bank {
+        contents: FileNameArg {
             path: test_token_path.to_str().unwrap().into(),
         },
     };

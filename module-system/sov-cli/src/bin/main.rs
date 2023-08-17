@@ -5,7 +5,7 @@ use sov_cli::workflows::rpc::RpcWorkflows;
 use sov_cli::workflows::transactions::TransactionWorkflow;
 use sov_cli::{clap, wallet_dir};
 use sov_modules_api::clap::Parser;
-use sov_modules_api::cli::{FileStringArg, JsonStringArg};
+use sov_modules_api::cli::{FileNameArg, JsonStringArg};
 use sov_modules_api::default_context::DefaultContext;
 
 type Ctx = sov_modules_api::default_context::DefaultContext;
@@ -16,7 +16,7 @@ pub enum Workflows {
     #[clap(subcommand)]
     Transactions(
         TransactionWorkflow<
-            RuntimeSubcommand<FileStringArg, DefaultContext>,
+            RuntimeSubcommand<FileNameArg, DefaultContext>,
             RuntimeSubcommand<JsonStringArg, DefaultContext>,
         >,
     ),
