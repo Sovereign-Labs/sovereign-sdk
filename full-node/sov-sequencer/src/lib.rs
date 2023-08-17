@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 use anyhow::anyhow;
 use jsonrpsee::types::ErrorObjectOwned;
@@ -12,12 +12,12 @@ const SEQUENCER_RPC_ERROR: &str = "SEQUENCER_RPC_ERROR";
 /// Single data structure that manages mempool and batch producing.
 pub struct Sequencer<B: BatchBuilder, T: DaService> {
     batch_builder: Mutex<B>,
-    da_service: Arc<T>,
+    da_service: T,
 }
 
 impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> Sequencer<B, T> {
     /// Creates new Sequencer from BatchBuilder and DaService
-    pub fn new(batch_builder: B, da_service: Arc<T>) -> Self {
+    pub fn new(batch_builder: B, da_service: T) -> Self {
         Self {
             batch_builder: Mutex::new(batch_builder),
             da_service,
@@ -59,7 +59,7 @@ fn register_txs_rpc_methods<B, D>(
 ) -> Result<(), jsonrpsee::core::Error>
 where
     B: BatchBuilder + Send + Sync + 'static,
-    D: DaService + Send + Sync + 'static,
+    D: DaService,
 {
     rpc.register_async_method("sequencer_publishBatch", |_, batch_builder| async move {
         batch_builder
@@ -79,10 +79,10 @@ where
     Ok(())
 }
 
-pub fn get_sequencer_rpc<B, D>(batch_builder: B, da_service: Arc<D>) -> RpcModule<Sequencer<B, D>>
+pub fn get_sequencer_rpc<B, D>(batch_builder: B, da_service: D) -> RpcModule<Sequencer<B, D>>
 where
     B: BatchBuilder + Send + Sync + 'static,
-    D: DaService + Send + Sync + 'static,
+    D: DaService,
 {
     let sequencer = Sequencer::new(batch_builder, da_service);
     let mut rpc = RpcModule::new(sequencer);
@@ -109,7 +109,6 @@ pub enum SubmitTransactionResponse {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
 
     use sov_rollup_interface::mocks::{MockBatchBuilder, MockDaService};
 
@@ -118,7 +117,7 @@ mod tests {
     #[tokio::test]
     async fn test_submit_on_empty_mempool() {
         let batch_builder = MockBatchBuilder { mempool: vec![] };
-        let da_service = Arc::new(MockDaService::default());
+        let da_service = MockDaService::default();
         assert!(da_service.is_empty());
         let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
@@ -140,7 +139,7 @@ mod tests {
         let batch_builder = MockBatchBuilder {
             mempool: vec![tx1.clone(), tx2.clone()],
         };
-        let da_service = Arc::new(MockDaService::default());
+        let da_service = MockDaService::default();
         assert!(da_service.is_empty());
         let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
@@ -159,7 +158,7 @@ mod tests {
     #[tokio::test]
     async fn test_accept_tx() {
         let batch_builder = MockBatchBuilder { mempool: vec![] };
-        let da_service = Arc::new(MockDaService::default());
+        let da_service = MockDaService::default();
 
         let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
         assert!(da_service.is_empty());
