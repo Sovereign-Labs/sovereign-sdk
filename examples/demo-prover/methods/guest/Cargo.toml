@@ -52,4 +52,4 @@ lto = true
 opt-level = 3
 
 [features]
-bench=[celestia/bench", "sov-modules-stf-template/bench", "sov-state/bench", "sov-modules-api/bench", "sov-sequencer-registry/bench"]
+bench=["celestia/bench", "sov-modules-stf-template/bench", "sov-state/bench", "sov-modules-api/bench", "sov-sequencer-registry/bench"]
