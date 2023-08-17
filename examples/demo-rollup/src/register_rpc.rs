@@ -1,5 +1,4 @@
 //! Full-Node specific RPC methods.
-use std::sync::Arc;
 
 use anyhow::Context;
 use demo_stf::app::App;
@@ -24,7 +23,7 @@ where
     DA: DaService<Error = anyhow::Error> + Send + Sync + 'static,
 {
     let batch_builder = demo_runner.batch_builder.take().unwrap();
-    let sequencer_rpc = get_sequencer_rpc(batch_builder, Arc::new(da_service));
+    let sequencer_rpc = get_sequencer_rpc(batch_builder, da_service);
     methods
         .merge(sequencer_rpc)
         .context("Failed to merge Txs RPC modules")
@@ -43,8 +42,8 @@ pub fn register_ledger(
 
 #[cfg(feature = "experimental")]
 /// register ethereum methods.
-pub fn register_ethereum(
-    da_config: jupiter::da_service::DaServiceConfig,
+pub fn register_ethereum<DA: DaService>(
+    da_service: DA,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error> {
     use std::fs;
@@ -60,7 +59,7 @@ pub fn register_ethereum(
         )
         .unwrap();
 
-    let ethereum_rpc = sov_ethereum::get_ethereum_rpc(da_config, tx_signer_private_key);
+    let ethereum_rpc = sov_ethereum::get_ethereum_rpc(da_service, tx_signer_private_key);
     methods
         .merge(ethereum_rpc)
         .context("Failed to merge Ethereum RPC modules")

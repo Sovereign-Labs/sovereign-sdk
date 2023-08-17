@@ -12,6 +12,7 @@ resolver = "2"
 
 [dependencies]
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+sov-rollup-interface = { path = "../../rollup-interface" }
 
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", default-features = false }
 demo-stf = { path = "../../examples/demo-stf", features = ["native"] }
