@@ -1,10 +1,10 @@
 use std::env;
 
 use anyhow::Context;
+use celestia::da_service::CelestiaService;
+use celestia::verifier::RollupParams;
 use demo_stf::app::{App, DefaultContext};
 use demo_stf::runtime::get_rpc_methods;
-use jupiter::da_service::CelestiaService;
-use jupiter::verifier::RollupParams;
 #[cfg(feature = "experimental")]
 use sov_demo_rollup::register_rpc::register_ethereum;
 use sov_demo_rollup::register_rpc::{register_ledger, register_sequencer};
