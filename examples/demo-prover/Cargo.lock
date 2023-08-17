@@ -459,6 +459,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "celestia"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.21.2",
+ "bech32",
+ "borsh",
+ "hex",
+ "hex-literal",
+ "jsonrpsee 0.16.2",
+ "nmt-rs",
+ "prost",
+ "prost-build",
+ "prost-types",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "serde",
+ "serde_json",
+ "sha2 0.10.7",
+ "sov-rollup-interface",
+ "tendermint",
+ "tendermint-proto",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "zk-cycle-macros",
+]
+
+[[package]]
 name = "cexpr"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1837,36 +1867,6 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tracing",
-]
-
-[[package]]
-name = "jupiter"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.21.2",
- "bech32",
- "borsh",
- "hex",
- "hex-literal",
- "jsonrpsee 0.16.2",
- "nmt-rs",
- "prost",
- "prost-build",
- "prost-types",
- "risc0-zkvm",
- "risc0-zkvm-platform",
- "serde",
- "serde_json",
- "sha2 0.10.7",
- "sov-rollup-interface",
- "tendermint",
- "tendermint-proto",
- "thiserror",
- "tokio",
- "tracing",
- "zk-cycle-macros",
 ]
 
 [[package]]
@@ -3567,12 +3567,12 @@ dependencies = [
  "anyhow",
  "bincode",
  "borsh",
+ "celestia",
  "const-rollup-config",
  "demo-stf",
  "env_logger",
  "hex",
  "jsonrpsee 0.16.2",
- "jupiter",
  "log",
  "log4rs",
  "methods",
@@ -3605,13 +3605,13 @@ dependencies = [
  "async-trait",
  "borsh",
  "bytes",
+ "celestia",
  "const-rollup-config",
  "demo-stf",
  "futures",
  "hex",
  "jmt",
  "jsonrpsee 0.18.2",
- "jupiter",
  "risc0-adapter",
  "serde",
  "serde_json",
@@ -3785,10 +3785,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "celestia",
  "futures",
  "hex",
  "jsonrpsee 0.18.2",
- "jupiter",
  "serde",
  "serde_json",
  "sov-db",
@@ -4765,3 +4765,8 @@ dependencies = [
  "libc",
  "pkg-config",
 ]
+
+[[patch.unused]]
+name = "cc"
+version = "1.0.79"
+source = "git+https://github.com/rust-lang/cc-rs?rev=e5bbdfa#e5bbdfa1fa468c028cb38fee6c35a3cf2e5a2736"
