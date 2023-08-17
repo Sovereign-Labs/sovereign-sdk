@@ -9,7 +9,7 @@ use demo_stf::app::create_zk_app_template;
 use demo_stf::ArrayWitness;
 use jupiter::types::NamespaceId;
 use jupiter::verifier::address::CelestiaAddress;
-use jupiter::verifier::{CelestiaSpec, CelestiaVerifier, ChainValidityCondition};
+use jupiter::verifier::{CelestiaSpec, CelestiaVerifier};
 use jupiter::{BlobWithSender, CelestiaHeader};
 use risc0_adapter::guest::Risc0Guest;
 use risc0_zkvm::guest::env;

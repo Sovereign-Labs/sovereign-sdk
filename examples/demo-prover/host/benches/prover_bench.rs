@@ -13,8 +13,7 @@ use demo_stf::genesis_config::create_demo_genesis_config;
 use jupiter::da_service::CelestiaService;
 use jupiter::types::{FilteredCelestiaBlock, NamespaceId};
 use jupiter::verifier::address::CelestiaAddress;
-use jupiter::verifier::{ChainValidityCondition, RollupParams};
-use jupiter::BlobWithSender;
+use jupiter::verifier::{CelestiaSpec, RollupParams};
 use log4rs::config::{Appender, Config, Root};
 use methods::ROLLUP_ELF;
 use regex::Regex;
@@ -164,8 +163,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let mut app: App<Risc0Host, ChainValidityCondition, BlobWithSender> =
-        App::new(rollup_config.runner.storage.clone());
+    let mut app: App<Risc0Host, CelestiaSpec> = App::new(rollup_config.runner.storage.clone());
 
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 
