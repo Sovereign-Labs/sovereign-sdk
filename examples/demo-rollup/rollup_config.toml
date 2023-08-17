@@ -12,7 +12,7 @@ max_celestia_response_body_size = 104_857_600
 # The maximum time to wait for a response to an RPC query against Celestia node. Defaults to 60 seconds.
 celestia_rpc_timeout_seconds = 60
 
-[runner.storage]
+[storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
 

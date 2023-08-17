@@ -1,7 +1,11 @@
-use jupiter::da_service::DaServiceConfig;
-use serde::Deserialize;
+use std::fs::File;
+use std::io::Read;
+use std::path::Path;
 
-use crate::runner_config::Config as RunnerConfig;
+use jupiter::da_service::DaServiceConfig;
+use serde::de::DeserializeOwned;
+use serde::Deserialize;
+pub use sov_state::config::Config as StorageConfig;
 
 /// RPC configuration.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -20,9 +24,22 @@ pub struct RollupConfig {
     /// DA configuration.
     pub da: DaServiceConfig,
     /// Runner configuration.
-    pub runner: RunnerConfig,
+    pub storage: StorageConfig,
     /// RPC configuration.
     pub rpc_config: RpcConfig,
+}
+
+///TODO
+pub fn from_toml_path<P: AsRef<Path>, R: DeserializeOwned>(path: P) -> anyhow::Result<R> {
+    let mut contents = String::new();
+    {
+        let mut file = File::open(path)?;
+        file.read_to_string(&mut contents)?;
+    }
+
+    let result: R = toml::from_str(&contents)?;
+
+    Ok(result)
 }
 
 #[cfg(test)]
@@ -33,7 +50,6 @@ mod tests {
     use tempfile::NamedTempFile;
 
     use super::*;
-    use crate::runner_config::{from_toml_path, StorageConfig};
 
     fn create_config_from(content: &str) -> NamedTempFile {
         let mut config_file = NamedTempFile::new().unwrap();
@@ -49,7 +65,7 @@ mod tests {
             celestia_rpc_auth_token = "SECRET_RPC_TOKEN"
             celestia_rpc_address = "http://localhost:11111/"
             max_celestia_response_body_size = 980
-            [runner.storage]
+            [storage]
             path = "/tmp"
             [rpc_config]
             bind_host = "127.0.0.1"
@@ -67,10 +83,8 @@ mod tests {
                 max_celestia_response_body_size: 980,
                 celestia_rpc_timeout_seconds: 60,
             },
-            runner: RunnerConfig {
-                storage: StorageConfig {
-                    path: PathBuf::from("/tmp"),
-                },
+            storage: StorageConfig {
+                path: PathBuf::from("/tmp"),
             },
             rpc_config: RpcConfig {
                 bind_host: "127.0.0.1".to_string(),

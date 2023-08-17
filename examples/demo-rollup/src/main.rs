@@ -39,7 +39,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .map_err(|_err| eprintln!("Unable to set global default subscriber"))
         .expect("Cannot fail to set subscriber");
 
-    let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
+    let ledger_db = initialize_ledger(&rollup_config.storage.path);
 
     let da_service = CelestiaService::new(
         rollup_config.da.clone(),
@@ -49,7 +49,7 @@ async fn main() -> Result<(), anyhow::Error> {
     )
     .await;
 
-    let mut app = App::new(rollup_config.runner.storage.clone());
+    let mut app = App::new(rollup_config.storage.clone());
 
     let storage = app.get_storage();
     let mut methods = get_rpc_methods::<DefaultContext>(storage);

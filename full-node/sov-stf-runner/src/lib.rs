@@ -3,15 +3,14 @@
 
 mod batch_builder;
 mod config;
-pub use config::RpcConfig;
-mod runner_config;
 use std::net::SocketAddr;
+
+pub use config::RpcConfig;
 mod ledger_rpc;
 pub use batch_builder::FiFoStrictBatchBuilder;
-pub use config::RollupConfig;
+pub use config::{from_toml_path, RollupConfig, StorageConfig};
 use jsonrpsee::RpcModule;
 pub use ledger_rpc::get_ledger_rpc;
-pub use runner_config::{from_toml_path, Config, StorageConfig};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::services::da::DaService;
