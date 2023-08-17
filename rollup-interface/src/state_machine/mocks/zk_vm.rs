@@ -5,7 +5,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
 use crate::zk::{Matches, Zkvm};
-use crate::AddressTrait;
 
 /// A mock commitment to a particular zkVM program.
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
