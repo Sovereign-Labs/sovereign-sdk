@@ -62,8 +62,55 @@ fn test_two_phase_unbonding() {
 
         assert_eq!(
             err,
-            AttesterIncentiveErrors::UserSlashed(SlashingReason::AttesterIsUnbonding),
-            "The attester should not be unbonding"
+            AttesterIncentiveErrors::UserNotBonded,
+            "The attester should not be bonded"
+        );
+
+        // We cannot try to bond either
+        let err = module
+            .bond_user_helper(
+                BOND_AMOUNT,
+                &attester_address,
+                crate::call::Role::Attester,
+                &mut working_set,
+            )
+            .unwrap_err();
+
+        assert_eq!(
+            err,
+            AttesterIncentiveErrors::AttesterIsUnbonding,
+            "Should raise an AttesterIsUnbonding error"
+        );
+    }
+
+    // Cannot bond again while unbonding
+    {
+        let err = module
+            .bond_user_helper(
+                BOND_AMOUNT,
+                &attester_address,
+                crate::call::Role::Attester,
+                &mut working_set,
+            )
+            .unwrap_err();
+
+        assert_eq!(
+            err,
+            AttesterIncentiveErrors::AttesterIsUnbonding,
+            "Should raise that error"
+        );
+    }
+
+    // Now try to complete the two phase unbonding immediately: the second phase should fail because the
+    // first phase cannot get finalized
+    {
+        // Should fail
+        let err = module
+            .end_unbond_attester(&context, &mut working_set)
+            .unwrap_err();
+        assert_eq!(
+            err,
+            AttesterIncentiveErrors::UserSlashed(SlashingReason::UnbondingNotFinalized)
         );
     }
 
@@ -85,33 +132,6 @@ fn test_two_phase_unbonding() {
         assert_eq!(
             err,
             AttesterIncentiveErrors::UserSlashed(SlashingReason::AttesterIsNotUnbonding)
-        );
-    }
-
-    // Bond again and now try to complete the two phase unbonding immediately: the second phase should fail because the
-    // first phase cannot get finalized
-    {
-        module
-            .bond_user_helper(
-                BOND_AMOUNT,
-                &attester_address,
-                crate::call::Role::Attester,
-                &mut working_set,
-            )
-            .unwrap();
-
-        // Should succeed
-        module
-            .begin_unbond_attester(&context, &mut working_set)
-            .expect("Should succeed");
-
-        // Should fail
-        let err = module
-            .end_unbond_attester(&context, &mut working_set)
-            .unwrap_err();
-        assert_eq!(
-            err,
-            AttesterIncentiveErrors::UserSlashed(SlashingReason::UnbondingNotFinalized)
         );
     }
 
@@ -137,13 +157,13 @@ fn test_two_phase_unbonding() {
             .begin_unbond_attester(&context, &mut working_set)
             .unwrap();
 
-        let begin_unbond_height = module
+        let unbonding_info = module
             .unbonding_attesters
             .get(&attester_address, &mut working_set)
             .unwrap();
 
         assert_eq!(
-            begin_unbond_height, INIT_HEIGHT,
+            unbonding_info.unbonding_initiated_height, INIT_HEIGHT,
             "Invalid beginning unbonding height"
         );
 

@@ -108,9 +108,10 @@ pub struct AttesterIncentives<
     #[state]
     pub bonded_attesters: sov_state::StateMap<C::Address, u64>,
 
-    /// The set of unbonding attesters, and the height of the chain where they started the unbonding.
+    /// The set of unbonding attesters, and the unbonding information (ie the
+    /// height of the chain where they started the unbonding and their associated bond).
     #[state]
-    pub unbonding_attesters: sov_state::StateMap<C::Address, u64>,
+    pub unbonding_attesters: sov_state::StateMap<C::Address, UnbondingInfo>,
 
     /// The current maximum attestation height
     #[state]
@@ -179,9 +180,9 @@ where
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
-            call::CallMessage::BondAttester(bond_amount) => {
-                self.bond_user_helper(bond_amount, context.sender(), Role::Attester, working_set)
-            }
+            call::CallMessage::BondAttester(bond_amount) => self
+                .bond_user_helper(bond_amount, context.sender(), Role::Attester, working_set)
+                .map_err(|err| err.into()),
             call::CallMessage::BeginUnbondingAttester => self
                 .begin_unbond_attester(context, working_set)
                 .map_err(|error| error.into()),
@@ -189,9 +190,9 @@ where
             call::CallMessage::EndUnbondingAttester => self
                 .end_unbond_attester(context, working_set)
                 .map_err(|error| error.into()),
-            call::CallMessage::BondChallenger(bond_amount) => {
-                self.bond_user_helper(bond_amount, context.sender(), Role::Challenger, working_set)
-            }
+            call::CallMessage::BondChallenger(bond_amount) => self
+                .bond_user_helper(bond_amount, context.sender(), Role::Challenger, working_set)
+                .map_err(|err| err.into()),
             call::CallMessage::UnbondChallenger => self.unbond_challenger(context, working_set),
             call::CallMessage::ProcessAttestation(attestation) => self
                 .process_attestation(context, attestation, working_set)

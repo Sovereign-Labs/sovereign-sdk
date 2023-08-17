@@ -14,7 +14,7 @@ use sov_state::storage::StorageProof;
 use sov_state::{Storage, WorkingSet};
 use thiserror::Error;
 
-use crate::AttesterIncentives;
+use crate::{AttesterIncentives, UnbondingInfo};
 
 /// This enumeration represents the available call messages for interacting with the `ExampleModule` module.
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
@@ -56,10 +56,6 @@ pub enum SlashingReason {
     /// The initial hash of the transition is invalid.
     InvalidInitialHash,
 
-    #[error("Attester is unbonding")]
-    /// The attester is in the first unbonding phase
-    AttesterIsUnbonding,
-
     #[error("The proof opening raised an error")]
     /// The proof verification raised an error
     InvalidProofOutputs,
@@ -91,6 +87,10 @@ pub enum AttesterIncentiveErrors {
     #[error("The sender key doesn't match the attester key provided in the proof")]
     /// The sender key doesn't match the attester key provided in the proof
     InvalidSender,
+
+    #[error("Attester is unbonding")]
+    /// The attester is in the first unbonding phase
+    AttesterIsUnbonding,
 
     #[error("The bond is not a 64 bits number")]
     /// The bond is not a 64 bits number
@@ -239,7 +239,17 @@ impl<
         user_address: &C::Address,
         role: Role,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse> {
+    ) -> Result<CallResponse, AttesterIncentiveErrors> {
+        // If the user is an attester we have to check that he's not trying to unbond
+        if role == Role::Attester
+            && self
+                .unbonding_attesters
+                .get(user_address, working_set)
+                .is_some()
+        {
+            return Err(AttesterIncentiveErrors::AttesterIsUnbonding);
+        }
+
         // Transfer the bond amount from the sender to the module's address.
         // On failure, no state is changed
         let coins = Coins {
@@ -249,8 +259,10 @@ impl<
                 .expect("Bonding token address must be set"),
             amount: bond_amount,
         };
+
         self.bank
-            .transfer_from(user_address, &self.address, coins, working_set)?;
+            .transfer_from(user_address, &self.address, coins, working_set)
+            .map_err(|_err| AttesterIncentiveErrors::TransferFailure)?;
 
         let (balances, event_key) = match role {
             Role::Attester => (&self.bonded_attesters, "bonded_attester"),
@@ -307,18 +319,24 @@ impl<
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
         // First get the bonded attester
-        if self
-            .bonded_attesters
-            .get(context.sender(), working_set)
-            .is_some()
-        {
-            // Then add the bonded attester to the unbonding set, with the current finalized height
+        if let Some(bond) = self.bonded_attesters.get(context.sender(), working_set) {
             let finalized_height = self
                 .light_client_finalized_height
                 .get(working_set)
                 .expect("Must be set at genesis");
-            self.unbonding_attesters
-                .set(context.sender(), &finalized_height, working_set);
+
+            // Remove the attester from the bonding set
+            self.bonded_attesters.remove(context.sender(), working_set);
+
+            // Then add the bonded attester to the unbonding set, with the current finalized height
+            self.unbonding_attesters.set(
+                context.sender(),
+                &UnbondingInfo {
+                    unbonding_initiated_height: finalized_height,
+                    amount: bond,
+                },
+                working_set,
+            );
         }
 
         Ok(CallResponse::default())
@@ -329,62 +347,50 @@ impl<
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
-        // We first have to ensure that the attester is bonded
-        if self
-            .bonded_attesters
-            .get(context.sender(), working_set)
-            .is_some()
-        {
-            // We have to ensure that the attester is unbonding, and that the unbonding transaction
-            // occurred at least `finality_period` blocks ago to let the attester unbond
-            if let Some(begin_unbond_height) =
-                self.unbonding_attesters.get(context.sender(), working_set)
-            {
-                // These two constants should always be set beforehand, hence we can panic if they're not set
-                let curr_height = self
-                    .light_client_finalized_height
-                    .get(working_set)
-                    .expect("Should be defined at genesis");
-                let finality_period = self
-                    .rollup_finality_period
-                    .get(working_set)
-                    .expect("Should be defined at genesis");
+        // We have to ensure that the attester is unbonding, and that the unbonding transaction
+        // occurred at least `finality_period` blocks ago to let the attester unbond
+        if let Some(unbonding_info) = self.unbonding_attesters.get(context.sender(), working_set) {
+            // These two constants should always be set beforehand, hence we can panic if they're not set
+            let curr_height = self
+                .light_client_finalized_height
+                .get(working_set)
+                .expect("Should be defined at genesis");
+            let finality_period = self
+                .rollup_finality_period
+                .get(working_set)
+                .expect("Should be defined at genesis");
 
-                if begin_unbond_height + finality_period > curr_height {
-                    return Err(self.slash_burn_reward(
-                        context.sender(),
-                        Role::Attester,
-                        SlashingReason::UnbondingNotFinalized,
-                        working_set,
-                    ));
-                }
-
-                // Get the user's old balance.
-                if let Some(old_balance) = self.bonded_attesters.get(context.sender(), working_set)
-                {
-                    // Transfer the bond amount from the sender to the module's address.
-                    // On failure, no state is changed
-                    self.reward_sender(context, old_balance, working_set)?;
-
-                    // Update our internal tracking of the total bonded amount for the sender.
-                    self.bonded_attesters.remove(context.sender(), working_set);
-                    self.unbonding_attesters
-                        .remove(context.sender(), working_set);
-
-                    // Emit the unbonding event
-                    working_set.add_event(
-                        "unbonded_challenger",
-                        &format!("amount_withdrawn: {old_balance:?}"),
-                    );
-                }
-            } else {
+            if unbonding_info.unbonding_initiated_height + finality_period > curr_height {
                 return Err(self.slash_burn_reward(
                     context.sender(),
                     Role::Attester,
-                    SlashingReason::AttesterIsNotUnbonding,
+                    SlashingReason::UnbondingNotFinalized,
                     working_set,
                 ));
             }
+
+            // Get the user's old balance.
+            // Transfer the bond amount from the sender to the module's address.
+            // On failure, no state is changed
+            self.reward_sender(context, unbonding_info.amount, working_set)?;
+
+            // Update our internal tracking of the total bonded amount for the sender.
+            self.bonded_attesters.remove(context.sender(), working_set);
+            self.unbonding_attesters
+                .remove(context.sender(), working_set);
+
+            // Emit the unbonding event
+            working_set.add_event("unbonded_challenger", {
+                let amount = unbonding_info.amount;
+                &format!("amount_withdrawn: {:?}", amount)
+            });
+        } else {
+            return Err(self.slash_burn_reward(
+                context.sender(),
+                Role::Attester,
+                SlashingReason::AttesterIsNotUnbonding,
+                working_set,
+            ));
         }
         Ok(CallResponse::default())
     }
@@ -532,6 +538,15 @@ impl<
         attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
+        // We first need to check that the attester is still in the bonding set
+        if self
+            .bonded_attesters
+            .get(context.sender(), working_set)
+            .is_none()
+        {
+            return Err(AttesterIncentiveErrors::UserNotBonded);
+        }
+
         // We first need to check the bonding proof (because we can't slash the attester if he's not bonded)
         self.check_bonding_proof(context, &attestation, working_set)?;
 
@@ -586,20 +601,6 @@ impl<
             &attestation,
             working_set,
         )?;
-
-        // Then we can check that the attester is not unbonding, otherwise we slash the attester
-        if self
-            .unbonding_attesters
-            .get(context.sender(), working_set)
-            .is_some()
-        {
-            return Err(self.slash_and_invalidate_attestation(
-                context.sender(),
-                new_height_to_attest,
-                SlashingReason::AttesterIsUnbonding,
-                working_set,
-            ));
-        }
 
         working_set.add_event(
             "processed_valid_attestation",
