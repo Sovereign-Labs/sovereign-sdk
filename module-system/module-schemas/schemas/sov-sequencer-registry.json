@@ -1,9 +1,10 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "CallMessage",
-  "description": "This enumeration represents the available call messages for interacting with the sov-sequencer-registry.",
+  "description": "This enumeration represents the available call messages for interacting with the `sov-sequencer-registry` module.",
   "oneOf": [
     {
+      "description": "Add a new sequencer to the sequencer registry.",
       "type": "object",
       "required": [
         "Register"
@@ -16,6 +17,7 @@
           ],
           "properties": {
             "da_address": {
+              "description": "The DA address of the sequencer you're registering.",
               "type": "array",
               "items": {
                 "type": "integer",
@@ -29,6 +31,7 @@
       "additionalProperties": false
     },
     {
+      "description": "Remove a sequencer from the sequencer registry.",
       "type": "object",
       "required": [
         "Exit"
@@ -41,6 +44,7 @@
           ],
           "properties": {
             "da_address": {
+              "description": "The DA address of the sequencer you're removing.",
               "type": "array",
               "items": {
                 "type": "integer",
