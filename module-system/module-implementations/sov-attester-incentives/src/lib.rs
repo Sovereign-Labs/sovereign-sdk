@@ -202,12 +202,13 @@ where
             call::CallMessage::BondAttester(bond_amount) => {
                 self.bond_user_helper(bond_amount, context.sender(), Role::Attester, working_set)
             }
-            call::CallMessage::BeginUnbondingAttester => {
-                self.begin_unbond_attester(context, working_set)
-            }
-            call::CallMessage::EndUnbondingAttester => {
-                self.end_unbond_attester(context, working_set)
-            }
+            call::CallMessage::BeginUnbondingAttester => self
+                .begin_unbond_attester(context, working_set)
+                .map_err(|error| error.into()),
+
+            call::CallMessage::EndUnbondingAttester => self
+                .end_unbond_attester(context, working_set)
+                .map_err(|error| error.into()),
             call::CallMessage::BondChallenger(bond_amount) => {
                 self.bond_user_helper(bond_amount, context.sender(), Role::Challenger, working_set)
             }
