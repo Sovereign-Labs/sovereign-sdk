@@ -6,11 +6,11 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
+use celestia::verifier::address::CelestiaAddress;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use criterion::{criterion_group, criterion_main, Criterion};
 use demo_stf::app::App;
 use demo_stf::genesis_config::create_demo_genesis_config;
-use jupiter::verifier::address::CelestiaAddress;
 use risc0_adapter::host::Risc0Verifier;
 use rng_xfers::{RngDaService, RngDaSpec};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};

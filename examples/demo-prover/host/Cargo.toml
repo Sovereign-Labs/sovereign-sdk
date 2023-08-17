@@ -19,7 +19,7 @@ tokio = { workspace = true }
 tracing = "0.1.37"
 tracing-subscriber = "0.3.16"
 
-jupiter = { path = "../../../adapters/celestia", features = ["native","bench"] }
+celestia = { path = "../../../adapters/celestia", features = ["native","bench"] }
 demo-stf = { path = "../../demo-stf" }
 sov-rollup-interface = { path = "../../../rollup-interface" }
 risc0-adapter = { path = "../../../adapters/risc0" }

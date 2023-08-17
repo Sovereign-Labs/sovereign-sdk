@@ -11,7 +11,7 @@ anyhow = "1.0.68"
 risc0-zkvm = { version = "0.16", default-features = false, features = ["std"] }
 risc0-zkvm-platform = "0.16"
 borsh = { version = "0.10.3", features = ["bytes"] }
-jupiter = { path = "../../../../adapters/celestia", default-features = false }
+celestia = { path = "../../../../adapters/celestia", default-features = false }
 demo-stf = { path = "../../../demo-stf", default-features = false }
 sov-rollup-interface = { path = "../../../../rollup-interface", default-features = false}
 risc0-adapter = { path = "../../../../adapters/risc0", default-features = false }
@@ -52,4 +52,4 @@ lto = true
 opt-level = 3
 
 [features]
-bench=["jupiter/bench", "sov-modules-stf-template/bench", "sov-state/bench", "sov-modules-api/bench", "sov-sequencer-registry/bench"]
+bench=[celestia/bench", "sov-modules-stf-template/bench", "sov-state/bench", "sov-modules-api/bench", "sov-sequencer-registry/bench"]
