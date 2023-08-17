@@ -58,21 +58,23 @@ where
         IndexCodec::new(&self.codec)
     }
 
-    /// Sets a value in the StateVec.
-    pub fn set<S: Storage>(&self, index: usize, value: V, working_set: &mut WorkingSet<S>) {
-        let size = self.size(working_set);
+    /// Sets a value in the [`StateVec`].
+    /// If the index is out of bounds, returns an error.
+    /// To push a value to the end of the StateVec, use [`StateVec::push`].
+    pub fn set<S: Storage>(&self, index: usize, value: V, working_set: &mut WorkingSet<S>) -> Result<(), Error> {
+        let len = self.len(working_set);
 
-        if index < size {
+        if index < len {
             working_set.set_value(self.prefix(), &self.internal_codec(), &IndexKey(index + 1), &value);
+            Ok(())
         } else {
-            working_set.set_value(self.prefix(), &self.internal_codec(), &IndexKey(index + 1), &value);
-            working_set.set_value(self.prefix(), &self.internal_codec(), &IndexKey(0), &index);
+            Err(Error::IndexOutOfBounds(index))
         }
     }
 
     /// Returns the value for the given index.
     pub fn get<S: Storage>(&self, index: usize, working_set: &mut WorkingSet<S>) -> Result<Option<V>, Error> {
-        let len = self.size(working_set);
+        let len = self.len(working_set);
 
         if index < len {
             let elem = working_set.get_value(self.prefix(), &self.internal_codec(), &IndexKey(index + 1));
@@ -83,40 +85,48 @@ where
         }
     }
 
-    /// Removes the value for the given index.
-    pub fn remove<S: Storage>(&self, index: usize, working_set: &mut WorkingSet<S>) -> Result<Option<V>, Error> {
-        let len = self.size(working_set);
-
-        if index < len {
-            Ok(working_set.remove_value(self.prefix(), &self.internal_codec(), &IndexKey(index + 1)))
-        } else {
-            Err(Error::IndexOutOfBounds(index))
-        }
+    /// Returns the length of the [`StateVec`].
+    pub fn len<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> usize {
+        let len = working_set.get_value::<_, usize, _>(self.prefix(), &self.internal_codec(), &IndexKey(0));
+        len.unwrap_or_default()
     }
 
-    /// Returns the length of the StateVec.
-    pub fn size<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> usize {
-        let size = working_set.get_value::<_, usize, _>(self.prefix(), &self.internal_codec(), &IndexKey(0));
-        size.unwrap_or_default()
+    fn set_len<S: Storage>(&self, length: usize, working_set: &mut WorkingSet<S>) {
+        working_set.set_value(self.prefix(), &self.internal_codec(), &IndexKey(0), &length);
     }
 
-    /// Pushes a value to the end of the StateVec.
+    /// Pushes a value to the end of the [`StateVec`].
     pub fn push<S: Storage>(&self, value: V, working_set: &mut WorkingSet<S>) {
-        let len = self.size(working_set);
+        let len = self.len(working_set);
 
-        self.set(len, value, working_set);
+        working_set.set_value(self.prefix(), &self.internal_codec(), &IndexKey(len + 1), &value);
+        self.set_len(len + 1, working_set);
     }
 
-    /// Pops a value from the end of the StateVec and returns it.
-    pub fn pop<S: Storage>(&self, value: V, working_set: &mut WorkingSet<S>) -> Option<V> {
-        let len = self.size(working_set);
+    /// Pops a value from the end of the [`StateVec`] and returns it.
+    pub fn pop<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
+        let len = self.len(working_set);
 
         if len > 0 {
-            let elem = self.get(len - 1, working_set).unwrap();
-            let _ = self.remove(len - 1, working_set);
+            let elem = working_set.remove_value(self.prefix(), &self.internal_codec(), &IndexKey(len + 1));
+            self.set_len(len - 1, working_set);
             elem
         } else {
             None
+        }
+    }
+
+    /// Sets all values in the [`StateVec`].
+    /// If the length of the provided values is less than the length of the [`StateVec`], the remaining values stay but are inaccessible.
+    pub fn set_all<S: Storage>(&self, values: Vec<V>, working_set: &mut WorkingSet<S>) {
+        let len = self.len(working_set);
+
+        for (i, value) in values.into_iter().enumerate() {
+            if i < len {
+                let _ = self.set(i, value, working_set);
+            } else {
+                self.push(value, working_set);
+            }
         }
     }
 }
