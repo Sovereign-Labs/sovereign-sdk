@@ -26,7 +26,7 @@ pub struct ExampleModuleConfig {}
 ///   module's call messages (which is useful to develop clients, CLI tooling
 ///   etc.).
 #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
-#[derive(ModuleInfo)]
+#[derive(ModuleInfo, Clone)]
 pub struct Transfer<C: sov_modules_api::Context> {
     /// Address of the module.
     #[address]
@@ -43,14 +43,11 @@ pub struct Transfer<C: sov_modules_api::Context> {
 }
 
 impl<C: sov_modules_api::Context> Transfer<C> {
-    pub fn to_context<'t, 'ws>(
-        &'t self,
+    pub fn into_context<'ws>(
+        self,
         working_set: &'ws mut WorkingSet<C::Storage>,
-    ) -> TransferContext<'t, 'ws, C> {
-        TransferContext {
-            transfer_mod: self,
-            working_set,
-        }
+    ) -> TransferContext<'ws, C> {
+        TransferContext::new(self, working_set)
     }
 }
 

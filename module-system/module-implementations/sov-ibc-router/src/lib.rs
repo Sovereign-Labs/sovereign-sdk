@@ -29,7 +29,7 @@ pub struct IbcRouterModule<C: sov_modules_api::Context> {
     #[address]
     pub address: C::Address,
 
-    /// Reference to the Bank module.
+    /// Reference to the Transfer module.
     #[module]
     pub(crate) transfer: sov_ibc_transfer::Transfer<C>,
 }
@@ -62,25 +62,25 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcRouterModule<C>
     }
 }
 
-pub struct IbcRouter<'t, 'ws, C: sov_modules_api::Context> {
-    pub transfer_ctx: TransferContext<'t, 'ws, C>,
+pub struct IbcRouter<'ws, C: sov_modules_api::Context> {
+    pub transfer_ctx: TransferContext<'ws, C>,
 }
 
-impl<'t, 'ws, C> IbcRouter<'t, 'ws, C>
+impl<'t, 'ws, C> IbcRouter<'ws, C>
 where
     C: sov_modules_api::Context,
 {
     pub fn new(
         router_mod: &'t IbcRouterModule<C>,
         working_set: &'ws mut WorkingSet<C::Storage>,
-    ) -> IbcRouter<'t, 'ws, C> {
+    ) -> IbcRouter<'ws, C> {
         IbcRouter {
-            transfer_ctx: router_mod.transfer.to_context(working_set),
+            transfer_ctx: router_mod.transfer.clone().into_context(working_set),
         }
     }
 }
 
-impl<'r, 'ws, C> Router for IbcRouter<'r, 'ws, C>
+impl<'ws, C> Router for IbcRouter<'ws, C>
 where
     C: sov_modules_api::Context,
 {

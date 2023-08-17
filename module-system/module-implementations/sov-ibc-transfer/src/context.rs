@@ -1,3 +1,5 @@
+use std::cell::RefCell;
+
 use ibc::applications::transfer::context::{
     on_acknowledgement_packet_validate, on_chan_open_ack_validate, on_chan_open_confirm_validate,
     on_chan_open_init_execute, on_chan_open_init_validate, on_chan_open_try_execute,
@@ -22,12 +24,24 @@ use crate::Transfer;
 /// because we only get the `WorkingSet` at call-time from the Sovereign SDK,
 /// which must be passed to `TokenTransferValidationContext` methods through
 /// the `self` argument.
-pub struct TransferContext<'t, 'ws, C: sov_modules_api::Context> {
-    pub transfer_mod: &'t Transfer<C>,
+pub struct TransferContext<'ws, C: sov_modules_api::Context> {
+    pub transfer_mod: RefCell<Transfer<C>>,
     pub working_set: &'ws mut WorkingSet<C::Storage>,
 }
 
-impl<'t, 'ws, C> core::fmt::Debug for TransferContext<'t, 'ws, C>
+impl<'ws, C> TransferContext<'ws, C>
+where
+    C: sov_modules_api::Context,
+{
+    pub fn new(transfer_mod: Transfer<C>, working_set: &'ws mut WorkingSet<C::Storage>) -> Self {
+        Self {
+            transfer_mod: RefCell::new(transfer_mod),
+            working_set,
+        }
+    }
+}
+
+impl<'ws, C> core::fmt::Debug for TransferContext<'ws, C>
 where
     C: sov_modules_api::Context,
 {
@@ -38,7 +52,7 @@ where
     }
 }
 
-impl<'t, 'ws, C> TokenTransferValidationContext for TransferContext<'t, 'ws, C>
+impl<'ws, C> TokenTransferValidationContext for TransferContext<'ws, C>
 where
     C: sov_modules_api::Context,
 {
@@ -93,7 +107,7 @@ where
     }
 }
 
-impl<'t, 'ws, C> TokenTransferExecutionContext for TransferContext<'t, 'ws, C>
+impl<'ws, C> TokenTransferExecutionContext for TransferContext<'ws, C>
 where
     C: sov_modules_api::Context,
 {
@@ -142,7 +156,7 @@ where
     }
 }
 
-impl<'t, 'ws, C> ibc::core::router::Module for TransferContext<'t, 'ws, C>
+impl<'ws, C> ibc::core::router::Module for TransferContext<'ws, C>
 where
     C: sov_modules_api::Context,
 {
