@@ -1,4 +1,5 @@
 use std::env;
+use std::str::FromStr;
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
@@ -6,7 +7,8 @@ use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use jupiter::da_service::{CelestiaService, DaServiceConfig};
 use jupiter::types::NamespaceId;
-use jupiter::verifier::RollupParams;
+use jupiter::verifier::address::CelestiaAddress;
+use jupiter::verifier::{CelestiaSpec, RollupParams};
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::{Risc0Host, Risc0Verifier};
 use serde::Deserialize;
@@ -30,6 +32,7 @@ const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    let skip_prover = env::var("SKIP_PROVER").is_ok();
     // Initializing logging
     let subscriber = tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
@@ -54,28 +57,27 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let app: App<Risc0Verifier, jupiter::BlobWithSender> =
-        App::new(rollup_config.runner.storage.clone());
+    let mut app: App<Risc0Verifier, CelestiaSpec> = App::new(rollup_config.runner.storage.clone());
 
     let is_storage_empty = app.get_storage().is_empty();
-    let mut demo = app.stf;
 
     if is_storage_empty {
+        let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
         let genesis_config = create_demo_genesis_config(
             100000000,
             sequencer_private_key.default_address(),
-            SEQUENCER_DA_ADDRESS.to_vec(),
+            sequencer_da_address.as_ref().to_vec(),
             &sequencer_private_key,
             &sequencer_private_key,
         );
         info!("Starting from empty storage, initialization chain");
-        demo.init_chain(genesis_config);
+        app.stf.init_chain(genesis_config);
     }
 
-    let mut prev_state_root = {
-        let res = demo.apply_slot(Default::default(), []);
-        res.state_root.0
-    };
+    let mut prev_state_root = app
+        .get_storage()
+        .get_state_root(&Default::default())
+        .expect("The storage needs to have a state root");
 
     for height in rollup_config.start_height.. {
         let mut host = Risc0Host::new(ROLLUP_ELF);
@@ -103,14 +105,22 @@ async fn main() -> Result<(), anyhow::Error> {
         host.write_to_guest(&completeness_proof);
         host.write_to_guest(&blobs);
 
-        let result = demo.apply_slot(Default::default(), &mut blobs);
+        let result = app
+            .stf
+            .apply_slot(Default::default(), &filtered_block, &mut blobs);
 
         host.write_to_guest(&result.witness);
 
-        info!("Starting proving...");
-        let receipt = host.run().expect("Prover should run successfully");
-        info!("Start verifying..");
-        receipt.verify(ROLLUP_ID).expect("Receipt should be valid");
+        if !skip_prover {
+            info!("Starting proving...");
+            let receipt = host.run().expect("Prover should run successfully");
+            info!("Start verifying..");
+            receipt.verify(ROLLUP_ID).expect("Receipt should be valid");
+        } else {
+            let _receipt = host
+                .run_without_proving()
+                .expect("Prover should run successfully");
+        }
 
         prev_state_root = result.state_root.0;
         info!("Completed proving and verifying block {height}");

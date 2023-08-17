@@ -2,43 +2,56 @@ use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
 use sov_modules_api::{Context, DispatchCall};
-use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
+use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader, DaSpec};
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
-use sov_rollup_interface::Buf;
+use sov_rollup_interface::{AddressTrait, Buf};
 use sov_state::StateCheckpoint;
 use tracing::{debug, error};
 
 use crate::tx_verifier::{verify_txs_stateless, TransactionAndRawHash};
 use crate::{Batch, Runtime, SequencerOutcome, SlashingReason, TxEffect};
 
-type ApplyBatchResult<T> = Result<T, ApplyBatchError>;
+type ApplyBatchResult<T, A> = Result<T, ApplyBatchError<A>>;
+
+#[allow(type_alias_bounds)]
+type ApplyBatch<DA: DaSpec> = ApplyBatchResult<
+    BatchReceipt<SequencerOutcome<<DA::BlobTransaction as BlobReaderTrait>::Address>, TxEffect>,
+    <DA::BlobTransaction as BlobReaderTrait>::Address,
+>;
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+use zk_cycle_macros::cycle_tracker;
 
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to work with the module-system.
-pub struct AppTemplate<C: Context, RT, Vm, B> {
+pub struct AppTemplate<
+    C: Context,
+    DA: DaSpec,
+    Vm,
+    RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
+> {
     /// State storage used by the rollup.
     pub current_storage: C::Storage,
     /// The runtime includes all the modules that the rollup supports.
     pub runtime: RT,
     pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
-    phantom_blob: PhantomData<B>,
+    phantom_da: PhantomData<DA>,
 }
 
-pub(crate) enum ApplyBatchError {
+pub(crate) enum ApplyBatchError<A: AddressTrait> {
     // Contains batch hash
     Ignored([u8; 32]),
     Slashed {
         // Contains batch hash
         hash: [u8; 32],
         reason: SlashingReason,
-        sequencer_da_address: Vec<u8>,
+        sequencer_da_address: A,
     },
 }
 
-impl From<ApplyBatchError> for BatchReceipt<SequencerOutcome, TxEffect> {
-    fn from(value: ApplyBatchError) -> Self {
+impl<A: AddressTrait> From<ApplyBatchError<A>> for BatchReceipt<SequencerOutcome<A>, TxEffect> {
+    fn from(value: ApplyBatchError<A>) -> Self {
         match value {
             ApplyBatchError::Ignored(hash) => BatchReceipt {
                 batch_hash: hash,
@@ -61,9 +74,11 @@ impl From<ApplyBatchError> for BatchReceipt<SequencerOutcome, TxEffect> {
     }
 }
 
-impl<C: Context, RT, Vm, B: BlobReaderTrait> AppTemplate<C, RT, Vm, B>
+impl<C, Vm, DA, RT> AppTemplate<C, DA, Vm, RT>
 where
-    RT: Runtime<C>,
+    C: Context,
+    DA: DaSpec,
+    RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
 {
     /// [`AppTemplate`] constructor.
     pub fn new(storage: C::Storage, runtime: RT) -> Self {
@@ -72,14 +87,12 @@ where
             current_storage: storage,
             checkpoint: None,
             phantom_vm: PhantomData,
-            phantom_blob: PhantomData,
+            phantom_da: PhantomData,
         }
     }
 
-    pub(crate) fn apply_blob(
-        &mut self,
-        blob: &mut B,
-    ) -> ApplyBatchResult<BatchReceipt<SequencerOutcome, TxEffect>> {
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
+    pub(crate) fn apply_blob(&mut self, blob: &mut DA::BlobTransaction) -> ApplyBatch<DA> {
         debug!(
             "Applying batch from sequencer: 0x{}",
             hex::encode(blob.sender())
@@ -112,7 +125,7 @@ where
             Err(reason) => {
                 // Explicitly revert on slashing, even though nothing has changed in pre_process.
                 let mut batch_workspace = batch_workspace.revert().to_revertable();
-                let sequencer_da_address = blob.sender().as_ref().to_vec();
+                let sequencer_da_address = blob.sender();
                 let sequencer_outcome = SequencerOutcome::Slashed {
                     reason,
                     sequencer_da_address: sequencer_da_address.clone(),
@@ -222,6 +235,7 @@ where
         };
 
         self.checkpoint = Some(batch_workspace.checkpoint());
+
         Ok(BatchReceipt {
             batch_hash: blob.hash(),
             tx_receipts,

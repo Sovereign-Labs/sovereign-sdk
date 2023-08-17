@@ -34,7 +34,11 @@ pub struct StateTransitionRunner<ST, DA, Vm>
 where
     DA: DaService,
     Vm: Zkvm,
-    ST: StateTransitionFunction<Vm, <<DA as DaService>::Spec as DaSpec>::BlobTransaction>,
+    ST: StateTransitionFunction<
+        Vm,
+        <<DA as DaService>::Spec as DaSpec>::BlobTransaction,
+        Condition = <DA::Spec as DaSpec>::ValidityCondition,
+    >,
 {
     start_height: u64,
     da_service: DA,
@@ -48,7 +52,11 @@ impl<ST, DA, Vm> StateTransitionRunner<ST, DA, Vm>
 where
     DA: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
     Vm: Zkvm,
-    ST: StateTransitionFunction<Vm, <<DA as DaService>::Spec as DaSpec>::BlobTransaction>,
+    ST: StateTransitionFunction<
+        Vm,
+        <<DA as DaService>::Spec as DaSpec>::BlobTransaction,
+        Condition = <DA::Spec as DaSpec>::ValidityCondition,
+    >,
 {
     /// Creates a new `StateTransitionRunner` runner.
     pub fn new(
@@ -65,16 +73,13 @@ where
             // Check if the rollup has previously been initialized
             if should_init_chain {
                 info!("No history detected. Initializing chain...");
-                app.init_chain(genesis_config);
+                let ret_hash = app.init_chain(genesis_config);
                 info!("Chain initialization is done.");
+                ret_hash
             } else {
                 debug!("Chain is already initialized. Skipping initialization.");
+                app.get_current_state_root()?
             }
-
-            let res = app.apply_slot(Default::default(), []);
-            // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
-            // This will be removed shortly.
-            res.state_root
         };
 
         let listen_address = SocketAddr::new(rpc_config.bind_host.parse()?, rpc_config.bind_port);
@@ -115,7 +120,6 @@ where
             info!("Requesting data for height {}", height,);
 
             let filtered_block = self.da_service.get_finalized_at(height).await?;
-
             let mut blobs = self.da_service.extract_relevant_txs(&filtered_block);
 
             info!(
@@ -126,7 +130,9 @@ where
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
 
-            let slot_result = self.app.apply_slot(Default::default(), &mut blobs);
+            let slot_result = self
+                .app
+                .apply_slot(Default::default(), &filtered_block, &mut blobs);
             for receipt in slot_result.batch_receipts {
                 data_to_commit.add_batch(receipt);
             }

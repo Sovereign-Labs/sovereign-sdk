@@ -1,9 +1,9 @@
 use sov_election::ElectionConfig;
 #[cfg(feature = "experimental")]
-use sov_evm::{AccountData, EvmConfig};
+use sov_evm::{AccountData, EvmConfig, SpecId};
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::test_utils::generate_address;
+use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Context, PrivateKey, PublicKey};
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
@@ -66,6 +66,7 @@ pub fn create_demo_genesis_config<C: Context>(
     GenesisConfig::new(
         bank_config,
         sequencer_registry_config,
+        (),
         election_config,
         value_setter_config,
         sov_accounts::AccountConfig { pub_keys: vec![] },
@@ -78,6 +79,9 @@ pub fn create_demo_genesis_config<C: Context>(
                 code: vec![],
                 nonce: 0,
             }],
+            chain_id: 1,
+            limit_contract_code_size: None,
+            spec: vec![(0, SpecId::LATEST)].into_iter().collect(),
         },
     )
 }

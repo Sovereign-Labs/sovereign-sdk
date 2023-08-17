@@ -56,9 +56,6 @@ impl CliParserMacro {
                         #field_name(<<#module_path as ::sov_modules_api::Module>::CallMessage as ::sov_modules_api::CliWalletArg>::CliStringRepr)
                     });
 
-                let field_name_string = field_name.to_string();
-                let encode_function_name = format_ident!("encode_{}_call", field_name_string);
-
                 let type_name_string = match &field.ty {
                     Type::Path(type_path) => extract_ident(type_path).to_string(),
                     _ => {
@@ -73,7 +70,7 @@ impl CliParserMacro {
                 parse_match_arms.push(quote! {
                             CliTransactionParser::#field_name(mod_args) => {
                                 let command_as_call_message: <#module_path as ::sov_modules_api::Module>::CallMessage = mod_args.into();
-                                #ident:: #ty_generics ::#encode_function_name(
+                                <#ident:: #ty_generics as ::sov_modules_api::EncodeCall<#module_path>> ::encode_call(
                                     command_as_call_message
                                 )
                             },
@@ -105,8 +102,10 @@ impl CliParserMacro {
                 // Build the `match` arms for the CLI's json parser
                 match_arms.push(quote! {
                             #type_name_string => Ok({
-                                #ident:: #ty_generics ::#encode_function_name(
-                                    ::serde_json::from_str::<<#module_path as ::sov_modules_api::Module>::CallMessage>(&call_data)?
+                                let _data: <#module_path as ::sov_modules_api::Module>::CallMessage =
+                                 ::serde_json::from_str::<<#module_path as ::sov_modules_api::Module>::CallMessage>(&call_data)?;
+                                <#ident:: #ty_generics as ::sov_modules_api::EncodeCall<#module_path>> ::encode_call(
+                                   _data
                                 )
                             }),
                         });
@@ -138,7 +137,7 @@ impl CliParserMacro {
             /// Borsh encode a transaction parsed from the CLI
             pub fn borsh_encode_cli_tx #impl_generics (cmd: CliTransactionParser #ty_generics) -> ::std::vec::Vec<u8>
             #where_clause {
-                use ::borsh::BorshSerialize;
+                use ::borsh::BorshSerialize as _;
                 match cmd {
                     #(#parse_match_arms)*
                     _ => panic!("unknown module name"),

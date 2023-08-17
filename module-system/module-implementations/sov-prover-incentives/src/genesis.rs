@@ -5,6 +5,9 @@ use sov_state::WorkingSet;
 use crate::ProverIncentives;
 
 impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
+    /// Init the [`ProverIncentives`] module using the provided `config`.
+    /// Sets the minimum amount necessary to bond, the commitment to the verifier circuit
+    /// the bonding token address and builds the set of initial provers.
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,

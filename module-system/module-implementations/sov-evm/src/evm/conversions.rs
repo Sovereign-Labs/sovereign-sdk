@@ -1,13 +1,20 @@
 use bytes::Bytes;
-use ethers_core::types::{OtherFields, Transaction};
-use reth_rpc::eth::error::{EthApiError, RpcInvalidTransactionError};
+use ethereum_types::U64;
+use ethers_core::types::{Bytes as EthBytes, OtherFields, Transaction};
+use reth_primitives::{
+    Bytes as RethBytes, TransactionSigned as RethTransactionSigned,
+    TransactionSignedEcRecovered as RethTransactionSignedEcRecovered,
+    TransactionSignedNoHash as RethTransactionSignedNoHash,
+};
+use reth_rpc::eth::error::EthApiError;
 use reth_rpc_types::CallRequest;
 use revm::primitives::{
     AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, Bytecode, CreateScheme, TransactTo,
     TxEnv, B160, B256, U256,
 };
+use thiserror::Error;
 
-use super::transaction::{AccessListItem, BlockEnv, EvmTransaction};
+use super::transaction::{BlockEnv, EvmTransactionSignedEcRecovered, RawEvmTransaction};
 use super::AccountInfo;
 
 impl From<AccountInfo> for ReVmAccountInfo {
@@ -35,7 +42,7 @@ impl From<ReVmAccountInfo> for AccountInfo {
 impl From<BlockEnv> for ReVmBlockEnv {
     fn from(block_env: BlockEnv) -> Self {
         Self {
-            number: U256::from_le_bytes(block_env.number),
+            number: U256::from(block_env.number),
             coinbase: B160::from_slice(&block_env.coinbase),
             timestamp: U256::from_le_bytes(block_env.timestamp),
             // TODO: handle difficulty
@@ -47,65 +54,56 @@ impl From<BlockEnv> for ReVmBlockEnv {
     }
 }
 
-impl From<AccessListItem> for (B160, Vec<U256>) {
-    fn from(item: AccessListItem) -> Self {
-        (
-            B160::from_slice(&item.address),
-            item.storage_keys
-                .into_iter()
-                .map(U256::from_le_bytes)
-                .collect(),
-        )
-    }
-}
+impl From<&EvmTransactionSignedEcRecovered> for TxEnv {
+    fn from(tx: &EvmTransactionSignedEcRecovered) -> Self {
+        let tx: &RethTransactionSignedEcRecovered = tx.as_ref();
 
-impl From<EvmTransaction> for TxEnv {
-    fn from(tx: EvmTransaction) -> Self {
-        let to = match tx.to {
-            Some(addr) => TransactTo::Call(B160::from_slice(&addr)),
+        let to = match tx.to() {
+            Some(addr) => TransactTo::Call(addr),
             None => TransactTo::Create(CreateScheme::Create),
         };
 
-        let access_list = tx
-            .access_lists
-            .into_iter()
-            .map(|item| item.into())
-            .collect();
-
         Self {
-            caller: B160::from_slice(&tx.sender),
-            data: Bytes::from(tx.data),
-            gas_limit: tx.gas_limit,
-            gas_price: U256::from(tx.gas_price),
-            gas_priority_fee: Some(U256::from(tx.max_priority_fee_per_gas)),
+            caller: tx.signer(),
+            gas_limit: tx.gas_limit(),
+            gas_price: U256::from(tx.effective_gas_price(None)),
+            gas_priority_fee: tx.max_priority_fee_per_gas().map(U256::from),
             transact_to: to,
-            value: U256::from(tx.value),
-            nonce: Some(tx.nonce),
-            chain_id: Some(tx.chain_id),
-            access_list,
+            value: U256::from(tx.value()),
+            data: Bytes::from(tx.input().to_vec()),
+            chain_id: tx.chain_id(),
+            nonce: Some(tx.nonce()),
+            // TODO handle access list
+            access_list: vec![],
         }
     }
 }
 
-impl From<EvmTransaction> for Transaction {
-    fn from(evm_tx: EvmTransaction) -> Self {
-        Self {
-            hash: evm_tx.hash.into(),
-            nonce: evm_tx.nonce.into(),
-            from: evm_tx.sender.into(),
-            to: evm_tx.to.map(|addr| addr.into()),
-            value: evm_tx.value.into(),
-            // https://github.com/foundry-rs/foundry/blob/master/anvil/core/src/eth/transaction/mod.rs#L1251
-            gas_price: Some(evm_tx.max_fee_per_gas.into()),
-            input: evm_tx.data.into(),
-            v: (evm_tx.odd_y_parity as u8).into(),
-            r: evm_tx.r.into(),
-            s: evm_tx.s.into(),
-            transaction_type: Some(2.into()),
+impl TryFrom<RawEvmTransaction> for Transaction {
+    type Error = RawEvmTxConversionError;
+    fn try_from(evm_tx: RawEvmTransaction) -> Result<Self, Self::Error> {
+        let tx: EvmTransactionSignedEcRecovered = evm_tx.try_into()?;
+        let tx: &RethTransactionSignedEcRecovered = tx.as_ref();
+
+        Ok(Self {
+            hash: tx.hash().into(),
+            nonce: tx.nonce().into(),
+
+            from: tx.signer().into(),
+            to: tx.to().map(|addr| addr.into()),
+            value: tx.value().into(),
+            gas_price: Some(tx.effective_gas_price(None).into()),
+
+            input: EthBytes::from(tx.input().to_vec()),
+            v: tx.signature().v(tx.chain_id()).into(),
+            r: tx.signature().r.into(),
+            s: tx.signature().s.into(),
+            transaction_type: Some(U64::from(tx.tx_type() as u8)),
+            // TODO handle access list
             access_list: None,
-            max_priority_fee_per_gas: Some(evm_tx.max_priority_fee_per_gas.into()),
-            max_fee_per_gas: Some(evm_tx.max_fee_per_gas.into()),
-            chain_id: Some(evm_tx.chain_id.into()),
+            max_priority_fee_per_gas: tx.max_priority_fee_per_gas().map(From::from),
+            max_fee_per_gas: Some(tx.max_fee_per_gas().into()),
+            chain_id: tx.chain_id().map(|id| id.into()),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
             block_hash: Some([0; 32].into()),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
@@ -116,64 +114,58 @@ impl From<EvmTransaction> for Transaction {
             gas: Default::default(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
             other: OtherFields::default(),
+        })
+    }
+}
+
+#[derive(Error, Debug)]
+pub enum RawEvmTxConversionError {
+    #[error("Empty raw transaction data")]
+    EmptyRawTransactionData,
+    #[error("Failed to decode signed transaction")]
+    FailedToDecodeSignedTransaction,
+}
+
+impl From<RawEvmTxConversionError> for EthApiError {
+    fn from(e: RawEvmTxConversionError) -> Self {
+        match e {
+            RawEvmTxConversionError::EmptyRawTransactionData => {
+                EthApiError::EmptyRawTransactionData
+            }
+            RawEvmTxConversionError::FailedToDecodeSignedTransaction => {
+                EthApiError::FailedToDecodeSignedTransaction
+            }
         }
     }
 }
 
-use reth_primitives::{Bytes as RethBytes, TransactionSigned};
+impl TryFrom<RawEvmTransaction> for RethTransactionSignedNoHash {
+    type Error = RawEvmTxConversionError;
 
-impl TryFrom<RethBytes> for EvmTransaction {
-    type Error = EthApiError;
-
-    fn try_from(data: RethBytes) -> Result<Self, Self::Error> {
+    fn try_from(data: RawEvmTransaction) -> Result<Self, Self::Error> {
+        let data = RethBytes::from(data.rlp);
         if data.is_empty() {
-            return Err(EthApiError::EmptyRawTransactionData);
+            return Err(RawEvmTxConversionError::EmptyRawTransactionData);
         }
 
-        let transaction = TransactionSigned::decode_enveloped(data)
-            .map_err(|_| EthApiError::FailedToDecodeSignedTransaction)?;
+        let transaction = RethTransactionSigned::decode_enveloped(data)
+            .map_err(|_| RawEvmTxConversionError::FailedToDecodeSignedTransaction)?;
 
-        let transaction = transaction
+        Ok(transaction.into())
+    }
+}
+
+impl TryFrom<RawEvmTransaction> for EvmTransactionSignedEcRecovered {
+    type Error = RawEvmTxConversionError;
+
+    fn try_from(evm_tx: RawEvmTransaction) -> Result<Self, Self::Error> {
+        let tx = RethTransactionSignedNoHash::try_from(evm_tx)?;
+        let tx: RethTransactionSigned = tx.into();
+        let tx = tx
             .into_ecrecovered()
-            .ok_or(EthApiError::InvalidTransactionSignature)?;
+            .ok_or(RawEvmTxConversionError::FailedToDecodeSignedTransaction)?;
 
-        let (signed_transaction, signer) = transaction.to_components();
-
-        let tx_hash = signed_transaction.hash();
-        let tx_eip_1559 = match signed_transaction.transaction {
-            reth_primitives::Transaction::Legacy(_) => {
-                return Err(EthApiError::InvalidTransaction(
-                    RpcInvalidTransactionError::TxTypeNotSupported,
-                ))
-            }
-            reth_primitives::Transaction::Eip2930(_) => {
-                return Err(EthApiError::InvalidTransaction(
-                    RpcInvalidTransactionError::TxTypeNotSupported,
-                ))
-            }
-            reth_primitives::Transaction::Eip1559(tx_eip_1559) => tx_eip_1559,
-        };
-
-        Ok(Self {
-            sender: signer.into(),
-            data: tx_eip_1559.input.to_vec(),
-            gas_limit: tx_eip_1559.gas_limit,
-            // https://github.com/foundry-rs/foundry/blob/master/anvil/core/src/eth/transaction/mod.rs#L1251C20-L1251C20
-            gas_price: tx_eip_1559.max_fee_per_gas,
-            max_priority_fee_per_gas: tx_eip_1559.max_priority_fee_per_gas,
-            max_fee_per_gas: tx_eip_1559.max_fee_per_gas,
-            to: tx_eip_1559.to.to().map(|addr| addr.into()),
-            value: tx_eip_1559.value,
-            nonce: tx_eip_1559.nonce,
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
-            access_lists: vec![],
-            chain_id: tx_eip_1559.chain_id,
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
-            hash: tx_hash.into(),
-            odd_y_parity: Default::default(),
-            r: Default::default(),
-            s: Default::default(),
-        })
+        Ok(EvmTransactionSignedEcRecovered::new(tx))
     }
 }
 
@@ -198,7 +190,7 @@ pub fn prepare_call_env(request: CallRequest) -> TxEnv {
             .unwrap_or_default(),
         chain_id: request.chain_id.map(|c| c.as_u64()),
         nonce: request.nonce.map(|n| TryInto::<u64>::try_into(n).unwrap()),
-
+        // TODO handle access list
         access_list: Default::default(),
     }
 }

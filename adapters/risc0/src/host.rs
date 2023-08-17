@@ -6,7 +6,12 @@ use risc0_zkvm::{
     Executor, ExecutorEnvBuilder, LocalExecutor, SegmentReceipt, Session, SessionReceipt,
 };
 use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
+use sov_rollup_interface::AddressTrait;
+#[cfg(feature = "bench")]
+use zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cycles};
 
+#[cfg(feature = "bench")]
+use crate::metrics::metrics_callback;
 use crate::Risc0MethodId;
 
 pub struct Risc0Host<'a> {
@@ -15,9 +20,28 @@ pub struct Risc0Host<'a> {
 }
 
 impl<'a> Risc0Host<'a> {
+    #[cfg(not(feature = "bench"))]
     pub fn new(elf: &'a [u8]) -> Self {
+        let default_env = ExecutorEnvBuilder::default();
+
         Self {
-            env: RefCell::new(ExecutorEnvBuilder::default()),
+            env: RefCell::new(default_env),
+            elf,
+        }
+    }
+
+    #[cfg(feature = "bench")]
+    pub fn new(elf: &'a [u8]) -> Self {
+        let mut default_env = ExecutorEnvBuilder::default();
+
+        let metrics_syscall_name = get_syscall_name();
+        default_env.io_callback(metrics_syscall_name, metrics_callback);
+
+        let cycles_syscall_name = get_syscall_name_cycles();
+        default_env.io_callback(cycles_syscall_name, cycle_count_callback);
+
+        Self {
+            env: RefCell::new(default_env),
             elf,
         }
     }
@@ -55,6 +79,16 @@ impl<'prover> Zkvm for Risc0Host<'prover> {
     ) -> Result<&'a [u8], Self::Error> {
         verify_from_slice(serialized_proof, code_commitment)
     }
+
+    fn verify_and_extract_output<
+        C: sov_rollup_interface::zk::ValidityCondition,
+        Add: AddressTrait,
+    >(
+        _serialized_proof: &[u8],
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
+        todo!("Implement once risc0 supports recursion, issue https://github.com/Sovereign-Labs/sovereign-sdk/issues/633")
+    }
 }
 
 pub struct Risc0Verifier;
@@ -69,6 +103,18 @@ impl Zkvm for Risc0Verifier {
         code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error> {
         verify_from_slice(serialized_proof, code_commitment)
+    }
+
+    fn verify_and_extract_output<
+        C: sov_rollup_interface::zk::ValidityCondition,
+        Add: AddressTrait,
+    >(
+        _serialized_proof: &[u8],
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<sov_rollup_interface::zk::StateTransition<C, Add>, Self::Error> {
+        // Method to implement: not clear how to deserialize the proof output.
+        // Issue https://github.com/Sovereign-Labs/sovereign-sdk/issues/621
+        todo!("not clear how to deserialize the proof output. Issue https://github.com/Sovereign-Labs/sovereign-sdk/issues/621")
     }
 }
 

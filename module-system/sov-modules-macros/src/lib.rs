@@ -280,7 +280,7 @@ pub fn cli_parser(input: TokenStream) -> TokenStream {
 /// [`sov_modules_api::CliWalletArg`] trait where the `CliStringRepr` type is the new struct or enum.
 ///
 /// As an implementation detail, `clap` requires that all types have named fields - so this macro auto generates an appropriate
-/// `clap`-compatible type from the annotated item. Tor example, the struct `MyStruct(u64, u64)` would be transformed into
+/// `clap`-compatible type from the annotated item. For example, the struct `MyStruct(u64, u64)` would be transformed into
 /// `MyStructWithNamedFields { field0: u64, field1: u64 }`.
 ///
 /// ## Example

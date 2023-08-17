@@ -15,8 +15,11 @@ use crate::ProverIncentives;
 // TODO: allow call messages to borrow data
 //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/274
 pub enum CallMessage {
+    /// Bonds the prover with provided bond.
     BondProver(u64),
+    /// Unbonds the prover.
     UnbondProver,
+    /// Verifies the provided proof (of format `Vec<u8>`)
     VerifyProof(Vec<u8>),
 }
 

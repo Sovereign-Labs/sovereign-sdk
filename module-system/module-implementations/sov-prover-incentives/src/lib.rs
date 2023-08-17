@@ -1,3 +1,5 @@
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
 mod call;
 mod genesis;
 
@@ -8,13 +10,19 @@ mod tests;
 mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+/// The call methods specified in this module
 pub use call::CallMessage;
+/// The response type used by RPC queries.
 #[cfg(feature = "native")]
 pub use query::Response;
 use sov_modules_api::{Context, Error, ModuleInfo};
 use sov_rollup_interface::zk::Zkvm;
 use sov_state::WorkingSet;
 
+/// Configuration of the prover incentives module. Specifies the
+/// address of the bonding token, the minimum bond, the commitment to
+/// the allowed verifier method and a set of initial provers with their
+/// bonding amount.
 pub struct ProverIncentivesConfig<C: Context, Vm: Zkvm> {
     /// The address of the token to be used for bonding.
     bonding_token_address: C::Address,

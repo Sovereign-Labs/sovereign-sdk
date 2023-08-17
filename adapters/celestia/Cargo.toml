@@ -27,14 +27,19 @@ serde_json = { workspace = true }
 tokio = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
+zk-cycle-macros = {path = "../../utils/zk-cycle-macros", optional=true}
+risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional=true}
+risc0-zkvm-platform = { version = "0.16", optional=true}
 
 sov-rollup-interface = { path = "../../rollup-interface" }
 nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "dd37588444fca72825d11fe4a46838f66525c49f", features = ["serde", "borsh"] }
+
 
 [dev-dependencies]
 postcard = { version = "1", features = ["use-std"] }
 proptest = { version = "1.2" }
 wiremock = "0.5"
+
 
 [build-dependencies]
 prost-build = { version = "0.11" }
@@ -42,4 +47,5 @@ prost-build = { version = "0.11" }
 [features]
 default = ["native"]
 native = ["dep:tokio", "dep:jsonrpsee"]
+bench = ["zk-cycle-macros/bench","risc0-zkvm","risc0-zkvm-platform"]
 verifier = []

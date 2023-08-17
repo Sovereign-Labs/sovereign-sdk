@@ -14,7 +14,7 @@ use sov_state::WorkingSet;
 
 pub struct ExampleModuleConfig {}
 
-#[derive(borsh::BorshSerialize)]
+#[derive(borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct ConsensusStateKey {
     pub client_id: String,
     pub epoch: u64,

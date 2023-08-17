@@ -7,8 +7,9 @@ use proptest::{prop_compose, proptest};
 use reqwest::header::CONTENT_TYPE;
 use serde_json::json;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
+use sov_rollup_interface::mocks::MockValidityCond;
 #[cfg(test)]
-use sov_rollup_interface::mocks::{TestBlock, TestBlockHeader, TestHash};
+use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::fuzzing::BatchReceiptStrategyArgs;
 use sov_rollup_interface::stf::{BatchReceipt, Event, TransactionReceipt};
@@ -47,13 +48,13 @@ async fn queries_test_runner(test_queries: Vec<TestExpect>, rpc_config: RpcConfi
     }
 }
 
-fn populate_ledger(ledger_db: &mut LedgerDB, slots: Vec<SlotCommit<TestBlock, u32, u32>>) {
+fn populate_ledger(ledger_db: &mut LedgerDB, slots: Vec<SlotCommit<MockBlock, u32, u32>>) {
     for slot in slots {
         ledger_db.commit_slot(slot).unwrap();
     }
 }
 
-fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<TestBlock, u32, u32>>) {
+fn test_helper(test_queries: Vec<TestExpect>, slots: Vec<SlotCommit<MockBlock, u32, u32>>) {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_io()
         .enable_time()
@@ -109,12 +110,13 @@ fn batch2_tx_receipts() -> Vec<TransactionReceipt<u32>> {
 }
 
 fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value) {
-    let mut slots: Vec<SlotCommit<TestBlock, u32, u32>> = vec![SlotCommit::new(TestBlock {
+    let mut slots: Vec<SlotCommit<MockBlock, u32, u32>> = vec![SlotCommit::new(MockBlock {
         curr_hash: sha2::Sha256::digest(b"slot_data"),
-        header: TestBlockHeader {
-            prev_hash: TestHash(sha2::Sha256::digest(b"prev_header")),
+        header: MockBlockHeader {
+            prev_hash: MockHash(sha2::Sha256::digest(b"prev_header")),
         },
         height: 0,
+        validity_cond: MockValidityCond::default(),
     })];
 
     let batches = vec![
@@ -298,13 +300,13 @@ prop_compose! {
 
 prop_compose! {
     fn arb_slots(max_slots: usize, max_batches: usize)
-    (batches_and_hashes in proptest::collection::vec(arb_batches_and_slot_hash(max_batches), 1..max_slots)) -> (Vec<SlotCommit<TestBlock, u32, u32>>, HashMap<usize, (usize, usize)>, usize)
+    (batches_and_hashes in proptest::collection::vec(arb_batches_and_slot_hash(max_batches), 1..max_slots)) -> (Vec<SlotCommit<MockBlock, u32, u32>>, HashMap<usize, (usize, usize)>, usize)
     {
         let mut slots = std::vec::Vec::with_capacity(max_slots);
 
         let mut total_num_batches = 1;
 
-        let mut prev_hash = TestHash([0;32]);
+        let mut prev_hash = MockHash([0;32]);
 
         let mut curr_tx_id = 1;
         let mut curr_event_id = 1;
@@ -312,12 +314,13 @@ prop_compose! {
         let mut tx_id_to_event_range = HashMap::new();
 
         for (batches, hash) in batches_and_hashes{
-            let mut new_slot = SlotCommit::new(TestBlock {
+            let mut new_slot = SlotCommit::new(MockBlock {
                 curr_hash: hash,
-                header: TestBlockHeader {
+                header: MockBlockHeader {
                     prev_hash,
                 },
-                height: 0
+                height: 0,
+                validity_cond: MockValidityCond::default()
             });
 
             total_num_batches += batches.len();
@@ -336,7 +339,7 @@ prop_compose! {
 
             slots.push(new_slot);
 
-            prev_hash = TestHash(hash);
+            prev_hash = MockHash(hash);
         }
 
         (slots, tx_id_to_event_range, total_num_batches)

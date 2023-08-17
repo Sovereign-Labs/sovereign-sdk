@@ -1,19 +1,23 @@
 use std::env;
+use std::str::FromStr;
 
 use async_trait::async_trait;
 use borsh::ser::BorshSerialize;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::runtime::Runtime;
 use jupiter::verifier::address::CelestiaAddress;
-use sov_bank::{CallMessage, Coins};
+use sov_bank::{Bank, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Address, AddressBech32, PrivateKey, PublicKey, Spec};
+use sov_modules_api::{Address, AddressBech32, EncodeCall, PrivateKey, PublicKey, Spec};
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::mocks::{TestBlob, TestBlock, TestBlockHeader, TestHash};
+use sov_rollup_interface::mocks::{
+    MockBlob, MockBlock, MockBlockHeader, MockHash, MockValidityCond,
+};
 use sov_rollup_interface::services::da::DaService;
 
+/// A simple DaService for a random number generator.
 pub struct RngDaService;
 
 fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
@@ -34,10 +38,11 @@ fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
             to: address,
             coins: Coins {
                 amount: 1,
-                token_address: token_address.clone(),
+                token_address,
             },
         };
-        let enc_msg = Runtime::<DefaultContext>::encode_bank_call(msg);
+        let enc_msg =
+            <Runtime<DefaultContext> as EncodeCall<Bank<DefaultContext>>>::encode_call(msg);
         let tx =
             Transaction::<DefaultContext>::new_signed_tx(&pk, enc_msg, start_nonce + (i as u64));
         let ser_tx = tx.try_to_vec().unwrap();
@@ -60,10 +65,10 @@ fn generate_create(start_nonce: u64) -> Vec<u8> {
         salt: 11,
         token_name: "sov-test-token".to_string(),
         initial_balance: 100000000,
-        minter_address: minter_address.clone(),
+        minter_address,
         authorized_minters: vec![minter_address],
     };
-    let enc_msg = Runtime::<DefaultContext>::encode_bank_call(msg);
+    let enc_msg = <Runtime<DefaultContext> as EncodeCall<Bank<DefaultContext>>>::encode_call(msg);
     let tx = Transaction::<DefaultContext>::new_signed_tx(&pk, enc_msg, start_nonce);
     let ser_tx = tx.try_to_vec().unwrap();
     message_vec.push(ser_tx);
@@ -71,6 +76,7 @@ fn generate_create(start_nonce: u64) -> Vec<u8> {
 }
 
 impl RngDaService {
+    /// Instantiate a new [`RngDaService`]
     pub fn new() -> Self {
         RngDaService
     }
@@ -82,22 +88,24 @@ impl Default for RngDaService {
     }
 }
 
+/// A simple DaSpec for a random number generator.
 pub struct RngDaSpec;
 
 impl DaSpec for RngDaSpec {
-    type SlotHash = TestHash;
-    type BlockHeader = TestBlockHeader;
-    type BlobTransaction = TestBlob<CelestiaAddress>;
+    type SlotHash = MockHash;
+    type BlockHeader = MockBlockHeader;
+    type BlobTransaction = MockBlob<CelestiaAddress>;
     type InclusionMultiProof = [u8; 32];
     type CompletenessProof = ();
     type ChainParams = ();
+    type ValidityCondition = MockValidityCond;
 }
 
 #[async_trait]
 impl DaService for RngDaService {
     type RuntimeConfig = ();
     type Spec = RngDaSpec;
-    type FilteredBlock = TestBlock;
+    type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
 
     async fn new(
@@ -112,12 +120,13 @@ impl DaService for RngDaService {
         let mut barray = [0u8; 32];
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
 
-        let block = TestBlock {
+        let block = MockBlock {
             curr_hash: barray,
-            header: TestBlockHeader {
-                prev_hash: TestHash([0u8; 32]),
+            header: MockBlockHeader {
+                prev_hash: MockHash([0u8; 32]),
             },
             height,
+            validity_cond: MockValidityCond { is_valid: true },
         };
 
         Ok(block)
@@ -146,8 +155,8 @@ impl DaService for RngDaService {
             generate_transfers(num_txns, (block.height - 1) * (num_txns as u64))
         };
 
-        let address = CelestiaAddress::try_from(&SEQUENCER_DA_ADDRESS[..]).unwrap();
-        let blob = TestBlob::new(data, address, [0u8; 32]);
+        let address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
+        let blob = MockBlob::new(data, address, [0u8; 32]);
 
         vec![blob]
     }
