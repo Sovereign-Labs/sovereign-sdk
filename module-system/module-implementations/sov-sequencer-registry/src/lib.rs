@@ -17,8 +17,7 @@ pub struct SequencerConfig<C: sov_modules_api::Context> {
     // TODO: Replace with DA address generic, when AddressTrait is split
     pub seq_da_address: Vec<u8>,
     pub coins_to_lock: sov_bank::Coins<C>,
-    // TODO: Replace with DA address generic, when AddressTrait is split
-    pub preferred_sequencer: Option<Vec<u8>>,
+    pub is_preferred_sequencer: bool,
 }
 
 #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
