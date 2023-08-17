@@ -124,6 +124,8 @@ where
         &self,
         height: &Height,
     ) -> Result<Self::AnyConsensusState, ContextError> {
+        // TODO: In order to implement this, we need to first define the
+        // `ConsensusState` protobuf definition that SDK chains will use
         todo!()
     }
 
@@ -139,7 +141,10 @@ where
         &self,
         client_state_of_host_on_counterparty: ibc::Any,
     ) -> Result<(), ContextError> {
-        todo!()
+        // Note: We can optionally implement this.
+        // It would require having a Protobuf definition of the chain's `ClientState` that other chains would use.
+        // The relayer sends us this `ClientState` as stored on other chains, and we validate it here.
+        Ok(())
     }
 
     fn commitment_prefix(&self) -> CommitmentPrefix {

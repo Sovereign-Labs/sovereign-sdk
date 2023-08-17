@@ -5,5 +5,4 @@ pub struct Response {
     pub value: Option<u32>,
 }
 
-impl<C: sov_modules_api::Context> Transfer<C> {
-}
+impl<C: sov_modules_api::Context> Transfer<C> {}

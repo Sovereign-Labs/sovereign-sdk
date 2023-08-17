@@ -18,5 +18,4 @@ pub enum CallMessage {
 #[derive(Debug, Error)]
 enum SetValueError {}
 
-impl<C: sov_modules_api::Context> Transfer<C> {
-}
+impl<C: sov_modules_api::Context> Transfer<C> {}

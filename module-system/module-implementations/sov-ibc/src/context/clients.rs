@@ -269,9 +269,11 @@ where
         // SDK will BorshSerialize our bytes before storing. We need to wait for
         // the SDK to allow us to store raw bytes (i.e. to choose our encoding
         // format)
-        self.ibc
-            .consensus_state_store
-            .set(&key, &consensus_state_bytes, self.working_set.get_mut());
+        self.ibc.consensus_state_store.set(
+            &key,
+            &consensus_state_bytes,
+            self.working_set.get_mut(),
+        );
 
         Ok(())
     }

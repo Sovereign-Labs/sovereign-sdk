@@ -31,11 +31,10 @@ impl From<ClientConsensusStatePath> for ConsensusStateKey {
     }
 }
 
-
-/// A new module:
-/// - Must derive `ModuleInfo`
-/// - Must contain `[address]` field
-/// - Can contain any number of ` #[state]` or `[module]` fields
+/// FIXME: As of today, the SDK borsh serializes all our data before it makes it
+/// to the store. They will add a feature to allow us to store "raw" bytes (e.g.
+/// Vec<u8>). Hence, all our data types are in their serialized form (i.e.
+/// you'll see `Vec<u8>` instead of `AnyClientState`)
 #[derive(ModuleInfo)]
 pub struct IbcModule<C: sov_modules_api::Context> {
     /// Address of the module.
@@ -49,6 +48,7 @@ pub struct IbcModule<C: sov_modules_api::Context> {
     #[state]
     pub client_state_store: sov_state::StateMap<String, Vec<u8>>,
 
+    // Key -> AnyConsensusState (encoded with Protobuf<Any>::encode_vec)
     #[state]
     pub consensus_state_store: sov_state::StateMap<ConsensusStateKey, Vec<u8>>,
 }
