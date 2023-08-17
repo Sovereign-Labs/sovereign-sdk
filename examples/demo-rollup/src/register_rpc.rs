@@ -43,9 +43,10 @@ pub fn register_ledger(
 
 #[cfg(feature = "experimental")]
 /// register ethereum methods.
-pub fn register_ethereum(
+pub fn register_ethereum<DA: DaService + Send + Sync + 'static>(
     da_config: jupiter::da_service::DaServiceConfig,
     methods: &mut jsonrpsee::RpcModule<()>,
+    da_service: Arc<DA>,
 ) -> Result<(), anyhow::Error> {
     use std::fs;
 
@@ -60,7 +61,7 @@ pub fn register_ethereum(
         )
         .unwrap();
 
-    let ethereum_rpc = sov_ethereum::get_ethereum_rpc(da_config, tx_signer_private_key);
+    let ethereum_rpc = sov_ethereum::get_ethereum_rpc(da_config, tx_signer_private_key, da_service);
     methods
         .merge(ethereum_rpc)
         .context("Failed to merge Ethereum RPC modules")

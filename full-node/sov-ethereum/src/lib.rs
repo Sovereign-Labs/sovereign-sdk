@@ -4,7 +4,7 @@ pub use experimental::{get_ethereum_rpc, Ethereum};
 #[cfg(feature = "experimental")]
 pub mod experimental {
     use std::collections::HashMap;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     use borsh::ser::BorshSerialize;
     use const_rollup_config::ROLLUP_NAMESPACE_RAW;
@@ -24,30 +24,34 @@ pub mod experimental {
     use sov_modules_api::transaction::Transaction;
     use sov_modules_api::utils::to_jsonrpsee_error_object;
     use sov_modules_api::EncodeCall;
+    use sov_rollup_interface::services::da::DaService;
 
     const GAS_PER_BYTE: usize = 120;
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 
-    pub fn get_ethereum_rpc(
+    pub fn get_ethereum_rpc<DA: DaService + DaService + Send + Sync + 'static>(
         config: DaServiceConfig,
         tx_signer_prov_key: DefaultPrivateKey,
-    ) -> RpcModule<Ethereum> {
+        da_service: Arc<DA>,
+    ) -> RpcModule<Ethereum<DA>> {
         let mut rpc = RpcModule::new(Ethereum {
             config,
             nonces: Default::default(),
             tx_signer_prov_key,
+            da_service,
         });
         register_rpc_methods(&mut rpc).expect("Failed to register sequencer RPC methods");
         rpc
     }
 
-    pub struct Ethereum {
+    pub struct Ethereum<DA: DaService> {
         config: DaServiceConfig,
         nonces: Mutex<HashMap<EthAddress, u64>>,
         tx_signer_prov_key: DefaultPrivateKey,
+        da_service: Arc<DA>,
     }
 
-    impl Ethereum {
+    impl<DA: DaService> Ethereum<DA> {
         fn make_raw_tx(
             &self,
             raw_tx: RawEvmTransaction,
@@ -79,10 +83,8 @@ pub mod experimental {
             );
             Ok((H256::from(tx_hash), tx.try_to_vec()?))
         }
-    }
 
-    impl Ethereum {
-        fn make_client(&self) -> HttpClient {
+        /*fn make_client(&self) -> HttpClient {
             let mut headers = HeaderMap::new();
             headers.insert(
                 "Authorization",
@@ -96,9 +98,9 @@ pub mod experimental {
                 .max_request_size(default_max_response_size())
                 .build(self.config.celestia_rpc_address.clone())
                 .expect("Client initialization is valid")
-        }
+        }*/
 
-        async fn send_tx_to_da(
+        /*async fn send_tx_to_da(
             &self,
             raw: Vec<u8>,
         ) -> Result<serde_json::Value, jsonrpsee::core::Error> {
@@ -116,10 +118,12 @@ pub mod experimental {
             client
                 .request::<serde_json::Value, _>("state.SubmitPayForBlob", params)
                 .await
-        }
+        }*/
     }
 
-    fn register_rpc_methods(rpc: &mut RpcModule<Ethereum>) -> Result<(), jsonrpsee::core::Error> {
+    fn register_rpc_methods<DA: DaService + Send + Sync + 'static>(
+        rpc: &mut RpcModule<Ethereum<DA>>,
+    ) -> Result<(), jsonrpsee::core::Error> {
         rpc.register_async_method(
             "eth_sendRawTransaction",
             |parameters, ethereum| async move {
@@ -130,8 +134,10 @@ pub mod experimental {
                     .make_raw_tx(raw_evm_tx)
                     .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
+                let blob = vec![raw_tx].try_to_vec().unwrap();
                 ethereum
-                    .send_tx_to_da(raw_tx)
+                    .da_service
+                    .send_transaction(&blob)
                     .await
                     .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 

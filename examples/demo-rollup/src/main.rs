@@ -1,4 +1,5 @@
 use std::env;
+use std::sync::Arc;
 
 use anyhow::Context;
 use demo_stf::app::{App, DefaultContext};
@@ -59,7 +60,11 @@ async fn main() -> Result<(), anyhow::Error> {
         register_ledger(ledger_db.clone(), &mut methods)?;
         register_sequencer(da_service.clone(), &mut app, &mut methods)?;
         #[cfg(feature = "experimental")]
-        register_ethereum(rollup_config.da.clone(), &mut methods)?;
+        register_ethereum(
+            rollup_config.da.clone(),
+            &mut methods,
+            Arc::new(da_service.clone()),
+        )?;
     }
 
     let storage = app.get_storage();
