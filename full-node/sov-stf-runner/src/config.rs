@@ -1,4 +1,4 @@
-use jupiter::da_service::DaServiceConfig;
+use celestia::da_service::DaServiceConfig;
 use serde::Deserialize;
 
 use crate::runner_config::Config as RunnerConfig;

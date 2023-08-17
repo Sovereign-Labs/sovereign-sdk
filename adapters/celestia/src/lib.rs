@@ -1,6 +1,6 @@
 pub mod celestia;
 pub mod shares;
-pub use celestia::*;
+pub use crate::celestia::*;
 
 #[cfg(feature = "native")]
 pub mod da_service;
