@@ -1,3 +1,5 @@
+use crate::CliWallet;
+
 /// An argument to the cli containing a json string
 #[derive(clap::Args, PartialEq, core::fmt::Debug, Clone, PartialOrd, Ord, Eq, Hash)]
 pub struct JsonStringArg {
@@ -22,6 +24,9 @@ impl TryFrom<FileStringArg> for JsonStringArg {
     }
 }
 
-pub trait CliFrontEnd<U>: TryInto<Self::CliIntermediateRepr<U>> {
-    type CliIntermediateRepr<T>;
+pub trait CliFrontEnd<RT>
+where
+    RT: CliWallet,
+{
+    type CliIntermediateRepr<U> = RT::CliStringRepr<U>;
 }

@@ -160,7 +160,9 @@ impl CliParserMacro {
         // Generics identical to `generics_with_inner`, with the `__Inner` type bound to `JsonStringArg`
         let generics_for_json = {
             let mut generics = generics.clone();
-            generics.params.insert(0, syn::parse_quote! {JsonStringArg});
+            generics
+                .params
+                .insert(0, syn::parse_quote! {__JsonStringArg});
             generics
         };
         let (_impl_generics_for_json, ty_generics_for_json, _) = generics_for_json.split_for_impl();
@@ -168,13 +170,6 @@ impl CliParserMacro {
         // Merge and generate the new code
         let expanded = quote! {
 
-            /// A string containing json formatted data
-            #[derive(::clap::Args, PartialEq, ::core::fmt::Debug, Clone, PartialOrd, Ord, Eq, Hash)]
-            pub struct JsonStringArg {
-                /// The json formatted transaction data
-                #[arg(long, help = "The JSON formatted transaction")]
-                pub json: String
-            }
 
             /// An enum expressing the subcommands available to this runtime. Contains
             /// one subcommand for each module, except modules annotated with the #[cli_skip] attribute
@@ -187,7 +182,7 @@ impl CliParserMacro {
                 ____phantom(::std::marker::PhantomData<#ident #ty_generics>)
             }
 
-            impl #impl_generics_with_inner ::sov_modules_api::cli::CliFrontEnd<__Inner> for RuntimeSubcommand #ty_generics_with_inner #where_clause_with_inner_as_clap {
+            impl #impl_generics_with_inner ::sov_modules_api::cli::CliFrontEnd<#ident #ty_generics> for RuntimeSubcommand #ty_generics_with_inner #where_clause_with_deserialize_bounds, __Inner: ::clap::Args {
                 type CliIntermediateRepr<__Dest> = RuntimeMessage #ty_generics_for_dest;
             }
 
@@ -200,16 +195,21 @@ impl CliParserMacro {
                 ____phantom(::std::marker::PhantomData<#ident #ty_generics>)
             }
 
-            // Implement TryFrom<RuntimeMessage<JsonStringArg>> for the runtime's call message. Uses serde_json to deserialize the json string.
-            impl #impl_generics ::core::convert::TryFrom<RuntimeMessage #ty_generics_for_json> for <#ident #ty_generics as ::sov_modules_api::DispatchCall>::Decodable #where_clause_with_deserialize_bounds {
-                type Error = ::serde_json::Error;
-                fn try_from(item: RuntimeMessage #ty_generics_for_json ) -> Result<Self, Self::Error> {
-                    match item {
-                        #( #from_json_match_arms )*
-                        RuntimeMessage::____phantom(_) => unreachable!(),
+            mod _generated {
+                use super::*;
+                use ::sov_modules_api::cli::JsonStringArg as __JsonStringArg;
+                // Implement TryFrom<RuntimeMessage<JsonStringArg>> for the runtime's call message. Uses serde_json to deserialize the json string.
+                impl #impl_generics ::core::convert::TryFrom<RuntimeMessage #ty_generics_for_json> for <#ident #ty_generics as ::sov_modules_api::DispatchCall>::Decodable #where_clause_with_deserialize_bounds {
+                    type Error = ::serde_json::Error;
+                    fn try_from(item: RuntimeMessage #ty_generics_for_json ) -> Result<Self, Self::Error> {
+                        match item {
+                            #( #from_json_match_arms )*
+                            RuntimeMessage::____phantom(_) => unreachable!(),
+                        }
                     }
                 }
             }
+
 
             // Allow arbitrary conversions from the `clap`-enabled `RuntimeSubcommand` to the less constrained `RuntimeMessage` enum.
             // This allows us to (for example), accept a `JsonStringArgs` or a `FileNameArgs` as a CLI argument, and then

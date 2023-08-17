@@ -11,42 +11,64 @@ use crate::wallet_state::WalletState;
 
 #[derive(clap::Parser)]
 /// Generate, sign, and send transactions
-pub enum TransactionWorkflow<T: Subcommand> {
+pub enum TransactionWorkflow<File: Subcommand, Json: Subcommand> {
     /// Import a transaction
     #[clap(subcommand)]
-    Import(T),
+    Import(ImportTransaction<File, Json>),
 }
 
-impl<T: Subcommand> TransactionWorkflow<T> {
+impl<File: Subcommand, Json: Subcommand> TransactionWorkflow<File, Json> {
     /// Run the transaction workflow
-    pub fn run<RT: CliWallet, C: sov_modules_api::Context, E1, E2, U>(
+    pub fn run<RT: CliWallet, C: sov_modules_api::Context, V, E1, E2, E3>(
         self,
         wallet_state: &mut WalletState<RT::Decodable, C>,
         _app_dir: impl AsRef<Path>,
     ) -> Result<(), anyhow::Error>
     where
-        T: CliFrontEnd<RT::CliStringRepr<U>>,
-        T: TryInto<RT::CliStringRepr<U>, Error = E1>,
-        RT::CliStringRepr<U>: TryInto<RT::Decodable, Error = E2>,
+        File: CliFrontEnd<RT>,
+        Json: CliFrontEnd<RT>,
+        File: TryInto<RT::CliStringRepr<V>, Error = E1>,
+        Json: TryInto<RT::CliStringRepr<V>, Error = E2>,
+        RT::CliStringRepr<V>: TryInto<RT::Decodable, Error = E3>,
         RT::Decodable: Serialize,
         E1: Into<anyhow::Error> + Send + Sync,
         E2: Into<anyhow::Error> + Send + Sync,
+        E3: Into<anyhow::Error> + Send + Sync,
     {
         match self {
-            TransactionWorkflow::Import(cli_version) => {
-                let intermediate_state: RT::CliStringRepr<U> = cli_version
-                    .try_into()
-                    .map_err(Into::<anyhow::Error>::into)?;
-                let tx = intermediate_state
-                    .try_into()
-                    .map_err(Into::<anyhow::Error>::into)?;
-                println!("Adding the following transaction to batch:");
-                println!("{}", serde_json::to_string_pretty(&tx)?);
-                wallet_state.unsent_transactions.push(tx);
-            }
+            TransactionWorkflow::Import(import_workflow) => import_workflow.run(wallet_state),
         }
-        Ok(())
     }
+
+    // /// Run the transaction workflow
+    // pub fn run<RT: CliWallet, C: sov_modules_api::Context, U, E1, E2>(
+    //     self,
+    //     wallet_state: &mut WalletState<RT::Decodable, C>,
+    //     _app_dir: impl AsRef<Path>,
+    // ) -> Result<(), anyhow::Error>
+    // where
+    //     T: CliFrontEnd<RT>,
+    //     T: TryInto<RT::CliStringRepr<U>, Error = E1>,
+    //     RT::CliStringRepr<U>: TryInto<RT::Decodable, Error = E2>,
+    //     RT::Decodable: Serialize,
+    //     E1: Into<anyhow::Error> + Send + Sync,
+    //     E2: Into<anyhow::Error> + Send + Sync,
+    // {
+    //     match self {
+    //         TransactionWorkflow::Import(cli_version) => {
+    //             let intermediate_state: RT::CliStringRepr<U> = cli_version
+    //                 .try_into()
+    //                 .map_err(Into::<anyhow::Error>::into)?;
+    //             let tx = intermediate_state
+    //                 .try_into()
+    //                 .map_err(Into::<anyhow::Error>::into)?;
+    //             println!("Adding the following transaction to batch:");
+    //             println!("{}", serde_json::to_string_pretty(&tx)?);
+    //             wallet_state.unsent_transactions.push(tx);
+    //         }
+    //     }
+    //     Ok(())
+    // }
 }
 
 // #[derive(clap::Parser)]
@@ -129,22 +151,45 @@ pub enum ImportTransaction<Json: Subcommand, File: Subcommand> {
     ),
 }
 
-// impl<T, Json, File, E1, E2> TryInto<T> for ImportTransaction<Json, File>
-// where
-//     Json: TryInto<T, Error = E1>,
-//     File: TryInto<T, Error = E2>,
-//     E1: Into<anyhow::Error> + Send + Sync,
-//     E2: Into<anyhow::Error> + Send + Sync,
-// {
-//     type Error = anyhow::Error;
+impl<Json, File> ImportTransaction<Json, File>
+where
+    Json: Subcommand,
+    File: Subcommand,
+{
+    /// Parse from a file or a json string
+    pub fn run<RT: CliWallet, C: sov_modules_api::Context, U, E1, E2, E3>(
+        self,
+        wallet_state: &mut WalletState<RT::Decodable, C>,
+    ) -> Result<(), anyhow::Error>
+    where
+        Json: CliFrontEnd<RT>,
+        File: CliFrontEnd<RT>,
+        Json: TryInto<RT::CliStringRepr<U>, Error = E1>,
+        File: TryInto<RT::CliStringRepr<U>, Error = E2>,
+        RT::CliStringRepr<U>: TryInto<RT::Decodable, Error = E3>,
+        RT::Decodable: Serialize,
+        E1: Into<anyhow::Error> + Send + Sync,
+        E2: Into<anyhow::Error> + Send + Sync,
+        E3: Into<anyhow::Error> + Send + Sync,
+    {
+        let intermediate_repr: RT::CliStringRepr<U> = match self {
+            ImportTransaction::FromFile(file) => {
+                file.try_into().map_err(Into::<anyhow::Error>::into)?
+            }
+            ImportTransaction::FromString(json) => {
+                json.try_into().map_err(Into::<anyhow::Error>::into)?
+            }
+        };
 
-//     fn try_into(self) -> Result<T, Self::Error> {
-//         match self {
-//             ImportTransaction::FromFile(f) => f.try_into()?,
-//             ImportTransaction::FromString(s) => s.try_into()?,
-//         }
-//     }
-// }
+        let tx = intermediate_repr
+            .try_into()
+            .map_err(Into::<anyhow::Error>::into)?;
+        println!("Adding the following transaction to batch:");
+        println!("{}", serde_json::to_string_pretty(&tx)?);
+        wallet_state.unsent_transactions.push(tx);
+        Ok(())
+    }
+}
 
 // /// The optional arguments for the transaction workflow
 // #[derive(Debug, Args)]
