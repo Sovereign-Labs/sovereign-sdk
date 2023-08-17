@@ -38,11 +38,6 @@ where
     }
 
     fn client_state(&self, client_id: &ClientId) -> Result<Self::AnyClientState, ContextError> {
-        let c = self
-            .ibc
-            .client_state_store
-            .get(&client_id.to_string(), self.working_set);
-
         todo!()
     }
 
