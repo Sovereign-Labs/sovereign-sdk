@@ -1,6 +1,6 @@
 use std::env;
 
-use sov_demo_rollup::Rollup;
+use sov_demo_rollup::new_rollup_with_celestia_da;
 
 #[cfg(test)]
 mod test_rpc;
@@ -15,6 +15,6 @@ async fn main() -> Result<(), anyhow::Error> {
         .nth(1)
         .unwrap_or_else(|| "rollup_config.toml".to_string());
 
-    let rollup = Rollup::new(&rollup_config_path).await?;
+    let rollup = new_rollup_with_celestia_da(&rollup_config_path).await?;
     rollup.run().await
 }
