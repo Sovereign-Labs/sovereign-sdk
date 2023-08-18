@@ -10,11 +10,12 @@ services:
       timeout: 10s
       retries: 5
     environment:
-      - VALIDATOR_NAME=validator1
-      - KEY_NAME_1=validator1
+      - VALIDATOR_NAME=validator
+      - KEY_NAME_1=validator
       - KEY_NAME_2=node1
       - KEY_NAME_3=node2
-      - CHAIN_ID=sov-testnet
+      - CHAIN_ID=test
+#      - CHAIN_ID=sov-testnet
       - CELES_AMOUNT=12300000000000000000000000utia
       - STAKING_AMOUNT=1000000000utia
       - DEBIAN_FRONTEND=noninteractive
@@ -61,8 +62,8 @@ services:
     image: ghcr.io/celestiaorg/celestia-node:v0.7.1
     container_name: sov-celestia-bridge
     environment:
-      - KEY_NAME=validator1
-      - CHAIN_ID=sov-testnet
+      - KEY_NAME=validator
+      - CHAIN_ID=test
       - STAKING_AMOUNT=1000000000utia
       - DEBIAN_FRONTEND=noninteractive
     depends_on:
