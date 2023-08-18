@@ -34,7 +34,7 @@ pub struct RollupConfig<DaServiceConfig> {
     pub da: DaServiceConfig,
 }
 
-///TODO
+/// Reads toml file as a specific type.
 pub fn from_toml_path<P: AsRef<Path>, R: DeserializeOwned>(path: P) -> anyhow::Result<R> {
     let mut contents = String::new();
     {
