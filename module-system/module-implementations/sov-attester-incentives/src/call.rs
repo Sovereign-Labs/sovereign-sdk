@@ -553,9 +553,13 @@ impl<
             .get(working_set)
             .expect("The rollup finality period should be set at genesis");
 
+        assert!(
+            current_finalized_height <= last_attested_height,
+            "The last attested height should always be below the current finalized height."
+        );
+
         // Update the max_attested_height in case the blocks have already been finalized
-        let new_height_to_attest =
-            TransitionHeight(max(last_attested_height, current_finalized_height).inner() + 1);
+        let new_height_to_attest = TransitionHeight(last_attested_height + 1);
 
         // Minimum height at which the proof of bond can be valid
         let min_height = new_height_to_attest
