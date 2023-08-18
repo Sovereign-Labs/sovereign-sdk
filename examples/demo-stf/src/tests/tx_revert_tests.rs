@@ -2,7 +2,7 @@ use borsh::BorshSerialize;
 use sov_accounts::Response;
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
 use sov_election::Election;
-use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_context::{DefaultContext, DefaultNamespace};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{EncodeCall, PrivateKey, PublicKey};
@@ -41,7 +41,7 @@ fn test_tx_revert() {
     {
         let mut demo = create_new_demo(path);
         // TODO: Maybe complete with actual block data
-        let _data = MockBlock::default();
+        let _data = MockBlock<DefaultNamespace>::default();
         demo.init_chain(config);
 
         let txs = simulate_da_with_revert_msg(election_admin_private_key);

@@ -84,6 +84,9 @@ impl SlotData for FilteredCelestiaBlock {
     type BlockHeader = CelestiaHeader;
     type Cond = ChainValidityCondition;
 
+    // TODO: specify a namespace for Celestia's adapter: https://github.com/Sovereign-Labs/sovereign-sdk/issues/671
+    type Namespace = ();
+
     fn hash(&self) -> [u8; 32] {
         match self.header.header.hash() {
             tendermint::Hash::Sha256(h) => h,
@@ -101,6 +104,8 @@ impl SlotData for FilteredCelestiaBlock {
             block_hash: self.hash(),
         }
     }
+
+    fn namespace(&self) {}
 }
 
 impl FilteredCelestiaBlock {

@@ -2,7 +2,7 @@ use core::result::Result::Ok;
 use std::cmp::max;
 use std::fmt::Debug;
 
-use anyhow::Result;
+use anyhow::{ensure, Result};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::{Amount, Coins};
 use sov_chain_state::TransitionHeight;
@@ -374,7 +374,6 @@ impl<
             self.reward_sender(context, unbonding_info.amount, working_set)?;
 
             // Update our internal tracking of the total bonded amount for the sender.
-            self.bonded_attesters.remove(context.sender(), working_set);
             self.unbonding_attesters
                 .remove(context.sender(), working_set);
 
@@ -557,18 +556,18 @@ impl<
             .get(working_set)
             .expect("The rollup finality period should be set at genesis");
 
+        assert!(
+            current_finalized_height <= last_attested_height,
+            "The attested height should always be above the finalized height"
+        );
+
         // Update the max_attested_height in case the blocks have already been finalized
-        let new_height_to_attest =
-            TransitionHeight(max(last_attested_height, current_finalized_height).inner() + 1);
+        let new_height_to_attest = TransitionHeight(last_attested_height.inner() + 1);
 
         // Minimum height at which the proof of bond can be valid
-        let min_height = if new_height_to_attest > finality {
-            new_height_to_attest
-                .inner()
-                .saturating_sub(finality.inner())
-        } else {
-            0
-        };
+        let min_height = new_height_to_attest
+            .inner()
+            .saturating_sub(finality.inner());
 
         // We have to check the following order invariant is respected:
         // (height to attest - finality) <= bonding_proof.transition_num <= height to attest

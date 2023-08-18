@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{bail, Error};
 use async_trait::async_trait;
+use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -11,7 +12,7 @@ use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufRea
 use crate::mocks::MockValidityCond;
 use crate::services::batch_builder::BatchBuilder;
 use crate::services::da::{DaService, SlotData};
-use crate::AddressTrait;
+use crate::{AddressTrait, NamespaceTrait};
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
 #[derive(Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize, Hash)]
@@ -147,9 +148,32 @@ impl BlockHeaderTrait for MockBlockHeader {
     }
 }
 
+/// A Mock namespace type that is used to specify the origin of the data of a MockBlock
+#[derive(
+    Serialize,
+    Deserialize,
+    BorshSerialize,
+    BorshDeserialize,
+    Eq,
+    PartialEq,
+    core::fmt::Debug,
+    Clone,
+    Copy,
+    Default,
+)]
+pub enum MockNamespace {
+    #[default]
+    /// The default namespace
+    Default,
+    /// Another namespace for testing
+    External,
+}
+
+impl NamespaceTrait for MockNamespace {}
+
 /// A mock block type used for testing.
 #[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]
-pub struct MockBlock {
+pub struct MockBlock<N> {
     /// The hash of this block.
     pub curr_hash: [u8; 32],
     /// The header of this block.
@@ -158,9 +182,11 @@ pub struct MockBlock {
     pub height: u64,
     /// Validity condition
     pub validity_cond: MockValidityCond,
+    /// Namespace
+    pub namespace: N,
 }
 
-impl Default for MockBlock {
+impl<N: Default> Default for MockBlock<N> {
     fn default() -> Self {
         Self {
             curr_hash: [0; 32],
@@ -169,13 +195,15 @@ impl Default for MockBlock {
             },
             height: 0,
             validity_cond: MockValidityCond::default(),
+            namespace: N::default(),
         }
     }
 }
 
-impl SlotData for MockBlock {
+impl<N: NamespaceTrait> SlotData for MockBlock<N> {
     type BlockHeader = MockBlockHeader;
     type Cond = MockValidityCond;
+    type Namespace = N;
 
     fn hash(&self) -> [u8; 32] {
         self.curr_hash
@@ -187,6 +215,10 @@ impl SlotData for MockBlock {
 
     fn validity_condition(&self) -> MockValidityCond {
         self.validity_cond
+    }
+
+    fn namespace(&self) -> Self::Namespace {
+        self.namespace
     }
 }
 
@@ -233,7 +265,7 @@ impl MockDaService {
 impl DaService for MockDaService {
     type RuntimeConfig = ();
     type Spec = MockDaSpec;
-    type FilteredBlock = MockBlock;
+    type FilteredBlock = MockBlock<MockNamespace>;
     type Error = anyhow::Error;
 
     async fn new(

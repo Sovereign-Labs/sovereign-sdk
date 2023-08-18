@@ -173,6 +173,7 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
             },
             height: INIT_HEIGHT + u64::from(i + 1),
             validity_cond: MockValidityCond { is_valid: true },
+            namespace: Default::default(),
         };
         module
             .chain_state

@@ -28,6 +28,7 @@ use serde::de::DeserializeOwned;
 pub use sov_modules_macros::{
     DispatchCall, Genesis, MessageCodec, ModuleCallJsonSchema, ModuleInfo,
 };
+use sov_rollup_interface::NamespaceTrait;
 
 /// Procedural macros to assist with creating new modules.
 #[cfg(feature = "macros")]
@@ -252,6 +253,9 @@ pub trait Spec {
 
     /// A structure containing the non-deterministic inputs from the prover to the zk-circuit
     type Witness: Witness;
+
+    /// The namespace types used by the rollup
+    type Namespace: NamespaceTrait;
 }
 
 /// A context contains information which is passed to modules during

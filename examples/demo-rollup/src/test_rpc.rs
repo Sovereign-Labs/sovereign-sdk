@@ -117,6 +117,7 @@ fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value)
         },
         height: 0,
         validity_cond: MockValidityCond::default(),
+        namespace: Default::default(),
     })];
 
     let batches = vec![
@@ -320,7 +321,8 @@ prop_compose! {
                     prev_hash,
                 },
                 height: 0,
-                validity_cond: MockValidityCond::default()
+                validity_cond: MockValidityCond::default(),
+                namespace: Default::default()
             });
 
             total_num_batches += batches.len();

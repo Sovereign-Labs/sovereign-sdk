@@ -109,11 +109,18 @@ impl TransitionHeight {
 /// - Must derive `ModuleInfo`
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
+///
+/// Here [`ChainState`] depends on `Namespace` which is a generic indicating the namespace of the transactions that can update this chain.
+/// The `Namespace` is contained within the `SlotData`.
 #[derive(ModuleInfo)]
 pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
     /// Address of the module.
     #[address]
     pub address: Ctx::Address,
+
+    /// CONSTANT: The namespace that is tracked by the [`ChainState`]
+    #[state]
+    pub namespace: sov_state::StateValue<Ctx::Namespace>,
 
     /// The current block height
     #[state]

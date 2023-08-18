@@ -122,6 +122,7 @@ async fn main() -> Result<(), anyhow::Error> {
             },
             height,
             validity_cond: MockValidityCond::default(),
+            namespace: Default::default(),
         };
         blocks.push(filtered_block);
 

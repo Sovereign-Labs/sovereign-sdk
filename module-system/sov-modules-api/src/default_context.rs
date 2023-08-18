@@ -1,7 +1,8 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use sov_rollup_interface::AddressTrait;
+use sov_rollup_interface::{AddressTrait, NamespaceTrait};
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
 use sov_state::{ArrayWitness, DefaultStorageSpec, ZkStorage};
@@ -12,7 +13,30 @@ use crate::default_signature::{DefaultPublicKey, DefaultSignature};
 use crate::{Address, Context, PublicKey, Spec};
 
 #[cfg(feature = "native")]
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(
+    Debug,
+    BorshSerialize,
+    BorshDeserialize,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Eq,
+    Clone,
+    Copy,
+    Default,
+)]
+pub enum DefaultNamespace {
+    #[default]
+    Default,
+    Sync,
+}
+
+impl NamespaceTrait for DefaultNamespace {}
+
+#[cfg_attr(
+    feature = "native",
+    derive(Clone, Debug, PartialEq, Serialize, Deserialize)
+)]
 pub struct DefaultContext {
     pub sender: Address,
 }
@@ -26,6 +50,7 @@ impl Spec for DefaultContext {
     type Hasher = sha2::Sha256;
     type Signature = DefaultSignature;
     type Witness = ArrayWitness;
+    type Namespace = DefaultNamespace;
 }
 
 #[cfg(feature = "native")]
@@ -54,6 +79,7 @@ impl Spec for ZkDefaultContext {
     type Hasher = sha2::Sha256;
     type Signature = DefaultSignature;
     type Witness = ArrayWitness;
+    type Namespace = DefaultNamespace;
 }
 
 impl Context for ZkDefaultContext {

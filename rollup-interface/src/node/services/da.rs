@@ -7,6 +7,7 @@ use serde::Serialize;
 
 use crate::da::{BlockHeaderTrait, DaSpec};
 use crate::zk::ValidityCondition;
+use crate::NamespaceTrait;
 
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer
 /// It is *not* part of the logic that is zk-proven.
@@ -94,6 +95,7 @@ pub trait DaService: Send + Sync + 'static {
 /// `SlotData` is the subset of a DA layer block which is stored in the rollup's database.
 /// At the very least, the rollup needs access to the hashes and headers of all DA layer blocks, but rollups
 /// may choose to partial (or full) block data as well.
+
 pub trait SlotData:
     Serialize + DeserializeOwned + PartialEq + core::fmt::Debug + Clone + Send + Sync
 {
@@ -108,10 +110,18 @@ pub trait SlotData:
     /// The validity condition associated with the slot data.
     type Cond: ValidityCondition;
 
+    /// The namespace from which the slot comes from
+    /// So far we have two namespaces by default:
+    /// - the execution namespace: that contains the standard transactions and update the rollup state accordingly.
+    /// - the sync namespace: that contains the attestations for the optimistic rollup mode.
+    type Namespace;
+
     /// The canonical hash of the DA layer block.
     fn hash(&self) -> [u8; 32];
     /// The header of the DA layer block.
     fn header(&self) -> &Self::BlockHeader;
     /// Get the validity condition set associated with the slot
     fn validity_condition(&self) -> Self::Cond;
+    /// Get the namespace associated with the slot
+    fn namespace(&self) -> Self::Namespace;
 }

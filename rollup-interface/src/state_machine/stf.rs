@@ -113,6 +113,9 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     /// The validity condition that must be verified outside of the Vm
     type Condition: ValidityCondition;
 
+    /// The namespace types handled by the STF
+    type Namespace;
+
     /// Perform one-time initialization for the genesis block and returns the resulting root hash wrapped in a result.
     /// If the init chain fails we panic.
     fn init_chain(&mut self, params: Self::InitialState) -> Self::StateRoot;
@@ -143,7 +146,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     >
     where
         I: IntoIterator<Item = &'a mut B>,
-        Data: SlotData<Cond = Self::Condition>;
+        Data: SlotData<Cond = Self::Condition, Namespace = Self::Namespace>;
 
     /// Gets the state root from the associated state. If not available (because the chain has not been initialized yet),
     /// return None.

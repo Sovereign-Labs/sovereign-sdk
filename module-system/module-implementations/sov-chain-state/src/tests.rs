@@ -52,6 +52,7 @@ fn test_simple_chain_state() {
         },
         height: INIT_HEIGHT,
         validity_cond: MockValidityCond { is_valid: true },
+        namespace: Default::default(),
     };
 
     chain_state.begin_slot_hook(&slot_data, &mut working_set);
@@ -98,6 +99,7 @@ fn test_simple_chain_state() {
         },
         height: INIT_HEIGHT,
         validity_cond: MockValidityCond { is_valid: false },
+        namespace: Default::default(),
     };
 
     chain_state.begin_slot_hook(&new_slot_data, &mut working_set);

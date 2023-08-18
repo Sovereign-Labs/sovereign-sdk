@@ -7,13 +7,13 @@ use celestia::verifier::address::CelestiaAddress;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::runtime::Runtime;
 use sov_bank::{Bank, CallMessage, Coins};
-use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::default_context::{DefaultContext, DefaultNamespace};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Address, AddressBech32, EncodeCall, PrivateKey, PublicKey, Spec};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::mocks::{
-    MockBlob, MockBlock, MockBlockHeader, MockHash, MockValidityCond,
+    MockBlob, MockBlock, MockBlockHeader, MockHash, MockNamespace, MockValidityCond,
 };
 use sov_rollup_interface::services::da::DaService;
 
@@ -105,7 +105,7 @@ impl DaSpec for RngDaSpec {
 impl DaService for RngDaService {
     type RuntimeConfig = ();
     type Spec = RngDaSpec;
-    type FilteredBlock = MockBlock;
+    type FilteredBlock = MockBlock<DefaultNamespace>;
     type Error = anyhow::Error;
 
     async fn new(
@@ -127,6 +127,7 @@ impl DaService for RngDaService {
             },
             height,
             validity_cond: MockValidityCond { is_valid: true },
+            namespace: Default::default(),
         };
 
         Ok(block)
