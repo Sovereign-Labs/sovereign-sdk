@@ -76,16 +76,17 @@ services:
       - /bin/sh
       - -c
       - |
-        apt-get -qq update && apt -qq install -y curl jq && rm -rf /var/lib/apt/lists/* && \
+        apt-get -qq update -qq && apt -qq install -y curl jq && rm -rf /var/lib/apt/lists/* && \
         sleep 20 && \
         until curl http://validator:26657/block?height=1; do echo "Waiting for validator..."; sleep 5; done && \
+        mkdir -p /bridge/keys/keyring-test/ && cp -r /root/keyring-test/* /bridge/keys/keyring-test/ && \
         /celestia bridge init --node.store /bridge && \
         until curl http://validator:26657/block?height=1; do echo "Waiting for validator..."; sleep 5; done && \
         export GENESIS=$(curl http://validator:26657/block?height=1 | jq '.result.block_id.hash' | tr -d '"') && \
-        cp -r /root/keyring-test/* /bridge/keys/keyring-test/ && \
         export CELESTIA_CUSTOM="$$CHAIN_ID:$$GENESIS" && \
-        echo "Starting bridge with option=$$CELESTIA_CUSTOM and key name $$KEY_NAME" && \
-        cp /bridge/keys/keyring-test/* /root/keyring-test/ && \
+        echo "Starting bridge with option=$$CELESTIA_CUSTOM and key name $$KEY_NAME. API KEY:" && \
+        /celestia bridge auth admin --node.store /bridge --log.level=ERROR && echo " " && \
+        echo "$(/celestia bridge auth admin --node.store /bridge --log.level=ERROR)" > /root/keyring-test/bridge_1_key.txt && \
         /celestia bridge start --node.store /bridge --gateway --gateway.addr 0.0.0.0 --rpc.addr 0.0.0.0 --core.ip validator --keyring.accname $$KEY_NAME
     volumes:
       - ./keyring-test:/root/keyring-test
@@ -95,11 +96,14 @@ services:
 
 
 # TODO:
-#  * Create keys only if keyring-test does not exist
-#  * Export validator API key to file.
+#  * +Create keys only if keyring-test does not exist
+#  * ~Export validator API key to file.
 #  * Multiple bridges
 #  * Bridge health-check
 #  * Timeoutable wait for block_height
+#  * Quite install script
+#  * Print genesis.json
+
 
 
 
