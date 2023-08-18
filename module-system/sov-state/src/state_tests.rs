@@ -247,21 +247,21 @@ fn test_state_vec_get() {
         working_set = before_get.execute(working_set);
         
         let val = state_vec.get(1, &mut working_set);
-        let err_val = state_vec.get(3, &mut working_set);
-        assert_eq!(val.is_ok(), true);
+        let err_val = state_vec.get_or_err(3, &mut working_set);
+        assert_eq!(val.is_some(), true);
         assert_eq!(err_val.is_err(), true);
 
         let val = val.unwrap();
-        assert_eq!(val.unwrap(), values.get(1).unwrap().clone());
+        assert_eq!(val, values.get(1).unwrap().clone());
 
         working_set = after_get.execute(working_set);
         let val = state_vec.get(1, &mut working_set);
-        let err_val = state_vec.get(3, &mut working_set);
-        assert_eq!(val.is_ok(), true);
+        let err_val = state_vec.get_or_err(3, &mut working_set);
+        assert_eq!(val.is_some(), true);
         assert_eq!(err_val.is_err(), true);
 
         let val = val.unwrap();
-        assert_eq!(val.unwrap(), values.get(1).unwrap().clone());
+        assert_eq!(val, values.get(1).unwrap().clone());
     }
 }
 
@@ -283,13 +283,13 @@ fn test_state_vec_set() {
         working_set = after_set.execute(working_set);
         
         let val = state_vec.get(1, &mut working_set);
-        let err_val = state_vec.get(3, &mut working_set);
+        let err_val = state_vec.get_or_err(3, &mut working_set);
 
-        assert!(val.is_ok());
+        assert!(val.is_some());
         assert!(err_val.is_err());
 
         let val = val.unwrap();
-        assert_eq!(val.unwrap(), 99);
+        assert_eq!(val, 99);
     }
 }
 
@@ -311,10 +311,10 @@ fn test_state_vec_push() {
         assert_eq!(len, 4);
 
         let val = state_vec.get(3, &mut working_set);
-        assert!(val.is_ok());
+        assert!(val.is_some());
 
         let val = val.unwrap();
-        assert_eq!(val.unwrap(), 53);
+        assert_eq!(val, 53);
     }
 }
 
@@ -338,10 +338,10 @@ fn test_state_vec_pop() {
         assert_eq!(len, 2);
 
         let val = state_vec.get(1, &mut working_set);
-        assert!(val.is_ok());
+        assert!(val.is_some());
 
         let val = val.unwrap();
-        assert_eq!(val.unwrap(), 55);
+        assert_eq!(val, 55);
     }
 }
 
@@ -362,15 +362,15 @@ fn test_state_vec_set_all() {
 
         let val = state_vec.get(0, &mut working_set);
 
-        assert!(val.is_ok());
+        assert!(val.is_some());
 
         let val = val.unwrap();
-        assert_eq!(val.unwrap(), 1);
+        assert_eq!(val, 1);
 
         let len = state_vec.len(&mut working_set);
         assert_eq!(len, 1);
 
-        let val = state_vec.get(1, &mut working_set);
+        let val = state_vec.get_or_err(1, &mut working_set);
 
         assert!(val.is_err());    
     }

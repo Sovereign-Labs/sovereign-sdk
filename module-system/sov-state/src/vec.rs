@@ -16,8 +16,10 @@ pub struct StateVec<V, C = BorshCodec> {
 /// Error type for `StateVec` get method.
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Index out of bounds: {0}")]
+    #[error("Index out of bounds for index: {0}")]
     IndexOutOfBounds(usize),
+    #[error("Value not found for prefix: {0} and index: {1}")]
+    MissingValue(Prefix, usize),
 }
 
 impl<V> StateVec<V>
@@ -73,13 +75,24 @@ where
     }
 
     /// Returns the value for the given index.
-    pub fn get<S: Storage>(&self, index: usize, working_set: &mut WorkingSet<S>) -> Result<Option<V>, Error> {
+    pub fn get<S: Storage>(&self, index: usize, working_set: &mut WorkingSet<S>) -> Option<V> {
+        working_set.get_value(self.prefix(), &self.internal_codec(), &IndexKey(index + 1))
+    }
+
+    /// Returns the value for the given index.
+    /// If the index is out of bounds, returns an error.
+    /// If the value is absent, returns an error.
+    pub fn get_or_err<S: Storage>(&self, index: usize, working_set: &mut WorkingSet<S>) -> Result<Option<V>, Error> {
         let len = self.len(working_set);
 
         if index < len {
             let elem = working_set.get_value(self.prefix(), &self.internal_codec(), &IndexKey(index + 1));
 
-            Ok(elem)
+            if elem.is_some() {
+                Ok(elem)
+            } else {
+                Err(Error::MissingValue(self.prefix().clone(), index))
+            }
         } else {
             Err(Error::IndexOutOfBounds(index))
         }
