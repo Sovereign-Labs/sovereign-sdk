@@ -38,13 +38,13 @@ fn rollup_bench(_bench: &mut Criterion) {
         .unwrap();
 
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
-    rollup_config.runner.storage.path = PathBuf::from(temp_dir.path());
+    rollup_config.storage.path = PathBuf::from(temp_dir.path());
     let ledger_db =
-        LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
+        LedgerDB::with_path(&rollup_config.storage.path).expect("Ledger DB failed to open");
 
     let da_service = Arc::new(RngDaService::new());
 
-    let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(rollup_config.runner.storage);
+    let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(rollup_config.storage);
 
     let mut demo = demo_runner.stf;
     let sequencer_private_key = DefaultPrivateKey::generate();
