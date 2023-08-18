@@ -11,7 +11,7 @@ use crate::zk::StateTransition;
 )]
 pub struct ProofOfBond<StateProof: BorshSerialize> {
     /// The transition number for which the proof of bond applies
-    pub transition_num: u64,
+    pub claimed_transition_num: u64,
     /// The actual state proof that the attester was bonded
     pub proof: StateProof,
 }

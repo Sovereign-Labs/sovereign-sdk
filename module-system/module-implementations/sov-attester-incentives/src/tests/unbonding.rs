@@ -1,8 +1,9 @@
+use sov_chain_state::TransitionHeight;
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::optimistic::Attestation;
 use sov_state::{ProverStorage, WorkingSet};
 
-use crate::call::{AttesterIncentiveErrors, SlashingReason};
+use crate::call::AttesterIncentiveErrors;
 use crate::tests::helpers::{
     execution_simulation, setup, BOND_AMOUNT, DEFAULT_ROLLUP_FINALITY, INIT_HEIGHT,
 };
@@ -26,14 +27,23 @@ fn test_two_phase_unbonding() {
         BOND_AMOUNT
     );
 
+    let context = DefaultContext {
+        sender: attester_address,
+    };
+
+    // Try to skip the first phase of the two phase unbonding. Should fail
+    {
+        // Should fail
+        let err = module
+            .end_unbond_attester(&context, &mut working_set)
+            .unwrap_err();
+        assert_eq!(err, AttesterIncentiveErrors::AttesterIsNotUnbonding);
+    }
+
     // Simulate the execution of a chain, with the genesis hash and two transitions after.
     // Update the chain_state module and the optimistic module accordingly
     let (mut exec_vars, mut working_set) =
         execution_simulation(3, &module, &storage, attester_address, working_set);
-
-    let context = DefaultContext {
-        sender: attester_address,
-    };
 
     // Start unbonding and then try to prove a transition. User slashed
     module
@@ -51,7 +61,7 @@ fn test_two_phase_unbonding() {
             da_block_hash: [1; 32],
             post_state_root: transition_1.state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
-                transition_num: INIT_HEIGHT + 1,
+                claimed_transition_num: INIT_HEIGHT + 1,
                 proof: initial_transition.state_proof,
             },
         };
@@ -62,57 +72,53 @@ fn test_two_phase_unbonding() {
 
         assert_eq!(
             err,
-            AttesterIncentiveErrors::UserSlashed(SlashingReason::AttesterIsUnbonding),
-            "The attester should not be unbonding"
+            AttesterIncentiveErrors::UserNotBonded,
+            "The attester should not be bonded"
         );
-    }
 
-    // Bond and try to skip the first phase of the two phase unbonding. Should fail
-    {
-        module
+        // We cannot try to bond either
+        let err = module
             .bond_user_helper(
                 BOND_AMOUNT,
                 &attester_address,
                 crate::call::Role::Attester,
                 &mut working_set,
             )
-            .unwrap();
-
-        // Should fail
-        let err = module
-            .end_unbond_attester(&context, &mut working_set)
             .unwrap_err();
+
         assert_eq!(
             err,
-            AttesterIncentiveErrors::UserSlashed(SlashingReason::AttesterIsNotUnbonding)
+            AttesterIncentiveErrors::AttesterIsUnbonding,
+            "Should raise an AttesterIsUnbonding error"
         );
     }
 
-    // Bond again and now try to complete the two phase unbonding immediately: the second phase should fail because the
+    // Cannot bond again while unbonding
+    {
+        let err = module
+            .bond_user_helper(
+                BOND_AMOUNT,
+                &attester_address,
+                crate::call::Role::Attester,
+                &mut working_set,
+            )
+            .unwrap_err();
+
+        assert_eq!(
+            err,
+            AttesterIncentiveErrors::AttesterIsUnbonding,
+            "Should raise that error"
+        );
+    }
+
+    // Now try to complete the two phase unbonding immediately: the second phase should fail because the
     // first phase cannot get finalized
     {
-        module
-            .bond_user_helper(
-                BOND_AMOUNT,
-                &attester_address,
-                crate::call::Role::Attester,
-                &mut working_set,
-            )
-            .unwrap();
-
-        // Should succeed
-        module
-            .begin_unbond_attester(&context, &mut working_set)
-            .expect("Should succeed");
-
         // Should fail
         let err = module
             .end_unbond_attester(&context, &mut working_set)
             .unwrap_err();
-        assert_eq!(
-            err,
-            AttesterIncentiveErrors::UserSlashed(SlashingReason::UnbondingNotFinalized)
-        );
+        assert_eq!(err, AttesterIncentiveErrors::UnbondingNotFinalized);
     }
 
     // Now unbond the right way.
@@ -122,35 +128,27 @@ fn test_two_phase_unbonding() {
             .get_balance_of(attester_address, token_address, &mut working_set)
             .unwrap();
 
-        // Bond the user: should succeed
-        module
-            .bond_user_helper(
-                BOND_AMOUNT,
-                &attester_address,
-                crate::call::Role::Attester,
-                &mut working_set,
-            )
-            .unwrap();
-
         // Start unbonding the user: should succeed
         module
             .begin_unbond_attester(&context, &mut working_set)
             .unwrap();
 
-        let begin_unbond_height = module
+        let unbonding_info = module
             .unbonding_attesters
             .get(&attester_address, &mut working_set)
             .unwrap();
 
         assert_eq!(
-            begin_unbond_height, INIT_HEIGHT,
+            unbonding_info.unbonding_initiated_height,
+            TransitionHeight(INIT_HEIGHT),
             "Invalid beginning unbonding height"
         );
 
         // Wait for the light client to finalize
-        module
-            .light_client_finalized_height
-            .set(&(INIT_HEIGHT + DEFAULT_ROLLUP_FINALITY), &mut working_set);
+        module.light_client_finalized_height.set(
+            &TransitionHeight(INIT_HEIGHT + DEFAULT_ROLLUP_FINALITY),
+            &mut working_set,
+        );
 
         // Finish the unbonding: should succeed
         module
@@ -159,7 +157,7 @@ fn test_two_phase_unbonding() {
 
         // Check that the final balance is the same as the initial balance
         assert_eq!(
-            initial_account_balance,
+            initial_account_balance + BOND_AMOUNT,
             module
                 .bank
                 .get_balance_of(attester_address, token_address, &mut working_set)

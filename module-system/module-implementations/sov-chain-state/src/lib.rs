@@ -64,6 +64,11 @@ impl<Cond: ValidityCondition> StateTransitionId<Cond> {
         self.da_block_hash
     }
 
+    /// Returns the validity condition associated with the transition
+    pub fn validity_condition(&self) -> &Cond {
+        &self.validity_condition
+    }
+
     /// Checks the validity condition of a state transition
     pub fn validity_condition_check<Checker: ValidityConditionChecker<Cond>>(
         &self,
@@ -90,6 +95,17 @@ impl<Cond> TransitionInProgress<Cond> {
     }
 }
 
+/// The information about a transition height
+#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub struct TransitionHeight(pub u64);
+
+impl TransitionHeight {
+    /// Returns the inner content of [`TransitionHeight`]
+    pub fn inner(&self) -> u64 {
+        self.0
+    }
+}
+
 /// A new module:
 /// - Must derive `ModuleInfo`
 /// - Must contain `[address]` field
@@ -109,7 +125,7 @@ pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
 
     /// The current block height
     #[state]
-    pub slot_height: sov_state::StateValue<u64>,
+    pub slot_height: sov_state::StateValue<TransitionHeight>,
 
     /// A record of all previous state transitions which are available to the VM.
     /// Currently, this includes *all* historical state transitions, but that may change in the future.
@@ -117,7 +133,7 @@ pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
     /// is stored during transition i+1. This is mainly due to the fact that this structure depends on the
     /// rollup's root hash which is only stored once the transition has completed.
     #[state]
-    pub historical_transitions: sov_state::StateMap<u64, StateTransitionId<Cond>>,
+    pub historical_transitions: sov_state::StateMap<TransitionHeight, StateTransitionId<Cond>>,
 
     /// The transition that is currently processed
     #[state]
@@ -132,7 +148,7 @@ pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
 /// Initial configuration of the chain state
 pub struct ChainStateConfig {
     /// Initial slot height
-    pub initial_slot_height: u64,
+    pub initial_slot_height: TransitionHeight,
 }
 
 impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition, Namespace: NamespaceTrait>

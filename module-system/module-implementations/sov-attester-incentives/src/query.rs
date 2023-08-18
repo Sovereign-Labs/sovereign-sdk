@@ -66,4 +66,14 @@ where
             witness,
         )
     }
+
+    /// TODO: Make the unbonding amount queriable:
+    pub fn get_unbonding_amount(
+        &self,
+        _address: C::Address,
+        _witness: &<<C as Spec>::Storage as Storage>::Witness,
+        _working_set: &mut WorkingSet<C::Storage>,
+    ) -> u64 {
+        todo!("Make the unbonding amount queriable: https://github.com/Sovereign-Labs/sovereign-sdk/issues/675")
+    }
 }

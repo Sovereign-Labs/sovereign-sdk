@@ -1,3 +1,4 @@
+use sov_chain_state::TransitionHeight;
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::optimistic::Attestation;
 use sov_state::{ProverStorage, WorkingSet};
@@ -47,7 +48,7 @@ fn test_process_valid_attestation() {
             da_block_hash: [1; 32],
             post_state_root: transition_1.state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
-                transition_num: INIT_HEIGHT + 1,
+                claimed_transition_num: INIT_HEIGHT + 1,
                 proof: initial_transition.state_proof,
             },
         };
@@ -64,7 +65,7 @@ fn test_process_valid_attestation() {
             da_block_hash: [2; 32],
             post_state_root: transition_2.state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
-                transition_num: INIT_HEIGHT + 2,
+                claimed_transition_num: INIT_HEIGHT + 2,
                 proof: transition_1.state_proof,
             },
         };
@@ -138,7 +139,7 @@ fn test_burn_on_invalid_attestation() {
             da_block_hash: [1; 32],
             post_state_root: transition_1.state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
-                transition_num: INIT_HEIGHT + 1,
+                claimed_transition_num: INIT_HEIGHT + 1,
                 proof: transition_1.state_proof.clone(),
             },
         };
@@ -173,7 +174,7 @@ fn test_burn_on_invalid_attestation() {
             da_block_hash: [1; 32],
             post_state_root: transition_1.state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
-                transition_num: INIT_HEIGHT + 1,
+                claimed_transition_num: INIT_HEIGHT + 1,
                 proof: initial_transition.state_proof,
             },
         };
@@ -190,7 +191,7 @@ fn test_burn_on_invalid_attestation() {
             da_block_hash: [2; 32],
             post_state_root: transition_2.state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
-                transition_num: INIT_HEIGHT + 2,
+                claimed_transition_num: INIT_HEIGHT + 2,
                 proof: transition_1.state_proof.clone(),
             },
         };
@@ -221,7 +222,7 @@ fn test_burn_on_invalid_attestation() {
     assert!(
         module
             .bad_transition_pool
-            .get(&(INIT_HEIGHT + 2), &mut working_set)
+            .get(&TransitionHeight(INIT_HEIGHT + 2), &mut working_set)
             .is_none(),
         "The transition should not exist in the pool"
     );
@@ -243,7 +244,7 @@ fn test_burn_on_invalid_attestation() {
             da_block_hash: [2; 32],
             post_state_root: transition_1.state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
-                transition_num: INIT_HEIGHT + 2,
+                claimed_transition_num: INIT_HEIGHT + 2,
                 proof: transition_1.state_proof,
             },
         };
@@ -274,7 +275,7 @@ fn test_burn_on_invalid_attestation() {
     assert_eq!(
         module
             .bad_transition_pool
-            .get(&(INIT_HEIGHT + 2), &mut working_set)
+            .get(&TransitionHeight(INIT_HEIGHT + 2), &mut working_set)
             .unwrap(),
         BOND_AMOUNT,
         "The transition should not exist in the pool"
