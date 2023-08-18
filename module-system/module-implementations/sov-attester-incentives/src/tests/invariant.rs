@@ -1,6 +1,5 @@
 use std::cmp::max;
 
-use sov_chain_state::TransitionHeight;
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::optimistic::Attestation;
 use sov_state::{ProverStorage, WorkingSet};
@@ -42,10 +41,9 @@ fn test_transition_invariant() {
     const NEW_LIGHT_CLIENT_FINALIZED_HEIGHT: u64 = DEFAULT_ROLLUP_FINALITY + INIT_HEIGHT + 1;
 
     // Update the finalized height and try to prove the INIT_HEIGHT: should fail
-    module.light_client_finalized_height.set(
-        &TransitionHeight(NEW_LIGHT_CLIENT_FINALIZED_HEIGHT),
-        &mut working_set,
-    );
+    module
+        .light_client_finalized_height
+        .set(&NEW_LIGHT_CLIENT_FINALIZED_HEIGHT, &mut working_set);
 
     // Process a valid attestation for the first transition *should fail*
     {
@@ -105,12 +103,7 @@ fn test_transition_invariant() {
             .expect("The maximum attested height should be set at genesis");
 
         // Update the max_attested_height in case the blocks have already been finalized
-        let new_height_to_attest = max(
-            last_height_attested,
-            TransitionHeight(NEW_LIGHT_CLIENT_FINALIZED_HEIGHT),
-        )
-        .inner()
-            + 1;
+        let new_height_to_attest = max(last_height_attested, NEW_LIGHT_CLIENT_FINALIZED_HEIGHT) + 1;
 
         let min_height = if new_height_to_attest > DEFAULT_ROLLUP_FINALITY {
             new_height_to_attest - DEFAULT_ROLLUP_FINALITY
@@ -159,12 +152,7 @@ fn test_transition_invariant() {
         .expect("The maximum attested height should be set at genesis");
 
     // Update the max_attested_height in case the blocks have already been finalized
-    let new_height_to_attest = max(
-        last_height_attested,
-        TransitionHeight(NEW_LIGHT_CLIENT_FINALIZED_HEIGHT),
-    )
-    .inner()
-        + 1;
+    let new_height_to_attest = max(last_height_attested, NEW_LIGHT_CLIENT_FINALIZED_HEIGHT) + 1;
 
     // TODO: Update these tests
 

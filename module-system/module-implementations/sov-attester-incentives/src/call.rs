@@ -1,5 +1,4 @@
 use core::result::Result::Ok;
-use std::cmp::max;
 use std::fmt::Debug;
 
 use anyhow::Result;
@@ -354,12 +353,10 @@ impl<
                 .get(working_set)
                 .expect("Should be defined at genesis");
 
-            if TransitionHeight(
-                unbonding_info
-                    .unbonding_initiated_height
-                    .inner()
-                    .saturating_add(finality_period.inner()),
-            ) > curr_height
+            if unbonding_info
+                .unbonding_initiated_height
+                .saturating_add(finality_period)
+                > curr_height
             {
                 return Err(AttesterIncentiveErrors::UnbondingNotFinalized);
             }
@@ -398,7 +395,7 @@ impl<
             // If we cannot get the transition before the current one, it means that we are trying
             // to get the genesis state root
             if let Some(transition) = self.chain_state.historical_transitions.get(
-                &TransitionHeight(attestation.proof_of_bond.claimed_transition_num - 1),
+                &(attestation.proof_of_bond.claimed_transition_num - 1),
                 working_set,
             ) {
                 transition.post_state_root()
@@ -482,10 +479,11 @@ impl<
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
         // Normal state
-        if let Some(transition) = self.chain_state.historical_transitions.get(
-            &TransitionHeight(claimed_transition_height.inner().saturating_sub(1)),
-            working_set,
-        ) {
+        if let Some(transition) = self
+            .chain_state
+            .historical_transitions
+            .get(&claimed_transition_height.saturating_sub(1), working_set)
+        {
             if transition.post_state_root() != attestation.initial_state_root {
                 // The initial root hashes don't match, just slash the attester
                 return Err(self.slash_burn_reward(
@@ -559,12 +557,10 @@ impl<
         );
 
         // Update the max_attested_height in case the blocks have already been finalized
-        let new_height_to_attest = TransitionHeight(last_attested_height + 1);
+        let new_height_to_attest = last_attested_height + 1;
 
         // Minimum height at which the proof of bond can be valid
-        let min_height = new_height_to_attest
-            .inner()
-            .saturating_sub(finality.inner());
+        let min_height = new_height_to_attest.saturating_sub(finality);
 
         // We have to check the following order invariant is respected:
         // (height to attest - finality) <= bonding_proof.transition_num <= height to attest
@@ -573,14 +569,14 @@ impl<
         // min_height <= bonding_proof.transition_num <= new_height_to_attest
         // If this invariant is respected, we can be sure that the attester was bonded at new_height_to_attest.
         if !(min_height <= attestation.proof_of_bond.claimed_transition_num
-            && attestation.proof_of_bond.claimed_transition_num <= new_height_to_attest.inner())
+            && attestation.proof_of_bond.claimed_transition_num <= new_height_to_attest)
         {
             return Err(AttesterIncentiveErrors::InvalidTransitionInvariant);
         }
 
         // First compare the initial hashes
         self.check_initial_hash(
-            &TransitionHeight(attestation.proof_of_bond.claimed_transition_num),
+            &attestation.proof_of_bond.claimed_transition_num,
             context.sender(),
             &attestation,
             working_set,
@@ -588,7 +584,7 @@ impl<
 
         // Then compare the transition
         self.check_transition(
-            &TransitionHeight(attestation.proof_of_bond.claimed_transition_num),
+            &attestation.proof_of_bond.claimed_transition_num,
             context.sender(),
             &attestation,
             working_set,
@@ -601,7 +597,7 @@ impl<
 
         // Now we have to check whether the claimed_transition_num is the max_attested_height.
         // If so update the maximum attested height and reward the sender
-        if attestation.proof_of_bond.claimed_transition_num == new_height_to_attest.inner() {
+        if attestation.proof_of_bond.claimed_transition_num == new_height_to_attest {
             // Update the maximum attested height
             self.maximum_attested_height
                 .set(&(new_height_to_attest), working_set);
@@ -634,10 +630,11 @@ impl<
             .map_err(|_| SlashingReason::TransitionInvalid)?;
 
         let initial_hash = {
-            if let Some(prev_transition) = self.chain_state.historical_transitions.get(
-                &TransitionHeight(height.inner().saturating_sub(1)),
-                working_set,
-            ) {
+            if let Some(prev_transition) = self
+                .chain_state
+                .historical_transitions
+                .get(&height.saturating_sub(1), working_set)
+            {
                 prev_transition.post_state_root()
             } else {
                 self.chain_state

@@ -4,9 +4,7 @@ use sov_modules_api::Genesis;
 use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash, MockValidityCond};
 use sov_state::{ProverStorage, Storage, WorkingSet};
 
-use crate::{
-    ChainState, ChainStateConfig, StateTransitionId, TransitionHeight, TransitionInProgress,
-};
+use crate::{ChainState, ChainStateConfig, StateTransitionId, TransitionInProgress};
 
 /// This simply tests that the chain_state reacts properly with the invocation of the `begin_slot`
 /// hook. For more complete integration tests, feel free to have a look at the integration tests folder.
@@ -24,7 +22,7 @@ fn test_simple_chain_state() {
 
     let chain_state = ChainState::<DefaultContext, MockValidityCond>::default();
     let config = ChainStateConfig {
-        initial_slot_height: TransitionHeight(INIT_HEIGHT),
+        initial_slot_height: INIT_HEIGHT,
     };
 
     // Genesis, initialize and then commit the state
@@ -39,8 +37,7 @@ fn test_simple_chain_state() {
     let initial_height = chain_state.get_slot_height(&mut working_set);
 
     assert_eq!(
-        initial_height,
-        TransitionHeight(INIT_HEIGHT),
+        initial_height, INIT_HEIGHT,
         "The initial height was not computed"
     );
 
@@ -67,7 +64,7 @@ fn test_simple_chain_state() {
 
     assert_eq!(
         new_height_storage,
-        TransitionHeight(INIT_HEIGHT + 1),
+        INIT_HEIGHT + 1,
         "The new height did not update"
     );
 
@@ -106,7 +103,7 @@ fn test_simple_chain_state() {
     let new_height_storage = chain_state.get_slot_height(&mut working_set);
     assert_eq!(
         new_height_storage,
-        TransitionHeight(INIT_HEIGHT + 2),
+        INIT_HEIGHT + 2,
         "The new height did not update"
     );
 
@@ -126,7 +123,7 @@ fn test_simple_chain_state() {
 
     // Check the transition stored
     let last_tx_stored: StateTransitionId<MockValidityCond> = chain_state
-        .get_historical_transitions(TransitionHeight(INIT_HEIGHT + 1), &mut working_set)
+        .get_historical_transitions(INIT_HEIGHT + 1, &mut working_set)
         .unwrap();
 
     assert_eq!(

@@ -1,4 +1,4 @@
-use sov_chain_state::{StateTransitionId, TransitionHeight, TransitionInProgress};
+use sov_chain_state::{StateTransitionId, TransitionInProgress};
 use sov_data_generators::value_setter_data::ValueSetterMessages;
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch, MessageGenerator};
 use sov_modules_api::default_context::DefaultContext;
@@ -65,11 +65,7 @@ fn test_simple_value_setter_with_chain_state() {
         .chain_state
         .get_slot_height(&mut working_set);
 
-    assert_eq!(
-        new_height_storage,
-        TransitionHeight(0),
-        "The initial height was not computed"
-    );
+    assert_eq!(new_height_storage, 0, "The initial height was not computed");
 
     let result = app_template.apply_slot(Default::default(), &slot_data, &mut [blob.clone()]);
 
@@ -98,11 +94,7 @@ fn test_simple_value_setter_with_chain_state() {
     // Check the slot height
     let new_height_storage = chain_state_ref.get_slot_height(&mut working_set);
 
-    assert_eq!(
-        new_height_storage,
-        TransitionHeight(1),
-        "The new height did not update"
-    );
+    assert_eq!(new_height_storage, 1, "The new height did not update");
 
     // Check the tx in progress
     let new_tx_in_progress: TransitionInProgress<MockValidityCond> = chain_state_ref
@@ -148,11 +140,7 @@ fn test_simple_value_setter_with_chain_state() {
 
     // Check the slot height
     let new_height_storage = chain_state_ref.get_slot_height(&mut working_set);
-    assert_eq!(
-        new_height_storage,
-        TransitionHeight(2),
-        "The new height did not update"
-    );
+    assert_eq!(new_height_storage, 2, "The new height did not update");
 
     // Check the tx in progress
     let new_tx_in_progress: TransitionInProgress<MockValidityCond> = chain_state_ref
@@ -166,7 +154,7 @@ fn test_simple_value_setter_with_chain_state() {
     );
 
     let last_tx_stored: StateTransitionId<MockValidityCond> = chain_state_ref
-        .get_historical_transitions(TransitionHeight(1), &mut working_set)
+        .get_historical_transitions(1, &mut working_set)
         .unwrap();
 
     assert_eq!(

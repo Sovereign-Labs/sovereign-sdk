@@ -1,6 +1,5 @@
 use jmt::proof::SparseMerkleProof;
 use sov_bank::{BankConfig, TokenConfig};
-use sov_chain_state::TransitionHeight;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::utils::generate_address;
@@ -96,7 +95,7 @@ pub(crate) fn setup(
 
     // Initialize chain state
     let chain_state_config = sov_chain_state::ChainStateConfig {
-        initial_slot_height: TransitionHeight(INIT_HEIGHT),
+        initial_slot_height: INIT_HEIGHT,
     };
 
     let chain_state = sov_chain_state::ChainState::<C, MockValidityCond>::default();
@@ -118,9 +117,9 @@ pub(crate) fn setup(
         minimum_challenger_bond: BOND_AMOUNT,
         commitment_to_allowed_challenge_method: MockCodeCommitment([0u8; 32]),
         initial_attesters: vec![(attester_address, BOND_AMOUNT)],
-        rollup_finality_period: TransitionHeight(DEFAULT_ROLLUP_FINALITY),
-        maximum_attested_height: TransitionHeight(INIT_HEIGHT),
-        light_client_finalized_height: TransitionHeight(INIT_HEIGHT),
+        rollup_finality_period: DEFAULT_ROLLUP_FINALITY,
+        maximum_attested_height: INIT_HEIGHT,
+        light_client_finalized_height: INIT_HEIGHT,
         validity_condition_checker: MockValidityCondChecker::<MockValidityCond>::new(),
         phantom_data: Default::default(),
     };

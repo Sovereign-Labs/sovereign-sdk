@@ -22,6 +22,9 @@ use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
 use sov_state::WorkingSet;
 
+/// Type alias that contains the height of a given transition
+pub type TransitionHeight = u64;
+
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]
 /// Structure that contains the information needed to represent a single state transition.
 pub struct StateTransitionId<Cond: ValidityCondition> {
@@ -91,17 +94,6 @@ impl<Cond> TransitionInProgress<Cond> {
             da_block_hash,
             validity_condition,
         }
-    }
-}
-
-/// The information about a transition height
-#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct TransitionHeight(pub u64);
-
-impl TransitionHeight {
-    /// Returns the inner content of [`TransitionHeight`]
-    pub fn inner(&self) -> u64 {
-        self.0
     }
 }
 

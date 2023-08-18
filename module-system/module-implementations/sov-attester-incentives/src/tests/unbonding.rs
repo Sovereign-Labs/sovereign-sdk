@@ -1,4 +1,3 @@
-use sov_chain_state::TransitionHeight;
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::optimistic::Attestation;
 use sov_state::{ProverStorage, WorkingSet};
@@ -139,16 +138,14 @@ fn test_two_phase_unbonding() {
             .unwrap();
 
         assert_eq!(
-            unbonding_info.unbonding_initiated_height,
-            TransitionHeight(INIT_HEIGHT),
+            unbonding_info.unbonding_initiated_height, INIT_HEIGHT,
             "Invalid beginning unbonding height"
         );
 
         // Wait for the light client to finalize
-        module.light_client_finalized_height.set(
-            &TransitionHeight(INIT_HEIGHT + DEFAULT_ROLLUP_FINALITY),
-            &mut working_set,
-        );
+        module
+            .light_client_finalized_height
+            .set(&(INIT_HEIGHT + DEFAULT_ROLLUP_FINALITY), &mut working_set);
 
         // Finish the unbonding: should succeed
         module

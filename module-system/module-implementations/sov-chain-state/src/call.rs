@@ -15,10 +15,8 @@ impl<
             .slot_height
             .get(working_set)
             .expect("Block height must be initialized");
-        self.slot_height.set(
-            &TransitionHeight(current_height.inner().saturating_add(1)),
-            working_set,
-        );
+        self.slot_height
+            .set(&(current_height.saturating_add(1)), working_set);
     }
 
     /// Store the previous state transition
