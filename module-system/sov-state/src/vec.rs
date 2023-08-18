@@ -108,7 +108,7 @@ where
         let len = self.len(working_set);
 
         if len > 0 {
-            let elem = working_set.remove_value(self.prefix(), &self.internal_codec(), &IndexKey(len + 1));
+            let elem = working_set.remove_value(self.prefix(), &self.internal_codec(), &IndexKey(len));
             self.set_len(len - 1, working_set);
             elem
         } else {
@@ -117,9 +117,11 @@ where
     }
 
     /// Sets all values in the [`StateVec`].
-    /// If the length of the provided values is less than the length of the [`StateVec`], the remaining values stay but are inaccessible.
+    /// If the length of the provided values is less than the length of the [`StateVec`], the remaining values stay in storage but are inaccessible.
     pub fn set_all<S: Storage>(&self, values: Vec<V>, working_set: &mut WorkingSet<S>) {
         let len = self.len(working_set);
+
+        let new_len = values.len(); 
 
         for (i, value) in values.into_iter().enumerate() {
             if i < len {
@@ -127,6 +129,11 @@ where
             } else {
                 self.push(value, working_set);
             }
+        }
+
+        // if new_len > len push() already handles setting length
+        if new_len < len {
+            self.set_len(new_len, working_set);
         }
     }
 }
