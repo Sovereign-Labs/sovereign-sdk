@@ -5,7 +5,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
 use crate::zk::{Matches, Zkvm};
-use crate::AddressTrait;
 
 /// A mock commitment to a particular zkVM program.
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
@@ -77,13 +76,6 @@ impl Zkvm for MockZkvm {
         );
         anyhow::ensure!(proof.is_valid, "Proof is not valid");
         Ok(proof.log)
-    }
-
-    fn verify_and_extract_output<C, Add: AddressTrait>(
-        _serialized_proof: &[u8],
-        _code_commitment: &Self::CodeCommitment,
-    ) -> Result<crate::zk::StateTransition<C, Add>, Self::Error> {
-        todo!("Need to specify an output format for the proof logs")
     }
 }
 

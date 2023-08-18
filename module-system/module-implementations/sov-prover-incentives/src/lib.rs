@@ -9,14 +9,13 @@ mod tests;
 #[cfg(feature = "native")]
 mod query;
 
-use borsh::{BorshDeserialize, BorshSerialize};
 /// The call methods specified in this module
 pub use call::CallMessage;
 /// The response type used by RPC queries.
 #[cfg(feature = "native")]
 pub use query::Response;
 use sov_modules_api::{Context, Error, ModuleInfo};
-use sov_rollup_interface::zk::Zkvm;
+use sov_rollup_interface::zk::{StoredCodeCommitment, Zkvm};
 use sov_state::WorkingSet;
 
 /// Configuration of the prover incentives module. Specifies the
@@ -32,28 +31,6 @@ pub struct ProverIncentivesConfig<C: Context, Vm: Zkvm> {
     commitment_of_allowed_verifier_method: Vm::CodeCommitment,
     /// A list of initial provers and their bonded amount.
     initial_provers: Vec<(C::Address, u64)>,
-}
-
-/// A wrapper around a code commitment which implements borsh
-#[derive(Clone, Debug)]
-pub struct StoredCodeCommitment<Vm: Zkvm> {
-    commitment: Vm::CodeCommitment,
-}
-
-impl<Vm: Zkvm> BorshSerialize for StoredCodeCommitment<Vm> {
-    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        bincode::serialize_into(writer, &self.commitment)
-            .expect("Serialization to vec is infallible");
-        Ok(())
-    }
-}
-
-impl<Vm: Zkvm> BorshDeserialize for StoredCodeCommitment<Vm> {
-    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
-        let commitment: Vm::CodeCommitment = bincode::deserialize_from(reader)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        Ok(Self { commitment })
-    }
 }
 
 /// A new module:

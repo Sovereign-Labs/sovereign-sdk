@@ -2,9 +2,8 @@ use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::WorkingSet;
 
 use super::ChainState;
-use crate::{StateTransitionId, TransitionInProgress};
+use crate::{StateTransitionId, TransitionHeight, TransitionInProgress};
 
-#[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq)]
 /// Structure returned by the query methods.
 pub struct Response {
     /// Value returned by the queries
@@ -14,7 +13,7 @@ pub struct Response {
 impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
     /// Get the height of the current slot.
     /// Panics if the slot height is not set
-    pub fn get_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> u64 {
+    pub fn get_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> TransitionHeight {
         self.slot_height
             .get(working_set)
             .expect("Slot height should be set at initialization")
@@ -36,7 +35,7 @@ impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
     /// Returns the completed transition associated with the provided `transition_num`.
     pub fn get_historical_transitions(
         &self,
-        transition_num: u64,
+        transition_num: TransitionHeight,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Option<StateTransitionId<Cond>> {
         self.historical_transitions
