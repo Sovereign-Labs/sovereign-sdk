@@ -78,7 +78,7 @@ where
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_slot(
         &mut self,
-        slot_data: &impl SlotData<Cond = DA::ValidityCondition>,
+        slot_data: &impl SlotData<Cond = DA::ValidityCondition, Namespace = C::Namespace>,
         witness: <Self as StateTransitionFunction<Vm, DA::BlobTransaction>>::Witness,
     ) {
         let state_checkpoint = StateCheckpoint::with_witness(self.current_storage.clone(), witness);
@@ -125,6 +125,8 @@ where
 
     type Condition = DA::ValidityCondition;
 
+    type Namespace = C::Namespace;
+
     fn init_chain(&mut self, params: Self::InitialState) -> jmt::RootHash {
         let mut working_set = StateCheckpoint::new(self.current_storage.clone()).to_revertable();
 
@@ -154,7 +156,7 @@ where
     >
     where
         I: IntoIterator<Item = &'a mut DA::BlobTransaction>,
-        Data: SlotData<Cond = Self::Condition>,
+        Data: SlotData<Cond = Self::Condition, Namespace = <C as Spec>::Namespace>,
     {
         self.begin_slot(slot_data, witness);
 

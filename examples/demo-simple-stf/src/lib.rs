@@ -5,6 +5,7 @@ use std::marker::PhantomData;
 
 use sha2::Digest;
 use sov_rollup_interface::da::BlobReaderTrait;
+use sov_rollup_interface::mocks::MockNamespace;
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{BatchReceipt, SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
@@ -44,6 +45,8 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
     // This data is produced during actual batch execution or validated with proof during verification.
     // However, in this tutorial, we won't use it.
     type Witness = ();
+
+    type Namespace = MockNamespace;
 
     type Condition = Cond;
 

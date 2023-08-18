@@ -38,6 +38,16 @@ pub trait AddressTrait:
 
 /// A marker trait for namespaces.
 pub trait NamespaceTrait:
-    PartialEq + Debug + Clone + Copy + Eq + BorshSerialize + BorshDeserialize
+    PartialEq
+    + Debug
+    + Clone
+    + Copy
+    + Eq
+    + BorshSerialize
+    + BorshDeserialize
+    + Sync
+    + Send
+    + DeserializeOwned
+    + Serialize
 {
 }

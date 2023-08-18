@@ -59,7 +59,7 @@ pub trait SlotHooks<Condition: ValidityCondition> {
 
     fn begin_slot_hook(
         &self,
-        slot_data: &impl SlotData<Cond = Condition>,
+        slot_data: &impl SlotData<Cond = Condition, Namespace = <Self::Context as Spec>::Namespace>,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     );
 

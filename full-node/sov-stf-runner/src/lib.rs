@@ -4,6 +4,7 @@
 mod batch_builder;
 mod config;
 pub use config::RpcConfig;
+use sov_modules_api::Spec;
 mod runner_config;
 use std::net::SocketAddr;
 mod ledger_rpc;
@@ -14,7 +15,7 @@ pub use ledger_rpc::get_ledger_rpc;
 pub use runner_config::{from_toml_path, Config, StorageConfig};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::Zkvm;
 use tracing::{debug, info};
@@ -56,6 +57,7 @@ where
         Vm,
         <<DA as DaService>::Spec as DaSpec>::BlobTransaction,
         Condition = <DA::Spec as DaSpec>::ValidityCondition,
+        Namespace = <DA::FilteredBlock as SlotData>::Namespace,
     >,
 {
     /// Creates a new `StateTransitionRunner` runner.

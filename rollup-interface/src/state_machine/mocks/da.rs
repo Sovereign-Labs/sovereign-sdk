@@ -173,7 +173,7 @@ impl NamespaceTrait for MockNamespace {}
 
 /// A mock block type used for testing.
 #[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]
-pub struct MockBlock {
+pub struct MockBlock<N> {
     /// The hash of this block.
     pub curr_hash: [u8; 32],
     /// The header of this block.
@@ -183,10 +183,10 @@ pub struct MockBlock {
     /// Validity condition
     pub validity_cond: MockValidityCond,
     /// Namespace
-    pub namespace: MockNamespace,
+    pub namespace: N,
 }
 
-impl Default for MockBlock {
+impl<N: Default> Default for MockBlock<N> {
     fn default() -> Self {
         Self {
             curr_hash: [0; 32],
@@ -195,15 +195,15 @@ impl Default for MockBlock {
             },
             height: 0,
             validity_cond: MockValidityCond::default(),
-            namespace: MockNamespace::Default,
+            namespace: N::default(),
         }
     }
 }
 
-impl SlotData for MockBlock {
+impl<N: NamespaceTrait> SlotData for MockBlock<N> {
     type BlockHeader = MockBlockHeader;
     type Cond = MockValidityCond;
-    type Namespace = MockNamespace;
+    type Namespace = N;
 
     fn hash(&self) -> [u8; 32] {
         self.curr_hash
@@ -265,7 +265,7 @@ impl MockDaService {
 impl DaService for MockDaService {
     type RuntimeConfig = ();
     type Spec = MockDaSpec;
-    type FilteredBlock = MockBlock;
+    type FilteredBlock = MockBlock<MockNamespace>;
     type Error = anyhow::Error;
 
     async fn new(
