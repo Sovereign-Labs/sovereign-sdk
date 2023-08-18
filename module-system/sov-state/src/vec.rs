@@ -61,11 +61,11 @@ where
     /// Sets a value in the [`StateVec`].
     /// If the index is out of bounds, returns an error.
     /// To push a value to the end of the StateVec, use [`StateVec::push`].
-    pub fn set<S: Storage>(&self, index: usize, value: V, working_set: &mut WorkingSet<S>) -> Result<(), Error> {
+    pub fn set<S: Storage>(&self, index: usize, value: &V, working_set: &mut WorkingSet<S>) -> Result<(), Error> {
         let len = self.len(working_set);
 
         if index < len {
-            working_set.set_value(self.prefix(), &self.internal_codec(), &IndexKey(index + 1), &value);
+            working_set.set_value(self.prefix(), &self.internal_codec(), &IndexKey(index + 1), value);
             Ok(())
         } else {
             Err(Error::IndexOutOfBounds(index))
@@ -96,10 +96,10 @@ where
     }
 
     /// Pushes a value to the end of the [`StateVec`].
-    pub fn push<S: Storage>(&self, value: V, working_set: &mut WorkingSet<S>) {
+    pub fn push<S: Storage>(&self, value: &V, working_set: &mut WorkingSet<S>) {
         let len = self.len(working_set);
 
-        working_set.set_value(self.prefix(), &self.internal_codec(), &IndexKey(len + 1), &value);
+        working_set.set_value(self.prefix(), &self.internal_codec(), &IndexKey(len + 1), value);
         self.set_len(len + 1, working_set);
     }
 
@@ -125,9 +125,9 @@ where
 
         for (i, value) in values.into_iter().enumerate() {
             if i < len {
-                let _ = self.set(i, value, working_set);
+                let _ = self.set(i, &value, working_set);
             } else {
-                self.push(value, working_set);
+                self.push(&value, working_set);
             }
         }
 

@@ -274,10 +274,10 @@ fn test_state_vec_set() {
         let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
 
         working_set = before_set.execute(working_set);
-        let val = state_vec.set(1, 99, &mut working_set);
+        let val = state_vec.set(1, &99, &mut working_set);
         assert!(val.is_ok());
 
-        let val_err = state_vec.set(3, 99, &mut working_set);
+        let val_err = state_vec.set(3, &99, &mut working_set);
         assert!(val_err.is_err());
 
         working_set = after_set.execute(working_set);
@@ -303,7 +303,7 @@ fn test_state_vec_push() {
 
         working_set = before_push.execute(working_set);
         
-        state_vec.push(53, &mut working_set);
+        state_vec.push(&53, &mut working_set);
 
         working_set = after_push.execute(working_set);
         
@@ -372,6 +372,6 @@ fn test_state_vec_set_all() {
 
         let val = state_vec.get(1, &mut working_set);
 
-        assert!(val.is_err());        
+        assert!(val.is_err());    
     }
 }
