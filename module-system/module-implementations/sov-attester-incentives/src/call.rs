@@ -294,10 +294,6 @@ impl<
             // On failure, no state is changed
             self.reward_sender(context, old_balance, working_set)?;
 
-            // Update our internal tracking of the total bonded amount for the sender.
-            self.bonded_challengers
-                .remove(context.sender(), working_set);
-
             // Emit the unbonding event
             working_set.add_event(
                 "unbonded_challenger",
@@ -562,13 +558,9 @@ impl<
             TransitionHeight(max(last_attested_height, current_finalized_height).inner() + 1);
 
         // Minimum height at which the proof of bond can be valid
-        let min_height = if new_height_to_attest > finality {
-            new_height_to_attest
-                .inner()
-                .saturating_sub(finality.inner())
-        } else {
-            0
-        };
+        let min_height = new_height_to_attest
+            .inner()
+            .saturating_sub(finality.inner());
 
         // We have to check the following order invariant is respected:
         // (height to attest - finality) <= bonding_proof.transition_num <= height to attest
