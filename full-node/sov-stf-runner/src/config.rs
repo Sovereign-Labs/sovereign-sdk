@@ -6,6 +6,7 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 pub use sov_state::config::Config as StorageConfig;
 
+/// Configuration for StateTransitionRunner.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RunnerConfig {
     /// DA start height.

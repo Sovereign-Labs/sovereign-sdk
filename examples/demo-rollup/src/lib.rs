@@ -2,7 +2,7 @@
 #![doc = include_str!("../README.md")]
 
 pub mod register_rpc;
-
+mod rollup;
 use std::str::FromStr;
 
 use celestia::types::NamespaceId;
@@ -11,6 +11,7 @@ use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::DefaultPrivateKey;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runtime::GenesisConfig;
+pub use rollup::{new_rollup_with_celestia_da, Rollup};
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::default_context::DefaultContext;
 
