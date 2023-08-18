@@ -63,11 +63,21 @@ where
     /// Sets a value in the [`StateVec`].
     /// If the index is out of bounds, returns an error.
     /// To push a value to the end of the StateVec, use [`StateVec::push`].
-    pub fn set<S: Storage>(&self, index: usize, value: &V, working_set: &mut WorkingSet<S>) -> Result<(), Error> {
+    pub fn set<S: Storage>(
+        &self,
+        index: usize,
+        value: &V,
+        working_set: &mut WorkingSet<S>,
+    ) -> Result<(), Error> {
         let len = self.len(working_set);
 
         if index < len {
-            working_set.set_value(self.prefix(), &self.internal_codec(), &IndexKey(index + 1), value);
+            working_set.set_value(
+                self.prefix(),
+                &self.internal_codec(),
+                &IndexKey(index + 1),
+                value,
+            );
             Ok(())
         } else {
             Err(Error::IndexOutOfBounds(index))
@@ -82,11 +92,16 @@ where
     /// Returns the value for the given index.
     /// If the index is out of bounds, returns an error.
     /// If the value is absent, returns an error.
-    pub fn get_or_err<S: Storage>(&self, index: usize, working_set: &mut WorkingSet<S>) -> Result<Option<V>, Error> {
+    pub fn get_or_err<S: Storage>(
+        &self,
+        index: usize,
+        working_set: &mut WorkingSet<S>,
+    ) -> Result<Option<V>, Error> {
         let len = self.len(working_set);
 
         if index < len {
-            let elem = working_set.get_value(self.prefix(), &self.internal_codec(), &IndexKey(index + 1));
+            let elem =
+                working_set.get_value(self.prefix(), &self.internal_codec(), &IndexKey(index + 1));
 
             if elem.is_some() {
                 Ok(elem)
@@ -100,7 +115,11 @@ where
 
     /// Returns the length of the [`StateVec`].
     pub fn len<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> usize {
-        let len = working_set.get_value::<_, usize, _>(self.prefix(), &self.internal_codec(), &IndexKey(0));
+        let len = working_set.get_value::<_, usize, _>(
+            self.prefix(),
+            &self.internal_codec(),
+            &IndexKey(0),
+        );
         len.unwrap_or_default()
     }
 
@@ -112,7 +131,12 @@ where
     pub fn push<S: Storage>(&self, value: &V, working_set: &mut WorkingSet<S>) {
         let len = self.len(working_set);
 
-        working_set.set_value(self.prefix(), &self.internal_codec(), &IndexKey(len + 1), value);
+        working_set.set_value(
+            self.prefix(),
+            &self.internal_codec(),
+            &IndexKey(len + 1),
+            value,
+        );
         self.set_len(len + 1, working_set);
     }
 
@@ -121,7 +145,8 @@ where
         let len = self.len(working_set);
 
         if len > 0 {
-            let elem = working_set.remove_value(self.prefix(), &self.internal_codec(), &IndexKey(len));
+            let elem =
+                working_set.remove_value(self.prefix(), &self.internal_codec(), &IndexKey(len));
             self.set_len(len - 1, working_set);
             elem
         } else {
@@ -134,7 +159,7 @@ where
     pub fn set_all<S: Storage>(&self, values: Vec<V>, working_set: &mut WorkingSet<S>) {
         let len = self.len(working_set);
 
-        let new_len = values.len(); 
+        let new_len = values.len();
 
         for (i, value) in values.into_iter().enumerate() {
             if i < len {
@@ -178,9 +203,9 @@ impl<'a, VC> StateKeyCodec<IndexKey> for IndexCodec<'a, VC> {
                 "IndexKey must not be empty",
             ))
         } else {
-            Ok(IndexKey(
-                usize::from_be_bytes(bytes.try_into().expect("Couldn't cast to [u8; 8]"))
-            ))
+            Ok(IndexKey(usize::from_be_bytes(
+                bytes.try_into().expect("Couldn't cast to [u8; 8]"),
+            )))
         }
     }
 }

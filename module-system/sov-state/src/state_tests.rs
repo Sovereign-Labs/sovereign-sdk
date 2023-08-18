@@ -208,11 +208,8 @@ fn test_witness_roundtrip() {
 
 fn create_state_vec_and_storage(
     values: Vec<u32>,
-    path: impl AsRef<Path>
-) -> (
-    StateVec<u32>,
-    WorkingSet<ProverStorage<DefaultStorageSpec>>,
-) {
+    path: impl AsRef<Path>,
+) -> (StateVec<u32>, WorkingSet<ProverStorage<DefaultStorageSpec>>) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
     let state_vec = StateVec::new(Prefix::new(vec![0]));
@@ -229,9 +226,9 @@ fn test_state_vec_len() {
         let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
 
         working_set = before_len.execute(working_set);
-        
+
         working_set = after_len.execute(working_set);
-        
+
         assert_eq!(state_vec.len(&mut working_set), values.len());
     }
 }
@@ -245,11 +242,11 @@ fn test_state_vec_get() {
         let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
 
         working_set = before_get.execute(working_set);
-        
+
         let val = state_vec.get(1, &mut working_set);
         let err_val = state_vec.get_or_err(3, &mut working_set);
-        assert_eq!(val.is_some(), true);
-        assert_eq!(err_val.is_err(), true);
+        assert!(val.is_some());
+        assert!(err_val.is_err());
 
         let val = val.unwrap();
         assert_eq!(val, values.get(1).unwrap().clone());
@@ -257,8 +254,8 @@ fn test_state_vec_get() {
         working_set = after_get.execute(working_set);
         let val = state_vec.get(1, &mut working_set);
         let err_val = state_vec.get_or_err(3, &mut working_set);
-        assert_eq!(val.is_some(), true);
-        assert_eq!(err_val.is_err(), true);
+        assert!(val.is_some());
+        assert!(err_val.is_err());
 
         let val = val.unwrap();
         assert_eq!(val, values.get(1).unwrap().clone());
@@ -281,7 +278,7 @@ fn test_state_vec_set() {
         assert!(val_err.is_err());
 
         working_set = after_set.execute(working_set);
-        
+
         let val = state_vec.get(1, &mut working_set);
         let err_val = state_vec.get_or_err(3, &mut working_set);
 
@@ -302,11 +299,11 @@ fn test_state_vec_push() {
         let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
 
         working_set = before_push.execute(working_set);
-        
+
         state_vec.push(&53, &mut working_set);
 
         working_set = after_push.execute(working_set);
-        
+
         let len = state_vec.len(&mut working_set);
         assert_eq!(len, 4);
 
@@ -327,13 +324,13 @@ fn test_state_vec_pop() {
         let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
 
         working_set = before_pop.execute(working_set);
-        
+
         let popped = state_vec.pop(&mut working_set);
 
         assert_eq!(popped.unwrap(), 54);
 
         working_set = after_pop.execute(working_set);
-        
+
         let len = state_vec.len(&mut working_set);
         assert_eq!(len, 2);
 
@@ -354,8 +351,8 @@ fn test_state_vec_set_all() {
         let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
 
         working_set = before_set_all.execute(working_set);
-        
-        let new_values:Vec<u32> = vec![1];  
+
+        let new_values: Vec<u32> = vec![1];
         state_vec.set_all(new_values, &mut working_set);
 
         working_set = after_set_all.execute(working_set);
@@ -372,6 +369,6 @@ fn test_state_vec_set_all() {
 
         let val = state_vec.get_or_err(1, &mut working_set);
 
-        assert!(val.is_err());    
+        assert!(val.is_err());
     }
 }
