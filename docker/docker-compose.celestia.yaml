@@ -12,8 +12,8 @@ services:
     environment:
       - VALIDATOR_NAME=validator1
       - KEY_NAME_1=validator1
-      - KEY_NAME_2=validator2
-      - KEY_NAME_3=validator3
+      - KEY_NAME_2=node1
+      - KEY_NAME_3=node2
       - CHAIN_ID=sov-testnet
       - CELES_AMOUNT=12300000000000000000000000utia
       - STAKING_AMOUNT=1000000000utia
@@ -40,7 +40,7 @@ services:
         /bin/celestia-appd collect-gentxs && \
         echo "NODE_ID:" && \
         /bin/celestia-appd tendermint show-node-id && \
-        cp -r /root/.celestia-app/keyring-test /root/keyring-test && \
+        mkdir -p /root/keyring-test && cp /root/.celestia-app/keyring-test/* /root/keyring-test/ && \
         /bin/celestia-appd start --rpc.laddr tcp://0.0.0.0:26657 --proxy_app tcp://0.0.0.0:26658
     volumes:
       - ./keyring-test:/root/keyring-test/
@@ -64,16 +64,21 @@ services:
       - -c
       - |
         apt-get update && apt install -y curl jq && rm -rf /var/lib/apt/lists/* && \
+        sleep 20 && \
         until curl http://validator:26657/block?height=1; do echo "Waiting for validator..."; sleep 5; done && \
         /celestia bridge init --node.store /bridge && \
         until curl http://validator:26657/block?height=1; do echo "Waiting for validator..."; sleep 5; done && \
         export GENESIS=$(curl http://validator:26657/block?height=1 | jq '.result.block_id.hash' | tr -d '"') && \
-        cp -r /root/keyring-test /bridge/keys/ && \
+        cp -r /root/keyring-test/* /bridge/keys/keyring-test/ && \
+        ls -la /bridge/keys/ && \
+        ls -la /bridge/keys/keyring-test/ && \
         export CELESTIA_CUSTOM="$$CHAIN_ID:$$GENESIS" && \
         echo "Starting bridge with option=$$CELESTIA_CUSTOM and key name $$KEY_NAME" && \
+        cp /bridge/keys/keyring-test/* /root/keyring-test/ && \
         /celestia bridge start --node.store /bridge --gateway --gateway.addr 0.0.0.0 --rpc.addr 0.0.0.0 --core.ip validator --keyring.accname $$KEY_NAME
     volumes:
       - ./keyring-test:/root/keyring-test
+
 
 
 
