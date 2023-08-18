@@ -15,12 +15,9 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
             &config.seq_rollup_address,
             working_set,
         )?;
-        if let Some(preferred_sequencer) = &config.preferred_sequencer {
-            if &config.seq_da_address != preferred_sequencer {
-                anyhow::bail!("Preferred sequencer is not in list of allowed sequencers");
-            }
+        if config.is_preferred_sequencer {
             self.preferred_sequencer
-                .set(preferred_sequencer, working_set);
+                .set(&config.seq_da_address, working_set);
         }
 
         Ok(())

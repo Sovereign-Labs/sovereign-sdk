@@ -46,7 +46,7 @@ pub fn create_demo_genesis_config<C: Context>(
             amount: LOCKED_AMOUNT,
             token_address,
         },
-        preferred_sequencer: None,
+        is_preferred_sequencer: false,
     };
 
     let value_setter_config = ValueSetterConfig {
