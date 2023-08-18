@@ -2,7 +2,6 @@ use std::fs::File;
 use std::io::Read;
 use std::path::Path;
 
-use celestia::da_service::DaServiceConfig;
 use serde::de::DeserializeOwned;
 use serde::Deserialize;
 pub use sov_state::config::Config as StorageConfig;
@@ -26,7 +25,7 @@ pub struct RpcConfig {
 
 /// Rollup Configuration
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct RollupConfig {
+pub struct RollupConfig<DaServiceConfig> {
     /// Runner configuration.
     pub storage: StorageConfig,
     /// TODO
@@ -81,7 +80,8 @@ mod tests {
 
         let config_file = create_config_from(config);
 
-        let config: RollupConfig = from_toml_path(config_file.path()).unwrap();
+        let config: RollupConfig<celestia::DaServiceConfig> =
+            from_toml_path(config_file.path()).unwrap();
         let expected = RollupConfig {
             runner: RunnerConfig {
                 start_height: 31337,
@@ -91,7 +91,7 @@ mod tests {
                 },
             },
 
-            da: DaServiceConfig {
+            da: celestia::DaServiceConfig {
                 celestia_rpc_auth_token: "SECRET_RPC_TOKEN".to_string(),
                 celestia_rpc_address: "http://localhost:11111/".into(),
                 max_celestia_response_body_size: 980,

@@ -2,7 +2,7 @@ use std::env;
 use std::str::FromStr;
 
 use anyhow::Context;
-use celestia::da_service::{CelestiaService, DaServiceConfig};
+use celestia::{CelestiaService, DaServiceConfig};
 use celestia::types::NamespaceId;
 use celestia::verifier::address::CelestiaAddress;
 use celestia::verifier::{CelestiaSpec, RollupParams};
@@ -11,21 +11,14 @@ use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use risc0_adapter::host::{Risc0Host, Risc0Verifier};
-use serde::Deserialize;
 use sov_modules_api::PrivateKey;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::Storage;
-use sov_stf_runner::{from_toml_path, StorageConfig};
+use sov_stf_runner::{from_toml_path, RollupConfig};
 use tracing::{info, Level};
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-pub struct RollupConfig {
-    pub start_height: u64,
-    pub da: DaServiceConfig,
-    pub storage: StorageConfig,
-}
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
@@ -44,7 +37,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
         .nth(1)
         .unwrap_or_else(|| "rollup_config.toml".to_string());
-    let rollup_config: RollupConfig =
+    let rollup_config: RollupConfig<DaServiceConfig> =
         from_toml_path(&rollup_config_path).context("Failed to read rollup configuration")?;
 
     let da_service = CelestiaService::new(
@@ -79,7 +72,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .get_state_root(&Default::default())
         .expect("The storage needs to have a state root");
 
-    for height in rollup_config.start_height.. {
+    for height in rollup_config.runner.start_height.. {
         let mut host = Risc0Host::new(ROLLUP_ELF);
         host.write_to_guest(prev_state_root);
         info!(

@@ -1,8 +1,8 @@
 use std::env;
 
 use anyhow::Context;
-use celestia::da_service::CelestiaService;
 use celestia::verifier::RollupParams;
+use celestia::CelestiaService;
 use demo_stf::app::{App, DefaultContext};
 use demo_stf::runtime::get_rpc_methods;
 #[cfg(feature = "experimental")]
@@ -13,7 +13,6 @@ use sov_rollup_interface::services::da::DaService;
 use sov_state::storage::Storage;
 use sov_stf_runner::{from_toml_path, RollupConfig, StateTransitionRunner};
 use tracing::{debug, Level};
-
 #[cfg(test)]
 mod test_rpc;
 
@@ -28,7 +27,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .unwrap_or_else(|| "rollup_config.toml".to_string());
 
     debug!("Starting demo rollup with config {}", rollup_config_path);
-    let rollup_config: RollupConfig =
+    let rollup_config: RollupConfig<celestia::DaServiceConfig> =
         from_toml_path(&rollup_config_path).context("Failed to read rollup configuration")?;
 
     // Initializing logging

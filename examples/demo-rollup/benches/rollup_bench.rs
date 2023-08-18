@@ -33,9 +33,10 @@ fn rollup_bench(_bench: &mut Criterion) {
         .sample_size(10)
         .measurement_time(Duration::from_secs(20));
     let rollup_config_path = "benches/rollup_config.toml".to_string();
-    let mut rollup_config: RollupConfig = from_toml_path(&rollup_config_path)
-        .context("Failed to read rollup configuration")
-        .unwrap();
+    let mut rollup_config: RollupConfig<celestia::DaServiceConfig> =
+        from_toml_path(&rollup_config_path)
+            .context("Failed to read rollup configuration")
+            .unwrap();
 
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
     rollup_config.storage.path = PathBuf::from(temp_dir.path());

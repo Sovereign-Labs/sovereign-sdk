@@ -10,7 +10,7 @@ celestia_rpc_address = "http://localhost:11111/"
 # The largest response the rollup will accept from the Celestia node. Defaults to 100 MB
 max_celestia_response_body_size = 104_857_600
 
-[runner.storage]
+[storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "benches/demo_data"
 
