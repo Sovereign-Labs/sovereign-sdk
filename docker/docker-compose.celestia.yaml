@@ -27,23 +27,35 @@ services:
       - /bin/sh
       - -c
       - |
-        apk update && apk add curl && \
+        apk update -qq && apk add -qq curl && \
         /bin/celestia-appd init $$VALIDATOR_NAME --chain-id $$CHAIN_ID && \
-        /bin/celestia-appd keys add $$KEY_NAME_1 --keyring-backend test && \
-        /bin/celestia-appd keys add $$KEY_NAME_2 --keyring-backend test && \
-        /bin/celestia-appd keys add $$KEY_NAME_3 --keyring-backend test && \
+        if [ ! -f "/root/keyring-test/$$KEY_NAME_1.info" ]; then \
+          echo "CREATING NEW KEYS" && \
+          /bin/celestia-appd keys add $$KEY_NAME_1 --keyring-backend test && \
+          /bin/celestia-appd keys add $$KEY_NAME_2 --keyring-backend test && \
+          /bin/celestia-appd keys add $$KEY_NAME_3 --keyring-backend test && \
+          mkdir -p /root/keyring-test && cp /root/.celestia-app/keyring-test/* /root/keyring-test/; \
+        else \
+          echo "USING EXISTING KEYS" && \
+          mkdir -p /root/.celestia-app/keyring-test/ && \
+          cp /root/keyring-test/* /root/.celestia-app/keyring-test/; \
+        fi; \
+        echo "AVAILABLE KEYS:" && \
+        /bin/celestia-appd keys list --keyring-backend test && \
         /bin/celestia-appd add-genesis-account $$KEY_NAME_1 $$CELES_AMOUNT --keyring-backend test && \
         /bin/celestia-appd add-genesis-account $$KEY_NAME_2 $$CELES_AMOUNT --keyring-backend test && \
         /bin/celestia-appd add-genesis-account $$KEY_NAME_3 $$CELES_AMOUNT --keyring-backend test && \
         /bin/celestia-appd gentx $$KEY_NAME_1 $$STAKING_AMOUNT --chain-id $$CHAIN_ID --keyring-backend test --evm-address 0x966e6f22781EF6a6A82BBB4DB3df8E225DfD9488 && \
-        cat /root/.celestia-app/config/genesis.json && \
         /bin/celestia-appd collect-gentxs && \
         echo "NODE_ID:" && \
         /bin/celestia-appd tendermint show-node-id && \
-        mkdir -p /root/keyring-test && cp /root/.celestia-app/keyring-test/* /root/keyring-test/ && \
+
         /bin/celestia-appd start --rpc.laddr tcp://0.0.0.0:26657 --proxy_app tcp://0.0.0.0:26658
     volumes:
       - ./keyring-test:/root/keyring-test/
+
+
+  #        cat /root/.celestia-app/config/genesis.json && \
 
   bridge:
     image: ghcr.io/celestiaorg/celestia-node:v0.7.1
@@ -63,15 +75,13 @@ services:
       - /bin/sh
       - -c
       - |
-        apt-get update && apt install -y curl jq && rm -rf /var/lib/apt/lists/* && \
+        apt-get -qq update && apt -qq install -y curl jq && rm -rf /var/lib/apt/lists/* && \
         sleep 20 && \
         until curl http://validator:26657/block?height=1; do echo "Waiting for validator..."; sleep 5; done && \
         /celestia bridge init --node.store /bridge && \
         until curl http://validator:26657/block?height=1; do echo "Waiting for validator..."; sleep 5; done && \
         export GENESIS=$(curl http://validator:26657/block?height=1 | jq '.result.block_id.hash' | tr -d '"') && \
         cp -r /root/keyring-test/* /bridge/keys/keyring-test/ && \
-        ls -la /bridge/keys/ && \
-        ls -la /bridge/keys/keyring-test/ && \
         export CELESTIA_CUSTOM="$$CHAIN_ID:$$GENESIS" && \
         echo "Starting bridge with option=$$CELESTIA_CUSTOM and key name $$KEY_NAME" && \
         cp /bridge/keys/keyring-test/* /root/keyring-test/ && \
