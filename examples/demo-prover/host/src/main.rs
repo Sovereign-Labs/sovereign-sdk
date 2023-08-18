@@ -2,10 +2,10 @@ use std::env;
 use std::str::FromStr;
 
 use anyhow::Context;
-use celestia::{CelestiaService, DaServiceConfig};
 use celestia::types::NamespaceId;
 use celestia::verifier::address::CelestiaAddress;
 use celestia::verifier::{CelestiaSpec, RollupParams};
+use celestia::{CelestiaService, DaServiceConfig};
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
@@ -18,7 +18,6 @@ use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::Storage;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tracing::{info, Level};
-
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
