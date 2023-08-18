@@ -4,6 +4,11 @@ services:
   validator:
     container_name: validator
     image: ghcr.io/celestiaorg/celestia-app:v0.13.2
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://127.0.0.1:26657/block?height=1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     environment:
       - VALIDATOR_NAME=validator
       - KEY_NAME=validator
@@ -12,22 +17,30 @@ services:
       - STAKING_AMOUNT=1000000000utia
     ports:
       - "9090:9090"
-      - "26656:26656"
-      - "26657:26657"
-      - "26658:26658"
+      - "36656:26656"
+      - "36657:26657"
+      - "36658:26658"
     entrypoint:
       - /bin/sh
       - -c
       - |
+        apk update && apk add curl && \
         /bin/celestia-appd init $$VALIDATOR_NAME --chain-id $$CHAIN_ID && \
         /bin/celestia-appd keys add $$VALIDATOR_NAME --keyring-backend test && \
         /bin/celestia-appd add-genesis-account $$VALIDATOR_NAME $$CELES_AMOUNT --keyring-backend test && \
         /bin/celestia-appd gentx "$$VALIDATOR_NAME" "$$STAKING_AMOUNT" --chain-id $$CHAIN_ID --keyring-backend test --evm-address 0x1aD2B053b8c6b1592cB645DEfadf105F34d8C6e1 && \
         /bin/celestia-appd collect-gentxs && \
         /bin/celestia-appd tendermint show-node-id && \
-        /bin/celestia-appd start
+        cp -r /root/.celestia-app/keyring-test /root/keyring-test && \
+        /bin/celestia-appd start --rpc.laddr tcp://0.0.0.0:26657 --proxy_app tcp://0.0.0.0:26658
     volumes:
-      - ./keyring-test:/root/.celestia-app/keyring-test/
+      - ./keyring-test:/root/keyring-test/
+
+  #       --address string                                  Listen address (default "tcp://0.0.0.0:26658")
+  #      --api.address string                              the API server address to listen on (default "tcp://0.0.0.0:1317")
+  #      --proxy_app string                                proxy app address, or one of: 'kvstore', 'persistent_kvstore', 'counter', 'e2e' or 'noop' for local testing. (default "tcp://127.0.0.1:26658")
+  #       --abci string                                     specify abci transport (socket | grpc) (default "socket")
+  # apt-get update && apt install -y net-tools curl netcat iputils-ping
 
   bridge:
     image: ghcr.io/celestiaorg/celestia-node:v0.7.1
@@ -37,12 +50,27 @@ services:
       - STAKING_AMOUNT=1000000000utia
     depends_on:
       - validator
+    ports:
+      - "26656:26656"
+      - "26657:26657"
+      - "26658:26658"
     entrypoint:
       - /bin/sh
       - -c
       - |
-        /celestia bridge init --node.store /bridge --p2p.network $$CHAIN_ID && \
-        cp -r /root/keyring-test /root/.celestia-light-mocha/keys/keyring-test
-        /celestia bridge start --node.store /bridge --gateway --core.ip validator --keyring.accname $$KEY_NAME --p2p.network $$CHAIN_ID
+        apt-get update && apt install -y curl jq && rm -rf /var/lib/apt/lists/* && \
+        /celestia bridge init --node.store /bridge && \
+        sleep 30 && \
+        until curl http://validator:26657/block?height=1; do echo "Waiting for validator..."; sleep 5; done && \
+        export GENESIS=$(curl http://validator:26657/block?height=1 | jq '.result.block_id.hash' | tr -d '"') && \
+        echo "GENESIS: $$GENESIS ___" && \
+        cp -r /root/keyring-test /bridge/keys/ && \
+        export CELESTIA_CUSTOM="$$CHAIN_ID:$$GENESIS" && \
+        echo "CELESTIA_CUSTOM: $$CELESTIA_CUSTOM___" && \
+        /celestia bridge start --node.store /bridge --gateway --gateway.addr 0.0.0.0 --core.ip validator --keyring.accname $$KEY_NAME
     volumes:
-      - ./keyring-test:/root/keyring-test/
+      - ./keyring-test:/root/keyring-test
+
+# GENESIS=""; CNT=0; MAX=30; while [ "${#GENESIS}" -le 4 -a $CNT -ne $MAX ]; do GENESIS=$(curl -s http://127.0.0.1:26657/block?height=1 | jq '.result.block_id.hash' | tr -d '"'); ((CNT++)); sleep 1; done
+
+# export GENESIS=$(curl http://validator:26657/block?height=1 | jq '.result.block_id.hash' | tr -d '"')
