@@ -17,6 +17,7 @@ use sov_rollup_interface::mocks::{
 };
 use sov_rollup_interface::services::da::DaService;
 
+#[derive(Clone)]
 /// A simple DaService for a random number generator.
 pub struct RngDaService;
 

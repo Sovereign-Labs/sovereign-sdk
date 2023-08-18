@@ -275,6 +275,34 @@ dependencies = [
 ]
 
 [[package]]
+name = "celestia"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.21.2",
+ "bech32",
+ "borsh",
+ "hex",
+ "hex-literal",
+ "nmt-rs",
+ "prost",
+ "prost-build",
+ "prost-types",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "serde",
+ "serde_json",
+ "sha2 0.10.6",
+ "sov-rollup-interface",
+ "tendermint",
+ "tendermint-proto",
+ "thiserror",
+ "tracing",
+ "zk-cycle-macros",
+]
+
+[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1056,34 +1084,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c5f195fe497f702db0f318b07fdd68edb16955aed830df8363d837542f8f935a"
 dependencies = [
  "wasm-bindgen",
-]
-
-[[package]]
-name = "jupiter"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.21.2",
- "bech32",
- "borsh",
- "hex",
- "hex-literal",
- "nmt-rs",
- "prost",
- "prost-build",
- "prost-types",
- "risc0-zkvm",
- "risc0-zkvm-platform",
- "serde",
- "serde_json",
- "sha2 0.10.6",
- "sov-rollup-interface",
- "tendermint",
- "tendermint-proto",
- "thiserror",
- "tracing",
- "zk-cycle-macros",
 ]
 
 [[package]]
@@ -2053,11 +2053,11 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "celestia",
  "const-rollup-config",
  "demo-stf",
  "directories",
  "downloader",
- "jupiter",
  "log",
  "risc0-adapter",
  "risc0-zkvm",
