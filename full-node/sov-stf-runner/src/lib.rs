@@ -8,6 +8,7 @@ use std::net::SocketAddr;
 pub use config::RpcConfig;
 mod ledger_rpc;
 pub use batch_builder::FiFoStrictBatchBuilder;
+use config::RunnerConfig;
 pub use config::{from_toml_path, RollupConfig, StorageConfig};
 use jsonrpsee::RpcModule;
 pub use ledger_rpc::get_ledger_rpc;
@@ -59,14 +60,14 @@ where
 {
     /// Creates a new `StateTransitionRunner` runner.
     pub fn new(
-        rollup_config: RollupConfig,
+        runner_config: RunnerConfig,
         da_service: DA,
         ledger_db: LedgerDB,
         mut app: ST,
         should_init_chain: bool,
         genesis_config: InitialState<ST, Vm, DA>,
     ) -> Result<Self, anyhow::Error> {
-        let rpc_config = rollup_config.rpc_config;
+        let rpc_config = runner_config.rpc_config;
 
         let prev_state_root = {
             // Check if the rollup has previously been initialized
@@ -86,7 +87,7 @@ where
         // Start the main rollup loop
         let item_numbers = ledger_db.get_next_items_numbers();
         let last_slot_processed_before_shutdown = item_numbers.slot_number - 1;
-        let start_height = rollup_config.start_height + last_slot_processed_before_shutdown;
+        let start_height = runner_config.start_height + last_slot_processed_before_shutdown;
 
         Ok(Self {
             start_height,

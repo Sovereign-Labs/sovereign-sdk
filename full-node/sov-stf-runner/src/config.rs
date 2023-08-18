@@ -7,6 +7,14 @@ use serde::de::DeserializeOwned;
 use serde::Deserialize;
 pub use sov_state::config::Config as StorageConfig;
 
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+pub struct RunnerConfig {
+    /// DA start height.
+    pub start_height: u64,
+    /// RPC configuration.
+    pub rpc_config: RpcConfig,
+}
+
 /// RPC configuration.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RpcConfig {
@@ -19,14 +27,12 @@ pub struct RpcConfig {
 /// Rollup Configuration
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RollupConfig {
-    /// DA start height.
-    pub start_height: u64,
-    /// DA configuration.
-    pub da: DaServiceConfig,
     /// Runner configuration.
     pub storage: StorageConfig,
-    /// RPC configuration.
-    pub rpc_config: RpcConfig,
+    /// TODO
+    pub runner: RunnerConfig,
+    /// DA configuration.
+    pub da: DaServiceConfig,
 }
 
 ///TODO
@@ -60,14 +66,15 @@ mod tests {
     #[test]
     fn test_correct_config() {
         let config = r#"
-            start_height = 31337
             [da]
             celestia_rpc_auth_token = "SECRET_RPC_TOKEN"
             celestia_rpc_address = "http://localhost:11111/"
             max_celestia_response_body_size = 980
             [storage]
             path = "/tmp"
-            [rpc_config]
+            [runner]
+            start_height = 31337
+            [runner.rpc_config]
             bind_host = "127.0.0.1"
             bind_port = 12345
         "#;
@@ -76,7 +83,14 @@ mod tests {
 
         let config: RollupConfig = from_toml_path(config_file.path()).unwrap();
         let expected = RollupConfig {
-            start_height: 31337,
+            runner: RunnerConfig {
+                start_height: 31337,
+                rpc_config: RpcConfig {
+                    bind_host: "127.0.0.1".to_string(),
+                    bind_port: 12345,
+                },
+            },
+
             da: DaServiceConfig {
                 celestia_rpc_auth_token: "SECRET_RPC_TOKEN".to_string(),
                 celestia_rpc_address: "http://localhost:11111/".into(),
@@ -85,10 +99,6 @@ mod tests {
             },
             storage: StorageConfig {
                 path: PathBuf::from("/tmp"),
-            },
-            rpc_config: RpcConfig {
-                bind_host: "127.0.0.1".to_string(),
-                bind_port: 12345,
             },
         };
         assert_eq!(config, expected);

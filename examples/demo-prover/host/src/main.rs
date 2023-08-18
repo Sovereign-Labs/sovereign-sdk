@@ -17,14 +17,14 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::Storage;
-use sov_stf_runner::{from_toml_path, Config as RunnerConfig};
+use sov_stf_runner::{from_toml_path, StorageConfig};
 use tracing::{info, Level};
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 pub struct RollupConfig {
     pub start_height: u64,
     pub da: DaServiceConfig,
-    pub runner: RunnerConfig,
+    pub storage: StorageConfig,
 }
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
@@ -57,7 +57,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let mut app: App<Risc0Verifier, CelestiaSpec> = App::new(rollup_config.runner.storage.clone());
+    let mut app: App<Risc0Verifier, CelestiaSpec> = App::new(rollup_config.storage.clone());
 
     let is_storage_empty = app.get_storage().is_empty();
 

@@ -66,7 +66,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let genesis_config = get_genesis_config();
 
     let mut runner = StateTransitionRunner::new(
-        rollup_config,
+        rollup_config.runner,
         da_service,
         ledger_db,
         app.stf,
