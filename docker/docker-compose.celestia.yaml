@@ -91,14 +91,45 @@ services:
     volumes:
       - ./keyring-test:/root/keyring-test
 
-
+  bridge-2:
+    image: ghcr.io/celestiaorg/celestia-node:v0.7.1
+    container_name: sov-celestia-bridge-2
+    environment:
+      - KEY_NAME=node1
+      - CHAIN_ID=test
+      - STAKING_AMOUNT=1000000000utia
+      - DEBIAN_FRONTEND=noninteractive
+    depends_on:
+      - validator
+    ports:
+      - "46656:26656"
+      - "46657:26657"
+      - "46658:26658"
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        apt-get -qq update -qq && apt -qq install -y curl jq && rm -rf /var/lib/apt/lists/* && \
+        sleep 20 && \
+        until curl http://validator:26657/block?height=1; do echo "Waiting for validator..."; sleep 5; done && \
+        mkdir -p /bridge/keys/keyring-test/ && cp -r /root/keyring-test/* /bridge/keys/keyring-test/ && \
+        /celestia bridge init --node.store /bridge && \
+        until curl http://validator:26657/block?height=1; do echo "Waiting for validator..."; sleep 5; done && \
+        export GENESIS=$(curl http://validator:26657/block?height=1 | jq '.result.block_id.hash' | tr -d '"') && \
+        export CELESTIA_CUSTOM="$$CHAIN_ID:$$GENESIS" && \
+        echo "Starting bridge with option=$$CELESTIA_CUSTOM and key name $$KEY_NAME. API KEY:" && \
+        /celestia bridge auth admin --node.store /bridge --log.level=ERROR && echo " " && \
+        echo "$(/celestia bridge auth admin --node.store /bridge --log.level=ERROR)" > /root/keyring-test/bridge_2_key.txt && \
+        /celestia bridge start --node.store /bridge --gateway --gateway.addr 0.0.0.0 --rpc.addr 0.0.0.0 --core.ip validator --keyring.accname $$KEY_NAME
+    volumes:
+      - ./keyring-test:/root/keyring-test
 
 
 
 # TODO:
 #  * +Create keys only if keyring-test does not exist
-#  * ~Export validator API key to file.
-#  * Multiple bridges
+#  * ~Export validator API key to file. Leftovers - generate rollup_config.toml
+#  * +Multiple bridges
 #  * Bridge health-check
 #  * Timeoutable wait for block_height
 #  * Quite install script
