@@ -16,13 +16,13 @@ const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.j
 /// register sequencer rpc methods.
 pub fn register_sequencer<DA>(
     da_service: DA,
-    demo_runner: &mut App<Risc0Verifier, DA::Spec>,
+    app: &mut App<Risc0Verifier, DA::Spec>,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error>
 where
-    DA: DaService<Error = anyhow::Error> + Send + Sync + 'static,
+    DA: DaService,
 {
-    let batch_builder = demo_runner.batch_builder.take().unwrap();
+    let batch_builder = app.batch_builder.take().unwrap();
     let sequencer_rpc = get_sequencer_rpc(batch_builder, da_service);
     methods
         .merge(sequencer_rpc)
