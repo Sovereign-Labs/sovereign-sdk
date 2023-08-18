@@ -20,7 +20,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
-
 use sov_state::WorkingSet;
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]

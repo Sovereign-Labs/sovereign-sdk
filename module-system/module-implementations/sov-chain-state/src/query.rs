@@ -1,5 +1,4 @@
 use sov_rollup_interface::zk::ValidityCondition;
-
 use sov_state::WorkingSet;
 
 use super::ChainState;

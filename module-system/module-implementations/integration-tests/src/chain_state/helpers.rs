@@ -8,7 +8,6 @@ use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::mocks::MockZkvm;
 use sov_rollup_interface::zk::ValidityCondition;
-
 use sov_state::WorkingSet;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 

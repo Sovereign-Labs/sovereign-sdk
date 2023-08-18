@@ -2,7 +2,6 @@ use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::{Context, Spec};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::zk::ValidityCondition;
-
 use sov_state::{Storage, WorkingSet};
 
 use super::ChainState;
