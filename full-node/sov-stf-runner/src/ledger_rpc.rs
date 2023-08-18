@@ -12,8 +12,8 @@ const LEDGER_RPC_ERROR: &str = "LEDGER_RPC_ERROR";
 use self::query_args::{extract_query_args, QueryArgs};
 
 /// Registers the following RPC methods
-/// - `ledger_head`
-///    Example Query: `curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"ledger_head","params":[],"id":1}' http://127.0.0.1:12345`
+/// - `ledger_getHead`
+///    Example Query: `curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}' http://127.0.0.1:12345`
 /// - ledger_getSlots
 ///    Example Query: `curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"ledger_getSlots","params":[[1, 2], "Compact"],"id":1}' http://127.0.0.1:12345`
 /// - ledger_getBatches
