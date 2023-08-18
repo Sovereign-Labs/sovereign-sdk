@@ -244,7 +244,6 @@ fn test_state_vec_get() {
         let values = vec![56, 55, 54];
         let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
 
-        // TODO: this test feels weird
         working_set = before_get.execute(working_set);
         
         let val = state_vec.get(1, &mut working_set);
@@ -298,11 +297,11 @@ fn test_state_vec_set() {
 fn test_state_vec_push() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
-    for (before_set, after_push) in create_storage_operations() {
+    for (before_push, after_push) in create_storage_operations() {
         let values = vec![56, 55, 54];
         let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
 
-        working_set = before_set.execute(working_set);
+        working_set = before_push.execute(working_set);
         
         state_vec.push(53, &mut working_set);
 
@@ -350,16 +349,16 @@ fn test_state_vec_pop() {
 fn test_state_vec_set_all() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
-    for (before_pop, after_pop) in create_storage_operations() {
+    for (before_set_all, after_set_all) in create_storage_operations() {
         let values = vec![56, 55, 54];
         let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
 
-        working_set = before_pop.execute(working_set);
+        working_set = before_set_all.execute(working_set);
         
         let new_values:Vec<u32> = vec![1];  
         state_vec.set_all(new_values, &mut working_set);
 
-        working_set = after_pop.execute(working_set);
+        working_set = after_set_all.execute(working_set);
 
         let val = state_vec.get(0, &mut working_set);
 
