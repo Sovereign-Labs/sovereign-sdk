@@ -1,6 +1,7 @@
 use std::env;
 
 use sov_demo_rollup::new_rollup_with_celestia_da;
+use tracing::Level;
 
 #[cfg(test)]
 mod test_rpc;
@@ -11,6 +12,15 @@ mod test_rpc;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    // Initializing logging
+    let subscriber = tracing_subscriber::fmt()
+        .with_max_level(Level::INFO)
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber)
+        .map_err(|_err| eprintln!("Unable to set global default subscriber"))
+        .expect("Cannot fail to set subscriber");
+
     let rollup_config_path = env::args()
         .nth(1)
         .unwrap_or_else(|| "rollup_config.toml".to_string());

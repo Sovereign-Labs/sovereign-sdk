@@ -9,7 +9,7 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::Zkvm;
 use sov_state::storage::Storage;
 use sov_stf_runner::{from_toml_path, RollupConfig, RunnerConfig, StateTransitionRunner};
-use tracing::{debug, Level};
+use tracing::debug;
 
 #[cfg(feature = "experimental")]
 use crate::register_rpc::register_ethereum;
@@ -17,7 +17,7 @@ use crate::register_rpc::{register_ledger, register_sequencer};
 use crate::{get_genesis_config, initialize_ledger, ROLLUP_NAMESPACE};
 
 /// Dependencies needed to run the rollup.
-pub struct Rollup<Vm: Zkvm, DA: DaService> {
+pub struct Rollup<Vm: Zkvm, DA: DaService + Clone> {
     app: App<Vm, DA::Spec>,
     da_service: DA,
     ledger_db: LedgerDB,
@@ -31,14 +31,6 @@ pub async fn new_rollup_with_celestia_da(
     debug!("Starting demo rollup with config {}", rollup_config_path);
     let rollup_config: RollupConfig<celestia::DaServiceConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
-
-    // Initializing logging
-    let subscriber = tracing_subscriber::fmt()
-        .with_max_level(Level::INFO)
-        .finish();
-    tracing::subscriber::set_global_default(subscriber)
-        .map_err(|_err| eprintln!("Unable to set global default subscriber"))
-        .expect("Cannot fail to set subscriber");
 
     let ledger_db = initialize_ledger(&rollup_config.storage.path);
 
@@ -60,7 +52,7 @@ pub async fn new_rollup_with_celestia_da(
     })
 }
 
-impl<Vm: Zkvm, DA: DaService<Error = anyhow::Error>> Rollup<Vm, DA> {
+impl<Vm: Zkvm, DA: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, DA> {
     /// Runs the rollup.
     pub async fn run(mut self) -> Result<(), anyhow::Error> {
         let storage = self.app.get_storage();
