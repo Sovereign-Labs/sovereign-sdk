@@ -1,8 +1,8 @@
 use std::env;
 
 use anyhow::Context;
-use celestia::da_service::CelestiaService;
 use celestia::verifier::RollupParams;
+use celestia::CelestiaService;
 use demo_stf::app::{App, DefaultContext};
 use demo_stf::runtime::get_rpc_methods;
 #[cfg(feature = "experimental")]
@@ -13,7 +13,6 @@ use sov_rollup_interface::services::da::DaService;
 use sov_state::storage::Storage;
 use sov_stf_runner::{from_toml_path, RollupConfig, StateTransitionRunner};
 use tracing::{debug, Level};
-
 #[cfg(test)]
 mod test_rpc;
 
@@ -28,7 +27,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .unwrap_or_else(|| "rollup_config.toml".to_string());
 
     debug!("Starting demo rollup with config {}", rollup_config_path);
-    let rollup_config: RollupConfig =
+    let rollup_config: RollupConfig<celestia::DaServiceConfig> =
         from_toml_path(&rollup_config_path).context("Failed to read rollup configuration")?;
 
     // Initializing logging
@@ -39,7 +38,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .map_err(|_err| eprintln!("Unable to set global default subscriber"))
         .expect("Cannot fail to set subscriber");
 
-    let ledger_db = initialize_ledger(&rollup_config.runner.storage.path);
+    let ledger_db = initialize_ledger(&rollup_config.storage.path);
 
     let da_service = CelestiaService::new(
         rollup_config.da.clone(),
@@ -49,7 +48,7 @@ async fn main() -> Result<(), anyhow::Error> {
     )
     .await;
 
-    let mut app = App::new(rollup_config.runner.storage.clone());
+    let mut app = App::new(rollup_config.storage.clone());
 
     let storage = app.get_storage();
     let mut methods = get_rpc_methods::<DefaultContext>(storage);
@@ -66,7 +65,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let genesis_config = get_genesis_config();
 
     let mut runner = StateTransitionRunner::new(
-        rollup_config,
+        rollup_config.runner,
         da_service,
         ledger_db,
         app.stf,
