@@ -179,7 +179,7 @@ impl<
     fn slash_and_invalidate_attestation(
         &self,
         attester: &C::Address,
-        height: &TransitionHeight,
+        height: TransitionHeight,
         reason: SlashingReason,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> AttesterIncentiveErrors {
@@ -187,11 +187,11 @@ impl<
 
         let curr_reward_value = self
             .bad_transition_pool
-            .get(height, working_set)
+            .get(&height, working_set)
             .unwrap_or_default();
 
         self.bad_transition_pool
-            .set(height, &(curr_reward_value + reward), working_set);
+            .set(&height, &(curr_reward_value + reward), working_set);
 
         AttesterIncentiveErrors::UserSlashed(reason)
     }
@@ -437,7 +437,7 @@ impl<
 
     fn check_transition(
         &self,
-        claimed_transition_height: &TransitionHeight,
+        claimed_transition_height: TransitionHeight,
         attester: &C::Address,
         attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
@@ -445,7 +445,7 @@ impl<
         if let Some(curr_tx) = self
             .chain_state
             .historical_transitions
-            .get(claimed_transition_height, working_set)
+            .get(&claimed_transition_height, working_set)
         {
             // We first need to compare the initial block hash to the previous post state root
             if !curr_tx.compare_hashes(&attestation.da_block_hash, &attestation.post_state_root) {
@@ -473,7 +473,7 @@ impl<
 
     fn check_initial_hash(
         &self,
-        claimed_transition_height: &TransitionHeight,
+        claimed_transition_height: TransitionHeight,
         attester: &C::Address,
         attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
@@ -498,6 +498,23 @@ impl<
             // We can assume that the genesis hash is always set, otherwise we need to panic.
             // We don't need to prove that the attester was bonded, simply need to check that the current bond is higher than the
             // minimal bond and that the attester is not unbonding
+
+            // We add a check here that the claimed transition height is the same as the genesis height.
+            if self
+                .chain_state
+                .genesis_height
+                .get(working_set)
+                .expect("Must be set at genesis")
+                != (claimed_transition_height - 1)
+            {
+                return Err(self.slash_burn_reward(
+                    attester,
+                    Role::Attester,
+                    SlashingReason::TransitionNotFound,
+                    working_set,
+                ));
+            }
+
             if self
                 .chain_state
                 .get_genesis_hash(working_set)
@@ -512,6 +529,7 @@ impl<
                     working_set,
                 ));
             }
+
             // Normal state
         }
 
@@ -576,7 +594,7 @@ impl<
 
         // First compare the initial hashes
         self.check_initial_hash(
-            &attestation.proof_of_bond.claimed_transition_num,
+            attestation.proof_of_bond.claimed_transition_num,
             context.sender(),
             &attestation,
             working_set,
@@ -584,7 +602,7 @@ impl<
 
         // Then compare the transition
         self.check_transition(
-            &attestation.proof_of_bond.claimed_transition_num,
+            attestation.proof_of_bond.claimed_transition_num,
             context.sender(),
             &attestation,
             working_set,

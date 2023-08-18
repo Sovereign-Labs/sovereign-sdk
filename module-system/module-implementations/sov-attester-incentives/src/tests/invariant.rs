@@ -1,5 +1,3 @@
-use std::cmp::max;
-
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::optimistic::Attestation;
 use sov_state::{ProverStorage, WorkingSet};
@@ -45,6 +43,11 @@ fn test_transition_invariant() {
         .light_client_finalized_height
         .set(&NEW_LIGHT_CLIENT_FINALIZED_HEIGHT, &mut working_set);
 
+    // Update the initial height
+    module
+        .maximum_attested_height
+        .set(&NEW_LIGHT_CLIENT_FINALIZED_HEIGHT, &mut working_set);
+
     // Process a valid attestation for the first transition *should fail*
     {
         let init_height_usize = usize::try_from(INIT_HEIGHT).unwrap();
@@ -84,14 +87,24 @@ fn test_transition_invariant() {
     let new_height = usize::try_from(NEW_LIGHT_CLIENT_FINALIZED_HEIGHT).unwrap();
 
     // The attester should be able to process multiple attestations with the same bonding proof
-    for _i in 0..usize::try_from(DEFAULT_ROLLUP_FINALITY).unwrap() {
-        let attestation = Attestation {
+    for i in 0..usize::try_from(DEFAULT_ROLLUP_FINALITY + 1).unwrap() {
+        let old_attestation = Attestation {
             initial_state_root: exec_vars[new_height - 1].state_root,
             da_block_hash: [(new_height).try_into().unwrap(); 32],
             post_state_root: exec_vars[new_height].state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
                 claimed_transition_num: new_height.try_into().unwrap(),
                 proof: exec_vars[new_height - 1].state_proof.clone(),
+            },
+        };
+
+        let new_attestation = Attestation {
+            initial_state_root: exec_vars[new_height + i - 1].state_root,
+            da_block_hash: [(new_height + i).try_into().unwrap(); 32],
+            post_state_root: exec_vars[new_height + i].state_root,
+            proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
+                claimed_transition_num: (new_height + i).try_into().unwrap(),
+                proof: exec_vars[new_height + i - 1].state_proof.clone(),
             },
         };
 
@@ -103,18 +116,14 @@ fn test_transition_invariant() {
             .expect("The maximum attested height should be set at genesis");
 
         // Update the max_attested_height in case the blocks have already been finalized
-        let new_height_to_attest = max(last_height_attested, NEW_LIGHT_CLIENT_FINALIZED_HEIGHT) + 1;
+        let new_height_to_attest = last_height_attested + 1;
 
-        let min_height = if new_height_to_attest > DEFAULT_ROLLUP_FINALITY {
-            new_height_to_attest - DEFAULT_ROLLUP_FINALITY
-        } else {
-            0
-        };
+        let min_height = new_height_to_attest.saturating_sub(DEFAULT_ROLLUP_FINALITY);
 
         // We have to check the following order invariant is respected:
         // min_height <= bonding_proof.transition_num <= new_height_to_attest
         // If this invariant is respected, we can be sure that the attester was bonded at new_height_to_attest.
-        let transition_num = attestation.proof_of_bond.claimed_transition_num;
+        let transition_num = old_attestation.proof_of_bond.claimed_transition_num;
 
         assert!(
             min_height <= transition_num,
@@ -127,17 +136,21 @@ fn test_transition_invariant() {
         );
 
         module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, old_attestation, &mut working_set)
+            .expect("Should succeed");
+
+        module
+            .process_attestation(&context, new_attestation, &mut working_set)
             .expect("Should succeed");
     }
 
     let finality_usize = usize::try_from(DEFAULT_ROLLUP_FINALITY).unwrap();
 
     // Now the transition invariant is no longer respected: the transition number is below the minimum height or above the max height
-    let _attestation = Attestation {
-        initial_state_root: exec_vars[new_height + finality_usize].state_root,
+    let old_attestation = Attestation {
+        initial_state_root: exec_vars[new_height].state_root,
         da_block_hash: [(new_height + finality_usize + 1).try_into().unwrap(); 32],
-        post_state_root: exec_vars[new_height + finality_usize + 1].state_root,
+        post_state_root: exec_vars[new_height + 1].state_root,
         proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
             claimed_transition_num: new_height.try_into().unwrap(),
             proof: exec_vars[new_height - 1].state_proof.clone(),
@@ -152,32 +165,26 @@ fn test_transition_invariant() {
         .expect("The maximum attested height should be set at genesis");
 
     // Update the max_attested_height in case the blocks have already been finalized
-    let new_height_to_attest = max(last_height_attested, NEW_LIGHT_CLIENT_FINALIZED_HEIGHT) + 1;
+    let new_height_to_attest = last_height_attested + 1;
 
-    // TODO: Update these tests
+    let min_height = new_height_to_attest.saturating_sub(DEFAULT_ROLLUP_FINALITY);
 
-    // let min_height = if new_height_to_attest > DEFAULT_ROLLUP_FINALITY {
-    //     new_height_to_attest - DEFAULT_ROLLUP_FINALITY
-    // } else {
-    //     0
-    // };
+    let transition_num = old_attestation.proof_of_bond.claimed_transition_num;
 
-    // let transition_num = attestation.proof_of_bond.claimed_transition_num;
+    assert!(
+        min_height > transition_num,
+        "The transition number {transition_num} should now be below the minimum height {min_height}"
+    );
 
-    // assert!(
-    //     min_height > transition_num,
-    //     "The transition number {transition_num} should now be above the minimum height {min_height}"
-    // );
+    let err = module
+        .process_attestation(&context, old_attestation, &mut working_set)
+        .unwrap_err();
 
-    // let err = module
-    //     .process_attestation(&context, attestation, &mut working_set)
-    //     .unwrap_err();
-
-    // assert_eq!(
-    //     err,
-    //     AttesterIncentiveErrors::InvalidTransitionInvariant,
-    //     "The transition invariant is not respected anymore"
-    // );
+    assert_eq!(
+        err,
+        AttesterIncentiveErrors::InvalidTransitionInvariant,
+        "The transition invariant is not respected anymore"
+    );
 
     // Now we do the same, except that the proof of bond refers to a transition above the transition to prove
     let attestation = Attestation {

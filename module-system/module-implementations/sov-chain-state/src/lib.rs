@@ -127,6 +127,10 @@ pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
     /// Set after the first transaction of the rollup is executed, using the `begin_slot` hook.
     #[state]
     pub genesis_hash: sov_state::StateValue<[u8; 32]>,
+
+    /// The height of genesis
+    #[state]
+    pub genesis_height: sov_state::StateValue<TransitionHeight>,
 }
 
 /// Initial configuration of the chain state
