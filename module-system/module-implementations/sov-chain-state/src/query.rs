@@ -1,5 +1,5 @@
 use sov_rollup_interface::zk::ValidityCondition;
-use sov_rollup_interface::NamespaceTrait;
+
 use sov_state::WorkingSet;
 
 use super::ChainState;
@@ -11,9 +11,7 @@ pub struct Response {
     pub value: u64,
 }
 
-impl<C: sov_modules_api::Context, Cond: ValidityCondition, Namespace: NamespaceTrait>
-    ChainState<C, Cond, Namespace>
-{
+impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
     /// Get the height of the current slot.
     /// Panics if the slot height is not set
     pub fn get_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> TransitionHeight {

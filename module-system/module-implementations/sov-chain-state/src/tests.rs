@@ -2,7 +2,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::Genesis;
 use sov_rollup_interface::mocks::{
-    MockBlock, MockBlockHeader, MockHash, MockNamespace, MockValidityCond,
+    MockBlock, MockBlockHeader, MockHash, MockValidityCond,
 };
 use sov_state::{ProverStorage, Storage, WorkingSet};
 
@@ -24,7 +24,7 @@ fn test_simple_chain_state() {
 
     let mut working_set = WorkingSet::new(storage.clone());
 
-    let chain_state = ChainState::<DefaultContext, MockValidityCond, MockNamespace>::default();
+    let chain_state = ChainState::<DefaultContext, MockValidityCond>::default();
     let config = ChainStateConfig {
         initial_slot_height: TransitionHeight(INIT_HEIGHT),
     };

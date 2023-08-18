@@ -2,15 +2,13 @@ use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::{Context, Spec};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::zk::ValidityCondition;
-use sov_rollup_interface::NamespaceTrait;
+
 use sov_state::{Storage, WorkingSet};
 
 use super::ChainState;
 use crate::{StateTransitionId, TransitionInProgress};
 
-impl<Ctx: Context, Cond: ValidityCondition, Namespace: NamespaceTrait> SlotHooks<Cond>
-    for ChainState<Ctx, Cond, Namespace>
-{
+impl<Ctx: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<Ctx, Cond> {
     type Context = Ctx;
 
     fn begin_slot_hook(

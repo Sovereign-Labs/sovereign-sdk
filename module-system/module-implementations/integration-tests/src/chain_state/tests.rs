@@ -4,7 +4,7 @@ use sov_data_generators::{has_tx_events, new_test_blob_from_batch, MessageGenera
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_stf_template::{AppTemplate, SequencerOutcome};
 use sov_rollup_interface::mocks::{
-    MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockNamespace, MockValidityCond, MockZkvm,
+    MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockValidityCond, MockZkvm,
 };
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::{ProverStorage, Storage};
@@ -26,16 +26,13 @@ fn test_simple_value_setter_with_chain_state() {
     let storage: ProverStorage<sov_state::DefaultStorageSpec> =
         ProverStorage::with_path(tmpdir.path()).unwrap();
 
-    let mut app_template = AppTemplate::<
-        C,
-        MockDaSpec,
-        MockZkvm,
-        TestRuntime<C, MockValidityCond, MockNamespace>,
-    >::new(storage, runtime);
+    let mut app_template =
+        AppTemplate::<C, MockDaSpec, MockZkvm, TestRuntime<C, MockValidityCond>>::new(
+            storage, runtime,
+        );
 
     let value_setter_messages = ValueSetterMessages::default();
-    let value_setter =
-        value_setter_messages.create_raw_txs::<TestRuntime<C, MockValidityCond, MockNamespace>>();
+    let value_setter = value_setter_messages.create_raw_txs::<TestRuntime<C, MockValidityCond>>();
 
     let admin_pub_key = value_setter_messages.messages[0].admin.default_address();
 

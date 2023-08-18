@@ -1,6 +1,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_rollup_interface::zk::ValidityCondition;
-use sov_rollup_interface::NamespaceTrait;
+
 use sov_state::WorkingSet;
 
 use crate::{ChainState, StateTransitionId, TransitionHeight};
@@ -8,8 +8,7 @@ use crate::{ChainState, StateTransitionId, TransitionHeight};
 impl<
         Ctx: sov_modules_api::Context,
         Cond: ValidityCondition + BorshSerialize + BorshDeserialize,
-        Namespace: NamespaceTrait,
-    > ChainState<Ctx, Cond, Namespace>
+    > ChainState<Ctx, Cond>
 {
     /// Increment the current slot height
     pub fn increment_slot_height(&self, working_set: &mut WorkingSet<Ctx::Storage>) {

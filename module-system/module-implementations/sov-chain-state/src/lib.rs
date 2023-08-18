@@ -20,7 +20,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
-use sov_rollup_interface::NamespaceTrait;
+
 use sov_state::WorkingSet;
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]
@@ -151,8 +151,8 @@ pub struct ChainStateConfig {
     pub initial_slot_height: TransitionHeight,
 }
 
-impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition, Namespace: NamespaceTrait>
-    sov_modules_api::Module for ChainState<Ctx, Cond, Namespace>
+impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Module
+    for ChainState<Ctx, Cond>
 {
     type Context = Ctx;
 
