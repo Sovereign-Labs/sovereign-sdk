@@ -1,8 +1,8 @@
 //! Full-Node specific RPC methods.
 
 use anyhow::Context;
+use celestia::verifier::address::CelestiaAddress;
 use demo_stf::app::App;
-use jupiter::verifier::address::CelestiaAddress;
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_stf_template::{SequencerOutcome, TxEffect};
