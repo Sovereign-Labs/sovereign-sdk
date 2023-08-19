@@ -18,10 +18,14 @@ use crate::{get_genesis_config, initialize_ledger, ROLLUP_NAMESPACE};
 
 /// Dependencies needed to run the rollup.
 pub struct Rollup<Vm: Zkvm, DA: DaService + Clone> {
-    app: App<Vm, DA::Spec>,
-    da_service: DA,
-    ledger_db: LedgerDB,
-    runner_config: RunnerConfig,
+    ///
+    pub app: App<Vm, DA::Spec>,
+    ///
+    pub da_service: DA,
+    ///
+    pub ledger_db: LedgerDB,
+    ///
+    pub runner_config: RunnerConfig,
 }
 
 /// Creates celestia based rollup.
