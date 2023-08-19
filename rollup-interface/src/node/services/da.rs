@@ -47,7 +47,7 @@ pub trait DaService: Send + Sync + 'static {
 
     /// Extract the relevant transactions from a block. For example, this method might return
     /// all of the blob transactions in rollup's namespace on Celestia.
-    fn extract_relevant_txs(
+    async fn extract_relevant_txs(
         &self,
         block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction>;
@@ -76,7 +76,7 @@ pub trait DaService: Send + Sync + 'static {
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,
     ) {
-        let relevant_txs = self.extract_relevant_txs(block);
+        let relevant_txs = self.extract_relevant_txs(block).await;
 
         let (etx_proofs, rollup_row_proofs) = self
             .get_extraction_proof(block, relevant_txs.as_slice())

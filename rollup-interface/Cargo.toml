@@ -18,6 +18,8 @@ exclude = [
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+crossbeam-channel = "0.5"
+tokio = { workspace = true }
 async-trait = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 serde = { workspace = true }

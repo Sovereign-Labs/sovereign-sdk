@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use anyhow::{bail, Error};
 use async_trait::async_trait;
@@ -203,21 +203,33 @@ impl DaSpec for MockDaSpec {
     type ChainParams = ();
 }
 
+//use std::sync::mpsc::{Receiver, Sender};
+
+//use crossbeam_channel::{unbounded, Receiver, Sender};
+use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::Mutex;
+
 #[derive(Clone)]
 /// DaService used in tests.
 pub struct MockDaService {
-    submitted: Arc<Mutex<Vec<Vec<u8>>>>,
+    sender: Sender<Vec<u8>>,
+    receiver: Arc<Mutex<Receiver<Vec<u8>>>>,
 }
 
 impl Default for MockDaService {
     fn default() -> Self {
+        //    let (sender, receiver) = unbounded::<Vec<u8>>();
+
+        let (sender, mut receiver) = mpsc::channel(100);
         Self {
-            submitted: Arc::new(Mutex::new(Vec::new())),
+            sender,
+            receiver: Arc::new(Mutex::new(receiver)),
         }
     }
 }
 
 impl MockDaService {
+    /*
     /// Checks if DaService contains unprocessed blobs.
     pub fn is_empty(&self) -> bool {
         self.submitted.lock().unwrap().is_empty()
@@ -226,7 +238,7 @@ impl MockDaService {
     /// Returns serialized blobs from the DaService.
     pub fn get_submitted(&self) -> Vec<Vec<u8>> {
         self.submitted.lock().unwrap().clone()
-    }
+    }*/
 }
 
 #[async_trait]
@@ -244,18 +256,26 @@ impl DaService for MockDaService {
     }
 
     async fn get_finalized_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        todo!()
+        Ok(MockBlock::default())
     }
 
-    async fn get_block_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        todo!()
+    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+        self.get_finalized_at(height).await
     }
 
-    fn extract_relevant_txs(
+    async fn extract_relevant_txs(
         &self,
         _block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
-        todo!()
+        println!("Recv");
+        let data = self.receiver.lock().await.recv().await;
+        let data = data.unwrap();
+        let address = MockAddress { addr: [0; 32] };
+        let hash = [0; 32];
+
+        let blob = MockBlob::<MockAddress>::new(data, address, hash);
+
+        vec![blob]
     }
 
     async fn get_extraction_proof(
@@ -270,7 +290,8 @@ impl DaService for MockDaService {
     }
 
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
-        self.submitted.lock().unwrap().push(blob.to_vec());
+        //self.submitted.lock().unwrap().push(blob.to_vec());
+        self.sender.send(blob.to_vec());
         Ok(())
     }
 }

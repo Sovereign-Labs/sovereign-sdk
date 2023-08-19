@@ -1,5 +1,6 @@
 use core::panic;
 use std::path::Path;
+use std::time::Duration;
 
 use demo_stf::app::App;
 use risc0_adapter::host::Risc0Verifier;
@@ -21,8 +22,7 @@ fn create_mock_da_rollup(rollup_config: RollupConfig<()>) -> Rollup<Risc0Verifie
     }
 }
 
-#[tokio::test]
-async fn tx_tests() -> Result<(), anyhow::Error> {
+async fn start_rollup() {
     let rollup_config = RollupConfig {
         storage: StorageConfig {
             path: "/tmp".into(),
@@ -38,5 +38,19 @@ async fn tx_tests() -> Result<(), anyhow::Error> {
     };
 
     let rollup = create_mock_da_rollup(rollup_config);
-    rollup.run().await
+    rollup.run().await.unwrap();
+}
+
+#[tokio::test]
+async fn tx_tests() -> Result<(), anyhow::Error> {
+    println!("Start");
+    let f = tokio::spawn(async {
+        start_rollup().await;
+    });
+
+    tokio::time::sleep(Duration::from_millis(1000)).await;
+    println!("End");
+    f.abort();
+
+    Ok(())
 }
