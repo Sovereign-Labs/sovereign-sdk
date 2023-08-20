@@ -38,7 +38,9 @@ impl<C: Context, B: BlobReaderTrait> ApplyBlobHooks<B> for Runtime<C> {
         blob: &mut B,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
-        self.sequencer_registry.begin_blob_hook(blob, working_set)
+        // TODO
+        //self.sequencer_registry.begin_blob_hook(blob, working_set)
+        Ok(())
     }
 
     fn end_blob_hook(

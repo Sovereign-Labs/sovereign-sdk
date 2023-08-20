@@ -267,7 +267,7 @@ impl DaService for MockDaService {
         &self,
         _block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
-        println!("Recv");
+        println!("Recv Blob");
         let data = self.receiver.lock().await.recv().await;
         let data = data.unwrap();
         let address = MockAddress { addr: [0; 32] };
@@ -290,8 +290,7 @@ impl DaService for MockDaService {
     }
 
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
-        //self.submitted.lock().unwrap().push(blob.to_vec());
-        self.sender.send(blob.to_vec());
+        self.sender.send(blob.to_vec()).await.unwrap();
         Ok(())
     }
 }

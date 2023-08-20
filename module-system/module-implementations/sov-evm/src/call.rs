@@ -28,6 +28,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
+        println!("EVM start");
         let evm_tx_recovered: EvmTransactionSignedEcRecovered = tx.clone().try_into()?;
 
         let block_env = self.block_env.get(working_set).unwrap_or_default();
@@ -68,6 +69,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         self.receipts
             .set(&receipt.transaction_hash, &receipt, working_set);
 
+        println!("EVM End");
         Ok(CallResponse::default())
     }
 }
