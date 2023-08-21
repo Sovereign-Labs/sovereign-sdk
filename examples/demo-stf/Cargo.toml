@@ -28,6 +28,7 @@ tracing = { workspace = true }
 
 const-rollup-config = { path = "../const-rollup-config" }
 sov-rollup-interface = { path = "../../rollup-interface" }
+sov-cli = { path = "../../module-system/sov-cli" }
 sov-election = { path = "../../module-system/module-implementations/examples/sov-election", default-features = false }
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry", default-features = false }
 sov-blob-storage = { path = "../../module-system/module-implementations/sov-blob-storage", default-features = false }

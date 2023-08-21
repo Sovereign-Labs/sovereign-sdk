@@ -24,8 +24,7 @@ impl<Tx: Serialize + DeserializeOwned, Ctx: sov_modules_api::Context> Default
         Self {
             unsent_transactions: Vec::new(),
             addresses: AddressList {
-                other_addresses: Vec::new(),
-                active_address: None,
+                addresses: Vec::new(),
             },
             rpc_url: None,
         }
@@ -57,16 +56,15 @@ impl<Tx: Serialize + DeserializeOwned, Ctx: sov_modules_api::Context> WalletStat
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(bound = "Ctx::Address: Serialize + DeserializeOwned")]
 pub struct AddressList<Ctx: sov_modules_api::Context> {
-    /// Any addresses which are known by the wallet but not currently active
-    pub other_addresses: Vec<AddressEntry<Ctx>>,
-    /// The address which is currently active
-    pub active_address: Option<AddressEntry<Ctx>>,
+    /// All addresses which are known by the wallet. The active address is stored
+    /// first in this array
+    addresses: Vec<AddressEntry<Ctx>>,
 }
 
 impl<Ctx: sov_modules_api::Context> AddressList<Ctx> {
     /// Get the active address
     pub fn default_address(&self) -> Option<&AddressEntry<Ctx>> {
-        self.active_address.as_ref()
+        self.addresses.first()
     }
 
     /// Get an address by identifier
@@ -74,17 +72,27 @@ impl<Ctx: sov_modules_api::Context> AddressList<Ctx> {
         &mut self,
         identifier: &KeyIdentifier<Ctx>,
     ) -> Option<&mut AddressEntry<Ctx>> {
-        if let Some(active) = self.active_address.as_mut() {
-            if active.matches(&identifier) {
-                return Some(active);
-            }
-            self.other_addresses
-                .iter_mut()
-                .find(|entry| entry.matches(&identifier))
-        } else {
-            None
-        }
+        self.addresses
+            .iter_mut()
+            .find(|entry| entry.matches(&identifier))
     }
+
+    /// Activate a key by identifier
+    pub fn activate(&mut self, identifier: &KeyIdentifier<Ctx>) -> Option<&AddressEntry<Ctx>> {
+        let (idx, _) = self
+            .addresses
+            .iter()
+            .enumerate()
+            .find(|(_idx, entry)| entry.matches(&identifier))?;
+        self.addresses.swap(0, idx);
+        self.default_address()
+    }
+
+    /// Remove an address from the wallet by identifier
+    pub fn remove(&mut self, identifier: &KeyIdentifier<Ctx>) {
+        self.addresses.retain(|entry| !entry.matches(&identifier));
+    }
+
     /// Add an address to the wallet
     pub fn add(
         &mut self,
@@ -99,11 +107,7 @@ impl<Ctx: sov_modules_api::Context> AddressList<Ctx> {
             location,
             pub_key: public_key,
         };
-        if self.active_address.is_none() {
-            self.active_address = Some(entry);
-        } else {
-            self.other_addresses.push(entry);
-        }
+        self.addresses.push(entry);
     }
 }
 

@@ -6,7 +6,6 @@ use jsonrpsee::RpcModule;
 use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_rollup_interface::services::da::DaService;
-use tracing::debug;
 
 const SEQUENCER_RPC_ERROR: &str = "SEQUENCER_RPC_ERROR";
 

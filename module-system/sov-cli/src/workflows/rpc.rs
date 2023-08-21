@@ -4,12 +4,12 @@ use std::path::Path;
 
 use anyhow::Context;
 use borsh::BorshSerialize;
-use demo_stf::runtime::query::accounts::{self, AccountsRpcClient};
-use demo_stf::runtime::query::bank::{BalanceResponse, BankRpcClient};
 use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::HttpClientBuilder;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
+use sov_accounts::query::AccountsRpcClient;
+use sov_bank::query::{BalanceResponse, BankRpcClient};
 use sov_modules_api::clap;
 use sov_modules_api::transaction::Transaction;
 
@@ -157,8 +157,6 @@ impl<C: sov_modules_api::Context + Serialize + DeserializeOwned + Send + Sync> R
                     })
                     .collect::<Vec<_>>();
 
-                println!("txs: {:?}", txs);
-
                 let response: String = client
                     .request("sequencer_publishBatch", txs)
                     .await
@@ -187,7 +185,7 @@ async fn get_nonce_for_account<C: sov_modules_api::Context + Send + Sync + Seria
     .context(
         "Unable to connect to provided rpc. You can change to a different rpc url with the `rpc set-url` subcommand ",
     )? {
-        accounts::Response::AccountExists { addr: _, nonce } => nonce,
+        sov_accounts::query::Response::AccountExists { addr: _, nonce } => nonce,
         _ => 0,
     })
 }

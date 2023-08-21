@@ -30,6 +30,7 @@ pub mod query {
     pub use sov_accounts::query as accounts;
     pub use sov_bank::query as bank;
     pub use sov_election::query as election;
+    pub use sov_sequencer_registry::query as sequencer_registry;
     pub use sov_value_setter::query as value_setter;
 }
 
