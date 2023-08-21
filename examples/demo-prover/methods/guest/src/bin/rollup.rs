@@ -104,7 +104,6 @@ pub fn main() {
         let metrics_syscall_name = unsafe {
             risc0_zkvm_platform::syscall::SyscallName::from_bytes_with_nul(cycle_string.as_ptr())
         };
-
         risc0_zkvm::guest::env::send_recv_slice::<u8, u8>(metrics_syscall_name, &serialized);
     }
 }

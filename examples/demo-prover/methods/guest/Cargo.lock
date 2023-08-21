@@ -2063,7 +2063,6 @@ dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
- "serde_json",
  "sha2 0.10.6",
  "sha3",
  "sov-modules-api",
