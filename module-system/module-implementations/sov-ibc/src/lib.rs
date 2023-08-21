@@ -3,6 +3,7 @@
 
 pub mod call;
 pub mod genesis;
+pub mod codec;
 
 mod context;
 mod router;

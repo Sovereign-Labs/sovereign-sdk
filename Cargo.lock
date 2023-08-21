@@ -6903,6 +6903,7 @@ dependencies = [
  "derive_more",
  "ibc",
  "ibc-proto",
+ "prost",
  "serde",
  "serde_json",
  "sov-bank",
