@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use borsh::{BorshSerialize, BorshDeserialize};
+
 use super::*;
 use crate::{DefaultStorageSpec, ProverStorage};
 
@@ -206,10 +208,10 @@ fn test_witness_roundtrip() {
     };
 }
 
-fn create_state_vec_and_storage(
-    values: Vec<u32>,
+fn create_state_vec_and_storage<T: BorshDeserialize + BorshSerialize>(
+    values: Vec<T>,
     path: impl AsRef<Path>,
-) -> (StateVec<u32>, WorkingSet<ProverStorage<DefaultStorageSpec>>) {
+) -> (StateVec<T>, WorkingSet<ProverStorage<DefaultStorageSpec>>) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
     let state_vec = StateVec::new(Prefix::new(vec![0]));
@@ -370,5 +372,40 @@ fn test_state_vec_set_all() {
         let val = state_vec.get_or_err(1, &mut working_set);
 
         assert!(val.is_err());
+    }
+}
+
+#[test]
+fn test_state_vec_diff_type() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
+    for (before_ops, after_ops) in create_storage_operations() {
+        let values = vec![String::from("Hello"), String::from("World")];
+        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+
+        working_set = before_ops.execute(working_set);
+
+        let val0 = state_vec.get(0, &mut working_set);
+        let val1 = state_vec.pop(&mut working_set);
+        state_vec.push(&String::from("new str"), &mut working_set);
+
+        working_set = after_ops.execute(working_set);
+
+        assert!(val0.is_some());
+        assert!(val1.is_some());
+
+        let val0 = val0.unwrap();
+        let val1 = val1.unwrap();
+        assert_eq!(val0, String::from("Hello"));
+        assert_eq!(val1, String::from("World"));
+
+        let val = state_vec.get(1, &mut working_set);
+        assert!(val.is_some());
+
+        let val = val.unwrap();
+        assert_eq!(val, String::from("new str"));
+
+        let len = state_vec.len(&mut working_set);
+        assert_eq!(len, 2);
     }
 }
