@@ -48,7 +48,7 @@ start-existing:
 
 start-new:
 	@echo "Starting new container: $(CONTAINER_NAME)"
-	docker run -d --name $(CONTAINER_NAME) --platform linux/amd64 -p 26657:26657 -p 26659:26659 -p $(RPC_PORT):$(RPC_PORT) $(IMAGE_NAME)
+	docker run -d --name $(CONTAINER_NAME) --platform linux/amd64 -p 26657:26657 -p 26659:26659 -p $(RPC_PORT):$(RPC_PORT) -p 9090:9090 $(IMAGE_NAME)
 
 start-container:
 	@$(MAKE) check-container-running || { $(MAKE) check-container-exists && $(MAKE) start-existing || $(MAKE) start-new; }
