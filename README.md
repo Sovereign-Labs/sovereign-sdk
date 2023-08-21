@@ -14,7 +14,7 @@
 
 ## What is the Sovereign SDK?
 
-The Sovereign SDK is a free and open-source toolkit for building rollups (both zk and optimistic) **that is currently under development**. Sovereign SDK consists of three
+The Sovereign SDK is a free and open-source toolkit for building rollups (both ZK and optimistic) **that is currently under development**. Sovereign SDK consists of three
 logical components:
 
 1. The Rollup Interface, a minimal set of interfaces that defines a rollup
