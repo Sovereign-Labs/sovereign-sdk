@@ -73,7 +73,7 @@ impl<C: Context> Accounts<C> {
     }
 }
 
-#[cfg(feature = "arbitrary")]
+#[cfg(all(feature = "arbitrary", feature = "native"))]
 impl<'a, C> arbitrary::Arbitrary<'a> for CallMessage<C>
 where
     C: Context,
