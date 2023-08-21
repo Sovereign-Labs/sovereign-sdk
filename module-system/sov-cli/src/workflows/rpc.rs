@@ -67,10 +67,8 @@ impl<C: sov_modules_api::Context> RpcWorkflows<C> {
 
         let account = if let Some(id) = account_id {
             let addr = wallet_state.addresses.get_address(id);
-            
-            addr.ok_or_else(|| {
-                anyhow::format_err!("No account found matching identifier: {}", id)
-            })?
+
+            addr.ok_or_else(|| anyhow::format_err!("No account found matching identifier: {}", id))?
         } else {
             wallet_state
                 .addresses
