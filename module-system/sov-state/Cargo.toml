@@ -25,7 +25,7 @@ sha2 = { workspace = true }
 
 zk-cycle-macros = {path = "../../utils/zk-cycle-macros", optional=true }
 risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional=true }
-risc0-zkvm-platform = { version = "0.16", optional=true}
+risc0-zkvm-platform = { version = "0.17", optional=true}
 
 [dev-dependencies]
 tempfile = { workspace = true }

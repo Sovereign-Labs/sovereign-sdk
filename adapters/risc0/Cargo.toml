@@ -15,7 +15,7 @@ readme = "README.md"
 anyhow = { workspace = true }
 bincode = { workspace = true }
 risc0-zkvm = { version = "0.16", default-features = false, features = ['std'] }
-risc0-zkvm-platform = { version = "0.16" }
+risc0-zkvm-platform = { version = "0.17" }
 risc0-zkp = { version = "0.16", optional = true }
 risc0-circuit-rv32im = { version = "0.16", optional = true }
 serde = { workspace = true }
