@@ -71,4 +71,4 @@ The Makefile is located in the demo-rollup/benches folder and supports the follo
 
 The Makefile supports setting number of blocks and transactions per block using BLOCKS and TXNS_PER_BLOCK env vars. Defaults are 100 blocks and 10,000 transactions per block when using the Makefile
 
-![Flamgraph](flamegraph_sample.svg)
+![Flamegraph](flamegraph_sample.svg)
