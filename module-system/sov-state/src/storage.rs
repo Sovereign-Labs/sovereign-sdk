@@ -1,6 +1,7 @@
 use std::fmt::Display;
 use std::sync::Arc;
 
+use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
 use hex;
 use serde::de::DeserializeOwned;
@@ -11,7 +12,7 @@ use crate::codec::{StateKeyCodec, StateValueCodec};
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::utils::AlignedVec;
 use crate::witness::Witness;
-use crate::Prefix;
+use crate::{Prefix, StateMap};
 
 // `Key` type for the `Storage`
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
@@ -165,6 +166,24 @@ pub trait Storage: Clone {
         proof: StorageProof<Self::Proof>,
     ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error>;
 
+    fn verify_proof<K, V, C: StateKeyCodec<K> + StateValueCodec<V>>(
+        &self,
+        state_root: [u8; 32],
+        proof: StorageProof<Self::Proof>,
+        expected_key: &K,
+        storage_map: &StateMap<K, V, C>,
+    ) -> Result<Option<StorageValue>, anyhow::Error> {
+        let (storage_key, storage_value) = self.open_proof(state_root, proof)?;
+
+        // We have to check that the storage key is the same as the external key
+        ensure!(
+            storage_key == StorageKey::new(storage_map.prefix(), expected_key, &storage_map.codec),
+            "The storage key from the proof doesn't match the expected storage key."
+        );
+
+        Ok(storage_value)
+    }
+
     /// Indicates if storage is empty or not.
     /// Useful during initialization
     fn is_empty(&self) -> bool;
@@ -191,10 +210,20 @@ impl From<&'static str> for StorageValue {
 }
 
 pub trait NativeStorage: Storage {
-    /// The object returned by `get_with_proof`. Should contain the returned value and the associated proof
-    type ValueWithProof;
-
     /// Returns the value corresponding to the key or None if key is absent and a proof to
     /// get the value. Panics if [`get_with_proof_opt`] returns `None` in place of the proof.
-    fn get_with_proof(&self, key: StorageKey, witness: &Self::Witness) -> Self::ValueWithProof;
+    fn get_with_proof(&self, key: StorageKey, witness: &Self::Witness)
+        -> StorageProof<Self::Proof>;
+
+    fn get_with_proof_from_state_map<K, V, C: StateKeyCodec<K> + StateValueCodec<V>>(
+        &self,
+        key: &K,
+        state_map: &StateMap<K, V, C>,
+        witness: &Self::Witness,
+    ) -> StorageProof<Self::Proof> {
+        self.get_with_proof(
+            StorageKey::new(state_map.prefix(), key, &state_map.codec),
+            witness,
+        )
+    }
 }

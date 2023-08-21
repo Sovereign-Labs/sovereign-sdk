@@ -10,6 +10,9 @@ impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
         config: &<Self as sov_modules_api::Module>::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
+        self.genesis_height
+            .set(&config.initial_slot_height, working_set);
+
         self.slot_height
             .set(&config.initial_slot_height, working_set);
         Ok(())

@@ -8,5 +8,5 @@ pub use da::{
     MockAddress, MockBatchBuilder, MockBlob, MockBlock, MockBlockHeader, MockDaService, MockDaSpec,
     MockHash,
 };
-pub use validity_condition::MockValidityCond;
+pub use validity_condition::{MockValidityCond, MockValidityCondChecker};
 pub use zk_vm::{MockCodeCommitment, MockProof, MockZkvm};
