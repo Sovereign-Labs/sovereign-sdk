@@ -1,10 +1,10 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 
-use borsh::{BorshDeserialize, BorshSerialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 use sov_rollup_interface::stf::Event;
 
+use crate::codec::{StateCodec, StateKeyCodec, StateValueCodec};
 use crate::internal_cache::{OrderedReadsAndWrites, StorageInternalCache};
 use crate::storage::{StorageKey, StorageValue};
 use crate::{Prefix, Storage};
@@ -135,50 +135,63 @@ impl<S: Storage> WorkingSet<S> {
 }
 
 impl<S: Storage> WorkingSet<S> {
-    pub(crate) fn set_value<K: BorshSerialize, V: BorshSerialize>(
+    pub(crate) fn set_value<K, V, C>(
         &mut self,
         prefix: &Prefix,
+        codec: &C,
         storage_key: &K,
         value: &V,
-    ) {
-        let storage_key = StorageKey::new(prefix, storage_key);
-        let storage_value = StorageValue::new(value);
+    ) where
+        C: StateCodec<K, V>,
+    {
+        let storage_key = StorageKey::new(prefix, storage_key, codec);
+        let storage_value = StorageValue::new(value, codec);
         self.set(storage_key, storage_value);
     }
 
-    pub(crate) fn get_value<K: BorshSerialize, V: BorshDeserialize>(
+    pub(crate) fn get_value<K, V, C>(
         &mut self,
         prefix: &Prefix,
+        codec: &C,
         storage_key: &K,
-    ) -> Option<V> {
-        let storage_key = StorageKey::new(prefix, storage_key);
-        self.get_decoded(&storage_key)
+    ) -> Option<V>
+    where
+        C: StateCodec<K, V>,
+    {
+        let storage_key = StorageKey::new(prefix, storage_key, codec);
+        self.get_decoded(codec, storage_key)
     }
 
-    pub(crate) fn remove_value<K: BorshSerialize, V: BorshDeserialize>(
+    pub(crate) fn remove_value<K, V, C>(
         &mut self,
         prefix: &Prefix,
+        codec: &C,
         storage_key: &K,
-    ) -> Option<V> {
-        let storage_key = StorageKey::new(prefix, storage_key);
-        let storage_value = self.get_decoded(&storage_key)?;
+    ) -> Option<V>
+    where
+        C: StateCodec<K, V>,
+    {
+        let storage_key = StorageKey::new(prefix, storage_key, codec);
+        let storage_value = self.get_decoded(codec, storage_key.clone())?;
         self.delete(storage_key);
         Some(storage_value)
     }
 
-    pub(crate) fn delete_value<K: BorshSerialize>(&mut self, prefix: &Prefix, storage_key: &K) {
-        let storage_key = StorageKey::new(prefix, storage_key);
+    pub(crate) fn delete_value<K, C>(&mut self, prefix: &Prefix, codec: &C, storage_key: &K)
+    where
+        C: StateKeyCodec<K>,
+    {
+        let storage_key = StorageKey::new(prefix, storage_key, codec);
         self.delete(storage_key);
     }
 
-    fn get_decoded<V: BorshDeserialize>(&mut self, storage_key: &StorageKey) -> Option<V> {
-        let storage_value = self.get(storage_key)?;
+    fn get_decoded<V, C>(&mut self, codec: &C, storage_key: StorageKey) -> Option<V>
+    where
+        C: StateValueCodec<V>,
+    {
+        let storage_value = self.get(&storage_key)?;
 
-        // It is ok to panic here. Deserialization problem means that something is terribly wrong.
-        Some(
-            V::deserialize_reader(&mut storage_value.value())
-                .unwrap_or_else(|e| panic!("Unable to deserialize storage value {e:?}")),
-        )
+        Some(codec.decode_value(storage_value.value()))
     }
 }
 

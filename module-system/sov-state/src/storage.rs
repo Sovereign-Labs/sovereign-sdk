@@ -7,6 +7,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
+use crate::codec::{StateKeyCodec, StateValueCodec};
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::utils::AlignedVec;
 use crate::witness::Witness;
@@ -54,8 +55,11 @@ impl Display for StorageKey {
 
 impl StorageKey {
     /// Creates a new StorageKey that combines a prefix and a key.
-    pub fn new<K: BorshSerialize>(prefix: &Prefix, key: &K) -> Self {
-        let encoded_key = key.try_to_vec().unwrap();
+    pub fn new<K, C>(prefix: &Prefix, key: &K, codec: &C) -> Self
+    where
+        C: StateKeyCodec<K>,
+    {
+        let encoded_key = codec.encode_key(key);
         let encoded_key = AlignedVec::new(encoded_key);
 
         let full_key = Vec::<u8>::with_capacity(prefix.len() + encoded_key.len());
@@ -94,9 +98,12 @@ impl From<Vec<u8>> for StorageValue {
 }
 
 impl StorageValue {
-    /// Create a new storage value by serializing the input
-    pub fn new(value: &impl BorshSerialize) -> Self {
-        let encoded_value = value.try_to_vec().unwrap();
+    /// Create a new storage value by serializing the input with the given codec.
+    pub fn new<V, C>(value: &V, codec: &C) -> Self
+    where
+        C: StateValueCodec<V>,
+    {
+        let encoded_value = codec.encode_value(value);
         Self {
             value: Arc::new(encoded_value),
         }
