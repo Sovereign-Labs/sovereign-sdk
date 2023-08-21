@@ -200,7 +200,7 @@ where
     C: sov_modules_api::Context,
 {
     fn get_client_execution_context(&mut self) -> &mut Self::E {
-        todo!()
+        self
     }
 
     fn increase_client_counter(&mut self) {
