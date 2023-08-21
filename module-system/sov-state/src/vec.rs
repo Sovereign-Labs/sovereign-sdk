@@ -60,6 +60,10 @@ where
         IndexCodec::new(&self.codec)
     }
 
+    fn set_len<S: Storage>(&self, length: usize, working_set: &mut WorkingSet<S>) {
+        working_set.set_value(self.prefix(), &self.internal_codec(), &IndexKey(0), &length);
+    }
+
     /// Sets a value in the [`StateVec`].
     /// If the index is out of bounds, returns an error.
     /// To push a value to the end of the StateVec, use [`StateVec::push`].
@@ -121,10 +125,6 @@ where
             &IndexKey(0),
         );
         len.unwrap_or_default()
-    }
-
-    fn set_len<S: Storage>(&self, length: usize, working_set: &mut WorkingSet<S>) {
-        working_set.set_value(self.prefix(), &self.internal_codec(), &IndexKey(0), &length);
     }
 
     /// Pushes a value to the end of the [`StateVec`].
