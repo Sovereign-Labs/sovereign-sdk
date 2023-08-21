@@ -66,7 +66,7 @@ fn priority_sequencer_flow() {
             amount: LOCKED_AMOUNT,
             token_address,
         },
-        preferred_sequencer: Some(preferred_sequencer_da.as_ref().to_vec()),
+        is_preferred_sequencer: true,
     };
 
     let bank = sov_bank::Bank::<C>::default();
@@ -166,7 +166,7 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
             amount: LOCKED_AMOUNT,
             token_address,
         },
-        preferred_sequencer: Some(preferred_sequencer_da.as_ref().to_vec()),
+        is_preferred_sequencer: true,
     };
 
     let bank = sov_bank::Bank::<C>::default();
@@ -234,7 +234,7 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
             amount: LOCKED_AMOUNT,
             token_address,
         },
-        preferred_sequencer: None,
+        is_preferred_sequencer: false,
     };
 
     let bank = sov_bank::Bank::<C>::default();
@@ -303,7 +303,7 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
             amount: LOCKED_AMOUNT,
             token_address,
         },
-        preferred_sequencer: Some(preferred_sequencer_da.as_ref().to_vec()),
+        is_preferred_sequencer: true,
     };
 
     let bank = sov_bank::Bank::<C>::default();

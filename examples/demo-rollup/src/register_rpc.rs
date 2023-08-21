@@ -1,12 +1,12 @@
 //! Full-Node specific RPC methods.
 
 use anyhow::Context;
+use celestia::verifier::address::CelestiaAddress;
 use demo_stf::app::App;
-use jupiter::verifier::address::CelestiaAddress;
-use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_stf_template::{SequencerOutcome, TxEffect};
 use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::zk::Zkvm;
 use sov_sequencer::get_sequencer_rpc;
 use sov_stf_runner::get_ledger_rpc;
 
@@ -14,15 +14,16 @@ use sov_stf_runner::get_ledger_rpc;
 const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
 
 /// register sequencer rpc methods.
-pub fn register_sequencer<DA>(
+pub fn register_sequencer<Vm, DA>(
     da_service: DA,
-    demo_runner: &mut App<Risc0Verifier, DA::Spec>,
+    app: &mut App<Vm, DA::Spec>,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error>
 where
-    DA: DaService<Error = anyhow::Error> + Send + Sync + 'static,
+    DA: DaService,
+    Vm: Zkvm,
 {
-    let batch_builder = demo_runner.batch_builder.take().unwrap();
+    let batch_builder = app.batch_builder.take().unwrap();
     let sequencer_rpc = get_sequencer_rpc(batch_builder, da_service);
     methods
         .merge(sequencer_rpc)

@@ -353,7 +353,6 @@ mod test {
     use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockDaSpec, MockZkvm};
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::WorkingSet;
-    use sov_stf_runner::Config;
 
     use super::*;
 
@@ -437,13 +436,11 @@ mod test {
                 &election_admin_private_key,
             );
 
-            let runner_config = Config {
-                storage: sov_state::config::Config { path },
-            };
+            let runner_config = sov_state::config::Config { path };
 
             Self {
                 config: genesis_config,
-                demo: App::<MockZkvm, MockDaSpec>::new(runner_config.storage).stf,
+                demo: App::<MockZkvm, MockDaSpec>::new(runner_config).stf,
             }
         }
     }

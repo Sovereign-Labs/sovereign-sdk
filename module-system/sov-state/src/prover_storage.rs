@@ -7,7 +7,6 @@ use jmt::storage::TreeWriter;
 use jmt::{JellyfishMerkleTree, KeyHash, RootHash, Version};
 use sov_db::state_db::StateDB;
 
-use crate::codec::BorshCodec;
 use crate::config::Config;
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::storage::{NativeStorage, StorageKey, StorageProof, StorageValue};
@@ -170,9 +169,11 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 }
 
 impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
-    type ValueWithProof = (Option<StorageValue>, Self::Proof);
-
-    fn get_with_proof(&self, key: StorageKey, _witness: &Self::Witness) -> Self::ValueWithProof {
+    fn get_with_proof(
+        &self,
+        key: StorageKey,
+        _witness: &Self::Witness,
+    ) -> StorageProof<Self::Proof> {
         let merkle = JellyfishMerkleTree::<StateDB, S::Hasher>::new(&self.db);
         let (val_opt, proof) = merkle
             .get_with_proof(
@@ -180,10 +181,11 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
                 self.db.get_next_version() - 1,
             )
             .unwrap();
-        (
-            val_opt.as_ref().map(|v| StorageValue::new(v, &BorshCodec)),
+        StorageProof {
+            key,
+            value: val_opt.map(StorageValue::from),
             proof,
-        )
+        }
     }
 }
 
