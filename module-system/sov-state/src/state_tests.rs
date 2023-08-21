@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use borsh::{BorshSerialize, BorshDeserialize};
+use borsh::{BorshDeserialize, BorshSerialize};
 
 use super::*;
 use crate::{DefaultStorageSpec, ProverStorage};
