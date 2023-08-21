@@ -1,4 +1,3 @@
-use clap::Parser;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::macros::{CliWallet, CliWalletArg, DefaultRuntime};
 use sov_modules_api::{
@@ -9,7 +8,15 @@ use sov_state::{StateValue, WorkingSet};
 pub mod first_test_module {
     use super::*;
 
-    #[derive(CliWalletArg, Debug, PartialEq, borsh::BorshDeserialize, borsh::BorshSerialize)]
+    #[derive(
+        CliWalletArg,
+        Debug,
+        PartialEq,
+        borsh::BorshDeserialize,
+        borsh::BorshSerialize,
+        serde::Serialize,
+        serde::Deserialize,
+    )]
     pub struct MyStruct {
         pub first_field: u32,
         pub str_field: String,
@@ -60,7 +67,15 @@ pub mod second_test_module {
         pub state_in_second_struct: StateValue<u8>,
     }
 
-    #[derive(CliWalletArg, Debug, PartialEq, borsh::BorshDeserialize, borsh::BorshSerialize)]
+    #[derive(
+        CliWalletArg,
+        Debug,
+        PartialEq,
+        borsh::BorshDeserialize,
+        borsh::BorshSerialize,
+        serde::Serialize,
+        serde::Deserialize,
+    )]
     pub enum MyEnum {
         Foo { first_field: u32, str_field: String },
         Bar(u8),

@@ -195,21 +195,17 @@ impl CliParserMacro {
                 ____phantom(::std::marker::PhantomData<#ident #ty_generics>)
             }
 
-            mod _generated {
-                use super::*;
-                use ::sov_modules_api::cli::JsonStringArg as __JsonStringArg;
-                // Implement TryFrom<RuntimeMessage<JsonStringArg>> for the runtime's call message. Uses serde_json to deserialize the json string.
-                impl #impl_generics ::core::convert::TryFrom<RuntimeMessage #ty_generics_for_json> for <#ident #ty_generics as ::sov_modules_api::DispatchCall>::Decodable #where_clause_with_deserialize_bounds {
-                    type Error = ::serde_json::Error;
-                    fn try_from(item: RuntimeMessage #ty_generics_for_json ) -> Result<Self, Self::Error> {
-                        match item {
-                            #( #from_json_match_arms )*
-                            RuntimeMessage::____phantom(_) => unreachable!(),
-                        }
+            use ::sov_modules_api::cli::JsonStringArg as __JsonStringArg;
+            // Implement TryFrom<RuntimeMessage<JsonStringArg>> for the runtime's call message. Uses serde_json to deserialize the json string.
+            impl #impl_generics ::core::convert::TryFrom<RuntimeMessage #ty_generics_for_json> for <#ident #ty_generics as ::sov_modules_api::DispatchCall>::Decodable #where_clause_with_deserialize_bounds {
+                type Error = ::serde_json::Error;
+                fn try_from(item: RuntimeMessage #ty_generics_for_json ) -> Result<Self, Self::Error> {
+                    match item {
+                        #( #from_json_match_arms )*
+                        RuntimeMessage::____phantom(_) => unreachable!(),
                     }
                 }
             }
-
 
             // Allow arbitrary conversions from the `clap`-enabled `RuntimeSubcommand` to the less constrained `RuntimeMessage` enum.
             // This allows us to (for example), accept a `JsonStringArgs` or a `FileNameArgs` as a CLI argument, and then
