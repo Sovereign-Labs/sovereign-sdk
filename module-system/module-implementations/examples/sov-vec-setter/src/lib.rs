@@ -15,7 +15,7 @@ pub use query::{VecSetterRpcImpl, VecSetterRpcServer};
 use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 
-/// Initial configuration for sov-value-setter module.
+/// Initial configuration for sov-vec-setter module.
 pub struct VecSetterConfig<C: sov_modules_api::Context> {
     /// Admin of the module.
     pub admin: C::Address,
@@ -36,7 +36,7 @@ pub struct VecSetter<C: sov_modules_api::Context> {
     #[state]
     pub vector: sov_state::StateVec<u32>,
 
-    /// Holds the address of the admin user who is allowed to update the value.
+    /// Holds the address of the admin user who is allowed to update the vector.
     #[state]
     pub admin: sov_state::StateValue<C::Address>,
 }

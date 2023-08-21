@@ -9,7 +9,7 @@ use thiserror::Error;
 
 use super::VecSetter;
 
-/// This enumeration represents the available call messages for interacting with the `sov-value-setter` module.
+/// This enumeration represents the available call messages for interacting with the `sov-vec-setter` module.
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
@@ -57,7 +57,7 @@ impl<C: sov_modules_api::Context> VecSetter<C> {
             Err(SetValueError::WrongSender)?;
         }
 
-        // This is how we set a new value:
+        // This is how we push a new value to vector:
         self.vector.push(&new_value, working_set);
 
         let new_length = self.vector.len(working_set);
@@ -67,7 +67,7 @@ impl<C: sov_modules_api::Context> VecSetter<C> {
         Ok(CallResponse::default())
     }
 
-    /// Sets `value` field to the `vector`, only admin is authorized to call this method.
+    /// Sets `value` field to the given index of `vector`, only admin is authorized to call this method.
     pub(crate) fn set_value(
         &self,
         index: usize,
@@ -84,14 +84,14 @@ impl<C: sov_modules_api::Context> VecSetter<C> {
         }
 
         // This is how we set a new value:
-        self.vector.set(index, &new_value, working_set);
+        self.vector.set(index, &new_value, working_set)?;
 
         working_set.add_event("set", &format!("value_set: {new_value:?} for index: {index:?}"));
 
         Ok(CallResponse::default())
     }
 
-    /// Sets all `value` fields to the `vector`, only admin is authorized to call this method.
+    /// Sets `values` completely to the `vector`, only admin is authorized to call this method.
     pub(crate) fn set_all_values(
         &self,
         values: Vec<u32>,
@@ -106,7 +106,7 @@ impl<C: sov_modules_api::Context> VecSetter<C> {
             Err(SetValueError::WrongSender)?;
         }
 
-        // This is how we set a new value:
+        // This is how we set all the vector:
         self.vector.set_all(values, working_set);
 
         let new_length = self.vector.len(working_set);
@@ -116,7 +116,7 @@ impl<C: sov_modules_api::Context> VecSetter<C> {
         Ok(CallResponse::default())
     }
 
-    /// Pops `value` field from the `vector`, only admin is authorized to call this method.
+    /// Pops last value from the `vector`, only admin is authorized to call this method.
     pub(crate) fn pop_value(
         &self,
         context: &C,
@@ -130,7 +130,7 @@ impl<C: sov_modules_api::Context> VecSetter<C> {
             Err(SetValueError::WrongSender)?;
         }
 
-        // This is how we set a new value:
+        // This is how we pop last value value:
         let pop_value = self.vector.pop(working_set);
 
         let new_length = self.vector.len(working_set);
