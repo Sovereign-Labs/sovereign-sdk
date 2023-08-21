@@ -5559,7 +5559,7 @@ dependencies = [
  "bincode",
  "bytemuck",
  "once_cell",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.1",
  "risc0-circuit-rv32im",
  "risc0-zkp",
  "risc0-zkvm",
