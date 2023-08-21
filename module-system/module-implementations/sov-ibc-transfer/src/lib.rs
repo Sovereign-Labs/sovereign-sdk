@@ -69,9 +69,9 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Transfer<C> {
 
     fn call(
         &self,
-        msg: Self::CallMessage,
-        context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        _msg: Self::CallMessage,
+        _context: &Self::Context,
+        _working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         todo!()
     }

@@ -64,8 +64,8 @@ where
 
     fn get_escrow_account(
         &self,
-        port_id: &PortId,
-        channel_id: &ChannelId,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
     ) -> Result<Self::AccountId, TokenTransferError> {
         // TODO: Which account to use?
         todo!()
@@ -81,27 +81,27 @@ where
 
     fn send_coins_validate(
         &self,
-        from_account: &Self::AccountId,
-        to_account: &Self::AccountId,
+        _from_account: &Self::AccountId,
+        _to_account: &Self::AccountId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        let token_name = coin.to_string();
+        let _token_name = coin.to_string();
 
         todo!()
     }
 
     fn mint_coins_validate(
         &self,
-        account: &Self::AccountId,
-        coin: &PrefixedCoin,
+        _account: &Self::AccountId,
+        _coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         todo!()
     }
 
     fn burn_coins_validate(
         &self,
-        account: &Self::AccountId,
-        coin: &PrefixedCoin,
+        _account: &Self::AccountId,
+        _coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         todo!()
     }
@@ -113,25 +113,25 @@ where
 {
     fn send_coins_execute(
         &mut self,
-        from_account: &Self::AccountId,
-        to_account: &Self::AccountId,
-        coin: &PrefixedCoin,
+        _from_account: &Self::AccountId,
+        _to_account: &Self::AccountId,
+        _coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         todo!()
     }
 
     fn mint_coins_execute(
         &mut self,
-        account: &Self::AccountId,
-        coin: &PrefixedCoin,
+        _account: &Self::AccountId,
+        _coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         todo!()
     }
 
     fn burn_coins_execute(
         &mut self,
-        account: &Self::AccountId,
-        coin: &PrefixedCoin,
+        _account: &Self::AccountId,
+        _coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         todo!()
     }
