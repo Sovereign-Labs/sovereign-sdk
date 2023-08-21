@@ -39,7 +39,9 @@ fn create_mock_da_rollup(rollup_config: RollupConfig<()>) -> Rollup<Risc0Verifie
 }
 
 async fn start_rollup() {
-    let mut mock_path = PathBuf::from("tmp");
+    let mut mock_path = PathBuf::from("tests");
+    mock_path.push("test_data");
+    mock_path.push("tmp");
     mock_path.push("mocks");
 
     let rollup_config = RollupConfig {
