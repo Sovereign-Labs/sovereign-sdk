@@ -133,8 +133,9 @@ mod tests {
         assert!(da_service.is_empty());
         let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
-        let result: Result<(), jsonrpsee::core::Error> =
-            rpc.call("sequencer_publishBatch", [1u64]).await;
+        let arg: &[u8] = &[];
+        let result: Result<String, jsonrpsee::core::Error> =
+            rpc.call("sequencer_publishBatch", arg).await;
 
         assert!(result.is_err());
         let error = result.err().unwrap();
@@ -155,7 +156,8 @@ mod tests {
         assert!(da_service.is_empty());
         let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
-        let _: () = rpc.call("sequencer_publishBatch", [1u64]).await.unwrap();
+        let arg: &[u8] = &[];
+        let _: String = rpc.call("sequencer_publishBatch", arg).await.unwrap();
 
         assert!(!da_service.is_empty());
 
@@ -184,7 +186,8 @@ mod tests {
         // Check that it got passed to DA service
         assert!(da_service.is_empty());
 
-        let _: () = rpc.call("sequencer_publishBatch", [1u64]).await.unwrap();
+        let arg: &[u8] = &[];
+        let _: String = rpc.call("sequencer_publishBatch", arg).await.unwrap();
 
         assert!(!da_service.is_empty());
 
