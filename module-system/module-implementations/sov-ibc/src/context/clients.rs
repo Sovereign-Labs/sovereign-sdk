@@ -279,11 +279,9 @@ where
     ) -> Result<(), ContextError> {
         let key: ConsensusStateKey = consensus_state_path.clone().into();
 
-        self.ibc.consensus_state_store.set(
-            &key,
-            &consensus_state,
-            self.working_set.get_mut(),
-        );
+        self.ibc
+            .consensus_state_store
+            .set(&key, &consensus_state, self.working_set.get_mut());
 
         Ok(())
     }
