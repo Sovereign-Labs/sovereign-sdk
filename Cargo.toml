@@ -87,7 +87,7 @@ clap = { version = "4.2.7", features = ["derive"] }
 toml = "0.7.3"
 jsonrpsee = {version = "0.18.2", features = ["jsonrpsee-types"] }
 schemars = { version = "0.8.12", features = ["derive"] }
-tempfile = "3.5"
+tempfile = "3.8"
 tokio = { version = "1", features = ["full"] }
 
 
