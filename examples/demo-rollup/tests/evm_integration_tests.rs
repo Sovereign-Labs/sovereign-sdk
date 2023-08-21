@@ -1,6 +1,7 @@
 mod test_helpers;
 use core::panic;
-use std::path::Path;
+use std::fs::remove_dir_all;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -8,8 +9,7 @@ use demo_stf::app::App;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
-use ethers_core::types::{Bytes, Eip1559TransactionRequest};
-use ethers_core::utils::rlp::Rlp;
+use ethers_core::types::Eip1559TransactionRequest;
 use ethers_middleware::SignerMiddleware;
 use ethers_providers::{Http, Middleware, Provider};
 use ethers_signers::{LocalWallet, Signer, Wallet};
@@ -22,6 +22,7 @@ use test_helpers::SimpleStorageContract;
 const MAX_FEE_PER_GAS: u64 = 100000001;
 
 fn create_mock_da_rollup(rollup_config: RollupConfig<()>) -> Rollup<Risc0Verifier, MockDaService> {
+    let _ = remove_dir_all(&rollup_config.storage.path);
     let ledger_db = initialize_ledger(rollup_config.storage.path.clone());
     let da_service = MockDaService::default();
 
@@ -38,10 +39,11 @@ fn create_mock_da_rollup(rollup_config: RollupConfig<()>) -> Rollup<Risc0Verifie
 }
 
 async fn start_rollup() {
+    let mut mock_path = PathBuf::from("tmp");
+    mock_path.push("mocks");
+
     let rollup_config = RollupConfig {
-        storage: StorageConfig {
-            path: "/tmp".into(),
-        },
+        storage: StorageConfig { path: mock_path },
         runner: RunnerConfig {
             start_height: 0,
             rpc_config: RpcConfig {
@@ -53,10 +55,7 @@ async fn start_rollup() {
     };
 
     let rollup = create_mock_da_rollup(rollup_config);
-    println!("B RUN");
-    let res = rollup.run().await;
-    println!("A RUN");
-    println!("Res {:?}", res);
+    rollup.run().await.unwrap();
 }
 
 struct TestClient {
