@@ -3,7 +3,7 @@ use std::rc::Rc;
 use borsh::ser::BorshSerialize;
 use sov_modules_api::transaction::Transaction;
 pub use sov_modules_api::EncodeCall;
-use sov_modules_api::{Address, Context, Module, Spec};
+use sov_modules_api::{Context, Module, Spec};
 use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, TxEffect};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockDaSpec};

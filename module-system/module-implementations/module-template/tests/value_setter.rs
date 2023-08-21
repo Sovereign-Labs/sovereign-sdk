@@ -1,5 +1,4 @@
 use module_template::{CallMessage, ExampleModule, ExampleModuleConfig, Response};
-use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 #[cfg(feature = "native")]
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_context::ZkDefaultContext;
