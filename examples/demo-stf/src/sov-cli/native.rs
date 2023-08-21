@@ -50,7 +50,7 @@ pub async fn main() -> Result<(), anyhow::Error> {
             )?,
         Workflows::Keys(inner) => inner.run(&mut wallet_state, app_dir)?,
         Workflows::Rpc(inner) => {
-            let _res = inner.run(&mut wallet_state, app_dir).await?;
+            inner.run(&mut wallet_state, app_dir).await?;
         }
     }
     wallet_state.save(wallet_state_path)?;

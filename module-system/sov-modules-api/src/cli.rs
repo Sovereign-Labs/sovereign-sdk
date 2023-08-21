@@ -19,7 +19,7 @@ pub struct FileNameArg {
 impl TryFrom<FileNameArg> for JsonStringArg {
     type Error = std::io::Error;
     fn try_from(arg: FileNameArg) -> Result<Self, Self::Error> {
-        let json = std::fs::read_to_string(&arg.path)?;
+        let json = std::fs::read_to_string(arg.path)?;
         Ok(JsonStringArg { json })
     }
 }
@@ -28,5 +28,5 @@ pub trait CliFrontEnd<RT>
 where
     RT: CliWallet,
 {
-    type CliIntermediateRepr<U>; 
+    type CliIntermediateRepr<U>;
 }

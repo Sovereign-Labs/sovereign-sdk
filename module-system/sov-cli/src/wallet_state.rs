@@ -74,7 +74,7 @@ impl<Ctx: sov_modules_api::Context> AddressList<Ctx> {
     ) -> Option<&mut AddressEntry<Ctx>> {
         self.addresses
             .iter_mut()
-            .find(|entry| entry.matches(&identifier))
+            .find(|entry| entry.matches(identifier))
     }
 
     /// Activate a key by identifier
@@ -83,14 +83,14 @@ impl<Ctx: sov_modules_api::Context> AddressList<Ctx> {
             .addresses
             .iter()
             .enumerate()
-            .find(|(_idx, entry)| entry.matches(&identifier))?;
+            .find(|(_idx, entry)| entry.matches(identifier))?;
         self.addresses.swap(0, idx);
         self.default_address()
     }
 
     /// Remove an address from the wallet by identifier
     pub fn remove(&mut self, identifier: &KeyIdentifier<Ctx>) {
-        self.addresses.retain(|entry| !entry.matches(&identifier));
+        self.addresses.retain(|entry| !entry.matches(identifier));
     }
 
     /// Add an address to the wallet

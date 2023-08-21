@@ -1,9 +1,9 @@
 #![doc = include_str!("../README.md")]
 
 mod bech32;
+pub mod capabilities;
 #[cfg(feature = "native")]
 pub mod cli;
-pub mod capabilities;
 pub mod default_context;
 pub mod default_signature;
 mod dispatch;

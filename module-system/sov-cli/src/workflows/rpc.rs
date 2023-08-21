@@ -15,9 +15,9 @@ use sov_modules_api::transaction::Transaction;
 
 use crate::wallet_state::{AddressEntry, KeyIdentifier, WalletState};
 use crate::workflows::keys::load_key;
-const NO_ACCOUNTS_FOUND: &'static str =
+const NO_ACCOUNTS_FOUND: &str =
     "No accounts found. You can generate one with the `keys generate` subcommand";
-const BAD_RPC_URL: &'static str = "Unable to connect to provided rpc. You can change to a different rpc url with the `rpc set-url` subcommand ";
+const BAD_RPC_URL: &str = "Unable to connect to provided rpc. You can change to a different rpc url with the `rpc set-url` subcommand ";
 
 /// Query the current state of the rollup and send transactions
 #[derive(clap::Subcommand)]
@@ -54,8 +54,8 @@ pub enum RpcWorkflows<C: sov_modules_api::Context> {
 }
 
 impl<C: sov_modules_api::Context> RpcWorkflows<C> {
-    fn resolve_account<'s, 'wallet, Tx: BorshSerialize>(
-        &'s self,
+    fn resolve_account<'wallet, Tx: BorshSerialize>(
+        &self,
         wallet_state: &'wallet mut WalletState<Tx, C>,
     ) -> Result<&'wallet AddressEntry<C>, anyhow::Error> {
         let account_id = match self {
@@ -67,10 +67,10 @@ impl<C: sov_modules_api::Context> RpcWorkflows<C> {
 
         let account = if let Some(id) = account_id {
             let addr = wallet_state.addresses.get_address(id);
-            let addr = addr.ok_or_else(|| {
+            
+            addr.ok_or_else(|| {
                 anyhow::format_err!("No account found matching identifier: {}", id)
-            })?;
-            addr
+            })?
         } else {
             wallet_state
                 .addresses

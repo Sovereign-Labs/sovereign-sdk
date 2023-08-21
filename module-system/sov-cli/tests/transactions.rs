@@ -14,7 +14,7 @@ fn test_import_transaction_from_string() {
     let test_token_path = make_test_path("requests/create_token.json");
     let subcommand = RuntimeSubcommand::<JsonStringArg, DefaultContext>::bank {
         contents: JsonStringArg {
-            json: std::fs::read_to_string(&test_token_path).unwrap(),
+            json: std::fs::read_to_string(test_token_path).unwrap(),
         },
     };
 

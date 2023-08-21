@@ -65,7 +65,7 @@ fn test_activate() {
     // Ensure that key1 is active
     let current_active_wallet = wallet_state.addresses.default_address().unwrap();
     assert!(current_active_wallet.is_nicknamed("key1"));
-    let address_1 = current_active_wallet.address.clone();
+    let address_1 = current_active_wallet.address;
 
     // Activate key2 by nickname
     let workflow = KeyWorkflow::Activate {

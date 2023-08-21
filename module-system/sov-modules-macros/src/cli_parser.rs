@@ -121,7 +121,7 @@ impl CliParserMacro {
             generics.params.insert(0, syn::parse_quote! {__Inner });
             generics.where_clause = match generics.where_clause {
                 Some(where_clause) => {
-                    let mut result = where_clause.clone();
+                    let mut result = where_clause;
                     result
                         .predicates
                         .push(syn::parse_quote! { __Inner: ::clap::Args });
@@ -148,10 +148,8 @@ impl CliParserMacro {
         let generics_with_inner_and_dest = {
             let mut generics = generics_with_inner.clone();
             generics.params.insert(0, syn::parse_quote! {__Dest});
-            generics.where_clause.as_mut().map(|c| {
-                c.predicates
-                    .push(syn::parse_quote! { __Dest: ::core::convert::TryFrom<__Inner> })
-            });
+            if let Some(c) = generics.where_clause.as_mut() { c.predicates
+                    .push(syn::parse_quote! { __Dest: ::core::convert::TryFrom<__Inner> }) }
             generics
         };
         let (impl_generics_with_inner_and_dest, _, where_clause_with_inner_clap_and_try_from) =
