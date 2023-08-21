@@ -24,10 +24,30 @@ use ibc_proto::protobuf::Protobuf;
 use super::IbcExecutionContext;
 use crate::ConsensusStateKey;
 
-#[derive(From, TryInto, ConsensusState)]
+#[derive(Clone, From, TryInto, ConsensusState)]
 pub enum AnyConsensusState {
     Tendermint(TmConsensusState),
 }
+
+impl TryFrom<Any> for AnyConsensusState {
+    type Error = ClientError;
+
+    fn try_from(value: Any) -> Result<Self, Self::Error> {
+        let tm_cs: TmConsensusState = value.try_into()?;
+
+        Ok(Self::Tendermint(tm_cs))
+    }
+}
+
+impl From<AnyConsensusState> for Any {
+    fn from(any_cs: AnyConsensusState) -> Self {
+        match any_cs {
+            AnyConsensusState::Tendermint(tm_cs) => tm_cs.into(),
+        }
+    }
+}
+
+impl Protobuf<Any> for AnyConsensusState {}
 
 #[derive(Clone, From, TryInto)]
 pub enum AnyClientState {
@@ -259,24 +279,9 @@ where
     ) -> Result<(), ContextError> {
         let key: ConsensusStateKey = consensus_state_path.clone().into();
 
-        let consensus_state_bytes = {
-            let tm_consensus_state: TmConsensusState =
-                consensus_state.try_into().map_err(|e: &str| {
-                    ContextError::ClientError(ClientError::Other {
-                        description: e.to_string(),
-                    })
-                })?;
-
-            <TmConsensusState as Protobuf<Any>>::encode_vec(&tm_consensus_state)
-        };
-
-        // FIXME: storing like this does NOT result in a proper Merkle proof The
-        // SDK will BorshSerialize our bytes before storing. We need to wait for
-        // the SDK to allow us to store raw bytes (i.e. to choose our encoding
-        // format)
         self.ibc.consensus_state_store.set(
             &key,
-            &consensus_state_bytes,
+            &consensus_state,
             self.working_set.get_mut(),
         );
 
