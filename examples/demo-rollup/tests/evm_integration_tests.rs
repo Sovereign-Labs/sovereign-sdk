@@ -5,6 +5,8 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 
+use celestia::verifier::address::CelestiaAddress;
+use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::app::App;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
@@ -15,7 +17,7 @@ use ethers_providers::{Http, Middleware, Provider};
 use ethers_signers::{LocalWallet, Signer, Wallet};
 use risc0_adapter::host::Risc0Verifier;
 use sov_demo_rollup::{get_genesis_config, initialize_ledger, Rollup};
-use sov_rollup_interface::mocks::MockDaService;
+use sov_rollup_interface::mocks::{MockAddress, MockDaService};
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
 use test_helpers::SimpleStorageContract;
 
@@ -27,7 +29,9 @@ fn create_mock_da_rollup(rollup_config: RollupConfig<()>) -> Rollup<Risc0Verifie
     let da_service = MockDaService::default();
 
     let app = App::new(rollup_config.storage);
-    let genesis_config = get_genesis_config();
+
+    let sequencer_da_address = MockAddress { addr: [99; 32] };
+    let genesis_config = get_genesis_config(sequencer_da_address);
 
     Rollup {
         app,

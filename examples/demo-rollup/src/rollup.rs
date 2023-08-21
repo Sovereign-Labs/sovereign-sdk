@@ -1,6 +1,10 @@
+use std::str::FromStr;
+
 use anyhow::Context;
+use celestia::verifier::address::CelestiaAddress;
 use celestia::verifier::RollupParams;
 use celestia::CelestiaService;
+use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::app::{App, DefaultContext};
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
 use risc0_adapter::host::Risc0Verifier;
@@ -49,7 +53,8 @@ pub async fn new_rollup_with_celestia_da(
     .await;
 
     let app = App::new(rollup_config.storage);
-    let genesis_config = get_genesis_config();
+    let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
+    let genesis_config = get_genesis_config(sequencer_da_address);
 
     Ok(Rollup {
         app,

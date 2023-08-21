@@ -16,7 +16,8 @@ use crate::AddressTrait;
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
 #[derive(Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize, Hash)]
 pub struct MockAddress {
-    addr: [u8; 32],
+    /// TODO
+    pub addr: [u8; 32],
 }
 
 impl core::str::FromStr for MockAddress {
@@ -270,7 +271,7 @@ impl DaService for MockDaService {
         println!("Recv Blob");
         let data = self.receiver.lock().await.recv().await;
         let data = data.unwrap();
-        let address = MockAddress { addr: [0; 32] };
+        let address = MockAddress { addr: [99; 32] };
         let hash = [0; 32];
 
         let blob = MockBlob::<MockAddress>::new(data, address, hash);
