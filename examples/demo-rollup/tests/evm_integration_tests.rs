@@ -1,12 +1,8 @@
 mod test_helpers;
-use core::panic;
 use std::fs::remove_dir_all;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
-use std::time::Duration;
 
-use celestia::verifier::address::CelestiaAddress;
-use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::app::App;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;

@@ -221,7 +221,7 @@ impl Default for MockDaService {
     fn default() -> Self {
         //    let (sender, receiver) = unbounded::<Vec<u8>>();
 
-        let (sender, mut receiver) = mpsc::channel(100);
+        let (sender, receiver) = mpsc::channel(100);
         Self {
             sender,
             receiver: Arc::new(Mutex::new(receiver)),
