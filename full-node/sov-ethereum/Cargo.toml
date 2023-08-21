@@ -18,7 +18,7 @@ sov-evm = { path = "../../module-system/module-implementations/sov-evm", default
 demo-stf = { path = "../../examples/demo-stf", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", default-features = false }
 const-rollup-config = { path = "../../examples/const-rollup-config" }
-jupiter = { path = "../../adapters/celestia", features = ["native"] }
+celestia = { path = "../../adapters/celestia", features = ["native"] }
 
 borsh = { workspace = true }
 serde_json = { workspace = true }

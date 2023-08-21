@@ -594,7 +594,7 @@ dependencies = [
 [[package]]
 name = "boa_ast"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b2cbcb965f95b604424030cb83cc2e9349abdc1f"
+source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
 dependencies = [
  "bitflags 2.4.0",
  "boa_interner",
@@ -607,7 +607,7 @@ dependencies = [
 [[package]]
 name = "boa_engine"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b2cbcb965f95b604424030cb83cc2e9349abdc1f"
+source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
 dependencies = [
  "bitflags 2.4.0",
  "boa_ast",
@@ -645,7 +645,7 @@ dependencies = [
 [[package]]
 name = "boa_gc"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b2cbcb965f95b604424030cb83cc2e9349abdc1f"
+source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
 dependencies = [
  "boa_macros",
  "boa_profiler",
@@ -656,7 +656,7 @@ dependencies = [
 [[package]]
 name = "boa_icu_provider"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b2cbcb965f95b604424030cb83cc2e9349abdc1f"
+source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
 dependencies = [
  "icu_collections",
  "icu_normalizer",
@@ -669,7 +669,7 @@ dependencies = [
 [[package]]
 name = "boa_interner"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b2cbcb965f95b604424030cb83cc2e9349abdc1f"
+source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
 dependencies = [
  "boa_gc",
  "boa_macros",
@@ -684,7 +684,7 @@ dependencies = [
 [[package]]
 name = "boa_macros"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b2cbcb965f95b604424030cb83cc2e9349abdc1f"
+source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.33",
@@ -695,7 +695,7 @@ dependencies = [
 [[package]]
 name = "boa_parser"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b2cbcb965f95b604424030cb83cc2e9349abdc1f"
+source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
 dependencies = [
  "bitflags 2.4.0",
  "boa_ast",
@@ -715,7 +715,7 @@ dependencies = [
 [[package]]
 name = "boa_profiler"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b2cbcb965f95b604424030cb83cc2e9349abdc1f"
+source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
 
 [[package]]
 name = "bonsai-sdk"
@@ -946,12 +946,45 @@ checksum = "37b2a672a2cb129a2e41c10b1224bb368f9f37a2b16b612598138befd7b37eb5"
 
 [[package]]
 name = "cc"
-version = "1.0.82"
+version = "1.0.83"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "305fe645edc1442a0fa8b6726ba61d422798d37a52e12eaecf4b022ebbb88f01"
+checksum = "f1174fb0b6ec23863f8b971027804a42614e347eafb0a95bf0b12cdae21fc4d0"
 dependencies = [
  "jobserver",
  "libc",
+]
+
+[[package]]
+name = "celestia"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.21.2",
+ "bech32 0.9.1",
+ "borsh 0.10.3",
+ "hex",
+ "hex-literal 0.4.1",
+ "jsonrpsee 0.16.2",
+ "nmt-rs",
+ "postcard",
+ "proptest",
+ "prost",
+ "prost-build",
+ "prost-types",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "serde",
+ "serde_json",
+ "sha2 0.10.7",
+ "sov-rollup-interface",
+ "tendermint",
+ "tendermint-proto",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "wiremock",
+ "zk-cycle-macros",
 ]
 
 [[package]]
@@ -1032,9 +1065,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.3.21"
+version = "4.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c27cdf28c0f604ba3f512b0c9a409f8de8513e4816705deb0498b627e7c3a3fd"
+checksum = "03aef18ddf7d879c15ce20f04826ef8418101c7e528014c3eeea13321047dca3"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -1043,9 +1076,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.3.21"
+version = "4.3.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "08a9f1ab5e9f01a9b81f202e8562eb9a10de70abf9eaeac1be465c28b75aa4aa"
+checksum = "f8ce6fffb678c9b80a70b6b6de0aad31df727623a70fd9a842c30cd573e2fa98"
 dependencies = [
  "anstream",
  "anstyle",
@@ -1554,9 +1587,9 @@ dependencies = [
 
 [[package]]
 name = "deranged"
-version = "0.3.7"
+version = "0.3.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7684a49fb1af197853ef7b2ee694bc1f5b4179556f1e5710e1760c5db6f5e929"
+checksum = "f2696e8a945f658fd14dc3b87242e6b80cd0f36ff04ea560fa39082368847946"
 dependencies = [
  "serde",
 ]
@@ -3257,8 +3290,8 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 
 [[package]]
 name = "jmt"
-version = "0.6.0"
-source = "git+https://github.com/penumbra-zone/jmt#46b4b0042f66506536097d689ac2201e3e430afd"
+version = "0.7.0"
+source = "git+https://github.com/penumbra-zone/jmt#aa91b7599e4f5daa1fc9152f4c8b133046f1ac57"
 dependencies = [
  "anyhow",
  "borsh 0.10.3",
@@ -3473,39 +3506,6 @@ dependencies = [
  "serde",
  "serde_json",
  "simple_asn1",
-]
-
-[[package]]
-name = "jupiter"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.21.2",
- "bech32 0.9.1",
- "borsh 0.10.3",
- "hex",
- "hex-literal 0.4.1",
- "jsonrpsee 0.16.2",
- "nmt-rs",
- "postcard",
- "proptest",
- "prost",
- "prost-build",
- "prost-types",
- "risc0-zkvm",
- "risc0-zkvm-platform",
- "serde",
- "serde_json",
- "sha2 0.10.7",
- "sov-rollup-interface",
- "tendermint",
- "tendermint-proto",
- "thiserror",
- "tokio",
- "tracing",
- "wiremock",
- "zk-cycle-macros",
 ]
 
 [[package]]
@@ -4344,12 +4344,12 @@ dependencies = [
 
 [[package]]
 name = "petgraph"
-version = "0.6.3"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4dd7d28ee937e54fe3080c91faa1c3a46c06de6252988a7f4592ba2310ef22a4"
+checksum = "e1d3afd2628e69da2be385eb6f2fd57c8ac7977ceeff6dc166ff1657b0e386a9"
 dependencies = [
  "fixedbitset",
- "indexmap 1.9.3",
+ "indexmap 2.0.0",
 ]
 
 [[package]]
@@ -5693,7 +5693,7 @@ dependencies = [
  "bincode",
  "bytemuck",
  "once_cell",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.1",
  "risc0-circuit-rv32im",
  "risc0-zkp",
  "risc0-zkvm",
@@ -6312,9 +6312,9 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "serde"
-version = "1.0.183"
+version = "1.0.185"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32ac8da02677876d532745a130fc9d8e6edfa81a269b107c5b00829b91d8eb3c"
+checksum = "be9b6f69f1dfd54c3b568ffa45c310d6973a5e5148fd40cf515acaf38cf5bc31"
 dependencies = [
  "serde_derive",
 ]
@@ -6330,9 +6330,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.183"
+version = "1.0.185"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aafe972d60b0b9bee71a91b92fee2d4fb3c9d7e8f6b179aa99f27203d99a4816"
+checksum = "dc59dfdcbad1437773485e0367fea4b090a2e0a16d9ffc46af47764536a298ec"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.33",
@@ -6646,6 +6646,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-attester-incentives"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh 0.10.3",
+ "jmt",
+ "serde",
+ "serde_json",
+ "sov-bank",
+ "sov-chain-state",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-state",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "sov-bank"
 version = "0.1.0"
 dependencies = [
@@ -6759,6 +6778,7 @@ dependencies = [
  "async-trait",
  "borsh 0.10.3",
  "bytes",
+ "celestia",
  "clap",
  "const-rollup-config",
  "criterion",
@@ -6767,7 +6787,6 @@ dependencies = [
  "hex",
  "jmt",
  "jsonrpsee 0.18.2",
- "jupiter",
  "prettytable-rs",
  "prometheus 0.11.0",
  "proptest",
@@ -6817,11 +6836,11 @@ name = "sov-ethereum"
 version = "0.1.0"
 dependencies = [
  "borsh 0.10.3",
+ "celestia",
  "const-rollup-config",
  "demo-stf",
  "ethers",
  "jsonrpsee 0.18.2",
- "jupiter",
  "reth-primitives",
  "reth-rpc",
  "serde_json",
@@ -7038,6 +7057,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "bincode",
  "borsh 0.10.3",
  "bytes",
  "digest 0.10.7",
@@ -7127,10 +7147,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh 0.10.3",
+ "celestia",
  "futures",
  "hex",
  "jsonrpsee 0.18.2",
- "jupiter",
  "rand 0.8.5",
  "serde",
  "serde_json",
@@ -7381,9 +7401,9 @@ checksum = "55937e1799185b12863d447f42597ed69d9928686b8d88a1df17376a097d8369"
 
 [[package]]
 name = "tempfile"
-version = "3.7.1"
+version = "3.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc02fddf48964c42031a0b3fe0428320ecf3a73c401040fc0096f97794310651"
+checksum = "cb94d2f3cc536af71caac6b6fcebf65860b347e7ce0cc9ebe8f70d3e521054ef"
 dependencies = [
  "cfg-if",
  "fastrand 2.0.0",
@@ -8268,9 +8288,9 @@ dependencies = [
 
 [[package]]
 name = "windows-targets"
-version = "0.48.2"
+version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1eeca1c172a285ee6c2c84c341ccea837e7c01b12fbb2d0fe3c9e550ce49ec8"
+checksum = "9a2fa6e2155d7247be68c096456083145c183cbbbc2764150dda45a87197940c"
 dependencies = [
  "windows_aarch64_gnullvm",
  "windows_aarch64_msvc",
@@ -8283,51 +8303,51 @@ dependencies = [
 
 [[package]]
 name = "windows_aarch64_gnullvm"
-version = "0.48.2"
+version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b10d0c968ba7f6166195e13d593af609ec2e3d24f916f081690695cf5eaffb2f"
+checksum = "2b38e32f0abccf9987a4e3079dfb67dcd799fb61361e53e2882c3cbaf0d905d8"
 
 [[package]]
 name = "windows_aarch64_msvc"
-version = "0.48.2"
+version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "571d8d4e62f26d4932099a9efe89660e8bd5087775a2ab5cdd8b747b811f1058"
+checksum = "dc35310971f3b2dbbf3f0690a219f40e2d9afcf64f9ab7cc1be722937c26b4bc"
 
 [[package]]
 name = "windows_i686_gnu"
-version = "0.48.2"
+version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2229ad223e178db5fbbc8bd8d3835e51e566b8474bfca58d2e6150c48bb723cd"
+checksum = "a75915e7def60c94dcef72200b9a8e58e5091744960da64ec734a6c6e9b3743e"
 
 [[package]]
 name = "windows_i686_msvc"
-version = "0.48.2"
+version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "600956e2d840c194eedfc5d18f8242bc2e17c7775b6684488af3a9fff6fe3287"
+checksum = "8f55c233f70c4b27f66c523580f78f1004e8b5a8b659e05a4eb49d4166cca406"
 
 [[package]]
 name = "windows_x86_64_gnu"
-version = "0.48.2"
+version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ea99ff3f8b49fb7a8e0d305e5aec485bd068c2ba691b6e277d29eaeac945868a"
+checksum = "53d40abd2583d23e4718fddf1ebec84dbff8381c07cae67ff7768bbf19c6718e"
 
 [[package]]
 name = "windows_x86_64_gnullvm"
-version = "0.48.2"
+version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f1a05a1ece9a7a0d5a7ccf30ba2c33e3a61a30e042ffd247567d1de1d94120d"
+checksum = "0b7b52767868a23d5bab768e390dc5f5c55825b6d30b86c844ff2dc7414044cc"
 
 [[package]]
 name = "windows_x86_64_msvc"
-version = "0.48.2"
+version = "0.48.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d419259aba16b663966e29e6d7c6ecfa0bb8425818bb96f6f1f3c3eb71a6e7b9"
+checksum = "ed94fce61571a4006852b7389a063ab983c02eb1bb37b47f8272ce92d06d9538"
 
 [[package]]
 name = "winnow"
-version = "0.5.12"
+version = "0.5.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "83817bbecf72c73bad717ee86820ebf286203d2e04c3951f3cd538869c897364"
+checksum = "d09770118a7eb1ccaf4a594a221334119a44a814fcb0d31c5b85e83e97227a97"
 dependencies = [
  "memchr",
 ]

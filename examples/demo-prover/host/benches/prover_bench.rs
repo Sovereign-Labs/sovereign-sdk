@@ -7,14 +7,13 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
+use celestia::types::{FilteredCelestiaBlock, NamespaceId};
+use celestia::verifier::address::CelestiaAddress;
+use celestia::verifier::{CelestiaSpec, RollupParams};
+use celestia::CelestiaService;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
-use jupiter::da_service::CelestiaService;
-use jupiter::types::{FilteredCelestiaBlock, NamespaceId};
-use jupiter::verifier::address::CelestiaAddress;
-use jupiter::verifier::{ChainValidityCondition, RollupParams};
-use jupiter::BlobWithSender;
 use log4rs::config::{Appender, Config, Root};
 use methods::ROLLUP_ELF;
 use regex::Regex;
@@ -142,9 +141,10 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     let rollup_config_path = "benches/rollup_config.toml".to_string();
-    let mut rollup_config: RollupConfig = from_toml_path(&rollup_config_path)
-        .context("Failed to read rollup configuration")
-        .unwrap();
+    let mut rollup_config: RollupConfig<celestia::DaServiceConfig> =
+        from_toml_path(&rollup_config_path)
+            .context("Failed to read rollup configuration")
+            .unwrap();
 
     let mut num_blocks = 0;
     let mut num_blobs = 0;
@@ -152,7 +152,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut num_total_transactions = 0;
 
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
-    rollup_config.runner.storage.path = PathBuf::from(temp_dir.path());
+    rollup_config.storage.path = PathBuf::from(temp_dir.path());
 
     let da_service = CelestiaService::new(
         rollup_config.da.clone(),
@@ -164,8 +164,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let mut app: App<Risc0Host, ChainValidityCondition, BlobWithSender> =
-        App::new(rollup_config.runner.storage.clone());
+    let mut app: App<Risc0Host, CelestiaSpec> = App::new(rollup_config.storage.clone());
 
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
 

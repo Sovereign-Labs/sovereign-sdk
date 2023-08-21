@@ -34,6 +34,7 @@ members = [
     "module-system/module-implementations/sov-ibc-router",
     "module-system/module-implementations/sov-ibc-transfer",
     "module-system/module-implementations/sov-prover-incentives",
+    "module-system/module-implementations/sov-attester-incentives",
     "module-system/module-implementations/sov-sequencer-registry",
     "module-system/module-implementations/module-template",
     "module-system/module-implementations/examples/sov-value-setter",

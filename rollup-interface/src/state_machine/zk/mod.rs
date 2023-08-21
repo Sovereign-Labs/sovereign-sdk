@@ -32,7 +32,7 @@ pub trait Zkvm {
         + DeserializeOwned;
 
     /// The error type which is returned when a proof fails to verify
-    type Error: Debug;
+    type Error: Debug + From<std::io::Error>;
 
     /// Interpret a sequence of a bytes as a proof and attempt to verify it against the code commitment.
     /// If the proof is valid, return a reference to the public outputs of the proof.
@@ -43,10 +43,40 @@ pub trait Zkvm {
 
     /// Same as [`verify`], except that instead of returning the output as a serialized array,
     /// it returns a state transition structure.
-    fn verify_and_extract_output<C: ValidityCondition, Add: AddressTrait>(
+    /// TODO: specify a deserializer for the output
+    fn verify_and_extract_output<
+        C: ValidityCondition,
+        Add: AddressTrait + BorshDeserialize + BorshSerialize,
+    >(
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<StateTransition<C, Add>, Self::Error>;
+    ) -> Result<StateTransition<C, Add>, Self::Error> {
+        let mut output = Self::verify(serialized_proof, code_commitment)?;
+        Ok(BorshDeserialize::deserialize_reader(&mut output)?)
+    }
+}
+
+/// A wrapper around a code commitment which implements borsh serialization
+#[derive(Clone, Debug)]
+pub struct StoredCodeCommitment<Vm: Zkvm> {
+    /// The inner field of the wrapper that contains the code commitment.
+    pub commitment: Vm::CodeCommitment,
+}
+
+impl<Vm: Zkvm> BorshSerialize for StoredCodeCommitment<Vm> {
+    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        bincode::serialize_into(writer, &self.commitment)
+            .expect("Serialization to vec is infallible");
+        Ok(())
+    }
+}
+
+impl<Vm: Zkvm> BorshDeserialize for StoredCodeCommitment<Vm> {
+    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+        let commitment: Vm::CodeCommitment = bincode::deserialize_from(reader)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        Ok(Self { commitment })
+    }
 }
 
 /// A trait which is accessible from within a zkVM program.
@@ -59,7 +89,7 @@ pub trait ZkvmGuest: Zkvm {
 
 /// This trait is implemented on the struct/enum which expresses the validity condition
 pub trait ValidityCondition:
-    Serialize + DeserializeOwned + BorshDeserialize + BorshSerialize + Debug + Clone + Copy
+    Serialize + DeserializeOwned + BorshDeserialize + BorshSerialize + Debug + Clone + Copy + PartialEq
 {
     /// The error type returned when two [`ValidityCondition`]s cannot be combined.
     type Error: Into<anyhow::Error>;
@@ -73,7 +103,7 @@ pub trait ValidityCondition:
 /// if and only if the condition `validity_condition` is satisfied.
 ///
 /// The period of time covered by a state transition proof may be a single slot, or a range of slots on the DA layer.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, PartialEq, Eq)]
 pub struct StateTransition<C, Address> {
     /// The state of the rollup before the transition
     pub initial_state_root: [u8; 32],

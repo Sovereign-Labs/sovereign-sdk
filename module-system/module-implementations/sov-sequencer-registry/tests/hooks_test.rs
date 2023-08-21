@@ -159,7 +159,7 @@ fn end_blob_hook_slash_preferred_sequencer() {
     let registry = SequencerRegistry::<C>::default();
     let mut sequencer_config = create_sequencer_config(seq_rollup_address, token_address);
 
-    sequencer_config.preferred_sequencer = Some(sequencer_config.seq_da_address.clone());
+    sequencer_config.is_preferred_sequencer = true;
 
     let mut test_sequencer = TestSequencer {
         bank,

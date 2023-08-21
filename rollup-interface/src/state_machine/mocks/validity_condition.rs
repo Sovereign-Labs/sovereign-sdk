@@ -25,13 +25,13 @@ impl ValidityCondition for MockValidityCond {
     }
 }
 
-#[derive(Debug, BorshDeserialize, BorshSerialize)]
+#[derive(BorshDeserialize, BorshSerialize, Debug)]
 /// A mock validity condition checker that always evaluate to cond
-pub struct TestValidityCondChecker<MockValidityCond> {
-    phantom: PhantomData<MockValidityCond>,
+pub struct MockValidityCondChecker<Cond: ValidityCondition> {
+    phantom: PhantomData<Cond>,
 }
 
-impl ValidityConditionChecker<MockValidityCond> for TestValidityCondChecker<MockValidityCond> {
+impl ValidityConditionChecker<MockValidityCond> for MockValidityCondChecker<MockValidityCond> {
     type Error = Error;
 
     fn check(&mut self, condition: &MockValidityCond) -> Result<(), Self::Error> {
@@ -40,5 +40,20 @@ impl ValidityConditionChecker<MockValidityCond> for TestValidityCondChecker<Mock
         } else {
             Err(anyhow::format_err!("Invalid mock validity condition"))
         }
+    }
+}
+
+impl<Cond: ValidityCondition> MockValidityCondChecker<Cond> {
+    /// Creates new test validity condition
+    pub fn new() -> Self {
+        Self {
+            phantom: Default::default(),
+        }
+    }
+}
+
+impl<Cond: ValidityCondition> Default for MockValidityCondChecker<Cond> {
+    fn default() -> Self {
+        Self::new()
     }
 }
