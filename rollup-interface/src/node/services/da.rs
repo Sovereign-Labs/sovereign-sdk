@@ -1,5 +1,5 @@
 //! The da module defines traits used by the full node to interact with the DA layer.
-use std::fmt;
+use std::fmt::{self, Display};
 
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
@@ -14,7 +14,7 @@ use crate::zk::ValidityCondition;
 /// The DaService has two responsibilities - fetching data from the DA layer, transforming the
 /// data into a representation that can be efficiently verified in circuit.
 #[async_trait]
-pub trait DaService {
+pub trait DaService: Send + Sync + 'static {
     /// A handle to the types used by the DA layer.
     type RuntimeConfig: DeserializeOwned;
 
@@ -28,7 +28,7 @@ pub trait DaService {
     >;
 
     /// The error type for fallible methods.
-    type Error: fmt::Debug + Send + Sync;
+    type Error: fmt::Debug + Send + Sync + Display;
 
     /// Create a new instance of the DaService
     async fn new(

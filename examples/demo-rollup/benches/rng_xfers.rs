@@ -3,9 +3,9 @@ use std::str::FromStr;
 
 use async_trait::async_trait;
 use borsh::ser::BorshSerialize;
+use celestia::verifier::address::CelestiaAddress;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::runtime::Runtime;
-use jupiter::verifier::address::CelestiaAddress;
 use sov_bank::{Bank, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
@@ -17,6 +17,7 @@ use sov_rollup_interface::mocks::{
 };
 use sov_rollup_interface::services::da::DaService;
 
+#[derive(Clone)]
 /// A simple DaService for a random number generator.
 pub struct RngDaService;
 

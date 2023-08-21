@@ -96,7 +96,7 @@ pub fn create_sequencer_config(
             amount: LOCKED_AMOUNT,
             token_address,
         },
-        preferred_sequencer: None,
+        is_preferred_sequencer: false,
     }
 }
 

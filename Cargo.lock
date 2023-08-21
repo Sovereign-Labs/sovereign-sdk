@@ -919,6 +919,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "celestia"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.21.2",
+ "bech32 0.9.1",
+ "borsh",
+ "hex",
+ "hex-literal 0.4.1",
+ "jsonrpsee 0.16.2",
+ "nmt-rs",
+ "postcard",
+ "proptest",
+ "prost",
+ "prost-build",
+ "prost-types",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "serde",
+ "serde_json",
+ "sha2 0.10.7",
+ "sov-rollup-interface",
+ "tendermint",
+ "tendermint-proto",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "wiremock",
+ "zk-cycle-macros",
+]
+
+[[package]]
 name = "cexpr"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3373,39 +3406,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "jupiter"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.21.2",
- "bech32 0.9.1",
- "borsh",
- "hex",
- "hex-literal 0.4.1",
- "jsonrpsee 0.16.2",
- "nmt-rs",
- "postcard",
- "proptest",
- "prost",
- "prost-build",
- "prost-types",
- "risc0-zkvm",
- "risc0-zkvm-platform",
- "serde",
- "serde_json",
- "sha2 0.10.7",
- "sov-rollup-interface",
- "tendermint",
- "tendermint-proto",
- "thiserror",
- "tokio",
- "tracing",
- "wiremock",
- "zk-cycle-macros",
-]
-
-[[package]]
 name = "k256"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5579,7 +5579,7 @@ dependencies = [
  "bincode",
  "bytemuck",
  "once_cell",
- "parking_lot 0.11.2",
+ "parking_lot 0.12.1",
  "risc0-circuit-rv32im",
  "risc0-zkp",
  "risc0-zkvm",
@@ -6151,9 +6151,9 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "serde"
-version = "1.0.183"
+version = "1.0.185"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32ac8da02677876d532745a130fc9d8e6edfa81a269b107c5b00829b91d8eb3c"
+checksum = "be9b6f69f1dfd54c3b568ffa45c310d6973a5e5148fd40cf515acaf38cf5bc31"
 dependencies = [
  "serde_derive",
 ]
@@ -6169,9 +6169,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.183"
+version = "1.0.185"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aafe972d60b0b9bee71a91b92fee2d4fb3c9d7e8f6b179aa99f27203d99a4816"
+checksum = "dc59dfdcbad1437773485e0367fea4b090a2e0a16d9ffc46af47764536a298ec"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.32",
@@ -6486,6 +6486,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-attester-incentives"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "jmt",
+ "serde",
+ "serde_json",
+ "sov-bank",
+ "sov-chain-state",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-state",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
 name = "sov-bank"
 version = "0.1.0"
 dependencies = [
@@ -6599,6 +6618,7 @@ dependencies = [
  "async-trait",
  "borsh",
  "bytes",
+ "celestia",
  "clap",
  "const-rollup-config",
  "criterion",
@@ -6607,7 +6627,6 @@ dependencies = [
  "hex",
  "jmt",
  "jsonrpsee 0.18.2",
- "jupiter",
  "prettytable-rs",
  "prometheus 0.11.0",
  "proptest",
@@ -6657,11 +6676,11 @@ name = "sov-ethereum"
 version = "0.1.0"
 dependencies = [
  "borsh",
+ "celestia",
  "const-rollup-config",
  "demo-stf",
  "ethers",
  "jsonrpsee 0.18.2",
- "jupiter",
  "reth-primitives",
  "reth-rpc",
  "serde_json",
@@ -6822,6 +6841,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "bincode",
  "borsh",
  "bytes",
  "digest 0.10.7",
@@ -6912,10 +6932,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "celestia",
  "futures",
  "hex",
  "jsonrpsee 0.18.2",
- "jupiter",
  "rand 0.8.5",
  "serde",
  "serde_json",

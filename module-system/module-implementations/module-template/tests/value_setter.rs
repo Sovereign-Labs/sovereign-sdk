@@ -1,10 +1,8 @@
+use module_template::{CallMessage, ExampleModule, ExampleModuleConfig, Response};
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::{Address, Context, Module};
 use sov_rollup_interface::stf::Event;
 use sov_state::{ProverStorage, WorkingSet, ZkStorage};
-
-use super::ExampleModule;
-use crate::{call, query, ExampleModuleConfig};
 
 #[test]
 fn test_value_setter() {
@@ -39,7 +37,7 @@ fn test_value_setter_helper<C: Context>(
     module.genesis(config, working_set).unwrap();
 
     let new_value = 99;
-    let call_msg = call::CallMessage::SetValue(new_value);
+    let call_msg = CallMessage::SetValue(new_value);
 
     // Test events
     {
@@ -52,7 +50,7 @@ fn test_value_setter_helper<C: Context>(
     {
         let query_response = module.query_value(working_set);
         assert_eq!(
-            query::Response {
+            Response {
                 value: Some(new_value)
             },
             query_response

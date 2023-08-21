@@ -6,10 +6,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
+use celestia::verifier::address::CelestiaAddress;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::app::App;
 use demo_stf::genesis_config::create_demo_genesis_config;
-use jupiter::verifier::address::CelestiaAddress;
 use prometheus::{Histogram, HistogramOpts, Registry};
 use risc0_adapter::host::Risc0Verifier;
 use rng_xfers::{RngDaService, RngDaSpec};
@@ -81,18 +81,19 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     let rollup_config_path = "benches/rollup_config.toml".to_string();
-    let mut rollup_config: RollupConfig = from_toml_path(&rollup_config_path)
-        .context("Failed to read rollup configuration")
-        .unwrap();
+    let mut rollup_config: RollupConfig<celestia::DaServiceConfig> =
+        from_toml_path(&rollup_config_path)
+            .context("Failed to read rollup configuration")
+            .unwrap();
 
     let temp_dir = TempDir::new().expect("Unable to create temporary directory");
-    rollup_config.runner.storage.path = PathBuf::from(temp_dir.path());
+    rollup_config.storage.path = PathBuf::from(temp_dir.path());
     let ledger_db =
-        LedgerDB::with_path(&rollup_config.runner.storage.path).expect("Ledger DB failed to open");
+        LedgerDB::with_path(&rollup_config.storage.path).expect("Ledger DB failed to open");
 
     let da_service = Arc::new(RngDaService::new());
 
-    let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(rollup_config.runner.storage);
+    let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(rollup_config.storage);
 
     let mut demo = demo_runner.stf;
     let sequencer_private_key = DefaultPrivateKey::generate();
