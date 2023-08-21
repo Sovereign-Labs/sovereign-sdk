@@ -73,9 +73,10 @@ fn rollup_bench(_bench: &mut Criterion) {
                 prev_hash: MockHash([0u8; 32]),
             },
             height,
-            validity_cond: MockValidityCond::default(),
+            validity_cond: Default::default(),
+            blobs: Default::default(),
         };
-        blocks.push(filtered_block);
+        blocks.push(filtered_block.clone());
 
         let blob_txs = da_service.extract_relevant_txs(&filtered_block);
         blobs.push(blob_txs.clone());
@@ -86,7 +87,7 @@ fn rollup_bench(_bench: &mut Criterion) {
         b.iter(|| {
             let filtered_block = &blocks[height as usize];
 
-            let mut data_to_commit = SlotCommit::new(*filtered_block);
+            let mut data_to_commit = SlotCommit::new(filtered_block.clone());
             let apply_block_result = demo.apply_slot(
                 Default::default(),
                 data_to_commit.slot_data(),

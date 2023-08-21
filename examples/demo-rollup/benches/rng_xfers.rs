@@ -128,6 +128,7 @@ impl DaService for RngDaService {
             },
             height,
             validity_cond: MockValidityCond { is_valid: true },
+            blobs: Default::default(),
         };
 
         Ok(block)

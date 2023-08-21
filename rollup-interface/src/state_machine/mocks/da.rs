@@ -149,7 +149,7 @@ impl BlockHeaderTrait for MockBlockHeader {
 }
 
 /// A mock block type used for testing.
-#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
 pub struct MockBlock {
     /// The hash of this block.
     pub curr_hash: [u8; 32],
@@ -159,6 +159,8 @@ pub struct MockBlock {
     pub height: u64,
     /// Validity condition
     pub validity_cond: MockValidityCond,
+    /// Blobs
+    pub blobs: Vec<MockBlob<MockAddress>>,
 }
 
 impl Default for MockBlock {
@@ -169,7 +171,8 @@ impl Default for MockBlock {
                 prev_hash: MockHash([0; 32]),
             },
             height: 0,
-            validity_cond: MockValidityCond::default(),
+            validity_cond: Default::default(),
+            blobs: Default::default(),
         }
     }
 }
@@ -257,17 +260,6 @@ impl DaService for MockDaService {
     }
 
     async fn get_finalized_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        Ok(MockBlock::default())
-    }
-
-    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        self.get_finalized_at(height).await
-    }
-
-    async fn extract_relevant_txs(
-        &self,
-        _block: &Self::FilteredBlock,
-    ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
         println!("Recv Blob");
         let data = self.receiver.lock().await.recv().await;
         let data = data.unwrap();
@@ -276,7 +268,21 @@ impl DaService for MockDaService {
 
         let blob = MockBlob::<MockAddress>::new(data, address, hash);
 
-        vec![blob]
+        Ok(MockBlock {
+            blobs: vec![blob],
+            ..Default::default()
+        })
+    }
+
+    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+        self.get_finalized_at(height).await
+    }
+
+    fn extract_relevant_txs(
+        &self,
+        block: &Self::FilteredBlock,
+    ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
+        block.blobs.clone()
     }
 
     async fn get_extraction_proof(

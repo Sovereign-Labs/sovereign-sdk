@@ -125,7 +125,7 @@ where
             println!("Runner Got TX3");
             let filtered_block = self.da_service.get_finalized_at(height).await?;
             println!("Runner Got TX4");
-            let mut blobs = self.da_service.extract_relevant_txs(&filtered_block).await;
+            let mut blobs = self.da_service.extract_relevant_txs(&filtered_block);
             println!("Runner Got TX5");
             info!(
                 "Extracted {} relevant blobs at height {}",
