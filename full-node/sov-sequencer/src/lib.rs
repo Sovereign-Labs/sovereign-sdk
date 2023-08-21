@@ -110,14 +110,14 @@ pub enum SubmitTransactionResponse {
 #[cfg(test)]
 mod tests {
 
-    use sov_rollup_interface::mocks::{MockBatchBuilder, MockDaService};
+    use sov_rollup_interface::mocks::{MockAddress, MockBatchBuilder, MockDaService};
 
     use super::*;
 
     #[tokio::test]
     async fn test_submit_on_empty_mempool() {
         let batch_builder = MockBatchBuilder { mempool: vec![] };
-        let da_service = MockDaService::default();
+        let da_service = MockDaService::new(MockAddress::default());
         let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
         let result: Result<(), jsonrpsee::core::Error> =

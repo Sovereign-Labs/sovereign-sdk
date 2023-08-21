@@ -22,11 +22,11 @@ const MAX_FEE_PER_GAS: u64 = 100000001;
 fn create_mock_da_rollup(rollup_config: RollupConfig<()>) -> Rollup<Risc0Verifier, MockDaService> {
     let _ = remove_dir_all(&rollup_config.storage.path);
     let ledger_db = initialize_ledger(rollup_config.storage.path.clone());
-    let da_service = MockDaService::default();
+    let sequencer_da_address = MockAddress { addr: [99; 32] };
+    let da_service = MockDaService::new(sequencer_da_address);
 
     let app = App::new(rollup_config.storage);
 
-    let sequencer_da_address = MockAddress { addr: [99; 32] };
     let genesis_config = get_genesis_config(sequencer_da_address);
 
     Rollup {

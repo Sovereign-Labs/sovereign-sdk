@@ -104,17 +104,9 @@ impl DaSpec for RngDaSpec {
 
 #[async_trait]
 impl DaService for RngDaService {
-    type RuntimeConfig = ();
     type Spec = RngDaSpec;
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
-
-    async fn new(
-        _config: Self::RuntimeConfig,
-        _chain_params: <Self::Spec as DaSpec>::ChainParams,
-    ) -> Self {
-        RngDaService::new()
-    }
 
     async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let num_bytes = height.to_le_bytes();

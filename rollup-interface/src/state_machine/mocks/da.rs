@@ -14,9 +14,11 @@ use crate::services::da::{DaService, SlotData};
 use crate::AddressTrait;
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
-#[derive(Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize, Hash)]
+#[derive(
+    Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize, Hash, Default,
+)]
 pub struct MockAddress {
-    /// TODO
+    ///
     pub addr: [u8; 32],
 }
 
@@ -218,16 +220,17 @@ use tokio::sync::Mutex;
 pub struct MockDaService {
     sender: Sender<Vec<u8>>,
     receiver: Arc<Mutex<Receiver<Vec<u8>>>>,
+    sequencer_da_address: MockAddress,
 }
 
-impl Default for MockDaService {
-    fn default() -> Self {
-        //    let (sender, receiver) = unbounded::<Vec<u8>>();
-
+impl MockDaService {
+    ///
+    pub fn new(sequencer_da_address: MockAddress) -> Self {
         let (sender, receiver) = mpsc::channel(100);
         Self {
             sender,
             receiver: Arc::new(Mutex::new(receiver)),
+            sequencer_da_address,
         }
     }
 }
@@ -247,17 +250,9 @@ impl MockDaService {
 
 #[async_trait]
 impl DaService for MockDaService {
-    type RuntimeConfig = ();
     type Spec = MockDaSpec;
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
-
-    async fn new(
-        _config: Self::RuntimeConfig,
-        _chain_params: <Self::Spec as DaSpec>::ChainParams,
-    ) -> Self {
-        MockDaService::default()
-    }
 
     async fn get_finalized_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         println!("Recv Blob");

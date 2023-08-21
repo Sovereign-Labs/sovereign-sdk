@@ -16,9 +16,6 @@ use crate::zk::ValidityCondition;
 #[async_trait]
 pub trait DaService: Send + Sync + 'static {
     /// A handle to the types used by the DA layer.
-    type RuntimeConfig: DeserializeOwned;
-
-    /// A handle to the types used by the DA layer.
     type Spec: DaSpec;
 
     /// A DA layer block, possibly excluding some irrelevant information.
@@ -29,12 +26,6 @@ pub trait DaService: Send + Sync + 'static {
 
     /// The error type for fallible methods.
     type Error: fmt::Debug + Send + Sync + Display;
-
-    /// Create a new instance of the DaService
-    async fn new(
-        config: Self::RuntimeConfig,
-        chain_params: <Self::Spec as DaSpec>::ChainParams,
-    ) -> Self;
 
     /// Retrieve the data for the given height, waiting for it to be
     /// finalized if necessary. The block, once returned, must not be reverted
