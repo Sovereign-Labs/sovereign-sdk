@@ -1,6 +1,6 @@
 #![no_main]
 
-use jupiter::shares::Share;
+use celestia::shares::Share;
 use libfuzzer_sys::fuzz_target;
 
 fuzz_target!(|data: &[u8]| {

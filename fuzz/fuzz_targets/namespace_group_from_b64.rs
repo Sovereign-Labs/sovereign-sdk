@@ -2,7 +2,7 @@
 #[macro_use]
 extern crate libfuzzer_sys;
 
-use jupiter::shares::NamespaceGroup;
+use celestia::shares::NamespaceGroup;
 
 fuzz_target!(|data: &[u8]| {
     if let Ok(s) = std::str::from_utf8(data) {

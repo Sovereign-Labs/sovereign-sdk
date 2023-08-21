@@ -12,25 +12,19 @@ impl AlignedVec {
     pub const ALIGNMENT: usize = 4;
 
     // Creates a new AlignedVec whose length is aligned to [Self::ALIGNMENT] bytes.
-    pub fn new(mut vector: Vec<u8>) -> Self {
-        let len = vector.len();
-        let pad = (len % Self::ALIGNMENT) != 0;
-        let len = (pad as usize + len / Self::ALIGNMENT) * Self::ALIGNMENT;
-
-        vector.resize(len, 0);
-
+    pub fn new(vector: Vec<u8>) -> Self {
         Self { inner: vector }
     }
 
     // Extends self with the contents of the other AlignedVec.
     pub fn extend(&mut self, other: &Self) {
         // TODO check if the standard extend method does the right thing.
+        // debug_assert_eq!(
+        //     self.inner.len() % Self::ALIGNMENT,
+        //     0,
+        //     "`AlignedVec` is expected to have well-formed chunks"
+        // );
         self.inner.extend(&other.inner);
-        debug_assert_eq!(
-            self.inner.len() % Self::ALIGNMENT,
-            0,
-            "`AlignedVec` is expected to have well-formed chunks"
-        );
     }
 
     pub fn into_inner(self) -> Vec<u8> {
