@@ -12,6 +12,8 @@ use serde::Serialize;
 #[cfg(feature = "mocks")]
 pub mod mocks;
 
+pub mod optimistic;
+
 /// A marker trait for addresses.
 pub trait AddressTrait:
     PartialEq

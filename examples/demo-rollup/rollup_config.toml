@@ -1,7 +1,3 @@
-# We define the rollup's genesis to occur at Celestia block number `start_height`. The rollup will ignore
-# any Celestia blocks before this height
-start_height = 1
-
 [da]
 # The JWT used to authenticate with the celestia light client. Instructions for generating this token can be found in the README
 celestia_rpc_auth_token = "MY.SECRET.TOKEN"
@@ -12,11 +8,16 @@ max_celestia_response_body_size = 104_857_600
 # The maximum time to wait for a response to an RPC query against Celestia node. Defaults to 60 seconds.
 celestia_rpc_timeout_seconds = 60
 
-[runner.storage]
+[storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
 
-[rpc_config]
+# We define the rollup's genesis to occur at block number `start_height`. The rollup will ignore
+# any blocks before this height
+[runner]
+start_height = 1
+
+[runner.rpc_config]
 # the host and port to bind the rpc server for
 bind_host = "127.0.0.1"
 bind_port = 12345

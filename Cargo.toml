@@ -31,6 +31,7 @@ members = [
     "module-system/module-implementations/sov-blob-storage",
     "module-system/module-implementations/sov-evm",
     "module-system/module-implementations/sov-prover-incentives",
+    "module-system/module-implementations/sov-attester-incentives",
     "module-system/module-implementations/sov-sequencer-registry",
     "module-system/module-implementations/module-template",
     "module-system/module-implementations/examples/sov-value-setter",
@@ -73,7 +74,7 @@ proptest-derive = "0.3.0"
 rand = "0.8"
 rayon = "1.5.2"
 rocksdb = { version = "0.21.0", features = ["lz4"] }
-serde = { version = "1.0.137", features = ["derive", "rc"] }
+serde = { version = "1.0.185", features = ["derive", "rc"] }
 serde_json = { version = "1.0" }
 sha2 = "0.10.6"
 digest = "0.10.6"

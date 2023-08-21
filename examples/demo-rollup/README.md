@@ -162,7 +162,7 @@ use sov_bank::Amount;
 pub enum CallMessage<C: sov_modules_api::Context> {
     /// Creates a new token with the specified name and initial balance.
     CreateToken {
-        /// Random value use to create a unique token address.
+        /// Random value used to create a unique token address.
         salt: u64,
         /// The name of the new token.
         token_name: String,
@@ -204,7 +204,7 @@ pub enum CallMessage<C: sov_modules_api::Context> {
 }
 ```
 
-In the above snippet, we can see that `CallMessage` in `Bank` support five different types of calls. The `sov-cli` has the ability to parse a JSON file that aligns with any of these calls and subsequently serialize them. The structure of the JSON file, which represents the call, closely mirrors that of the Enum member. Consider the `Transfer` message as an example:
+In the above snippet, we can see that `CallMessage` in `Bank` supports five different types of calls. The `sov-cli` has the ability to parse a JSON file that aligns with any of these calls and subsequently serialize them. The structure of the JSON file, which represents the call, closely mirrors that of the Enum member. Consider the `Transfer` message as an example:
 
 ```rust
 use sov_bank::Coins;
@@ -401,7 +401,7 @@ Most queries for ledger information accept an optional `QueryMode` argument. The
 
 **Identifiers**
 
-There are a several ways to uniquely identify items in the Ledger DB.
+There are several ways to uniquely identify items in the Ledger DB.
 
 - By _number_. Each family of structs (`slots`, `blocks`, `transactions`, and `events`) is numbered in order starting from `1`. So, for example, the
   first transaction to appear on the DA layer will be numered `1` and might emit events `1`-`5`. Or, slot `17` might contain batches `41` - `44`.
@@ -412,7 +412,7 @@ There are a several ways to uniquely identify items in the Ledger DB.
 To request an item from the ledger DB, you can provide any identifier - and even mix and match different identifiers. We recommend using item number
 wherever possible, though, since resolving other identifiers may require additional database lookups.
 
-Some examples will make this clearer. Suppose that slot number `5` contaisn batches `9`, `10`, and `11`, that batch `10` contains
+Some examples will make this clearer. Suppose that slot number `5` contains batches `9`, `10`, and `11`, that batch `10` contains
 transactions `50`-`81`, and that transaction `52` emits event number `17`. If we want to fetch events number `17`, we can use any of the following queries:
 
 - `{"jsonrpc":"2.0","method":"ledger_getEvents","params":[[17]], ... }`

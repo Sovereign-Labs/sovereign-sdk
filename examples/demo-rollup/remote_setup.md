@@ -33,7 +33,7 @@ as of Mar 18, 2023. To get started, you'll need to sync a Celestia light node ru
 1. Initialize the node: `celestia light init --p2p.network arabica`
 1. Start the node with rpc enabled. Our default config uses port 11111: `celestia light start --core.ip https://limani.celestia-devops.dev --p2p.network arabica --gateway --rpc.port 11111`. If you want to use a different port, you can adjust the rollup's configuration in rollup_config.toml.
 1. Obtain a JWT for RPC access: `celestia light auth admin --p2p.network arabica`
-1. Copy the JWT and and store it in the `celestia_rpc_auth_token` field of the rollup's config file (`rollup_config.toml`). Be careful to paste the entire JWT - it may wrap across several lines in your terminal.
+1. Copy the JWT and store it in the `celestia_rpc_auth_token` field of the rollup's config file (`rollup_config.toml`). Be careful to paste the entire JWT - it may wrap across several lines in your terminal.
 1. Wait a few minutes for your Celestia node to sync. It needs to have synced to the rollup's configured `start_height `671431` before the demo can run properly.
 
 Once your Celestia node is up and running, simply `cargo +nightly run` to test out the prototype.

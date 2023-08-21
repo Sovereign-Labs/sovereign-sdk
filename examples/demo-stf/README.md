@@ -85,7 +85,7 @@ We recommend borsh, since it's both fast and safe for hashing.
 
 ### Implementing Hooks for the Runtime:
 
-The next step is to implement `Hooks` for `MyRuntime`. Hooks are abstractions that allows for the injection of custom logic into the transaction processing pipeline.
+The next step is to implement `Hooks` for `MyRuntime`. Hooks are abstractions that allow for the injection of custom logic into the transaction processing pipeline.
 
 There are two kind of hooks:
 
@@ -160,14 +160,14 @@ complete State Transition Function!
 Your modules implement rpc methods via the `rpc_gen` macro, in order to enable the full-node to expose them, annotate the `Runtime` with `expose_rpc`.
 In the example above, you can see how to use the `expose_rpc` macro on the `native` `Runtime`.
 
-## Make Full Node Itegrations Simpler with the State Transition Runner:
+## Make Full Node Integrations Simpler with the State Transition Runner:
 
 Now that we have an app, we want to be able to run it. For any custom state transition, your full node implementation is going to need a little
 customization. At the very least, you'll have to modify our `demo-rollup` example code
 to import your custom STF! But, when you're building an STF it's useful to stick as closely as possible to some standard interfaces.
 That way, you can minimize the changeset for your custom node implementation, which reduces the risk of bugs.
 
-To help you integrate with full node implementations, we provide standard tools for intitializing an app (`StateTransitionRunner`). In this section, we'll briefly show how to use them. Again it is not strictly
+To help you integrate with full node implementations, we provide standard tools for initializing an app (`StateTransitionRunner`). In this section, we'll briefly show how to use them. Again it is not strictly
 required - just by implementing STF, you get the capability to integrate with DA layers and ZKVMs. But, using these structures
 makes you more compatible with full node implementations out of the box.
 
