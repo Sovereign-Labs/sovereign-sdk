@@ -23,7 +23,11 @@ pub struct LenResponse {
 impl<C: sov_modules_api::Context> VecSetter<C> {
     /// Queries the state vector of the module.
     #[rpc_method(name = "queryVec")]
-    pub fn query_vec(&self, index: usize, working_set: &mut WorkingSet<C::Storage>) -> RpcResult<QueryResponse> {
+    pub fn query_vec(
+        &self,
+        index: usize,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> RpcResult<QueryResponse> {
         Ok(QueryResponse {
             value: self.vector.get(index, working_set),
         })

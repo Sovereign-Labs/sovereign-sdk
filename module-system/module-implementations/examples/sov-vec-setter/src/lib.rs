@@ -64,9 +64,15 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for VecSetter<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
-            call::CallMessage::PushValue(new_value) => Ok(self.push_value(new_value, context, working_set)?),
-            call::CallMessage::SetValue { index, value } => Ok(self.set_value(index, value, context, working_set)?),
-            call::CallMessage::SetAllValues(values) => Ok(self.set_all_values(values, context, working_set)?),
+            call::CallMessage::PushValue(new_value) => {
+                Ok(self.push_value(new_value, context, working_set)?)
+            }
+            call::CallMessage::SetValue { index, value } => {
+                Ok(self.set_value(index, value, context, working_set)?)
+            }
+            call::CallMessage::SetAllValues(values) => {
+                Ok(self.set_all_values(values, context, working_set)?)
+            }
             call::CallMessage::PopValue => Ok(self.pop_value(context, working_set)?),
         }
     }

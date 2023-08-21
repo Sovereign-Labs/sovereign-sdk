@@ -22,7 +22,7 @@ pub enum CallMessage {
     /// value to push
     PushValue(u32),
     /// value to set
-    SetValue { 
+    SetValue {
         /// index to set
         index: usize,
         /// value to set
@@ -62,7 +62,10 @@ impl<C: sov_modules_api::Context> VecSetter<C> {
 
         let new_length = self.vector.len(working_set);
 
-        working_set.add_event("push", &format!("value_push: {new_value:?}, new length: {new_length:?}"));
+        working_set.add_event(
+            "push",
+            &format!("value_push: {new_value:?}, new length: {new_length:?}"),
+        );
 
         Ok(CallResponse::default())
     }
@@ -86,7 +89,10 @@ impl<C: sov_modules_api::Context> VecSetter<C> {
         // This is how we set a new value:
         self.vector.set(index, &new_value, working_set)?;
 
-        working_set.add_event("set", &format!("value_set: {new_value:?} for index: {index:?}"));
+        working_set.add_event(
+            "set",
+            &format!("value_set: {new_value:?} for index: {index:?}"),
+        );
 
         Ok(CallResponse::default())
     }
@@ -135,7 +141,10 @@ impl<C: sov_modules_api::Context> VecSetter<C> {
 
         let new_length = self.vector.len(working_set);
 
-        working_set.add_event("pop", &format!("value_pop: {pop_value:?}, new length: {new_length:?}"));
+        working_set.add_event(
+            "pop",
+            &format!("value_pop: {pop_value:?}, new length: {new_length:?}"),
+        );
 
         Ok(CallResponse::default())
     }
