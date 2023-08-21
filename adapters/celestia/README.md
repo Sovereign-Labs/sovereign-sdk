@@ -41,9 +41,9 @@ about compatibility with these proof systems, then `no_std` isn't a requirement.
 
 **Jupiter's DA Verifier**
 
-In Celestia, checking _completeness_ of data is pretty simple. Celestia provides a a "data availability header",
+In Celestia, checking _completeness_ of data is pretty simple. Celestia provides a "data availability header",
 containing the roots of many namespaced merkle tree. The union of the data in each of these namespaced merkle trees
-is the data for this Celestia block. So, to prove compleness, we just have to iterate over these roots. At each step,
+is the data for this Celestia block. So, to prove completeness, we just have to iterate over these roots. At each step,
 we verify a "namespace proof" showing the presence (or absence) of data from our namespace
 in that row. Then, we check that the blob(s) corresponding to that data appear next in the provided list of blobs.
 
@@ -51,7 +51,7 @@ Checking _correctness_, is a bit more complicated. Unfortunately, Celestia does 
 way to associate a blob of data with its sender - so we have to be pretty creative with our solution. (Recall that the
 Sovereign SDK requires blobs to be attributable to a particular sender for DOS protection). We have to read
 all of the data from a special reserved namespace on Celestia which contains the Cosmos SDK transactions associated
-with the current block. (We accomplish this using the same technique of iterating over the row roots that we descibed previously). Then, we associate each relevant data blob from our rollup namespace with a transaction, using the
+with the current block. (We accomplish this using the same technique of iterating over the row roots that we described previously). Then, we associate each relevant data blob from our rollup namespace with a transaction, using the
 [`share commitment`](https://github.com/celestiaorg/celestia-app/blob/main/proto/celestia/blob/v1/tx.proto#L25) field.
 
 ### The DaService Trait
