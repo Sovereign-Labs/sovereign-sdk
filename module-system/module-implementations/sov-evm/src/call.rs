@@ -69,7 +69,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         self.receipts
             .set(&receipt.transaction_hash, &receipt, working_set);
 
-        println!("EVM End");
+        println!("EVM End {:?}", receipt);
         Ok(CallResponse::default())
     }
 }

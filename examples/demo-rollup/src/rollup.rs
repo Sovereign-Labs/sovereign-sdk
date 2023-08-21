@@ -2,7 +2,7 @@ use anyhow::Context;
 use celestia::verifier::RollupParams;
 use celestia::CelestiaService;
 use demo_stf::app::{App, DefaultContext};
-use demo_stf::runtime::get_rpc_methods;
+use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::LedgerDB;
 use sov_rollup_interface::services::da::DaService;
@@ -26,6 +26,8 @@ pub struct Rollup<Vm: Zkvm, DA: DaService + Clone> {
     pub ledger_db: LedgerDB,
     ///
     pub runner_config: RunnerConfig,
+    ///
+    pub genesis_config: GenesisConfig<DefaultContext>,
 }
 
 /// Creates celestia based rollup.
@@ -47,12 +49,14 @@ pub async fn new_rollup_with_celestia_da(
     .await;
 
     let app = App::new(rollup_config.storage);
+    let genesis_config = get_genesis_config();
 
     Ok(Rollup {
         app,
         da_service,
         ledger_db,
         runner_config: rollup_config.runner,
+        genesis_config,
     })
 }
 
@@ -71,7 +75,6 @@ impl<Vm: Zkvm, DA: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, DA> {
         }
 
         let storage = self.app.get_storage();
-        let genesis_config = get_genesis_config();
 
         let mut runner = StateTransitionRunner::new(
             self.runner_config,
@@ -79,7 +82,7 @@ impl<Vm: Zkvm, DA: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, DA> {
             self.ledger_db,
             self.app.stf,
             storage.is_empty(),
-            genesis_config,
+            self.genesis_config,
         )?;
 
         runner.start_rpc_server(methods).await;

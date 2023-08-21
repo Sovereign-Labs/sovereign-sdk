@@ -34,7 +34,7 @@ mod experimental {
     use crate::evm::{Bytes32, EvmChainCfg, RawEvmTransaction};
     use crate::TransactionReceipt;
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     pub struct AccountData {
         pub address: EthAddress,
         pub balance: Bytes32,
@@ -53,7 +53,7 @@ mod experimental {
         }
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     pub struct EvmConfig {
         pub data: Vec<AccountData>,
         pub chain_id: u64,
@@ -107,6 +107,7 @@ mod experimental {
             config: &Self::Config,
             working_set: &mut WorkingSet<C::Storage>,
         ) -> Result<(), Error> {
+            println!("EVM Genesis");
             Ok(self.init_module(config, working_set)?)
         }
 
@@ -116,6 +117,7 @@ mod experimental {
             context: &Self::Context,
             working_set: &mut WorkingSet<C::Storage>,
         ) -> Result<sov_modules_api::CallResponse, Error> {
+            println!("EVM Call");
             Ok(self.execute_call(msg.tx, context, working_set)?)
         }
     }

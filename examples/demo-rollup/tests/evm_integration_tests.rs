@@ -14,7 +14,7 @@ use ethers_middleware::SignerMiddleware;
 use ethers_providers::{Http, Middleware, Provider};
 use ethers_signers::{LocalWallet, Signer, Wallet};
 use risc0_adapter::host::Risc0Verifier;
-use sov_demo_rollup::{initialize_ledger, Rollup};
+use sov_demo_rollup::{get_genesis_config, initialize_ledger, Rollup};
 use sov_rollup_interface::mocks::MockDaService;
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
 use test_helpers::SimpleStorageContract;
@@ -26,12 +26,14 @@ fn create_mock_da_rollup(rollup_config: RollupConfig<()>) -> Rollup<Risc0Verifie
     let da_service = MockDaService::default();
 
     let app = App::new(rollup_config.storage);
+    let genesis_config = get_genesis_config();
 
     Rollup {
         app,
         da_service,
         ledger_db,
         runner_config: rollup_config.runner,
+        genesis_config,
     }
 }
 
@@ -180,11 +182,11 @@ async fn tx_tests() -> Result<(), anyhow::Error> {
         start_rollup().await;
     });
 
-    tokio::time::sleep(Duration::from_millis(1000)).await;
-    tokio::time::sleep(Duration::from_millis(3000)).await;
+    //    tokio::time::sleep(Duration::from_millis(1000)).await;
+    //   tokio::time::sleep(Duration::from_millis(3000)).await;
     println!("End");
     send_tx_test_to_eth().await.unwrap();
-    tokio::time::sleep(Duration::from_millis(5000)).await;
+    //tokio::time::sleep(Duration::from_millis(2000)).await;
     f.abort();
 
     Ok(())

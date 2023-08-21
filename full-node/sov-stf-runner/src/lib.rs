@@ -66,11 +66,13 @@ where
         should_init_chain: bool,
         genesis_config: InitialState<ST, Vm, DA>,
     ) -> Result<Self, anyhow::Error> {
+        println!("should_init_chain {}", should_init_chain);
         let rpc_config = runner_config.rpc_config;
 
         let prev_state_root = {
             // Check if the rollup has previously been initialized
             if should_init_chain {
+                println!("init should_init_chain {}", should_init_chain);
                 info!("No history detected. Initializing chain...");
                 let ret_hash = app.init_chain(genesis_config);
                 info!("Chain initialization is done.");
