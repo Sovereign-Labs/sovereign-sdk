@@ -736,7 +736,7 @@ checksum = "4114279215a005bc675e386011e594e1d9b800918cea18fcadadcce864a2046b"
 dependencies = [
  "borsh-derive",
  "bytes",
- "hashbrown 0.13.2",
+ "hashbrown 0.12.3",
 ]
 
 [[package]]
@@ -2634,6 +2634,9 @@ name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
+dependencies = [
+ "ahash 0.7.6",
+]
 
 [[package]]
 name = "hashbrown"
@@ -3167,8 +3170,8 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 
 [[package]]
 name = "jmt"
-version = "0.6.0"
-source = "git+https://github.com/penumbra-zone/jmt#46b4b0042f66506536097d689ac2201e3e430afd"
+version = "0.7.0"
+source = "git+https://github.com/penumbra-zone/jmt#aa91b7599e4f5daa1fc9152f4c8b133046f1ac57"
 dependencies = [
  "anyhow",
  "borsh",
