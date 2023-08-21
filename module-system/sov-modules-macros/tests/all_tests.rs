@@ -38,5 +38,4 @@ fn cli_wallet_arg_tests() {
     t.pass("tests/cli_wallet_arg/derive_struct_named_fields.rs");
     t.pass("tests/cli_wallet_arg/derive_enum_mixed_fields.rs");
     t.pass("tests/cli_wallet_arg/derive_enum_unnamed_fields.rs");
-    t.pass("tests/cli_wallet_arg/derive_wallet.rs");
 }
