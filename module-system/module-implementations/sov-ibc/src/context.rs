@@ -1,4 +1,4 @@
-mod clients;
+pub(crate) mod clients;
 
 use std::cell::RefCell;
 
@@ -43,22 +43,15 @@ where
     }
 
     fn client_state(&self, client_id: &ClientId) -> Result<Self::AnyClientState, ContextError> {
-        let client_state_bytes = self
-            .ibc
+        self.ibc
             .client_state_store
             .get(&client_id.to_string(), *self.working_set.borrow_mut())
-            .ok_or(ClientError::ClientStateNotFound {
-                client_id: client_id.clone(),
-            })?;
-
-        let tm_client_state: TmClientState =
-            <TmClientState as Protobuf<Any>>::decode(client_state_bytes.as_ref()).map_err(|e| {
-                ClientError::Other {
-                    description: "failed to decode client state".to_string(),
+            .ok_or(
+                ClientError::ClientStateNotFound {
+                    client_id: client_id.clone(),
                 }
-            })?;
-
-        Ok(tm_client_state.into())
+                .into(),
+            )
     }
 
     fn decode_client_state(

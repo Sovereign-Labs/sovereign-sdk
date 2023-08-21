@@ -24,16 +24,35 @@ use ibc_proto::protobuf::Protobuf;
 use super::IbcExecutionContext;
 use crate::ConsensusStateKey;
 
-// Q: How do we enable users to set the light clients they want?
 #[derive(From, TryInto, ConsensusState)]
 pub enum AnyConsensusState {
     Tendermint(TmConsensusState),
 }
 
-#[derive(From, TryInto)]
+#[derive(Clone, From, TryInto)]
 pub enum AnyClientState {
     Tendermint(TmClientState),
 }
+
+impl TryFrom<Any> for AnyClientState {
+    type Error = ClientError;
+
+    fn try_from(value: Any) -> Result<Self, Self::Error> {
+        let tm_cs: TmClientState = value.try_into()?;
+
+        Ok(Self::Tendermint(tm_cs))
+    }
+}
+
+impl From<AnyClientState> for Any {
+    fn from(any_cs: AnyClientState) -> Self {
+        match any_cs {
+            AnyClientState::Tendermint(tm_cs) => tm_cs.into(),
+        }
+    }
+}
+
+impl Protobuf<Any> for AnyClientState {}
 
 // Next 3 trait impls are boilerplate
 // We have a `ClientState` macro, but unfortunately it doesn't currently support
@@ -224,23 +243,9 @@ where
         client_state_path: ClientStatePath,
         client_state: Self::AnyClientState,
     ) -> Result<(), ContextError> {
-        let client_state_bytes = {
-            let tm_client_state: TmClientState = client_state.try_into().map_err(|e: &str| {
-                ContextError::ClientError(ClientError::Other {
-                    description: e.to_string(),
-                })
-            })?;
-
-            <TmClientState as Protobuf<Any>>::encode_vec(&tm_client_state)
-        };
-
-        // FIXME: storing like this does NOT result in a proper Merkle proof The
-        // SDK will BorshSerialize our bytes before storing. We need to wait for
-        // the SDK to allow us to store raw bytes (i.e. to choose our encoding
-        // format)
         self.ibc.client_state_store.set(
             &client_state_path.to_string(),
-            &client_state_bytes,
+            &client_state,
             self.working_set.get_mut(),
         );
 
