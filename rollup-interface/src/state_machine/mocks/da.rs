@@ -258,10 +258,9 @@ impl DaService for MockDaService {
         println!("Recv Blob");
         let data = self.receiver.lock().await.recv().await;
         let data = data.unwrap();
-        let address = MockAddress { addr: [99; 32] };
         let hash = [0; 32];
 
-        let blob = MockBlob::<MockAddress>::new(data, address, hash);
+        let blob = MockBlob::<MockAddress>::new(data, self.sequencer_da_address, hash);
 
         Ok(MockBlock {
             blobs: vec![blob],
