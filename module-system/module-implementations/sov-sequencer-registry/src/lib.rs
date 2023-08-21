@@ -2,7 +2,7 @@ mod call;
 mod genesis;
 mod hooks;
 #[cfg(feature = "native")]
-mod query;
+pub mod query;
 
 pub use call::CallMessage;
 #[cfg(feature = "native")]

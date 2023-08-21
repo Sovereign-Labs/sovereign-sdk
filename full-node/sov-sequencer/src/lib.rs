@@ -6,6 +6,7 @@ use jsonrpsee::RpcModule;
 use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_rollup_interface::services::da::DaService;
+use tracing::debug;
 
 const SEQUENCER_RPC_ERROR: &str = "SEQUENCER_RPC_ERROR";
 
@@ -24,7 +25,7 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> Sequencer<B, T> 
         }
     }
 
-    async fn submit_batch(&self) -> anyhow::Result<()> {
+    async fn submit_batch(&self) -> anyhow::Result<usize> {
         // Need to release lock before await, so Future is `Send`.
         // But potentially it can create blobs that sent out of order.
         // Can be improved with atomics, so new batch is only created after previous was submitted.
@@ -36,9 +37,10 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> Sequencer<B, T> 
                 .map_err(|e| anyhow!("failed to lock mempool: {}", e.to_string()))?;
             batch_builder.get_next_blob()?
         };
+        let num_txs = blob.len();
         let blob: Vec<u8> = borsh::to_vec(&blob)?;
         match self.da_service.send_transaction(&blob).await {
-            Ok(_) => Ok(()),
+            Ok(_) => Ok(num_txs),
             Err(e) => Err(anyhow!("failed to submit batch: {:?}", e)),
         }
     }
@@ -61,12 +63,23 @@ where
     B: BatchBuilder + Send + Sync + 'static,
     D: DaService,
 {
-    rpc.register_async_method("sequencer_publishBatch", |_, batch_builder| async move {
-        batch_builder
-            .submit_batch()
-            .await
-            .map_err(|e| to_jsonrpsee_error_object(e, SEQUENCER_RPC_ERROR))
-    })?;
+    rpc.register_async_method(
+        "sequencer_publishBatch",
+        |params, batch_builder| async move {
+            let mut params_iter = params.sequence();
+            while let Some(tx) = params_iter.optional_next::<Vec<u8>>()? {
+                batch_builder
+                    .accept_tx(tx)
+                    .map_err(|e| to_jsonrpsee_error_object(e, SEQUENCER_RPC_ERROR))?;
+            }
+            let num_txs = batch_builder
+                .submit_batch()
+                .await
+                .map_err(|e| to_jsonrpsee_error_object(e, SEQUENCER_RPC_ERROR))?;
+
+            Ok::<String, ErrorObjectOwned>(format!("Submitted {} transactions", num_txs))
+        },
+    )?;
     rpc.register_method("sequencer_acceptTx", move |params, sequencer| {
         let tx: SubmitTransaction = params.one()?;
         let response = match sequencer.accept_tx(tx.body) {

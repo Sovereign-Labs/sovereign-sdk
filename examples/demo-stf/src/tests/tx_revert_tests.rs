@@ -1,7 +1,5 @@
 use borsh::BorshSerialize;
-use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use sov_accounts::query::Response;
-use sov_accounts::Response;
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
 use sov_election::Election;
 use sov_modules_api::default_context::DefaultContext;

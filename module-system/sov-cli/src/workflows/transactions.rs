@@ -15,6 +15,15 @@ pub enum TransactionWorkflow<File: Subcommand, Json: Subcommand> {
     /// Import a transaction
     #[clap(subcommand)]
     Import(ImportTransaction<File, Json>),
+    /// Delete the current batch of transactions
+    Clean,
+    /// Remove a single transaction from the current batch
+    Remove {
+        /// The index of the transaction to remove, starting from 0
+        index: usize,
+    },
+    /// List the current batch of transactions
+    List,
 }
 
 impl<File: Subcommand, Json: Subcommand> TransactionWorkflow<File, Json> {
@@ -37,6 +46,22 @@ impl<File: Subcommand, Json: Subcommand> TransactionWorkflow<File, Json> {
     {
         match self {
             TransactionWorkflow::Import(import_workflow) => import_workflow.run(wallet_state),
+            TransactionWorkflow::List => {
+                println!("Current batch:");
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&wallet_state.unsent_transactions)?
+                );
+                Ok(())
+            }
+            TransactionWorkflow::Clean => {
+                wallet_state.unsent_transactions.clear();
+                Ok(())
+            }
+            TransactionWorkflow::Remove { index } => {
+                wallet_state.unsent_transactions.remove(index);
+                Ok(())
+            }
         }
     }
 
