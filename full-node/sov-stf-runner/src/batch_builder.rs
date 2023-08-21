@@ -3,11 +3,12 @@ use std::io::Cursor;
 
 use anyhow::bail;
 use borsh::BorshDeserialize;
+use sov_modules_api::digest::Digest;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Context, DispatchCall, PublicKey};
+use sov_modules_api::{Context, DispatchCall, PublicKey, Spec};
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_state::WorkingSet;
-use tracing::warn;
+use tracing::{info, warn};
 
 /// BatchBuilder that creates batches of transactions in the order they were submitted
 /// Only transactions that were successfully dispatched are included.
@@ -110,6 +111,11 @@ where
             // In order to fill batch as big as possible,
             // we only check if valid tx can fit in the batch.
             if current_batch_size + tx_len <= self.max_batch_size_bytes {
+                let tx_hash: [u8; 32] = <C as Spec>::Hasher::digest(&raw_tx[..]).into();
+                info!(
+                    "Tx with has 0x{} has bee included in the batch",
+                    hex::encode(tx_hash)
+                );
                 txs.push(raw_tx);
             } else {
                 self.mempool.push_front(raw_tx);

@@ -170,6 +170,11 @@ where
             .get_blobs_for_this_slot(blobs, &mut batch_workspace)
             .expect("blob selection must succeed, probably serialization failed");
 
+        info!(
+            "Selected {} blob(s) for execution in current slot",
+            selected_blobs.len()
+        );
+
         self.checkpoint = Some(batch_workspace.checkpoint());
 
         let mut batch_receipts = vec![];
@@ -179,8 +184,9 @@ where
                 .apply_blob(blob.as_mut_ref())
                 .unwrap_or_else(Into::into);
             info!(
-                "priority blob #{} with blob_hash 0x{} has been applied with #{} transactions, sequencer outcome {:?}",
+                "blob #{} from sequencer {} with blob_hash 0x{} has been applied with #{} transactions, sequencer outcome {:?}",
                 blob_idx,
+                blob.as_mut_ref().sender(),
                 hex::encode(batch_receipt.batch_hash),
                 batch_receipt.tx_receipts.len(),
                 batch_receipt.inner
