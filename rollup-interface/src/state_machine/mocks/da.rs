@@ -238,7 +238,6 @@ impl DaService for MockDaService {
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
 
-    ///
     async fn get_finalized_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let data = self.receiver.lock().await.recv().await;
         let data = data.unwrap();
