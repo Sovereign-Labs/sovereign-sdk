@@ -224,7 +224,7 @@ pub struct MockDaService {
 }
 
 impl MockDaService {
-    ///
+    /// Creates a new MockDaService.
     pub fn new(sequencer_da_address: MockAddress) -> Self {
         let (sender, receiver) = mpsc::channel(100);
         Self {
@@ -235,19 +235,6 @@ impl MockDaService {
     }
 }
 
-impl MockDaService {
-    /*
-    /// Checks if DaService contains unprocessed blobs.
-    pub fn is_empty(&self) -> bool {
-        self.submitted.lock().unwrap().is_empty()
-    }
-
-    /// Returns serialized blobs from the DaService.
-    pub fn get_submitted(&self) -> Vec<Vec<u8>> {
-        self.submitted.lock().unwrap().clone()
-    }*/
-}
-
 #[async_trait]
 impl DaService for MockDaService {
     type Spec = MockDaSpec;
@@ -255,7 +242,6 @@ impl DaService for MockDaService {
     type Error = anyhow::Error;
 
     async fn get_finalized_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        println!("Recv Blob");
         let data = self.receiver.lock().await.recv().await;
         let data = data.unwrap();
         let hash = [0; 32];

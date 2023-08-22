@@ -110,6 +110,8 @@ pub enum SubmitTransactionResponse {
 #[cfg(test)]
 mod tests {
 
+    use std::io::Read;
+
     use sov_rollup_interface::mocks::{MockAddress, MockBatchBuilder, MockDaService};
 
     use super::*;
@@ -130,60 +132,62 @@ mod tests {
             error.to_string()
         );
     }
-    /*
-        #[tokio::test]
-        async fn test_submit_happy_path() {
-            let tx1 = vec![1, 2, 3];
-            let tx2 = vec![3, 4, 5];
-            let batch_builder = MockBatchBuilder {
-                mempool: vec![tx1.clone(), tx2.clone()],
-            };
-            let da_service = MockDaService::default();
-            assert!(da_service.is_empty());
-            let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
-            let _: () = rpc.call("sequencer_publishBatch", [1u64]).await.unwrap();
+    use sov_rollup_interface::da::BlobReaderTrait;
 
-            assert!(!da_service.is_empty());
+    #[tokio::test]
+    async fn test_submit_happy_path() {
+        let tx1 = vec![1, 2, 3];
+        let tx2 = vec![3, 4, 5];
+        let batch_builder = MockBatchBuilder {
+            mempool: vec![tx1.clone(), tx2.clone()],
+        };
+        let da_service = MockDaService::new(MockAddress::default());
 
-            let submitted = da_service.get_submitted();
-            assert_eq!(1, submitted.len());
-            // First bytes of each tx, flattened
-            let blob: Vec<Vec<u8>> = vec![vec![tx1[0]], vec![tx2[0]]];
-            let expected: Vec<u8> = borsh::to_vec(&blob).unwrap();
-            assert_eq!(expected, submitted[0]);
-        }
-    */
-    /*
-        #[tokio::test]
-        async fn test_accept_tx() {
-            let batch_builder = MockBatchBuilder { mempool: vec![] };
-            let da_service = MockDaService::default();
+        let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
+        let _: () = rpc.call("sequencer_publishBatch", [1u64]).await.unwrap();
 
-            let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
-            //assert!(da_service.is_empty());
+        let mut block = vec![];
+        let mut submitted_block = da_service.get_block_at(0).await.unwrap();
+        let _ = submitted_block.blobs[0]
+            .data_mut()
+            .read_to_end(&mut block)
+            .unwrap();
 
-            let tx: Vec<u8> = vec![1, 2, 3, 4, 5];
-            let request = SubmitTransaction { body: tx.clone() };
-            let result: SubmitTransactionResponse =
-                rpc.call("sequencer_acceptTx", [request]).await.unwrap();
-            assert_eq!(SubmitTransactionResponse::Registered, result);
+        // First bytes of each tx, flattened
+        let blob: Vec<Vec<u8>> = vec![vec![tx1[0]], vec![tx2[0]]];
+        let expected: Vec<u8> = borsh::to_vec(&blob).unwrap();
+        assert_eq!(expected, block);
+    }
 
-            // Check that it got passed to DA service
-            //assert!(da_service.is_empty());
+    #[tokio::test]
+    async fn test_accept_tx() {
+        let batch_builder = MockBatchBuilder { mempool: vec![] };
+        let da_service = MockDaService::new(MockAddress::default());
 
-            let _: () = rpc.call("sequencer_publishBatch", [1u64]).await.unwrap();
+        let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
-            //assert!(!da_service.is_empty());
+        let tx: Vec<u8> = vec![1, 2, 3, 4, 5];
+        let request = SubmitTransaction { body: tx.clone() };
+        let result: SubmitTransactionResponse =
+            rpc.call("sequencer_acceptTx", [request]).await.unwrap();
+        assert_eq!(SubmitTransactionResponse::Registered, result);
 
-            //let submitted = da_service.get_submitted();
-            //assert_eq!(1, submitted.len());
-            // First bytes of each tx, flattened
-            let blob: Vec<Vec<u8>> = vec![vec![tx[0]]];
-            let expected: Vec<u8> = borsh::to_vec(&blob).unwrap();
-            // /assert_eq!(expected, submitted[0]);
-        }
-    */
+        let _: () = rpc.call("sequencer_publishBatch", [1u64]).await.unwrap();
+
+        let mut block = vec![];
+        let mut submitted_block = da_service.get_block_at(0).await.unwrap();
+        let _ = submitted_block.blobs[0]
+            .data_mut()
+            .read_to_end(&mut block)
+            .unwrap();
+
+        // First bytes of each tx, flattened
+        let blob: Vec<Vec<u8>> = vec![vec![tx[0]]];
+        let expected: Vec<u8> = borsh::to_vec(&blob).unwrap();
+        assert_eq!(expected, block);
+    }
+
     #[tokio::test]
     #[ignore = "TBD"]
     async fn test_full_flow() {}
