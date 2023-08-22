@@ -24,11 +24,12 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> Sequencer<B, T> 
         }
     }
 
-    async fn submit_batch(&self) -> anyhow::Result<()> {
-        // Need to release lock before await, so Future is `Send`.
-        // But potentially it can create blobs that sent out of order.
-        // Can be improved with atomics, so new batch is only created after previous was submitted.
-        tracing::info!("Going to submit batch!");
+    async fn submit_batch(&self) -> anyhow::Result<usize> {
+        // Need to release lock before await, so the Future is `Send`.
+        // But potentially it can create blobs that are sent out of order.
+        // It can be improved with atomics,
+        // so a new batch is only created after previous was submitted.
+        tracing::info!("Submit batch request has been received!");
         let blob = {
             let mut batch_builder = self
                 .batch_builder
@@ -36,9 +37,11 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> Sequencer<B, T> 
                 .map_err(|e| anyhow!("failed to lock mempool: {}", e.to_string()))?;
             batch_builder.get_next_blob()?
         };
+        let num_txs = blob.len();
         let blob: Vec<u8> = borsh::to_vec(&blob)?;
+
         match self.da_service.send_transaction(&blob).await {
-            Ok(_) => Ok(()),
+            Ok(_) => Ok(num_txs),
             Err(e) => Err(anyhow!("failed to submit batch: {:?}", e)),
         }
     }
@@ -61,12 +64,23 @@ where
     B: BatchBuilder + Send + Sync + 'static,
     D: DaService,
 {
-    rpc.register_async_method("sequencer_publishBatch", |_, batch_builder| async move {
-        batch_builder
-            .submit_batch()
-            .await
-            .map_err(|e| to_jsonrpsee_error_object(e, SEQUENCER_RPC_ERROR))
-    })?;
+    rpc.register_async_method(
+        "sequencer_publishBatch",
+        |params, batch_builder| async move {
+            let mut params_iter = params.sequence();
+            while let Some(tx) = params_iter.optional_next::<Vec<u8>>()? {
+                batch_builder
+                    .accept_tx(tx)
+                    .map_err(|e| to_jsonrpsee_error_object(e, SEQUENCER_RPC_ERROR))?;
+            }
+            let num_txs = batch_builder
+                .submit_batch()
+                .await
+                .map_err(|e| to_jsonrpsee_error_object(e, SEQUENCER_RPC_ERROR))?;
+
+            Ok::<String, ErrorObjectOwned>(format!("Submitted {} transactions", num_txs))
+        },
+    )?;
     rpc.register_method("sequencer_acceptTx", move |params, sequencer| {
         let tx: SubmitTransaction = params.one()?;
         let response = match sequencer.accept_tx(tx.body) {
@@ -121,8 +135,9 @@ mod tests {
         assert!(da_service.is_empty());
         let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
-        let result: Result<(), jsonrpsee::core::Error> =
-            rpc.call("sequencer_publishBatch", [1u64]).await;
+        let arg: &[u8] = &[];
+        let result: Result<String, jsonrpsee::core::Error> =
+            rpc.call("sequencer_publishBatch", arg).await;
 
         assert!(result.is_err());
         let error = result.err().unwrap();
@@ -143,7 +158,8 @@ mod tests {
         assert!(da_service.is_empty());
         let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
-        let _: () = rpc.call("sequencer_publishBatch", [1u64]).await.unwrap();
+        let arg: &[u8] = &[];
+        let _: String = rpc.call("sequencer_publishBatch", arg).await.unwrap();
 
         assert!(!da_service.is_empty());
 
@@ -172,7 +188,8 @@ mod tests {
         // Check that it got passed to DA service
         assert!(da_service.is_empty());
 
-        let _: () = rpc.call("sequencer_publishBatch", [1u64]).await.unwrap();
+        let arg: &[u8] = &[];
+        let _: String = rpc.call("sequencer_publishBatch", arg).await.unwrap();
 
         assert!(!da_service.is_empty());
 

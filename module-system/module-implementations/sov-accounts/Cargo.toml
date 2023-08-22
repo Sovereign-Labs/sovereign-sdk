@@ -21,15 +21,14 @@ thiserror = { workspace = true }
 clap = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false, features = ["macros"] }
-sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-state = { path = "../../sov-state", version = "0.1" }
 
 
 [dev-dependencies]
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
 tempfile = { workspace = true }
 
 [features]
-default = ["native"]
+default = []
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-state/native", "sov-modules-api/native", "dep:jsonrpsee", "dep:schemars", "dep:clap"]
+native = ["serde", "dep:jsonrpsee", "dep:schemars", "dep:clap", "sov-state/native", "sov-modules-api/native"]

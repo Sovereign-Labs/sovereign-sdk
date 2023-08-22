@@ -14,8 +14,8 @@ anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 serde = { workspace = true, optional = true }
 
-sov-modules-api = { path = "../../module-system/sov-modules-api", default-features = false, features = ["macros"] }
-sov-state = { path = "../../module-system/sov-state", default-features = false }
+sov-modules-api = { path = "../../module-system/sov-modules-api" }
+sov-state = { path = "../../module-system/sov-state" }
 
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
@@ -23,9 +23,11 @@ jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], 
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-data-generators = { path = "../../module-system/utils/sov-data-generators" }
 tempfile = { workspace = true }
+demo-nft-module = { version = "*", features = ["native"], path = "." }
 
 
 [features]
-default = ["native"]
+default = []
 serde = ["dep:serde"]
 native = ["serde", "sov-state/native", "sov-modules-api/native", "jsonrpsee"]
+test = ["native"]

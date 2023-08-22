@@ -1,4 +1,5 @@
 use clap::Parser;
+use sov_modules_api::cli::JsonStringArg;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::macros::{CliWallet, CliWalletArg, DefaultRuntime};
 use sov_modules_api::{
@@ -9,7 +10,15 @@ use sov_state::{StateValue, WorkingSet};
 pub mod first_test_module {
     use super::*;
 
-    #[derive(CliWalletArg, Debug, PartialEq, borsh::BorshDeserialize, borsh::BorshSerialize)]
+    #[derive(
+        CliWalletArg,
+        Debug,
+        PartialEq,
+        borsh::BorshDeserialize,
+        borsh::BorshSerialize,
+        serde::Serialize,
+        serde::Deserialize,
+    )]
     pub struct MyStruct {
         pub first_field: u32,
         pub str_field: String,
@@ -60,7 +69,15 @@ pub mod second_test_module {
         pub state_in_second_struct: StateValue<u8>,
     }
 
-    #[derive(CliWalletArg, Debug, PartialEq, borsh::BorshDeserialize, borsh::BorshSerialize)]
+    #[derive(
+        CliWalletArg,
+        Debug,
+        PartialEq,
+        borsh::BorshDeserialize,
+        borsh::BorshSerialize,
+        serde::Serialize,
+        serde::Deserialize,
+    )]
     pub enum MyEnum {
         Foo { first_field: u32, str_field: String },
         Bar(u8),
@@ -102,25 +119,29 @@ fn main() {
         first_field: 1,
         str_field: "hello".to_string(),
     });
-    let actual_foo =
-        <Runtime<DefaultContext> as sov_modules_api::CliWallet>::CliStringRepr::try_parse_from(&[
+    let foo_from_cli: RuntimeSubcommand<JsonStringArg, DefaultContext> =
+        <RuntimeSubcommand<JsonStringArg, DefaultContext>>::try_parse_from(&[
             "main",
             "first",
-            "my-struct",
-            "1",
-            "hello",
+            "--json",
+            r#"{"first_field": 1, "str_field": "hello"}"#,
         ])
         .expect("parsing must succed")
         .into();
-    assert_eq!(expected_foo, actual_foo);
+    let foo_ir: RuntimeMessage<JsonStringArg, DefaultContext> = foo_from_cli.try_into().unwrap();
+    assert_eq!(expected_foo, foo_ir.try_into().unwrap());
 
     let expected_bar = RuntimeCall::second(second_test_module::MyEnum::Bar(2));
-    let actual_bar =
-        <Runtime<DefaultContext> as sov_modules_api::CliWallet>::CliStringRepr::try_parse_from(&[
-            "main", "second", "bar", "2",
+    let bar_from_cli: RuntimeSubcommand<JsonStringArg, DefaultContext> =
+        <RuntimeSubcommand<JsonStringArg, DefaultContext>>::try_parse_from(&[
+            "main",
+            "second",
+            "--json",
+            r#"{"Bar": 2}"#,
         ])
         .expect("parsing must succed")
         .into();
+    let bar_ir: RuntimeMessage<JsonStringArg, DefaultContext> = bar_from_cli.try_into().unwrap();
 
-    assert_eq!(expected_bar, actual_bar);
+    assert_eq!(expected_bar, bar_ir.try_into().unwrap());
 }

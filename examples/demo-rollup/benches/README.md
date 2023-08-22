@@ -11,7 +11,7 @@
 # Native Benchmarks
 Native benchmarks refer to the performance of the rollup SDK in native mode - this does not involve proving
 ## Methodology
-* We use the Bank module's Transfer call as the main transaction for running this benchmark. So what we're measuring is the number of value transfers can be done per second. 
+* We use the Bank module's Transfer call as the main transaction for running this benchmark. So what we're measuring is the number of value transfers that can be done per second. 
 * We do not connect to the DA layer since that will be the bottleneck if we do. We pre-populate 10 blocks (configurable via env var BLOCKS) with 1 blob each containing 10,000 transactions each (configurable via env var TXNS_PER_BLOCK). 
 * The first block only contains a "CreateToken" transaction. Subsequent blocks contain "Transfer" transactions.
 * All token transfers are initiated from the created token's mint address
@@ -71,4 +71,4 @@ The Makefile is located in the demo-rollup/benches folder and supports the follo
 
 The Makefile supports setting number of blocks and transactions per block using BLOCKS and TXNS_PER_BLOCK env vars. Defaults are 100 blocks and 10,000 transactions per block when using the Makefile
 
-![Flamgraph](flamegraph_sample.svg)
+![Flamegraph](flamegraph_sample.svg)

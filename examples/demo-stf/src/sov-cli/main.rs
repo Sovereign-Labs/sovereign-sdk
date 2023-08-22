@@ -2,8 +2,9 @@
 mod native;
 
 #[cfg(feature = "native")]
-fn main() -> Result<(), anyhow::Error> {
-    native::main()
+#[tokio::main]
+async fn main() -> Result<(), anyhow::Error> {
+    native::main().await
 }
 
 #[cfg(not(feature = "native"))]

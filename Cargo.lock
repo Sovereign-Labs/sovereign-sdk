@@ -349,6 +349,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-lock"
+version = "2.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "287272293e9d8c41773cec55e365490fe034813a2f172f502d6ddcf75b2f582b"
+dependencies = [
+ "event-listener",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.73"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -594,7 +603,7 @@ dependencies = [
 [[package]]
 name = "boa_ast"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
+source = "git+https://github.com/boa-dev/boa#dda713d42e698f4095b8bd17453e3271974fff89"
 dependencies = [
  "bitflags 2.4.0",
  "boa_interner",
@@ -607,7 +616,7 @@ dependencies = [
 [[package]]
 name = "boa_engine"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
+source = "git+https://github.com/boa-dev/boa#dda713d42e698f4095b8bd17453e3271974fff89"
 dependencies = [
  "bitflags 2.4.0",
  "boa_ast",
@@ -645,7 +654,7 @@ dependencies = [
 [[package]]
 name = "boa_gc"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
+source = "git+https://github.com/boa-dev/boa#dda713d42e698f4095b8bd17453e3271974fff89"
 dependencies = [
  "boa_macros",
  "boa_profiler",
@@ -656,7 +665,7 @@ dependencies = [
 [[package]]
 name = "boa_icu_provider"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
+source = "git+https://github.com/boa-dev/boa#dda713d42e698f4095b8bd17453e3271974fff89"
 dependencies = [
  "icu_collections",
  "icu_normalizer",
@@ -669,7 +678,7 @@ dependencies = [
 [[package]]
 name = "boa_interner"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
+source = "git+https://github.com/boa-dev/boa#dda713d42e698f4095b8bd17453e3271974fff89"
 dependencies = [
  "boa_gc",
  "boa_macros",
@@ -684,7 +693,7 @@ dependencies = [
 [[package]]
 name = "boa_macros"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
+source = "git+https://github.com/boa-dev/boa#dda713d42e698f4095b8bd17453e3271974fff89"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.33",
@@ -695,7 +704,7 @@ dependencies = [
 [[package]]
 name = "boa_parser"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
+source = "git+https://github.com/boa-dev/boa#dda713d42e698f4095b8bd17453e3271974fff89"
 dependencies = [
  "bitflags 2.4.0",
  "boa_ast",
@@ -715,7 +724,7 @@ dependencies = [
 [[package]]
 name = "boa_profiler"
 version = "0.17.0"
-source = "git+https://github.com/boa-dev/boa#b204dcb0014fe825a06a2683b01a29b886436c46"
+source = "git+https://github.com/boa-dev/boa#dda713d42e698f4095b8bd17453e3271974fff89"
 
 [[package]]
 name = "bonsai-sdk"
@@ -1480,9 +1489,9 @@ dependencies = [
 
 [[package]]
 name = "dashmap"
-version = "5.5.0"
+version = "5.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6943ae99c34386c84a470c499d3414f66502a41340aa895406e0d2e4a207b91d"
+checksum = "edd72493923899c6f10c641bdbdeddc7183d6396641d99c1a0d1597f37f92e28"
 dependencies = [
  "cfg-if",
  "hashbrown 0.14.0",
@@ -1522,6 +1531,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh 0.10.3",
+ "demo-nft-module",
  "jsonrpsee 0.18.2",
  "serde",
  "sov-data-generators",
@@ -1558,6 +1568,7 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-blob-storage",
+ "sov-cli",
  "sov-data-generators",
  "sov-election",
  "sov-evm",
@@ -2612,6 +2623,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "gloo-net"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9902a044653b26b99f7e3693a42f171312d9be8b26b5697bd1e43ad1f8a35e10"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "futures-sink",
+ "gloo-utils",
+ "js-sys",
+ "pin-project",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "gloo-timers"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2621,6 +2652,19 @@ dependencies = [
  "futures-core",
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "gloo-utils"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "037fcb07216cb3a30f7292bd0176b050b7b9a052ba830ef7d5d65f6dc64ba58e"
+dependencies = [
+ "js-sys",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -2636,9 +2680,9 @@ dependencies = [
 
 [[package]]
 name = "h2"
-version = "0.3.20"
+version = "0.3.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "97ec8491ebaf99c8eaa73058b045fe58073cd6be7f596ac993ced0b0a0c01049"
+checksum = "91fc23aa11be92976ef4729127f1a74adf36d8436f7816b185d18df956790833"
 dependencies = [
  "bytes",
  "fnv",
@@ -3344,12 +3388,37 @@ version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1822d18e4384a5e79d94dc9e4d1239cfa9fad24e55b44d2efeff5b394c9fece4"
 dependencies = [
+ "jsonrpsee-client-transport",
  "jsonrpsee-core 0.18.2",
  "jsonrpsee-http-client 0.18.2",
  "jsonrpsee-proc-macros",
  "jsonrpsee-server",
  "jsonrpsee-types 0.18.2",
+ "jsonrpsee-wasm-client",
+ "jsonrpsee-ws-client",
  "tracing",
+]
+
+[[package]]
+name = "jsonrpsee-client-transport"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11aa5766d5c430b89cb26a99b88f3245eb91534be8126102cea9e45ee3891b22"
+dependencies = [
+ "futures-channel",
+ "futures-util",
+ "gloo-net",
+ "http",
+ "jsonrpsee-core 0.18.2",
+ "pin-project",
+ "rustls-native-certs",
+ "soketto",
+ "thiserror",
+ "tokio",
+ "tokio-rustls 0.24.1",
+ "tokio-util",
+ "tracing",
+ "webpki-roots 0.23.1",
 ]
 
 [[package]]
@@ -3378,8 +3447,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "64c6832a55f662b5a6ecc844db24b8b9c387453f923de863062c60ce33d62b81"
 dependencies = [
  "anyhow",
+ "async-lock",
  "async-trait",
  "beef",
+ "futures-timer",
  "futures-util",
  "globset",
  "hyper",
@@ -3392,7 +3463,9 @@ dependencies = [
  "soketto",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tracing",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -3492,6 +3565,29 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "jsonrpsee-wasm-client"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34e6ea7c6d862e60f8baebd946c037b70c6808a4e4e31e792a4029184e3ce13a"
+dependencies = [
+ "jsonrpsee-client-transport",
+ "jsonrpsee-core 0.18.2",
+ "jsonrpsee-types 0.18.2",
+]
+
+[[package]]
+name = "jsonrpsee-ws-client"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a64b2589680ba1ad7863f279cd2d5083c1dc0a7c0ea959d22924553050f8ab9f"
+dependencies = [
+ "http",
+ "jsonrpsee-client-transport",
+ "jsonrpsee-core 0.18.2",
+ "jsonrpsee-types 0.18.2",
 ]
 
 [[package]]
@@ -3805,6 +3901,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh 0.10.3",
+ "module-template",
  "schemars",
  "serde",
  "serde_json",
@@ -4991,9 +5088,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.11.18"
+version = "0.11.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cde824a14b7c14f85caff81225f411faacc04a2013f41670f41443742b1c1c55"
+checksum = "20b9b67e2ca7dd9e9f9285b759de30ff538aab981abaaf7bc9bd90b84a0126c3"
 dependencies = [
  "base64 0.21.2",
  "bytes",
@@ -5027,7 +5124,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots 0.22.6",
+ "webpki-roots 0.25.2",
  "winreg",
 ]
 
@@ -5979,7 +6076,7 @@ checksum = "1d1feddffcfcc0b33f5c6ce9a29e341e4cd59c3f78e7ee45f4a40c038b1d6cbb"
 dependencies = [
  "log",
  "ring",
- "rustls-webpki 0.101.3",
+ "rustls-webpki 0.101.4",
  "sct",
 ]
 
@@ -6006,9 +6103,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.100.1"
+version = "0.100.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d6207cd5ed3d8dca7816f8f3725513a34609c0c765bf652b8c3cb4cfd87db46b"
+checksum = "e98ff011474fa39949b7e5c0428f9b4937eda7da7848bbb947786b7be0b27dab"
 dependencies = [
  "ring",
  "untrusted",
@@ -6016,9 +6113,9 @@ dependencies = [
 
 [[package]]
 name = "rustls-webpki"
-version = "0.101.3"
+version = "0.101.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "261e9e0888cba427c3316e6322805653c9425240b6fd96cee7cb671ab70ab8d0"
+checksum = "7d93931baf2d282fff8d3a532bbfd7653f734643161b87e3e01e59a04439bf0d"
 dependencies = [
  "ring",
  "untrusted",
@@ -6550,9 +6647,9 @@ checksum = "7bd3e3206899af3f8b12af284fafc038cc1dc2b41d1b89dd17297221c5d225de"
 
 [[package]]
 name = "slab"
-version = "0.4.8"
+version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6528351c9bc8ab22353f9d776db39a20288e8d6c37ef8cfe3317cf875eecfc2d"
+checksum = "8f92a496fb766b417c996b9c5e57daf2f7ad3b0bebe1ccfca4856390e3d3bb67"
 dependencies = [
  "autocfg",
 ]
@@ -6734,9 +6831,15 @@ dependencies = [
  "borsh 0.10.3",
  "demo-stf",
  "directories",
+ "hex",
+ "jsonrpsee 0.18.2",
  "serde",
  "serde_json",
+ "sov-accounts",
+ "sov-bank",
  "sov-modules-api",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -7047,6 +7150,7 @@ dependencies = [
  "serde_json",
  "sov-bank",
  "sov-modules-api",
+ "sov-prover-incentives",
  "sov-rollup-interface",
  "sov-state",
  "tempfile",
@@ -8224,8 +8328,14 @@ version = "0.23.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b03058f88386e5ff5310d9111d53f48b17d732b401aeb83a8d5190f2ac459338"
 dependencies = [
- "rustls-webpki 0.100.1",
+ "rustls-webpki 0.100.2",
 ]
+
+[[package]]
+name = "webpki-roots"
+version = "0.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14247bb57be4f377dfb94c72830b8ce8fc6beac03cf4bf7b9732eadd414123fc"
 
 [[package]]
 name = "which"
@@ -8355,11 +8465,12 @@ dependencies = [
 
 [[package]]
 name = "winreg"
-version = "0.10.1"
+version = "0.50.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80d0f4e272c85def139476380b12f9ac60926689dd2e01d4923222f40580869d"
+checksum = "524e57b2c537c0f9b1e69f1965311ec12182b4122e45035b1508cd24d2adadb1"
 dependencies = [
- "winapi",
+ "cfg-if",
+ "windows-sys",
 ]
 
 [[package]]

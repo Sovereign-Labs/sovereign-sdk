@@ -47,6 +47,8 @@ pub trait EncodeCall<M: Module> {
 #[cfg(feature = "native")]
 pub trait CliWallet: DispatchCall {
     /// The type that is used to represent this type in the CLI. Typically,
-    /// this type implements the clap::Subcommand trait.
-    type CliStringRepr: Into<<Self as DispatchCall>::Decodable>;
+    /// this type implements the clap::Subcommand trait. This type is generic to
+    /// allow for different representations of the same type in the interface; a
+    /// typical end-usage will impl traits only in the case where `CliStringRepr<T>: Into::RuntimeCall`
+    type CliStringRepr<T>;
 }
