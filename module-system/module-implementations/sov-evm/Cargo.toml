@@ -30,12 +30,11 @@ jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], 
 tracing = { workspace = true }
 derive_more = { workspace = true }
 
-# TODO: move these dependencies to the workspace when the EVM module is no longer in the experimental stage
+
 ethereum-types = "0.14.1"
 ethers-core = { workspace = true }
 ethers-contract = { workspace = true }
 ethers-middleware = { workspace = true }
-ethers-providers = { workspace = true }
 ethers-signers = { workspace = true }
 ethers = { workspace = true }
 

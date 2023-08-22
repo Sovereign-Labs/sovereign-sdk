@@ -22,15 +22,15 @@ use crate::{get_genesis_config, initialize_ledger, ROLLUP_NAMESPACE};
 
 /// Dependencies needed to run the rollup.
 pub struct Rollup<Vm: Zkvm, DA: DaService + Clone> {
-    ///
+    /// Implementation of the STF.
     pub app: App<Vm, DA::Spec>,
-    ///
+    /// Data availability service.
     pub da_service: DA,
-    ///
+    /// Ledger db.
     pub ledger_db: LedgerDB,
-    ///
+    /// Runner configuration.
     pub runner_config: RunnerConfig,
-    ///
+    /// Initial rollup configuration.
     pub genesis_config: GenesisConfig<DefaultContext>,
 }
 

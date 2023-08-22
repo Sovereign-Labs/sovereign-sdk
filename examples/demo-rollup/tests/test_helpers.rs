@@ -20,7 +20,6 @@ pub(crate) fn output(result: ExecutionResult) -> bytes::Bytes {
 fn test_data_path() -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests");
-    //path.push("evm");
     path.push("test_data");
     path
 }

@@ -6691,7 +6691,6 @@ dependencies = [
  "ethers-contract",
  "ethers-core",
  "ethers-middleware",
- "ethers-providers",
  "ethers-signers",
  "hex",
  "jsonrpsee 0.18.2",
