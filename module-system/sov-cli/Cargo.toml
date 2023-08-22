@@ -17,7 +17,7 @@ path = "src/lib.rs"
 
 
 [dependencies]
-demo-stf = { path = "../../examples/demo-stf" }
+demo-stf = { path = "../../examples/demo-stf", features = ["native"] }
 sov-modules-api = { path = "../sov-modules-api", version = "0.1", features = ["native"] }
 directories = "5.0.1"
 anyhow = { workspace = true }

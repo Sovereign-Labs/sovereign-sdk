@@ -11,6 +11,8 @@ borsh = { workspace = true, features = ["bytes"] }
 bech32 = { workspace = true }
 prost = "0.11"
 prost-types = "0.11"
+# I keep this commented as a reminder to opportunity to optimze this crate for non native compilation
+#tendermint = { version = "0.32", default-features = false, features = ["std"] }
 tendermint = "0.32"
 tendermint-proto = "0.32"
 
@@ -23,13 +25,13 @@ hex = { version = "0.4.3", features = ["serde"] }
 hex-literal = "0.4.1"
 jsonrpsee = { version = "0.16.2", features = ["http-client"], optional = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
+serde_json = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-zk-cycle-macros = {path = "../../utils/zk-cycle-macros", optional=true}
-risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional=true}
-risc0-zkvm-platform = { version = "0.16", optional=true}
+zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
+risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
+risc0-zkvm-platform = { version = "0.16", optional = true }
 
 sov-rollup-interface = { path = "../../rollup-interface" }
 nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "dd37588444fca72825d11fe4a46838f66525c49f", features = ["serde", "borsh"] }
@@ -45,7 +47,7 @@ wiremock = "0.5"
 prost-build = { version = "0.11" }
 
 [features]
-default = ["native"]
-native = ["dep:tokio", "dep:jsonrpsee"]
-bench = ["zk-cycle-macros/bench","risc0-zkvm","risc0-zkvm-platform"]
+default = []
+native = ["dep:tokio", "dep:jsonrpsee", "dep:serde_json", "tendermint/default"]
+bench = ["zk-cycle-macros/bench", "risc0-zkvm", "risc0-zkvm-platform"]
 verifier = []

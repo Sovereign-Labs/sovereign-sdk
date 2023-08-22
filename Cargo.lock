@@ -1477,6 +1477,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "demo-nft-module",
  "jsonrpsee 0.18.2",
  "serde",
  "sov-data-generators",
@@ -3682,6 +3683,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "module-template",
  "schemars",
  "serde",
  "serde_json",
@@ -6808,6 +6810,7 @@ dependencies = [
  "serde_json",
  "sov-bank",
  "sov-modules-api",
+ "sov-prover-incentives",
  "sov-rollup-interface",
  "sov-state",
  "tempfile",

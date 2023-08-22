@@ -13,13 +13,12 @@ resolver = "2"
 publish = false
 
 [dev-dependencies]
-sov-modules-api = { path = "../../../sov-modules-api" }
 tempfile = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
-sov-modules-api = { path = "../../../sov-modules-api", default-features = false, features = ["macros"] }
-sov-state = { path = "../../../sov-state", default-features = false }
+sov-modules-api = { path = "../../../sov-modules-api" }
+sov-state = { path = "../../../sov-state" }
 sov-rollup-interface = { path = "../../../../rollup-interface" }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
@@ -30,6 +29,6 @@ jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], 
 clap = { workspace = true, optional = true }
 
 [features]
-default = ["native"]
+default = []
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-modules-api/native", "dep:jsonrpsee", "dep:schemars", "dep:clap"]
+native = ["serde", "sov-modules-api/native", "dep:jsonrpsee", "dep:schemars", "dep:clap", "sov-state/native"]
