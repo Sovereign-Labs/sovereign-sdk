@@ -96,7 +96,7 @@ build-sov-cli:
 test-generate-create-token-tx: check-container-running build-sov-cli
 	$(SOV_CLI_REL_PATH) transactions import from-file bank --path ../test-data/requests/create_token.json
 
-set-rpc-url: build-sov-cli:
+set-rpc-url: build-sov-cli
 	$(SOV_CLI_REL_PATH) rpc set-url http://localhost:12345
 
 import-keys: build-sov-cli
@@ -105,7 +105,7 @@ import-keys: build-sov-cli
 test-create-token: set-rpc-url test-generate-create-token-tx import-keys
 	$(SOV_CLI_REL_PATH) rpc submit-batch
 
-remove-insecure-keys: build-sov-cli:
+remove-insecure-keys: build-sov-cli
 	$(SOV_CLI_REL_PATH) keys remove by-address sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqwr57gc
 
 clean-rollup-db:
