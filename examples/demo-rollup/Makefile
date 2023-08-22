@@ -48,7 +48,7 @@ start-existing:
 
 start-new:
 	@echo "Starting new container: $(CONTAINER_NAME)"
-	docker run -d --name $(CONTAINER_NAME) --platform linux/amd64 -p 26657:26657 -p 26659:26659 -p $(RPC_PORT):$(RPC_PORT) -p 9090:9090 $(IMAGE_NAME)
+	docker run -d --name $(CONTAINER_NAME) --platform linux/amd64 -p 26657:26657 -p 26659:26659 -p $(RPC_PORT):$(RPC_PORT) $(IMAGE_NAME)
 
 start-container:
 	@$(MAKE) check-container-running || { $(MAKE) check-container-exists && $(MAKE) start-existing || $(MAKE) start-new; }
@@ -96,16 +96,16 @@ build-sov-cli:
 test-generate-create-token-tx: check-container-running build-sov-cli
 	$(SOV_CLI_REL_PATH) transactions import from-file bank --path ../test-data/requests/create_token.json
 
-set-rpc-url: 
+set-rpc-url: build-sov-cli:
 	$(SOV_CLI_REL_PATH) rpc set-url http://localhost:12345
 
-import-keys: 
+import-keys: build-sov-cli
 	$(SOV_CLI_REL_PATH) keys import --nickname DANGER__DO_NOT_USE_WITH_REAL_MONEY --path ../test-data/keys/minter_private_key.json
 
 test-create-token: set-rpc-url test-generate-create-token-tx import-keys
 	$(SOV_CLI_REL_PATH) rpc submit-batch
 
-remove-insecure-keys:
+remove-insecure-keys: build-sov-cli:
 	$(SOV_CLI_REL_PATH) keys remove by-address sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqwr57gc
 
 clean-rollup-db:
