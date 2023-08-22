@@ -14,17 +14,17 @@
 
 ## What is the Sovereign SDK?
 
-The Sovereign SDK is a free and open-source toolkit for building zk-rollups **that is currently under development**. Sovereign SDK consists of three
+The Sovereign SDK is a free and open-source toolkit for building rollups (both ZK and optimistic) **that is currently under development**. Sovereign SDK consists of three
 logical components:
 
-1. The Rollup Interface, a minimal set of interfaces that defines a zk-rollup
+1. The Rollup Interface, a minimal set of interfaces that defines a rollup
 1. The Module System, an opinionated framework for building a rollup with the Rollup Interface
 1. The Full Node, a client implementation capable of running any rollup which implements the Rollup Interface.
 
 ### The Rollup Interface
 
 At the heart of the Sovereign SDK is [the Rollup Interface](./rollup-interface/specs/overview.md), which defines the _interfaces_ that rollups
-must implement. In the Sovereign SDK, we define a zk-rollup as the combination of three components:
+must implement. In the Sovereign SDK, we define a rollup as the combination of three components:
 
 1. A [State Transition Function](./rollup-interface/specs/interfaces/stf.md) ("STF") which defines the "business logic" of the rollup
 1. A [Data Availability Layer](./rollup-interface/specs/interfaces/da.md) ("DA layer") which determines the set of transactions that are fed
@@ -80,16 +80,19 @@ issue! All of the core developers can be reached via [Discord](https://discord.g
 
 ## Getting Started
 
-### Building a Rollup
+### Running a demo rollup
 
-The easiest way to build a rollup is to use the Module System. You can find a tutorial [here](./examples/demo-nft-module/README.md).
+Experience how a simple rollup works by exploring our [`demo-rollup`](./examples/demo-rollup/README.md) tutorial.
 
-We also provide two examples - [`demo-stf`](./examples/demo-stf/README.md), which shows how to use the Module System to implement a
-state transition, and [`demo-rollup`](./examples/demo-rollup/README.md), which shows how to combine the demo STF with a DA layer and a ZKVM to
-get a complete rollup implementation.
+### Building a rollup
 
-If you want even more control over your rollup's functionality, you can implement a completely custom State Transition Function
-without using the Module System. You can find a tutorial [here](./examples/demo-simple-stf/README.md).
+- #### Using the Module System
+This is the most straightforward way to create a rollup.
+
+To construct a single module, follow our [module building tutorial](./examples/demo-nft-module/README.md).
+To combine multiple modules into a State Transition Function (STF), see the [`demo-stf`](./examples/demo-stf/README.md) guide.
+- #### By building a custom State Transition Function
+If you want even more control over your rollup's functionality, you can implement a completely custom State Transition Function without using the Module System. Our dedicated tutorial for this approach can be found [here](./examples/demo-simple-stf/README.md).
 
 ### Adding a new Data Availability Layer
 
