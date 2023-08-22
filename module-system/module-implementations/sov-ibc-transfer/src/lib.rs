@@ -1,4 +1,5 @@
 mod call;
+pub mod codec;
 pub mod context;
 mod genesis;
 
@@ -9,22 +10,15 @@ mod tests;
 mod query;
 
 pub use call::CallMessage;
+use codec::RawKeyBorshValueCodec;
 use context::TransferContext;
 #[cfg(feature = "native")]
 pub use query::Response;
 use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 
-pub struct ExampleModuleConfig {}
+pub struct TransferConfig {}
 
-/// A new module:
-/// - Must derive `ModuleInfo`
-/// - Must contain `[address]` field
-/// - Can contain any number of ` #[state]` or `[module]` fields
-/// - Should derive `ModuleCallJsonSchema` if the "native" feature is enabled.
-///   This is optional, and is only used to generate a JSON Schema for your
-///   module's call messages (which is useful to develop clients, CLI tooling
-///   etc.).
 #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo, Clone)]
 pub struct Transfer<C: sov_modules_api::Context> {
@@ -36,10 +30,19 @@ pub struct Transfer<C: sov_modules_api::Context> {
     #[module]
     pub(crate) bank: sov_bank::Bank<C>,
 
-    /// Keeps track of the address of each token we minted, indexed by token
-    /// name.
+    /// Keeps track of the address of each token we minted.
+    /// The index is the hash of the token denom (using the hasher `C::Hasher`).
+    /// Note: we use `Vec<u8>` instead of `Output<C::Hasher>` because `C::Hasher`
+    /// is not cloneable, and we currently need our module to be cloneable
     #[state]
-    pub(crate) minted_tokens: sov_state::StateMap<String, C::Address>,
+    pub(crate) minted_tokens:
+        sov_state::StateMap<Vec<u8>, C::Address, RawKeyBorshValueCodec>,
+
+    /// Keeps track of the address of each token we escrowed.
+    /// The index is the hash of the token denom (using the hasher `C::Hasher`).
+    #[state]
+    pub(crate) escrowed_tokens:
+        sov_state::StateMap<Vec<u8>, C::Address, RawKeyBorshValueCodec>,
 }
 
 impl<C: sov_modules_api::Context> Transfer<C> {
@@ -54,7 +57,7 @@ impl<C: sov_modules_api::Context> Transfer<C> {
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Transfer<C> {
     type Context = C;
 
-    type Config = ExampleModuleConfig;
+    type Config = TransferConfig;
 
     type CallMessage = call::CallMessage;
 
