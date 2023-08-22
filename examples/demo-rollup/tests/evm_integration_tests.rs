@@ -1,4 +1,5 @@
 mod test_helpers;
+use std::net::SocketAddr;
 use std::str::FromStr;
 
 use ethers_core::abi::Address;
@@ -26,9 +27,10 @@ impl TestClient {
         key: Wallet<SigningKey>,
         from_addr: Address,
         contract: SimpleStorageContract,
+        rpc_addr: std::net::SocketAddr,
     ) -> Self {
-        let endpoint = format!("http://localhost:{}", 12345);
-        let provider = Provider::try_from(endpoint).unwrap();
+        let provider =
+            Provider::try_from(&format!("http://localhost:{}", rpc_addr.port())).unwrap();
 
         let client = SignerMiddleware::new_with_provider_chain(provider, key)
             .await
@@ -113,7 +115,7 @@ impl TestClient {
     }
 }
 
-async fn send_tx_test_to_eth() -> Result<(), Box<dyn std::error::Error>> {
+async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
     let chain_id: u64 = 1;
     let key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
         .parse::<LocalWallet>()
@@ -124,23 +126,22 @@ async fn send_tx_test_to_eth() -> Result<(), Box<dyn std::error::Error>> {
 
     let from_addr = Address::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
 
-    let test_client = TestClient::new_demo_rollup_client(chain_id, key, from_addr, contract).await;
+    let test_client =
+        TestClient::new_demo_rollup_client(chain_id, key, from_addr, contract, rpc_address).await;
     test_client.execute().await
 }
 
 #[tokio::test]
 async fn tx_tests() -> Result<(), anyhow::Error> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
+    let (port_tx, port_rx) = tokio::sync::oneshot::channel();
 
     let rollup_task = tokio::spawn(async {
-        tx.send(()).unwrap();
-        start_rollup().await;
+        start_rollup(port_tx).await;
     });
 
     // Wait for rollup task to start:
-    let _ = rx.await;
-
-    send_tx_test_to_eth().await.unwrap();
+    let port = port_rx.await.unwrap();
+    send_tx_test_to_eth(port).await.unwrap();
     rollup_task.abort();
     Ok(())
 }

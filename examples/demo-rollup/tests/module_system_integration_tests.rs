@@ -1,4 +1,6 @@
 mod test_helpers;
+use std::net::SocketAddr;
+
 use borsh::BorshSerialize;
 use demo_stf::app::DefaultPrivateKey;
 use demo_stf::runtime::RuntimeCall;
@@ -29,7 +31,7 @@ impl TestClient {
     }
 }
 
-async fn send_test_create_token_tx() -> Result<(), anyhow::Error> {
+async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow::Error> {
     let key = DefaultPrivateKey::generate();
     let address: <DefaultContext as Spec>::Address = key.to_address();
 
@@ -42,24 +44,23 @@ async fn send_test_create_token_tx() -> Result<(), anyhow::Error> {
     });
     let tx = Transaction::<DefaultContext>::new_signed_tx(&key, msg.try_to_vec().unwrap(), 0);
 
-    let client = TestClient::new("http://localhost:12345");
+    let client = TestClient::new(&format!("http://localhost:{}", rpc_address.port()));
 
     client.send_transaction(tx).await
 }
 
 #[tokio::test]
 async fn tx_tests() -> Result<(), anyhow::Error> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
+    let (port_tx, port_rx) = tokio::sync::oneshot::channel();
 
     let rollup_task = tokio::spawn(async {
-        tx.send(()).unwrap();
-        start_rollup().await;
+        start_rollup(port_tx).await;
     });
 
     // Wait for rollup task to start:
-    let _ = rx.await;
+    let port = port_rx.await.unwrap();
 
-    send_test_create_token_tx().await?;
+    send_test_create_token_tx(port).await?;
     rollup_task.abort();
     Ok(())
 }

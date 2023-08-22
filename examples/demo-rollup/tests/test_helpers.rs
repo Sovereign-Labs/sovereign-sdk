@@ -1,4 +1,5 @@
 use std::fs::remove_dir_all;
+use std::net::SocketAddr;
 use std::path::PathBuf;
 
 use demo_stf::app::App;
@@ -10,6 +11,7 @@ use risc0_adapter::host::Risc0Verifier;
 use sov_demo_rollup::{get_genesis_config, initialize_ledger, Rollup};
 use sov_rollup_interface::mocks::{MockAddress, MockDaService};
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
+use tokio::sync::oneshot;
 
 #[allow(dead_code)]
 pub(crate) fn output(result: ExecutionResult) -> bytes::Bytes {
@@ -56,7 +58,7 @@ fn create_mock_da_rollup(rollup_config: RollupConfig<()>) -> Rollup<Risc0Verifie
     }
 }
 
-pub async fn start_rollup() {
+pub async fn start_rollup(rpc_reporting_channel: oneshot::Sender<SocketAddr>) {
     let mut mock_path = PathBuf::from("tests");
     mock_path.push("test_data");
     mock_path.push("tmp");
@@ -68,14 +70,16 @@ pub async fn start_rollup() {
             start_height: 0,
             rpc_config: RpcConfig {
                 bind_host: "127.0.0.1".into(),
-                bind_port: 12345,
+                bind_port: 0,
             },
         },
         da: (),
     };
-
     let rollup = create_mock_da_rollup(rollup_config);
-    rollup.run().await.unwrap();
+    rollup
+        .run_and_report_rpc_port(Some(rpc_reporting_channel))
+        .await
+        .unwrap();
 }
 
 #[allow(dead_code)]
