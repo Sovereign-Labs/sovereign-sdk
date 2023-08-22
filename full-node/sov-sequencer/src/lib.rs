@@ -25,10 +25,11 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> Sequencer<B, T> 
     }
 
     async fn submit_batch(&self) -> anyhow::Result<()> {
-        // Need to release lock before await, so Future is `Send`.
-        // But potentially it can create blobs that sent out of order.
-        // Can be improved with atomics, so new batch is only created after previous was submitted.
-        tracing::info!("Going to submit batch!");
+        // Need to release lock before await, so the Future is `Send`.
+        // But potentially it can create blobs that are sent out of order.
+        // It can be improved with atomics,
+        // so a new batch is only created after previous was submitted.
+        tracing::info!("Submit batch request has been received!");
         let blob = {
             let mut batch_builder = self
                 .batch_builder
@@ -37,6 +38,7 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> Sequencer<B, T> 
             batch_builder.get_next_blob()?
         };
         let blob: Vec<u8> = borsh::to_vec(&blob)?;
+
         match self.da_service.send_transaction(&blob).await {
             Ok(_) => Ok(()),
             Err(e) => Err(anyhow!("failed to submit batch: {:?}", e)),

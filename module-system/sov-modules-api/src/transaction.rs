@@ -50,14 +50,14 @@ impl<C: Context> Transaction<C> {
     pub fn new_signed_tx(priv_key: &C::PrivateKey, mut message: Vec<u8>, nonce: u64) -> Self {
         // Since we own the message already, try to add the serialized nonce in-place.
         // This lets us avoid a copy if the message vec has at least 8 bytes of extra capacity.
-        let orignal_length = message.len();
+        let original_length = message.len();
         message.extend_from_slice(&nonce.to_le_bytes());
 
         let pub_key = priv_key.pub_key();
         let signature = priv_key.sign(&message);
 
         // Don't forget to truncate the message back to its original length!
-        message.truncate(orignal_length);
+        message.truncate(original_length);
 
         Self {
             signature,
