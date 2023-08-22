@@ -10,7 +10,6 @@ use sov_db::state_db::StateDB;
 use crate::config::Config;
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::storage::{NativeStorage, StorageKey, StorageProof, StorageValue};
-use crate::tree_db::TreeReadLogger;
 use crate::witness::Witness;
 use crate::{MerkleProofSpec, Storage};
 
@@ -85,19 +84,14 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error> {
         let latest_version = self.db.get_next_version() - 1;
-        witness.add_hint(latest_version);
 
-        let read_logger = TreeReadLogger::with_db_and_witness(self.db.clone(), witness);
-        let untracked_jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&self.db);
+        let jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&self.db);
 
         // Handle empty untracked_jmt
-        if untracked_jmt
-            .get_root_hash_option(latest_version)?
-            .is_none()
-        {
+        if jmt.get_root_hash_option(latest_version)?.is_none() {
             assert_eq!(latest_version, 0);
             let empty_batch = Vec::default().into_iter();
-            let (_, tree_update) = untracked_jmt
+            let (_, tree_update) = jmt
                 .put_value_set(empty_batch, latest_version)
                 .expect("JMT update must succeed");
 
@@ -110,14 +104,13 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         for (key, read_value) in state_accesses.ordered_reads {
             let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
             // TODO: Switch to the batch read API once it becomes available
-            let (result, proof) = untracked_jmt.get_with_proof(key_hash, latest_version)?;
+            let (result, proof) = jmt.get_with_proof(key_hash, latest_version)?;
             if result.as_ref() != read_value.as_ref().map(|f| f.value.as_ref()) {
                 anyhow::bail!("Bug! Incorrect value read from jmt");
             }
             witness.add_hint(proof);
         }
 
-        let tracked_jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&read_logger);
         // Compute the jmt update from the write batch
         let batch = state_accesses
             .ordered_writes
@@ -135,13 +128,17 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
 
         let next_version = self.db.get_next_version();
 
-        let (new_root, tree_update) = tracked_jmt
-            .put_value_set(batch, next_version)
+        let (new_root, update_proof, tree_update) = jmt
+            .put_value_set_with_proof(batch, next_version)
             .expect("JMT update must succeed");
 
         self.db
             .write_node_batch(&tree_update.node_batch)
             .expect("db write must succeed");
+
+        witness.add_hint(update_proof);
+        witness.add_hint(&new_root.0);
+
         self.db.inc_next_version();
         Ok(new_root.0)
     }

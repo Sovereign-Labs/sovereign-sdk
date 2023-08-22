@@ -3211,8 +3211,7 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 
 [[package]]
 name = "jmt"
-version = "0.6.0"
-source = "git+https://github.com/penumbra-zone/jmt#46b4b0042f66506536097d689ac2201e3e430afd"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "borsh",
