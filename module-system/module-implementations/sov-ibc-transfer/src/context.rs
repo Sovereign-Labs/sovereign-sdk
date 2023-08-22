@@ -43,7 +43,7 @@ where
         }
     }
 
-    pub fn get_escrow_account(&self, port_id: &PortId, channel_id: &ChannelId) -> C::Address {
+    pub fn get_escrow_account(&self, _port_id: &PortId, _channel_id: &ChannelId) -> C::Address {
         // Q: What is the escrow account?
         todo!()
     }
