@@ -82,7 +82,6 @@ pub mod experimental {
         rpc.register_async_method(
             "eth_sendRawTransaction",
             |parameters, ethereum| async move {
-                println!("Got TX1");
                 let data: Bytes = parameters.one().unwrap();
 
                 let raw_evm_tx = RawEvmTransaction { rlp: data.to_vec() };

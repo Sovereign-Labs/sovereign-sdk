@@ -13,8 +13,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         config: &<Self as sov_modules_api::Module>::Config,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
-        println!("Genesis {:?}", config);
-
         let mut evm_db = self.get_db(working_set);
 
         for acc in &config.data {

@@ -107,7 +107,6 @@ mod experimental {
             config: &Self::Config,
             working_set: &mut WorkingSet<C::Storage>,
         ) -> Result<(), Error> {
-            println!("EVM Genesis");
             Ok(self.init_module(config, working_set)?)
         }
 
@@ -117,7 +116,6 @@ mod experimental {
             context: &Self::Context,
             working_set: &mut WorkingSet<C::Storage>,
         ) -> Result<sov_modules_api::CallResponse, Error> {
-            println!("EVM Call");
             Ok(self.execute_call(msg.tx, context, working_set)?)
         }
     }

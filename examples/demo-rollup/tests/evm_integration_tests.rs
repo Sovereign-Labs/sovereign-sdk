@@ -178,16 +178,11 @@ async fn send_tx_test_to_eth() -> Result<(), Box<dyn std::error::Error>> {
 
 #[tokio::test]
 async fn tx_tests() -> Result<(), anyhow::Error> {
-    println!("Start");
     let f = tokio::spawn(async {
         start_rollup().await;
     });
 
-    //    tokio::time::sleep(Duration::from_millis(1000)).await;
-    //   tokio::time::sleep(Duration::from_millis(3000)).await;
-    println!("End");
     send_tx_test_to_eth().await.unwrap();
-    //tokio::time::sleep(Duration::from_millis(2000)).await;
     f.abort();
 
     Ok(())

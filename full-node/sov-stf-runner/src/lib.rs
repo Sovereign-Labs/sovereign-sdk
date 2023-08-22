@@ -66,13 +66,11 @@ where
         should_init_chain: bool,
         genesis_config: InitialState<ST, Vm, DA>,
     ) -> Result<Self, anyhow::Error> {
-        println!("should_init_chain {}", should_init_chain);
         let rpc_config = runner_config.rpc_config;
 
         let prev_state_root = {
             // Check if the rollup has previously been initialized
             if should_init_chain {
-                println!("init should_init_chain {}", should_init_chain);
                 info!("No history detected. Initializing chain...");
                 let ret_hash = app.init_chain(genesis_config);
                 info!("Chain initialization is done.");
@@ -117,15 +115,12 @@ where
 
     /// Runs the rollup.
     pub async fn run(&mut self) -> Result<(), anyhow::Error> {
-        println!("Runner Got TX1");
         for height in self.start_height.. {
             debug!("Requesting data for height {}", height,);
 
-            println!("Runner Got TX3");
             let filtered_block = self.da_service.get_finalized_at(height).await?;
-            println!("Runner Got TX4");
             let mut blobs = self.da_service.extract_relevant_txs(&filtered_block);
-            println!("Runner Got TX5");
+
             info!(
                 "Extracted {} relevant blobs at height {}: {:?}",
                 blobs.len(),
@@ -141,7 +136,6 @@ where
             );
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
-            println!("Runner before apply_slot");
 
             let slot_result = self
                 .app
@@ -153,8 +147,6 @@ where
 
             self.ledger_db.commit_slot(data_to_commit)?;
             self.state_root = next_state_root;
-
-            println!("Runner Got TX2 End");
         }
 
         Ok(())

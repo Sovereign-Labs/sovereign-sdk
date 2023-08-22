@@ -98,8 +98,6 @@ where
             hex::encode(blob.sender())
         );
 
-        println!("APP BLOB 1");
-
         // Initialize batch workspace
         let mut batch_workspace = self
             .checkpoint
@@ -116,12 +114,10 @@ where
             // TODO: will be covered in https://github.com/Sovereign-Labs/sovereign-sdk/issues/421
             self.checkpoint = Some(batch_workspace.revert());
 
-            println!("APP BLOB Ignored {:?}", e);
             return Err(ApplyBatchError::Ignored(blob.hash()));
         }
         batch_workspace = batch_workspace.checkpoint().to_revertable();
 
-        println!("APP BLOB 2");
         // TODO: don't ignore these events: https://github.com/Sovereign-Labs/sovereign/issues/350
         let _ = batch_workspace.take_events();
 
@@ -156,8 +152,6 @@ where
                 });
             }
         };
-
-        println!("APP BLOB 3");
 
         // Sanity check after pre processing
         assert_eq!(
