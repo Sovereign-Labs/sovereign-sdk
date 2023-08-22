@@ -212,7 +212,7 @@ jobs:
             examples/demo-prover
       - name: Run prover
         working-directory: examples/demo-prover
-        run: cargo run
+        run: cargo run -- ../demo-rollup/rollup_config.toml
         env:
           SKIP_PROVER: 1
       - name: Run cargo fmt check
