@@ -53,7 +53,7 @@ pub async fn new_rollup_with_celestia_da(
     .await;
 
     let app = App::new(rollup_config.storage);
-    let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
+    let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS)?;
     let genesis_config = get_genesis_config(sequencer_da_address);
 
     Ok(Rollup {

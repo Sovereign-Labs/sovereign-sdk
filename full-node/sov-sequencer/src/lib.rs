@@ -114,6 +114,7 @@ mod tests {
 
     use std::io::Read;
 
+    use sov_rollup_interface::da::BlobReaderTrait;
     use sov_rollup_interface::mocks::{MockAddress, MockBatchBuilder, MockDaService};
 
     use super::*;
@@ -134,8 +135,6 @@ mod tests {
             error.to_string()
         );
     }
-
-    use sov_rollup_interface::da::BlobReaderTrait;
 
     #[tokio::test]
     async fn test_submit_happy_path() {

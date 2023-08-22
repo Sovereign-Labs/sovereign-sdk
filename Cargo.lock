@@ -6833,7 +6833,6 @@ dependencies = [
  "bincode",
  "borsh",
  "bytes",
- "crossbeam-channel",
  "digest 0.10.7",
  "hex",
  "proptest",
