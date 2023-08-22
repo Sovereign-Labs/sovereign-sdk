@@ -113,7 +113,7 @@ where
             if current_batch_size + tx_len <= self.max_batch_size_bytes {
                 let tx_hash: [u8; 32] = <C as Spec>::Hasher::digest(&raw_tx[..]).into();
                 info!(
-                    "Tx with has 0x{} has bee included in the batch",
+                    "Tx with hash 0x{} has been included in the batch",
                     hex::encode(tx_hash)
                 );
                 txs.push(raw_tx);
