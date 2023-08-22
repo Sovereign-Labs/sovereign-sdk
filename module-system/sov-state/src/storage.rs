@@ -1,4 +1,5 @@
 use std::fmt::Display;
+use std::hash::Hash;
 use std::sync::Arc;
 
 use anyhow::ensure;
@@ -8,7 +9,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
-use crate::codec::{StateKeyCodec, StateValueCodec};
+use crate::codec::StateValueCodec;
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::utils::AlignedVec;
 use crate::witness::Witness;
@@ -50,11 +51,11 @@ impl Display for StorageKey {
 
 impl StorageKey {
     /// Creates a new StorageKey that combines a prefix and a key.
-    pub fn new<K, C>(prefix: &Prefix, key: &K, codec: &C) -> Self
+    pub fn new<K>(prefix: &Prefix, key: &K) -> Self
     where
-        C: StateKeyCodec<K>,
+        K: Hash + ?Sized,
     {
-        let encoded_key = codec.encode_key(key);
+        let encoded_key = nohash_serialize(key);
         let encoded_key = AlignedVec::new(encoded_key);
 
         let full_key = Vec::<u8>::with_capacity(prefix.len() + encoded_key.len());
@@ -66,6 +67,26 @@ impl StorageKey {
             key: Arc::new(full_key.into_inner()),
         }
     }
+}
+
+// Serializes a value into a `Vec<u8>` using `std::hash::Hasher`
+// writer methods, but without actually ever hashing anything.
+fn nohash_serialize<T: Hash>(item: T) -> Vec<u8> {
+    struct NoHasher(Vec<u8>);
+
+    impl std::hash::Hasher for NoHasher {
+        fn finish(&self) -> u64 {
+            0
+        }
+
+        fn write(&mut self, bytes: &[u8]) {
+            self.0.extend_from_slice(bytes);
+        }
+    }
+
+    let mut hasher = NoHasher(vec![]);
+    item.hash(&mut hasher);
+    hasher.0
 }
 
 /// A serialized value suitable for storing. Internally uses an Arc<Vec<u8>> for cheap cloning.
@@ -94,9 +115,9 @@ impl From<Vec<u8>> for StorageValue {
 
 impl StorageValue {
     /// Create a new storage value by serializing the input with the given codec.
-    pub fn new<V, C>(value: &V, codec: &C) -> Self
+    pub fn new<V, VC>(value: &V, codec: &VC) -> Self
     where
-        C: StateValueCodec<V>,
+        VC: StateValueCodec<V>,
     {
         let encoded_value = codec.encode_value(value);
         Self {
@@ -166,18 +187,21 @@ pub trait Storage: Clone {
         proof: StorageProof<Self::Proof>,
     ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error>;
 
-    fn verify_proof<K, V, C: StateKeyCodec<K> + StateValueCodec<V>>(
+    fn verify_proof<K, V>(
         &self,
         state_root: [u8; 32],
         proof: StorageProof<Self::Proof>,
         expected_key: &K,
-        storage_map: &StateMap<K, V, C>,
-    ) -> Result<Option<StorageValue>, anyhow::Error> {
+        storage_map: &StateMap<K, V>,
+    ) -> Result<Option<StorageValue>, anyhow::Error>
+    where
+        K: Hash + Eq,
+    {
         let (storage_key, storage_value) = self.open_proof(state_root, proof)?;
 
         // We have to check that the storage key is the same as the external key
         ensure!(
-            storage_key == StorageKey::new(storage_map.prefix(), expected_key, &storage_map.codec),
+            storage_key == StorageKey::new(storage_map.prefix(), expected_key),
             "The storage key from the proof doesn't match the expected storage key."
         );
 
@@ -215,15 +239,15 @@ pub trait NativeStorage: Storage {
     fn get_with_proof(&self, key: StorageKey, witness: &Self::Witness)
         -> StorageProof<Self::Proof>;
 
-    fn get_with_proof_from_state_map<K, V, C: StateKeyCodec<K> + StateValueCodec<V>>(
+    fn get_with_proof_from_state_map<K, V>(
         &self,
         key: &K,
-        state_map: &StateMap<K, V, C>,
+        state_map: &StateMap<K, V>,
         witness: &Self::Witness,
-    ) -> StorageProof<Self::Proof> {
-        self.get_with_proof(
-            StorageKey::new(state_map.prefix(), key, &state_map.codec),
-            witness,
-        )
+    ) -> StorageProof<Self::Proof>
+    where
+        K: Hash + Eq,
+    {
+        self.get_with_proof(StorageKey::new(state_map.prefix(), key), witness)
     }
 }
