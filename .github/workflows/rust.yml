@@ -194,8 +194,8 @@ jobs:
   # After that demo-prover should be integrated into workspace.
   # Note that `demo-prover` has (at the time of writing) a different `dev`
   # profile from the rest of the codebase, so caches can't be shared.
-  check-demo-prover:
-    name: check demo prover
+  run-demo-prover:
+    name: run demo prover
     runs-on:
       group: 8-cores_32GB_Ubuntu Group
     timeout-minutes: 90
@@ -210,9 +210,11 @@ jobs:
           workspaces: |
             .
             examples/demo-prover
-      - name: Run cargo check
+      - name: Run prover
         working-directory: examples/demo-prover
-        run: cargo check
+        run: cargo run
+        env:
+          SKIP_PROVER: 1
       - name: Run cargo fmt check
         run: |
           cd examples/demo-prover;
