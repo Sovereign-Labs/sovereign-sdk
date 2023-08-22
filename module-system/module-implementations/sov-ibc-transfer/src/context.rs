@@ -17,6 +17,7 @@ use ibc::core::ics24_host::identifier::{ChannelId, ConnectionId, PortId};
 use ibc::core::router::ModuleExtras;
 use ibc::Signer;
 use sov_bank::Coins;
+use sov_rollup_interface::digest::Digest;
 use sov_state::WorkingSet;
 use uint::FromDecStrErr;
 
@@ -172,6 +173,17 @@ where
         extra: &EscrowExtraData<C>,
     ) -> Result<(), TokenTransferError> {
         // 1. ensure that token exists in `self.escrowed_tokens` map
+        {
+            let mut hasher = <C::Hasher as Digest>::new();
+            hasher.update(coin.denom.to_string());
+            let denom_hash = hasher.finalize().to_vec();
+
+            self.transfer_mod.escrowed_tokens.set(
+                &denom_hash,
+                &extra.token_address,
+                &mut self.working_set.borrow_mut(),
+            );
+        }
 
         // 2. transfer coins to escrow account
         {
