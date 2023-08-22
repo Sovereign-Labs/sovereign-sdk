@@ -7,7 +7,7 @@ use ibc::applications::transfer::context::{
     on_timeout_packet_validate, TokenTransferExecutionContext, TokenTransferValidationContext,
 };
 use ibc::applications::transfer::error::TokenTransferError;
-use ibc::applications::transfer::{PrefixedCoin, PORT_ID_STR, VERSION};
+use ibc::applications::transfer::{Amount, PrefixedCoin, PORT_ID_STR, VERSION};
 use ibc::core::ics04_channel::acknowledgement::Acknowledgement;
 use ibc::core::ics04_channel::channel::{Counterparty, Order};
 use ibc::core::ics04_channel::error::{ChannelError, PacketError};
@@ -26,7 +26,7 @@ use crate::Transfer;
 /// the `self` argument.
 pub struct TransferContext<'ws, C: sov_modules_api::Context> {
     pub transfer_mod: RefCell<Transfer<C>>,
-    pub working_set: &'ws mut WorkingSet<C::Storage>,
+    pub working_set: RefCell<&'ws mut WorkingSet<C::Storage>>,
 }
 
 impl<'ws, C> TransferContext<'ws, C>
@@ -36,7 +36,7 @@ where
     pub fn new(transfer_mod: Transfer<C>, working_set: &'ws mut WorkingSet<C::Storage>) -> Self {
         Self {
             transfer_mod: RefCell::new(transfer_mod),
-            working_set,
+            working_set: RefCell::new(working_set),
         }
     }
 }
@@ -92,6 +92,7 @@ where
         todo!()
     }
 
+    /// Check if the sender has enough balance
     fn escrow_coins_validate(
         &self,
         _port_id: &PortId,
@@ -100,22 +101,27 @@ where
         coin: &PrefixedCoin,
         extra: &EscrowExtraData<C>,
     ) -> Result<(), TokenTransferError> {
-        // Check if the sender has enough balance
+        let sender_balance: u64 = self
+            .transfer_mod
+            .borrow()
+            .bank
+            .get_balance_of(
+                from_account.address.clone(),
+                extra.token_addr.clone(),
+                &mut self.working_set.borrow_mut(),
+            )
+            .ok_or(TokenTransferError::InvalidCoin {
+                coin: coin.denom.to_string(),
+            })?;
 
-        // FIXME: `working_set` must be behind a RefCell
+        let sender_balance: Amount = sender_balance.into();
 
-        // let token = self
-        //     .transfer_mod
-        //     .borrow()
-        //     .bank
-        //     .get_balance_of(
-        //         from_account.address.clone(),
-        //         extra.token_addr.clone(),
-        //         self.working_set,
-        //     )
-        //     .ok_or(TokenTransferError::InvalidCoin {
-        //         coin: coin.denom.to_string(),
-        //     })?;
+        if coin.amount > sender_balance {
+            return Err(TokenTransferError::InsufficientFunds {
+                send_attempt: sender_balance,
+                available_funds: coin.amount.clone(),
+            });
+        }
 
         Ok(())
     }

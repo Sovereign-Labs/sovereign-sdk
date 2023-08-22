@@ -2977,7 +2977,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.44.1"
-source = "git+https://github.com/cosmos/ibc-rs?branch=plafer/transfer-extra-data#6f1a5a651d1423a97653b5e964bc2b2588a2acda"
+source = "git+https://github.com/cosmos/ibc-rs?rev=625efb3#625efb33688a0ba046bd43d9348d1b6d16e81330"
 dependencies = [
  "borsh 0.9.3",
  "bytes",
@@ -3006,7 +3006,7 @@ dependencies = [
 [[package]]
 name = "ibc-derive"
 version = "0.3.0"
-source = "git+https://github.com/cosmos/ibc-rs?branch=plafer/transfer-extra-data#6f1a5a651d1423a97653b5e964bc2b2588a2acda"
+source = "git+https://github.com/cosmos/ibc-rs?rev=625efb3#625efb33688a0ba046bd43d9348d1b6d16e81330"
 dependencies = [
  "darling",
  "proc-macro2 1.0.66",
