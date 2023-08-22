@@ -1,11 +1,11 @@
 #[cfg(feature = "native")]
-use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
+use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
-use sov_bank::{BankRpcImpl, BankRpcServer};
+use sov_bank::query::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
 use sov_blob_storage::{BlobStorageRpcImpl, BlobStorageRpcServer};
 #[cfg(feature = "native")]
-use sov_election::{ElectionRpcImpl, ElectionRpcServer};
+use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
 use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
@@ -23,7 +23,16 @@ use sov_rollup_interface::zk::ValidityCondition;
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 use sov_state::WorkingSet;
 #[cfg(feature = "native")]
-use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
+use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
+
+#[cfg(feature = "native")]
+pub mod query {
+    pub use sov_accounts::query as accounts;
+    pub use sov_bank::query as bank;
+    pub use sov_election::query as election;
+    pub use sov_sequencer_registry::query as sequencer_registry;
+    pub use sov_value_setter::query as value_setter;
+}
 
 /// The Rollup entrypoint.
 ///

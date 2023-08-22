@@ -1,3 +1,18 @@
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Demo State Transition Function](#demo-state-transition-function)
+  - [Overview](#overview)
+  - [Implementing State Transition _Function_](#implementing-state-transition-_function_)
+  - [Implementing Runtime: Pick Your Modules](#implementing-runtime-pick-your-modules)
+    - [Implementing Hooks for the Runtime:](#implementing-hooks-for-the-runtime)
+    - [Exposing RPC](#exposing-rpc)
+  - [Make Full Node Itegrations Simpler with the State Transition Runner:](#make-full-node-itegrations-simpler-with-the-state-transition-runner)
+    - [Using State Transition Runner](#using-state-transition-runner)
+  - [Wrapping Up](#wrapping-up)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 # Demo State Transition Function
 
 This package shows how you can combine modules to build a custom state transition function. We provide several module implementations
