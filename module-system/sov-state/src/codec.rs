@@ -112,6 +112,7 @@ where
 
 /// A [`StateCodec`] that uses two different codecs under the hood, one for keys
 /// and one for values.
+#[derive(Default, Debug, Clone)]
 pub struct PairOfCodecs<KC, VC> {
     pub key_codec: KC,
     pub value_codec: VC,
