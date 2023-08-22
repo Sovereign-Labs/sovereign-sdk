@@ -2977,7 +2977,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.44.1"
-source = "git+https://github.com/cosmos/ibc-rs?rev=625efb3#625efb33688a0ba046bd43d9348d1b6d16e81330"
+source = "git+https://github.com/cosmos/ibc-rs?rev=4ade607#4ade60784f988bdd14af36c5333681a1e4d7a052"
 dependencies = [
  "borsh 0.9.3",
  "bytes",
@@ -3006,7 +3006,7 @@ dependencies = [
 [[package]]
 name = "ibc-derive"
 version = "0.3.0"
-source = "git+https://github.com/cosmos/ibc-rs?rev=625efb3#625efb33688a0ba046bd43d9348d1b6d16e81330"
+source = "git+https://github.com/cosmos/ibc-rs?rev=4ade607#4ade60784f988bdd14af36c5333681a1e4d7a052"
 dependencies = [
  "darling",
  "proc-macro2 1.0.66",
@@ -7068,6 +7068,7 @@ dependencies = [
  "sov-state",
  "tempfile",
  "thiserror",
+ "uint",
 ]
 
 [[package]]

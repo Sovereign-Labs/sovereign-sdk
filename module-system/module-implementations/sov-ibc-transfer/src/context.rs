@@ -7,7 +7,7 @@ use ibc::applications::transfer::context::{
     on_timeout_packet_validate, TokenTransferExecutionContext, TokenTransferValidationContext,
 };
 use ibc::applications::transfer::error::TokenTransferError;
-use ibc::applications::transfer::{Amount, PrefixedCoin, PORT_ID_STR, VERSION};
+use ibc::applications::transfer::{self, PrefixedCoin, PORT_ID_STR, VERSION};
 use ibc::core::ics04_channel::acknowledgement::Acknowledgement;
 use ibc::core::ics04_channel::channel::{Counterparty, Order};
 use ibc::core::ics04_channel::error::{ChannelError, PacketError};
@@ -16,7 +16,9 @@ use ibc::core::ics04_channel::Version as ChannelVersion;
 use ibc::core::ics24_host::identifier::{ChannelId, ConnectionId, PortId};
 use ibc::core::router::ModuleExtras;
 use ibc::Signer;
+use sov_bank::Coins;
 use sov_state::WorkingSet;
+use uint::FromDecStrErr;
 
 use crate::Transfer;
 
@@ -39,6 +41,11 @@ where
             working_set: RefCell::new(working_set),
         }
     }
+
+    pub fn get_escrow_account(&self, port_id: &PortId, channel_id: &ChannelId) -> C::Address {
+        // Q: What is the escrow account?
+        todo!()
+    }
 }
 
 impl<'ws, C> core::fmt::Debug for TransferContext<'ws, C>
@@ -55,7 +62,7 @@ where
 /// Extra data to be passed to `TokenTransfer` contexts' escrow methods
 pub struct EscrowExtraData<C: sov_modules_api::Context> {
     /// The address of the token being escrowed
-    pub token_addr: C::Address,
+    pub token_address: C::Address,
 }
 
 impl<'ws, C> TokenTransferValidationContext<EscrowExtraData<C>> for TransferContext<'ws, C>
@@ -106,14 +113,14 @@ where
             .bank
             .get_balance_of(
                 from_account.address.clone(),
-                extra.token_addr.clone(),
+                extra.token_address.clone(),
                 &mut self.working_set.borrow_mut(),
             )
             .ok_or(TokenTransferError::InvalidCoin {
                 coin: coin.denom.to_string(),
             })?;
 
-        let sender_balance: Amount = sender_balance.into();
+        let sender_balance: transfer::Amount = sender_balance.into();
 
         if coin.amount > sender_balance {
             return Err(TokenTransferError::InsufficientFunds {
@@ -158,13 +165,40 @@ where
 
     fn escrow_coins_execute(
         &self,
-        _port_id: &PortId,
-        _channel_id: &ChannelId,
-        _from_account: &Self::AccountId,
-        _coin: &PrefixedCoin,
-        _extra: &EscrowExtraData<C>,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        from_account: &Self::AccountId,
+        coin: &PrefixedCoin,
+        extra: &EscrowExtraData<C>,
     ) -> Result<(), TokenTransferError> {
-        todo!()
+        // 1. ensure that token exists in `self.escrowed_tokens` map
+
+        // 2. transfer coins to escrow account
+        {
+            let escrow_account = self.get_escrow_account(port_id, channel_id);
+            let amount: sov_bank::Amount = coin
+                .amount
+                .as_ref()
+                .clone()
+                .try_into()
+                .map_err(|_| TokenTransferError::InvalidAmount(FromDecStrErr::InvalidLength))?;
+            let coin = Coins {
+                amount,
+                token_address: extra.token_address.clone(),
+            };
+
+            self.transfer_mod
+                .bank
+                .transfer_from(
+                    &from_account.address,
+                    &escrow_account,
+                    coin,
+                    &mut self.working_set.borrow_mut(),
+                )
+                .map_err(|err| TokenTransferError::InternalTransferFailed(err.to_string()))?;
+        }
+
+        Ok(())
     }
 
     fn unescrow_coins_execute(
