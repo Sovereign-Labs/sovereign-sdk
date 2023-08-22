@@ -987,8 +987,8 @@ dependencies = [
  "serde_json",
  "sha2 0.10.7",
  "sov-rollup-interface",
- "tendermint",
- "tendermint-proto",
+ "tendermint 0.32.2",
+ "tendermint-proto 0.32.2",
  "thiserror",
  "tokio",
  "tracing",
@@ -2977,15 +2977,14 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.44.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18b0357f6a0c6241c4a5bcd52f82147a216d405f8bffd3d3066472fa25bb96f9"
+source = "git+https://github.com/cosmos/ibc-rs?branch=plafer/transfer-extra-data#6f1a5a651d1423a97653b5e964bc2b2588a2acda"
 dependencies = [
  "borsh 0.9.3",
  "bytes",
  "derive_more",
  "displaydoc",
  "ibc-derive",
- "ibc-proto",
+ "ibc-proto 0.33.0",
  "ics23",
  "num-traits",
  "primitive-types",
@@ -2996,9 +2995,9 @@ dependencies = [
  "serde_json",
  "sha2 0.10.7",
  "subtle-encoding",
- "tendermint",
+ "tendermint 0.33.0",
  "tendermint-light-client-verifier",
- "tendermint-proto",
+ "tendermint-proto 0.33.0",
  "time",
  "tracing",
  "uint",
@@ -3007,8 +3006,7 @@ dependencies = [
 [[package]]
 name = "ibc-derive"
 version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92f1528535e9ca495badb76c143bdd4763c1c9d987f59d1f8b47963ba0c11674"
+source = "git+https://github.com/cosmos/ibc-rs?branch=plafer/transfer-extra-data#6f1a5a651d1423a97653b5e964bc2b2588a2acda"
 dependencies = [
  "darling",
  "proc-macro2 1.0.66",
@@ -3030,7 +3028,24 @@ dependencies = [
  "prost",
  "serde",
  "subtle-encoding",
- "tendermint-proto",
+ "tendermint-proto 0.32.2",
+]
+
+[[package]]
+name = "ibc-proto"
+version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "59d0bc49ee5fc8e5d0e668765d470cb201fd0cdee4166f49c6cbcf3100466137"
+dependencies = [
+ "base64 0.21.2",
+ "borsh 0.9.3",
+ "bytes",
+ "flex-error",
+ "ics23",
+ "prost",
+ "serde",
+ "subtle-encoding",
+ "tendermint-proto 0.33.0",
 ]
 
 [[package]]
@@ -6910,7 +6925,7 @@ dependencies = [
  "sov-stf-runner",
  "sov-value-setter",
  "tempfile",
- "tendermint",
+ "tendermint 0.32.2",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -7005,7 +7020,7 @@ dependencies = [
  "borsh 0.10.3",
  "derive_more",
  "ibc",
- "ibc-proto",
+ "ibc-proto 0.32.1",
  "prost",
  "serde",
  "serde_json",
@@ -7015,7 +7030,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "tempfile",
- "tendermint-proto",
+ "tendermint-proto 0.32.2",
  "thiserror",
 ]
 
@@ -7541,21 +7556,50 @@ dependencies = [
  "signature 2.1.0",
  "subtle",
  "subtle-encoding",
- "tendermint-proto",
+ "tendermint-proto 0.32.2",
+ "time",
+ "zeroize",
+]
+
+[[package]]
+name = "tendermint"
+version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6d550db02d6bec4ebcbbebc4301ec22181bc489c37fb3f167e64b14c1be8321"
+dependencies = [
+ "bytes",
+ "digest 0.10.7",
+ "ed25519 2.2.2",
+ "ed25519-consensus",
+ "flex-error",
+ "futures",
+ "num-traits",
+ "once_cell",
+ "prost",
+ "prost-types",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "serde_repr",
+ "sha2 0.10.7",
+ "signature 2.1.0",
+ "subtle",
+ "subtle-encoding",
+ "tendermint-proto 0.33.0",
  "time",
  "zeroize",
 ]
 
 [[package]]
 name = "tendermint-light-client-verifier"
-version = "0.32.2"
+version = "0.33.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9875dce5c1b08201152eb0860f8fb1dce96c53e37532c310ffc4956d20f90def"
+checksum = "6bc1e4e3dd6f65cfa7979cf721b5afa1d79d32c4a2fe5fddb6416a98638634a9"
 dependencies = [
  "derive_more",
  "flex-error",
  "serde",
- "tendermint",
+ "tendermint 0.33.0",
  "time",
 ]
 
@@ -7564,6 +7608,24 @@ name = "tendermint-proto"
 version = "0.32.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0cec054567d16d85e8c3f6a3139963d1a66d9d3051ed545d31562550e9bcc3d"
+dependencies = [
+ "bytes",
+ "flex-error",
+ "num-derive 0.3.3",
+ "num-traits",
+ "prost",
+ "prost-types",
+ "serde",
+ "serde_bytes",
+ "subtle-encoding",
+ "time",
+]
+
+[[package]]
+name = "tendermint-proto"
+version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1834fa2eb884ba69b9c0eea55f0178270bed421217596ca4e54c19ef75dcb660"
 dependencies = [
  "bytes",
  "flex-error",

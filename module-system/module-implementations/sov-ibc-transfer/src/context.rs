@@ -52,7 +52,13 @@ where
     }
 }
 
-impl<'ws, C> TokenTransferValidationContext for TransferContext<'ws, C>
+/// Extra data to be passed to `TokenTransfer` contexts' escrow methods
+pub struct EscrowExtraData<C: sov_modules_api::Context> {
+    /// The address of the token being escrowed
+    pub token_addr: C::Address,
+}
+
+impl<'ws, C> TokenTransferValidationContext<EscrowExtraData<C>> for TransferContext<'ws, C>
 where
     C: sov_modules_api::Context,
 {
@@ -62,32 +68,12 @@ where
         PortId::new(PORT_ID_STR.to_string()).map_err(TokenTransferError::InvalidIdentifier)
     }
 
-    fn get_escrow_account(
-        &self,
-        _port_id: &PortId,
-        _channel_id: &ChannelId,
-    ) -> Result<Self::AccountId, TokenTransferError> {
-        // TODO: Which account to use?
-        todo!()
-    }
-
     fn can_send_coins(&self) -> Result<(), TokenTransferError> {
         Ok(())
     }
 
     fn can_receive_coins(&self) -> Result<(), TokenTransferError> {
         Ok(())
-    }
-
-    fn send_coins_validate(
-        &self,
-        _from_account: &Self::AccountId,
-        _to_account: &Self::AccountId,
-        coin: &PrefixedCoin,
-    ) -> Result<(), TokenTransferError> {
-        let _token_name = coin.to_string();
-
-        todo!()
     }
 
     fn mint_coins_validate(
@@ -105,21 +91,33 @@ where
     ) -> Result<(), TokenTransferError> {
         todo!()
     }
-}
 
-impl<'ws, C> TokenTransferExecutionContext for TransferContext<'ws, C>
-where
-    C: sov_modules_api::Context,
-{
-    fn send_coins_execute(
-        &mut self,
-        _from_account: &Self::AccountId,
+    fn escrow_coins_validate(
+        &self,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+        _to_account: &Self::AccountId,
+        _coin: &PrefixedCoin,
+        _extra: &EscrowExtraData<C>,
+    ) -> Result<(), TokenTransferError> {
+        todo!()
+    }
+
+    fn unescrow_coins_validate(
+        &self,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
         _to_account: &Self::AccountId,
         _coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         todo!()
     }
+}
 
+impl<'ws, C> TokenTransferExecutionContext<EscrowExtraData<C>> for TransferContext<'ws, C>
+where
+    C: sov_modules_api::Context,
+{
     fn mint_coins_execute(
         &mut self,
         _account: &Self::AccountId,
@@ -131,6 +129,27 @@ where
     fn burn_coins_execute(
         &mut self,
         _account: &Self::AccountId,
+        _coin: &PrefixedCoin,
+    ) -> Result<(), TokenTransferError> {
+        todo!()
+    }
+
+    fn escrow_coins_execute(
+        &self,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+        _to_account: &Self::AccountId,
+        _coin: &PrefixedCoin,
+        _extra: &EscrowExtraData<C>,
+    ) -> Result<(), TokenTransferError> {
+        todo!()
+    }
+
+    fn unescrow_coins_execute(
+        &self,
+        _port_id: &PortId,
+        _channel_id: &ChannelId,
+        _to_account: &Self::AccountId,
         _coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         todo!()
