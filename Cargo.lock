@@ -6624,6 +6624,7 @@ dependencies = [
  "sha2 0.10.7",
  "sov-bank",
  "sov-db",
+ "sov-demo-rollup",
  "sov-election",
  "sov-ethereum",
  "sov-modules-api",

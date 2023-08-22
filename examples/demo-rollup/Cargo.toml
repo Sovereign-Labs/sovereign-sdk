@@ -65,6 +65,8 @@ ethers-signers = { workspace = true }
 ethers = { workspace = true }
 revm = { workspace = true }
 
+sov-demo-rollup = { path = ".", features = ["experimental"] }
+
 [features]
 default = []
 experimental = ["sov-ethereum/experimental"]

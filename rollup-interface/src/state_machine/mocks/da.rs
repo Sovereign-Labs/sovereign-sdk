@@ -209,9 +209,6 @@ impl DaSpec for MockDaSpec {
     type ChainParams = ();
 }
 
-//use std::sync::mpsc::{Receiver, Sender};
-
-//use crossbeam_channel::{unbounded, Receiver, Sender};
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::Mutex;
 
