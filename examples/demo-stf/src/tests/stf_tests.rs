@@ -189,11 +189,12 @@ pub mod test {
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = create_demo_config(
+        let mut config = create_demo_config(
             LOCKED_AMOUNT + 1,
             &value_setter_admin_private_key,
             &election_admin_private_key,
         );
+        config.sequencer_registry.is_preferred_sequencer = false;
 
         let mut demo = create_new_demo(path);
         demo.init_chain(config);

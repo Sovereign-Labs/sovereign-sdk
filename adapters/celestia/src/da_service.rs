@@ -153,7 +153,7 @@ impl DaService for CelestiaService {
 
         let _span = span!(Level::TRACE, "fetching finalized block", height = height);
         // Fetch the header and relevant shares via RPC
-        info!("Fetching header at height={}...", height);
+        debug!("Fetching header at height={}...", height);
         let header = client
             .request::<serde_json::Value, _>("header.GetByHeight", vec![height])
             .await?;
@@ -260,7 +260,7 @@ impl DaService for CelestiaService {
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
         // https://node-rpc-docs.celestia.org/
         let client = self.client.clone();
-        info!("Sending {} bytes of raw data to Celestia.", blob.len());
+        debug!("Sending {} bytes of raw data to Celestia.", blob.len());
         let fee: u64 = 2000;
         let namespace = self.rollup_namespace.0.to_vec();
         let blob = blob.to_vec();
@@ -304,7 +304,7 @@ struct CelestiaBasicResponse {
 }
 
 impl CelestiaBasicResponse {
-    /// We assume that absence of `code` indicates that request was successfull
+    /// We assume that absence of `code` indicates that request was successful
     pub fn is_success(&self) -> bool {
         self.error_code.is_none()
     }

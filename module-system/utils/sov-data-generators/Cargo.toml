@@ -13,26 +13,15 @@ resolver = "2"
 
 
 [dependencies]
-sov-modules-api = { path = "../../sov-modules-api", default-features = false }
-sov-modules-stf-template = { path = "../../sov-modules-stf-template" }
-sov-value-setter = { path = "../../module-implementations/examples/sov-value-setter", default-features = false }
-sov-election = { path = "../../module-implementations/examples/sov-election", default-features = false }
-sov-bank = { path = "../../module-implementations/sov-bank", default-features = false }
-sov-state = { path = "../../sov-state", default-features = false }
+sov-modules-api = { path = "../../sov-modules-api", features = ["native"] }
+sov-modules-stf-template = { path = "../../sov-modules-stf-template", features = ["native"] }
+sov-value-setter = { path = "../../module-implementations/examples/sov-value-setter", features = ["native"] }
+sov-election = { path = "../../module-implementations/examples/sov-election", features = ["native"] }
+sov-bank = { path = "../../module-implementations/sov-bank", features = ["native"] }
+sov-state = { path = "../../sov-state" }
 sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"] }
 
 borsh = { workspace = true }
 
 [dev-dependencies]
 proptest = { workspace = true }
-
-[features]
-default = ["mocks", "native"]
-mocks = []
-native = [
-    "sov-modules-api/native",
-    "sov-state/native",
-    "sov-bank/native",
-    "sov-election/native",
-    "sov-value-setter/native",
-]

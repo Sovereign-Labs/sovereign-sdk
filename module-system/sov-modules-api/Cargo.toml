@@ -12,9 +12,9 @@ readme = "README.md"
 resolver = "2"
 
 [dependencies]
-jsonrpsee = { workspace = true, optional = true } 
+jsonrpsee = { workspace = true, optional = true }
 anyhow = { workspace = true }
-sov-state = { path = "../sov-state", version = "0.1", default-features = false }
+sov-state = { path = "../sov-state", version = "0.1" }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
 sov-modules-macros = { path = "../sov-modules-macros", version = "0.1", optional = true }
 serde = { workspace = true }
@@ -23,24 +23,25 @@ thiserror = { workspace = true }
 sha2 = { workspace = true }
 bech32 = { workspace = true }
 derive_more = { workspace = true }
-serde_json = { workspace = true }
+serde_json = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true, features = [] }
 
-ed25519-dalek = { version = "1.0.1", default-features = false, features = ["alloc", "u64_backend"] }
+# TODO: try update 2.x
+ed25519-dalek = { version = "1.0.1", default-features = false, features = ["u64_backend"] }
 rand = { version = "0.7", optional = true }
 
-zk-cycle-macros = {path = "../../utils/zk-cycle-macros", optional=true }
-risc0-zkvm = { version = "0.16", default-features = false, features = ["std"],optional=true }
-risc0-zkvm-platform = { version = "0.16",optional=true}
+zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
+risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
+risc0-zkvm-platform = { version = "0.16", optional = true }
 
 [dev-dependencies]
-serde_json = { workspace = true }
 bincode = { workspace = true }
 
 [features]
-bench = ["zk-cycle-macros","risc0-zkvm","risc0-zkvm-platform"]
-default = ["native", "macros"]
-native = ["sov-state/native", "rand", "hex", "schemars", "ed25519-dalek/default", "clap", "jsonrpsee", "macros", "sov-modules-macros/native"]
+bench = ["zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
+default = ["macros"]
+serde = ["dep:serde_json"]
+native = ["serde", "rand", "hex", "schemars", "ed25519-dalek/default", "clap", "jsonrpsee", "macros", "sov-modules-macros/native", "sov-state/native"]
 macros = ["sov-modules-macros"]

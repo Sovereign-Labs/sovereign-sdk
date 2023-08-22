@@ -12,7 +12,7 @@ pub use config::{from_toml_path, RollupConfig, RunnerConfig, StorageConfig};
 use jsonrpsee::RpcModule;
 pub use ledger_rpc::get_ledger_rpc;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::Zkvm;
@@ -100,7 +100,7 @@ where
         })
     }
 
-    /// Starts an rpc server with provided rpc methods.
+    /// Starts a RPC server with provided rpc methods.
     pub async fn start_rpc_server(&self, methods: RpcModule<()>) {
         let listen_address = self.listen_address;
         let _handle = tokio::spawn(async move {
@@ -119,8 +119,7 @@ where
     pub async fn run(&mut self) -> Result<(), anyhow::Error> {
         println!("Runner Got TX1");
         for height in self.start_height.. {
-            println!("Runner Got TX2");
-            info!("Requesting data for height {}", height,);
+            debug!("Requesting data for height {}", height,);
 
             println!("Runner Got TX3");
             let filtered_block = self.da_service.get_finalized_at(height).await?;
@@ -128,9 +127,17 @@ where
             let mut blobs = self.da_service.extract_relevant_txs(&filtered_block);
             println!("Runner Got TX5");
             info!(
-                "Extracted {} relevant blobs at height {}",
+                "Extracted {} relevant blobs at height {}: {:?}",
                 blobs.len(),
-                height
+                height,
+                blobs
+                    .iter()
+                    .map(|b| format!(
+                        "sequencer={} blob_hash=0x{}",
+                        b.sender(),
+                        hex::encode(b.hash())
+                    ))
+                    .collect::<Vec<_>>()
             );
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
