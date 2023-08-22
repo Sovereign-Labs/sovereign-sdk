@@ -26,6 +26,10 @@ hex = { workspace = true, features = ["serde"] }
 digest = { workspace = true }
 sha2 = { workspace = true, optional = true }
 
+# TODO: Replace with serde-compatible borsh implementation when it becomes availabile 
+#    see https://github.com/Sovereign-Labs/sovereign-sdk/issues/215
+bincode = { workspace = true }
+
 anyhow = { workspace = true }
 
 # Proptest should be a dev-dependency, but those can't be optional

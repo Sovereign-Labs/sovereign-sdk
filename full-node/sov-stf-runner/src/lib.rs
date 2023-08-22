@@ -3,17 +3,16 @@
 
 mod batch_builder;
 mod config;
-pub use config::RpcConfig;
-mod runner_config;
 use std::net::SocketAddr;
+
+pub use config::RpcConfig;
 mod ledger_rpc;
 pub use batch_builder::FiFoStrictBatchBuilder;
-pub use config::RollupConfig;
+pub use config::{from_toml_path, RollupConfig, RunnerConfig, StorageConfig};
 use jsonrpsee::RpcModule;
 pub use ledger_rpc::get_ledger_rpc;
-pub use runner_config::{from_toml_path, Config, StorageConfig};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::Zkvm;
@@ -60,14 +59,14 @@ where
 {
     /// Creates a new `StateTransitionRunner` runner.
     pub fn new(
-        rollup_config: RollupConfig,
+        runner_config: RunnerConfig,
         da_service: DA,
         ledger_db: LedgerDB,
         mut app: ST,
         should_init_chain: bool,
         genesis_config: InitialState<ST, Vm, DA>,
     ) -> Result<Self, anyhow::Error> {
-        let rpc_config = rollup_config.rpc_config;
+        let rpc_config = runner_config.rpc_config;
 
         let prev_state_root = {
             // Check if the rollup has previously been initialized
@@ -87,7 +86,7 @@ where
         // Start the main rollup loop
         let item_numbers = ledger_db.get_next_items_numbers();
         let last_slot_processed_before_shutdown = item_numbers.slot_number - 1;
-        let start_height = rollup_config.start_height + last_slot_processed_before_shutdown;
+        let start_height = runner_config.start_height + last_slot_processed_before_shutdown;
 
         Ok(Self {
             start_height,
@@ -99,7 +98,7 @@ where
         })
     }
 
-    /// Starts an rpc server with provided rpc methods.
+    /// Starts a RPC server with provided rpc methods.
     pub async fn start_rpc_server(&self, methods: RpcModule<()>) {
         let listen_address = self.listen_address;
         let _handle = tokio::spawn(async move {
@@ -117,15 +116,23 @@ where
     /// Runs the rollup.
     pub async fn run(&mut self) -> Result<(), anyhow::Error> {
         for height in self.start_height.. {
-            info!("Requesting data for height {}", height,);
+            debug!("Requesting data for height {}", height,);
 
             let filtered_block = self.da_service.get_finalized_at(height).await?;
             let mut blobs = self.da_service.extract_relevant_txs(&filtered_block);
 
             info!(
-                "Extracted {} relevant blobs at height {}",
+                "Extracted {} relevant blobs at height {}: {:?}",
                 blobs.len(),
-                height
+                height,
+                blobs
+                    .iter()
+                    .map(|b| format!(
+                        "sequencer={} blob_hash=0x{}",
+                        b.sender(),
+                        hex::encode(b.hash())
+                    ))
+                    .collect::<Vec<_>>()
             );
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());

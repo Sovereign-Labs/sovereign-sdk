@@ -13,16 +13,15 @@ readme = "README.md"
 resolver = "2"
 
 [dev-dependencies]
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1", features = ["mocks"] }
 tempfile = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, optional = true }
-sov-bank = { path = "../sov-bank", version = "0.1", default-features = false }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false, features = ["macros"] }
-sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
+sov-bank = { path = "../sov-bank", version = "0.1" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-state = { path = "../../sov-state", version = "0.1" }
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
@@ -36,6 +35,6 @@ zk-cycle-utils = {path = "../../../utils/zk-cycle-utils", optional=true}
 
 [features]
 bench = ["zk-cycle-macros/bench", "risc0-zkvm","risc0-zkvm-platform","zk-cycle-utils"]
-default = ["native"]
+default = []
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-modules-api/native", "sov-state/native", "sov-bank/native", "dep:jsonrpsee", "dep:schemars", "dep:clap"]
+native = ["serde", "sov-bank/native", "dep:jsonrpsee", "dep:schemars", "dep:clap", "sov-state/native", "sov-modules-api/native"]

@@ -4,13 +4,14 @@
 
 use std::str::FromStr;
 
+use celestia::types::NamespaceId;
+use celestia::verifier::address::CelestiaAddress;
+use celestia::verifier::{CelestiaSpec, CelestiaVerifier, ChainValidityCondition};
+use celestia::{BlobWithSender, CelestiaHeader};
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::create_zk_app_template;
 use demo_stf::ArrayWitness;
-use jupiter::types::NamespaceId;
-use jupiter::verifier::address::CelestiaAddress;
-use jupiter::verifier::{CelestiaSpec, CelestiaVerifier};
-use jupiter::{BlobWithSender, CelestiaHeader};
+
 use risc0_adapter::guest::Risc0Guest;
 use risc0_zkvm::guest::env;
 use sov_rollup_interface::crypto::NoOpHasher;
@@ -18,7 +19,6 @@ use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::{StateTransition, ZkvmGuest};
-
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
@@ -33,7 +33,6 @@ risc0_zkvm::guest::entry!(main);
 //  5. Call end_slot
 //  6. Output (Da hash, start_root, end_root, event_root)
 pub fn main() {
-
     env::write(&"Start guest\n");
     let guest = Risc0Guest;
 
@@ -57,15 +56,13 @@ pub fn main() {
     let witness: ArrayWitness = guest.read_from_host();
     env::write(&"Witness have been read\n");
 
-
     env::write(&"Applying slot...\n");
     let result = app.apply_slot(witness, &header, &mut blobs);
 
     env::write(&"Slot has been applied\n");
 
-
     // Step 3: Verify tx list
-    let verifier = CelestiaVerifier::new(jupiter::verifier::RollupParams {
+    let verifier = CelestiaVerifier::new(celestia::verifier::RollupParams {
         namespace: ROLLUP_NAMESPACE,
     });
 
@@ -92,7 +89,10 @@ pub fn main() {
 
     #[cfg(feature = "bench")]
     {
-        let tuple = ("Cycles per block".to_string(), (end_cycles - start_cycles) as u64);
+        let tuple = (
+            "Cycles per block".to_string(),
+            (end_cycles - start_cycles) as u64,
+        );
         let mut serialized = Vec::new();
         serialized.extend(tuple.0.as_bytes());
         serialized.push(0);

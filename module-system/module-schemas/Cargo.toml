@@ -16,10 +16,10 @@ sov-modules-api = { path = "../sov-modules-api" }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
 
 # Modules
-sov-accounts = { path = "../module-implementations/sov-accounts" }
-sov-bank = { path = "../module-implementations/sov-bank" }
-sov-prover-incentives = { path = "../module-implementations/sov-prover-incentives" }
-sov-sequencer-registry = { path = "../module-implementations/sov-sequencer-registry" }
+sov-accounts = { path = "../module-implementations/sov-accounts", features = ["native"] }
+sov-bank = { path = "../module-implementations/sov-bank", features = ["native"] }
+sov-prover-incentives = { path = "../module-implementations/sov-prover-incentives", features = ["native"] }
+sov-sequencer-registry = { path = "../module-implementations/sov-sequencer-registry", features = ["native"] }
 sov-evm = { path = "../module-implementations/sov-evm", features = ["experimental"] }
-sov-election = { path = "../module-implementations/examples/sov-election" }
-sov-value-setter = { path = "../module-implementations/examples/sov-value-setter" }
+sov-election = { path = "../module-implementations/examples/sov-election", features = ["native"] }
+sov-value-setter = { path = "../module-implementations/examples/sov-value-setter", features = ["native"] }

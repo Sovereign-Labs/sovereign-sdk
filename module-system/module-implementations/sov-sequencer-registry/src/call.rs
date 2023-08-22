@@ -4,21 +4,29 @@ use sov_modules_api::macros::CliWalletArg;
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
-use crate::SequencerRegistry;
+use crate::{DaAddress, SequencerRegistry};
 
-/// This enumeration represents the available call messages for interacting with the sov-sequencer-registry.
+/// This enumeration represents the available call messages for interacting with
+/// the `sov-sequencer-registry` module.
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
     derive(serde::Deserialize),
-    derive(CliWalletArg),
-    derive(schemars::JsonSchema)
+    derive(schemars::JsonSchema),
+    derive(CliWalletArg)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-// TODO: Replace with DA address generic, when AddressTrait is split
 pub enum CallMessage {
-    Register { da_address: Vec<u8> },
-    Exit { da_address: Vec<u8> },
+    /// Add a new sequencer to the sequencer registry.
+    Register {
+        /// The DA address of the sequencer you're registering.
+        da_address: DaAddress,
+    },
+    /// Remove a sequencer from the sequencer registry.
+    Exit {
+        /// The DA address of the sequencer you're removing.
+        da_address: DaAddress,
+    },
 }
 
 impl<C: sov_modules_api::Context> SequencerRegistry<C> {

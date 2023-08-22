@@ -48,7 +48,7 @@ start-existing:
 
 start-new:
 	@echo "Starting new container: $(CONTAINER_NAME)"
-	docker run -d --name $(CONTAINER_NAME) --platform linux/amd64 -p 26657:26657 -p 26659:26659 -p $(RPC_PORT):$(RPC_PORT) $(IMAGE_NAME)
+	docker run -d --name $(CONTAINER_NAME) --platform linux/amd64 -p 26657:26657 -p 26659:26659 -p $(RPC_PORT):$(RPC_PORT) -p 9090:9090 $(IMAGE_NAME)
 
 start-container:
 	@$(MAKE) check-container-running || { $(MAKE) check-container-exists && $(MAKE) start-existing || $(MAKE) start-new; }
@@ -91,7 +91,7 @@ else
 endif
 
 build-sov-cli:
-	cd ../demo-stf && cargo build --bin sov-cli
+	cd ../demo-stf && cargo build --bin sov-cli --features=native
 
 test-generate-create-token-tx: check-container-running build-sov-cli
 	$(SOV_CLI_REL_PATH) generate-transaction-from-json ../test-data/keys/token_deployer_private_key.json Bank ../test-data/requests/create_token.json 0

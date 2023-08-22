@@ -27,19 +27,19 @@ futures = "0.3"
 tokio = { workspace = true }
 tracing-subscriber = "0.3.17"
 
-jupiter = { path = "../../adapters/celestia" }
+celestia = { path = "../../adapters/celestia", features = ["native"] }
 demo-stf = { path = "../demo-stf", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-db = { path = "../../full-node/db/sov-db" }
 sov-ethereum = { path = "../../full-node/sov-ethereum", optional = true }
 sov-sequencer = { path = "../../full-node/sov-sequencer" }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
-risc0-adapter = { path = "../../adapters/risc0" }
+risc0-adapter = { path = "../../adapters/risc0", features = ["native"] }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }
 
-sov-bank = { path = "../../module-system/module-implementations/sov-bank", default-features = false }
-sov-election = { path = "../../module-system/module-implementations/examples/sov-election", default-features = false }
-sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", default-features = false }
+sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
+sov-election = { path = "../../module-system/module-implementations/examples/sov-election", features = ["native"] }
+sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
@@ -57,6 +57,7 @@ prettytable-rs = "^0.10"
 criterion = "0.5.1"
 
 [features]
+default = []
 experimental = ["sov-ethereum/experimental"]
 
 [[bench]]

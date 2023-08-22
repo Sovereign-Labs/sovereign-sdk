@@ -275,16 +275,13 @@ pub async fn main() -> Result<(), anyhow::Error> {
         Commands::PublishBatch { rpc_endpoint } => {
             let client = HttpClientBuilder::default().build(rpc_endpoint).unwrap();
 
-            let response: String = client
+            client
                 .request("sequencer_publishBatch", [1u32])
                 .await
                 .context("Unable to publish batch")?;
 
             // Print the result
-            println!(
-                "Your batch was submitted to the sequencer for publication. Response: {:?}",
-                response
-            );
+            println!("Your batch was submitted to the sequencer for publication");
         }
         Commands::MakeBatch { path_list } => {
             let mut hex_encoded_txs = vec![];
@@ -353,7 +350,6 @@ mod test {
     use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockDaSpec, MockZkvm};
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::WorkingSet;
-    use sov_stf_runner::Config;
 
     use super::*;
 
@@ -379,8 +375,8 @@ mod test {
             test_data.minter_address,
         );
 
-        // The minted amount was 1000 and we transferred 200 and burned 300.
-        assert_eq!(balance, Some(500))
+        // The minted amount was 10_000, and we transferred 200 and burned 300.
+        assert_eq!(balance, Some(99_500))
     }
 
     #[test]
@@ -437,13 +433,11 @@ mod test {
                 &election_admin_private_key,
             );
 
-            let runner_config = Config {
-                storage: sov_state::config::Config { path },
-            };
+            let runner_config = sov_state::config::Config { path };
 
             Self {
                 config: genesis_config,
-                demo: App::<MockZkvm, MockDaSpec>::new(runner_config.storage).stf,
+                demo: App::<MockZkvm, MockDaSpec>::new(runner_config).stf,
             }
         }
     }

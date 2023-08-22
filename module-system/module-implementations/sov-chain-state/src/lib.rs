@@ -14,7 +14,6 @@ pub mod hooks;
 pub mod tests;
 
 /// The query interface with the module
-#[cfg(feature = "native")]
 pub mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -22,6 +21,9 @@ use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
 use sov_state::WorkingSet;
+
+/// Type alias that contains the height of a given transition
+pub type TransitionHeight = u64;
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]
 /// Structure that contains the information needed to represent a single state transition.
@@ -64,6 +66,11 @@ impl<Cond: ValidityCondition> StateTransitionId<Cond> {
         self.da_block_hash
     }
 
+    /// Returns the validity condition associated with the transition
+    pub fn validity_condition(&self) -> &Cond {
+        &self.validity_condition
+    }
+
     /// Checks the validity condition of a state transition
     pub fn validity_condition_check<Checker: ValidityConditionChecker<Cond>>(
         &self,
@@ -102,7 +109,7 @@ pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
 
     /// The current block height
     #[state]
-    pub slot_height: sov_state::StateValue<u64>,
+    pub slot_height: sov_state::StateValue<TransitionHeight>,
 
     /// A record of all previous state transitions which are available to the VM.
     /// Currently, this includes *all* historical state transitions, but that may change in the future.
@@ -110,7 +117,7 @@ pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
     /// is stored during transition i+1. This is mainly due to the fact that this structure depends on the
     /// rollup's root hash which is only stored once the transition has completed.
     #[state]
-    pub historical_transitions: sov_state::StateMap<u64, StateTransitionId<Cond>>,
+    pub historical_transitions: sov_state::StateMap<TransitionHeight, StateTransitionId<Cond>>,
 
     /// The transition that is currently processed
     #[state]
@@ -120,12 +127,16 @@ pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
     /// Set after the first transaction of the rollup is executed, using the `begin_slot` hook.
     #[state]
     pub genesis_hash: sov_state::StateValue<[u8; 32]>,
+
+    /// The height of genesis
+    #[state]
+    pub genesis_height: sov_state::StateValue<TransitionHeight>,
 }
 
 /// Initial configuration of the chain state
 pub struct ChainStateConfig {
     /// Initial slot height
-    pub initial_slot_height: u64,
+    pub initial_slot_height: TransitionHeight,
 }
 
 impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Module
