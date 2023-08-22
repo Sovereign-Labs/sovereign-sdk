@@ -25,7 +25,7 @@ use crate::Transfer;
 /// which must be passed to `TokenTransferValidationContext` methods through
 /// the `self` argument.
 pub struct TransferContext<'ws, C: sov_modules_api::Context> {
-    pub transfer_mod: RefCell<Transfer<C>>,
+    pub transfer_mod: Transfer<C>,
     pub working_set: RefCell<&'ws mut WorkingSet<C::Storage>>,
 }
 
@@ -35,7 +35,7 @@ where
 {
     pub fn new(transfer_mod: Transfer<C>, working_set: &'ws mut WorkingSet<C::Storage>) -> Self {
         Self {
-            transfer_mod: RefCell::new(transfer_mod),
+            transfer_mod: transfer_mod,
             working_set: RefCell::new(working_set),
         }
     }
@@ -103,7 +103,6 @@ where
     ) -> Result<(), TokenTransferError> {
         let sender_balance: u64 = self
             .transfer_mod
-            .borrow()
             .bank
             .get_balance_of(
                 from_account.address.clone(),
