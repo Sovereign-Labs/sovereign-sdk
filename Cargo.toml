@@ -112,4 +112,4 @@ secp256k1 = { version = "0.27.0", default-features = false, features = ["global-
 # See reth: https://github.com/paradigmxyz/reth/blob/main/Cargo.toml#L79
 revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
 revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
-jmt = { path = "../penumbra-jmt/jmt" }
+jmt = { git = "https://github.com/penumbra-zone/jmt.git", rev = "55898a5ca7575820561e9d11b4d56ee5862d5402" }
