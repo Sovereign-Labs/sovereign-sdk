@@ -96,11 +96,28 @@ where
         &self,
         _port_id: &PortId,
         _channel_id: &ChannelId,
-        _to_account: &Self::AccountId,
-        _coin: &PrefixedCoin,
-        _extra: &EscrowExtraData<C>,
+        from_account: &Self::AccountId,
+        coin: &PrefixedCoin,
+        extra: &EscrowExtraData<C>,
     ) -> Result<(), TokenTransferError> {
-        todo!()
+        // Check if the sender has enough balance
+
+        // FIXME: `working_set` must be behind a RefCell
+
+        // let token = self
+        //     .transfer_mod
+        //     .borrow()
+        //     .bank
+        //     .get_balance_of(
+        //         from_account.address.clone(),
+        //         extra.token_addr.clone(),
+        //         self.working_set,
+        //     )
+        //     .ok_or(TokenTransferError::InvalidCoin {
+        //         coin: coin.denom.to_string(),
+        //     })?;
+
+        Ok(())
     }
 
     fn unescrow_coins_validate(
@@ -138,7 +155,7 @@ where
         &self,
         _port_id: &PortId,
         _channel_id: &ChannelId,
-        _to_account: &Self::AccountId,
+        _from_account: &Self::AccountId,
         _coin: &PrefixedCoin,
         _extra: &EscrowExtraData<C>,
     ) -> Result<(), TokenTransferError> {
