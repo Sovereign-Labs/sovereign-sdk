@@ -91,7 +91,7 @@ else
 endif
 
 build-sov-cli:
-	cd ../demo-stf && cargo build --bin sov-cli
+	cd ../demo-stf && cargo build --bin sov-cli --features=native
 
 test-generate-create-token-tx: check-container-running build-sov-cli
 	$(SOV_CLI_REL_PATH) transactions import from-file bank --path ../test-data/requests/create_token.json
