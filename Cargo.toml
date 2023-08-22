@@ -54,7 +54,8 @@ rust-version = "1.66"
 
 [workspace.dependencies]
 # Dependencies maintained by sovereign
-jmt = "0.7.0"
+# TODO: replace by release number once available on crates.io: tracking issue https://github.com/Sovereign-Labs/sovereign-sdk/issues/632
+jmt = { git = "https://github.com/penumbra-zone/jmt", commit = "46b4b00" }
 
 # External dependencies
 async-trait = "0.1.71"
@@ -112,4 +113,3 @@ secp256k1 = { version = "0.27.0", default-features = false, features = ["global-
 # See reth: https://github.com/paradigmxyz/reth/blob/main/Cargo.toml#L79
 revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
 revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
-jmt = { path = "../penumbra-jmt/jmt" }
