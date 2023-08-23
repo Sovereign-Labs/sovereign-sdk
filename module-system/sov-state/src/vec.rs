@@ -177,39 +177,36 @@ where
 /// An [`Iterator`] over a [`StateVec`]
 ///
 /// See [`StateVec::iter`] for more details.
-pub struct StateVecIter<'a, 'ws, V, C, S>
+pub struct StateVecIter<'a, 'ws, V, VC, S>
 where
-    C: StateValueCodec<V>,
+    VC: StateValueCodec<V>,
     S: Storage,
 {
-    state_vec: &'a StateVec<V, C>,
+    state_vec: &'a StateVec<V, VC>,
     ws: &'ws mut WorkingSet<S>,
     len: usize,
     next_i: usize,
 }
 
-impl<'a, 'ws, V, C, S> Iterator for StateVecIter<'a, 'ws, V, C, S>
+impl<'a, 'ws, V, VC, S> Iterator for StateVecIter<'a, 'ws, V, VC, S>
 where
-    C: StateValueCodec<V>,
+    VC: StateValueCodec<V>,
     S: Storage,
 {
     type Item = V;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.next_i == self.state_vec.len(self.ws) {
-            return None;
-        }
-
         let elem = self.state_vec.get(self.next_i, self.ws);
-        debug_assert!(elem.is_some());
-        self.next_i += 1;
+        if elem.is_some() {
+            self.next_i += 1;
+        }
         elem
     }
 }
 
-impl<'a, 'ws, V, C, S> ExactSizeIterator for StateVecIter<'a, 'ws, V, C, S>
+impl<'a, 'ws, V, VC, S> ExactSizeIterator for StateVecIter<'a, 'ws, V, VC, S>
 where
-    C: StateValueCodec<V>,
+    VC: StateValueCodec<V>,
     S: Storage,
 {
     fn len(&self) -> usize {
@@ -217,9 +214,9 @@ where
     }
 }
 
-impl<'a, 'ws, V, C, S> FusedIterator for StateVecIter<'a, 'ws, V, C, S>
+impl<'a, 'ws, V, VC, S> FusedIterator for StateVecIter<'a, 'ws, V, VC, S>
 where
-    C: StateValueCodec<V>,
+    VC: StateValueCodec<V>,
     S: Storage,
 {
 }
