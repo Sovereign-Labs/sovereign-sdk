@@ -39,4 +39,3 @@ pub trait StateValueCodec<V> {
             .unwrap()
     }
 }
-
