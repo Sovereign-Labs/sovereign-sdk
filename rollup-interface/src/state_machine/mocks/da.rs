@@ -81,22 +81,18 @@ impl RollupAddress for MockAddress {}
 )]
 
 /// A mock BlobTransaction from a DA layer used for testing.
-pub struct MockBlob<Address> {
-    address: Address,
+pub struct MockBlob<A> {
+    address: A,
     hash: [u8; 32],
     data: CountedBufReader<Bytes>,
 }
 
-impl<Address: RollupAddress> BlobReaderTrait for MockBlob<Address> {
+impl<A: BasicAddress> BlobReaderTrait for MockBlob<A> {
     type Data = Bytes;
-    type Address = Address;
+    type Address = A;
 
     fn sender(&self) -> Self::Address {
         self.address.clone()
-    }
-
-    fn hash(&self) -> [u8; 32] {
-        self.hash
     }
 
     fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
@@ -106,11 +102,15 @@ impl<Address: RollupAddress> BlobReaderTrait for MockBlob<Address> {
     fn data(&self) -> &CountedBufReader<Self::Data> {
         &self.data
     }
+
+    fn hash(&self) -> [u8; 32] {
+        self.hash
+    }
 }
 
-impl<Address: RollupAddress> MockBlob<Address> {
+impl<A: BasicAddress> MockBlob<A> {
     /// Creates a new mock blob with the given data, claiming to have been published by the provided address.
-    pub fn new(data: Vec<u8>, address: Address, hash: [u8; 32]) -> Self {
+    pub fn new(data: Vec<u8>, address: A, hash: [u8; 32]) -> Self {
         Self {
             address,
             data: CountedBufReader::new(bytes::Bytes::from(data)),

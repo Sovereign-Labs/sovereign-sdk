@@ -4,7 +4,6 @@ use std::str::FromStr;
 use bech32::WriteBase32;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::RollupAddress;
 use thiserror::Error;
 
 /// Human Readable Part: "celestia" for Celestia network
@@ -49,17 +48,6 @@ impl<'a> TryFrom<&'a [u8]> for CelestiaAddress {
             raw_address[idx] = item;
         }
         Ok(Self(raw_address))
-    }
-}
-
-/// Panics if any element is not in range 0..32 (u5)
-/// TODO: Will be removed after https://github.com/Sovereign-Labs/sovereign-sdk/issues/493
-impl From<[u8; 32]> for CelestiaAddress {
-    fn from(value: [u8; 32]) -> Self {
-        for item in value {
-            bech32::u5::try_from_u8(item).unwrap();
-        }
-        Self(value)
     }
 }
 
@@ -117,8 +105,6 @@ impl FromStr for CelestiaAddress {
 }
 
 impl sov_rollup_interface::BasicAddress for CelestiaAddress {}
-// TODO: Remove this
-impl RollupAddress for CelestiaAddress {}
 
 #[cfg(test)]
 mod tests {
@@ -233,13 +219,6 @@ mod tests {
         #[test]
         fn test_borsh(input in proptest::array::uniform20(0u8..=255)) {
             check_borsh(input);
-        }
-
-        #[test]
-        fn test_try_from_array(arr in proptest::array::uniform32(0u8..32)) {
-            let address = CelestiaAddress::from(arr);
-            let output = format!("{}", address);
-            prop_assert!(output.starts_with("celestia"));
         }
     }
 }

@@ -12,7 +12,7 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlockHeaderTrait as BlockHeader, CountedBufReader};
 use sov_rollup_interface::services::da::SlotData;
-use sov_rollup_interface::{BasicAddress, RollupAddress};
+use sov_rollup_interface::BasicAddress;
 pub use tendermint::block::Header as TendermintHeader;
 use tendermint::block::Height;
 use tendermint::crypto::default::Sha256;
@@ -370,14 +370,6 @@ impl<'a> TryFrom<&'a [u8]> for H160 {
     }
 }
 
-impl From<[u8; 32]> for H160 {
-    fn from(value: [u8; 32]) -> Self {
-        let mut addr = [0u8; 20];
-        addr.copy_from_slice(&value[12..]);
-        Self(addr)
-    }
-}
-
 impl FromStr for H160 {
     type Err = hex::FromHexError;
 
@@ -397,8 +389,6 @@ impl Display for H160 {
 }
 
 impl BasicAddress for H160 {}
-// TODO: Remove this
-impl RollupAddress for H160 {}
 
 pub fn parse_pfb_namespace(
     group: NamespaceGroup,

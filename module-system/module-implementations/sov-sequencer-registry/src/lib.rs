@@ -180,7 +180,7 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
     }
 
     /// Checks whether `sender` is a registered sequencer.
-    pub fn is_sender_allowed<T: sov_modules_api::RollupAddress>(
+    pub fn is_sender_allowed<T: sov_rollup_interface::BasicAddress>(
         &self,
         sender: &T,
         working_set: &mut WorkingSet<C::Storage>,

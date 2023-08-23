@@ -54,6 +54,7 @@ pub use prefix::Prefix;
 pub use response::CallResponse;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::BasicAddress;
+// TODO: Check this.
 pub use sov_rollup_interface::{digest, RollupAddress};
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;

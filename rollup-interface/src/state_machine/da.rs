@@ -11,7 +11,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::zk::ValidityCondition;
-use crate::RollupAddress;
+use crate::BasicAddress;
 
 /// A specification for the types used by a DA layer.
 pub trait DaSpec {
@@ -166,7 +166,7 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
     type Data: Buf;
 
     /// The type used to represent addresses on the DA layer.
-    type Address: RollupAddress;
+    type Address: BasicAddress;
 
     /// Returns the address (on the DA layer) of the entity which submitted the blob transaction
     fn sender(&self) -> Self::Address;
