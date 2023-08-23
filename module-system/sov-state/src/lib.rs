@@ -1,4 +1,4 @@
-mod bincode_codec;
+mod bcs_codec;
 mod borsh_codec;
 pub mod codec;
 mod internal_cache;
@@ -29,7 +29,7 @@ mod state_tests;
 use std::fmt::Display;
 use std::str;
 
-pub use bincode_codec::BincodeCodec;
+pub use bcs_codec::BcsCodec;
 pub use borsh_codec::BorshCodec;
 pub use map::StateMap;
 #[cfg(feature = "native")]

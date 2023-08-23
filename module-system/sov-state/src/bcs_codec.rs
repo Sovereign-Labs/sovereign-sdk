@@ -2,9 +2,9 @@ use crate::codec::{StateKeyCodec, StateValueCodec};
 
 //// TODO
 #[derive(Debug, Default, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub struct BincodeCodec;
+pub struct BcsCodec;
 
-impl<K> StateKeyCodec<K> for BincodeCodec
+impl<K> StateKeyCodec<K> for BcsCodec
 where
     K: serde::Serialize + for<'de> serde::Deserialize<'de>,
 {
@@ -19,7 +19,7 @@ where
     }
 }
 
-impl<V> StateValueCodec<V> for BincodeCodec
+impl<V> StateValueCodec<V> for BcsCodec
 where
     V: serde::Serialize + for<'de> serde::Deserialize<'de>,
 {
