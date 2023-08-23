@@ -46,5 +46,6 @@ proptest-derive = { workspace = true }
 
 [features]
 default = []
+native = ["tokio"]
 fuzzing = ["proptest", "proptest-derive", "sha2"]
 mocks = ["sha2", "bytes/serde", "tokio"]

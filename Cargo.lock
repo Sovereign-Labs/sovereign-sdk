@@ -6690,6 +6690,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-schema-db",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]

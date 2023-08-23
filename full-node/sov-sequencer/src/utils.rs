@@ -21,6 +21,11 @@ impl SimpleClient {
         println!("response: {:?}", response);
         Ok(())
     }
+
+    /// Get a reference to the underlying [`HttpClient`]
+    pub fn inner(&self) -> &HttpClient {
+        &self.client
+    }
 }
 
 use jsonrpsee::types::ErrorObjectOwned;
