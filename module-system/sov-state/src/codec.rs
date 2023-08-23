@@ -114,8 +114,19 @@ where
 /// and one for values.
 #[derive(Default, Debug, Clone)]
 pub struct PairOfCodecs<KC, VC> {
-    pub key_codec: KC,
-    pub value_codec: VC,
+    key_codec: KC,
+    value_codec: VC,
+}
+
+impl<KC, VC> PairOfCodecs<KC, VC> {
+    /// Creates a new [`PairOfCodecs`] from a [`StateKeyCodec`] and a
+    /// [`StateValueCodec`].
+    pub fn new(key_codec: KC, value_codec: VC) -> Self {
+        Self {
+            key_codec,
+            value_codec,
+        }
+    }
 }
 
 impl<K, KC, VC> StateKeyCodec<K> for PairOfCodecs<KC, VC>

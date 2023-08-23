@@ -1,16 +1,22 @@
+use std::iter::FusedIterator;
 use std::marker::PhantomData;
 
-use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, StateKeyCodec, StateValueCodec};
-use crate::{Prefix, Storage, WorkingSet};
+use crate::codec::{BorshCodec, PairOfCodecs, StateValueCodec};
+use crate::{Prefix, StateMap, StateValue, Storage, WorkingSet};
 
-#[derive(Debug, PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize)]
-pub struct StateVec<V, C = BorshCodec> {
+type InternalCodec<C> = PairOfCodecs<BorshCodec, C>;
+
+#[derive(Debug, Clone)]
+pub struct StateVec<V, VC = BorshCodec>
+where
+    VC: StateValueCodec<V>,
+{
     _phantom: PhantomData<V>,
-    codec: C,
     prefix: Prefix,
+    len_value: StateValue<usize>,
+    elems: StateMap<usize, V, InternalCodec<VC>>,
 }
 
 /// Error type for `StateVec` get method.
@@ -27,27 +33,30 @@ where
     BorshCodec: StateValueCodec<V>,
 {
     /// Crates a new [`StateVec`] with the given prefix and the default
-    /// [`StateCodec`] (i.e. [`BorshCodec`]).
+    /// [`StateValueCodec`] (i.e. [`BorshCodec`]).
     pub fn new(prefix: Prefix) -> Self {
-        Self {
-            _phantom: PhantomData,
-            codec: BorshCodec,
-            prefix,
-        }
+        Self::with_codec(prefix, BorshCodec)
     }
 }
 
-impl<V, C> StateVec<V, C>
+impl<V, VC> StateVec<V, VC>
 where
-    C: StateValueCodec<V>,
-    C: StateValueCodec<usize>,
+    VC: StateValueCodec<V>,
 {
     /// Creates a new [`StateVec`] with the given prefix and codec.
-    pub fn with_codec(prefix: Prefix, codec: C) -> Self {
+    pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
+        // Differentiating the prefixes for the length and the elements
+        // shouldn't be necessary, but it's best not to rely on implementation
+        // details of `StateValue` and `StateMap` as they both have the right to
+        // reserve the whole key space for themselves.
+        let len_value = StateValue::<usize>::new(prefix.extended(b"l"));
+        let elems =
+            StateMap::with_codec(prefix.extended(b"e"), InternalCodec::new(BorshCodec, codec));
         Self {
             _phantom: PhantomData,
-            codec,
             prefix,
+            len_value,
+            elems,
         }
     }
 
@@ -56,12 +65,8 @@ where
         &self.prefix
     }
 
-    fn internal_codec(&self) -> IndexCodec<C> {
-        IndexCodec::new(&self.codec)
-    }
-
     fn set_len<S: Storage>(&self, length: usize, working_set: &mut WorkingSet<S>) {
-        working_set.set_value(self.prefix(), &self.internal_codec(), &IndexKey(0), &length);
+        self.len_value.set(&length, working_set);
     }
 
     /// Sets a value in the [`StateVec`].
@@ -76,12 +81,7 @@ where
         let len = self.len(working_set);
 
         if index < len {
-            working_set.set_value(
-                self.prefix(),
-                &self.internal_codec(),
-                &IndexKey(index + 1),
-                value,
-            );
+            self.elems.set(&index, value, working_set);
             Ok(())
         } else {
             Err(Error::IndexOutOfBounds(index))
@@ -90,7 +90,7 @@ where
 
     /// Returns the value for the given index.
     pub fn get<S: Storage>(&self, index: usize, working_set: &mut WorkingSet<S>) -> Option<V> {
-        working_set.get_value(self.prefix(), &self.internal_codec(), &IndexKey(index + 1))
+        self.elems.get(&index, working_set)
     }
 
     /// Returns the value for the given index.
@@ -100,18 +100,13 @@ where
         &self,
         index: usize,
         working_set: &mut WorkingSet<S>,
-    ) -> Result<Option<V>, Error> {
+    ) -> Result<V, Error> {
         let len = self.len(working_set);
 
         if index < len {
-            let elem =
-                working_set.get_value(self.prefix(), &self.internal_codec(), &IndexKey(index + 1));
-
-            if elem.is_some() {
-                Ok(elem)
-            } else {
-                Err(Error::MissingValue(self.prefix().clone(), index))
-            }
+            self.elems
+                .get(&index, working_set)
+                .ok_or_else(|| Error::MissingValue(self.prefix().clone(), index))
         } else {
             Err(Error::IndexOutOfBounds(index))
         }
@@ -119,113 +114,120 @@ where
 
     /// Returns the length of the [`StateVec`].
     pub fn len<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> usize {
-        let len = working_set.get_value::<_, usize, _>(
-            self.prefix(),
-            &self.internal_codec(),
-            &IndexKey(0),
-        );
-        len.unwrap_or_default()
+        self.len_value.get(working_set).unwrap_or_default()
     }
 
     /// Pushes a value to the end of the [`StateVec`].
     pub fn push<S: Storage>(&self, value: &V, working_set: &mut WorkingSet<S>) {
         let len = self.len(working_set);
 
-        working_set.set_value(
-            self.prefix(),
-            &self.internal_codec(),
-            &IndexKey(len + 1),
-            value,
-        );
+        self.elems.set(&len, value, working_set);
         self.set_len(len + 1, working_set);
     }
 
     /// Pops a value from the end of the [`StateVec`] and returns it.
     pub fn pop<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
         let len = self.len(working_set);
+        let new_len = len.checked_sub(1)?;
 
-        if len > 0 {
-            let elem =
-                working_set.remove_value(self.prefix(), &self.internal_codec(), &IndexKey(len));
-            self.set_len(len - 1, working_set);
-            elem
-        } else {
-            None
-        }
+        let elem = self.get(new_len, working_set)?;
+        self.set_len(new_len, working_set);
+        Some(elem)
     }
 
     pub fn clear<S: Storage>(&self, working_set: &mut WorkingSet<S>) {
-        let len = self.len(working_set);
+        let len = self.len_value.remove(working_set).unwrap_or_default();
 
         for i in 0..len + 1 {
-            working_set.delete_value(self.prefix(), &self.internal_codec(), &IndexKey(i));
+            self.elems.delete(&i, working_set);
         }
-        self.set_len(0, working_set);
     }
 
     /// Sets all values in the [`StateVec`].
+    ///
     /// If the length of the provided values is less than the length of the
     /// [`StateVec`], the remaining values will be removed from storage.
     pub fn set_all<S: Storage>(&self, values: Vec<V>, working_set: &mut WorkingSet<S>) {
-        // TODO(performance): optimize this, we could skip many reads and writes here.
-        self.clear(working_set);
+        let old_len = self.len(working_set);
+        let new_len = values.len();
 
-        for value in values.into_iter() {
-            self.push(&value, working_set);
+        for i in new_len..old_len {
+            self.elems.delete(&i, working_set);
+        }
+
+        for (i, value) in values.into_iter().enumerate() {
+            self.elems.set(&i, &value, working_set);
+        }
+
+        self.set_len(new_len, working_set);
+    }
+
+    /// Returns an iterator over all the values in the [`StateVec`].
+    pub fn iter<'a, 'ws, S: Storage>(
+        &'a self,
+        working_set: &'ws mut WorkingSet<S>,
+    ) -> StateVecIter<'a, 'ws, V, VC, S> {
+        let len = self.len(working_set);
+        StateVecIter {
+            state_vec: self,
+            ws: working_set,
+            len,
+            next_i: 0,
         }
     }
 }
 
-#[derive(Debug)]
-struct IndexKey(usize);
-
-struct IndexCodec<'a, VC> {
-    value_codec: &'a VC,
-}
-
-impl<'a, VC> IndexCodec<'a, VC> {
-    pub fn new(value_codec: &'a VC) -> Self {
-        Self { value_codec }
-    }
-}
-
-impl<'a, VC> StateKeyCodec<IndexKey> for IndexCodec<'a, VC> {
-    type KeyError = std::io::Error;
-
-    fn encode_key(&self, i: &IndexKey) -> Vec<u8> {
-        i.0.to_be_bytes().to_vec()
-    }
-
-    fn try_decode_key(&self, bytes: &[u8]) -> Result<IndexKey, Self::KeyError> {
-        if bytes.is_empty() {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                "IndexKey must not be empty",
-            ))
-        } else {
-            Ok(IndexKey(usize::from_be_bytes(
-                bytes.try_into().expect("Couldn't cast to [u8; 8]"),
-            )))
-        }
-    }
-}
-
-impl<'a, V, VC> StateValueCodec<V> for IndexCodec<'a, VC>
+/// An [`Iterator`] over a [`StateVec`]
+///
+/// See [`StateVec::iter`] for more details.
+pub struct StateVecIter<'a, 'ws, V, C, S>
 where
-    VC: StateValueCodec<V>,
+    C: StateValueCodec<V>,
+    S: Storage,
 {
-    type ValueError = VC::ValueError;
+    state_vec: &'a StateVec<V, C>,
+    ws: &'ws mut WorkingSet<S>,
+    len: usize,
+    next_i: usize,
+}
 
-    fn encode_value(&self, value: &V) -> Vec<u8> {
-        self.value_codec.encode_value(value)
-    }
+impl<'a, 'ws, V, C, S> Iterator for StateVecIter<'a, 'ws, V, C, S>
+where
+    C: StateValueCodec<V>,
+    S: Storage,
+{
+    type Item = V;
 
-    fn try_decode_value(&self, bytes: &[u8]) -> Result<V, Self::ValueError> {
-        self.value_codec.try_decode_value(bytes)
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next_i == self.state_vec.len(self.ws) {
+            return None;
+        }
+
+        let elem = self.state_vec.get(self.next_i, self.ws);
+        debug_assert!(elem.is_some());
+        self.next_i += 1;
+        elem
     }
 }
 
-#[cfg(test)]
+impl<'a, 'ws, V, C, S> ExactSizeIterator for StateVecIter<'a, 'ws, V, C, S>
+where
+    C: StateValueCodec<V>,
+    S: Storage,
+{
+    fn len(&self) -> usize {
+        self.len - self.next_i
+    }
+}
+
+impl<'a, 'ws, V, C, S> FusedIterator for StateVecIter<'a, 'ws, V, C, S>
+where
+    C: StateValueCodec<V>,
+    S: Storage,
+{
+}
+
+#[cfg(all(test, feature = "native"))]
 mod test {
     use std::fmt::Debug;
 
@@ -254,7 +256,11 @@ mod test {
             TestCaseAction::CheckContents(vec![10]),
             TestCaseAction::Push(8),
             TestCaseAction::CheckContents(vec![10, 8]),
+            TestCaseAction::SetAll(vec![10]),
+            TestCaseAction::CheckContents(vec![10]),
+            TestCaseAction::CheckGet(1, None),
             TestCaseAction::Set(0, u32::MAX),
+            TestCaseAction::Push(8),
             TestCaseAction::Push(0),
             TestCaseAction::CheckContents(vec![u32::MAX, 8, 0]),
             TestCaseAction::SetAll(vec![11, 12]),
@@ -266,20 +272,23 @@ mod test {
             TestCaseAction::Clear,
             TestCaseAction::CheckContents(vec![]),
             TestCaseAction::CheckGet(0, None),
+            TestCaseAction::SetAll(vec![1, 2, 3]),
+            TestCaseAction::CheckContents(vec![1, 2, 3]),
         ]
     }
 
-    fn get_all<T, VC, C>(sv: &StateVec<T, VC>, ws: &mut WorkingSet<C>) -> Vec<T>
-    where
-        VC: StateValueCodec<T> + StateValueCodec<usize>,
-        C: Storage,
-    {
-        let mut result = Vec::new();
-        let len = sv.len(ws);
-        for i in 0..len {
-            result.push(sv.get(i, ws).unwrap());
+    #[test]
+    fn test_state_vec() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
+        let mut working_set = WorkingSet::new(storage);
+
+        let prefix = Prefix::new("test".as_bytes().to_vec());
+        let state_vec = StateVec::<u32>::new(prefix);
+
+        for test_case_action in test_cases() {
+            check_test_case_action(&state_vec, test_case_action, &mut working_set);
         }
-        result
     }
 
     fn check_test_case_action<T, S>(
@@ -293,7 +302,8 @@ mod test {
     {
         match action {
             TestCaseAction::CheckContents(expected) => {
-                assert_eq!(expected, get_all(state_vec, ws));
+                let contents: Vec<T> = state_vec.iter(ws).collect();
+                assert_eq!(expected, contents);
             }
             TestCaseAction::CheckLen(expected) => {
                 let actual = state_vec.len(ws);
@@ -319,20 +329,6 @@ mod test {
             TestCaseAction::Clear => {
                 state_vec.clear(ws);
             }
-        }
-    }
-
-    #[test]
-    fn test_state_vec() {
-        let tmpdir = tempfile::tempdir().unwrap();
-        let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
-        let mut working_set = WorkingSet::new(storage);
-
-        let prefix = Prefix::new("test".as_bytes().to_vec());
-        let state_vec = StateVec::<u32>::new(prefix);
-
-        for test_case_action in test_cases() {
-            check_test_case_action(&state_vec, test_case_action, &mut working_set);
         }
     }
 }
