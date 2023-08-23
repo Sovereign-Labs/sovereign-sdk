@@ -6,7 +6,7 @@ use std::str::FromStr;
 
 use celestia::types::NamespaceId;
 use celestia::verifier::address::CelestiaAddress;
-use celestia::verifier::{CelestiaSpec, CelestiaVerifier, ChainValidityCondition};
+use celestia::verifier::{CelestiaSpec, CelestiaVerifier};
 use celestia::{BlobWithSender, CelestiaHeader};
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::create_zk_app_template;

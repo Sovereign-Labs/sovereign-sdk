@@ -54,8 +54,8 @@ pub mod private_key {
     impl<'de> serde::Deserialize<'de> for DefaultPrivateKey {
         fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
             use serde::de::Error;
-            let bytes = <&'de [u8] as serde::Deserialize>::deserialize(deserializer)?;
-            let key_pair = Keypair::from_bytes(bytes).map_err(D::Error::custom)?;
+            let bytes = Vec::<u8>::deserialize(deserializer)?;
+            let key_pair = Keypair::from_bytes(&bytes).map_err(D::Error::custom)?;
             Ok(Self { key_pair })
         }
     }
@@ -266,13 +266,27 @@ impl FromStr for DefaultSignature {
 
 #[test]
 #[cfg(feature = "native")]
-fn test_privatekey_serde() {
+fn test_privatekey_serde_bincode() {
     use self::private_key::DefaultPrivateKey;
     use crate::PrivateKey;
 
     let key_pair = DefaultPrivateKey::generate();
     let serialized = bincode::serialize(&key_pair).expect("Serialization to vec is infallible");
     let output = bincode::deserialize::<DefaultPrivateKey>(&serialized)
+        .expect("Keypair is serialized correctly");
+
+    assert_eq!(key_pair.as_hex(), output.as_hex());
+}
+
+#[test]
+#[cfg(feature = "native")]
+fn test_privatekey_serde_json() {
+    use self::private_key::DefaultPrivateKey;
+    use crate::PrivateKey;
+
+    let key_pair = DefaultPrivateKey::generate();
+    let serialized = serde_json::to_vec(&key_pair).expect("Serialization to vec is infallible");
+    let output = serde_json::from_slice::<DefaultPrivateKey>(&serialized)
         .expect("Keypair is serialized correctly");
 
     assert_eq!(key_pair.as_hex(), output.as_hex());

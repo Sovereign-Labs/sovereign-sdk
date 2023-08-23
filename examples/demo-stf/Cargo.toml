@@ -28,6 +28,7 @@ tracing = { workspace = true }
 
 const-rollup-config = { path = "../const-rollup-config" }
 sov-rollup-interface = { path = "../../rollup-interface" }
+sov-cli = { path = "../../module-system/sov-cli", optional = true }
 sov-election = { path = "../../module-system/module-implementations/examples/sov-election" }
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry" }
 sov-blob-storage = { path = "../../module-system/module-implementations/sov-blob-storage" }
@@ -53,6 +54,7 @@ default = []
 experimental = ["sov-evm/experimental"]
 native = [
     "sov-bank/native",
+    "sov-cli",
     "sov-accounts/native",
     "sov-election/native",
     "sov-sequencer-registry/native",

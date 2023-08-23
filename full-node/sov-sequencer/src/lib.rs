@@ -24,7 +24,7 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> Sequencer<B, T> 
         }
     }
 
-    async fn submit_batch(&self) -> anyhow::Result<()> {
+    async fn submit_batch(&self) -> anyhow::Result<usize> {
         // Need to release lock before await, so the Future is `Send`.
         // But potentially it can create blobs that are sent out of order.
         // It can be improved with atomics,
@@ -37,10 +37,11 @@ impl<B: BatchBuilder + Send + Sync, T: DaService + Send + Sync> Sequencer<B, T> 
                 .map_err(|e| anyhow!("failed to lock mempool: {}", e.to_string()))?;
             batch_builder.get_next_blob()?
         };
+        let num_txs = blob.len();
         let blob: Vec<u8> = borsh::to_vec(&blob)?;
 
         match self.da_service.send_transaction(&blob).await {
-            Ok(_) => Ok(()),
+            Ok(_) => Ok(num_txs),
             Err(e) => Err(anyhow!("failed to submit batch: {:?}", e)),
         }
     }
@@ -63,12 +64,23 @@ where
     B: BatchBuilder + Send + Sync + 'static,
     D: DaService,
 {
-    rpc.register_async_method("sequencer_publishBatch", |_, batch_builder| async move {
-        batch_builder
-            .submit_batch()
-            .await
-            .map_err(|e| to_jsonrpsee_error_object(e, SEQUENCER_RPC_ERROR))
-    })?;
+    rpc.register_async_method(
+        "sequencer_publishBatch",
+        |params, batch_builder| async move {
+            let mut params_iter = params.sequence();
+            while let Some(tx) = params_iter.optional_next::<Vec<u8>>()? {
+                batch_builder
+                    .accept_tx(tx)
+                    .map_err(|e| to_jsonrpsee_error_object(e, SEQUENCER_RPC_ERROR))?;
+            }
+            let num_txs = batch_builder
+                .submit_batch()
+                .await
+                .map_err(|e| to_jsonrpsee_error_object(e, SEQUENCER_RPC_ERROR))?;
+
+            Ok::<String, ErrorObjectOwned>(format!("Submitted {} transactions", num_txs))
+        },
+    )?;
     rpc.register_method("sequencer_acceptTx", move |params, sequencer| {
         let tx: SubmitTransaction = params.one()?;
         let response = match sequencer.accept_tx(tx.body) {
@@ -112,19 +124,22 @@ pub enum SubmitTransactionResponse {
 #[cfg(test)]
 mod tests {
 
-    use sov_rollup_interface::mocks::{MockBatchBuilder, MockDaService};
+    use std::io::Read;
+
+    use sov_rollup_interface::da::BlobReaderTrait;
+    use sov_rollup_interface::mocks::{MockAddress, MockBatchBuilder, MockDaService};
 
     use super::*;
 
     #[tokio::test]
     async fn test_submit_on_empty_mempool() {
         let batch_builder = MockBatchBuilder { mempool: vec![] };
-        let da_service = MockDaService::default();
-        assert!(da_service.is_empty());
+        let da_service = MockDaService::new(MockAddress::default());
         let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
-        let result: Result<(), jsonrpsee::core::Error> =
-            rpc.call("sequencer_publishBatch", [1u64]).await;
+        let arg: &[u8] = &[];
+        let result: Result<String, jsonrpsee::core::Error> =
+            rpc.call("sequencer_publishBatch", arg).await;
 
         assert!(result.is_err());
         let error = result.err().unwrap();
@@ -141,29 +156,31 @@ mod tests {
         let batch_builder = MockBatchBuilder {
             mempool: vec![tx1.clone(), tx2.clone()],
         };
-        let da_service = MockDaService::default();
-        assert!(da_service.is_empty());
+        let da_service = MockDaService::new(MockAddress::default());
         let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
 
-        let _: () = rpc.call("sequencer_publishBatch", [1u64]).await.unwrap();
+        let arg: &[u8] = &[];
+        let _: String = rpc.call("sequencer_publishBatch", arg).await.unwrap();
 
-        assert!(!da_service.is_empty());
+        let mut block = vec![];
+        let mut submitted_block = da_service.get_block_at(0).await.unwrap();
+        let _ = submitted_block.blobs[0]
+            .data_mut()
+            .read_to_end(&mut block)
+            .unwrap();
 
-        let submitted = da_service.get_submitted();
-        assert_eq!(1, submitted.len());
         // First bytes of each tx, flattened
         let blob: Vec<Vec<u8>> = vec![vec![tx1[0]], vec![tx2[0]]];
         let expected: Vec<u8> = borsh::to_vec(&blob).unwrap();
-        assert_eq!(expected, submitted[0]);
+        assert_eq!(expected, block);
     }
 
     #[tokio::test]
     async fn test_accept_tx() {
         let batch_builder = MockBatchBuilder { mempool: vec![] };
-        let da_service = MockDaService::default();
+        let da_service = MockDaService::new(MockAddress::default());
 
         let rpc = get_sequencer_rpc(batch_builder, da_service.clone());
-        assert!(da_service.is_empty());
 
         let tx: Vec<u8> = vec![1, 2, 3, 4, 5];
         let request = SubmitTransaction { body: tx.clone() };
@@ -171,19 +188,20 @@ mod tests {
             rpc.call("sequencer_acceptTx", [request]).await.unwrap();
         assert_eq!(SubmitTransactionResponse::Registered, result);
 
-        // Check that it got passed to DA service
-        assert!(da_service.is_empty());
+        let arg: &[u8] = &[];
+        let _: String = rpc.call("sequencer_publishBatch", arg).await.unwrap();
 
-        let _: () = rpc.call("sequencer_publishBatch", [1u64]).await.unwrap();
+        let mut block = vec![];
+        let mut submitted_block = da_service.get_block_at(0).await.unwrap();
+        let _ = submitted_block.blobs[0]
+            .data_mut()
+            .read_to_end(&mut block)
+            .unwrap();
 
-        assert!(!da_service.is_empty());
-
-        let submitted = da_service.get_submitted();
-        assert_eq!(1, submitted.len());
         // First bytes of each tx, flattened
         let blob: Vec<Vec<u8>> = vec![vec![tx[0]]];
         let expected: Vec<u8> = borsh::to_vec(&blob).unwrap();
-        assert_eq!(expected, submitted[0]);
+        assert_eq!(expected, block);
     }
 
     #[tokio::test]
