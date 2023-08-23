@@ -15,6 +15,8 @@ resolver = "2"
 anyhow = { workspace = true }
 borsh = { workspace = true }
 bincode = { workspace = true }
+bcs = { workspace = true }
+postcard = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }

@@ -3,6 +3,7 @@ use ethers_core::types::OtherFields;
 
 use crate::evm::{Bytes32, EthAddress};
 
+/*
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct TransactionReceipt {
     /// Transaction hash.
@@ -62,3 +63,4 @@ impl From<TransactionReceipt> for response::TransactionReceipt {
         }
     }
 }
+*/
