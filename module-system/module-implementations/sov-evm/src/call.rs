@@ -1,4 +1,5 @@
 use anyhow::Result;
+use ethers_core::types::{OtherFields, TransactionReceipt};
 use revm::primitives::{CfgEnv, U256};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
@@ -8,7 +9,7 @@ use crate::evm::executor::{self};
 use crate::evm::transaction::{BlockEnv, EvmTransactionSignedEcRecovered};
 use crate::evm::{contract_address, EvmChainCfg, RawEvmTransaction};
 use crate::experimental::SpecIdWrapper;
-use crate::{Evm, TransactionReceipt};
+use crate::Evm;
 
 #[cfg_attr(
     feature = "native",
@@ -46,24 +47,30 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let receipt = TransactionReceipt {
             transaction_hash: hash.into(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            transaction_index: 0,
+            transaction_index: 0u64.into(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
             block_hash: Default::default(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            block_number: Some(0),
+            block_number: Some(0u64.into()),
             from: evm_tx_recovered.signer().into(),
-            to: evm_tx_recovered.to(),
+            to: evm_tx_recovered.to().map(|to| to.into()),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
             cumulative_gas_used: Default::default(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
             gas_used: Default::default(),
             contract_address: contract_address(result).map(|addr| addr.into()),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            status: Some(1),
+            status: Some(1u64.into()),
             root: Default::default(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            transaction_type: Some(1),
+            transaction_type: Some(1u64.into()),
             effective_gas_price: Default::default(),
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
+            logs_bloom: Default::default(),
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
+            other: OtherFields::default(),
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
+            logs: Default::default(),
         };
 
         self.receipts
