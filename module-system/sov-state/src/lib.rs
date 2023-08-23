@@ -27,7 +27,7 @@ mod state_tests;
 use std::fmt::Display;
 use std::str;
 
-pub use map::StateMap;
+pub use map::{StateMap, StateMapError};
 #[cfg(feature = "native")]
 pub use prover_storage::{delete_storage, ProverStorage};
 pub use scratchpad::*;
