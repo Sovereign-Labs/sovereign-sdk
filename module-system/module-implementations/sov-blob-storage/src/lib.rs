@@ -67,7 +67,7 @@ impl<C: sov_modules_api::Context> BlobStorage<C> {
             .collect()
     }
 
-    // TODO: Migrate to AddressTrait generic: https://github.com/Sovereign-Labs/sovereign-sdk/issues/622
+    // TODO: Migrate to generic: https://github.com/Sovereign-Labs/sovereign-sdk/issues/622
     pub(crate) fn get_preferred_sequencer(
         &self,
         working_set: &mut WorkingSet<C::Storage>,
