@@ -137,7 +137,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .expect("db write must succeed");
 
         witness.add_hint(update_proof);
-        witness.add_hint(&new_root.0);
+        witness.add_hint(new_root.0);
 
         self.db.inc_next_version();
         Ok(new_root.0)
