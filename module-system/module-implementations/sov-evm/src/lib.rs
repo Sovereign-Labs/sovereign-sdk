@@ -19,11 +19,10 @@ pub use revm::primitives::SpecId;
 mod experimental {
     use std::collections::HashMap;
     use derive_more::{From, Into};
-    pub use ethers_core::types::transaction::response::TransactionReceipt;
     use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo};
     use sov_state::WorkingSet;
-
+    use ethers::types::TransactionReceipt;
     use super::evm::db::EvmDb;
     use super::evm::transaction::BlockEnv;
     use super::evm::{DbAccount, EthAddress};

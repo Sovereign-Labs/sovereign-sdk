@@ -7012,11 +7012,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bcs",
- "bincode",
  "borsh",
  "hex",
  "jmt",
- "postcard",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
