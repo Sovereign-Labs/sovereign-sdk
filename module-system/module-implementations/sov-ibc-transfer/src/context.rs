@@ -211,7 +211,8 @@ where
         coin: &PrefixedCoin,
         extra: &EscrowExtraData<C>,
     ) -> Result<(), TokenTransferError> {
-        // 1. ensure that token exists in `self.escrowed_tokens` map
+        // 1. ensure that token exists in `self.escrowed_tokens` map, which is
+        // necessary information when unescrowing tokens
         {
             let mut hasher = <C::Hasher as Digest>::new();
             hasher.update(coin.denom.to_string());
@@ -251,12 +252,47 @@ where
 
     fn unescrow_coins_execute(
         &self,
-        _port_id: &PortId,
-        _channel_id: &ChannelId,
-        _to_account: &Self::AccountId,
-        _coin: &PrefixedCoin,
+        port_id: &PortId,
+        channel_id: &ChannelId,
+        to_account: &Self::AccountId,
+        coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        todo!()
+        let token_address = {
+            let mut hasher = <C::Hasher as Digest>::new();
+            hasher.update(coin.denom.to_string());
+            let denom_hash = hasher.finalize().to_vec();
+
+            self.transfer_mod
+                .escrowed_tokens
+                .get(&denom_hash, &mut self.working_set.borrow_mut())
+                .ok_or(TokenTransferError::InvalidCoin {
+                    coin: coin.to_string(),
+                })?
+        };
+
+        // transfer coins from escrow account to `to_account`
+        {
+            let escrow_account = self.get_escrow_account(port_id, channel_id);
+            let amount: sov_bank::Amount = (*coin.amount.as_ref())
+                .try_into()
+                .map_err(|_| TokenTransferError::InvalidAmount(FromDecStrErr::InvalidLength))?;
+            let coin = Coins {
+                amount,
+                token_address,
+            };
+
+            self.transfer_mod
+                .bank
+                .transfer_from(
+                    &escrow_account,
+                    &to_account.address,
+                    coin,
+                    &mut self.working_set.borrow_mut(),
+                )
+                .map_err(|err| TokenTransferError::InternalTransferFailed(err.to_string()))?;
+        }
+
+        Ok(())
     }
 }
 

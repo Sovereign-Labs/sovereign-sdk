@@ -44,10 +44,7 @@ pub struct Transfer<C: sov_modules_api::Context> {
 }
 
 impl<C: sov_modules_api::Context> Transfer<C> {
-    pub fn into_context(
-        self,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> TransferContext<'_, C> {
+    pub fn into_context(self, working_set: &mut WorkingSet<C::Storage>) -> TransferContext<'_, C> {
         TransferContext::new(self, working_set)
     }
 }
