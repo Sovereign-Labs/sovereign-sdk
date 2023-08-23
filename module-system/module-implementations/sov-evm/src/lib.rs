@@ -8,23 +8,17 @@ pub mod genesis;
 #[cfg(feature = "experimental")]
 pub mod query;
 #[cfg(feature = "experimental")]
-mod receipt;
-#[cfg(feature = "experimental")]
 #[cfg(test)]
 mod tests;
 #[cfg(feature = "experimental")]
 pub use experimental::{AccountData, Evm, EvmConfig, SpecIdWrapper};
-//#[cfg(feature = "experimental")]
-//pub use receipt::TransactionReceipt;
 #[cfg(feature = "experimental")]
 pub use revm::primitives::SpecId;
 
 #[cfg(feature = "experimental")]
 mod experimental {
     use std::collections::HashMap;
-
     use derive_more::{From, Into};
-    //use crate::TransactionReceipt;
     pub use ethers_core::types::transaction::response::TransactionReceipt;
     use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo};
