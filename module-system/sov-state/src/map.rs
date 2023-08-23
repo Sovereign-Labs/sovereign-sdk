@@ -37,16 +37,9 @@ impl<K, V> StateMap<K, V> {
     }
 }
 
-impl<K, V, C> StateMap<K, V, C>
-where
-    C: StateCodec<K, V>,
-{
-    /// Creates a new [`StateMap`] with the given prefix and codec.
-    ///
-    /// Note that `codec` must implement [`StateCodec`]. You can use
-    /// [`PairOfCodecs`](crate::codec::PairOfCodecs) if you wish to decouple key
-    /// and value codecs.
-    pub fn with_codec(prefix: Prefix, codec: C) -> Self {
+impl<K, V, VC> StateMap<K, V, VC> {
+    /// Creates a new [`StateMap`] with the given prefix and [`StateValueCodec`].
+    pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
         Self {
             _phantom: (PhantomData, PhantomData),
             value_codec: codec,
@@ -124,7 +117,7 @@ where
 
     /// Returns the value corresponding to the key or [`StateMapError`] if key is absent in
     /// the map.
-    pub fn get_or_err<S: Storage>(
+    pub fn get_or_err<Q, S: Storage>(
         &self,
         key: &Q,
         working_set: &mut WorkingSet<S>,
