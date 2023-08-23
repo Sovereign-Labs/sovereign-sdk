@@ -43,9 +43,38 @@ where
         }
     }
 
-    pub fn get_escrow_account(&self, _port_id: &PortId, _channel_id: &ChannelId) -> C::Address {
+    fn get_escrow_account(&self, _port_id: &PortId, _channel_id: &ChannelId) -> C::Address {
         // Q: What is the escrow account?
         todo!()
+    }
+
+    /// Transfers `amount` tokens from `from_account` to `to_account`
+    fn transfer(
+        &self,
+        token_address: C::Address,
+        from_account: &C::Address,
+        to_account: &C::Address,
+        amount: &transfer::Amount,
+    ) -> Result<(), TokenTransferError> {
+        let amount: sov_bank::Amount = (*amount.as_ref())
+            .try_into()
+            .map_err(|_| TokenTransferError::InvalidAmount(FromDecStrErr::InvalidLength))?;
+        let coin = Coins {
+            amount,
+            token_address,
+        };
+
+        self.transfer_mod
+            .bank
+            .transfer_from(
+                &from_account,
+                &to_account,
+                coin,
+                &mut self.working_set.borrow_mut(),
+            )
+            .map_err(|err| TokenTransferError::InternalTransferFailed(err.to_string()))?;
+
+        Ok(())
     }
 }
 
@@ -228,23 +257,13 @@ where
         // 2. transfer coins to escrow account
         {
             let escrow_account = self.get_escrow_account(port_id, channel_id);
-            let amount: sov_bank::Amount = (*coin.amount.as_ref())
-                .try_into()
-                .map_err(|_| TokenTransferError::InvalidAmount(FromDecStrErr::InvalidLength))?;
-            let coin = Coins {
-                amount,
-                token_address: extra.token_address.clone(),
-            };
 
-            self.transfer_mod
-                .bank
-                .transfer_from(
-                    &from_account.address,
-                    &escrow_account,
-                    coin,
-                    &mut self.working_set.borrow_mut(),
-                )
-                .map_err(|err| TokenTransferError::InternalTransferFailed(err.to_string()))?;
+            self.transfer(
+                extra.token_address.clone(),
+                &from_account.address,
+                &escrow_account,
+                &coin.amount,
+            )?;
         }
 
         Ok(())
@@ -270,26 +289,16 @@ where
                 })?
         };
 
-        // transfer coins from escrow account to `to_account`
+        // transfer coins out of escrow account to `to_account`
         {
             let escrow_account = self.get_escrow_account(port_id, channel_id);
-            let amount: sov_bank::Amount = (*coin.amount.as_ref())
-                .try_into()
-                .map_err(|_| TokenTransferError::InvalidAmount(FromDecStrErr::InvalidLength))?;
-            let coin = Coins {
-                amount,
-                token_address,
-            };
 
-            self.transfer_mod
-                .bank
-                .transfer_from(
-                    &escrow_account,
-                    &to_account.address,
-                    coin,
-                    &mut self.working_set.borrow_mut(),
-                )
-                .map_err(|err| TokenTransferError::InternalTransferFailed(err.to_string()))?;
+            self.transfer(
+                token_address,
+                &escrow_account,
+                &to_account.address,
+                &coin.amount,
+            )?;
         }
 
         Ok(())
