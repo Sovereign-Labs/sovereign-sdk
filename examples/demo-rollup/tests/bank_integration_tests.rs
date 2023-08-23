@@ -14,7 +14,7 @@ use sov_sequencer::utils::SimpleClient;
 use test_helpers::start_rollup;
 
 const TOKEN_SALT: u64 = 0;
-const TOKEN_NAME: &'static str = "test_token";
+const TOKEN_NAME: &str = "test_token";
 
 async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow::Error> {
     let key = DefaultPrivateKey::generate();
