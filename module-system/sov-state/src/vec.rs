@@ -125,17 +125,19 @@ where
     /// Pops a value from the end of the [`StateVec`] and returns it.
     pub fn pop<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
         let len = self.len(working_set);
-        let new_len = len.checked_sub(1)?;
+        let last_i = len.checked_sub(1)?;
+        let elem = self.elems.remove(&last_i, working_set)?;
 
-        let elem = self.get(new_len, working_set)?;
+        let new_len = last_i;
         self.set_len(new_len, working_set);
+
         Some(elem)
     }
 
     pub fn clear<S: Storage>(&self, working_set: &mut WorkingSet<S>) {
         let len = self.len_value.remove(working_set).unwrap_or_default();
 
-        for i in 0..len + 1 {
+        for i in 0..len {
             self.elems.delete(&i, working_set);
         }
     }
@@ -200,6 +202,7 @@ where
         if elem.is_some() {
             self.next_i += 1;
         }
+
         elem
     }
 }
