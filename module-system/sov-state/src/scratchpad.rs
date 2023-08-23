@@ -54,7 +54,7 @@ impl<S: Storage> StateCheckpoint<S> {
         }
     }
 
-    pub fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
+    pub fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
         self.delta.get(key)
     }
 
@@ -201,20 +201,20 @@ impl<S: Storage> WorkingSet<S> {
 
 impl<S: Storage> RevertableDelta<S> {
     fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
-        let key = key.as_cache_key();
+        let key = key.to_cache_key();
         if let Some(value) = self.writes.get(&key) {
             return value.clone().map(Into::into);
         }
-        self.inner.get(key.into())
+        self.inner.get(&key.into())
     }
 
     fn set(&mut self, key: StorageKey, value: StorageValue) {
         self.writes
-            .insert(key.as_cache_key(), Some(value.as_cache_value()));
+            .insert(key.to_cache_key(), Some(value.into_cache_value()));
     }
 
     fn delete(&mut self, key: StorageKey) {
-        self.writes.insert(key.as_cache_key(), None);
+        self.writes.insert(key.to_cache_key(), None);
     }
 }
 
@@ -224,9 +224,9 @@ impl<S: Storage> RevertableDelta<S> {
 
         for (k, v) in self.writes.into_iter() {
             if let Some(v) = v {
-                inner.set(k.into(), v.into());
+                inner.set(&k.into(), v.into());
             } else {
-                inner.delete(k.into());
+                inner.delete(&k.into());
             }
         }
 
@@ -270,15 +270,15 @@ impl<S: Storage> Debug for Delta<S> {
 }
 
 impl<S: Storage> Delta<S> {
-    fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
+    fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
         self.cache.get_or_fetch(key, &self.inner, &self.witness)
     }
 
-    fn set(&mut self, key: StorageKey, value: StorageValue) {
+    fn set(&mut self, key: &StorageKey, value: StorageValue) {
         self.cache.set(key, value)
     }
 
-    fn delete(&mut self, key: StorageKey) {
+    fn delete(&mut self, key: &StorageKey) {
         self.cache.delete(key)
     }
 }

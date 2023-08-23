@@ -32,7 +32,13 @@ impl StorageKey {
         self.key.clone()
     }
 
-    pub fn as_cache_key(self) -> CacheKey {
+    pub fn to_cache_key(&self) -> CacheKey {
+        CacheKey {
+            key: self.key.clone(),
+        }
+    }
+
+    pub fn into_cache_key(self) -> CacheKey {
         CacheKey { key: self.key }
     }
 }
@@ -130,8 +136,8 @@ impl StorageValue {
         &self.value
     }
 
-    /// Convert this value into a `CacheValue`.
-    pub fn as_cache_value(self) -> CacheValue {
+    /// Convert this value into a [`CacheValue`].
+    pub fn into_cache_value(self) -> CacheValue {
         CacheValue { value: self.value }
     }
 }
@@ -166,7 +172,7 @@ pub trait Storage: Clone {
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error>;
 
     /// Returns the value corresponding to the key or None if key is absent.
-    fn get(&self, key: StorageKey, witness: &Self::Witness) -> Option<StorageValue>;
+    fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue>;
 
     /// Returns the latest state root hash from the storage.
     fn get_state_root(&self, witness: &Self::Witness) -> anyhow::Result<[u8; 32]>;
