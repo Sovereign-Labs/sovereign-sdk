@@ -26,7 +26,7 @@ where
     BorshCodec: StateValueCodec<V>,
 {
     /// Crates a new [`StateValue`] with the given prefix and the default
-    /// [`StateCodec`] (i.e. [`BorshCodec`]).
+    /// [`StateValueCodec`] (i.e. [`BorshCodec`]).
     pub fn new(prefix: Prefix) -> Self {
         Self {
             _phantom: PhantomData,

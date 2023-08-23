@@ -23,9 +23,9 @@ where
     prefix: Prefix,
 }
 
-/// Error type for `StateMap` get method.
+/// Error type for [`StateMap::get`] method.
 #[derive(Debug, Error)]
-pub enum Error {
+pub enum MapError {
     #[error("Value not found for prefix: {0} and: storage key {1}")]
     MissingValue(Prefix, StorageKey),
 }
@@ -51,9 +51,9 @@ where
 {
     /// Creates a new [`StateMap`] with the given prefix and codec.
     ///
-    /// Note that `codec` must implement both [`StateKeyCodec`] and
-    /// [`StateValueCodec`] and there's no way (yet?) to use different codecs
-    /// for keys and values.
+    /// Note that `codec` must implement [`StateCodec`]. You can use
+    /// [`PairOfCodecs`](crate::codec::PairOfCodecs) if you wish to decouple key
+    /// and value codecs.
     pub fn with_codec(prefix: Prefix, codec: C) -> Self {
         Self {
             _phantom: (PhantomData, PhantomData),
@@ -62,7 +62,7 @@ where
         }
     }
 
-    /// Returns the prefix used when this [`StateValue`] was created.
+    /// Returns the prefix used when this [`StateMap`] was created.
     pub fn prefix(&self) -> &Prefix {
         &self.prefix
     }
@@ -77,14 +77,15 @@ where
         working_set.get_value(self.prefix(), &self.codec, key)
     }
 
-    /// Returns the value corresponding to the key or Error if key is absent in the StateMap.
+    /// Returns the value corresponding to the key or [`MapError`] if key is absent in
+    /// the map.
     pub fn get_or_err<S: Storage>(
         &self,
         key: &K,
         working_set: &mut WorkingSet<S>,
-    ) -> Result<V, Error> {
+    ) -> Result<V, MapError> {
         self.get(key, working_set).ok_or_else(|| {
-            Error::MissingValue(
+            MapError::MissingValue(
                 self.prefix().clone(),
                 StorageKey::new(self.prefix(), key, &self.codec),
             )
@@ -101,9 +102,9 @@ where
         &self,
         key: &K,
         working_set: &mut WorkingSet<S>,
-    ) -> Result<V, Error> {
+    ) -> Result<V, MapError> {
         self.remove(key, working_set).ok_or_else(|| {
-            Error::MissingValue(
+            MapError::MissingValue(
                 self.prefix().clone(),
                 StorageKey::new(self.prefix(), key, &self.codec),
             )
