@@ -277,7 +277,7 @@ where
         consensus_state_path: ClientConsensusStatePath,
         consensus_state: Self::AnyConsensusState,
     ) -> Result<(), ContextError> {
-        let key: ConsensusStateKey = consensus_state_path.clone().into();
+        let key: ConsensusStateKey = consensus_state_path.into();
 
         self.ibc
             .consensus_state_store
@@ -298,7 +298,7 @@ where
         &self,
         client_cons_state_path: &ClientConsensusStatePath,
     ) -> Result<Self::AnyConsensusState, ContextError> {
-        <Self as ValidationContext>::consensus_state(&self, client_cons_state_path)
+        <Self as ValidationContext>::consensus_state(self, client_cons_state_path)
     }
 }
 
@@ -307,7 +307,7 @@ where
     C: sov_modules_api::Context,
 {
     fn host_timestamp(&self) -> Result<Timestamp, ContextError> {
-        <Self as ValidationContext>::host_timestamp(&self)
+        <Self as ValidationContext>::host_timestamp(self)
     }
 
     fn next_consensus_state(

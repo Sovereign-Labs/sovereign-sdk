@@ -7342,7 +7342,7 @@ name = "sov-vec-setter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh",
+ "borsh 0.10.3",
  "clap",
  "jsonrpsee 0.18.2",
  "schemars",

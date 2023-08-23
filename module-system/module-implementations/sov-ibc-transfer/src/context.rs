@@ -38,7 +38,7 @@ where
 {
     pub fn new(transfer_mod: Transfer<C>, working_set: &'ws mut WorkingSet<C::Storage>) -> Self {
         Self {
-            transfer_mod: transfer_mod,
+            transfer_mod,
             working_set: RefCell::new(working_set),
         }
     }
@@ -126,7 +126,7 @@ where
         if coin.amount > sender_balance {
             return Err(TokenTransferError::InsufficientFunds {
                 send_attempt: sender_balance,
-                available_funds: coin.amount.clone(),
+                available_funds: coin.amount,
             });
         }
 
@@ -188,10 +188,7 @@ where
         // 2. transfer coins to escrow account
         {
             let escrow_account = self.get_escrow_account(port_id, channel_id);
-            let amount: sov_bank::Amount = coin
-                .amount
-                .as_ref()
-                .clone()
+            let amount: sov_bank::Amount = (*coin.amount.as_ref())
                 .try_into()
                 .map_err(|_| TokenTransferError::InvalidAmount(FromDecStrErr::InvalidLength))?;
             let coin = Coins {

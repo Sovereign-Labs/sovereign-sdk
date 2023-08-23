@@ -1,5 +1,4 @@
 mod call;
-pub mod codec;
 pub mod context;
 mod genesis;
 
@@ -10,7 +9,6 @@ mod tests;
 mod query;
 
 pub use call::CallMessage;
-use codec::RawKeyBorshValueCodec;
 use context::TransferContext;
 #[cfg(feature = "native")]
 pub use query::Response;
@@ -35,21 +33,19 @@ pub struct Transfer<C: sov_modules_api::Context> {
     /// Note: we use `Vec<u8>` instead of `Output<C::Hasher>` because `C::Hasher`
     /// is not cloneable, and we currently need our module to be cloneable
     #[state]
-    pub(crate) minted_tokens:
-        sov_state::StateMap<Vec<u8>, C::Address, RawKeyBorshValueCodec>,
+    pub(crate) minted_tokens: sov_state::StateMap<Vec<u8>, C::Address>,
 
     /// Keeps track of the address of each token we escrowed.
     /// The index is the hash of the token denom (using the hasher `C::Hasher`).
     #[state]
-    pub(crate) escrowed_tokens:
-        sov_state::StateMap<Vec<u8>, C::Address, RawKeyBorshValueCodec>,
+    pub(crate) escrowed_tokens: sov_state::StateMap<Vec<u8>, C::Address>,
 }
 
 impl<C: sov_modules_api::Context> Transfer<C> {
-    pub fn into_context<'ws>(
+    pub fn into_context(
         self,
-        working_set: &'ws mut WorkingSet<C::Storage>,
-    ) -> TransferContext<'ws, C> {
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> TransferContext<'_, C> {
         TransferContext::new(self, working_set)
     }
 }

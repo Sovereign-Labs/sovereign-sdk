@@ -8,7 +8,7 @@ pub mod genesis;
 pub(crate) mod context;
 mod router;
 
-use codec::BorshKeyProtobufValueCodec;
+use codec::ProtobufCodec;
 use context::clients::{AnyClientState, AnyConsensusState};
 use ibc::core::ics24_host::path::ClientConsensusStatePath;
 use sov_modules_api::Error;
@@ -17,7 +17,7 @@ use sov_state::WorkingSet;
 
 pub struct ExampleModuleConfig {}
 
-#[derive(borsh::BorshSerialize, borsh::BorshDeserialize)]
+#[derive(Hash, PartialEq, Eq)]
 pub struct ConsensusStateKey {
     pub client_id: String,
     pub epoch: u64,
@@ -49,11 +49,11 @@ pub struct IbcModule<C: sov_modules_api::Context> {
     /// which isn't the case even with ibc-rs's borsh feature since ibc-rs uses
     /// borsh v0.9 and the Sovereign SDK uses v0.10.
     #[state]
-    pub client_state_store: sov_state::StateMap<String, AnyClientState, BorshKeyProtobufValueCodec>,
+    pub client_state_store: sov_state::StateMap<String, AnyClientState, ProtobufCodec>,
 
     #[state]
     pub consensus_state_store:
-        sov_state::StateMap<ConsensusStateKey, AnyConsensusState, BorshKeyProtobufValueCodec>,
+        sov_state::StateMap<ConsensusStateKey, AnyConsensusState, ProtobufCodec>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcModule<C> {

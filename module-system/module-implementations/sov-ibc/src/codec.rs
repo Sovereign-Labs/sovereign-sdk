@@ -2,7 +2,7 @@ use core::fmt::Display;
 
 use ibc::Any;
 use ibc_proto::protobuf::{Error, Protobuf};
-use sov_state::codec::{BorshCodec, PairOfCodecs, StateValueCodec};
+use sov_state::codec::StateValueCodec;
 
 #[derive(Default)]
 pub struct ProtobufCodec;
@@ -12,15 +12,13 @@ where
     V: Protobuf<Any>,
     V::Error: Display,
 {
-    type ValueError = Error;
+    type Error = Error;
 
     fn encode_value(&self, value: &V) -> Vec<u8> {
         value.encode_vec()
     }
 
-    fn try_decode_value(&self, bytes: &[u8]) -> Result<V, Self::ValueError> {
+    fn try_decode_value(&self, bytes: &[u8]) -> Result<V, Self::Error> {
         Protobuf::decode_vec(bytes)
     }
 }
-
-pub type BorshKeyProtobufValueCodec = PairOfCodecs<BorshCodec, ProtobufCodec>;
