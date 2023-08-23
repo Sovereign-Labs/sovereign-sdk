@@ -3,10 +3,8 @@ use std::marker::PhantomData;
 
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, PairOfCodecs, StateValueCodec};
+use crate::codec::{BorshCodec, StateValueCodec};
 use crate::{Prefix, StateMap, StateValue, Storage, WorkingSet};
-
-type InternalCodec<C> = PairOfCodecs<BorshCodec, C>;
 
 #[derive(Debug, Clone)]
 pub struct StateVec<V, VC = BorshCodec>
@@ -16,7 +14,7 @@ where
     _phantom: PhantomData<V>,
     prefix: Prefix,
     len_value: StateValue<usize>,
-    elems: StateMap<usize, V, InternalCodec<VC>>,
+    elems: StateMap<usize, V, VC>,
 }
 
 /// Error type for `StateVec` get method.
@@ -50,8 +48,7 @@ where
         // details of `StateValue` and `StateMap` as they both have the right to
         // reserve the whole key space for themselves.
         let len_value = StateValue::<usize>::new(prefix.extended(b"l"));
-        let elems =
-            StateMap::with_codec(prefix.extended(b"e"), InternalCodec::new(BorshCodec, codec));
+        let elems = StateMap::with_codec(prefix.extended(b"e"), codec);
         Self {
             _phantom: PhantomData,
             prefix,

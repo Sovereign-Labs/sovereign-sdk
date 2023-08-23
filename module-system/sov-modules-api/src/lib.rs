@@ -41,6 +41,7 @@ pub mod macros {
 
 use core::fmt::{self, Debug, Display};
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -193,6 +194,7 @@ pub trait Spec {
     type PublicKey: borsh::BorshDeserialize
         + borsh::BorshSerialize
         + Eq
+        + Hash
         + Clone
         + Debug
         + PublicKey
@@ -217,6 +219,7 @@ pub trait Spec {
     type PublicKey: borsh::BorshDeserialize
         + borsh::BorshSerialize
         + Eq
+        + Hash
         + Clone
         + Debug
         + Send
