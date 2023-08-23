@@ -114,17 +114,8 @@ const fn default_request_timeout_seconds() -> u64 {
     60
 }
 
-#[async_trait]
-impl DaService for CelestiaService {
-    type RuntimeConfig = DaServiceConfig;
-
-    type Spec = CelestiaSpec;
-
-    type FilteredBlock = FilteredCelestiaBlock;
-
-    type Error = BoxError;
-
-    async fn new(config: Self::RuntimeConfig, chain_params: RollupParams) -> Self {
+impl CelestiaService {
+    pub async fn new(config: DaServiceConfig, chain_params: RollupParams) -> Self {
         let client = {
             let mut headers = HeaderMap::new();
             headers.insert(
@@ -146,6 +137,15 @@ impl DaService for CelestiaService {
 
         Self::with_client(client, chain_params.namespace)
     }
+}
+
+#[async_trait]
+impl DaService for CelestiaService {
+    type Spec = CelestiaSpec;
+
+    type FilteredBlock = FilteredCelestiaBlock;
+
+    type Error = BoxError;
 
     async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let client = self.client.clone();
