@@ -1,6 +1,6 @@
 use crate::codec::{StateKeyCodec, StateValueCodec};
 
-//// TODO
+/// A [`StateCodec`] that uses [`bcs`] for all keys and values.
 #[derive(Debug, Default, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct BcsCodec;
 
