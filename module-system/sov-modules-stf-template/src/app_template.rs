@@ -29,7 +29,10 @@ pub struct AppTemplate<
     DA: DaSpec,
     Vm,
     RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
-> {
+> where
+    <<DA as DaSpec>::BlobTransaction as BlobReaderTrait>::Address:
+        borsh::BorshSerialize + borsh::BorshDeserialize,
+{
     /// State storage used by the rollup.
     pub current_storage: C::Storage,
     /// The runtime includes all the modules that the rollup supports.
@@ -79,6 +82,8 @@ where
     C: Context,
     DA: DaSpec,
     RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
+    <<DA as DaSpec>::BlobTransaction as BlobReaderTrait>::Address:
+        borsh::BorshSerialize + borsh::BorshDeserialize,
 {
     /// [`AppTemplate`] constructor.
     pub fn new(storage: C::Storage, runtime: RT) -> Self {

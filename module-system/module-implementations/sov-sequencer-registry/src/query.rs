@@ -20,8 +20,8 @@ pub struct SequencerAddressResponse<C: sov_modules_api::Context> {
 
 #[rpc_gen(client, server, namespace = "sequencer")]
 impl<C: sov_modules_api::Context, B: BlobReaderTrait> SequencerRegistry<C, B>
-where
-    B::Address: borsh::BorshSerialize + borsh::BorshDeserialize,
+// where
+//     B::Address: borsh::BorshSerialize + borsh::BorshDeserialize,
 {
     /// Returns the rollup address of the sequencer with the given DA address.
     ///
@@ -31,9 +31,14 @@ where
         &self,
         da_address: DaAddress,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> RpcResult<SequencerAddressResponse<C>> {
+    ) -> RpcResult<SequencerAddressResponse<C>>
+    where
+        <B as BlobReaderTrait>::Address: borsh::BorshSerialize + borsh::BorshDeserialize,
+    {
+        // TODO: Remove after first iteration
+        let a = B::Address::try_from(&da_address)?;
         Ok(SequencerAddressResponse {
-            address: self.allowed_sequencers.get(&da_address, working_set),
+            address: self.allowed_sequencers.get(&a, working_set),
         })
     }
 }

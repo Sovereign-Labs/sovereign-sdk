@@ -27,7 +27,9 @@ pub trait Runtime<C: Context, Cond: ValidityCondition, B: BlobReaderTrait>:
     + TxHooks<Context = C>
     + SlotHooks<Cond, Context = C>
     + ApplyBlobHooks<B, Context = C, BlobResult = SequencerOutcome<B::Address>>
-    + BlobSelector<Context = C>
+    + BlobSelector<B, Context = C>
+where
+    B::Address: borsh::BorshSerialize + borsh::BorshDeserialize,
 {
 }
 
@@ -74,6 +76,8 @@ where
     Vm: Zkvm,
     DA: DaSpec,
     RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
+    <<DA as DaSpec>::BlobTransaction as BlobReaderTrait>::Address:
+        borsh::BorshSerialize + borsh::BorshDeserialize,
 {
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_slot(
@@ -112,6 +116,8 @@ where
     DA: DaSpec,
     Vm: Zkvm,
     RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
+    <<DA as DaSpec>::BlobTransaction as BlobReaderTrait>::Address:
+        borsh::BorshSerialize + borsh::BorshDeserialize,
 {
     type StateRoot = jmt::RootHash;
 
