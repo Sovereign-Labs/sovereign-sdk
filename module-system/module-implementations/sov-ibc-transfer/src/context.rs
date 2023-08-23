@@ -162,7 +162,20 @@ where
         Ok(())
     }
 
-    /// This is called in a `recv_packet()` in the case where we are the token source
+    /// This is called in a `recv_packet()` in the case where we are the token
+    /// source.
+    /// 
+    /// Note: ibc-rs strips the first prefix upon receival. That is, if token
+    /// with denom `my_token` was previously sent on channel `channel-1` and
+    /// port `transfer` (on the counterparty), it will be received in
+    /// `recv_packet` as `transfer/channel-1/my_token`. However, ibc-rs strips
+    /// `transfer/channel-1/` off the denom before passing it here, such that
+    /// `coin.denom` would be `my_token`.
+    /// 
+    /// This is especially important for us, as we use the denom to lookup the
+    /// token address. Hence, we need to be careful not to use `my_token` in
+    /// some instances and `transfer/channel-1/my_token` in others. Fortunately,
+    /// ibc-rs solves that problem for us.
     fn unescrow_coins_validate(
         &self,
         port_id: &PortId,
@@ -271,7 +284,9 @@ where
         Ok(())
     }
 
-    /// This is called in a `recv_packet()` in the case where we are the token source
+    /// This is called in a `recv_packet()` in the case where we are the token source.
+    /// 
+    /// For more details, see note in `unescrow_coins_validate()`.
     fn unescrow_coins_execute(
         &self,
         port_id: &PortId,
