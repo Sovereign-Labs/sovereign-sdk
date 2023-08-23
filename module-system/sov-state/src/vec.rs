@@ -157,8 +157,8 @@ where
     pub fn clear<S: Storage>(&self, working_set: &mut WorkingSet<S>) {
         let len = self.len(working_set);
 
-        for _ in 0..len {
-            working_set.delete_value(self.prefix(), &self.internal_codec(), &IndexKey(len));
+        for i in 0..len + 1 {
+            working_set.delete_value(self.prefix(), &self.internal_codec(), &IndexKey(i));
         }
         self.set_len(0, working_set);
     }
@@ -239,6 +239,7 @@ mod test {
         SetAll(Vec<T>),
         CheckLen(usize),
         CheckContents(Vec<T>),
+        CheckGet(usize, Option<T>),
         Clear,
     }
 
@@ -260,9 +261,11 @@ mod test {
             TestCaseAction::CheckContents(vec![11, 12]),
             TestCaseAction::SetAll(vec![]),
             TestCaseAction::CheckLen(0),
-            TestCaseAction::Push(0),
+            TestCaseAction::Push(42),
+            TestCaseAction::Push(1337),
             TestCaseAction::Clear,
             TestCaseAction::CheckContents(vec![]),
+            TestCaseAction::CheckGet(0, None),
         ]
     }
 
@@ -308,6 +311,10 @@ mod test {
             }
             TestCaseAction::SetAll(values) => {
                 state_vec.set_all(values, ws);
+            }
+            TestCaseAction::CheckGet(index, expected) => {
+                let actual = state_vec.get(index, ws);
+                assert_eq!(actual, expected);
             }
             TestCaseAction::Clear => {
                 state_vec.clear(ws);
