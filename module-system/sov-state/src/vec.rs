@@ -154,24 +154,23 @@ where
         }
     }
 
+    pub fn clear<S: Storage>(&self, working_set: &mut WorkingSet<S>) {
+        let len = self.len(working_set);
+
+        for _ in 0..len {
+            working_set.delete_value(self.prefix(), &self.internal_codec(), &IndexKey(len));
+        }
+        self.set_len(0, working_set);
+    }
+
     /// Sets all values in the [`StateVec`].
     /// If the length of the provided values is less than the length of the [`StateVec`], the remaining values stay in storage but are inaccessible.
     pub fn set_all<S: Storage>(&self, values: Vec<V>, working_set: &mut WorkingSet<S>) {
-        let len = self.len(working_set);
+        // TODO(performance): optimize this, we could skip many reads and writes here.
+        self.clear(working_set);
 
-        let new_len = values.len();
-
-        for (i, value) in values.into_iter().enumerate() {
-            if i < len {
-                let _ = self.set(i, &value, working_set);
-            } else {
-                self.push(&value, working_set);
-            }
-        }
-
-        // if new_len > len push() already handles setting length
-        if new_len < len {
-            self.set_len(new_len, working_set);
+        for value in values.into_iter() {
+            self.push(&value, working_set);
         }
     }
 }
@@ -222,5 +221,110 @@ where
 
     fn try_decode_value(&self, bytes: &[u8]) -> Result<V, Self::ValueError> {
         self.value_codec.try_decode_value(bytes)
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use std::fmt::Debug;
+
+    use super::*;
+    use crate::{DefaultStorageSpec, ProverStorage};
+
+    enum TestCaseAction<T> {
+        Push(T),
+        Pop(T),
+        Set(usize, T),
+        SetAll(Vec<T>),
+        CheckLen(usize),
+        CheckContents(Vec<T>),
+        Clear,
+    }
+
+    fn test_cases() -> Vec<TestCaseAction<u32>> {
+        vec![
+            TestCaseAction::Push(1),
+            TestCaseAction::Push(2),
+            TestCaseAction::CheckContents(vec![1, 2]),
+            TestCaseAction::CheckLen(2),
+            TestCaseAction::Pop(2),
+            TestCaseAction::Set(0, 10),
+            TestCaseAction::CheckContents(vec![10]),
+            TestCaseAction::Push(8),
+            TestCaseAction::CheckContents(vec![10, 8]),
+            TestCaseAction::Set(0, u32::MAX),
+            TestCaseAction::Push(0),
+            TestCaseAction::CheckContents(vec![u32::MAX, 8, 0]),
+            TestCaseAction::SetAll(vec![11, 12]),
+            TestCaseAction::CheckContents(vec![11, 12]),
+            TestCaseAction::SetAll(vec![]),
+            TestCaseAction::CheckLen(0),
+            TestCaseAction::Push(0),
+            TestCaseAction::Clear,
+            TestCaseAction::CheckContents(vec![]),
+        ]
+    }
+
+    fn get_all<T, VC, C>(sv: &StateVec<T, VC>, ws: &mut WorkingSet<C>) -> Vec<T>
+    where
+        VC: StateValueCodec<T> + StateValueCodec<usize>,
+        C: Storage,
+    {
+        let mut result = Vec::new();
+        let len = sv.len(ws);
+        for i in 0..len {
+            result.push(sv.get(i, ws).unwrap());
+        }
+        result
+    }
+
+    fn check_test_case_action<T, S>(
+        state_vec: &StateVec<T>,
+        action: TestCaseAction<T>,
+        ws: &mut WorkingSet<S>,
+    ) where
+        S: Storage,
+        BorshCodec: StateValueCodec<T> + StateValueCodec<usize>,
+        T: Eq + Debug,
+    {
+        match action {
+            TestCaseAction::CheckContents(expected) => {
+                assert_eq!(expected, get_all(&state_vec, ws));
+            }
+            TestCaseAction::CheckLen(expected) => {
+                let actual = state_vec.len(ws);
+                assert_eq!(actual, expected);
+            }
+            TestCaseAction::Pop(expected) => {
+                let actual = state_vec.pop(ws);
+                assert_eq!(actual, Some(expected));
+            }
+            TestCaseAction::Push(value) => {
+                state_vec.push(&value, ws);
+            }
+            TestCaseAction::Set(index, value) => {
+                state_vec.set(index, &value, ws).unwrap();
+            }
+            TestCaseAction::SetAll(values) => {
+                state_vec.set_all(values, ws);
+            }
+            TestCaseAction::Clear => {
+                state_vec.clear(ws);
+            }
+        }
+    }
+
+    #[test]
+    fn test_state_vec() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
+        let mut working_set = WorkingSet::new(storage);
+
+        let prefix = Prefix::new("test".as_bytes().to_vec());
+        let state_vec = StateVec::<u32>::new(prefix.clone());
+
+        for test_case_action in test_cases() {
+            check_test_case_action(&state_vec, test_case_action, &mut working_set);
+        }
     }
 }
