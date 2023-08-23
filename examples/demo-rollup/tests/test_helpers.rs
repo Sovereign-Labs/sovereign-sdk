@@ -59,13 +59,13 @@ fn create_mock_da_rollup(rollup_config: RollupConfig<()>) -> Rollup<Risc0Verifie
 }
 
 pub async fn start_rollup(rpc_reporting_channel: oneshot::Sender<SocketAddr>) {
-    let mut mock_path = PathBuf::from("tests");
-    mock_path.push("test_data");
-    mock_path.push("tmp");
-    mock_path.push("mocks");
+    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_path = temp_dir.path();
 
     let rollup_config = RollupConfig {
-        storage: StorageConfig { path: mock_path },
+        storage: StorageConfig {
+            path: temp_path.to_path_buf(),
+        },
         runner: RunnerConfig {
             start_height: 0,
             rpc_config: RpcConfig {
@@ -80,6 +80,9 @@ pub async fn start_rollup(rpc_reporting_channel: oneshot::Sender<SocketAddr>) {
         .run_and_report_rpc_port(Some(rpc_reporting_channel))
         .await
         .unwrap();
+
+    // Close the tempdir explicitly to ensure that rustc doesn't see that it's unused and drop it unexpectedly
+    temp_dir.close().unwrap();
 }
 
 #[allow(dead_code)]
