@@ -16,6 +16,7 @@ pub mod storage;
 
 mod utils;
 mod value;
+mod vec;
 mod witness;
 
 mod zk_storage;
@@ -31,7 +32,7 @@ use std::str;
 
 pub use bcs_codec::BcsCodec;
 pub use borsh_codec::BorshCodec;
-pub use map::StateMap;
+pub use map::{MapError, StateMap};
 #[cfg(feature = "native")]
 pub use prover_storage::{delete_storage, ProverStorage};
 pub use scratchpad::*;
@@ -40,6 +41,7 @@ use sov_rollup_interface::digest::Digest;
 pub use storage::Storage;
 use utils::AlignedVec;
 pub use value::StateValue;
+pub use vec::StateVec;
 
 pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 
@@ -85,6 +87,19 @@ impl Prefix {
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.prefix.is_empty()
+    }
+
+    pub fn extended(&self, bytes: &[u8]) -> Self {
+        let mut prefix = self.clone();
+        prefix.extend(bytes.iter().copied());
+        prefix
+    }
+}
+
+impl Extend<u8> for Prefix {
+    fn extend<T: IntoIterator<Item = u8>>(&mut self, iter: T) {
+        self.prefix
+            .extend(&AlignedVec::new(iter.into_iter().collect()))
     }
 }
 
