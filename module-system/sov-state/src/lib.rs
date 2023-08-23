@@ -29,8 +29,8 @@ mod state_tests;
 use std::fmt::Display;
 use std::str;
 
-pub use borsh_codec::BorshCodec;
 pub use bincode_codec::BincodeCodec;
+pub use borsh_codec::BorshCodec;
 pub use map::StateMap;
 #[cfg(feature = "native")]
 pub use prover_storage::{delete_storage, ProverStorage};
