@@ -154,38 +154,39 @@ The first transaction that finds the correct hash would break the loop and retur
 The `sov_rollup_interface::mocks` crate provides two utilities that are useful for testing:
 
 1. The `MockZkvm` is an implementation of the `Zkvm` trait that can be used in tests.
-1. The `TestBlob` is an implementation of the `BlobTransactionTrait` trait that can be used in tests. It accepts an `Address` as a generic parameter. For testing purposes, we implement our own `Address` type as follows:
-
-```rust, ignore
-#[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
-pub struct DaAddress {
-    pub addr: [u8; 32],
-}
-
-impl BasicAddress for DaAddress {}
-impl RollupAddress for DaAddress {}
-
-```
+1. The `MockBlob` is an implementation of the `BlobTransactionTrait` trait that can be used in tests. It accepts an `A: BasicAddress` as a generic parameter. For testing purposes, we use `MockAddress` struct from the same `mocks` module
 
 You can find more details in the `stf_test.rs` file.
 
 The following test checks the rollup logic. In the test, we call `init_chain, begin_slot, and end_slot` for completeness, even though these methods do nothing.
 
-```rust, ignore
+```rust 
+use demo_simple_stf::{ApplySlotResult, CheckHashPreimageStf};
+use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockBlock, MockValidityCond, MockZkvm};
+use sov_rollup_interface::stf::StateTransitionFunction;
+
 #[test]
 fn test_stf() {
-    let address = DaAddress { addr: [1; 32] };
+    let address = MockAddress { addr: [1; 32] };
     let preimage = vec![0; 32];
 
-    let test_blob = TestBlob::<DaAddress>::new(preimage, address);
-    let stf = &mut CheckHashPreimageStf {};
+    let test_blob = MockBlob::<MockAddress>::new(preimage, address, [0; 32]);
+    let stf = &mut CheckHashPreimageStf::<MockValidityCond>::default();
 
-    StateTransitionFunction::<MockZkvm>::init_chain(stf, ());
-    StateTransitionFunction::<MockZkvm>::begin_slot(stf, ());
+    let data = MockBlock::default();
+    let mut blobs = [test_blob];
 
-    let receipt = StateTransitionFunction::<MockZkvm>::apply_blob(stf, test_blob, None);
-    assert_eq!(receipt.inner, ApplyBlobResult::Success);
+    StateTransitionFunction::<MockZkvm, MockBlob<MockAddress>>::init_chain(stf, ());
 
-    StateTransitionFunction::<MockZkvm>::end_slot(stf);
+    let result = StateTransitionFunction::<MockZkvm, MockBlob<MockAddress>>::apply_slot(
+        stf,
+        (),
+        &data,
+        &mut blobs,
+    );
+
+    assert_eq!(1, result.batch_receipts.len());
+    let receipt = result.batch_receipts[0].clone();
+    assert_eq!(receipt.inner, ApplySlotResult::Success);
 }
 ```

@@ -26,6 +26,7 @@ pub trait BasicAddress:
     + std::hash::Hash
     + AsRef<[u8]>
     + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+    + std::str::FromStr
     + Serialize
     + DeserializeOwned
     + 'static
