@@ -1,9 +1,10 @@
+//! Serialization and deserialization -related logic.
+
 mod bcs_codec;
 mod borsh_codec;
 
 pub use bcs_codec::BcsCodec;
 pub use borsh_codec::BorshCodec;
-/// Serialization and deserialization -related logic.
 
 /// A trait for types that can serialize and deserialize values for storage
 /// access.
