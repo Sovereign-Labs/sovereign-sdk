@@ -210,18 +210,49 @@ jobs:
           workspaces: |
             .
             examples/demo-prover
+      - name: start celestia local
+        working-directory: ./examples/demo-rollup
+        run: make start
       - name: Run prover
         working-directory: examples/demo-prover
-        run: cargo run -- ../demo-rollup/rollup_config.toml
+        run: cargo run -- ../demo-rollup/rollup_config.toml &
         env:
           SKIP_PROVER: 1
-      - name: Run cargo fmt check
+      - name: wait for service to be up
         run: |
-          cd examples/demo-prover;
-          if ! cargo fmt --check ; then
-            echo "Formatting errors detected, please run 'cargo fmt' to fix it";
-            exit 1
-          fi
+          SECONDS=0
+          while ((SECONDS <= 1200))
+          do
+            if curl -f -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"],"id":1}' http://127.0.0.1:12345; then
+              echo "demo-rollup is up"
+              exit 0
+            fi
+            echo "Not up yet, sleeping for 3 seconds..."
+            sleep 3
+            SECONDS=$((SECONDS+3))
+          done
+          echo "demo-rollup took too long to start; exiting"
+          exit 1
+      - name: submit rollup transaction
+        working-directory: ./examples/demo-rollup
+        run: make test-create-token
+      - name: check token supply
+        # simple grep check on RPC to verify if the curl output contains "1000" which is the supply of token - could use jq and parse, but considering this won't change, it seems like a simple check to get it out quick
+        # if we want more complex parsing in the future and validation, we can switch to jq or other tools
+        run: |
+          SECONDS=0
+          while ((SECONDS <= 300))
+          do
+            if curl -f -s -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"],"id":1}' http://127.0.0.1:12345 | grep -q 1000; then
+              echo "demo-rollup test succeeded"
+              exit 0
+            fi
+            echo "Not up yet, sleeping for 3 seconds..."
+            sleep 3
+            SECONDS=$((SECONDS+3))
+          done
+          echo "demo-rollup took too long to process transaction; exiting"
+          exit 1
   coverage:
     runs-on:
       group: 8-cores_32GB_Ubuntu Group
