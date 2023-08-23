@@ -75,8 +75,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<TransactionReceipt>> {
         info!("evm module: eth_getTransactionReceipt");
-        let receipt = self.receipts.get(&hash.into(), working_set);
-        Ok(receipt.map(|r| r.into()))
+        let receipt = self.receipts.get(&hash, working_set);
+        Ok(receipt)
     }
 
     //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502
