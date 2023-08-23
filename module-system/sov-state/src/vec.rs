@@ -290,7 +290,7 @@ mod test {
     {
         match action {
             TestCaseAction::CheckContents(expected) => {
-                assert_eq!(expected, get_all(&state_vec, ws));
+                assert_eq!(expected, get_all(state_vec, ws));
             }
             TestCaseAction::CheckLen(expected) => {
                 let actual = state_vec.len(ws);
@@ -322,7 +322,7 @@ mod test {
         let mut working_set = WorkingSet::new(storage);
 
         let prefix = Prefix::new("test".as_bytes().to_vec());
-        let state_vec = StateVec::<u32>::new(prefix.clone());
+        let state_vec = StateVec::<u32>::new(prefix);
 
         for test_case_action in test_cases() {
             check_test_case_action(&state_vec, test_case_action, &mut working_set);
