@@ -3,7 +3,8 @@ use std::marker::PhantomData;
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, StateKeyCodec, StateValueCodec};
+use crate::borsh_codec::BorshCodec;
+use crate::codec::{StateKeyCodec, StateValueCodec};
 use crate::{Prefix, Storage, WorkingSet};
 
 /// Container for a single value.

@@ -1,3 +1,5 @@
+mod bincode_codec;
+mod borsh_codec;
 pub mod codec;
 mod internal_cache;
 mod map;
