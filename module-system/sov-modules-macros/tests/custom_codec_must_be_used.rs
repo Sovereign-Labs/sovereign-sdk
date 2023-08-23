@@ -1,7 +1,6 @@
 use std::panic::catch_unwind;
 
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::macros::DefaultRuntime;
 use sov_modules_api::{Context, ModuleInfo};
 use sov_state::codec::StateValueCodec;
 use sov_state::{DefaultStorageSpec, ProverStorage, StateValue, WorkingSet};
