@@ -88,7 +88,7 @@ mod experimental {
 
         #[state]
         pub(crate) receipts:
-            sov_state::StateMap<ethereum_types::H256, TransactionReceipt, sov_state::BcsCodec>,
+            sov_state::StateMap<ethereum_types::H256, TransactionReceipt, sov_state::codec::BcsCodec>,
     }
 
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {

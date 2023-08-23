@@ -3,9 +3,8 @@ use std::marker::PhantomData;
 
 use thiserror::Error;
 
-use crate::codec::{PairOfCodecs, StateValueCodec};
+use crate::codec::{BorshCodec, PairOfCodecs, StateValueCodec};
 use crate::{Prefix, StateMap, StateValue, Storage, WorkingSet};
-use crate::BorshCodec;
 
 type InternalCodec<C> = PairOfCodecs<BorshCodec, C>;
 

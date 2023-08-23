@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use thiserror::Error;
 
-use crate::borsh_codec::BorshCodec;
+use crate::codec::BorshCodec;
 use crate::codec::StateCodec;
 use crate::storage::StorageKey;
 use crate::{Prefix, Storage, WorkingSet};

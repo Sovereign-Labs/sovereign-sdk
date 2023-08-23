@@ -1,5 +1,3 @@
-mod bcs_codec;
-mod borsh_codec;
 pub mod codec;
 mod internal_cache;
 mod map;
@@ -30,8 +28,6 @@ mod state_tests;
 use std::fmt::Display;
 use std::str;
 
-pub use bcs_codec::BcsCodec;
-pub use borsh_codec::BorshCodec;
 pub use map::{MapError, StateMap};
 #[cfg(feature = "native")]
 pub use prover_storage::{delete_storage, ProverStorage};
