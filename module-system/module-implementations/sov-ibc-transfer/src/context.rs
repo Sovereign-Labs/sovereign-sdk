@@ -129,7 +129,7 @@ where
         todo!()
     }
 
-    /// Check if the sender has enough balance
+    /// This is called in a `send_transfer()` in the case where we are the token source
     fn escrow_coins_validate(
         &self,
         _port_id: &PortId,
@@ -162,6 +162,7 @@ where
         Ok(())
     }
 
+    /// This is called in a `recv_packet()` in the case where we are the token source
     fn unescrow_coins_validate(
         &self,
         port_id: &PortId,
@@ -232,6 +233,7 @@ where
         todo!()
     }
 
+    /// This is called in a `send_transfer()` in the case where we are the token source
     fn escrow_coins_execute(
         &self,
         port_id: &PortId,
@@ -269,6 +271,7 @@ where
         Ok(())
     }
 
+    /// This is called in a `recv_packet()` in the case where we are the token source
     fn unescrow_coins_execute(
         &self,
         port_id: &PortId,
