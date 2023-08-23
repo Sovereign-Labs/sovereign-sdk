@@ -37,6 +37,8 @@ pub struct Transfer<C: sov_modules_api::Context> {
 
     /// Keeps track of the address of each token we escrowed.
     /// The index is the hash of the token denom (using the hasher `C::Hasher`).
+    /// Note: Even though we could store the `denom: String` as a key, we prefer
+    /// to hash it to the key a constant size.
     #[state]
     pub(crate) escrowed_tokens: sov_state::StateMap<Vec<u8>, C::Address>,
 }

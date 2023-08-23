@@ -93,7 +93,7 @@ jsonrpsee = {version = "0.18.2", features = ["jsonrpsee-types"] }
 schemars = { version = "0.8.12", features = ["derive"] }
 tempfile = "3.5"
 tokio = { version = "1", features = ["full"] }
-ibc = { git = "https://github.com/cosmos/ibc-rs", rev = "4ade607", features = ["borsh", "serde"]}
+ibc = { git = "https://github.com/cosmos/ibc-rs", rev = "0a4b42b", features = ["borsh", "serde"]}
 
 
 # EVM dependencies

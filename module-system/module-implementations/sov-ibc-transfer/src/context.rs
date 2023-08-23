@@ -135,12 +135,51 @@ where
 
     fn unescrow_coins_validate(
         &self,
-        _port_id: &PortId,
-        _channel_id: &ChannelId,
+        port_id: &PortId,
+        channel_id: &ChannelId,
         _to_account: &Self::AccountId,
-        _coin: &PrefixedCoin,
+        coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        todo!()
+        // ensure that escrow account has enough balance
+        let escrow_balance: transfer::Amount = {
+            let token_address = {
+                let mut hasher = <C::Hasher as Digest>::new();
+                hasher.update(coin.denom.to_string());
+                let denom_hash = hasher.finalize().to_vec();
+
+                self.transfer_mod
+                    .escrowed_tokens
+                    .get(&denom_hash, &mut self.working_set.borrow_mut())
+                    .ok_or(TokenTransferError::InvalidCoin {
+                        coin: coin.to_string(),
+                    })?
+            };
+            let escrow_address = self.get_escrow_account(port_id, channel_id);
+
+            let escrow_balance = self
+                .transfer_mod
+                .bank
+                .get_balance_of(
+                    escrow_address,
+                    token_address,
+                    &mut self.working_set.borrow_mut(),
+                )
+                .ok_or(TokenTransferError::Other(format!(
+                    "No escrow account for token {}",
+                    coin.to_string()
+                )))?;
+
+            escrow_balance.into()
+        };
+
+        if coin.amount > escrow_balance {
+            return Err(TokenTransferError::InsufficientFunds {
+                send_attempt: coin.amount,
+                available_funds: escrow_balance,
+            });
+        }
+
+        Ok(())
     }
 }
 
