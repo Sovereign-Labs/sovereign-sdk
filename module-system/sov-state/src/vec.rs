@@ -164,7 +164,8 @@ where
     }
 
     /// Sets all values in the [`StateVec`].
-    /// If the length of the provided values is less than the length of the [`StateVec`], the remaining values stay in storage but are inaccessible.
+    /// If the length of the provided values is less than the length of the
+    /// [`StateVec`], the remaining values will be removed from storage.
     pub fn set_all<S: Storage>(&self, values: Vec<V>, working_set: &mut WorkingSet<S>) {
         // TODO(performance): optimize this, we could skip many reads and writes here.
         self.clear(working_set);
