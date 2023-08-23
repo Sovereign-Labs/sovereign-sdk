@@ -2,6 +2,7 @@ use anyhow::{bail, Result};
 #[cfg(feature = "native")]
 use sov_modules_api::macros::CliWalletArg;
 use sov_modules_api::CallResponse;
+use sov_rollup_interface::da::BlobReaderTrait;
 use sov_state::WorkingSet;
 
 use crate::{DaAddress, SequencerRegistry};
@@ -29,7 +30,10 @@ pub enum CallMessage {
     },
 }
 
-impl<C: sov_modules_api::Context> SequencerRegistry<C> {
+impl<C: sov_modules_api::Context, B: BlobReaderTrait> SequencerRegistry<C, B>
+where
+    B::Address: borsh::BorshSerialize + borsh::BorshDeserialize,
+{
     pub(crate) fn register(
         &self,
         da_address: Vec<u8>,
@@ -51,9 +55,9 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
         let coins = self.coins_to_lock.get_or_err(working_set)?;
         let sequencer = context.sender();
 
-        let belongs_to = self
-            .allowed_sequencers
-            .get_or_err(&da_address, working_set)?;
+        // TODO: Remove on next iteration
+        let d = B::Address::try_from(&da_address[..])?;
+        let belongs_to = self.allowed_sequencers.get_or_err(&d, working_set)?;
 
         if sequencer != &belongs_to {
             bail!("Unauthorized exit attempt");
@@ -68,10 +72,12 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
     }
 
     pub(crate) fn delete(&self, da_address: Vec<u8>, working_set: &mut WorkingSet<C::Storage>) {
-        self.allowed_sequencers.delete(&da_address, working_set);
+        // TODO: Remove on next iteration
+        let d = B::Address::try_from(&da_address[..]).unwrap();
+        self.allowed_sequencers.delete(&d, working_set);
 
         if let Some(preferred_sequencer) = self.preferred_sequencer.get(working_set) {
-            if da_address == preferred_sequencer {
+            if d == preferred_sequencer {
                 self.preferred_sequencer.delete(working_set);
             }
         }

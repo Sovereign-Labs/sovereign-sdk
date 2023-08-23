@@ -9,7 +9,10 @@ use zk_cycle_utils::print_cycle_count;
 
 use crate::{SequencerOutcome, SequencerRegistry};
 
-impl<C: Context, B: BlobReaderTrait> ApplyBlobHooks<B> for SequencerRegistry<C> {
+impl<C: Context, B: BlobReaderTrait> ApplyBlobHooks<B> for SequencerRegistry<C, B>
+where
+    B::Address: borsh::BorshSerialize + borsh::BorshDeserialize,
+{
     type Context = C;
     type BlobResult = SequencerOutcome;
 

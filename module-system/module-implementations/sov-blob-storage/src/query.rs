@@ -2,6 +2,7 @@
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::ModuleInfo;
+use sov_rollup_interface::da::BlobReaderTrait;
 use sov_state::WorkingSet;
 
 use super::BlobStorage;
@@ -15,7 +16,10 @@ pub struct Response {
 
 /// TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/626
 #[rpc_gen(client, server, namespace = "blobStorage")]
-impl<C: sov_modules_api::Context> BlobStorage<C> {
+impl<C: sov_modules_api::Context, B: BlobReaderTrait> BlobStorage<C, B>
+where
+    B::Address: borsh::BorshSerialize + borsh::BorshDeserialize,
+{
     /// Queries the address of the module.
     #[rpc_method(name = "getModuleAddress")]
     fn get_module_address(&self, _working_set: &mut WorkingSet<C::Storage>) -> RpcResult<Response> {

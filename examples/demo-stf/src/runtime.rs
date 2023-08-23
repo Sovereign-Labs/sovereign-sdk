@@ -132,16 +132,15 @@ where
 {
 }
 
-impl<C: Context> BlobSelector for Runtime<C> {
+impl<C: Context, B: BlobReaderTrait> BlobSelector<B> for Runtime<C> {
     type Context = C;
 
-    fn get_blobs_for_this_slot<'a, I, B>(
+    fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, B>>>
     where
-        B: BlobReaderTrait,
         I: IntoIterator<Item = &'a mut B>,
     {
         self.blob_storage

@@ -2,7 +2,7 @@
 
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::Context;
+use sov_rollup_interface::da::BlobReaderTrait;
 use sov_state::WorkingSet;
 
 use crate::{DaAddress, SequencerRegistry};
@@ -13,13 +13,16 @@ use crate::{DaAddress, SequencerRegistry};
     derive(serde::Deserialize, serde::Serialize, Clone)
 )]
 #[derive(Debug, Eq, PartialEq)]
-pub struct SequencerAddressResponse<C: Context> {
+pub struct SequencerAddressResponse<C: sov_modules_api::Context> {
     /// The rollup address of the requested sequencer.
     pub address: Option<C::Address>,
 }
 
 #[rpc_gen(client, server, namespace = "sequencer")]
-impl<C: Context> SequencerRegistry<C> {
+impl<C: sov_modules_api::Context, B: BlobReaderTrait> SequencerRegistry<C, B>
+where
+    B::Address: borsh::BorshSerialize + borsh::BorshDeserialize,
+{
     /// Returns the rollup address of the sequencer with the given DA address.
     ///
     /// The response only contains data if the sequencer is registered.

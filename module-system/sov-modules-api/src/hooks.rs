@@ -32,7 +32,10 @@ pub trait TxHooks {
 /// Hooks related to the Sequencer functionality.
 /// In essence, the sequencer locks a bond at the beginning of the `StateTransitionFunction::apply_blob`,
 /// and is rewarded once a blob of transactions is processed.
-pub trait ApplyBlobHooks<B: BlobReaderTrait> {
+pub trait ApplyBlobHooks<B: BlobReaderTrait>
+where
+    B::Address: borsh::BorshSerialize + borsh::BorshDeserialize,
+{
     type Context: Context;
     type BlobResult;
 

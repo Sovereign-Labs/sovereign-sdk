@@ -6,16 +6,18 @@ use tracing::info;
 
 use crate::BlobStorage;
 
-impl<C: Context> BlobSelector for BlobStorage<C> {
+impl<C: Context, B: BlobReaderTrait> BlobSelector<B> for BlobStorage<C, B>
+where
+    B::Address: borsh::BorshSerialize + borsh::BorshDeserialize,
+{
     type Context = C;
 
-    fn get_blobs_for_this_slot<'a, I, B>(
+    fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, B>>>
     where
-        B: BlobReaderTrait,
         I: IntoIterator<Item = &'a mut B>,
     {
         // TODO: Chain-state module: https://github.com/Sovereign-Labs/sovereign-sdk/pull/598/
@@ -42,7 +44,7 @@ impl<C: Context> BlobSelector for BlobStorage<C> {
         let mut to_defer: Vec<&mut B> = Vec::new();
 
         for blob in current_blobs {
-            if blob.sender().as_ref() == &preferred_sequencer[..] {
+            if blob.sender() == preferred_sequencer {
                 priority_blobs.push(blob);
             } else {
                 to_defer.push(blob);
