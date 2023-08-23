@@ -113,6 +113,7 @@ where
             );
             // TODO: will be covered in https://github.com/Sovereign-Labs/sovereign-sdk/issues/421
             self.checkpoint = Some(batch_workspace.revert());
+
             return Err(ApplyBatchError::Ignored(blob.hash()));
         }
         batch_workspace = batch_workspace.checkpoint().to_revertable();

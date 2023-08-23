@@ -34,7 +34,7 @@ mod experimental {
     use crate::evm::{Bytes32, EvmChainCfg, RawEvmTransaction};
     use crate::TransactionReceipt;
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     pub struct AccountData {
         pub address: EthAddress,
         pub balance: Bytes32,
@@ -53,7 +53,7 @@ mod experimental {
         }
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     pub struct EvmConfig {
         pub data: Vec<AccountData>,
         pub chain_id: u64,
