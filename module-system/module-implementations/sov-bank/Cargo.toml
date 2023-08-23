@@ -20,18 +20,17 @@ schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false, features = ["macros"] }
-sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-state = { path = "../../sov-state", version = "0.1" }
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 thiserror = { workspace = true }
 hex = { workspace = true }
 
 [dev-dependencies]
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
 tempfile = { workspace = true }
 
 [features]
-default = ["native"]
+default = []
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-state/native", "dep:jsonrpsee", "sov-modules-api/native", "dep:clap", "dep:schemars"]
+native = ["serde", "dep:jsonrpsee", "dep:clap", "dep:schemars", "sov-state/native", "sov-modules-api/native", ]
 cli = ["native"]

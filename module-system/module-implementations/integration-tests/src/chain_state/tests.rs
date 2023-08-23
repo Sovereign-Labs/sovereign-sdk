@@ -54,6 +54,7 @@ fn test_simple_value_setter_with_chain_state() {
         },
         height: 0,
         validity_cond: MockValidityCond::default(),
+        blobs: Default::default(),
     };
 
     // Computes the initial working set
@@ -117,6 +118,7 @@ fn test_simple_value_setter_with_chain_state() {
         },
         height: 1,
         validity_cond: MockValidityCond::default(),
+        blobs: Default::default(),
     };
 
     let result = app_template.apply_slot(Default::default(), &new_slot_data, &mut [blob]);

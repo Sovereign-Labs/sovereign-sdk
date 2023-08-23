@@ -13,22 +13,25 @@ resolver = "2"
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1", features = ["mocks"] }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", features = ["macros"] }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1", features = ["native"] }
 tempfile = { workspace = true }
+sov-prover-incentives = { version = "*", features = ["native"], path = "." }
 
 [dependencies]
 anyhow = { workspace = true }
-sov-bank = { path = "../sov-bank", version = "0.1", default-features = false }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false, features = ["macros"] }
-sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
+sov-bank = { path = "../sov-bank", version = "0.1" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-state = { path = "../../sov-state", version = "0.1" }
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 schemars = { workspace = true, optional = true }
-serde = { workspace = true }
+serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["rc"] }
 bincode = { workspace = true }
 
 
 [features]
-default = ["native"]
-native = ["sov-modules-api/native", "dep:schemars", "dep:serde_json"]
+default = []
+serde = ["dep:serde", "dep:serde_json"]
+native = ["serde", "dep:schemars", "sov-state/native", "sov-modules-api/native"]
+test = ["native"]

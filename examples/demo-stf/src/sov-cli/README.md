@@ -107,6 +107,6 @@ Options:
 demo-stf % cargo run --bin sov-cli generate-transaction-from-json my_private_key.json Bank src/sov-cli/test_data/create_token.json 1
 ```
 
-- By default the file is formatted in `hex` and contains a blob ready for submission to celestia - the blob only contains a single transactions for now
+- By default the file is formatted in `hex` and contains a blob ready for submission to celestia - the blob only contains a single transaction for now
 - Other formats include `borsh`
 - In order to know what the token is the `derive-token-address` command from the `utils` subcommand can be used

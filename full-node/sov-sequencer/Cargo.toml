@@ -21,7 +21,7 @@ serde = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
 
 sov-rollup-interface = { path = "../../rollup-interface" }
-sov-modules-api = { path = "../../module-system/sov-modules-api" }
+sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 
 [dev-dependencies]
 async-trait = { workspace = true }

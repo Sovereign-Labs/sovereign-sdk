@@ -13,26 +13,24 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
-sov-modules-api = { path = "../../sov-modules-api", default-features = false }
-sov-modules-macros = { path = "../../sov-modules-macros" }
-sov-state = { path = "../../sov-state", default-features = false }
-sov-rollup-interface = { path = "../../../rollup-interface" }
+borsh = { workspace = true, features = ["rc"] }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
-borsh = { workspace = true, features = ["rc"] }
-
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
+sov-state = { path = "../../sov-state", version = "0.1" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
+
 [dev-dependencies]
-sov-modules-api = { path = "../../sov-modules-api" }
-sov-bank = { path = "../sov-bank", default-features = false }
+sov-bank = { path = "../sov-bank" }
 sov-value-setter = { path = "../examples/sov-value-setter" }
-sov-state = { path = "../../sov-state", default-features = false }
 sov-modules-stf-template = { path = "../../sov-modules-stf-template" }
 sov-data-generators = { path = "../../utils/sov-data-generators" }
 tempfile = { workspace = true }
 
 [features]
-default = ["native"]
+default = []
 serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-modules-api/native", "dep:jsonrpsee"]
+native = ["serde", "dep:jsonrpsee", "sov-state/native", "sov-modules-api/native", ]
