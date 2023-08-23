@@ -4,7 +4,7 @@ use borsh::BorshDeserialize;
 use sov_modules_api::{Context, DispatchCall};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader, DaSpec};
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
-use sov_rollup_interface::{AddressTrait, Buf};
+use sov_rollup_interface::{Buf, RollupAddress};
 use sov_state::StateCheckpoint;
 use tracing::{debug, error};
 
@@ -39,7 +39,7 @@ pub struct AppTemplate<
     phantom_da: PhantomData<DA>,
 }
 
-pub(crate) enum ApplyBatchError<A: AddressTrait> {
+pub(crate) enum ApplyBatchError<A: RollupAddress> {
     // Contains batch hash
     Ignored([u8; 32]),
     Slashed {
@@ -50,7 +50,7 @@ pub(crate) enum ApplyBatchError<A: AddressTrait> {
     },
 }
 
-impl<A: AddressTrait> From<ApplyBatchError<A>> for BatchReceipt<SequencerOutcome<A>, TxEffect> {
+impl<A: RollupAddress> From<ApplyBatchError<A>> for BatchReceipt<SequencerOutcome<A>, TxEffect> {
     fn from(value: ApplyBatchError<A>) -> Self {
         match value {
             ApplyBatchError::Ignored(hash) => BatchReceipt {

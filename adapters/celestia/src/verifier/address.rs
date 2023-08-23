@@ -4,7 +4,7 @@ use std::str::FromStr;
 use bech32::WriteBase32;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::AddressTrait;
+use sov_rollup_interface::RollupAddress;
 use thiserror::Error;
 
 /// Human Readable Part: "celestia" for Celestia network
@@ -116,7 +116,9 @@ impl FromStr for CelestiaAddress {
     }
 }
 
-impl AddressTrait for CelestiaAddress {}
+impl sov_rollup_interface::BasicAddress for CelestiaAddress {}
+// TODO: Remove this
+impl RollupAddress for CelestiaAddress {}
 
 #[cfg(test)]
 mod tests {

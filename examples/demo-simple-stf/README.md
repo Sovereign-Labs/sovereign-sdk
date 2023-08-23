@@ -162,7 +162,8 @@ pub struct DaAddress {
     pub addr: [u8; 32],
 }
 
-impl AddressTrait for DaAddress {}
+impl BasicAddress for DaAddress {}
+impl RollupAddress for DaAddress {}
 
 ```
 

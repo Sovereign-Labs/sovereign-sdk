@@ -1,7 +1,6 @@
 use std::fmt::Display;
 use std::sync::Arc;
 
-use anyhow::{bail, Error};
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
@@ -11,7 +10,7 @@ use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufRea
 use crate::mocks::MockValidityCond;
 use crate::services::batch_builder::BatchBuilder;
 use crate::services::da::{DaService, SlotData};
-use crate::AddressTrait;
+use crate::{BasicAddress, RollupAddress};
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
 #[derive(
@@ -38,7 +37,7 @@ impl core::str::FromStr for MockAddress {
 }
 
 impl<'a> TryFrom<&'a [u8]> for MockAddress {
-    type Error = Error;
+    type Error = anyhow::Error;
 
     fn try_from(addr: &'a [u8]) -> Result<Self, Self::Error> {
         if addr.len() != 32 {
@@ -68,7 +67,8 @@ impl Display for MockAddress {
     }
 }
 
-impl AddressTrait for MockAddress {}
+impl BasicAddress for MockAddress {}
+impl RollupAddress for MockAddress {}
 
 #[derive(
     Debug,
@@ -87,7 +87,7 @@ pub struct MockBlob<Address> {
     data: CountedBufReader<Bytes>,
 }
 
-impl<Address: AddressTrait> BlobReaderTrait for MockBlob<Address> {
+impl<Address: RollupAddress> BlobReaderTrait for MockBlob<Address> {
     type Data = Bytes;
     type Address = Address;
 
@@ -108,7 +108,7 @@ impl<Address: AddressTrait> BlobReaderTrait for MockBlob<Address> {
     }
 }
 
-impl<Address: AddressTrait> MockBlob<Address> {
+impl<Address: RollupAddress> MockBlob<Address> {
     /// Creates a new mock blob with the given data, claiming to have been published by the provided address.
     pub fn new(data: Vec<u8>, address: Address, hash: [u8; 32]) -> Self {
         Self {
@@ -201,9 +201,9 @@ pub struct MockDaSpec;
 
 impl DaSpec for MockDaSpec {
     type SlotHash = MockHash;
-    type ValidityCondition = MockValidityCond;
     type BlockHeader = MockBlockHeader;
     type BlobTransaction = MockBlob<MockAddress>;
+    type ValidityCondition = MockValidityCond;
     type InclusionMultiProof = [u8; 32];
     type CompletenessProof = ();
     type ChainParams = ();
@@ -294,7 +294,7 @@ impl BatchBuilder for MockBatchBuilder {
 
     fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
         if self.mempool.is_empty() {
-            bail!("Mock mempool is empty");
+            anyhow::bail!("Mock mempool is empty");
         }
         let txs = std::mem::take(&mut self.mempool)
             .into_iter()

@@ -12,7 +12,7 @@ use prost::Message;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlockHeaderTrait as BlockHeader, CountedBufReader};
 use sov_rollup_interface::services::da::SlotData;
-use sov_rollup_interface::AddressTrait;
+use sov_rollup_interface::{BasicAddress, RollupAddress};
 pub use tendermint::block::Header as TendermintHeader;
 use tendermint::block::Height;
 use tendermint::crypto::default::Sha256;
@@ -396,7 +396,9 @@ impl Display for H160 {
     }
 }
 
-impl AddressTrait for H160 {}
+impl BasicAddress for H160 {}
+// TODO: Remove this
+impl RollupAddress for H160 {}
 
 pub fn parse_pfb_namespace(
     group: NamespaceGroup,
