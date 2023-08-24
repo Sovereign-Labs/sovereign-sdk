@@ -13,7 +13,7 @@ use zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cy
 use crate::metrics::metrics_callback;
 use crate::Risc0MethodId;
 
-/// Allows to run prover code and send data to ZkVM
+/// Allows to run prover code and send data to zkVM.
 pub struct Risc0Host<'a> {
     env: RefCell<ExecutorEnvBuilder<'a>>,
     elf: &'a [u8],
@@ -21,6 +21,7 @@ pub struct Risc0Host<'a> {
 
 impl<'a> Risc0Host<'a> {
     #[cfg(not(feature = "bench"))]
+    /// Create a host to prove the provided ELF file?
     pub fn new(elf: &'a [u8]) -> Self {
         let default_env = ExecutorEnvBuilder::default();
 
@@ -31,7 +32,7 @@ impl<'a> Risc0Host<'a> {
     }
 
     #[cfg(feature = "bench")]
-    /// Create a new host fo a given reference to an ELF file
+    /// Create a host to prove the provided ELF file?
     pub fn new(elf: &'a [u8]) -> Self {
         let mut default_env = ExecutorEnvBuilder::default();
 
@@ -103,7 +104,7 @@ fn verify_from_slice<'a>(
     code_commitment: &Risc0MethodId,
 ) -> Result<&'a [u8], anyhow::Error> {
     let Risc0Proof::<'a> {
-        segment_receipts,
+        segment_receipts
         journal,
         ..
     } = bincode::deserialize(serialized_proof)?;
