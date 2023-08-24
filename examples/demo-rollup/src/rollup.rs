@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 use std::str::FromStr;
 
 use anyhow::Context;
@@ -13,6 +14,7 @@ use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::Zkvm;
 use sov_state::storage::Storage;
 use sov_stf_runner::{from_toml_path, RollupConfig, RunnerConfig, StateTransitionRunner};
+use tokio::sync::oneshot;
 use tracing::debug;
 
 #[cfg(feature = "experimental")]
@@ -67,7 +69,15 @@ pub async fn new_rollup_with_celestia_da(
 
 impl<Vm: Zkvm, DA: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, DA> {
     /// Runs the rollup.
-    pub async fn run(mut self) -> Result<(), anyhow::Error> {
+    pub async fn run(self) -> Result<(), anyhow::Error> {
+        self.run_and_report_rpc_port(None).await
+    }
+
+    /// Runs the rollup. Reports rpc port to the caller using the provided channel.
+    pub async fn run_and_report_rpc_port(
+        mut self,
+        channel: Option<oneshot::Sender<SocketAddr>>,
+    ) -> Result<(), anyhow::Error> {
         let storage = self.app.get_storage();
         let mut methods = get_rpc_methods::<DefaultContext>(storage);
 
@@ -90,7 +100,7 @@ impl<Vm: Zkvm, DA: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, DA> {
             self.genesis_config,
         )?;
 
-        runner.start_rpc_server(methods).await;
+        runner.start_rpc_server(methods, channel).await;
         runner.run().await?;
 
         Ok(())

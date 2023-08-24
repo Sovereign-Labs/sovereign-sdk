@@ -464,6 +464,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bcs"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bd3ffe8b19a604421a5d461d4a70346223e535903fbc3067138bddbebddcf77"
+dependencies = [
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "bech32"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6708,6 +6718,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-schema-db",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -6879,6 +6890,7 @@ dependencies = [
  "sha2 0.10.7",
  "sov-modules-macros",
  "sov-rollup-interface",
+ "sov-sequencer",
  "sov-state",
  "thiserror",
  "zk-cycle-macros",
@@ -6899,6 +6911,7 @@ dependencies = [
  "serde_json",
  "sov-bank",
  "sov-modules-api",
+ "sov-modules-macros",
  "sov-state",
  "syn 1.0.109",
  "tempfile",
@@ -6986,7 +6999,6 @@ dependencies = [
  "hex",
  "jsonrpsee 0.18.2",
  "serde",
- "sov-modules-api",
  "sov-rollup-interface",
  "tokio",
  "tracing",
@@ -7008,6 +7020,7 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-rollup-interface",
+ "sov-sequencer-registry",
  "sov-state",
  "tempfile",
  "zk-cycle-macros",
@@ -7019,6 +7032,7 @@ name = "sov-state"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bcs",
  "borsh",
  "hex",
  "jmt",
@@ -7066,6 +7080,24 @@ dependencies = [
 
 [[package]]
 name = "sov-value-setter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "clap",
+ "jsonrpsee 0.18.2",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "sov-state",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "sov-vec-setter"
 version = "0.1.0"
 dependencies = [
  "anyhow",

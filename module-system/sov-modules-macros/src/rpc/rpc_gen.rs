@@ -6,7 +6,7 @@ use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::{
     parenthesized, Attribute, FnArg, ImplItem, Meta, MetaList, PatType, Path, PathSegment,
-    Signature, Type,
+    Signature,
 };
 
 /// Returns an attribute with the name `rpc_method` replaced with `method`, and the index
@@ -64,7 +64,7 @@ fn find_working_set_argument(sig: &Signature) -> Option<(usize, syn::Type)> {
 struct RpcImplBlock {
     pub(crate) type_name: Ident,
     pub(crate) methods: Vec<RpcEnabledMethod>,
-    pub(crate) working_set_type: Option<Type>,
+    pub(crate) working_set_type: Option<syn::Type>,
     pub(crate) generics: syn::Generics,
 }
 
@@ -164,14 +164,14 @@ impl RpcImplBlock {
 
         let rpc_impl_trait = if let Some(ref working_set_type) = self.working_set_type {
             quote! {
-                pub trait #impl_trait_name #generics {
+                pub trait #impl_trait_name #generics #where_clause {
                     fn get_working_set(&self) -> #working_set_type;
                     #(#impl_trait_methods)*
                 }
             }
         } else {
             quote! {
-                pub trait #impl_trait_name #generics {
+                pub trait #impl_trait_name #generics #where_clause {
                     #(#impl_trait_methods)*
                 }
             }
@@ -303,13 +303,16 @@ fn build_rpc_trait(
         #input
     };
 
+    let where_clause = &generics.where_clause;
+
     let rpc_output = quote! {
         #simplified_impl
 
         #impl_rpc_trait_impl
 
+
         #rpc_attribute
-        pub trait #intermediate_trait_name  #generics {
+        pub trait #intermediate_trait_name  #generics #where_clause {
 
             #(#intermediate_trait_items)*
 
@@ -335,12 +338,12 @@ pub(crate) fn rpc_gen(
     build_rpc_trait(attrs, type_name.clone(), input)
 }
 
-struct TypeList(pub Punctuated<Type, syn::token::Comma>);
+struct TypeList(pub Punctuated<syn::Type, syn::token::Comma>);
 
 impl Parse for TypeList {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let content;
         parenthesized!(content in input);
-        Ok(TypeList(content.parse_terminated(Type::parse)?))
+        Ok(TypeList(content.parse_terminated(syn::Type::parse)?))
     }
 }

@@ -47,7 +47,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         Ok(Self::new(config))
     }
 
-    fn get(&self, _key: StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
+    fn get(&self, _key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
         witness.get_hint()
     }
 

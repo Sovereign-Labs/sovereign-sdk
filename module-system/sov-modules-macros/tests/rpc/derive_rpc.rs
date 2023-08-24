@@ -107,5 +107,5 @@ fn main() {
         assert_eq!(result, ());
     }
 
-    println!("All tests passed!")
+    println!("All tests passed!");
 }
