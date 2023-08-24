@@ -20,7 +20,6 @@ use sov_modules_api::macros::DefaultRuntime;
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec, Spec};
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-use sov_rollup_interface::zk::ValidityCondition;
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 use sov_state::WorkingSet;
@@ -80,7 +79,7 @@ pub mod query {
     feature = "native",
     serialization(serde::Serialize, serde::Deserialize)
 )]
-pub struct Runtime<C: Context> {
+pub struct Runtime<C: Context, DA: DaSpec> {
     pub bank: sov_bank::Bank<C>,
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]
@@ -114,7 +113,7 @@ pub struct Runtime<C: Context, DA: DaSpec> {
     pub evm: sov_evm::Evm<C>,
 }
 
-impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for Runtime<C> {
+impl<C: Context, DA: DaSpec> SlotHooks<DA::ValidityCondition> for Runtime<C, DA> {
     type Context = C;
 
     fn begin_slot_hook(
@@ -131,15 +130,15 @@ impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for Runtime<C> {
     }
 }
 
-impl<C, Cond, B> sov_modules_stf_template::Runtime<C, Cond, B> for Runtime<C>
+impl<C, DA> sov_modules_stf_template::Runtime<C, DA::ValidityCondition, DA::BlobTransaction>
+    for Runtime<C, DA>
 where
     C: Context,
-    Cond: ValidityCondition,
-    B: BlobReaderTrait,
+    DA: DaSpec,
 {
 }
 
-impl<C: Context> BlobSelector for Runtime<C> {
+impl<C: Context, DA: DaSpec> BlobSelector for Runtime<C, DA> {
     type Context = C;
 
     fn get_blobs_for_this_slot<'a, I, B>(
