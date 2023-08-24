@@ -341,7 +341,6 @@ fn build_rpc_trait(
 
         }
     };
-    println!("{}", &rpc_output);
     Ok(rpc_output)
 }
 
