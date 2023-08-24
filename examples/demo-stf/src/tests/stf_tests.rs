@@ -62,14 +62,14 @@ pub mod test {
 
             assert_eq!(
                 resp,
-                sov_election::GetResultResponse::Result(Some(sov_election::Candidate {
+                sov_election::query::GetResultResponse::Result(Some(sov_election::Candidate {
                     name: "candidate_2".to_owned(),
                     count: 3
                 }))
             );
             let resp = runtime.value_setter.query_value(&mut working_set).unwrap();
 
-            assert_eq!(resp, sov_value_setter::Response { value: Some(33) });
+            assert_eq!(resp, sov_value_setter::query::Response { value: Some(33) });
         }
     }
 
@@ -116,7 +116,7 @@ pub mod test {
 
         assert_eq!(
             resp,
-            sov_election::GetResultResponse::Result(Some(sov_election::Candidate {
+            sov_election::query::GetResultResponse::Result(Some(sov_election::Candidate {
                 name: "candidate_2".to_owned(),
                 count: 3
             }))
@@ -124,7 +124,7 @@ pub mod test {
 
         let resp = runtime.value_setter.query_value(&mut working_set).unwrap();
 
-        assert_eq!(resp, sov_value_setter::Response { value: Some(33) });
+        assert_eq!(resp, sov_value_setter::query::Response { value: Some(33) });
     }
 
     #[test]
@@ -172,12 +172,12 @@ pub mod test {
 
             assert_eq!(
                 resp,
-                sov_election::GetResultResponse::Err("Election is not frozen".to_owned())
+                sov_election::query::GetResultResponse::Err("Election is not frozen".to_owned())
             );
 
             let resp = runtime.value_setter.query_value(&mut working_set).unwrap();
 
-            assert_eq!(resp, sov_value_setter::Response { value: None });
+            assert_eq!(resp, sov_value_setter::query::Response { value: None });
         }
     }
 
@@ -189,11 +189,12 @@ pub mod test {
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
         let election_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = create_demo_config(
+        let mut config = create_demo_config(
             LOCKED_AMOUNT + 1,
             &value_setter_admin_private_key,
             &election_admin_private_key,
         );
+        config.sequencer_registry.is_preferred_sequencer = false;
 
         let mut demo = create_new_demo(path);
         demo.init_chain(config);

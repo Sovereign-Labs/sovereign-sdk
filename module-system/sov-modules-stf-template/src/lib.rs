@@ -13,7 +13,7 @@ use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
-use sov_rollup_interface::AddressTrait;
+use sov_rollup_interface::BasicAddress;
 use sov_state::{StateCheckpoint, Storage, WorkingSet};
 use tracing::info;
 pub use tx_verifier::RawTx;
@@ -42,7 +42,7 @@ pub enum TxEffect {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 /// Represents the different outcomes that can occur for a sequencer after batch processing.
-pub enum SequencerOutcome<A: AddressTrait> {
+pub enum SequencerOutcome<A: BasicAddress> {
     /// Sequencer receives reward amount in defined token and can withdraw its deposit
     Rewarded(u64),
     /// Sequencer loses its deposit and receives no reward
@@ -170,6 +170,11 @@ where
             .get_blobs_for_this_slot(blobs, &mut batch_workspace)
             .expect("blob selection must succeed, probably serialization failed");
 
+        info!(
+            "Selected {} blob(s) for execution in current slot",
+            selected_blobs.len()
+        );
+
         self.checkpoint = Some(batch_workspace.checkpoint());
 
         let mut batch_receipts = vec![];
@@ -179,8 +184,9 @@ where
                 .apply_blob(blob.as_mut_ref())
                 .unwrap_or_else(Into::into);
             info!(
-                "priority blob #{} with blob_hash 0x{} has been applied with #{} transactions, sequencer outcome {:?}",
+                "blob #{} from sequencer {} with blob_hash 0x{} has been applied with #{} transactions, sequencer outcome {:?}",
                 blob_idx,
+                blob.as_mut_ref().sender(),
                 hex::encode(batch_receipt.batch_hash),
                 batch_receipt.tx_receipts.len(),
                 batch_receipt.inner

@@ -29,6 +29,7 @@ pub struct LedgerDB {
     /// requires transactions to be executed before being committed.
     db: Arc<DB>,
     next_item_numbers: Arc<Mutex<ItemNumbers>>,
+    slot_subscriptions: tokio::sync::broadcast::Sender<u64>,
 }
 
 /// A SlotNumber, BatchNumber, TxNumber, and EventNumber which are grouped together, typically representing
@@ -107,6 +108,7 @@ impl LedgerDB {
         Ok(Self {
             db: Arc::new(inner),
             next_item_numbers: Arc::new(Mutex::new(next_item_numbers)),
+            slot_subscriptions: tokio::sync::broadcast::channel(10).0,
         })
     }
 
@@ -287,6 +289,11 @@ impl LedgerDB {
         )?;
 
         self.db.write_schemas(schema_batch)?;
+
+        // Notify subscribers. This call returns an error IFF there are no subscribers, so we don't need to check the result
+        let _ = self
+            .slot_subscriptions
+            .send(current_item_numbers.slot_number);
 
         Ok(())
     }

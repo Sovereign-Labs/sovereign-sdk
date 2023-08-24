@@ -1,7 +1,6 @@
 use std::fmt::Display;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
-use anyhow::{bail, Error};
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
@@ -11,12 +10,15 @@ use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufRea
 use crate::mocks::MockValidityCond;
 use crate::services::batch_builder::BatchBuilder;
 use crate::services::da::{DaService, SlotData};
-use crate::AddressTrait;
+use crate::{BasicAddress, RollupAddress};
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
-#[derive(Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize, Hash)]
+#[derive(
+    Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize, Hash, Default,
+)]
 pub struct MockAddress {
-    addr: [u8; 32],
+    /// Underlying mock address.
+    pub addr: [u8; 32],
 }
 
 impl core::str::FromStr for MockAddress {
@@ -35,7 +37,7 @@ impl core::str::FromStr for MockAddress {
 }
 
 impl<'a> TryFrom<&'a [u8]> for MockAddress {
-    type Error = Error;
+    type Error = anyhow::Error;
 
     fn try_from(addr: &'a [u8]) -> Result<Self, Self::Error> {
         if addr.len() != 32 {
@@ -65,7 +67,8 @@ impl Display for MockAddress {
     }
 }
 
-impl AddressTrait for MockAddress {}
+impl BasicAddress for MockAddress {}
+impl RollupAddress for MockAddress {}
 
 #[derive(
     Debug,
@@ -78,22 +81,18 @@ impl AddressTrait for MockAddress {}
 )]
 
 /// A mock BlobTransaction from a DA layer used for testing.
-pub struct MockBlob<Address> {
-    address: Address,
+pub struct MockBlob<A> {
+    address: A,
     hash: [u8; 32],
     data: CountedBufReader<Bytes>,
 }
 
-impl<Address: AddressTrait> BlobReaderTrait for MockBlob<Address> {
+impl<A: BasicAddress> BlobReaderTrait for MockBlob<A> {
     type Data = Bytes;
-    type Address = Address;
+    type Address = A;
 
     fn sender(&self) -> Self::Address {
         self.address.clone()
-    }
-
-    fn hash(&self) -> [u8; 32] {
-        self.hash
     }
 
     fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
@@ -103,11 +102,15 @@ impl<Address: AddressTrait> BlobReaderTrait for MockBlob<Address> {
     fn data(&self) -> &CountedBufReader<Self::Data> {
         &self.data
     }
+
+    fn hash(&self) -> [u8; 32] {
+        self.hash
+    }
 }
 
-impl<Address: AddressTrait> MockBlob<Address> {
+impl<A: BasicAddress> MockBlob<A> {
     /// Creates a new mock blob with the given data, claiming to have been published by the provided address.
-    pub fn new(data: Vec<u8>, address: Address, hash: [u8; 32]) -> Self {
+    pub fn new(data: Vec<u8>, address: A, hash: [u8; 32]) -> Self {
         Self {
             address,
             data: CountedBufReader::new(bytes::Bytes::from(data)),
@@ -148,7 +151,7 @@ impl BlockHeaderTrait for MockBlockHeader {
 }
 
 /// A mock block type used for testing.
-#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone, Copy)]
+#[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
 pub struct MockBlock {
     /// The hash of this block.
     pub curr_hash: [u8; 32],
@@ -158,6 +161,8 @@ pub struct MockBlock {
     pub height: u64,
     /// Validity condition
     pub validity_cond: MockValidityCond,
+    /// Blobs
+    pub blobs: Vec<MockBlob<MockAddress>>,
 }
 
 impl Default for MockBlock {
@@ -168,7 +173,8 @@ impl Default for MockBlock {
                 prev_hash: MockHash([0; 32]),
             },
             height: 0,
-            validity_cond: MockValidityCond::default(),
+            validity_cond: Default::default(),
+            blobs: Default::default(),
         }
     }
 }
@@ -195,67 +201,65 @@ pub struct MockDaSpec;
 
 impl DaSpec for MockDaSpec {
     type SlotHash = MockHash;
-    type ValidityCondition = MockValidityCond;
     type BlockHeader = MockBlockHeader;
     type BlobTransaction = MockBlob<MockAddress>;
+    type ValidityCondition = MockValidityCond;
     type InclusionMultiProof = [u8; 32];
     type CompletenessProof = ();
     type ChainParams = ();
 }
 
+use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::Mutex;
+
 #[derive(Clone)]
 /// DaService used in tests.
 pub struct MockDaService {
-    submitted: Arc<Mutex<Vec<Vec<u8>>>>,
-}
-
-impl Default for MockDaService {
-    fn default() -> Self {
-        Self {
-            submitted: Arc::new(Mutex::new(Vec::new())),
-        }
-    }
+    sender: Sender<Vec<u8>>,
+    receiver: Arc<Mutex<Receiver<Vec<u8>>>>,
+    sequencer_da_address: MockAddress,
 }
 
 impl MockDaService {
-    /// Checks if DaService contains unprocessed blobs.
-    pub fn is_empty(&self) -> bool {
-        self.submitted.lock().unwrap().is_empty()
-    }
-
-    /// Returns serialized blobs from the DaService.
-    pub fn get_submitted(&self) -> Vec<Vec<u8>> {
-        self.submitted.lock().unwrap().clone()
+    /// Creates a new MockDaService.
+    pub fn new(sequencer_da_address: MockAddress) -> Self {
+        let (sender, receiver) = mpsc::channel(100);
+        Self {
+            sender,
+            receiver: Arc::new(Mutex::new(receiver)),
+            sequencer_da_address,
+        }
     }
 }
 
 #[async_trait]
 impl DaService for MockDaService {
-    type RuntimeConfig = ();
     type Spec = MockDaSpec;
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
 
-    async fn new(
-        _config: Self::RuntimeConfig,
-        _chain_params: <Self::Spec as DaSpec>::ChainParams,
-    ) -> Self {
-        MockDaService::default()
-    }
-
     async fn get_finalized_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        todo!()
+        let data = self.receiver.lock().await.recv().await;
+        let data = data.unwrap();
+        let hash = [0; 32];
+
+        let blob = MockBlob::<MockAddress>::new(data, self.sequencer_da_address, hash);
+
+        Ok(MockBlock {
+            blobs: vec![blob],
+            ..Default::default()
+        })
     }
 
-    async fn get_block_at(&self, _height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        todo!()
+    async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
+        self.get_finalized_at(height).await
     }
 
     fn extract_relevant_txs(
         &self,
-        _block: &Self::FilteredBlock,
+        block: &Self::FilteredBlock,
     ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
-        todo!()
+        block.blobs.clone()
     }
 
     async fn get_extraction_proof(
@@ -270,7 +274,7 @@ impl DaService for MockDaService {
     }
 
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
-        self.submitted.lock().unwrap().push(blob.to_vec());
+        self.sender.send(blob.to_vec()).await.unwrap();
         Ok(())
     }
 }
@@ -290,7 +294,7 @@ impl BatchBuilder for MockBatchBuilder {
 
     fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
         if self.mempool.is_empty() {
-            bail!("Mock mempool is empty");
+            anyhow::bail!("Mock mempool is empty");
         }
         let txs = std::mem::take(&mut self.mempool)
             .into_iter()

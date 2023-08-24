@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use borsh::{BorshDeserialize, BorshSerialize};
+
 use super::*;
 use crate::{DefaultStorageSpec, ProverStorage};
 
@@ -204,4 +206,206 @@ fn test_witness_roundtrip() {
             .validate_and_commit(cache_log, &witness)
             .expect("ZK validation should succeed");
     };
+}
+
+fn create_state_vec_and_storage<T: BorshDeserialize + BorshSerialize>(
+    values: Vec<T>,
+    path: impl AsRef<Path>,
+) -> (StateVec<T>, WorkingSet<ProverStorage<DefaultStorageSpec>>) {
+    let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
+
+    let state_vec = StateVec::new(Prefix::new(vec![0]));
+    state_vec.set_all(values, &mut working_set);
+    (state_vec, working_set)
+}
+
+#[test]
+fn test_state_vec_len() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
+    for (before_len, after_len) in create_storage_operations() {
+        let values = vec![11, 22, 33];
+        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+
+        working_set = before_len.execute(working_set);
+
+        working_set = after_len.execute(working_set);
+
+        assert_eq!(state_vec.len(&mut working_set), values.len());
+    }
+}
+
+#[test]
+fn test_state_vec_get() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
+    for (before_get, after_get) in create_storage_operations() {
+        let values = vec![56, 55, 54];
+        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+
+        working_set = before_get.execute(working_set);
+
+        let val = state_vec.get(1, &mut working_set);
+        let err_val = state_vec.get_or_err(3, &mut working_set);
+        assert!(val.is_some());
+        assert!(err_val.is_err());
+
+        let val = val.unwrap();
+        assert_eq!(val, values.get(1).unwrap().clone());
+
+        working_set = after_get.execute(working_set);
+        let val = state_vec.get(1, &mut working_set);
+        let err_val = state_vec.get_or_err(3, &mut working_set);
+        assert!(val.is_some());
+        assert!(err_val.is_err());
+
+        let val = val.unwrap();
+        assert_eq!(val, values.get(1).unwrap().clone());
+    }
+}
+
+#[test]
+fn test_state_vec_set() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
+    for (before_set, after_set) in create_storage_operations() {
+        let values = vec![56, 55, 54];
+        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+
+        working_set = before_set.execute(working_set);
+        let val = state_vec.set(1, &99, &mut working_set);
+        assert!(val.is_ok());
+
+        let val_err = state_vec.set(3, &99, &mut working_set);
+        assert!(val_err.is_err());
+
+        working_set = after_set.execute(working_set);
+
+        let val = state_vec.get(1, &mut working_set);
+        let err_val = state_vec.get_or_err(3, &mut working_set);
+
+        assert!(val.is_some());
+        assert!(err_val.is_err());
+
+        let val = val.unwrap();
+        assert_eq!(val, 99);
+    }
+}
+
+#[test]
+fn test_state_vec_push() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
+    for (before_push, after_push) in create_storage_operations() {
+        let values = vec![56, 55, 54];
+        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+
+        working_set = before_push.execute(working_set);
+
+        state_vec.push(&53, &mut working_set);
+
+        working_set = after_push.execute(working_set);
+
+        let len = state_vec.len(&mut working_set);
+        assert_eq!(len, 4);
+
+        let val = state_vec.get(3, &mut working_set);
+        assert!(val.is_some());
+
+        let val = val.unwrap();
+        assert_eq!(val, 53);
+    }
+}
+
+#[test]
+fn test_state_vec_pop() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
+    for (before_pop, after_pop) in create_storage_operations() {
+        let values = vec![56, 55, 54];
+        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+
+        working_set = before_pop.execute(working_set);
+
+        let popped = state_vec.pop(&mut working_set);
+
+        assert_eq!(popped.unwrap(), 54);
+
+        working_set = after_pop.execute(working_set);
+
+        let len = state_vec.len(&mut working_set);
+        assert_eq!(len, 2);
+
+        let val = state_vec.get(1, &mut working_set);
+        assert!(val.is_some());
+
+        let val = val.unwrap();
+        assert_eq!(val, 55);
+    }
+}
+
+#[test]
+fn test_state_vec_set_all() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
+    for (before_set_all, after_set_all) in create_storage_operations() {
+        let values = vec![56, 55, 54];
+        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+
+        working_set = before_set_all.execute(working_set);
+
+        let new_values: Vec<u32> = vec![1];
+        state_vec.set_all(new_values, &mut working_set);
+
+        working_set = after_set_all.execute(working_set);
+
+        let val = state_vec.get(0, &mut working_set);
+
+        assert!(val.is_some());
+
+        let val = val.unwrap();
+        assert_eq!(val, 1);
+
+        let len = state_vec.len(&mut working_set);
+        assert_eq!(len, 1);
+
+        let val = state_vec.get_or_err(1, &mut working_set);
+
+        assert!(val.is_err());
+    }
+}
+
+#[test]
+fn test_state_vec_diff_type() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
+    for (before_ops, after_ops) in create_storage_operations() {
+        let values = vec![String::from("Hello"), String::from("World")];
+        let (state_vec, mut working_set) = create_state_vec_and_storage(values.clone(), path);
+
+        working_set = before_ops.execute(working_set);
+
+        let val0 = state_vec.get(0, &mut working_set);
+        let val1 = state_vec.pop(&mut working_set);
+        state_vec.push(&String::from("new str"), &mut working_set);
+
+        working_set = after_ops.execute(working_set);
+
+        assert!(val0.is_some());
+        assert!(val1.is_some());
+
+        let val0 = val0.unwrap();
+        let val1 = val1.unwrap();
+        assert_eq!(val0, String::from("Hello"));
+        assert_eq!(val1, String::from("World"));
+
+        let val = state_vec.get(1, &mut working_set);
+        assert!(val.is_some());
+
+        let val = val.unwrap();
+        assert_eq!(val, String::from("new str"));
+
+        let len = state_vec.len(&mut working_set);
+        assert_eq!(len, 2);
+    }
 }

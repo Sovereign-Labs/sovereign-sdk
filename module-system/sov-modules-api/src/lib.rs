@@ -2,6 +2,8 @@
 
 mod bech32;
 pub mod capabilities;
+#[cfg(feature = "native")]
+pub mod cli;
 pub mod default_context;
 pub mod default_signature;
 mod dispatch;
@@ -39,6 +41,7 @@ pub mod macros {
 
 use core::fmt::{self, Debug, Display};
 use std::collections::{HashMap, HashSet};
+use std::hash::Hash;
 use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -51,7 +54,7 @@ pub use error::Error;
 pub use prefix::Prefix;
 pub use response::CallResponse;
 use serde::{Deserialize, Serialize};
-pub use sov_rollup_interface::{digest, AddressTrait};
+pub use sov_rollup_interface::{digest, BasicAddress, RollupAddress};
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
 
@@ -63,7 +66,8 @@ impl AsRef<[u8]> for Address {
     }
 }
 
-impl AddressTrait for Address {}
+impl BasicAddress for Address {}
+impl RollupAddress for Address {}
 
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
@@ -141,7 +145,7 @@ pub enum NonInstantiable {}
 
 /// PublicKey used in the Module System.
 pub trait PublicKey {
-    fn to_address<A: AddressTrait>(&self) -> A;
+    fn to_address<A: RollupAddress>(&self) -> A;
 }
 
 /// A PrivateKey used in the Module System.
@@ -152,7 +156,7 @@ pub trait PrivateKey {
     fn generate() -> Self;
     fn pub_key(&self) -> Self::PublicKey;
     fn sign(&self, msg: &[u8]) -> Self::Signature;
-    fn to_address<A: AddressTrait>(&self) -> A {
+    fn to_address<A: RollupAddress>(&self) -> A {
         self.pub_key().to_address::<A>()
     }
 }
@@ -169,7 +173,7 @@ pub trait PrivateKey {
 pub trait Spec {
     /// The Address type used on the rollup. Typically calculated as the hash of a public key.
     #[cfg(feature = "native")]
-    type Address: AddressTrait
+    type Address: RollupAddress
         + BorshSerialize
         + BorshDeserialize
         + Sync
@@ -182,7 +186,7 @@ pub trait Spec {
 
     /// The Address type used on the rollup. Typically calculated as the hash of a public key.
     #[cfg(not(feature = "native"))]
-    type Address: AddressTrait + BorshSerialize + BorshDeserialize;
+    type Address: RollupAddress + BorshSerialize + BorshDeserialize;
 
     /// Authenticated state storage used by the rollup. Typically some variant of a merkle-patricia trie.
     type Storage: Storage + Clone + Send + Sync;
@@ -192,6 +196,7 @@ pub trait Spec {
     type PublicKey: borsh::BorshDeserialize
         + borsh::BorshSerialize
         + Eq
+        + Hash
         + Clone
         + Debug
         + PublicKey
@@ -216,6 +221,7 @@ pub trait Spec {
     type PublicKey: borsh::BorshDeserialize
         + borsh::BorshSerialize
         + Eq
+        + Hash
         + Clone
         + Debug
         + Send

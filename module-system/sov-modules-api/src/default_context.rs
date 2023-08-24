@@ -1,7 +1,7 @@
 #[cfg(feature = "native")]
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use sov_rollup_interface::AddressTrait;
+use sov_rollup_interface::RollupAddress;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
 use sov_state::{ArrayWitness, DefaultStorageSpec, ZkStorage};
@@ -68,7 +68,7 @@ impl Context for ZkDefaultContext {
 }
 
 impl PublicKey for DefaultPublicKey {
-    fn to_address<A: AddressTrait>(&self) -> A {
+    fn to_address<A: RollupAddress>(&self) -> A {
         let pub_key_hash = {
             let mut hasher = <ZkDefaultContext as Spec>::Hasher::new();
             hasher.update(self.pub_key);

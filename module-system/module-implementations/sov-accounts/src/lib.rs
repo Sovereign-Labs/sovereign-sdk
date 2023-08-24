@@ -5,13 +5,11 @@ mod hooks;
 mod call;
 mod genesis;
 #[cfg(feature = "native")]
-mod query;
+pub mod query;
 #[cfg(test)]
 mod tests;
 
 pub use call::{CallMessage, UPDATE_ACCOUNT_MSG};
-#[cfg(feature = "native")]
-pub use query::{AccountsRpcImpl, AccountsRpcServer, Response};
 use sov_modules_api::{Context, Error, ModuleInfo};
 use sov_state::WorkingSet;
 

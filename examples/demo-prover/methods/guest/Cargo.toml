@@ -11,19 +11,15 @@ anyhow = "1.0.68"
 risc0-zkvm = { version = "0.16", default-features = false, features = ["std"] }
 risc0-zkvm-platform = "0.16"
 borsh = { version = "0.10.3", features = ["bytes"] }
-celestia = { path = "../../../../adapters/celestia", default-features = false }
-demo-stf = { path = "../../../demo-stf", default-features = false }
+celestia = { path = "../../../../adapters/celestia" }
+demo-stf = { path = "../../../demo-stf" }
 sov-rollup-interface = { path = "../../../../rollup-interface", default-features = false}
-risc0-adapter = { path = "../../../../adapters/risc0", default-features = false }
+risc0-adapter = { path = "../../../../adapters/risc0" }
 const-rollup-config = { path = "../../../const-rollup-config" }
 sov-modules-stf-template = {path = "../../../../module-system/sov-modules-stf-template", optional=true}
 sov-state = {path = "../../../../module-system/sov-state", default-features = false, optional=true}
 sov-modules-api = {path = "../../../../module-system/sov-modules-api", default-features = false, optional=true}
 sov-sequencer-registry = {path = "../../../../module-system/module-implementations/sov-sequencer-registry", default-features = false, optional=true}
-
-# TODO: Just for test
-tracing = "0.1.37"
-log = "0.4.17"
 
 [build-dependencies]
 directories = "5.0"

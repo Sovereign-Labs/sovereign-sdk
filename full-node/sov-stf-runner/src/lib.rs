@@ -12,10 +12,11 @@ pub use config::{from_toml_path, RollupConfig, RunnerConfig, StorageConfig};
 use jsonrpsee::RpcModule;
 pub use ledger_rpc::get_ledger_rpc;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::Zkvm;
+use tokio::sync::oneshot;
 use tracing::{debug, info};
 
 type StateRoot<ST, Vm, DA> = <ST as StateTransitionFunction<
@@ -98,8 +99,12 @@ where
         })
     }
 
-    /// Starts an rpc server with provided rpc methods.
-    pub async fn start_rpc_server(&self, methods: RpcModule<()>) {
+    /// Starts a RPC server with provided rpc methods.
+    pub async fn start_rpc_server(
+        &self,
+        methods: RpcModule<()>,
+        channel: Option<oneshot::Sender<SocketAddr>>,
+    ) {
         let listen_address = self.listen_address;
         let _handle = tokio::spawn(async move {
             let server = jsonrpsee::server::ServerBuilder::default()
@@ -107,7 +112,12 @@ where
                 .await
                 .unwrap();
 
-            info!("Starting RPC server at {} ", server.local_addr().unwrap());
+            let bound_address = server.local_addr().unwrap();
+            if let Some(channel) = channel {
+                channel.send(bound_address).unwrap();
+            }
+            info!("Starting RPC server at {} ", &bound_address);
+
             let _server_handle = server.start(methods).unwrap();
             futures::future::pending::<()>().await;
         });
@@ -116,15 +126,23 @@ where
     /// Runs the rollup.
     pub async fn run(&mut self) -> Result<(), anyhow::Error> {
         for height in self.start_height.. {
-            info!("Requesting data for height {}", height,);
+            debug!("Requesting data for height {}", height,);
 
             let filtered_block = self.da_service.get_finalized_at(height).await?;
             let mut blobs = self.da_service.extract_relevant_txs(&filtered_block);
 
             info!(
-                "Extracted {} relevant blobs at height {}",
+                "Extracted {} relevant blobs at height {}: {:?}",
                 blobs.len(),
-                height
+                height,
+                blobs
+                    .iter()
+                    .map(|b| format!(
+                        "sequencer={} blob_hash=0x{}",
+                        b.sender(),
+                        hex::encode(b.hash())
+                    ))
+                    .collect::<Vec<_>>()
             );
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
