@@ -23,14 +23,13 @@ fn module_dispatch_tests() {
     t.compile_fail("tests/dispatch/missing_serialization.rs");
 }
 
-#[cfg(feature = "native")]
 #[test]
 fn rpc_tests() {
     let t = trybuild::TestCases::new();
-    t.pass("tests/derive_rpc.rs");
+    t.pass("tests/rpc/derive_rpc.rs");
+    t.pass("tests/rpc/derive_rpc_with_where.rs");
 }
 
-#[cfg(feature = "native")]
 #[test]
 fn cli_wallet_arg_tests() {
     let t: trybuild::TestCases = trybuild::TestCases::new();
