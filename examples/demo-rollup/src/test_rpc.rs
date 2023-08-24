@@ -378,6 +378,8 @@ fn full_tx_json(
 }
 
 proptest!(
+    // Reduce the cases from 256 to 100 to speed up these tests
+    #![proptest_config(proptest::prelude::ProptestConfig::with_cases(100))]
     #[test]
     fn proptest_get_head((slots, _, total_num_batches) in arb_slots(10, 10)){
         let last_slot = slots.last().unwrap();

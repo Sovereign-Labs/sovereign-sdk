@@ -1,11 +1,15 @@
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
 use std::sync::Mutex;
 
+/// Utilities for the sequencer rpc
+pub mod utils;
 use anyhow::anyhow;
 use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::RpcModule;
-use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_rollup_interface::services::da::DaService;
+use utils::to_jsonrpsee_error_object;
 
 const SEQUENCER_RPC_ERROR: &str = "SEQUENCER_RPC_ERROR";
 
@@ -93,6 +97,7 @@ where
     Ok(())
 }
 
+/// Creates an RPC module with the sequencer's methods
 pub fn get_sequencer_rpc<B, D>(batch_builder: B, da_service: D) -> RpcModule<Sequencer<B, D>>
 where
     B: BatchBuilder + Send + Sync + 'static,
@@ -104,20 +109,25 @@ where
     rpc
 }
 
+/// A transaction to be submitted to the rollup
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct SubmitTransaction {
     body: Vec<u8>,
 }
 
 impl SubmitTransaction {
+    /// Creates a new transaction for submission to the rollup
     pub fn new(body: Vec<u8>) -> Self {
         SubmitTransaction { body }
     }
 }
 
+/// The result of submitting a transaction to the rollup
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum SubmitTransactionResponse {
+    /// Submission succeeded
     Registered,
+    /// Submission faileds
     Failed(String),
 }
 
