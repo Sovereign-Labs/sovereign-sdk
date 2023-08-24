@@ -141,8 +141,8 @@ fn test_simple_value_setter_with_chain_state() {
     assert_eq!(stored_root, init_root_hash.0, "Root hashes don't match");
 
     // Check the slot height
-    let new_height_storage = chain_state_ref.get_slot_height(&mut working_set);
-    assert_eq!(new_height_storage, 2, "The new height did not update");
+    let new_height_storage = chain_state_ref.get_slot_height(&mut working_set).unwrap();
+    assert_eq!(2, new_height_storage, "The new height did not update");
 
     // Check the tx in progress
     let new_tx_in_progress: TransitionInProgress<MockValidityCond> = chain_state_ref

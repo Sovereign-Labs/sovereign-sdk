@@ -89,7 +89,7 @@ pub trait ZkvmGuest: Zkvm {
 
 /// This trait is implemented on the struct/enum which expresses the validity condition
 pub trait ValidityCondition:
-    Serialize + DeserializeOwned + BorshDeserialize + BorshSerialize + Debug + Clone + Copy + PartialEq
+    BorshDeserialize + BorshSerialize + Debug + Clone + Copy + PartialEq
 {
     /// The error type returned when two [`ValidityCondition`]s cannot be combined.
     type Error: Into<anyhow::Error>;

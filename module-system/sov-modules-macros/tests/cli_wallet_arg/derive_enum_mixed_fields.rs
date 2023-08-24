@@ -15,7 +15,7 @@ fn main() {
     let actual_foo = <MyEnum as sov_modules_api::CliWalletArg>::CliStringRepr::try_parse_from(&[
         "myenum", "foo", "1", "hello",
     ])
-    .expect("parsing must succed")
+    .expect("parsing must succeed")
     .into();
     assert_eq!(expected_foo, actual_foo);
 
@@ -23,7 +23,7 @@ fn main() {
     let actual_bar = <MyEnum as sov_modules_api::CliWalletArg>::CliStringRepr::try_parse_from(&[
         "myenum", "bar", "2",
     ])
-    .expect("parsing must succed")
+    .expect("parsing must succeed")
     .into();
 
     assert_eq!(expected_bar, actual_bar);

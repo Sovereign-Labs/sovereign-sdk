@@ -2,14 +2,14 @@ use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, Spec};
 use sov_modules_stf_template::SequencerOutcome;
-use sov_rollup_interface::da::BlobReaderTrait;
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_sequencer_registry::SequencerRegistry;
 use sov_state::WorkingSet;
 use tracing::info;
 
 use crate::runtime::Runtime;
 
-impl<C: Context> TxHooks for Runtime<C> {
+impl<C: Context, DA: DaSpec> TxHooks for Runtime<C, DA> {
     type Context = C;
 
     fn pre_dispatch_tx_hook(
@@ -29,7 +29,7 @@ impl<C: Context> TxHooks for Runtime<C> {
     }
 }
 
-impl<C: Context, B: BlobReaderTrait> ApplyBlobHooks<B> for Runtime<C> {
+impl<C: Context, DA: DaSpec, B: BlobReaderTrait> ApplyBlobHooks<B> for Runtime<C, DA> {
     type Context = C;
     type BlobResult = SequencerOutcome<B::Address>;
 

@@ -7,6 +7,7 @@ use sov_cli::{clap, wallet_dir};
 use sov_modules_api::clap::Parser;
 use sov_modules_api::cli::{FileNameArg, JsonStringArg};
 use sov_modules_api::default_context::DefaultContext;
+use sov_rollup_interface::mocks::MockValidityCond;
 
 type Ctx = sov_modules_api::default_context::DefaultContext;
 
@@ -16,8 +17,8 @@ pub enum Workflows {
     #[clap(subcommand)]
     Transactions(
         TransactionWorkflow<
-            RuntimeSubcommand<FileNameArg, DefaultContext>,
-            RuntimeSubcommand<JsonStringArg, DefaultContext>,
+            RuntimeSubcommand<FileNameArg, DefaultContext, MockValidityCond>,
+            RuntimeSubcommand<JsonStringArg, DefaultContext, MockValidityCond>,
         >,
     ),
     #[clap(subcommand)]
@@ -37,14 +38,14 @@ pub async fn main() -> Result<(), anyhow::Error> {
     let app_dir = wallet_dir()?;
     std::fs::create_dir_all(app_dir.as_ref())?;
     let wallet_state_path = app_dir.as_ref().join("wallet_state.json");
-    let mut wallet_state: WalletState<RuntimeCall<Ctx>, Ctx> =
+    let mut wallet_state: WalletState<RuntimeCall<Ctx, MockValidityCond>, Ctx> =
         WalletState::load(&wallet_state_path)?;
 
     let invocation = App::parse();
 
     match invocation.workflow {
         Workflows::Transactions(tx) => tx
-            .run::<Runtime<DefaultContext>, DefaultContext, JsonStringArg, _, _, _>(
+            .run::<Runtime<DefaultContext, MockValidityCond>, DefaultContext, JsonStringArg,  _, _, _>(
                 &mut wallet_state,
                 app_dir,
             )?,
