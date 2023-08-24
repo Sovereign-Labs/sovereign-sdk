@@ -29,13 +29,13 @@ fn make_contract_from_abi(path: PathBuf) -> BaseContract {
     BaseContract::from(abi)
 }
 
-pub(crate) struct SimpleStorageContract {
+pub struct SimpleStorageContract {
     bytecode: Bytes,
     base_contract: BaseContract,
 }
 
 impl SimpleStorageContract {
-    pub(crate) fn new() -> Self {
+    pub fn new() -> Self {
         let contract_data = {
             let mut path = test_data_path();
             path.push("SimpleStorage.bin");
@@ -57,16 +57,16 @@ impl SimpleStorageContract {
         }
     }
 
-    pub(crate) fn byte_code(&self) -> Bytes {
+    pub fn byte_code(&self) -> Bytes {
         self.bytecode.clone()
     }
 
-    pub(crate) fn set_call_data(&self, set_arg: u32) -> Bytes {
+    pub fn set_call_data(&self, set_arg: u32) -> Bytes {
         let set_arg = ethereum_types::U256::from(set_arg);
         self.base_contract.encode("set", set_arg).unwrap()
     }
 
-    pub(crate) fn get_call_data(&self) -> Bytes {
+    pub fn get_call_data(&self) -> Bytes {
         self.base_contract.encode("get", ()).unwrap()
     }
 }
