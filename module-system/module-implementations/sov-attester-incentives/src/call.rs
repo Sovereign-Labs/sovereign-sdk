@@ -217,7 +217,7 @@ impl<
 
         // Mint tokens and send them
         self.bank
-            .mint(
+            .mint_from_eoa(
                 &coins,
                 context.sender(),
                 &C::new(reward_address),

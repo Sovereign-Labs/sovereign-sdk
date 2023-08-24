@@ -137,21 +137,33 @@ impl<C: sov_modules_api::Context> Bank<C> {
         Ok(CallResponse::default())
     }
 
-    /// Mints the `coins` set by the address `minter_address`. If the token address doesn't exist return an error.
+    /// Mints the `coins`to the address `mint_to_address` using `context.sender()` as the authorizer.
+    /// Returns an error if the token address doesn't exist or `context.sender()` is not authorized to mint tokens.
+    /// Calls the [`Token::mint`] function and update the `self.tokens` set to store the new balance.
+    pub fn mint_from_eoa(
+        &self,
+        coins: &Coins<C>,
+        mint_to_address: &C::Address,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<CallResponse> {
+        self.mint(coins, mint_to_address, context.sender(), working_set)
+    }
+
+    /// Mints the `coins` to the address `mint_to_address` if `authorizer` is an allowed minter.
+    /// Returns an error if the token address doesn't exist or `context.sender()` is not authorized to mint tokens.
     /// Calls the [`Token::mint`] function and update the `self.tokens` set to store the new minted address.
     pub fn mint(
         &self,
         coins: &Coins<C>,
-        minter_address: &C::Address,
-        context: &C,
+        mint_to_address: &C::Address,
+        authorizer: &C::Address,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let context_logger = || {
             format!(
                 "Failed mint coins({}) to {} by minter {}",
-                coins,
-                minter_address,
-                context.sender()
+                coins, mint_to_address, authorizer
             )
         };
         let mut token = self
@@ -159,7 +171,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
             .get_or_err(&coins.token_address, working_set)
             .with_context(context_logger)?;
         token
-            .mint(context.sender(), minter_address, coins.amount, working_set)
+            .mint_from_eoa(authorizer, mint_to_address, coins.amount, working_set)
             .with_context(context_logger)?;
         self.tokens.set(&coins.token_address, &token, working_set);
 
