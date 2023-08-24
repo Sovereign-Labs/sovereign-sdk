@@ -105,6 +105,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
 
 [[package]]
+name = "bcs"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bd3ffe8b19a604421a5d461d4a70346223e535903fbc3067138bddbebddcf77"
+dependencies = [
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "bech32"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -430,6 +440,7 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-blob-storage",
+ "sov-chain-state",
  "sov-election",
  "sov-modules-api",
  "sov-modules-stf-template",
@@ -2016,6 +2027,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-chain-state"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-rollup-interface",
+ "sov-state",
+]
+
+[[package]]
 name = "sov-demo-prover-guest"
 version = "0.1.0"
 dependencies = [
@@ -2148,6 +2171,7 @@ name = "sov-state"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bcs",
  "borsh",
  "hex",
  "jmt",
