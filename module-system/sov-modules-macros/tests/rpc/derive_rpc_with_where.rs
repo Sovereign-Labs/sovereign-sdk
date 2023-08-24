@@ -43,7 +43,7 @@ where
     pub fn second_method(
         &self,
         result: D,
-        working_set: &mut WorkingSet<C::Storage>,
+        _working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<(D, u64)> {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         let value = result.clone();
