@@ -1,4 +1,3 @@
-mod test_helpers;
 use std::net::SocketAddr;
 
 use borsh::BorshSerialize;
@@ -6,12 +5,12 @@ use demo_stf::app::DefaultPrivateKey;
 use demo_stf::runtime::RuntimeCall;
 use jsonrpsee::core::client::{Subscription, SubscriptionClientT};
 use jsonrpsee::rpc_params;
-use jsonrpsee::ws_client::WsClientBuilder;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{PrivateKey, Spec};
 use sov_sequencer::utils::SimpleClient;
-use test_helpers::start_rollup;
+
+use super::test_helpers::start_rollup;
 
 const TOKEN_SALT: u64 = 0;
 const TOKEN_NAME: &str = "test_token";
@@ -36,12 +35,10 @@ async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow
     let tx = Transaction::<DefaultContext>::new_signed_tx(&key, msg.try_to_vec().unwrap(), 0);
 
     let port = rpc_address.port();
-    let http_client = SimpleClient::new(&format!("http://localhost:{}", port));
-    let ws_client = WsClientBuilder::default()
-        .build(&format!("ws://localhost:{}", port))
-        .await?;
+    let client = SimpleClient::new("localhost", port).await?;
 
-    let mut slot_processed_subscription: Subscription<u64> = ws_client
+    let mut slot_processed_subscription: Subscription<u64> = client
+        .ws()
         .subscribe(
             "ledger_subscribeSlots",
             rpc_params![],
@@ -49,13 +46,13 @@ async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow
         )
         .await?;
 
-    http_client.send_transaction(tx).await?;
+    client.send_transaction(tx).await?;
 
     // Wait until the rollup has processed the next slot
     let _ = slot_processed_subscription.next().await;
 
     let balance_response = sov_bank::query::BankRpcClient::<DefaultContext>::balance_of(
-        http_client.inner(),
+        client.http(),
         user_address,
         token_address,
     )

@@ -1,4 +1,3 @@
-mod test_helpers;
 use std::net::SocketAddr;
 use std::str::FromStr;
 
@@ -10,6 +9,8 @@ use ethers_middleware::SignerMiddleware;
 use ethers_providers::{Http, Middleware, Provider};
 use ethers_signers::{LocalWallet, Signer, Wallet};
 use test_helpers::{start_rollup, SimpleStorageContract};
+
+use super::test_helpers;
 
 const MAX_FEE_PER_GAS: u64 = 100000001;
 
