@@ -127,14 +127,8 @@ where
     ) -> arbitrary::Result<Self> {
         use sov_modules_api::Module;
 
-        let address = u.arbitrary()?;
         let config: AccountConfig<C> = u.arbitrary()?;
-        let prefix: sov_state::Prefix = u.arbitrary()?;
-        let accounts = Self {
-            address,
-            public_keys: sov_state::StateMap::new(prefix.clone()),
-            accounts: sov_state::StateMap::new(prefix),
-        };
+        let accounts = Accounts::default();
 
         accounts
             .genesis(&config, working_set)
