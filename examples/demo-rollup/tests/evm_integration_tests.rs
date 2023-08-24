@@ -12,7 +12,7 @@ use ethers_providers::{Http, Middleware, Provider};
 use ethers_signers::{LocalWallet, Signer, Wallet};
 use risc0_adapter::host::Risc0Verifier;
 use sov_demo_rollup::{get_genesis_config, initialize_ledger, Rollup};
-use sov_evm::evm::test_helpers::SimpleStorageContract;
+use sov_evm::smart_contracts::SimpleStorageContract;
 use sov_rollup_interface::mocks::{MockAddress, MockDaService};
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
 

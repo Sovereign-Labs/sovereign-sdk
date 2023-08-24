@@ -9,7 +9,6 @@ mod db_commit;
 pub(crate) mod db_init;
 pub(crate) mod executor;
 mod serialize;
-pub mod test_helpers;
 #[cfg(test)]
 mod tests;
 pub(crate) mod transaction;

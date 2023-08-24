@@ -8,6 +8,8 @@ pub mod genesis;
 #[cfg(feature = "experimental")]
 pub mod query;
 #[cfg(feature = "experimental")]
+pub mod smart_contracts;
+#[cfg(feature = "experimental")]
 #[cfg(test)]
 mod tests;
 #[cfg(feature = "experimental")]
