@@ -14,7 +14,7 @@ impl SimpleClient {
     /// Creates a new client at the given endpoint
     pub async fn new(address: &str, port: u16) -> Result<Self, anyhow::Error> {
         let http_client = HttpClientBuilder::default()
-            .build(&format!("http://{address}:{port}"))
+            .build(format!("http://{address}:{port}"))
             .unwrap();
         let ws_client = WsClientBuilder::default()
             .build(&format!("ws://{address}:{port}"))
