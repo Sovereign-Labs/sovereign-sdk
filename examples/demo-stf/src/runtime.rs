@@ -5,6 +5,8 @@ use sov_bank::query::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
 use sov_blob_storage::{BlobStorageRpcImpl, BlobStorageRpcServer};
 #[cfg(feature = "native")]
+use sov_chain_state::{ChainStateRpcImpl, ChainStateRpcServer};
+#[cfg(feature = "native")]
 use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
@@ -17,7 +19,7 @@ use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec, Spec};
-use sov_rollup_interface::da::BlobReaderTrait;
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::zk::ValidityCondition;
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
@@ -29,6 +31,7 @@ use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 pub mod query {
     pub use sov_accounts::query as accounts;
     pub use sov_bank::query as bank;
+    pub use sov_chain_state::query as chain_state;
     pub use sov_election::query as election;
     pub use sov_sequencer_registry::query as sequencer_registry;
     pub use sov_value_setter::query as value_setter;
@@ -82,6 +85,8 @@ pub struct Runtime<C: Context> {
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub blob_storage: sov_blob_storage::BlobStorage<C>,
+    #[cfg_attr(feature = "native", cli_skip)]
+    pub chain_state: sov_chain_state::ChainState<C, DA::ValidityCondition>,
     pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
@@ -95,11 +100,13 @@ pub struct Runtime<C: Context> {
     feature = "native",
     serialization(serde::Serialize, serde::Deserialize)
 )]
-pub struct Runtime<C: Context> {
+pub struct Runtime<C: Context, DA: DaSpec> {
     pub bank: sov_bank::Bank<C>,
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub blob_storage: sov_blob_storage::BlobStorage<C>,
+    #[cfg_attr(feature = "native", cli_skip)]
+    pub chain_state: sov_chain_state::ChainState<C, DA::ValidityCondition>,
     pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,

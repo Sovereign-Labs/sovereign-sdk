@@ -1533,6 +1533,7 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-blob-storage",
+ "sov-chain-state",
  "sov-cli",
  "sov-data-generators",
  "sov-election",

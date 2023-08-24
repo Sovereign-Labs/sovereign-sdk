@@ -17,6 +17,8 @@ pub mod tests;
 pub mod query;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(feature = "native")]
+pub use query::{ChainStateRpcImpl, ChainStateRpcServer, Response};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
