@@ -20,7 +20,7 @@ use super::ValueSetter;
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub enum CallMessage {
     /// value to set
-    SetValue(u32),
+    SetValue(String),
 }
 
 /// Example of a custom error.
@@ -30,11 +30,19 @@ enum SetValueError {
     WrongSender,
 }
 
-impl<C: sov_modules_api::Context> ValueSetter<C> {
+impl<C: sov_modules_api::Context, D> ValueSetter<C, D>
+where
+    D: std::hash::Hash
+        + std::clone::Clone
+        + borsh::BorshSerialize
+        + borsh::BorshDeserialize
+        + std::fmt::Debug
+        + std::str::FromStr,
+{
     /// Sets `value` field to the `new_value`, only admin is authorized to call this method.
     pub(crate) fn set_value(
         &self,
-        new_value: u32,
+        new_value: String,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
@@ -45,6 +53,8 @@ impl<C: sov_modules_api::Context> ValueSetter<C> {
             // Here we use a custom error type.
             Err(SetValueError::WrongSender)?;
         }
+
+        let new_value = D::from_str(&new_value).map_err(|_| SetValueError::WrongSender)?;
 
         // This is how we set a new value:
         self.value.set(&new_value, working_set);

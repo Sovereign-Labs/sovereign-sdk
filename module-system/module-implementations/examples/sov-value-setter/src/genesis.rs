@@ -3,7 +3,15 @@ use sov_state::WorkingSet;
 
 use super::ValueSetter;
 
-impl<C: sov_modules_api::Context> ValueSetter<C> {
+impl<C: sov_modules_api::Context, D> ValueSetter<C, D>
+where
+    D: std::hash::Hash
+        + std::clone::Clone
+        + borsh::BorshSerialize
+        + borsh::BorshDeserialize
+        + std::fmt::Debug
+        + std::str::FromStr,
+{
     /// Initializes module with the `admin` role.
     pub(crate) fn init_module(
         &self,

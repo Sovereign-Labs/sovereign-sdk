@@ -25,26 +25,42 @@ pub struct ValueSetterConfig<C: sov_modules_api::Context> {
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo)]
-pub struct ValueSetter<C: sov_modules_api::Context> {
+pub struct ValueSetter<C: sov_modules_api::Context, D>
+where
+    D: std::hash::Hash
+        + std::clone::Clone
+        + borsh::BorshSerialize
+        + borsh::BorshDeserialize
+        + std::fmt::Debug
+        + std::str::FromStr,
+{
     /// Address of the module.
     #[address]
     pub address: C::Address,
 
     /// Some value kept in the state.
     #[state]
-    pub value: sov_state::StateValue<u32>,
+    pub value: sov_state::StateValue<D>,
 
     /// Holds the address of the admin user who is allowed to update the value.
     #[state]
     pub admin: sov_state::StateValue<C::Address>,
 }
 
-impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
+impl<C: sov_modules_api::Context, D> sov_modules_api::Module for ValueSetter<C, D>
+where
+    D: std::hash::Hash
+        + std::clone::Clone
+        + borsh::BorshSerialize
+        + borsh::BorshDeserialize
+        + std::fmt::Debug
+        + std::str::FromStr,
+{
     type Context = C;
 
     type Config = ValueSetterConfig<C>;
 
-    type CallMessage = call::CallMessage;
+    type CallMessage = CallMessage;
 
     fn genesis(
         &self,
@@ -62,7 +78,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
-            call::CallMessage::SetValue(new_value) => {
+            CallMessage::SetValue(new_value) => {
                 Ok(self.set_value(new_value, context, working_set)?)
             }
         }

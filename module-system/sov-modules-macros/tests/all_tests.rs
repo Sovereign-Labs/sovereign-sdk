@@ -29,7 +29,6 @@ fn rpc_tests() {
     t.pass("tests/rpc/derive_rpc_with_where.rs");
 }
 
-#[cfg(feature = "native")]
 #[test]
 fn cli_wallet_arg_tests() {
     let t: trybuild::TestCases = trybuild::TestCases::new();

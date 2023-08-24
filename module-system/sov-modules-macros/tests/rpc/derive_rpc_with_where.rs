@@ -1,4 +1,4 @@
-use std::hash::{Hash, Hasher};
+use std::hash::Hasher;
 
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::default_context::ZkDefaultContext;
@@ -9,7 +9,13 @@ use sov_state::{WorkingSet, ZkStorage};
 #[derive(ModuleInfo)]
 pub struct TestStruct<C: ::sov_modules_api::Context, D>
 where
-    D: std::hash::Hash + std::clone::Clone + borsh::BorshSerialize + borsh::BorshDeserialize,
+    D: std::hash::Hash
+        + std::clone::Clone
+        + borsh::BorshSerialize
+        + borsh::BorshDeserialize
+        + serde::Serialize
+        + serde::de::DeserializeOwned
+        + 'static,
 {
     #[address]
     pub(crate) address: C::Address,
@@ -20,7 +26,13 @@ where
 #[rpc_gen(client, server, namespace = "test")]
 impl<C: sov_modules_api::Context, D> TestStruct<C, D>
 where
-    D: std::hash::Hash + std::clone::Clone + borsh::BorshSerialize + borsh::BorshDeserialize,
+    D: std::hash::Hash
+        + std::clone::Clone
+        + borsh::BorshSerialize
+        + borsh::BorshDeserialize
+        + serde::Serialize
+        + serde::de::DeserializeOwned
+        + 'static,
 {
     #[rpc_method(name = "firstMethod")]
     pub fn first_method(&self, _working_set: &mut WorkingSet<C::Storage>) -> RpcResult<u32> {
@@ -30,11 +42,11 @@ where
     #[rpc_method(name = "secondMethod")]
     pub fn second_method(
         &self,
-        result: u32,
+        result: D,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<(D, u64)> {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        let value = self.data.get(working_set).unwrap().clone();
+        let value = result.clone();
         value.hash(&mut hasher);
         let hashed_value = hasher.finish();
 
@@ -67,11 +79,20 @@ fn main() {
     };
     {
         let result =
-            <RpcStorage<ZkDefaultContext> as TestStructRpcServer<ZkDefaultContext>>::first_method(
+            <RpcStorage<ZkDefaultContext> as TestStructRpcServer<ZkDefaultContext, u32>>::first_method(
                 &r,
             )
             .unwrap();
         assert_eq!(result, 11);
+    }
+
+    {
+        let result =
+            <RpcStorage<ZkDefaultContext> as TestStructRpcServer<ZkDefaultContext, u32>>::second_method(
+                &r, 22,
+            )
+            .unwrap();
+        assert_eq!(result, (22, 15733059416522709050));
     }
 
     println!("All tests passed!");
