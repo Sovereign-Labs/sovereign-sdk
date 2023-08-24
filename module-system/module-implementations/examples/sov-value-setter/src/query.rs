@@ -9,23 +9,16 @@ use super::ValueSetter;
 #[derive(serde::Serialize, serde::Deserialize, Debug, Eq, PartialEq, Clone)]
 pub struct Response {
     /// Value saved in the module's state.
-    pub value: Option<String>,
+    pub value: Option<u32>,
 }
 
 #[rpc_gen(client, server, namespace = "valueSetter")]
-impl<C: sov_modules_api::Context, D> ValueSetter<C, D>
-where
-    D: std::hash::Hash
-        + std::clone::Clone
-        + borsh::BorshSerialize
-        + borsh::BorshDeserialize
-        + std::fmt::Debug
-        + std::str::FromStr,
-{
+impl<C: sov_modules_api::Context> ValueSetter<C> {
     /// Queries the state of the module.
     #[rpc_method(name = "queryValue")]
     pub fn query_value(&self, working_set: &mut WorkingSet<C::Storage>) -> RpcResult<Response> {
-        let value = self.value.get(working_set).map(|v| format!("{:?}", v));
-        Ok(Response { value })
+        Ok(Response {
+            value: self.value.get(working_set),
+        })
     }
 }
