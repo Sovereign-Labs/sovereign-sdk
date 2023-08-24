@@ -6911,6 +6911,7 @@ dependencies = [
  "serde_json",
  "sov-bank",
  "sov-modules-api",
+ "sov-modules-macros",
  "sov-state",
  "syn 1.0.109",
  "tempfile",
