@@ -13,7 +13,7 @@ use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
-use sov_rollup_interface::AddressTrait;
+use sov_rollup_interface::BasicAddress;
 use sov_state::{StateCheckpoint, Storage, WorkingSet};
 use tracing::info;
 pub use tx_verifier::RawTx;
@@ -42,7 +42,7 @@ pub enum TxEffect {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 /// Represents the different outcomes that can occur for a sequencer after batch processing.
-pub enum SequencerOutcome<A: AddressTrait> {
+pub enum SequencerOutcome<A: BasicAddress> {
     /// Sequencer receives reward amount in defined token and can withdraw its deposit
     Rewarded(u64),
     /// Sequencer loses its deposit and receives no reward

@@ -1,3 +1,4 @@
+use std::hash::Hash;
 #[cfg(feature = "native")]
 use std::str::FromStr;
 
@@ -121,6 +122,12 @@ pub struct DefaultPublicKey {
         schemars(with = "&[u8]", length(equal = "ed25519_dalek::PUBLIC_KEY_LENGTH"))
     )]
     pub(crate) pub_key: DalekPublicKey,
+}
+
+impl Hash for DefaultPublicKey {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.pub_key.as_bytes().hash(state);
+    }
 }
 
 impl Serialize for DefaultPublicKey {

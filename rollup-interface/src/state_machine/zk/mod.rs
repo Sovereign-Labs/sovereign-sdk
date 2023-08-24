@@ -13,7 +13,7 @@ use digest::Digest;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::AddressTrait;
+use crate::RollupAddress;
 
 /// A trait implemented by the prover ("host") of a zkVM program.
 pub trait ZkvmHost: Zkvm {
@@ -46,7 +46,7 @@ pub trait Zkvm {
     /// TODO: specify a deserializer for the output
     fn verify_and_extract_output<
         C: ValidityCondition,
-        Add: AddressTrait + BorshDeserialize + BorshSerialize,
+        Add: RollupAddress + BorshDeserialize + BorshSerialize,
     >(
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
