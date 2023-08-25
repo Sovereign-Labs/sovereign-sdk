@@ -30,7 +30,7 @@ pub type TransitionHeight = u64;
 
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]
 /// Structure that contains the information needed to represent a single state transition.
-pub struct StateTransitionId<Cond: ValidityCondition> {
+pub struct StateTransitionId<Cond> {
     da_block_hash: [u8; 32],
     post_state_root: [u8; 32],
     validity_condition: Cond,
@@ -105,7 +105,7 @@ impl<Cond> TransitionInProgress<Cond> {
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[derive(ModuleInfo)]
-pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
+pub struct ChainState<Ctx: sov_modules_api::Context, Cond> {
     /// Address of the module.
     #[address]
     pub address: Ctx::Address,
@@ -142,9 +142,7 @@ pub struct ChainStateConfig {
     pub initial_slot_height: TransitionHeight,
 }
 
-impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Module
-    for ChainState<Ctx, Cond>
-{
+impl<Ctx: sov_modules_api::Context, Cond> sov_modules_api::Module for ChainState<Ctx, Cond> {
     type Context = Ctx;
 
     type Config = ChainStateConfig;

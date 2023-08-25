@@ -1,3 +1,4 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
@@ -81,7 +82,7 @@ pub mod query {
     feature = "native",
     serialization(serde::Serialize, serde::Deserialize)
 )]
-pub struct Runtime<C: Context, Cond: ValidityCondition> {
+pub struct Runtime<C: Context, Cond: BorshDeserialize + BorshSerialize> {
     pub bank: sov_bank::Bank<C>,
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]
@@ -101,7 +102,7 @@ pub struct Runtime<C: Context, Cond: ValidityCondition> {
     feature = "native",
     serialization(serde::Serialize, serde::Deserialize)
 )]
-pub struct Runtime<C: Context, Cond: ValidityCondition> {
+pub struct Runtime<C: Context, Cond> {
     pub bank: sov_bank::Bank<C>,
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]

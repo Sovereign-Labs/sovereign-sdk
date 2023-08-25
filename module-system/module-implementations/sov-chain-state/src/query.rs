@@ -1,4 +1,5 @@
 #![allow(missing_docs)]
+use borsh::{BorshDeserialize, BorshSerialize};
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
 use sov_rollup_interface::zk::ValidityCondition;
@@ -14,7 +15,7 @@ pub struct Response {
 }
 
 #[rpc_gen(client, server, namespace = "chainState")]
-impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
+impl<C: sov_modules_api::Context, Cond: BorshDeserialize + BorshSerialize> ChainState<C, Cond> {
     /// Get the height of the current slot.
     /// Panics if the slot height is not set
     #[rpc_method(name = "getSlotHeight")]
