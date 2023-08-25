@@ -48,7 +48,6 @@ where
     // We use a
     fn get_escrow_account(&self, port_id: &PortId, channel_id: &ChannelId) -> C::Address {
         // TODO: Probably cache so we don't need to hash every time
-        // TODO: Hash the same way as cosmos_adr028_escrow_address, but with C::Hash
         let escrow_account_bytes: [u8; 32] = {
             let mut hasher = <C::Hasher as Digest>::new();
             hasher.update(VERSION);
