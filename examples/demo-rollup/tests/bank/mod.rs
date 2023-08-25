@@ -10,7 +10,7 @@ use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{PrivateKey, Spec};
 use sov_sequencer::utils::SimpleClient;
 
-use crate::test_helpers::start_rollup;
+use super::test_helpers::start_rollup;
 const TOKEN_SALT: u64 = 0;
 const TOKEN_NAME: &str = "test_token";
 

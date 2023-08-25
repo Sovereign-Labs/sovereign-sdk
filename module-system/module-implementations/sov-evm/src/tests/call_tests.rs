@@ -18,7 +18,7 @@ fn create_messages(
     dev_signer: DevSigner,
 ) -> Vec<CallMessage> {
     let mut transactions = Vec::default();
-    let contract = SimpleStorageContract::new();
+    let contract = SimpleStorageContract::default();
 
     // Contract creation.
     {

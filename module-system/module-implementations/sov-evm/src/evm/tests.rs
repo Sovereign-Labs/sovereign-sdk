@@ -59,7 +59,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
         },
     );
 
-    let contract = SimpleStorageContract::new();
+    let contract = SimpleStorageContract::default();
 
     let contract_address = {
         let tx = dev_signer

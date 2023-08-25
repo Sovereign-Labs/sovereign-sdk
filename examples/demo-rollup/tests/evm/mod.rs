@@ -10,7 +10,7 @@ use ethers_providers::{Http, Middleware, Provider};
 use ethers_signers::{LocalWallet, Signer, Wallet};
 use sov_evm::smart_contracts::SimpleStorageContract;
 
-use crate::test_helpers::start_rollup;
+use super::test_helpers::start_rollup;
 
 const MAX_FEE_PER_GAS: u64 = 100000001;
 
@@ -23,7 +23,7 @@ struct TestClient {
 
 impl TestClient {
     #[allow(dead_code)]
-    async fn new_demo_rollup_client(
+    async fn new(
         chain_id: u64,
         key: Wallet<SigningKey>,
         from_addr: Address,
@@ -123,12 +123,11 @@ async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std:
         .unwrap()
         .with_chain_id(chain_id);
 
-    let contract = SimpleStorageContract::new();
+    let contract = SimpleStorageContract::default();
 
     let from_addr = Address::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
 
-    let test_client =
-        TestClient::new_demo_rollup_client(chain_id, key, from_addr, contract, rpc_address).await;
+    let test_client = TestClient::new(chain_id, key, from_addr, contract, rpc_address).await;
     test_client.execute().await
 }
 
