@@ -7,6 +7,10 @@ use sov_modules_api::{
 };
 use sov_state::{StateValue, WorkingSet, ZkStorage};
 
+pub trait TestSpec {
+    type Data: Data;
+}
+
 pub trait Data:
     Clone
     + Eq
@@ -80,16 +84,22 @@ where
 #[expose_rpc(DefaultContext)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-struct Runtime<C: Context, D: Data> {
-    pub first: QueryModule<C, D>,
+struct Runtime<C: Context, S: TestSpec> {
+    pub first: QueryModule<C, S::Data>,
+}
+
+struct ActualSpec;
+
+impl TestSpec for ActualSpec {
+    type Data = u32;
 }
 
 fn main() {
     type C = ZkDefaultContext;
-    type RT = Runtime<C, u32>;
+    type RT = Runtime<C, ActualSpec>;
     let storage = ZkStorage::new([1u8; 32]);
     let working_set = &mut sov_state::WorkingSet::new(storage);
-    let runtime = &mut Runtime::<C, u32>::default();
+    let runtime = &mut Runtime::<C, ActualSpec>::default();
     let config = GenesisConfig::new(22);
     runtime.genesis(&config, working_set).unwrap();
 

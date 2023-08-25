@@ -424,9 +424,10 @@ pub(crate) fn generics_for_field(
 
 #[cfg(test)]
 mod tests {
+    use quote::ToTokens;
     use syn::parse_quote;
 
-    use crate::common::extract_generic_type_bounds;
+    use crate::common::{extract_generic_type_bounds, generics_for_field};
 
     #[test]
     fn test_generic_types_with_bounds() {
@@ -490,5 +491,37 @@ mod tests {
             our_bounds.get(&parse_quote!(V)),
             Some(&syn::punctuated::Punctuated::new())
         );
+    }
+
+    #[test]
+    fn test_generic_types_with_associated_type_bounds_2() {
+        // where T::Error: Debug
+        let test_struct: syn::ItemStruct = syn::parse_quote! {
+
+            struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> {
+                field: (T::Error, U, V)
+            }
+        };
+        let generics = test_struct.generics;
+        let our_bounds = extract_generic_type_bounds(&generics);
+        // let expected_bounds_for_t: syn::TypeParam = syn::parse_quote!(T: SomeTrait);
+    }
+
+    #[test]
+    fn test_generics_for_field() {
+        let test_struct: syn::ItemStruct = parse_quote! {
+            struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> where V: SomeThirdTrait {
+                field: (T::Error, U, V)
+            }
+        };
+
+        let generics: syn::Generics = test_struct.generics;
+        let path_arguments: syn::AngleBracketedGenericArguments = parse_quote! { <T::Error, U, V> };
+
+        let p = syn::PathArguments::AngleBracketed(path_arguments);
+
+        let actual_generics = generics_for_field(&generics, &p);
+
+        println!("{}", actual_generics.to_token_stream());
     }
 }
