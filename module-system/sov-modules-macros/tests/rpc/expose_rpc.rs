@@ -1,3 +1,6 @@
+use jsonrpsee::core::RpcResult;
+pub use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::macros::{expose_rpc, rpc_gen};
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
 use sov_state::{StateValue, WorkingSet};
 
@@ -34,4 +37,28 @@ impl<C: Context> Module for QueryModule<C> {
         Ok(CallResponse::default())
     }
 }
+
+#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+pub struct QueryResponse {
+    pub value: Option<u8>,
+}
+
+#[rpc_gen(client, server, namespace = "queryModule")]
+impl<C: Context> QueryModule<C> {
+    #[rpc_method(name = "queryValue")]
+    pub fn query_value(
+        &self,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> RpcResult<QueryResponse> {
+        Ok(QueryResponse {
+            value: self.data.get(working_set),
+        })
+    }
+}
+
+#[expose_rpc(DefaultContext)]
+struct Runtime<C: Context> {
+    pub first: QueryModule<C>,
+}
+
 fn main() {}
