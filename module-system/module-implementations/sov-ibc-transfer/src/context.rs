@@ -121,12 +121,51 @@ where
         todo!()
     }
 
+    /// Any token that is to be burned will have been previously minted, so we
+    /// can expect to find the token address in our `minted_tokens` map.
+    ///
+    /// This is called in a `send_transfer()` in the case where we are NOT the
+    /// token source
     fn burn_coins_validate(
         &self,
-        _account: &Self::AccountId,
-        _coin: &PrefixedCoin,
+        account: &Self::AccountId,
+        coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        todo!()
+        let token_address = {
+            let mut hasher = <C::Hasher as Digest>::new();
+            hasher.update(coin.denom.to_string());
+            let denom_hash = hasher.finalize().to_vec();
+
+            self.transfer_mod
+                .minted_tokens
+                .get(&denom_hash, &mut self.working_set.borrow_mut())
+                .ok_or(TokenTransferError::InvalidCoin {
+                    coin: coin.to_string(),
+                })?
+        };
+
+        let sender_balance: u64 = self
+            .transfer_mod
+            .bank
+            .get_balance_of(
+                account.address.clone(),
+                token_address.clone(),
+                &mut self.working_set.borrow_mut(),
+            )
+            .ok_or(TokenTransferError::InvalidCoin {
+                coin: coin.denom.to_string(),
+            })?;
+
+        let sender_balance: transfer::Amount = sender_balance.into();
+
+        if coin.amount > sender_balance {
+            return Err(TokenTransferError::InsufficientFunds {
+                send_attempt: sender_balance,
+                available_funds: coin.amount,
+            });
+        }
+
+        Ok(())
     }
 
     /// This is called in a `send_transfer()` in the case where we are the token source
@@ -164,14 +203,14 @@ where
 
     /// This is called in a `recv_packet()` in the case where we are the token
     /// source.
-    /// 
+    ///
     /// Note: ibc-rs strips the first prefix upon receival. That is, if token
     /// with denom `my_token` was previously sent on channel `channel-1` and
     /// port `transfer` (on the counterparty), it will be received in
     /// `recv_packet` as `transfer/channel-1/my_token`. However, ibc-rs strips
     /// `transfer/channel-1/` off the denom before passing it here, such that
     /// `coin.denom` would be `my_token`.
-    /// 
+    ///
     /// This is especially important for us, as we use the denom to lookup the
     /// token address. Hence, we need to be careful not to use `my_token` in
     /// some instances and `transfer/channel-1/my_token` in others. Fortunately,
@@ -235,7 +274,11 @@ where
         _account: &Self::AccountId,
         _coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        todo!()
+        // 1. if token address doesn't exist in `minted_tokens`, then create a new token and store in `minted_tokens`
+
+        // 2. mint tokens
+
+        Ok(())
     }
 
     fn burn_coins_execute(
@@ -243,7 +286,9 @@ where
         _account: &Self::AccountId,
         _coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        todo!()
+        
+
+        Ok(())
     }
 
     /// This is called in a `send_transfer()` in the case where we are the token source
@@ -285,7 +330,7 @@ where
     }
 
     /// This is called in a `recv_packet()` in the case where we are the token source.
-    /// 
+    ///
     /// For more details, see note in `unescrow_coins_validate()`.
     fn unescrow_coins_execute(
         &self,
