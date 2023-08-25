@@ -1,9 +1,11 @@
 use jsonrpsee::core::RpcResult;
-pub use sov_modules_api::default_context::DefaultContext;
-// use sov_modules_api::macros::{expose_rpc, rpc_gen};
-use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
-use sov_state::{StateValue, WorkingSet};
+use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
+use sov_modules_api::macros::{expose_rpc, rpc_gen, DefaultRuntime};
+use sov_modules_api::{
+    Address, CallResponse, Context, DispatchCall, EncodeCall, Error, Genesis, MessageCodec, Module,
+    ModuleInfo,
+};
+use sov_state::{StateValue, WorkingSet, ZkStorage};
 
 pub trait Data:
     Clone
@@ -17,6 +19,8 @@ pub trait Data:
     + 'static
 {
 }
+
+impl Data for u32 {}
 
 #[derive(ModuleInfo)]
 pub struct QueryModule<C: Context, D: Data> {
@@ -69,8 +73,28 @@ impl<C: Context, D: Data> QueryModule<C, D> {
     }
 }
 
+#[expose_rpc(DefaultContext)]
+#[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
+#[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 struct Runtime<C: Context, D: Data> {
     pub first: QueryModule<C, D>,
 }
 
-fn main() {}
+fn main() {
+    type C = ZkDefaultContext;
+    type RT = Runtime<C, u32>;
+    let storage = ZkStorage::new([1u8; 32]);
+    let mut working_set = &mut sov_state::WorkingSet::new(storage);
+    let runtime = &mut Runtime::<C, u32>::default();
+    let config = GenesisConfig::new(22);
+    runtime.genesis(&config, working_set).unwrap();
+
+    let message: u32 = 33;
+    let serialized_message = <RT as EncodeCall<QueryModule<C, u32>>>::encode_call(message);
+    let module = RT::decode_call(&serialized_message).unwrap();
+    let context = C::new(Address::try_from([11; 32].as_ref()).unwrap());
+
+    let _ = runtime
+        .dispatch_call(module, working_set, &context)
+        .unwrap();
+}
