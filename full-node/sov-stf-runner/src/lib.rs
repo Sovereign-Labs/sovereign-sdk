@@ -16,6 +16,7 @@ use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::Zkvm;
+use tokio::sync::oneshot;
 use tracing::{debug, info};
 
 type StateRoot<ST, Vm, DA> = <ST as StateTransitionFunction<
@@ -99,7 +100,11 @@ where
     }
 
     /// Starts a RPC server with provided rpc methods.
-    pub async fn start_rpc_server(&self, methods: RpcModule<()>) {
+    pub async fn start_rpc_server(
+        &self,
+        methods: RpcModule<()>,
+        channel: Option<oneshot::Sender<SocketAddr>>,
+    ) {
         let listen_address = self.listen_address;
         let _handle = tokio::spawn(async move {
             let server = jsonrpsee::server::ServerBuilder::default()
@@ -107,7 +112,12 @@ where
                 .await
                 .unwrap();
 
-            info!("Starting RPC server at {} ", server.local_addr().unwrap());
+            let bound_address = server.local_addr().unwrap();
+            if let Some(channel) = channel {
+                channel.send(bound_address).unwrap();
+            }
+            info!("Starting RPC server at {} ", &bound_address);
+
             let _server_handle = server.start(methods).unwrap();
             futures::future::pending::<()>().await;
         });

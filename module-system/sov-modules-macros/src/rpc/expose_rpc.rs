@@ -90,7 +90,7 @@ impl ExposeRpcMacro {
         }
 
         let get_rpc_methods: proc_macro2::TokenStream = quote! {
-            pub fn get_rpc_methods #impl_generics (storage: <#context_type as ::sov_modules_api::Spec>::Storage) -> jsonrpsee::RpcModule<()> #where_clause{
+            pub fn get_rpc_methods #impl_generics (storage: <#context_type as ::sov_modules_api::Spec>::Storage) -> jsonrpsee::RpcModule<()> #where_clause {
                 let mut module = jsonrpsee::RpcModule::new(());
                 let r = RpcStorage::<#context_type> {
                     storage: storage.clone(),

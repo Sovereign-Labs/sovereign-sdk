@@ -1,9 +1,14 @@
 //! The rpc module defines types and traits for querying chain history
 //! via an RPC interface.
+#[cfg(feature = "native")]
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+#[cfg(feature = "native")]
+use tokio::sync::broadcast::Receiver;
 
-use crate::stf::{Event, EventKey};
+#[cfg(feature = "native")]
+use crate::stf::Event;
+use crate::stf::EventKey;
 
 /// A struct containing enough information to uniquely specify single batch.
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -187,6 +192,7 @@ pub enum ItemOrHash<T> {
 }
 
 /// A LedgerRpcProvider provides a way to query the ledger for information about slots, batches, transactions, and events.
+#[cfg(feature = "native")]
 pub trait LedgerRpcProvider {
     /// Get the latest slot in the ledger.
     fn get_head<B: DeserializeOwned + Clone, T: DeserializeOwned>(
@@ -294,6 +300,9 @@ pub trait LedgerRpcProvider {
         end: u64,
         query_mode: QueryMode,
     ) -> Result<Vec<Option<TxResponse<T>>>, anyhow::Error>;
+
+    /// Get a notification each time a slot is processed
+    fn subscribe_slots(&self) -> Result<Receiver<u64>, anyhow::Error>;
 }
 
 mod rpc_hex {

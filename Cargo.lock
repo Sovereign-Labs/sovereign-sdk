@@ -6718,6 +6718,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-schema-db",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -6888,6 +6889,7 @@ dependencies = [
  "sha2 0.10.7",
  "sov-modules-macros",
  "sov-rollup-interface",
+ "sov-sequencer",
  "sov-state",
  "thiserror",
  "zk-cycle-macros",
@@ -6908,6 +6910,7 @@ dependencies = [
  "serde_json",
  "sov-bank",
  "sov-modules-api",
+ "sov-modules-macros",
  "sov-state",
  "syn 1.0.109",
  "tempfile",
@@ -6995,7 +6998,6 @@ dependencies = [
  "hex",
  "jsonrpsee 0.18.2",
  "serde",
- "sov-modules-api",
  "sov-rollup-interface",
  "tokio",
  "tracing",
