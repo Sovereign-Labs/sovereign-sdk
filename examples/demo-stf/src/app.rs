@@ -21,8 +21,10 @@ use crate::runtime::Runtime;
 
 #[cfg(feature = "native")]
 pub struct App<Vm: Zkvm, DA: DaSpec> {
-    pub stf: AppTemplate<DefaultContext, DA, Vm, Runtime<DefaultContext, DA>>,
-    pub batch_builder: Option<FiFoStrictBatchBuilder<Runtime<DefaultContext, DA>, DefaultContext>>,
+    pub stf: AppTemplate<DefaultContext, DA, Vm, Runtime<DefaultContext, DA::ValidityCondition>>,
+    pub batch_builder: Option<
+        FiFoStrictBatchBuilder<Runtime<DefaultContext, DA::ValidityCondition>, DefaultContext>,
+    >,
 }
 
 #[cfg(feature = "native")]
@@ -51,7 +53,7 @@ impl<Vm: Zkvm, DA: DaSpec> App<Vm, DA> {
 
 pub fn create_zk_app_template<Vm: Zkvm, DA: DaSpec>(
     runtime_config: [u8; 32],
-) -> AppTemplate<ZkDefaultContext, DA, Vm, Runtime<ZkDefaultContext, DA>> {
+) -> AppTemplate<ZkDefaultContext, DA, Vm, Runtime<ZkDefaultContext, DA::ValidityCondition>> {
     let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
     AppTemplate::new(storage, Runtime::default())
 }

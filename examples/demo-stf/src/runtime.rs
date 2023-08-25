@@ -19,7 +19,8 @@ use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec, Spec};
-use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
+use sov_rollup_interface::da::BlobReaderTrait;
+use sov_rollup_interface::zk::ValidityCondition;
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 use sov_state::WorkingSet;
@@ -70,6 +71,7 @@ pub mod query {
 ///
 /// Similar mechanism works for queries with the difference that queries are submitted by users directly to the rollup node
 /// instead of going through the DA layer.
+///
 
 #[cfg(not(feature = "experimental"))]
 #[cfg_attr(feature = "native", derive(CliWallet), expose_rpc(DefaultContext))]
@@ -79,13 +81,13 @@ pub mod query {
     feature = "native",
     serialization(serde::Serialize, serde::Deserialize)
 )]
-pub struct Runtime<C: Context, DA: DaSpec> {
+pub struct Runtime<C: Context, Cond: ValidityCondition> {
     pub bank: sov_bank::Bank<C>,
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub blob_storage: sov_blob_storage::BlobStorage<C>,
     #[cfg_attr(feature = "native", cli_skip)]
-    pub chain_state: sov_chain_state::ChainState<C, DA::ValidityCondition>,
+    pub chain_state: sov_chain_state::ChainState<C, Cond>,
     pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
@@ -99,13 +101,13 @@ pub struct Runtime<C: Context, DA: DaSpec> {
     feature = "native",
     serialization(serde::Serialize, serde::Deserialize)
 )]
-pub struct Runtime<C: Context, DA: DaSpec> {
+pub struct Runtime<C: Context, Cond: ValidityCondition> {
     pub bank: sov_bank::Bank<C>,
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub blob_storage: sov_blob_storage::BlobStorage<C>,
     #[cfg_attr(feature = "native", cli_skip)]
-    pub chain_state: sov_chain_state::ChainState<C, DA::ValidityCondition>,
+    pub chain_state: sov_chain_state::ChainState<C, Cond>,
     pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
@@ -113,7 +115,7 @@ pub struct Runtime<C: Context, DA: DaSpec> {
     pub evm: sov_evm::Evm<C>,
 }
 
-impl<C: Context, DA: DaSpec> SlotHooks<DA::ValidityCondition> for Runtime<C, DA> {
+impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for Runtime<C, Cond> {
     type Context = C;
 
     fn begin_slot_hook(
@@ -130,15 +132,15 @@ impl<C: Context, DA: DaSpec> SlotHooks<DA::ValidityCondition> for Runtime<C, DA>
     }
 }
 
-impl<C, DA> sov_modules_stf_template::Runtime<C, DA::ValidityCondition, DA::BlobTransaction>
-    for Runtime<C, DA>
+impl<C, Cond: ValidityCondition, B> sov_modules_stf_template::Runtime<C, Cond, B>
+    for Runtime<C, Cond>
 where
     C: Context,
-    DA: DaSpec,
+    B: BlobReaderTrait,
 {
 }
 
-impl<C: Context, DA: DaSpec> BlobSelector for Runtime<C, DA> {
+impl<C: Context, Cond: ValidityCondition> BlobSelector for Runtime<C, Cond> {
     type Context = C;
 
     fn get_blobs_for_this_slot<'a, I, B>(
