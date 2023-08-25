@@ -41,7 +41,7 @@ sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
 
 [dev-dependencies]
-sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["native"] }
+sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
 sha2 = { workspace = true }
 reqwest = "0.11"
