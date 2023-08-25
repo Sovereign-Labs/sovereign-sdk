@@ -45,7 +45,7 @@ pub struct Transfer<C: sov_modules_api::Context> {
     /// with a denom is
     /// 1. when tokens are escrowed, save the mapping `denom -> token address`
     /// 2. when tokens are unescrowed, lookup the token address by `denom`
-    /// 
+    ///
     /// Note: Even though we could store the `denom: String` as a key, we prefer
     /// to hash it to the key a constant size.
     #[state]

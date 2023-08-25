@@ -17,7 +17,6 @@ use ibc::core::ics24_host::identifier::{ChannelId, ConnectionId, PortId};
 use ibc::core::router::ModuleExtras;
 use ibc::Signer;
 use sov_bank::Coins;
-use sov_modules_api::Module;
 use sov_rollup_interface::digest::Digest;
 use sov_state::WorkingSet;
 use uint::FromDecStrErr;
@@ -44,9 +43,23 @@ where
         }
     }
 
-    fn get_escrow_account(&self, _port_id: &PortId, _channel_id: &ChannelId) -> C::Address {
-        // Q: What is the escrow account?
-        todo!()
+    // The escrow address follows the format as outlined in ADR 028:
+    // https://github.com/cosmos/cosmos-sdk/blob/master/docs/architecture/adr-028-public-key-addresses.md
+    // We use a
+    fn get_escrow_account(&self, port_id: &PortId, channel_id: &ChannelId) -> C::Address {
+        // TODO: Probably cache so we don't need to hash every time
+        // TODO: Hash the same way as cosmos_adr028_escrow_address, but with C::Hash
+        let escrow_account_bytes: [u8; 32] = {
+            let mut hasher = <C::Hasher as Digest>::new();
+            hasher.update(VERSION);
+            hasher.update([0]);
+            hasher.update(format!("{port_id}/{channel_id}"));
+
+            let hash = hasher.finalize();
+            *hash.as_ref()
+        };
+
+        escrow_account_bytes.into()
     }
 
     /// Transfers `amount` tokens from `from_account` to `to_account`
@@ -284,10 +297,10 @@ where
 
     fn burn_coins_execute(
         &mut self,
-        account: &Self::AccountId,
+        _account: &Self::AccountId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        let token_address = {
+        let _token_address = {
             let mut hasher = <C::Hasher as Digest>::new();
             hasher.update(coin.denom.to_string());
             let denom_hash = hasher.finalize().to_vec();
