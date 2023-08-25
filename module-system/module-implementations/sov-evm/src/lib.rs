@@ -7,7 +7,7 @@ pub mod genesis;
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
 pub mod query;
-#[cfg(feature = "experimental")]
+#[cfg(feature = "smart_contracts")]
 pub mod smart_contracts;
 #[cfg(feature = "experimental")]
 #[cfg(test)]

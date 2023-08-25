@@ -6836,6 +6836,7 @@ dependencies = [
  "secp256k1",
  "serde",
  "serde_json",
+ "sov-evm",
  "sov-modules-api",
  "sov-state",
  "tempfile",
