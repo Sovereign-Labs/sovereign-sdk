@@ -17,6 +17,7 @@ use ibc::core::ics24_host::identifier::{ChannelId, ConnectionId, PortId};
 use ibc::core::router::ModuleExtras;
 use ibc::Signer;
 use sov_bank::Coins;
+use sov_modules_api::Module;
 use sov_rollup_interface::digest::Digest;
 use sov_state::WorkingSet;
 use uint::FromDecStrErr;
@@ -283,12 +284,25 @@ where
 
     fn burn_coins_execute(
         &mut self,
-        _account: &Self::AccountId,
-        _coin: &PrefixedCoin,
+        account: &Self::AccountId,
+        coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        
+        let token_address = {
+            let mut hasher = <C::Hasher as Digest>::new();
+            hasher.update(coin.denom.to_string());
+            let denom_hash = hasher.finalize().to_vec();
 
-        Ok(())
+            self.transfer_mod
+                .minted_tokens
+                .get(&denom_hash, &mut self.working_set.borrow_mut())
+                .ok_or(TokenTransferError::InvalidCoin {
+                    coin: coin.to_string(),
+                })?
+        };
+
+        // TODO: burn when `burn_from()` method is added to bank
+
+        todo!()
     }
 
     /// This is called in a `send_transfer()` in the case where we are the token source
