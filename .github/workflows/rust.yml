@@ -39,6 +39,11 @@ name: Rust
 #   so you're not wasting money unless several cores are sitting idle for long.
 
 on:
+  # Relevant docs:
+  # - https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue#how-merge-queues-work
+  # - https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#merge_group
+  merge_group:
+    types: ["checks_requested"]
   push:
     branches: ["nightly", "stable"]
   pull_request:
@@ -58,7 +63,7 @@ jobs:
   check:
     name: check
     runs-on:
-      group: 8-cores_32GB_Ubuntu Group
+      group: 4-cores_16GB_Ubuntu Group
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v3
@@ -86,7 +91,7 @@ jobs:
     # effectively.
     needs: check
     runs-on:
-      group: 8-cores_32GB_Ubuntu Group
+      group: 4-cores_16GB_Ubuntu Group
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v3
@@ -107,7 +112,7 @@ jobs:
         run: make check-features
   test:
     runs-on:
-      group: 8-cores_32GB_Ubuntu Group
+      group: 4-cores_16GB_Ubuntu Group
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v3
@@ -197,7 +202,7 @@ jobs:
   check-demo-prover:
     name: check demo prover
     runs-on:
-      group: 8-cores_32GB_Ubuntu Group
+      group: 4-cores_16GB_Ubuntu Group
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v3
