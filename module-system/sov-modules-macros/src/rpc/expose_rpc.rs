@@ -80,6 +80,7 @@ impl ExposeRpcMacro {
 
             let rpc_trait_impl = quote! {
                 impl #field_generics #rpc_trait_ident #field_path_args for RpcStorage<#context_type> {
+                    /// Get a working set on top of the current storage
                     fn get_working_set(&self) -> ::sov_state::WorkingSet<<#context_type as ::sov_modules_api::Spec>::Storage>
                     {
                         ::sov_state::WorkingSet::new(self.storage.clone())
@@ -90,8 +91,9 @@ impl ExposeRpcMacro {
         }
 
         let get_rpc_methods: proc_macro2::TokenStream = quote! {
-            pub fn get_rpc_methods #impl_generics (storage: <#context_type as ::sov_modules_api::Spec>::Storage) -> jsonrpsee::RpcModule<()> #where_clause {
-                let mut module = jsonrpsee::RpcModule::new(());
+            /// Returns a [`jsonrpsee::RpcModule`] with all the rpc methods exposed by the module
+            pub fn get_rpc_methods #impl_generics (storage: <#context_type as ::sov_modules_api::Spec>::Storage) -> ::jsonrpsee::RpcModule<()> #where_clause{
+                let mut module = ::jsonrpsee::RpcModule::new(());
                 let r = RpcStorage::<#context_type> {
                     storage: storage.clone(),
                 };

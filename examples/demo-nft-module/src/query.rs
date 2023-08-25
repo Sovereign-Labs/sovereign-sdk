@@ -1,4 +1,3 @@
-#![allow(missing_docs)]
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::Context;
@@ -16,6 +15,7 @@ pub struct OwnerResponse<C: Context> {
 #[rpc_gen(client, server, namespace = "nft")]
 impl<C: Context> NonFungibleToken<C> {
     #[rpc_method(name = "getOwner")]
+    /// Get the owner of a token
     pub fn get_owner(
         &self,
         token_id: u64,
