@@ -11,7 +11,6 @@ pub mod genesis;
 mod tests;
 
 #[cfg(feature = "native")]
-#[allow(missing_docs)]
 pub mod query;
 
 use std::marker::PhantomData;
