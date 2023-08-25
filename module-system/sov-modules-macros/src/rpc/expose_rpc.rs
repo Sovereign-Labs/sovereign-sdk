@@ -33,6 +33,7 @@ impl ExposeRpcMacro {
             })
             .ok_or(syn::Error::new_spanned(
                 &generics,
+                // CliWallet?
                 "a runtime must be generic over a sov_modules_api::Context to derive CliWallet",
             ))?;
 
@@ -78,6 +79,7 @@ impl ExposeRpcMacro {
 
             merge_operations.extend(merge_operation);
 
+            // TODO: double check where
             let rpc_trait_impl = quote! {
                 impl #field_generics #rpc_trait_ident #field_path_args for RpcStorage<#context_type> {
                     /// Get a working set on top of the current storage
@@ -92,7 +94,7 @@ impl ExposeRpcMacro {
 
         let get_rpc_methods: proc_macro2::TokenStream = quote! {
             /// Returns a [`jsonrpsee::RpcModule`] with all the rpc methods exposed by the module
-            pub fn get_rpc_methods #impl_generics (storage: <#context_type as ::sov_modules_api::Spec>::Storage) -> ::jsonrpsee::RpcModule<()> #where_clause{
+            pub fn get_rpc_methods #impl_generics (storage: <#context_type as ::sov_modules_api::Spec>::Storage) -> ::jsonrpsee::RpcModule<()> #where_clause {
                 let mut module = ::jsonrpsee::RpcModule::new(());
                 let r = RpcStorage::<#context_type> {
                     storage: storage.clone(),

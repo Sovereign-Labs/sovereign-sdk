@@ -62,7 +62,11 @@ pub struct QueryResponse {
 }
 
 #[rpc_gen(client, server, namespace = "queryModule")]
-impl<C: Context, D: Data> QueryModule<C, D> {
+impl<C, D> QueryModule<C, D>
+where
+    C: Context,
+    D: Data,
+{
     #[rpc_method(name = "queryValue")]
     pub fn query_value(
         &self,
@@ -84,7 +88,7 @@ fn main() {
     type C = ZkDefaultContext;
     type RT = Runtime<C, u32>;
     let storage = ZkStorage::new([1u8; 32]);
-    let mut working_set = &mut sov_state::WorkingSet::new(storage);
+    let working_set = &mut sov_state::WorkingSet::new(storage);
     let runtime = &mut Runtime::<C, u32>::default();
     let config = GenesisConfig::new(22);
     runtime.genesis(&config, working_set).unwrap();
