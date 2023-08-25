@@ -36,15 +36,13 @@ sov-sequencer = { path = "../../full-node/sov-sequencer" }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
 risc0-adapter = { path = "../../adapters/risc0", features = ["native"] }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
-
-sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
-sov-election = { path = "../../module-system/module-implementations/examples/sov-election", features = ["native"] }
-sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
 
 [dev-dependencies]
+sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
+sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
 sha2 = { workspace = true }
 reqwest = "0.11"
 tendermint = "0.32"
