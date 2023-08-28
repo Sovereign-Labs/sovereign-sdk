@@ -155,7 +155,7 @@ fn mint_token() {
     assert!(chain.next().is_none());
     assert_eq!(
         format!(
-            "Failed mint coins(token_address={} amount={}) to {} by minter {}",
+            "Failed mint coins(token_address={} amount={}) to {} by authorizer {}",
             token_address, mint_amount, new_holder, minter_address,
         ),
         message_1
@@ -223,7 +223,7 @@ fn mint_token() {
     assert!(chain.next().is_none());
     assert_eq!(
         format!(
-            "Failed mint coins(token_address={} amount={}) to {} by minter {}",
+            "Failed mint coins(token_address={} amount={}) to {} by authorizer {}",
             token_address,
             u64::MAX,
             new_holder,
@@ -262,7 +262,7 @@ fn mint_token() {
     assert!(chain.next().is_none());
     assert_eq!(
         format!(
-            "Failed mint coins(token_address={} amount={}) to {} by minter {}",
+            "Failed mint coins(token_address={} amount={}) to {} by authorizer {}",
             token_address,
             u64::MAX - 1,
             new_holder,
