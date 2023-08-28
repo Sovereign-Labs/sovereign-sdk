@@ -296,3 +296,48 @@ impl MessageGenerator for BadSignatureBankCallMessages {
         }
     }
 }
+
+pub struct BadNonceBankCallMessages;
+
+impl BadNonceBankCallMessages {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl MessageGenerator for BadNonceBankCallMessages {
+    type Module = Bank<DefaultContext>;
+    type Context = DefaultContext;
+
+    fn create_messages(&self) -> Vec<Message<Self::Context, Self::Module>> {
+        let mut messages = Vec::<Message<DefaultContext, Bank<DefaultContext>>>::new();
+        let minter_key = DefaultPrivateKey::from_hex(DEFAULT_PVT_KEY).unwrap();
+        let minter_address = minter_key.default_address();
+        let salt = DEFAULT_SALT;
+        let token_name = DEFAULT_TOKEN_NAME.to_owned();
+        messages.push(Message::new(
+            Rc::new(DefaultPrivateKey::from_hex(DEFAULT_PVT_KEY).unwrap()),
+            CallMessage::CreateToken {
+                salt,
+                token_name: token_name.clone(),
+                initial_balance: 1000,
+                minter_address,
+                authorized_minters: Vec::from([minter_address]),
+            },
+            0,
+        ));
+        messages
+    }
+
+    fn create_tx<Encoder: EncodeCall<Self::Module>>(
+        &self,
+        sender: &DefaultPrivateKey,
+        message: <Bank<DefaultContext> as Module>::CallMessage,
+        _nonce: u64,
+        _is_last: bool,
+    ) -> Transaction<DefaultContext> {
+        let message = Encoder::encode_call(message);
+        // hard-coding the nonce to 1000
+        Transaction::<DefaultContext>::new_signed_tx(sender, message, 1000)
+    }
+}

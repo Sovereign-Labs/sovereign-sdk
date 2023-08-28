@@ -1,7 +1,8 @@
 use std::rc::Rc;
 
 use sov_data_generators::bank_data::{
-    BadSerializationBankCallMessages, BadSignatureBankCallMessages, BankMessageGenerator,
+    BadSerializationBankCallMessages, BadSignatureBankCallMessages,
+    BankMessageGenerator, BadNonceBankCallMessages
 };
 use sov_data_generators::value_setter_data::{ValueSetterMessage, ValueSetterMessages};
 use sov_data_generators::MessageGenerator;
@@ -40,15 +41,11 @@ pub fn simulate_da_with_bad_sig() -> Vec<RawTx> {
     let b = BadSignatureBankCallMessages::new();
     b.create_raw_txs::<Runtime<C>>()
 }
-//
-// // TODO: Remove once we fix test with bad nonce
-// //   https://github.com/Sovereign-Labs/sovereign-sdk/issues/235
-// #[allow(unused)]
-// pub fn simulate_da_with_bad_nonce(election_admin: DefaultPrivateKey) -> Vec<RawTx> {
-//     let election = BadNonceElectionCallMessages::new(election_admin);
-//     election.create_raw_txs::<Runtime<C>>()
-// }
-//
+
+pub fn simulate_da_with_bad_nonce() -> Vec<RawTx> {
+    let b = BadNonceBankCallMessages::new();
+    b.create_raw_txs::<Runtime<C>>()
+}
 
 pub fn simulate_da_with_bad_serialization() -> Vec<RawTx> {
     let b = BadSerializationBankCallMessages::new();

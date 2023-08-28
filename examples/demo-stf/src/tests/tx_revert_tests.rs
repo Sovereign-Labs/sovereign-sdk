@@ -14,7 +14,8 @@ use super::create_new_demo;
 use crate::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
 use crate::runtime::Runtime;
 use crate::tests::da_simulation::{
-    simulate_da_with_bad_serialization, simulate_da_with_bad_sig, simulate_da_with_revert_msg,
+    simulate_da_with_bad_serialization, simulate_da_with_bad_sig,
+    simulate_da_with_revert_msg, simulate_da_with_bad_nonce
 };
 
 const SEQUENCER_BALANCE_DELTA: u64 = 1;
@@ -187,6 +188,48 @@ fn test_tx_bad_sig() {
 
         // The batch receipt contains no events.
         assert!(!has_tx_events(&apply_blob_outcome));
+    }
+}
+
+#[test]
+fn test_tx_bad_nonce() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
+    let admin_private_key = DefaultPrivateKey::generate();
+
+    let config = create_demo_config(SEQUENCER_BALANCE, &admin_private_key);
+
+    {
+        let mut demo = create_new_demo(path);
+        // TODO: Maybe complete with actual block data
+        let _data = MockBlock::default();
+        demo.init_chain(config);
+
+        let txs = simulate_da_with_bad_nonce();
+
+        let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
+        let mut blobs = [blob];
+
+        let data = MockBlock::default();
+        let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
+
+
+        assert_eq!(1, apply_block_result.batch_receipts.len());
+        let tx_receipts = apply_block_result.batch_receipts[0].tx_receipts.clone();
+
+        // Bad nonce means that the transaction has to be reverted
+        assert_eq!(tx_receipts[0].receipt, TxEffect::Reverted);
+
+        // We don't expect the sequencer to be slashed for a bad nonce
+        // The reason for this is that in cases such as based sequencing, the sequencer can
+        // still post under the assumption that the nonce is valid (It doesn't know other sequencers
+        // are also doing this) so it needs to be rewarded.
+        // We're asserting that here to track if the logic changes
+        assert_eq!(
+            apply_block_result.batch_receipts[0].inner,
+            SequencerOutcome::Rewarded(0)
+        );
+
     }
 }
 
