@@ -69,8 +69,9 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: Install Rust
         run: rustup show
-      - uses: astriaorg/buildjet-rust-cache@v2.5.1
+      - uses: Swatinem/rust-cache@v2
         with:
+          cache-provider: "buildjet"
           shared-key: cargo-check
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
@@ -98,8 +99,9 @@ jobs:
         run: rustup show
       - name: cargo install cargo-hack
         uses: taiki-e/install-action@cargo-hack
-      - uses: astriaorg/buildjet-rust-cache@v2.5.1
+      - uses: Swatinem/rust-cache@v2
         with:
+          cache-provider: "buildjet"
           shared-key: cargo-check
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
@@ -118,8 +120,9 @@ jobs:
         run: rustup show
       # `cargo-nextest` is much faster than standard `cargo test`.
       - uses: taiki-e/install-action@nextest
-      - uses: astriaorg/buildjet-rust-cache@v2.5.1
+      - uses: Swatinem/rust-cache@v2
         with:
+          cache-provider: "buildjet"
           shared-key: cargo-build
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
@@ -140,8 +143,9 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: Install Rust
         run: rustup show
-      - uses: astriaorg/buildjet-rust-cache@v2.5.1
+      - uses: Swatinem/rust-cache@v2
         with:
+          cache-provider: "buildjet"
           shared-key: cargo-build
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
@@ -204,8 +208,9 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: Install Rust
         run: rustup show
-      - uses: astriaorg/buildjet-rust-cache@v2.5.1
+      - uses: Swatinem/rust-cache@v2
         with:
+          cache-provider: "buildjet"
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
             .
@@ -234,8 +239,9 @@ jobs:
         run: rustup component add llvm-tools-preview
       - name: cargo install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
-      - uses: astriaorg/buildjet-rust-cache@v2.5.1
+      - uses: Swatinem/rust-cache@v2
         with:
+          cache-provider: "buildjet"
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
             .
@@ -270,8 +276,9 @@ jobs:
       - uses: rui314/setup-mold@v1
       - name: Install Rust
         run: rustup show
-      - uses: astriaorg/buildjet-rust-cache@v2.5.1
+      - uses: Swatinem/rust-cache@v2
         with:
+          cache-provider: "buildjet"
           shared-key: cargo-check
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
