@@ -178,6 +178,7 @@ impl<C: sov_modules_api::Context> Token<C> {
         if self.authorized_minters.is_empty() {
             bail!("Attempt to mint frozen token {}", self.name)
         }
+
         self.is_authorized_minter(sender)?;
         let to_balance: Amount = self
             .balances

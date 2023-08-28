@@ -36,7 +36,6 @@ members = [
     "module-system/module-implementations/module-template",
     "module-system/module-implementations/examples/sov-value-setter",
     "module-system/module-implementations/examples/sov-vec-setter",
-    "module-system/module-implementations/examples/sov-election",
     "module-system/module-implementations/integration-tests",
 ]
 exclude = [
@@ -77,7 +76,7 @@ proptest-derive = "0.3.0"
 rand = "0.8"
 rayon = "1.5.2"
 rocksdb = { version = "0.21.0", features = ["lz4"] }
-serde = { version = "1.0.185", features = ["derive", "rc"]}
+serde = { version = "1.0.188", features = ["derive", "rc"]}
 serde_json = { version = "1.0" }
 sha2 = "0.10.6"
 digest = "0.10.6"

@@ -1544,7 +1544,6 @@ dependencies = [
  "sov-blob-storage",
  "sov-cli",
  "sov-data-generators",
- "sov-election",
  "sov-evm",
  "sov-modules-api",
  "sov-modules-stf-template",
@@ -5002,9 +5001,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.11.18"
+version = "0.11.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cde824a14b7c14f85caff81225f411faacc04a2013f41670f41443742b1c1c55"
+checksum = "3e9ad3fe7488d7e34558a2033d45a0c90b72d97b4f80705666fea71472e2e6a1"
 dependencies = [
  "base64 0.21.2",
  "bytes",
@@ -5038,7 +5037,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots 0.22.6",
+ "webpki-roots 0.25.2",
  "winreg",
 ]
 
@@ -6276,9 +6275,9 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "serde"
-version = "1.0.185"
+version = "1.0.188"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be9b6f69f1dfd54c3b568ffa45c310d6973a5e5148fd40cf515acaf38cf5bc31"
+checksum = "cf9e0fcba69a370eed61bcf2b728575f726b50b55cba78064753d708ddc7549e"
 dependencies = [
  "serde_derive",
 ]
@@ -6294,9 +6293,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.185"
+version = "1.0.188"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc59dfdcbad1437773485e0367fea4b090a2e0a16d9ffc46af47764536a298ec"
+checksum = "4eca7ac642d82aa35b60049a6eccb4be6be75e599bd2e9adb5f875a737654af2"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.33",
@@ -6717,7 +6716,6 @@ dependencies = [
  "borsh",
  "proptest",
  "sov-bank",
- "sov-election",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-rollup-interface",
@@ -6794,24 +6792,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-election"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "clap",
- "hex",
- "jsonrpsee 0.18.2",
- "schemars",
- "serde",
- "serde_json",
- "sov-modules-api",
- "sov-rollup-interface",
- "sov-state",
- "tempfile",
-]
-
-[[package]]
 name = "sov-ethereum"
 version = "0.1.0"
 dependencies = [
@@ -6880,7 +6860,6 @@ version = "0.1.0"
 dependencies = [
  "sov-accounts",
  "sov-bank",
- "sov-election",
  "sov-evm",
  "sov-modules-api",
  "sov-prover-incentives",
@@ -7087,7 +7066,6 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-db",
- "sov-election",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-rollup-interface",
@@ -8166,6 +8144,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "webpki-roots"
+version = "0.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14247bb57be4f377dfb94c72830b8ce8fc6beac03cf4bf7b9732eadd414123fc"
+
+[[package]]
 name = "which"
 version = "4.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8293,11 +8277,12 @@ dependencies = [
 
 [[package]]
 name = "winreg"
-version = "0.10.1"
+version = "0.50.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80d0f4e272c85def139476380b12f9ac60926689dd2e01d4923222f40580869d"
+checksum = "524e57b2c537c0f9b1e69f1965311ec12182b4122e45035b1508cd24d2adadb1"
 dependencies = [
- "winapi",
+ "cfg-if",
+ "windows-sys",
 ]
 
 [[package]]
