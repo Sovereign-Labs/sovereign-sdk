@@ -119,8 +119,10 @@ impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for Runtime<C> {
 
     fn end_slot_hook(
         &self,
-        root_hash: [u8; 32],
-        working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+        #[allow(unused_variables)] root_hash: [u8; 32],
+        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
+            <Self::Context as sov_modules_api::Spec>::Storage,
+        >,
     ) {
         #[cfg(feature = "experimental")]
         self.evm.end_slot_hook(root_hash, working_set);
