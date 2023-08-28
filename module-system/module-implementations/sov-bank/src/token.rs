@@ -168,9 +168,9 @@ impl<C: sov_modules_api::Context> Token<C> {
     /// Checks that the `authorized_minters` set is not empty for the token and that the `sender`
     /// is an `authorized_minter`. If so, update the balances of token for the `mint_to_address` by
     /// adding the minted tokens. Updates the `total_supply` of that token.
-    pub(crate) fn mint_from_eoa(
+    pub(crate) fn mint(
         &mut self,
-        sender: &C::Address,
+        authorizer: &C::Address,
         mint_to_address: &C::Address,
         amount: Amount,
         working_set: &mut WorkingSet<C::Storage>,
@@ -179,7 +179,7 @@ impl<C: sov_modules_api::Context> Token<C> {
             bail!("Attempt to mint frozen token {}", self.name)
         }
 
-        self.is_authorized_minter(sender)?;
+        self.is_authorized_minter(authorizer)?;
         let to_balance: Amount = self
             .balances
             .get(mint_to_address, working_set)
