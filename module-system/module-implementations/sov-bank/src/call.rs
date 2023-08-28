@@ -137,7 +137,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         Ok(CallResponse::default())
     }
 
-    /// Mints the `coins`to the address `mint_to_address` using the externally owned account ("EOA") supplied by 
+    /// Mints the `coins`to the address `mint_to_address` using the externally owned account ("EOA") supplied by
     /// `context.sender()` as the authorizer.
     /// Returns an error if the token address doesn't exist or `context.sender()` is not authorized to mint tokens.
     /// Calls the [`Token::mint`] function and update the `self.tokens` set to store the new balance.
