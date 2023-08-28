@@ -5,7 +5,7 @@ use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Address, Genesis, Spec};
 use sov_rollup_interface::mocks::{
-    MockBlock, MockBlockHeader, MockCodeCommitment, MockHash, MockValidityCond,
+    MockBlock, MockBlockHeader, MockCodeCommitment, MockDaSpec, MockHash, MockValidityCond,
     MockValidityCondChecker, MockZkvm,
 };
 use sov_rollup_interface::zk::ValidityConditionChecker;
@@ -75,7 +75,7 @@ pub(crate) fn create_bank_config_with_token(
 pub(crate) fn setup(
     working_set: &mut WorkingSet<<C as Spec>::Storage>,
 ) -> (
-    AttesterIncentives<C, MockZkvm, MockValidityCond, MockValidityCondChecker<MockValidityCond>>,
+    AttesterIncentives<C, MockZkvm, MockDaSpec, MockValidityCondChecker<MockValidityCond>>,
     Address,
     Address,
     Address,
@@ -98,7 +98,7 @@ pub(crate) fn setup(
         initial_slot_height: INIT_HEIGHT,
     };
 
-    let chain_state = sov_chain_state::ChainState::<C, MockValidityCond>::default();
+    let chain_state = sov_chain_state::ChainState::<C, MockDaSpec>::default();
     chain_state
         .genesis(&chain_state_config, working_set)
         .expect("Chain state genesis must succeed");
@@ -107,7 +107,7 @@ pub(crate) fn setup(
     let module = AttesterIncentives::<
         C,
         MockZkvm,
-        MockValidityCond,
+        MockDaSpec,
         MockValidityCondChecker<MockValidityCond>,
     >::default();
     let config = crate::AttesterIncentivesConfig {
@@ -140,7 +140,7 @@ pub(crate) struct ExecutionSimulationVars {
 /// with associated bonding proofs, as long as the last state root
 pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidityCond>>(
     rounds: u8,
-    module: &AttesterIncentives<C, MockZkvm, MockValidityCond, Checker>,
+    module: &AttesterIncentives<C, MockZkvm, MockDaSpec, Checker>,
     storage: &ProverStorage<DefaultStorageSpec>,
     attester_address: <C as Spec>::Address,
     mut working_set: WorkingSet<<C as Spec>::Storage>,
@@ -163,20 +163,16 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
                 &mut working_set,
             ),
         });
-
-        // Then process the first transaction. Only sets the genesis hash and a transition in progress.
-        let slot_data = MockBlock {
-            curr_hash: [i + 1; 32],
-            header: MockBlockHeader {
-                prev_hash: MockHash([i; 32]),
-            },
-            height: INIT_HEIGHT + u64::from(i + 1),
-            validity_cond: MockValidityCond { is_valid: true },
-            blobs: Default::default(),
+        let mock_header = MockBlockHeader {
+            prev_hash: MockHash([i; 32]),
         };
-        module
-            .chain_state
-            .begin_slot_hook(&slot_data, &mut working_set);
+        let mock_validity_condition = MockValidityCond { is_valid: true };
+
+        module.chain_state.begin_slot_hook(
+            &mock_header,
+            &mock_validity_condition,
+            &mut working_set,
+        );
     }
 
     (ret_exec_vars, working_set)

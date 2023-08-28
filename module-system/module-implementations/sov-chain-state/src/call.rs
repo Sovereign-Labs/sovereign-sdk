@@ -1,14 +1,9 @@
-use borsh::{BorshDeserialize, BorshSerialize};
-use sov_rollup_interface::zk::ValidityCondition;
+use sov_rollup_interface::da::DaSpec;
 use sov_state::WorkingSet;
 
 use crate::{ChainState, StateTransitionId, TransitionHeight};
 
-impl<
-        Ctx: sov_modules_api::Context,
-        Cond: ValidityCondition + BorshSerialize + BorshDeserialize,
-    > ChainState<Ctx, Cond>
-{
+impl<Ctx: sov_modules_api::Context, Da: DaSpec> ChainState<Ctx, Da> {
     /// Increment the current slot height
     pub fn increment_slot_height(&self, working_set: &mut WorkingSet<Ctx::Storage>) {
         let current_height = self
@@ -23,7 +18,7 @@ impl<
     pub fn store_state_transition(
         &self,
         height: TransitionHeight,
-        transition: StateTransitionId<Cond>,
+        transition: StateTransitionId<Da>,
         working_set: &mut WorkingSet<Ctx::Storage>,
     ) {
         self.historical_transitions

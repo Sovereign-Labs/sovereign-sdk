@@ -1,4 +1,4 @@
-use sov_rollup_interface::zk::ValidityCondition;
+use sov_rollup_interface::da::DaSpec;
 use sov_state::WorkingSet;
 
 use super::ChainState;
@@ -10,7 +10,7 @@ pub struct Response {
     pub value: u64,
 }
 
-impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
+impl<C: sov_modules_api::Context, Da: DaSpec> ChainState<C, Da> {
     /// Get the height of the current slot.
     /// Panics if the slot height is not set
     pub fn get_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> TransitionHeight {
@@ -28,7 +28,7 @@ impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
     pub fn get_in_progress_transition(
         &self,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<TransitionInProgress<Cond>> {
+    ) -> Option<TransitionInProgress<Da>> {
         self.in_progress_transition.get(working_set)
     }
 
@@ -37,7 +37,7 @@ impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
         &self,
         transition_num: TransitionHeight,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<StateTransitionId<Cond>> {
+    ) -> Option<StateTransitionId<Da>> {
         self.historical_transitions
             .get(&transition_num, working_set)
     }

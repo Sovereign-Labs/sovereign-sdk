@@ -22,17 +22,16 @@ use sov_bank::Amount;
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::{Context, Error};
 use sov_modules_macros::ModuleInfo;
-use sov_rollup_interface::zk::{
-    StoredCodeCommitment, ValidityCondition, ValidityConditionChecker, Zkvm,
-};
+use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::zk::{StoredCodeCommitment, ValidityConditionChecker, Zkvm};
 use sov_state::{Storage, WorkingSet};
 
 /// Configuration of the attester incentives module
 pub struct AttesterIncentivesConfig<
     C: Context,
     Vm: Zkvm,
-    Cond: ValidityCondition,
-    Checker: ValidityConditionChecker<Cond>,
+    Da: DaSpec,
+    Checker: ValidityConditionChecker<Da::ValidityCondition>,
 > {
     /// The address of the token to be used for bonding.
     pub bonding_token_address: C::Address,
@@ -55,7 +54,7 @@ pub struct AttesterIncentivesConfig<
     /// The validity condition checker used to check validity conditions
     pub validity_condition_checker: Checker,
     /// Phantom data that contains the validity condition
-    phantom_data: PhantomData<Cond>,
+    phantom_data: PhantomData<Da>,
 }
 
 /// The information about an attester's unbonding
@@ -75,8 +74,8 @@ pub struct UnbondingInfo {
 pub struct AttesterIncentives<
     C: sov_modules_api::Context,
     Vm: Zkvm,
-    Cond: ValidityCondition,
-    Checker: ValidityConditionChecker<Cond>,
+    Da: DaSpec,
+    Checker: ValidityConditionChecker<Da::ValidityCondition>,
 > {
     /// Address of the module.
     #[address]
@@ -147,24 +146,23 @@ pub struct AttesterIncentives<
 
     /// Reference to the chain state module, used to check the initial hashes of the state transition.
     #[module]
-    pub(crate) chain_state: sov_chain_state::ChainState<C, Cond>,
+    pub(crate) chain_state: sov_chain_state::ChainState<C, Da>,
 }
 
-impl<C, Vm, S, P, Cond, Checker> sov_modules_api::Module
-    for AttesterIncentives<C, Vm, Cond, Checker>
+impl<C, Vm, S, P, Da, Checker> sov_modules_api::Module for AttesterIncentives<C, Vm, Da, Checker>
 where
     C: sov_modules_api::Context<Storage = S>,
     Vm: Zkvm,
     S: Storage<Proof = P>,
     P: BorshDeserialize + BorshSerialize,
-    Cond: ValidityCondition,
-    Checker: ValidityConditionChecker<Cond>,
+    Da: DaSpec,
+    Checker: ValidityConditionChecker<Da::ValidityCondition>,
 {
     type Context = C;
 
-    type Config = AttesterIncentivesConfig<C, Vm, Cond, Checker>;
+    type Config = AttesterIncentivesConfig<C, Vm, Da, Checker>;
 
-    type CallMessage = call::CallMessage<C>;
+    type CallMessage = call::CallMessage<C, Da>;
 
     fn genesis(
         &self,

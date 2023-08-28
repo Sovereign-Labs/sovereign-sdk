@@ -86,6 +86,20 @@ impl AsRef<TmHash> for tendermint::Hash {
 
 impl BlockHash for TmHash {}
 
+impl BorshSerialize for TmHash {
+    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        BorshSerialize::serialize(self.inner(), writer)
+    }
+}
+
+impl BorshDeserialize for TmHash {
+    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+        let contents: [u8; 32] = BorshDeserialize::deserialize_reader(reader)?;
+        Ok(Self(tendermint::Hash::Sha256(contents)))
+    }
+}
+
+#[derive(Debug)]
 pub struct CelestiaSpec;
 
 impl DaSpec for CelestiaSpec {
@@ -154,7 +168,7 @@ impl da::DaVerifier for CelestiaVerifier {
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
-    fn verify_relevant_tx_list<H: Digest>(
+    fn verify_relevant_tx_list(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],

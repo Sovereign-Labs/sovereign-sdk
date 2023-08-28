@@ -2,6 +2,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 
+use crate::da::DaSpec;
 use crate::zk::StateTransition;
 
 /// A proof that the attester was bonded at the transition num `transition_num`.
@@ -20,11 +21,11 @@ pub struct ProofOfBond<StateProof: BorshSerialize> {
 #[derive(
     Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Default,
 )]
-pub struct Attestation<StateProof: BorshSerialize> {
+pub struct Attestation<Da: DaSpec, StateProof: BorshSerialize> {
     /// The alleged state root before applying the contents of the da block
     pub initial_state_root: [u8; 32],
     /// The hash of the block in which the transition occurred
-    pub da_block_hash: [u8; 32],
+    pub da_block_hash: Da::SlotHash,
     /// The alleged post-state root
     pub post_state_root: [u8; 32],
     /// A proof that the attester was bonded at some point in time before the attestation is generated

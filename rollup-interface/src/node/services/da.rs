@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::da::{BlockHeaderTrait, DaSpec};
+use crate::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use crate::zk::ValidityCondition;
 
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer
@@ -15,8 +15,11 @@ use crate::zk::ValidityCondition;
 /// data into a representation that can be efficiently verified in circuit.
 #[async_trait]
 pub trait DaService: Send + Sync + 'static {
-    /// A handle to the types used by the DA layer.
+    /// A handle to the verifier used for the DA layer
     type Spec: DaSpec;
+
+    /// A handle to the verifier used for the DA layer
+    type Verifier: DaVerifier<Spec = Self::Spec>;
 
     /// A DA layer block, possibly excluding some irrelevant information.
     type FilteredBlock: SlotData<
@@ -41,7 +44,10 @@ pub trait DaService: Send + Sync + 'static {
     fn extract_relevant_txs(
         &self,
         block: &Self::FilteredBlock,
-    ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction>;
+    ) -> (
+        Vec<<Self::Spec as DaSpec>::BlobTransaction>,
+        <Self::Spec as DaSpec>::ValidityCondition,
+    );
 
     /// Generate a proof that the relevant blob transactions have been extracted correctly from the DA layer
     /// block.
@@ -67,7 +73,7 @@ pub trait DaService: Send + Sync + 'static {
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,
     ) {
-        let relevant_txs = self.extract_relevant_txs(block);
+        let relevant_txs = self.extract_relevant_txs(block).0;
 
         let (etx_proofs, rollup_row_proofs) = self
             .get_extraction_proof(block, relevant_txs.as_slice())
@@ -84,7 +90,7 @@ pub trait DaService: Send + Sync + 'static {
 
 /// `SlotData` is the subset of a DA layer block which is stored in the rollup's database.
 /// At the very least, the rollup needs access to the hashes and headers of all DA layer blocks, but rollups
-/// may choose to partial (or full) block data as well.
+/// may choose to store partial (or full) block data as well.
 pub trait SlotData:
     Serialize + DeserializeOwned + PartialEq + core::fmt::Debug + Clone + Send + Sync
 {

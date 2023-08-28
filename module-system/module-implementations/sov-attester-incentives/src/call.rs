@@ -6,6 +6,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::{Amount, Coins};
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::{CallResponse, Context, Spec};
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::optimistic::Attestation;
 use sov_rollup_interface::zk::{
     StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
@@ -18,9 +19,10 @@ use crate::{AttesterIncentives, UnbondingInfo};
 
 /// This enumeration represents the available call messages for interacting with the `AttesterIncentives` module.
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
-pub enum CallMessage<C>
+pub enum CallMessage<C, Da>
 where
     C: Context,
+    Da: DaSpec,
 {
     /// Bonds an attester, the parameter is the bond amount
     BondAttester(Amount),
@@ -33,7 +35,7 @@ where
     /// Unbonds a challenger
     UnbondChallenger,
     /// Proccesses an attestation.
-    ProcessAttestation(Attestation<StorageProof<<<C as Spec>::Storage as Storage>::Proof>>),
+    ProcessAttestation(Attestation<Da, StorageProof<<<C as Spec>::Storage as Storage>::Proof>>),
     /// Processes a challenge. The challenge is encoded as a [`Vec<u8>`]. The second parameter is the transition number
     ProcessChallenge(Vec<u8>, TransitionHeight),
 }
@@ -122,9 +124,9 @@ pub enum Role {
 impl<
         C: sov_modules_api::Context,
         Vm: Zkvm,
-        Cond: ValidityCondition,
-        Checker: ValidityConditionChecker<Cond> + BorshDeserialize + BorshSerialize,
-    > AttesterIncentives<C, Vm, Cond, Checker>
+        Da: DaSpec,
+        Checker: ValidityConditionChecker<Da::ValidityCondition> + BorshDeserialize + BorshSerialize,
+    > AttesterIncentives<C, Vm, Da, Checker>
 {
     /// This returns the address of the reward token supply
     pub fn get_reward_token_supply_address(
@@ -388,7 +390,7 @@ impl<
     fn check_bonding_proof(
         &self,
         context: &C,
-        attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        attestation: &Attestation<Da, StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(), AttesterIncentiveErrors> {
         let bonding_root = {
@@ -439,7 +441,7 @@ impl<
         &self,
         claimed_transition_height: TransitionHeight,
         attester: &C::Address,
-        attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        attestation: &Attestation<Da, StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
         if let Some(curr_tx) = self
@@ -475,7 +477,7 @@ impl<
         &self,
         claimed_transition_height: TransitionHeight,
         attester: &C::Address,
-        attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        attestation: &Attestation<Da, StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
         // Normal state
@@ -540,7 +542,7 @@ impl<
     pub(crate) fn process_attestation(
         &self,
         context: &C,
-        attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
+        attestation: Attestation<Da, StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
         // We first need to check that the attester is still in the bonding set
@@ -636,9 +638,9 @@ impl<
 
     fn check_challenge_outputs_against_transition(
         &self,
-        public_outputs: StateTransition<Cond, C::Address>,
+        public_outputs: StateTransition<Da, C::Address>,
         height: &TransitionHeight,
-        condition_checker: &mut impl ValidityConditionChecker<Cond>,
+        condition_checker: &mut impl ValidityConditionChecker<Da::ValidityCondition>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(), SlashingReason> {
         let transition = self
@@ -726,8 +728,8 @@ impl<
                 )
             })?;
 
-        let public_outputs_opt: Result<StateTransition<Cond, C::Address>> =
-            Vm::verify_and_extract_output::<Cond, C::Address>(proof, &code_commitment)
+        let public_outputs_opt: Result<StateTransition<Da, C::Address>> =
+            Vm::verify_and_extract_output::<Da, C::Address>(proof, &code_commitment)
                 .map_err(|e| anyhow::format_err!("{:?}", e));
 
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.

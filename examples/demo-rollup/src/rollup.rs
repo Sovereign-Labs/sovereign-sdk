@@ -8,10 +8,13 @@ use celestia::CelestiaService;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::app::{App, DefaultContext};
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
-use risc0_adapter::host::Risc0Verifier;
+use risc0_adapter::host::Risc0Vm;
 use sov_db::ledger_db::LedgerDB;
+use sov_modules_stf_template::AppTemplate;
+use sov_rollup_interface::da::DaVerifier;
+use sov_rollup_interface::mocks::MockZkvm;
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::zk::Zkvm;
+use sov_rollup_interface::zk::{ZkSystem, Zkvm};
 use sov_state::storage::Storage;
 use sov_stf_runner::{from_toml_path, RollupConfig, RunnerConfig, StateTransitionRunner};
 use tokio::sync::oneshot;
@@ -23,7 +26,7 @@ use crate::register_rpc::{register_ledger, register_sequencer};
 use crate::{get_genesis_config, initialize_ledger, ROLLUP_NAMESPACE};
 
 /// Dependencies needed to run the rollup.
-pub struct Rollup<Vm: Zkvm, DA: DaService + Clone> {
+pub struct Rollup<Vm: ZkSystem, DA: DaService + Clone> {
     /// Implementation of the STF.
     pub app: App<Vm, DA::Spec>,
     /// Data availability service.
@@ -36,10 +39,17 @@ pub struct Rollup<Vm: Zkvm, DA: DaService + Clone> {
     pub genesis_config: GenesisConfig<DefaultContext>,
 }
 
+pub struct RollupGuest<Vm: Zkvm, DA: DaVerifier> {
+    /// Implementation of the stf
+    pub app: App<Vm, DA::Spec>,
+    /// Initial rollup configuration.
+    pub genesis_config: GenesisConfig<DefaultContext>,
+}
+
 /// Creates celestia based rollup.
 pub async fn new_rollup_with_celestia_da(
     rollup_config_path: &str,
-) -> Result<Rollup<Risc0Verifier, CelestiaService>, anyhow::Error> {
+) -> Result<Rollup<Risc0Vm, CelestiaService>, anyhow::Error> {
     debug!("Starting demo rollup with config {}", rollup_config_path);
     let rollup_config: RollupConfig<celestia::DaServiceConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
@@ -67,16 +77,33 @@ pub async fn new_rollup_with_celestia_da(
     })
 }
 
-impl<Vm: Zkvm, DA: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, DA> {
+impl<Vm: ZkSystem, DA: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, DA> {
     /// Runs the rollup.
     pub async fn run(self) -> Result<(), anyhow::Error> {
         self.run_and_report_rpc_port(None).await
     }
-
     /// Runs the rollup. Reports rpc port to the caller using the provided channel.
     pub async fn run_and_report_rpc_port(
+        self,
+        channel: Option<oneshot::Sender<SocketAddr>>,
+    ) -> Result<(), anyhow::Error> {
+        self.run_maybe_prover(channel, None).await
+    }
+
+    /// Runs the rollup. Reports rpc port to the caller using the provided channel.
+    pub async fn run_prover_and_report_rpc_port(
+        self,
+        channel: Option<oneshot::Sender<SocketAddr>>,
+        prover: &<Vm as ZkSystem>::Host,
+    ) -> Result<(), anyhow::Error> {
+        self.run_maybe_prover(channel, Some(prover)).await
+    }
+
+    /// Runs the rollup. Reports rpc port to the caller using the provided channel.
+    async fn run_maybe_prover(
         mut self,
         channel: Option<oneshot::Sender<SocketAddr>>,
+        prover: Option<&<Vm as ZkSystem>::Host>,
     ) -> Result<(), anyhow::Error> {
         let storage = self.app.get_storage();
         let mut methods = get_rpc_methods::<DefaultContext>(storage);
@@ -98,10 +125,11 @@ impl<Vm: Zkvm, DA: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, DA> {
             self.app.stf,
             storage.is_empty(),
             self.genesis_config,
+            None,
         )?;
 
         runner.start_rpc_server(methods, channel).await;
-        runner.run().await?;
+        runner.run(prover).await?;
 
         Ok(())
     }

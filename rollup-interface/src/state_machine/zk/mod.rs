@@ -23,6 +23,14 @@ pub trait ZkvmHost: Zkvm {
 
 /// A Zk proof system capable of proving and verifying arbitrary Rust code
 /// Must support recursive proofs.
+pub trait ZkSystem: Zkvm {
+    /// The guest of a zkVM program
+    type Guest: ZkvmGuest;
+    /// The host of a zkVM program
+    type Host: ZkvmHost;
+}
+
+/// A verifier for a zkVM program
 pub trait Zkvm {
     /// A commitment to the zkVM program which is being proven
     type CodeCommitment: Matches<Self::CodeCommitment>

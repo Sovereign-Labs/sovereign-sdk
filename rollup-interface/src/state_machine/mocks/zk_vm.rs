@@ -1,10 +1,15 @@
+use std::cell::RefCell;
+use std::collections::VecDeque;
 use std::io::Write;
+use std::sync::atomic::AtomicUsize;
+use std::sync::Mutex;
 
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::zk::{Matches, Zkvm};
+use crate::zk::{Matches, ZkSystem, Zkvm, ZkvmGuest, ZkvmHost};
 
 /// A mock commitment to a particular zkVM program.
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
@@ -58,7 +63,42 @@ impl<'a> MockProof<'a> {
 }
 
 /// A mock implementing the zkVM trait.
-pub struct MockZkvm;
+pub struct MockZkvm {
+    hints: Mutex<VecDeque<Vec<u8>>>,
+    outputs: Mutex<Vec<Vec<u8>>>,
+}
+
+impl ZkvmGuest for MockZkvm {
+    fn read_from_host<T: DeserializeOwned>(&self) -> T {
+        let mut hints = self.hints.lock().expect("lock may not be poisoned");
+        let hint = hints
+            .pop_front()
+            .expect("Prover must provide all expected hints");
+        bincode::deserialize(&hint).expect("hints must be correctly serialized")
+    }
+
+    fn commit<T: Serialize>(&self, item: &T) {
+        let serialized = bincode::serialize(item).expect("serialization to vec is infallible");
+        self.outputs
+            .lock()
+            .expect("lock may not be poisoned")
+            .push(serialized);
+    }
+}
+
+impl ZkvmHost for MockZkvm {
+    fn write_to_guest<T: Serialize>(&self, item: T) {
+        let serialized = bincode::serialize(&item).expect("serialization to vec is infallible");
+        self.hints
+            .lock()
+            .expect("lock may not be poisoned")
+            .push_back(serialized);
+    }
+}
+impl ZkSystem for MockZkvm {
+    type Guest = Self;
+    type Host = Self;
+}
 
 impl Zkvm for MockZkvm {
     type CodeCommitment = MockCodeCommitment;

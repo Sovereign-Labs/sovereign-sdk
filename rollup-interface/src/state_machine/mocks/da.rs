@@ -122,7 +122,16 @@ impl<A: BasicAddress> MockBlob<A> {
 }
 
 /// A mock hash digest.
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    serde::Serialize,
+    serde::Deserialize,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+)]
 pub struct MockHash(pub [u8; 32]);
 
 impl AsRef<[u8]> for MockHash {
@@ -211,6 +220,12 @@ impl DaSpec for MockDaSpec {
     type ChainParams = ();
 }
 
+impl core::fmt::Debug for MockDaSpec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MockDaSpec").finish()
+    }
+}
+
 use tokio::sync::mpsc::{self, Receiver, Sender};
 use tokio::sync::Mutex;
 
@@ -236,6 +251,7 @@ impl MockDaService {
 
 #[async_trait]
 impl DaService for MockDaService {
+    type Verifier = MockDaVerifier;
     type Spec = MockDaSpec;
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
@@ -260,8 +276,11 @@ impl DaService for MockDaService {
     fn extract_relevant_txs(
         &self,
         block: &Self::FilteredBlock,
-    ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
-        block.blobs.clone()
+    ) -> (
+        Vec<<Self::Spec as DaSpec>::BlobTransaction>,
+        MockValidityCond,
+    ) {
+        (block.blobs.clone(), Default::default())
     }
 
     async fn get_extraction_proof(
@@ -294,7 +313,7 @@ impl DaVerifier for MockDaVerifier {
         Self {}
     }
 
-    fn verify_relevant_tx_list<H: Digest>(
+    fn verify_relevant_tx_list(
         &self,
         _block_header: &<Self::Spec as DaSpec>::BlockHeader,
         _txs: &[<Self::Spec as DaSpec>::BlobTransaction],

@@ -1,7 +1,8 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::Spec;
-use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker, Zkvm};
+use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::zk::{ValidityConditionChecker, Zkvm};
 use sov_state::storage::{NativeStorage, StorageProof};
 use sov_state::{Storage, WorkingSet};
 
@@ -14,12 +15,12 @@ pub struct BondAmountResponse {
 }
 
 // TODO: implement rpc_gen macro
-impl<C, Vm, Cond, Checker> AttesterIncentives<C, Vm, Cond, Checker>
+impl<C, Vm, Da, Checker> AttesterIncentives<C, Vm, Da, Checker>
 where
     C: sov_modules_api::Context,
     Vm: Zkvm,
-    Cond: ValidityCondition,
-    Checker: ValidityConditionChecker<Cond> + BorshDeserialize + BorshSerialize,
+    Da: DaSpec,
+    Checker: ValidityConditionChecker<Da::ValidityCondition> + BorshDeserialize + BorshSerialize,
 {
     /// Queries the state of the module.
     pub fn get_bond_amount(

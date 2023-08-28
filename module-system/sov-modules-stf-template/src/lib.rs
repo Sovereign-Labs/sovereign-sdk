@@ -12,7 +12,7 @@ use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
-use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
+use sov_rollup_interface::zk::{ValidityCondition, ZkSystem, Zkvm};
 use sov_rollup_interface::BasicAddress;
 use sov_state::{StateCheckpoint, Storage, WorkingSet};
 use tracing::info;
@@ -21,13 +21,16 @@ pub use tx_verifier::RawTx;
 use zk_cycle_macros::cycle_tracker;
 
 /// This trait has to be implemented by a runtime in order to be used in `AppTemplate`.
-pub trait Runtime<C: Context, Cond: ValidityCondition, B: BlobReaderTrait>:
+pub trait Runtime<C: Context, Da: DaSpec>:
     DispatchCall<Context = C>
     + Genesis<Context = C>
     + TxHooks<Context = C>
-    + SlotHooks<Cond, Context = C>
-    + ApplyBlobHooks<B, Context = C, BlobResult = SequencerOutcome<B::Address>>
-    + BlobSelector<Context = C>
+    + SlotHooks<Da, Context = C>
+    + ApplyBlobHooks<
+        Da::BlobTransaction,
+        Context = C,
+        BlobResult = SequencerOutcome<<Da::BlobTransaction as BlobReaderTrait>::Address>,
+    > + BlobSelector<Da, Context = C>
 {
 }
 
@@ -71,21 +74,23 @@ pub enum SlashingReason {
 impl<C, RT, Vm, DA> AppTemplate<C, DA, Vm, RT>
 where
     C: Context,
-    Vm: Zkvm,
+    Vm: ZkSystem,
     DA: DaSpec,
-    RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
+    RT: Runtime<C, DA>,
 {
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_slot(
         &mut self,
-        slot_data: &impl SlotData<Cond = DA::ValidityCondition>,
-        witness: <Self as StateTransitionFunction<Vm, DA::BlobTransaction>>::Witness,
+        slot_header: &DA::BlockHeader,
+        validity_condition: &DA::ValidityCondition,
+        witness: <Self as StateTransitionFunction<Vm, DA>>::Witness,
     ) {
         let state_checkpoint = StateCheckpoint::with_witness(self.current_storage.clone(), witness);
 
         let mut working_set = state_checkpoint.to_revertable();
 
-        self.runtime.begin_slot_hook(slot_data, &mut working_set);
+        self.runtime
+            .begin_slot_hook(slot_header, validity_condition, &mut working_set);
 
         self.checkpoint = Some(working_set.checkpoint());
     }
@@ -106,12 +111,12 @@ where
     }
 }
 
-impl<C, RT, Vm, DA> StateTransitionFunction<Vm, DA::BlobTransaction> for AppTemplate<C, DA, Vm, RT>
+impl<C, RT, Vm, DA> StateTransitionFunction<Vm, DA> for AppTemplate<C, DA, Vm, RT>
 where
     C: Context,
     DA: DaSpec,
-    Vm: Zkvm,
-    RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
+    Vm: ZkSystem,
+    RT: Runtime<C, DA>,
 {
     type StateRoot = jmt::RootHash;
 
@@ -141,10 +146,11 @@ where
         jmt::RootHash(genesis_hash)
     }
 
-    fn apply_slot<'a, I, Data>(
+    fn apply_slot<'a, I>(
         &mut self,
         witness: Self::Witness,
-        slot_data: &Data,
+        slot_header: &DA::BlockHeader,
+        validity_condition: &DA::ValidityCondition,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,
@@ -154,9 +160,8 @@ where
     >
     where
         I: IntoIterator<Item = &'a mut DA::BlobTransaction>,
-        Data: SlotData<Cond = Self::Condition>,
     {
-        self.begin_slot(slot_data, witness);
+        self.begin_slot(slot_header, validity_condition, witness);
 
         // Initialize batch workspace
         let mut batch_workspace = self

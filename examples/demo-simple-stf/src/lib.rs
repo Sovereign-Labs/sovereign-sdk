@@ -4,17 +4,25 @@ use std::io::Read;
 use std::marker::PhantomData;
 
 use sha2::Digest;
-use sov_rollup_interface::da::BlobReaderTrait;
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{BatchReceipt, SlotResult, StateTransitionFunction};
-use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
+use sov_rollup_interface::zk::{ValidityCondition, ZkSystem, Zkvm};
 
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to check if someone knows a preimage of a specific hash.
-#[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize, Default)]
+#[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize)]
 pub struct CheckHashPreimageStf<Cond> {
     phantom_data: PhantomData<Cond>,
+}
+
+impl<Cond> Default for CheckHashPreimageStf<Cond> {
+    fn default() -> Self {
+        Self {
+            phantom_data: Default::default(),
+        }
+    }
 }
 
 /// Outcome of the apply_slot method.
@@ -26,11 +34,11 @@ pub enum ApplySlotResult {
     Success,
 }
 
-impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunction<Vm, B>
+impl<Vm: ZkSystem, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, Da>
     for CheckHashPreimageStf<Cond>
 {
-    // Since our rollup is stateless, we don't need to consider the StateRoot.
-    type StateRoot = ();
+    /// The state root is a 32-byte array.
+    type StateRoot = [u8; 32];
 
     // This represents the initial configuration of the rollup, but it is not supported in this tutorial.
     type InitialState = ();
@@ -48,14 +56,16 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
     type Condition = Cond;
 
     // Perform one-time initialization for the genesis block.
-    fn init_chain(&mut self, _params: Self::InitialState) {
-        // Do nothing
+    fn init_chain(&mut self, _params: Self::InitialState) -> [u8; 32] {
+        // Do nothing and return an empty state root
+        [0u8; 32]
     }
 
-    fn apply_slot<'a, I, Data>(
+    fn apply_slot<'a, I>(
         &mut self,
-        _witness: Self::Witness,
-        _slot_data: &Data,
+        witness: Self::Witness,
+        slot_header: &Da::BlockHeader,
+        validity_condition: &Da::ValidityCondition,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,
@@ -64,8 +74,7 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
         Self::Witness,
     >
     where
-        I: IntoIterator<Item = &'a mut B>,
-        Data: SlotData,
+        I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
     {
         let mut receipts = vec![];
         for blob in blobs {
@@ -103,13 +112,13 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
         }
 
         SlotResult {
-            state_root: (),
+            state_root: [0u8; 32],
             batch_receipts: receipts,
             witness: (),
         }
     }
 
     fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot> {
-        Ok(())
+        Ok([0u8; 32])
     }
 }

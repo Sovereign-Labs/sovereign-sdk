@@ -7,7 +7,7 @@ use ethers_contract::BaseContract;
 use ethers_core::abi::Abi;
 use ethers_core::types::Bytes;
 use revm::primitives::{ExecutionResult, Output};
-use risc0_adapter::host::Risc0Verifier;
+use risc0_adapter::host::Risc0Vm;
 use sov_demo_rollup::{get_genesis_config, initialize_ledger, Rollup};
 use sov_rollup_interface::mocks::{MockAddress, MockDaService};
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
@@ -40,7 +40,7 @@ fn make_contract_from_abi(path: PathBuf) -> BaseContract {
     BaseContract::from(abi)
 }
 
-fn create_mock_da_rollup(rollup_config: RollupConfig<()>) -> Rollup<Risc0Verifier, MockDaService> {
+fn create_mock_da_rollup(rollup_config: RollupConfig<()>) -> Rollup<Risc0Vm, MockDaService> {
     let _ = remove_dir_all(&rollup_config.storage.path);
     let ledger_db = initialize_ledger(rollup_config.storage.path.clone());
     let sequencer_da_address = MockAddress { addr: [99; 32] };

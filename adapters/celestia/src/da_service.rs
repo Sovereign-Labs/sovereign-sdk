@@ -8,8 +8,8 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::params::ArrayParams;
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
 use nmt_rs::NamespaceId;
-use sov_rollup_interface::da::CountedBufReader;
-use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::da::{BlockHeaderTrait, CountedBufReader};
+use sov_rollup_interface::services::da::{DaService, SlotData};
 use tracing::{debug, info, span, Level};
 
 use crate::share_commit::recreate_commitment;
@@ -18,7 +18,9 @@ use crate::types::{ExtendedDataSquare, FilteredCelestiaBlock, Row, RpcNamespaced
 use crate::utils::BoxError;
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{CompletenessProof, CorrectnessProof};
-use crate::verifier::{CelestiaSpec, RollupParams, PFB_NAMESPACE};
+use crate::verifier::{
+    CelestiaSpec, CelestiaVerifier, ChainValidityCondition, RollupParams, PFB_NAMESPACE,
+};
 use crate::{
     parse_pfb_namespace, BlobWithSender, CelestiaHeader, CelestiaHeaderResponse,
     DataAvailabilityHeader,
@@ -141,6 +143,8 @@ impl CelestiaService {
 
 #[async_trait]
 impl DaService for CelestiaService {
+    type Verifier = CelestiaVerifier;
+
     type Spec = CelestiaSpec;
 
     type FilteredBlock = FilteredCelestiaBlock;
@@ -216,7 +220,10 @@ impl DaService for CelestiaService {
     fn extract_relevant_txs(
         &self,
         block: &Self::FilteredBlock,
-    ) -> Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction> {
+    ) -> (
+        Vec<<Self::Spec as sov_rollup_interface::da::DaSpec>::BlobTransaction>,
+        ChainValidityCondition,
+    ) {
         let mut output = Vec::new();
         for blob_ref in block.rollup_data.blobs() {
             let commitment = recreate_commitment(block.square_size(), blob_ref.clone())
@@ -239,7 +246,13 @@ impl DaService for CelestiaService {
 
             output.push(blob_tx)
         }
-        output
+        (
+            output,
+            ChainValidityCondition {
+                prev_hash: block.header().prev_hash().inner().clone(),
+                block_hash: block.hash(),
+            },
+        )
     }
 
     async fn get_extraction_proof(

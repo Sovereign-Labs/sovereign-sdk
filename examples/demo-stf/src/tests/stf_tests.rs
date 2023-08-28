@@ -39,7 +39,12 @@ pub mod test {
 
             let data = MockBlock::default();
 
-            let result = demo.apply_slot(Default::default(), &data, &mut blobs);
+            let result = demo.apply_slot(
+                Default::default(),
+                &data.header,
+                &data.validity_cond,
+                &mut blobs,
+            );
 
             assert_eq!(1, result.batch_receipts.len());
             let apply_blob_outcome = result.batch_receipts[0].clone();
@@ -96,7 +101,12 @@ pub mod test {
         let mut blobs = [blob];
         let data = MockBlock::default();
 
-        let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
+        let apply_block_result = demo.apply_slot(
+            Default::default(),
+            &data.header,
+            &data.validity_cond,
+            &mut blobs,
+        );
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
@@ -150,7 +160,12 @@ pub mod test {
             let mut blobs = [blob];
             let data = MockBlock::default();
 
-            let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
+            let apply_block_result = demo.apply_slot(
+                Default::default(),
+                &data.header,
+                &data.validity_cond,
+                &mut blobs,
+            );
 
             assert_eq!(1, apply_block_result.batch_receipts.len());
             let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
@@ -205,7 +220,12 @@ pub mod test {
         let mut blobs = [blob];
         let data = MockBlock::default();
 
-        let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
+        let apply_block_result = demo.apply_slot(
+            Default::default(),
+            &data.header,
+            &data.validity_cond,
+            &mut blobs,
+        );
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();

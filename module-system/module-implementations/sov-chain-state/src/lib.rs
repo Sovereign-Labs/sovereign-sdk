@@ -19,27 +19,37 @@ pub mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
-use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
+use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::zk::ValidityConditionChecker;
 use sov_state::WorkingSet;
 
 /// Type alias that contains the height of a given transition
 pub type TransitionHeight = u64;
 
-#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]
+#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, Eq)]
 /// Structure that contains the information needed to represent a single state transition.
-pub struct StateTransitionId<Cond: ValidityCondition> {
-    da_block_hash: [u8; 32],
+pub struct StateTransitionId<Da: DaSpec> {
+    da_block_hash: Da::SlotHash,
     post_state_root: [u8; 32],
-    validity_condition: Cond,
+    validity_condition: Da::ValidityCondition,
 }
 
-impl<Cond: ValidityCondition> StateTransitionId<Cond> {
+// Manually implement partialeq for StateTransitionId because derive generates the wrong bounds
+impl<Da: DaSpec> PartialEq for StateTransitionId<Da> {
+    fn eq(&self, other: &Self) -> bool {
+        self.da_block_hash == other.da_block_hash
+            && self.post_state_root == other.post_state_root
+            && self.validity_condition == other.validity_condition
+    }
+}
+
+impl<Da: DaSpec> StateTransitionId<Da> {
     /// Creates a new state transition. Only available for testing as we only want to create
     /// new state transitions from existing [`TransitionInProgress`].
     pub fn new(
-        da_block_hash: [u8; 32],
+        da_block_hash: Da::SlotHash,
         post_state_root: [u8; 32],
-        validity_condition: Cond,
+        validity_condition: Da::ValidityCondition,
     ) -> Self {
         Self {
             da_block_hash,
@@ -49,10 +59,10 @@ impl<Cond: ValidityCondition> StateTransitionId<Cond> {
     }
 }
 
-impl<Cond: ValidityCondition> StateTransitionId<Cond> {
+impl<Da: DaSpec> StateTransitionId<Da> {
     /// Compare the transition block hash and state root with the provided input couple. If
     /// the pairs are equal, return [`true`].
-    pub fn compare_hashes(&self, da_block_hash: &[u8; 32], post_state_root: &[u8; 32]) -> bool {
+    pub fn compare_hashes(&self, da_block_hash: &Da::SlotHash, post_state_root: &[u8; 32]) -> bool {
         self.da_block_hash == *da_block_hash && self.post_state_root == *post_state_root
     }
 
@@ -62,34 +72,42 @@ impl<Cond: ValidityCondition> StateTransitionId<Cond> {
     }
 
     /// Returns the da block hash of a state transition
-    pub fn da_block_hash(&self) -> [u8; 32] {
-        self.da_block_hash
+    pub fn da_block_hash(&self) -> &Da::SlotHash {
+        &self.da_block_hash
     }
 
     /// Returns the validity condition associated with the transition
-    pub fn validity_condition(&self) -> &Cond {
+    pub fn validity_condition(&self) -> &Da::ValidityCondition {
         &self.validity_condition
     }
 
     /// Checks the validity condition of a state transition
-    pub fn validity_condition_check<Checker: ValidityConditionChecker<Cond>>(
+    pub fn validity_condition_check<Checker: ValidityConditionChecker<Da::ValidityCondition>>(
         &self,
         checker: &mut Checker,
-    ) -> Result<(), <Checker as ValidityConditionChecker<Cond>>::Error> {
+    ) -> Result<(), <Checker as ValidityConditionChecker<Da::ValidityCondition>>::Error> {
         checker.check(&self.validity_condition)
     }
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]
+#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, Eq)]
 /// Represents a transition in progress for the rollup.
-pub struct TransitionInProgress<Cond> {
-    da_block_hash: [u8; 32],
-    validity_condition: Cond,
+pub struct TransitionInProgress<Da: DaSpec> {
+    da_block_hash: Da::SlotHash,
+    validity_condition: Da::ValidityCondition,
 }
 
-impl<Cond> TransitionInProgress<Cond> {
+// Manually impl PartialEq because derive generates the wrong bounds
+impl<Da: DaSpec> PartialEq for TransitionInProgress<Da> {
+    fn eq(&self, other: &Self) -> bool {
+        self.da_block_hash == other.da_block_hash
+            && self.validity_condition == other.validity_condition
+    }
+}
+
+impl<Da: DaSpec> TransitionInProgress<Da> {
     /// Creates a new transition in progress
-    pub fn new(da_block_hash: [u8; 32], validity_condition: Cond) -> Self {
+    pub fn new(da_block_hash: Da::SlotHash, validity_condition: Da::ValidityCondition) -> Self {
         Self {
             da_block_hash,
             validity_condition,
@@ -102,7 +120,7 @@ impl<Cond> TransitionInProgress<Cond> {
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[derive(ModuleInfo)]
-pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
+pub struct ChainState<Ctx: sov_modules_api::Context, Da: DaSpec> {
     /// Address of the module.
     #[address]
     pub address: Ctx::Address,
@@ -117,11 +135,11 @@ pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
     /// is stored during transition i+1. This is mainly due to the fact that this structure depends on the
     /// rollup's root hash which is only stored once the transition has completed.
     #[state]
-    pub historical_transitions: sov_state::StateMap<TransitionHeight, StateTransitionId<Cond>>,
+    pub historical_transitions: sov_state::StateMap<TransitionHeight, StateTransitionId<Da>>,
 
     /// The transition that is currently processed
     #[state]
-    pub in_progress_transition: sov_state::StateValue<TransitionInProgress<Cond>>,
+    pub in_progress_transition: sov_state::StateValue<TransitionInProgress<Da>>,
 
     /// The genesis root hash.
     /// Set after the first transaction of the rollup is executed, using the `begin_slot` hook.
@@ -139,9 +157,7 @@ pub struct ChainStateConfig {
     pub initial_slot_height: TransitionHeight,
 }
 
-impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Module
-    for ChainState<Ctx, Cond>
-{
+impl<Ctx: sov_modules_api::Context, Da: DaSpec> sov_modules_api::Module for ChainState<Ctx, Da> {
     type Context = Ctx;
 
     type Config = ChainStateConfig;

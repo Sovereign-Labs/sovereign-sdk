@@ -1,7 +1,9 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::Genesis;
-use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash, MockValidityCond};
+use sov_rollup_interface::mocks::{
+    MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockValidityCond,
+};
 use sov_state::{ProverStorage, Storage, WorkingSet};
 
 use crate::{ChainState, ChainStateConfig, StateTransitionId, TransitionInProgress};
@@ -20,7 +22,7 @@ fn test_simple_chain_state() {
 
     let mut working_set = WorkingSet::new(storage.clone());
 
-    let chain_state = ChainState::<DefaultContext, MockValidityCond>::default();
+    let chain_state = ChainState::<DefaultContext, MockDaSpec>::default();
     let config = ChainStateConfig {
         initial_slot_height: INIT_HEIGHT,
     };
@@ -42,17 +44,12 @@ fn test_simple_chain_state() {
     );
 
     // Then simulate a transaction execution: call the begin_slot hook on a mock slot_data.
-    let slot_data = MockBlock {
-        curr_hash: [1; 32],
-        header: MockBlockHeader {
-            prev_hash: MockHash([0; 32]),
-        },
-        height: INIT_HEIGHT,
-        validity_cond: MockValidityCond { is_valid: true },
-        blobs: Default::default(),
+    let header = MockBlockHeader {
+        prev_hash: MockHash([1; 32]),
     };
+    let validity_condition = Default::default();
 
-    chain_state.begin_slot_hook(&slot_data, &mut working_set);
+    chain_state.begin_slot_hook(&header, &validity_condition, &mut working_set);
 
     // Check that the root hash has been stored correctly
     let stored_root: [u8; 32] = chain_state.get_genesis_hash(&mut working_set).unwrap();
@@ -70,13 +67,16 @@ fn test_simple_chain_state() {
     );
 
     // Check that the new state transition is being stored
-    let new_tx_in_progress: TransitionInProgress<MockValidityCond> = chain_state
+    let new_tx_in_progress: TransitionInProgress<MockDaSpec> = chain_state
         .get_in_progress_transition(&mut working_set)
         .unwrap();
 
     assert_eq!(
         new_tx_in_progress,
-        TransitionInProgress::<MockValidityCond>::new([1; 32], MockValidityCond { is_valid: true }),
+        TransitionInProgress::<MockDaSpec>::new(
+            MockHash([1; 32]),
+            MockValidityCond { is_valid: true }
+        ),
         "The new transition has not been correctly stored"
     );
 
@@ -89,17 +89,13 @@ fn test_simple_chain_state() {
     let mut working_set = WorkingSet::new(storage);
 
     // And we simulate a new slot application by calling the `begin_slot` hook.
-    let new_slot_data = MockBlock {
-        curr_hash: [2; 32],
-        header: MockBlockHeader {
-            prev_hash: MockHash([1; 32]),
-        },
-        height: INIT_HEIGHT,
-        validity_cond: MockValidityCond { is_valid: false },
-        blobs: Default::default(),
+    // Then simulate a transaction execution: call the begin_slot hook on a mock slot_data.
+    let new_header = MockBlockHeader {
+        prev_hash: MockHash([2; 32]),
     };
+    let new_validity_condition = MockValidityCond { is_valid: false };
 
-    chain_state.begin_slot_hook(&new_slot_data, &mut working_set);
+    chain_state.begin_slot_hook(&new_header, &new_validity_condition, &mut working_set);
 
     // Check that the slot height have been updated correctly
     let new_height_storage = chain_state.get_slot_height(&mut working_set);
@@ -110,28 +106,28 @@ fn test_simple_chain_state() {
     );
 
     // Check the transition in progress
-    let new_tx_in_progress: TransitionInProgress<MockValidityCond> = chain_state
+    let new_tx_in_progress: TransitionInProgress<MockDaSpec> = chain_state
         .get_in_progress_transition(&mut working_set)
         .unwrap();
 
     assert_eq!(
         new_tx_in_progress,
-        TransitionInProgress::<MockValidityCond>::new(
-            [2; 32],
+        TransitionInProgress::<MockDaSpec>::new(
+            MockHash([2; 32]),
             MockValidityCond { is_valid: false }
         ),
         "The new transition has not been correctly stored"
     );
 
     // Check the transition stored
-    let last_tx_stored: StateTransitionId<MockValidityCond> = chain_state
+    let last_tx_stored: StateTransitionId<MockDaSpec> = chain_state
         .get_historical_transitions(INIT_HEIGHT + 1, &mut working_set)
         .unwrap();
 
     assert_eq!(
         last_tx_stored,
         StateTransitionId::new(
-            [1; 32],
+            MockHash([1; 32]),
             new_root_hash.unwrap(),
             MockValidityCond { is_valid: true }
         )

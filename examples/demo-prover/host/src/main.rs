@@ -10,7 +10,7 @@ use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use methods::{ROLLUP_ELF, ROLLUP_ID};
-use risc0_adapter::host::{Risc0Host, Risc0Verifier};
+use risc0_adapter::host::{Risc0Host, Risc0Vm};
 use sov_modules_api::PrivateKey;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -49,7 +49,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let sequencer_private_key = DefaultPrivateKey::generate();
 
-    let mut app: App<Risc0Verifier, CelestiaSpec> = App::new(rollup_config.storage.clone());
+    let mut app: App<Risc0Vm, CelestiaSpec> = App::new(rollup_config.storage.clone());
 
     let is_storage_empty = app.get_storage().is_empty();
 

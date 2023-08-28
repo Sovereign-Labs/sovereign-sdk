@@ -1,18 +1,18 @@
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::{Context, Spec};
-use sov_rollup_interface::services::da::SlotData;
-use sov_rollup_interface::zk::ValidityCondition;
+use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_state::{Storage, WorkingSet};
 
 use super::ChainState;
 use crate::{StateTransitionId, TransitionInProgress};
 
-impl<Ctx: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<Ctx, Cond> {
+impl<Ctx: Context, Da: DaSpec> SlotHooks<Da> for ChainState<Ctx, Da> {
     type Context = Ctx;
 
     fn begin_slot_hook(
         &self,
-        slot: &impl SlotData<Cond = Cond>,
+        slot_header: &Da::BlockHeader,
+        validity_condition: &Da::ValidityCondition,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) {
         if self.genesis_hash.get(working_set).is_none() {
@@ -26,7 +26,7 @@ impl<Ctx: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<Ctx, 
                 working_set,
             )
         } else {
-            let transition: StateTransitionId<Cond> = {
+            let transition: StateTransitionId<Da> = {
                 let last_transition_in_progress = self
                     .in_progress_transition
                     .get(working_set)
@@ -52,12 +52,11 @@ impl<Ctx: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<Ctx, 
         }
 
         self.increment_slot_height(working_set);
-        let validity_condition = slot.validity_condition();
 
         self.in_progress_transition.set(
             &TransitionInProgress {
-                da_block_hash: slot.hash(),
-                validity_condition,
+                da_block_hash: slot_header.hash(),
+                validity_condition: validity_condition.clone(),
             },
             working_set,
         );

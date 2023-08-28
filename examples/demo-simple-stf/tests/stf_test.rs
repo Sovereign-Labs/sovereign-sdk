@@ -1,5 +1,8 @@
 use demo_simple_stf::{ApplySlotResult, CheckHashPreimageStf};
-use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockBlock, MockValidityCond, MockZkvm};
+use sov_rollup_interface::mocks::{
+    MockAddress, MockBlob, MockBlock, MockDaSpec, MockValidityCond, MockZkvm,
+};
+use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::StateTransitionFunction;
 
 #[test]
@@ -13,12 +16,13 @@ fn test_stf() {
     let data = MockBlock::default();
     let mut blobs = [test_blob];
 
-    StateTransitionFunction::<MockZkvm, MockBlob<MockAddress>>::init_chain(stf, ());
+    StateTransitionFunction::<MockZkvm, MockDaSpec>::init_chain(stf, ());
 
-    let result = StateTransitionFunction::<MockZkvm, MockBlob<MockAddress>>::apply_slot(
+    let result = StateTransitionFunction::<MockZkvm, MockDaSpec>::apply_slot(
         stf,
         (),
-        &data,
+        data.header(),
+        &MockValidityCond::default(),
         &mut blobs,
     );
 

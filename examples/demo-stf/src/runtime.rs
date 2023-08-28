@@ -2,6 +2,7 @@
 use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
 use sov_bank::query::{BankRpcImpl, BankRpcServer};
+use sov_blob_storage::BlobStorage;
 #[cfg(feature = "native")]
 use sov_blob_storage::{BlobStorageRpcImpl, BlobStorageRpcServer};
 #[cfg(feature = "native")]
@@ -17,7 +18,7 @@ use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec, Spec};
-use sov_rollup_interface::da::BlobReaderTrait;
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::zk::ValidityCondition;
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
@@ -107,12 +108,13 @@ pub struct Runtime<C: Context> {
     pub evm: sov_evm::Evm<C>,
 }
 
-impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for Runtime<C> {
+impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C> {
     type Context = C;
 
     fn begin_slot_hook(
         &self,
-        _slot_data: &impl sov_rollup_interface::services::da::SlotData,
+        _slot_header: &Da::BlockHeader,
+        _validity_condition: &Da::ValidityCondition,
         _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
     ) {
     }
@@ -124,27 +126,28 @@ impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for Runtime<C> {
     }
 }
 
-impl<C, Cond, B> sov_modules_stf_template::Runtime<C, Cond, B> for Runtime<C>
+impl<C, Da> sov_modules_stf_template::Runtime<C, Da> for Runtime<C>
 where
     C: Context,
-    Cond: ValidityCondition,
-    B: BlobReaderTrait,
+    Da: DaSpec,
 {
 }
 
-impl<C: Context> BlobSelector for Runtime<C> {
+impl<C: Context, Da: DaSpec> BlobSelector<Da> for Runtime<C> {
     type Context = C;
 
-    fn get_blobs_for_this_slot<'a, I, B>(
+    fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, B>>>
+    ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
     where
-        B: BlobReaderTrait,
-        I: IntoIterator<Item = &'a mut B>,
+        I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
     {
-        self.blob_storage
-            .get_blobs_for_this_slot(current_blobs, working_set)
+        <BlobStorage<C> as BlobSelector<Da>>::get_blobs_for_this_slot(
+            &self.blob_storage,
+            current_blobs,
+            working_set,
+        )
     }
 }

@@ -7,36 +7,36 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::da::BlobReaderTrait;
+use crate::da::{BlobReaderTrait, DaSpec};
 use crate::services::da::SlotData;
-use crate::zk::{ValidityCondition, Zkvm};
+use crate::zk::{ValidityCondition, ZkSystem, Zkvm};
 
 #[cfg(any(test, feature = "fuzzing"))]
 pub mod fuzzing;
 
 /// The configuration of a full node of the rollup which creates zk proofs.
-pub struct ProverConfig;
+pub struct ProverMode;
 /// The configuration used to initialize the "Verifier" of the state transition function
 /// which runs inside of the zkvm.
-pub struct ZkConfig;
+pub struct ZkMode;
 /// The configuration of a standard full node of the rollup which does not create zk proofs
-pub struct StandardConfig;
+pub struct StandardMode;
 
 /// A special marker trait which allows us to define different rollup configurations. There are
-/// only 3 possible instantiations of this trait: [`ProverConfig`], [`ZkConfig`], and [`StandardConfig`].
-pub trait StateTransitionConfig: sealed::Sealed {}
-impl StateTransitionConfig for ProverConfig {}
-impl StateTransitionConfig for ZkConfig {}
-impl StateTransitionConfig for StandardConfig {}
+/// only 3 possible instantiations of this trait: [`ProverMode`], [`ZkMode`], and [`StandardMode`].
+pub trait StateTransitionMode: sealed::Sealed {}
+impl StateTransitionMode for ProverMode {}
+impl StateTransitionMode for ZkMode {}
+impl StateTransitionMode for StandardMode {}
 
 // https://rust-lang.github.io/api-guidelines/future-proofing.html
 mod sealed {
-    use super::{ProverConfig, StandardConfig, ZkConfig};
+    use super::{ProverMode, StandardMode, ZkMode};
 
     pub trait Sealed {}
-    impl Sealed for ProverConfig {}
-    impl Sealed for ZkConfig {}
-    impl Sealed for StandardConfig {}
+    impl Sealed for ProverMode {}
+    impl Sealed for ZkMode {}
+    impl Sealed for StandardMode {}
 }
 
 /// A receipt for a single transaction. These receipts are stored in the rollup's database
@@ -87,6 +87,15 @@ pub struct SlotResult<S, B, T, W> {
     pub witness: W,
 }
 
+/// Create a specialized version of a struct for a particular StateTransitionMode
+pub trait FromConfig<Mode: StateTransitionMode>: Sized {
+    /// The config type needed for this struct in this mode
+    type Config;
+
+    /// Creatse the struct from the provided config
+    fn from_config(config: &Self::Config) -> Self;
+}
+
 // TODO(@preston-evans98): update spec with simplified API
 /// State transition function defines business logic that responsible for changing state.
 /// Terminology:
@@ -94,9 +103,9 @@ pub struct SlotResult<S, B, T, W> {
 ///  - block: DA layer block
 ///  - batch: Set of transactions grouped together, or block on L2
 ///  - blob: Non serialised batch or anything else that can be posted on DA layer, like attestation or proof.
-pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
+pub trait StateTransitionFunction<Vm: ZkSystem, Da: DaSpec> {
     /// Root hash of state merkle tree
-    type StateRoot;
+    type StateRoot: Serialize + DeserializeOwned + Clone;
     /// The initial state of the rollup.
     type InitialState;
 
@@ -108,7 +117,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
 
     /// Witness is a data that is produced during actual batch execution
     /// or validated together with proof during verification
-    type Witness: Default + Serialize;
+    type Witness: Default + Serialize + DeserializeOwned;
 
     /// The validity condition that must be verified outside of the Vm
     type Condition: ValidityCondition;
@@ -130,10 +139,11 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     /// which is why we use a generic here instead of an associated type.
     ///
     /// Commits state changes to the database
-    fn apply_slot<'a, I, Data>(
+    fn apply_slot<'a, I>(
         &mut self,
         witness: Self::Witness,
-        slot_data: &Data,
+        slot_header: &Da::BlockHeader,
+        validity_condition: &Da::ValidityCondition,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,
@@ -142,8 +152,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
         Self::Witness,
     >
     where
-        I: IntoIterator<Item = &'a mut B>,
-        Data: SlotData<Cond = Self::Condition>;
+        I: IntoIterator<Item = &'a mut Da::BlobTransaction>;
 
     /// Gets the state root from the associated state. If not available (because the chain has not been initialized yet),
     /// return None.
