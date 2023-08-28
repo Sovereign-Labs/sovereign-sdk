@@ -55,6 +55,8 @@ fn strip_hash(name_with_hash: &str) -> String {
 }
 
 fn get_cycle_count(insn: &str) -> Result<usize, &'static str> {
+    // The opcodes and their cycle counts are taken from
+    // https://github.com/risc0/risc0/blob/main/risc0/zkvm/src/host/server/opcode.rs
     match insn {
         "LB" | "LH" | "LW" | "LBU" | "LHU" | "ADDI" | "SLLI" | "SLTI" | "SLTIU" |
         "AUIPC" | "SB" | "SH" | "SW" | "ADD" | "SUB" | "SLL" | "SLT" | "SLTU" |
