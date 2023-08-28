@@ -57,53 +57,6 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
-    fn validate_and_commit(
-        &self,
-        state_accesses: OrderedReadsAndWrites,
-        witness: &Self::Witness,
-    ) -> Result<[u8; 32], anyhow::Error> {
-        let latest_version: Version = witness.get_hint();
-        let reader = TreeWitnessReader::new(witness);
-
-        // For each value that's been read from the tree, verify the provided smt proof
-        for (key, read_value) in state_accesses.ordered_reads {
-            let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
-            // TODO: Switch to the batch read API once it becomes available
-            let proof: jmt::proof::SparseMerkleProof<S::Hasher> = witness.get_hint();
-            match read_value {
-                Some(val) => proof.verify_existence(
-                    jmt::RootHash(self.prev_state_root),
-                    key_hash,
-                    val.value.as_ref(),
-                )?,
-                None => proof.verify_nonexistence(jmt::RootHash(self.prev_state_root), key_hash)?,
-            }
-        }
-
-        // Compute the jmt update from the write batch
-        let batch = state_accesses
-            .ordered_writes
-            .into_iter()
-            .map(|(key, value)| {
-                let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
-                (
-                    key_hash,
-                    value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
-                )
-            });
-
-        let next_version = latest_version + 1;
-        // TODO: Make updates verifiable. Currently, writes don't verify that the provided siblings existed in the old tree
-        // because the TreeReader is trusted
-        let jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&reader);
-
-        let (new_root, _tree_update) = jmt
-            .put_value_set(batch, next_version)
-            .expect("JMT update must succeed");
-        Ok(new_root.0)
-    }
-
-    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn get_new_root(
         &self,
         state_accesses: OrderedReadsAndWrites,
@@ -151,7 +104,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
-    fn commit(&self, node_batch: &NodeBatch) {}
+    fn commit(&self, _node_batch: &NodeBatch) {}
 
     fn is_empty(&self) -> bool {
         unimplemented!("Needs simplification in JellyfishMerkleTree: https://github.com/Sovereign-Labs/sovereign-sdk/issues/362")

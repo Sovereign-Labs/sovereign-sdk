@@ -82,7 +82,6 @@ where
         witness: <Self as StateTransitionFunction<Vm, DA::BlobTransaction>>::Witness,
     ) {
         let state_checkpoint = StateCheckpoint::with_witness(self.current_storage.clone(), witness);
-
         let mut working_set = state_checkpoint.to_revertable();
 
         self.runtime.begin_slot_hook(slot_data, &mut working_set);
@@ -93,16 +92,18 @@ where
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn end_slot(&mut self) -> (jmt::RootHash, <<C as Spec>::Storage as Storage>::Witness) {
         let (cache_log, witness) = self.checkpoint.take().unwrap().freeze();
-        let root_hash = self
+        let (root_hash, authenticated_node_batch) = self
             .current_storage
-            .validate_and_commit(cache_log, &witness)
+            .get_new_root(cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
 
         let mut working_set = WorkingSet::new(self.current_storage.clone());
-
         self.runtime.end_slot_hook(&mut working_set);
 
-        (jmt::RootHash(root_hash), witness)
+        //
+
+        self.current_storage.commit(&authenticated_node_batch);
+        (root_hash, witness)
     }
 }
 
@@ -135,7 +136,7 @@ where
         let (log, witness) = working_set.checkpoint().freeze();
         let genesis_hash = self
             .current_storage
-            .validate_and_commit(log, &witness)
+            .get_new_root(log, &witness)
             .expect("Storage update must succeed");
 
         jmt::RootHash(genesis_hash)
