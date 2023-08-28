@@ -438,10 +438,8 @@ mod tests {
         let db = LedgerDB::with_path(path).unwrap();
 
         let mut rx = db.subscribe_slots().unwrap();
-        db.commit_slot(SlotCommit::<_, MockBlob<MockAddress>, Vec<u8>>::new(
-            MockBlock::default(),
-        ))
-        .unwrap();
+        db.commit_slot(SlotCommit::<_, MockBlob, Vec<u8>>::new(MockBlock::default()))
+            .unwrap();
 
         assert_eq!(rx.blocking_recv().unwrap(), 1);
     }

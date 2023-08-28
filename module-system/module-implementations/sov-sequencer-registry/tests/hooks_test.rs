@@ -88,7 +88,7 @@ fn end_blob_hook_success() {
         .begin_blob_hook(&mut test_blob, working_set)
         .unwrap();
 
-    <SequencerRegistry<C> as ApplyBlobHooks<MockBlob<MockAddress>>>::end_blob_hook(
+    <SequencerRegistry<C> as ApplyBlobHooks<MockBlob>>::end_blob_hook(
         &test_sequencer.registry,
         SequencerOutcome::Completed,
         working_set,
@@ -129,7 +129,7 @@ fn end_blob_hook_slash() {
     let result = SequencerOutcome::Slashed {
         sequencer: GENESIS_SEQUENCER_DA_ADDRESS.to_vec(),
     };
-    <SequencerRegistry<C> as ApplyBlobHooks<MockBlob<MockAddress>>>::end_blob_hook(
+    <SequencerRegistry<C> as ApplyBlobHooks<MockBlob>>::end_blob_hook(
         &test_sequencer.registry,
         result,
         working_set,
@@ -190,7 +190,7 @@ fn end_blob_hook_slash_preferred_sequencer() {
     let result = SequencerOutcome::Slashed {
         sequencer: GENESIS_SEQUENCER_DA_ADDRESS.to_vec(),
     };
-    <SequencerRegistry<C> as ApplyBlobHooks<MockBlob<MockAddress>>>::end_blob_hook(
+    <SequencerRegistry<C> as ApplyBlobHooks<MockBlob>>::end_blob_hook(
         &test_sequencer.registry,
         result,
         working_set,
@@ -238,7 +238,7 @@ fn end_blob_hook_slash_unknown_sequencer() {
     let result = SequencerOutcome::Slashed {
         sequencer: UNKNOWN_SEQUENCER_DA_ADDRESS.to_vec(),
     };
-    <SequencerRegistry<C> as ApplyBlobHooks<MockBlob<MockAddress>>>::end_blob_hook(
+    <SequencerRegistry<C> as ApplyBlobHooks<MockBlob>>::end_blob_hook(
         &test_sequencer.registry,
         result,
         working_set,

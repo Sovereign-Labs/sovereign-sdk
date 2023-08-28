@@ -94,7 +94,7 @@ pub struct RngDaSpec;
 impl DaSpec for RngDaSpec {
     type SlotHash = MockHash;
     type BlockHeader = MockBlockHeader;
-    type BlobTransaction = MockBlob<MockAddress>;
+    type BlobTransaction = MockBlob;
     type InclusionMultiProof = [u8; 32];
     type CompletenessProof = ();
     type ChainParams = ();
