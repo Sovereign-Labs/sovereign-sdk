@@ -5,7 +5,6 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
-use celestia::verifier::address::CelestiaAddress;
 use criterion::{criterion_group, criterion_main, Criterion};
 use demo_stf::app::App;
 use demo_stf::genesis_config::create_demo_genesis_config;
