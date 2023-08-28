@@ -38,16 +38,16 @@ pub fn simulate_da_with_revert_msg() -> Vec<RawTx> {
 }
 
 pub fn simulate_da_with_bad_sig() -> Vec<RawTx> {
-    let b = BadSignatureBankCallMessages::new();
+    let b: BadSignatureBankCallMessages = Default::default();
     b.create_raw_txs::<Runtime<C>>()
 }
 
 pub fn simulate_da_with_bad_nonce() -> Vec<RawTx> {
-    let b = BadNonceBankCallMessages::new();
+    let b: BadNonceBankCallMessages = Default::default();
     b.create_raw_txs::<Runtime<C>>()
 }
 
 pub fn simulate_da_with_bad_serialization() -> Vec<RawTx> {
-    let b = BadSerializationBankCallMessages::new();
+    let b: BadSerializationBankCallMessages = Default::default();
     b.create_raw_txs::<Runtime<C>>()
 }

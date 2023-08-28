@@ -215,7 +215,6 @@ fn test_tx_bad_nonce() {
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let tx_receipts = apply_block_result.batch_receipts[0].tx_receipts.clone();
-
         // Bad nonce means that the transaction has to be reverted
         assert_eq!(tx_receipts[0].receipt, TxEffect::Reverted);
 

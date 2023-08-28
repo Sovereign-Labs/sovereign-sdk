@@ -189,6 +189,12 @@ impl BadSerializationBankCallMessages {
     }
 }
 
+impl Default for BadSerializationBankCallMessages {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MessageGenerator for BadSerializationBankCallMessages {
     type Module = Bank<DefaultContext>;
     type Context = DefaultContext;
@@ -203,7 +209,7 @@ impl MessageGenerator for BadSerializationBankCallMessages {
             Rc::new(DefaultPrivateKey::from_hex(DEFAULT_PVT_KEY).unwrap()),
             CallMessage::CreateToken {
                 salt,
-                token_name: token_name.clone(),
+                token_name,
                 initial_balance: 1000,
                 minter_address,
                 authorized_minters: Vec::from([minter_address]),
@@ -250,6 +256,12 @@ impl BadSignatureBankCallMessages {
     }
 }
 
+impl Default for BadSignatureBankCallMessages {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MessageGenerator for BadSignatureBankCallMessages {
     type Module = Bank<DefaultContext>;
     type Context = DefaultContext;
@@ -264,7 +276,7 @@ impl MessageGenerator for BadSignatureBankCallMessages {
             Rc::new(DefaultPrivateKey::from_hex(DEFAULT_PVT_KEY).unwrap()),
             CallMessage::CreateToken {
                 salt,
-                token_name: token_name.clone(),
+                token_name,
                 initial_balance: 1000,
                 minter_address,
                 authorized_minters: Vec::from([minter_address]),
@@ -305,6 +317,12 @@ impl BadNonceBankCallMessages {
     }
 }
 
+impl Default for BadNonceBankCallMessages {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl MessageGenerator for BadNonceBankCallMessages {
     type Module = Bank<DefaultContext>;
     type Context = DefaultContext;
@@ -319,7 +337,7 @@ impl MessageGenerator for BadNonceBankCallMessages {
             Rc::new(DefaultPrivateKey::from_hex(DEFAULT_PVT_KEY).unwrap()),
             CallMessage::CreateToken {
                 salt,
-                token_name: token_name.clone(),
+                token_name,
                 initial_balance: 1000,
                 minter_address,
                 authorized_minters: Vec::from([minter_address]),
