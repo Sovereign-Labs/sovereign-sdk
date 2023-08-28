@@ -102,7 +102,7 @@ impl BlobReaderTrait for MockBlob {
     type Address = MockAddress;
 
     fn sender(&self) -> Self::Address {
-        self.address.clone()
+        self.address
     }
 
     fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
