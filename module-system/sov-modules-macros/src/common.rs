@@ -494,34 +494,46 @@ mod tests {
     }
 
     #[test]
-    fn test_generic_types_with_associated_type_bounds_2() {
-        // where T::Error: Debug
-        let test_struct: syn::ItemStruct = syn::parse_quote! {
-
-            struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> {
-                field: (T::Error, U, V)
-            }
-        };
-        let generics = test_struct.generics;
-        let our_bounds = extract_generic_type_bounds(&generics);
-        // let expected_bounds_for_t: syn::TypeParam = syn::parse_quote!(T: SomeTrait);
-    }
-
-    #[test]
-    fn test_generics_for_field() {
+    fn test_generics_for_field_associated_type() {
         let test_struct: syn::ItemStruct = parse_quote! {
-            struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> where V: SomeThirdTrait {
-                field: (T::Error, U, V)
+            struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> where V: SomeThirdTrait, T::Error: Debug {
+                field_1: Result<U, T::Error>,
+                field_2: (V, T::Error)
             }
         };
 
         let generics: syn::Generics = test_struct.generics;
-        let path_arguments: syn::AngleBracketedGenericArguments = parse_quote! { <T::Error, U, V> };
+        let path_arguments: syn::AngleBracketedGenericArguments = parse_quote! { <U, T::Error> };
 
         let p = syn::PathArguments::AngleBracketed(path_arguments);
 
         let actual_generics = generics_for_field(&generics, &p);
 
-        println!("{}", actual_generics.to_token_stream());
+        let expected: syn::ItemStruct = parse_quote! {
+            struct Dummy<U: SomeOtherTrait, T: SomeThirdTrait> where T::Error: Debug {}
+        };
+
+        println!("actual {}", actual_generics.to_token_stream());
+        println!("expected {}", expected.generics.to_token_stream());
+
+        assert_eq!(expected.generics, actual_generics);
+    }
+
+    #[test]
+    fn test_generic_types_with_associated_type_bounds_2() {
+        // where T::Error: Debug
+        let test_struct: syn::ItemStruct = syn::parse_quote! {
+            struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V, X> where T::Error: Debug, X::Thing: std::fmt::Display {
+                field: (T::Error, U, V),
+                fiel2: X::Thing,
+            }
+        };
+        let generics = test_struct.generics;
+        let our_bounds = extract_generic_type_bounds(&generics);
+        for (t, p) in our_bounds {
+            println!("{} _::_ {}", t.to_token_stream(), p.to_token_stream());
+        }
+        // TODO: Add checks
+        // let expected_bounds_for_t: syn::TypeParam = syn::parse_quote!(T: SomeTrait);
     }
 }
