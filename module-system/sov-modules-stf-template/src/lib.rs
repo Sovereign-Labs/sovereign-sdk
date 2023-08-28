@@ -99,8 +99,7 @@ where
             .expect("jellyfish merkle tree update must succeed");
 
         let mut working_set = WorkingSet::new(self.current_storage.clone());
-
-        self.runtime.end_slot_hook(&mut working_set);
+        self.runtime.end_slot_hook(&mut working_set, root_hash);
 
         (jmt::RootHash(root_hash), witness)
     }
