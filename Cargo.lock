@@ -1535,7 +1535,6 @@ dependencies = [
  "sov-blob-storage",
  "sov-cli",
  "sov-data-generators",
- "sov-election",
  "sov-evm",
  "sov-modules-api",
  "sov-modules-stf-template",
@@ -6696,7 +6695,6 @@ dependencies = [
  "borsh",
  "proptest",
  "sov-bank",
- "sov-election",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-rollup-interface",
@@ -6773,24 +6771,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-election"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "clap",
- "hex",
- "jsonrpsee 0.18.2",
- "schemars",
- "serde",
- "serde_json",
- "sov-modules-api",
- "sov-rollup-interface",
- "sov-state",
- "tempfile",
-]
-
-[[package]]
 name = "sov-ethereum"
 version = "0.1.0"
 dependencies = [
@@ -6859,7 +6839,6 @@ version = "0.1.0"
 dependencies = [
  "sov-accounts",
  "sov-bank",
- "sov-election",
  "sov-evm",
  "sov-modules-api",
  "sov-prover-incentives",
@@ -7064,7 +7043,6 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-db",
- "sov-election",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-rollup-interface",

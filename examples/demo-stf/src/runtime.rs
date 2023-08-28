@@ -5,8 +5,6 @@ use sov_bank::query::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
 use sov_blob_storage::{BlobStorageRpcImpl, BlobStorageRpcServer};
 #[cfg(feature = "native")]
-use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
-#[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
 use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
@@ -29,7 +27,6 @@ use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 pub mod query {
     pub use sov_accounts::query as accounts;
     pub use sov_bank::query as bank;
-    pub use sov_election::query as election;
     pub use sov_sequencer_registry::query as sequencer_registry;
     pub use sov_value_setter::query as value_setter;
 }
@@ -82,7 +79,6 @@ pub struct Runtime<C: Context> {
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub blob_storage: sov_blob_storage::BlobStorage<C>,
-    pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
 }
@@ -100,7 +96,6 @@ pub struct Runtime<C: Context> {
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub blob_storage: sov_blob_storage::BlobStorage<C>,
-    pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
     #[cfg_attr(feature = "native", cli_skip)]

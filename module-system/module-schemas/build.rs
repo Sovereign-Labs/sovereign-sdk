@@ -9,7 +9,6 @@ fn main() -> io::Result<()> {
     store_json_schema::<sov_bank::Bank<C>>("sov-bank.json")?;
     store_json_schema::<sov_accounts::Accounts<C>>("sov-accounts.json")?;
     store_json_schema::<sov_evm::Evm<C>>("sov-evm.json")?;
-    store_json_schema::<sov_election::Election<C>>("sov-election.json")?;
     store_json_schema::<sov_value_setter::ValueSetter<C>>("sov-value-setter.json")?;
     store_json_schema::<sov_prover_incentives::ProverIncentives<C, MockZkvm>>(
         "sov-prover-incentives.json",
