@@ -5,6 +5,8 @@ use std::sync::Arc;
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
 use hex;
+use jmt::storage::{NodeBatch, TreeUpdateBatch};
+use jmt::RootHash;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
@@ -184,6 +186,14 @@ pub trait Storage: Clone {
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error>;
+
+    fn get_new_root(
+        &self,
+        state_accesses: OrderedReadsAndWrites,
+        witness: &Self::Witness,
+    ) -> Result<(RootHash, NodeBatch), anyhow::Error>;
+
+    fn commit(&self, node_batch: &NodeBatch);
 
     /// Opens a storage access proof and validates it against a state root.
     /// It returns a result with the opened leaf (key, value) pair in case of success.
