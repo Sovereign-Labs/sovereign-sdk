@@ -1,7 +1,7 @@
 use quote::{format_ident, quote};
-use syn::{Data, DataEnum, DeriveInput, Fields, Ident, Type};
+use syn::{Data, DataEnum, DeriveInput, Fields, Ident};
 
-use crate::common::{extract_ident, StructFieldExtractor};
+use crate::common::StructFieldExtractor;
 
 pub(crate) struct CliParserMacro {
     field_extractor: StructFieldExtractor,
@@ -28,11 +28,11 @@ impl CliParserMacro {
 
         let (_, ty_generics, _) = generics.split_for_impl();
 
-        let mut module_command_arms = vec![];
-        // let mut module_args = vec![];
-        let mut match_arms = vec![];
-        let mut parse_match_arms = vec![];
-        let mut convert_match_arms = vec![];
+        let mut module_json_parser_arms = vec![];
+        let mut module_message_arms = vec![];
+        let mut try_from_subcommand_match_arms = vec![];
+        let mut try_map_match_arms = vec![];
+        let mut from_json_match_arms = vec![];
         let mut deserialize_constraints: Vec<syn::WherePredicate> = vec![];
 
         // Loop over the fields
@@ -50,40 +50,38 @@ impl CliParserMacro {
                 let module_path = type_path.path.clone();
                 let field_name = field.ident.clone();
                 let doc_str = format!("Generates a transaction for the `{}` module", &field_name);
-                module_command_arms.push(quote! {
-                        #[clap(subcommand)]
-                        #[doc = #doc_str]
-                        #field_name(<<#module_path as ::sov_modules_api::Module>::CallMessage as ::sov_modules_api::CliWalletArg>::CliStringRepr)
-                    });
 
-                let type_name_string = match &field.ty {
-                    Type::Path(type_path) => extract_ident(type_path).to_string(),
-                    _ => {
-                        return Err(syn::Error::new_spanned(
-                            field.ident.clone(),
-                            "expected a type path",
-                        ))
+                module_json_parser_arms.push(quote! {
+                    #[doc = #doc_str]
+                    #field_name {
+                        #[clap(flatten)]
+                        contents: __Inner
                     }
-                };
+                });
 
-                // Build the `match` arm for the CLI's `clap` parse function
-                parse_match_arms.push(quote! {
-                            CliTransactionParser::#field_name(mod_args) => {
-                                let command_as_call_message: <#module_path as ::sov_modules_api::Module>::CallMessage = mod_args.into();
-                                <#ident:: #ty_generics as ::sov_modules_api::EncodeCall<#module_path>> ::encode_call(
-                                    command_as_call_message
+                module_message_arms.push(quote! {
+                    #[doc = #doc_str]
+                    #field_name {
+                        contents: __Inner
+                    }
+                });
+
+                from_json_match_arms.push(quote! {
+                    RuntimeMessage::#field_name{ contents } => {
+                                ::serde_json::from_str::<<#module_path as ::sov_modules_api::Module>::CallMessage>(&contents.json).map(
+                                    // Use the enum variant as a constructor
+                                    <#ident #ty_generics as ::sov_modules_api::DispatchCall>::Decodable:: #field_name
                                 )
                             },
                          });
 
-                convert_match_arms.push(quote! {
-                            CliTransactionParser::#field_name(mod_args) => {
-                                let command_as_call_message: <#module_path as ::sov_modules_api::Module>::CallMessage = mod_args.into();
-                                <#ident #ty_generics as ::sov_modules_api::DispatchCall>::Decodable:: #field_name(
-                                    command_as_call_message
-                                )
-                            },
-                         });
+                try_map_match_arms.push(quote! {
+                    RuntimeMessage::#field_name { contents } => RuntimeMessage::#field_name { contents: contents.try_into()? },
+                });
+
+                try_from_subcommand_match_arms.push(quote! {
+                    RuntimeSubcommand::#field_name { contents } => RuntimeMessage::#field_name { contents: contents.try_into()? },
+                });
 
                 // Build a constraint requiring that all call messages support serde deserialization
                 let deserialization_constraint = {
@@ -98,21 +96,11 @@ impl CliParserMacro {
                     })
                 };
                 deserialize_constraints.push(deserialization_constraint);
-
-                // Build the `match` arms for the CLI's json parser
-                match_arms.push(quote! {
-                            #type_name_string => Ok({
-                                let _data: <#module_path as ::sov_modules_api::Module>::CallMessage =
-                                 ::serde_json::from_str::<<#module_path as ::sov_modules_api::Module>::CallMessage>(&call_data)?;
-                                <#ident:: #ty_generics as ::sov_modules_api::EncodeCall<#module_path>> ::encode_call(
-                                   _data
-                                )
-                            }),
-                        });
             }
         }
 
         let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
         let where_clause_with_deserialize_bounds = match where_clause {
             Some(where_clause) => {
                 let mut result = where_clause.clone();
@@ -125,46 +113,122 @@ impl CliParserMacro {
                 where #(#deserialize_constraints),*
             },
         };
+
+        // The generics from the `runtime`, with an additional `__Inner` generic
+        // which holds the clap arguments.
+        let generics_with_inner = {
+            let mut generics = generics.clone();
+            generics.params.insert(0, syn::parse_quote! {__Inner });
+            generics.where_clause = match generics.where_clause {
+                Some(where_clause) => {
+                    let mut result = where_clause;
+                    result
+                        .predicates
+                        .push(syn::parse_quote! { __Inner: ::clap::Args });
+                    Some(result)
+                }
+                None => syn::parse_quote! {
+                    where  __Inner: ::clap::Args
+                },
+            };
+            generics
+        };
+        let (impl_generics_with_inner, ty_generics_with_inner, where_clause_with_inner_as_clap) =
+            generics_with_inner.split_for_impl();
+
+        // Generics identical to generics_with_inner, but with the `__Inner` type renamed to `__Dest`.
+        // This type is used in the the try_map conversion
+        let generics_for_dest = {
+            let mut generics = generics.clone();
+            generics.params.insert(0, syn::parse_quote! {__Dest});
+            generics
+        };
+        let (_, ty_generics_for_dest, _) = generics_for_dest.split_for_impl();
+
+        let generics_with_inner_and_dest = {
+            let mut generics = generics_with_inner.clone();
+            generics.params.insert(0, syn::parse_quote! {__Dest});
+            if let Some(c) = generics.where_clause.as_mut() {
+                c.predicates
+                    .push(syn::parse_quote! { __Dest: ::core::convert::TryFrom<__Inner> })
+            }
+            generics
+        };
+        let (impl_generics_with_inner_and_dest, _, where_clause_with_inner_clap_and_try_from) =
+            generics_with_inner_and_dest.split_for_impl();
+
+        // Generics identical to `generics_with_inner`, with the `__Inner` type bound to `JsonStringArg`
+        let generics_for_json = {
+            let mut generics = generics.clone();
+            generics
+                .params
+                .insert(0, syn::parse_quote! {__JsonStringArg});
+            generics
+        };
+        let (_impl_generics_for_json, ty_generics_for_json, _) = generics_for_json.split_for_impl();
+
         // Merge and generate the new code
         let expanded = quote! {
-            /// Parse a transaction from command-line arguments
+
+
+            /// An enum expressing the subcommands available to this runtime. Contains
+            /// one subcommand for each module, except modules annotated with the #[cli_skip] attribute
             #[derive(::clap::Parser)]
             #[allow(non_camel_case_types)]
-            pub enum CliTransactionParser #impl_generics #where_clause {
-                #( #module_command_arms, )*
+            pub enum RuntimeSubcommand #impl_generics_with_inner #where_clause_with_inner_as_clap {
+                #( #module_json_parser_arms, )*
+                #[clap(skip)]
+                #[doc(hidden)]
+                ____phantom(::std::marker::PhantomData<#ident #ty_generics>)
             }
 
-            /// Borsh encode a transaction parsed from the CLI
-            pub fn borsh_encode_cli_tx #impl_generics (cmd: CliTransactionParser #ty_generics) -> ::std::vec::Vec<u8>
-            #where_clause {
-                use ::borsh::BorshSerialize as _;
-                match cmd {
-                    #(#parse_match_arms)*
-                    _ => panic!("unknown module name"),
-                }
+            impl #impl_generics_with_inner ::sov_modules_api::cli::CliFrontEnd<#ident #ty_generics> for RuntimeSubcommand #ty_generics_with_inner #where_clause_with_deserialize_bounds, __Inner: ::clap::Args {
+                type CliIntermediateRepr<__Dest> = RuntimeMessage #ty_generics_for_dest;
             }
 
-            impl #impl_generics From<CliTransactionParser #ty_generics> for <#ident #ty_generics as ::sov_modules_api::DispatchCall>::Decodable #where_clause {
-                fn from(cmd: CliTransactionParser #ty_generics) -> Self {
-                    match cmd {
-                        #(#convert_match_arms)*
+            /// An intermediate enum between the RuntimeSubcommand (which must implement `clap`) and the
+            /// final RT::Decodable type. Like the RuntimeSubcommand, this type contains one variant for each cli-enabled module.
+            #[allow(non_camel_case_types)]
+            pub enum RuntimeMessage #impl_generics_with_inner #where_clause {
+                #( #module_message_arms, )*
+                #[doc(hidden)]
+                ____phantom(::std::marker::PhantomData<#ident #ty_generics>)
+            }
+
+            use ::sov_modules_api::cli::JsonStringArg as __JsonStringArg;
+            // Implement TryFrom<RuntimeMessage<JsonStringArg>> for the runtime's call message. Uses serde_json to deserialize the json string.
+            impl #impl_generics ::core::convert::TryFrom<RuntimeMessage #ty_generics_for_json> for <#ident #ty_generics as ::sov_modules_api::DispatchCall>::Decodable #where_clause_with_deserialize_bounds {
+                type Error = ::serde_json::Error;
+                fn try_from(item: RuntimeMessage #ty_generics_for_json ) -> Result<Self, Self::Error> {
+                    match item {
+                        #( #from_json_match_arms )*
+                        RuntimeMessage::____phantom(_) => unreachable!(),
                     }
                 }
             }
 
-            impl #impl_generics sov_modules_api::CliWallet for #ident #ty_generics #where_clause {
-                type CliStringRepr = CliTransactionParser #ty_generics;
-            }
-
-            /// Attempts to parse the provided call data as a [`sov_modules_api::Module::CallMessage`] for the given module.
-            pub fn parse_call_message_json #impl_generics (module_name: &str, call_data: &str) -> ::anyhow::Result<Vec<u8>>
-            #where_clause_with_deserialize_bounds
-             {
-                match module_name {
-                    #(#match_arms)*
-                    _ => panic!("unknown module name"),
+            // Allow arbitrary conversions from the `clap`-enabled `RuntimeSubcommand` to the less constrained `RuntimeMessage` enum.
+            // This allows us to (for example), accept a `JsonStringArgs` or a `FileNameArgs` as a CLI argument, and then
+            // use fallible logic to convert it into the final JSON string to be parsed into a callmessage.
+            impl #impl_generics_with_inner_and_dest ::core::convert::TryFrom<RuntimeSubcommand #ty_generics_with_inner> for RuntimeMessage #ty_generics_for_dest #where_clause_with_inner_clap_and_try_from {
+                type Error = <__Dest as ::core::convert::TryFrom<__Inner>>::Error;
+                /// Convert a `RuntimeSubcommand` to a `RuntimeSubcommand` with a different `__Inner` type using `try_from`.
+                ///
+                /// This method is called `try_map` instead of `try_from` to avoid conflicting with the `TryFrom` trait in
+                /// the corner case where the source and destination types are the same.
+                fn try_from(item: RuntimeSubcommand #ty_generics_with_inner ) -> Result<Self, Self::Error>
+                 {
+                    Ok(match item {
+                        #( #try_from_subcommand_match_arms )*
+                        RuntimeSubcommand::____phantom(_) => unreachable!(),
+                    })
                 }
             }
+
+            impl #impl_generics ::sov_modules_api::CliWallet for #ident #ty_generics #where_clause_with_deserialize_bounds {
+                type CliStringRepr<__Inner> = RuntimeMessage #ty_generics_with_inner;
+            }
+
         };
         Ok(expanded.into())
     }

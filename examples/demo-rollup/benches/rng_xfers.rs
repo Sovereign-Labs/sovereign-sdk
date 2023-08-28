@@ -1,10 +1,7 @@
 use std::env;
-use std::str::FromStr;
 
 use async_trait::async_trait;
 use borsh::ser::BorshSerialize;
-use celestia::verifier::address::CelestiaAddress;
-use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::runtime::Runtime;
 use sov_bank::{Bank, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
@@ -13,9 +10,11 @@ use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Address, AddressBech32, EncodeCall, PrivateKey, PublicKey, Spec};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::mocks::{
-    MockBlob, MockBlock, MockBlockHeader, MockHash, MockValidityCond,
+    MockAddress, MockBlob, MockBlock, MockBlockHeader, MockHash, MockValidityCond,
 };
 use sov_rollup_interface::services::da::DaService;
+
+pub(crate) const SEQUENCER_DA_ADDRESS: [u8; 32] = [99; 32];
 
 #[derive(Clone)]
 /// A simple DaService for a random number generator.
@@ -95,7 +94,7 @@ pub struct RngDaSpec;
 impl DaSpec for RngDaSpec {
     type SlotHash = MockHash;
     type BlockHeader = MockBlockHeader;
-    type BlobTransaction = MockBlob<CelestiaAddress>;
+    type BlobTransaction = MockBlob<MockAddress>;
     type InclusionMultiProof = [u8; 32];
     type CompletenessProof = ();
     type ChainParams = ();
@@ -104,17 +103,9 @@ impl DaSpec for RngDaSpec {
 
 #[async_trait]
 impl DaService for RngDaService {
-    type RuntimeConfig = ();
     type Spec = RngDaSpec;
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
-
-    async fn new(
-        _config: Self::RuntimeConfig,
-        _chain_params: <Self::Spec as DaSpec>::ChainParams,
-    ) -> Self {
-        RngDaService::new()
-    }
 
     async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let num_bytes = height.to_le_bytes();
@@ -128,6 +119,7 @@ impl DaService for RngDaService {
             },
             height,
             validity_cond: MockValidityCond { is_valid: true },
+            blobs: Default::default(),
         };
 
         Ok(block)
@@ -156,7 +148,7 @@ impl DaService for RngDaService {
             generate_transfers(num_txns, (block.height - 1) * (num_txns as u64))
         };
 
-        let address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
+        let address = MockAddress::from(SEQUENCER_DA_ADDRESS);
         let blob = MockBlob::new(data, address, [0u8; 32]);
 
         vec![blob]

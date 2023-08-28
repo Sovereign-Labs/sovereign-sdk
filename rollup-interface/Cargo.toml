@@ -36,6 +36,9 @@ anyhow = { workspace = true }
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
 
+tokio = { workspace = true, optional = true}
+
+
 [dev-dependencies]
 serde_json = "1"
 proptest = { workspace = true }
@@ -43,5 +46,6 @@ proptest-derive = { workspace = true }
 
 [features]
 default = []
+native = ["tokio"]
 fuzzing = ["proptest", "proptest-derive", "sha2"]
-mocks = ["sha2", "bytes/serde"]
+mocks = ["sha2", "bytes/serde", "tokio"]

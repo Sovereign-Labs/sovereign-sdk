@@ -1,22 +1,19 @@
 mod rng_xfers;
 use std::env;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Context;
-use celestia::verifier::address::CelestiaAddress;
-use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use criterion::{criterion_group, criterion_main, Criterion};
 use demo_stf::app::App;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use risc0_adapter::host::Risc0Verifier;
-use rng_xfers::{RngDaService, RngDaSpec};
+use rng_xfers::{RngDaService, RngDaSpec, SEQUENCER_DA_ADDRESS};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
-use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash, MockValidityCond};
+use sov_rollup_interface::mocks::{MockAddress, MockBlock, MockBlockHeader, MockHash};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_stf_runner::{from_toml_path, RollupConfig};
@@ -49,12 +46,11 @@ fn rollup_bench(_bench: &mut Criterion) {
 
     let mut demo = demo_runner.stf;
     let sequencer_private_key = DefaultPrivateKey::generate();
-    let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
+    let sequencer_da_address = MockAddress::from(SEQUENCER_DA_ADDRESS);
     let demo_genesis_config = create_demo_genesis_config(
         100000000,
         sequencer_private_key.default_address(),
         sequencer_da_address.as_ref().to_vec(),
-        &sequencer_private_key,
         &sequencer_private_key,
     );
 
@@ -73,9 +69,10 @@ fn rollup_bench(_bench: &mut Criterion) {
                 prev_hash: MockHash([0u8; 32]),
             },
             height,
-            validity_cond: MockValidityCond::default(),
+            validity_cond: Default::default(),
+            blobs: Default::default(),
         };
-        blocks.push(filtered_block);
+        blocks.push(filtered_block.clone());
 
         let blob_txs = da_service.extract_relevant_txs(&filtered_block);
         blobs.push(blob_txs.clone());
@@ -86,7 +83,7 @@ fn rollup_bench(_bench: &mut Criterion) {
         b.iter(|| {
             let filtered_block = &blocks[height as usize];
 
-            let mut data_to_commit = SlotCommit::new(*filtered_block);
+            let mut data_to_commit = SlotCommit::new(filtered_block.clone());
             let apply_block_result = demo.apply_slot(
                 Default::default(),
                 data_to_commit.slot_data(),

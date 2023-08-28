@@ -349,6 +349,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-lock"
+version = "2.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "287272293e9d8c41773cec55e365490fe034813a2f172f502d6ddcf75b2f582b"
+dependencies = [
+ "event-listener",
+]
+
+[[package]]
 name = "async-trait"
 version = "0.1.72"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -452,6 +461,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7bfc506e7a2370ec239e1d072507b2a80c833083699d3c6fa176fbb4de8448c6"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "bcs"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bd3ffe8b19a604421a5d461d4a70346223e535903fbc3067138bddbebddcf77"
+dependencies = [
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
@@ -1514,8 +1533,8 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-blob-storage",
+ "sov-cli",
  "sov-data-generators",
- "sov-election",
  "sov-evm",
  "sov-modules-api",
  "sov-modules-stf-template",
@@ -2568,6 +2587,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "gloo-net"
+version = "0.2.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9902a044653b26b99f7e3693a42f171312d9be8b26b5697bd1e43ad1f8a35e10"
+dependencies = [
+ "futures-channel",
+ "futures-core",
+ "futures-sink",
+ "gloo-utils",
+ "js-sys",
+ "pin-project",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
+]
+
+[[package]]
 name = "gloo-timers"
 version = "0.2.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2577,6 +2616,19 @@ dependencies = [
  "futures-core",
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "gloo-utils"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "037fcb07216cb3a30f7292bd0176b050b7b9a052ba830ef7d5d65f6dc64ba58e"
+dependencies = [
+ "js-sys",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -3222,12 +3274,37 @@ version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1822d18e4384a5e79d94dc9e4d1239cfa9fad24e55b44d2efeff5b394c9fece4"
 dependencies = [
+ "jsonrpsee-client-transport",
  "jsonrpsee-core 0.18.2",
  "jsonrpsee-http-client 0.18.2",
  "jsonrpsee-proc-macros",
  "jsonrpsee-server",
  "jsonrpsee-types 0.18.2",
+ "jsonrpsee-wasm-client",
+ "jsonrpsee-ws-client",
  "tracing",
+]
+
+[[package]]
+name = "jsonrpsee-client-transport"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11aa5766d5c430b89cb26a99b88f3245eb91534be8126102cea9e45ee3891b22"
+dependencies = [
+ "futures-channel",
+ "futures-util",
+ "gloo-net",
+ "http",
+ "jsonrpsee-core 0.18.2",
+ "pin-project",
+ "rustls-native-certs",
+ "soketto",
+ "thiserror",
+ "tokio",
+ "tokio-rustls 0.24.1",
+ "tokio-util",
+ "tracing",
+ "webpki-roots 0.23.1",
 ]
 
 [[package]]
@@ -3256,8 +3333,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "64c6832a55f662b5a6ecc844db24b8b9c387453f923de863062c60ce33d62b81"
 dependencies = [
  "anyhow",
+ "async-lock",
  "async-trait",
  "beef",
+ "futures-timer",
  "futures-util",
  "globset",
  "hyper",
@@ -3270,7 +3349,9 @@ dependencies = [
  "soketto",
  "thiserror",
  "tokio",
+ "tokio-stream",
  "tracing",
+ "wasm-bindgen-futures",
 ]
 
 [[package]]
@@ -3370,6 +3451,29 @@ dependencies = [
  "serde_json",
  "thiserror",
  "tracing",
+]
+
+[[package]]
+name = "jsonrpsee-wasm-client"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "34e6ea7c6d862e60f8baebd946c037b70c6808a4e4e31e792a4029184e3ce13a"
+dependencies = [
+ "jsonrpsee-client-transport",
+ "jsonrpsee-core 0.18.2",
+ "jsonrpsee-types 0.18.2",
+]
+
+[[package]]
+name = "jsonrpsee-ws-client"
+version = "0.18.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a64b2589680ba1ad7863f279cd2d5083c1dc0a7c0ea959d22924553050f8ab9f"
+dependencies = [
+ "http",
+ "jsonrpsee-client-transport",
+ "jsonrpsee-core 0.18.2",
+ "jsonrpsee-types 0.18.2",
 ]
 
 [[package]]
@@ -3560,6 +3664,15 @@ checksum = "57d27b317e207b10f69f5e75494119e391a96f48861ae870d1da6edac98ca900"
 dependencies = [
  "cc",
  "libc",
+]
+
+[[package]]
+name = "matchers"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8263075bb86c5a1b1427b5ae862e8889656f126e9f77c484496e8b47cf5c5558"
+dependencies = [
+ "regex-automata 0.1.10",
 ]
 
 [[package]]
@@ -4820,8 +4933,17 @@ checksum = "81bc1d4caf89fac26a70747fe603c130093b53c773888797a6329091246d651a"
 dependencies = [
  "aho-corasick",
  "memchr",
- "regex-automata",
+ "regex-automata 0.3.6",
  "regex-syntax 0.7.4",
+]
+
+[[package]]
+name = "regex-automata"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c230d73fb8d8c1b9c0b3135c5142a8acee3a0558fb8db5cf1cb65f8d7862132"
+dependencies = [
+ "regex-syntax 0.6.29",
 ]
 
 [[package]]
@@ -4859,9 +4981,9 @@ dependencies = [
 
 [[package]]
 name = "reqwest"
-version = "0.11.18"
+version = "0.11.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cde824a14b7c14f85caff81225f411faacc04a2013f41670f41443742b1c1c55"
+checksum = "3e9ad3fe7488d7e34558a2033d45a0c90b72d97b4f80705666fea71472e2e6a1"
 dependencies = [
  "base64 0.21.2",
  "bytes",
@@ -4895,7 +5017,7 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
- "webpki-roots 0.22.6",
+ "webpki-roots 0.25.2",
  "winreg",
 ]
 
@@ -6133,9 +6255,9 @@ checksum = "cd0b0ec5f1c1ca621c432a25813d8d60c88abe6d3e08a3eb9cf37d97a0fe3d73"
 
 [[package]]
 name = "serde"
-version = "1.0.185"
+version = "1.0.188"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be9b6f69f1dfd54c3b568ffa45c310d6973a5e5148fd40cf515acaf38cf5bc31"
+checksum = "cf9e0fcba69a370eed61bcf2b728575f726b50b55cba78064753d708ddc7549e"
 dependencies = [
  "serde_derive",
 ]
@@ -6151,9 +6273,9 @@ dependencies = [
 
 [[package]]
 name = "serde_derive"
-version = "1.0.185"
+version = "1.0.188"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dc59dfdcbad1437773485e0367fea4b090a2e0a16d9ffc46af47764536a298ec"
+checksum = "4eca7ac642d82aa35b60049a6eccb4be6be75e599bd2e9adb5f875a737654af2"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.33",
@@ -6555,9 +6677,15 @@ dependencies = [
  "borsh",
  "demo-stf",
  "directories",
+ "hex",
+ "jsonrpsee 0.18.2",
  "serde",
  "serde_json",
+ "sov-accounts",
+ "sov-bank",
  "sov-modules-api",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -6567,7 +6695,6 @@ dependencies = [
  "borsh",
  "proptest",
  "sov-bank",
- "sov-election",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-rollup-interface",
@@ -6589,6 +6716,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-schema-db",
  "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -6604,6 +6732,13 @@ dependencies = [
  "const-rollup-config",
  "criterion",
  "demo-stf",
+ "ethereum-types",
+ "ethers",
+ "ethers-contract",
+ "ethers-core",
+ "ethers-middleware",
+ "ethers-providers",
+ "ethers-signers",
  "futures",
  "hex",
  "jmt",
@@ -6612,44 +6747,27 @@ dependencies = [
  "prometheus 0.11.0",
  "proptest",
  "reqwest",
+ "revm",
  "risc0-adapter",
  "serde",
  "serde_json",
  "sha2 0.10.7",
  "sov-bank",
  "sov-db",
- "sov-election",
+ "sov-demo-rollup",
  "sov-ethereum",
+ "sov-evm",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-state",
  "sov-stf-runner",
- "sov-value-setter",
  "tempfile",
  "tendermint",
  "tokio",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "sov-election"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "clap",
- "hex",
- "jsonrpsee 0.18.2",
- "schemars",
- "serde",
- "serde_json",
- "sov-modules-api",
- "sov-rollup-interface",
- "sov-state",
- "tempfile",
 ]
 
 [[package]]
@@ -6685,7 +6803,6 @@ dependencies = [
  "ethers-contract",
  "ethers-core",
  "ethers-middleware",
- "ethers-providers",
  "ethers-signers",
  "hex",
  "jsonrpsee 0.18.2",
@@ -6699,6 +6816,7 @@ dependencies = [
  "secp256k1",
  "serde",
  "serde_json",
+ "sov-evm",
  "sov-modules-api",
  "sov-state",
  "tempfile",
@@ -6721,7 +6839,6 @@ version = "0.1.0"
 dependencies = [
  "sov-accounts",
  "sov-bank",
- "sov-election",
  "sov-evm",
  "sov-modules-api",
  "sov-prover-incentives",
@@ -6752,6 +6869,7 @@ dependencies = [
  "sha2 0.10.7",
  "sov-modules-macros",
  "sov-rollup-interface",
+ "sov-sequencer",
  "sov-state",
  "thiserror",
  "zk-cycle-macros",
@@ -6772,6 +6890,7 @@ dependencies = [
  "serde_json",
  "sov-bank",
  "sov-modules-api",
+ "sov-modules-macros",
  "sov-state",
  "syn 1.0.109",
  "tempfile",
@@ -6832,6 +6951,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.7",
+ "tokio",
 ]
 
 [[package]]
@@ -6858,7 +6978,6 @@ dependencies = [
  "hex",
  "jsonrpsee 0.18.2",
  "serde",
- "sov-modules-api",
  "sov-rollup-interface",
  "tokio",
  "tracing",
@@ -6880,6 +6999,7 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-rollup-interface",
+ "sov-sequencer-registry",
  "sov-state",
  "tempfile",
  "zk-cycle-macros",
@@ -6891,6 +7011,7 @@ name = "sov-state"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bcs",
  "borsh",
  "hex",
  "jmt",
@@ -6922,7 +7043,6 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-db",
- "sov-election",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-rollup-interface",
@@ -6938,6 +7058,24 @@ dependencies = [
 
 [[package]]
 name = "sov-value-setter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "clap",
+ "jsonrpsee 0.18.2",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "sov-state",
+ "tempfile",
+ "thiserror",
+]
+
+[[package]]
+name = "sov-vec-setter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -7588,10 +7726,14 @@ version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "30a651bc37f915e81f087d86e62a18eec5f79550c7faff886f7090b4ea757c77"
 dependencies = [
+ "matchers",
  "nu-ansi-term",
+ "once_cell",
+ "regex",
  "sharded-slab",
  "smallvec",
  "thread_local",
+ "tracing",
  "tracing-core",
  "tracing-log",
 ]
@@ -7979,6 +8121,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "webpki-roots"
+version = "0.25.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14247bb57be4f377dfb94c72830b8ce8fc6beac03cf4bf7b9732eadd414123fc"
+
+[[package]]
 name = "which"
 version = "4.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8106,11 +8254,12 @@ dependencies = [
 
 [[package]]
 name = "winreg"
-version = "0.10.1"
+version = "0.50.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "80d0f4e272c85def139476380b12f9ac60926689dd2e01d4923222f40580869d"
+checksum = "524e57b2c537c0f9b1e69f1965311ec12182b4122e45035b1508cd24d2adadb1"
 dependencies = [
- "winapi",
+ "cfg-if",
+ "windows-sys",
 ]
 
 [[package]]

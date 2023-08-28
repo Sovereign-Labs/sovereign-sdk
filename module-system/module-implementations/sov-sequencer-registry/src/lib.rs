@@ -11,11 +11,14 @@ mod call;
 mod genesis;
 mod hooks;
 #[cfg(feature = "native")]
-mod query;
+pub mod query;
 
 pub use call::CallMessage;
 #[cfg(feature = "native")]
-pub use query::{SequencerAddressResponse, SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
+pub use query::{
+    SequencerAddressResponse, SequencerRegistryRpcClient, SequencerRegistryRpcImpl,
+    SequencerRegistryRpcServer,
+};
 use sov_modules_api::{CallResponse, Error, ModuleInfo, Spec};
 use sov_state::{StateMap, StateValue, WorkingSet};
 
@@ -177,7 +180,7 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
     }
 
     /// Checks whether `sender` is a registered sequencer.
-    pub fn is_sender_allowed<T: sov_modules_api::AddressTrait>(
+    pub fn is_sender_allowed<T: sov_rollup_interface::BasicAddress>(
         &self,
         sender: &T,
         working_set: &mut WorkingSet<C::Storage>,

@@ -1,11 +1,9 @@
 #[cfg(feature = "native")]
-use sov_accounts::{AccountsRpcImpl, AccountsRpcServer};
+use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
-use sov_bank::{BankRpcImpl, BankRpcServer};
+use sov_bank::query::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
 use sov_blob_storage::{BlobStorageRpcImpl, BlobStorageRpcServer};
-#[cfg(feature = "native")]
-use sov_election::{ElectionRpcImpl, ElectionRpcServer};
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
 use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
@@ -23,7 +21,15 @@ use sov_rollup_interface::zk::ValidityCondition;
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 use sov_state::WorkingSet;
 #[cfg(feature = "native")]
-use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
+use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
+
+#[cfg(feature = "native")]
+pub mod query {
+    pub use sov_accounts::query as accounts;
+    pub use sov_bank::query as bank;
+    pub use sov_sequencer_registry::query as sequencer_registry;
+    pub use sov_value_setter::query as value_setter;
+}
 
 /// The Rollup entrypoint.
 ///
@@ -73,7 +79,6 @@ pub struct Runtime<C: Context> {
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub blob_storage: sov_blob_storage::BlobStorage<C>,
-    pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
 }
@@ -91,7 +96,6 @@ pub struct Runtime<C: Context> {
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub blob_storage: sov_blob_storage::BlobStorage<C>,
-    pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
     #[cfg_attr(feature = "native", cli_skip)]
@@ -110,8 +114,13 @@ impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for Runtime<C> {
 
     fn end_slot_hook(
         &self,
-        _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+        #[allow(unused_variables)] root_hash: [u8; 32],
+        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
+            <Self::Context as sov_modules_api::Spec>::Storage,
+        >,
     ) {
+        #[cfg(feature = "experimental")]
+        self.evm.end_slot_hook(root_hash, working_set);
     }
 }
 

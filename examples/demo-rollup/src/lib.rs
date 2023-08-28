@@ -3,17 +3,16 @@
 
 pub mod register_rpc;
 mod rollup;
-use std::str::FromStr;
 
 use celestia::types::NamespaceId;
-use celestia::verifier::address::CelestiaAddress;
-use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
+use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 use demo_stf::app::DefaultPrivateKey;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runtime::GenesisConfig;
 pub use rollup::{new_rollup_with_celestia_da, Rollup};
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::default_context::DefaultContext;
+use sov_rollup_interface::BasicAddress;
 
 /// The rollup stores its data in the namespace b"sov-test" on Celestia
 /// You can change this constant to point your rollup at a different namespace
@@ -39,9 +38,11 @@ pub struct HexKey {
 /// address, simply change the value of the SEQUENCER_DA_ADDRESS to your own address.
 /// For example:
 /// ```rust,no_run
-/// const SEQUENCER_DA_ADDRESS: [u8;47] = *b"celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208";
+/// const SEQUENCER_DA_ADDRESS: &str = "celestia1qp09ysygcx6npted5yc0au6k9lner05yvs9208";
 /// ```
-pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
+pub fn get_genesis_config<A: BasicAddress>(
+    sequencer_da_address: A,
+) -> GenesisConfig<DefaultContext> {
     let hex_key: HexKey = serde_json::from_slice(include_bytes!(
         "../../test-data/keys/token_deployer_private_key.json"
     ))
@@ -52,12 +53,11 @@ pub fn get_genesis_config() -> GenesisConfig<DefaultContext> {
         hex_key.address,
         "Inconsistent key data",
     );
-    let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
+
     create_demo_genesis_config(
         100000000,
         sequencer_private_key.default_address(),
         sequencer_da_address.as_ref().to_vec(),
-        &sequencer_private_key,
         &sequencer_private_key,
     )
 }

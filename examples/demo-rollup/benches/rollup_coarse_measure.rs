@@ -16,7 +16,7 @@ use rng_xfers::{RngDaService, RngDaSpec};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
-use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash, MockValidityCond};
+use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_stf_runner::{from_toml_path, RollupConfig};
@@ -103,7 +103,6 @@ async fn main() -> Result<(), anyhow::Error> {
         sequencer_private_key.default_address(),
         sequencer_da_address.as_ref().to_vec(),
         &sequencer_private_key,
-        &sequencer_private_key,
     );
 
     demo.init_chain(demo_genesis_config);
@@ -122,9 +121,10 @@ async fn main() -> Result<(), anyhow::Error> {
                 prev_hash: MockHash([0u8; 32]),
             },
             height,
-            validity_cond: MockValidityCond::default(),
+            validity_cond: Default::default(),
+            blobs: Default::default(),
         };
-        blocks.push(filtered_block);
+        blocks.push(filtered_block.clone());
 
         let blob_txs = da_service.extract_relevant_txs(&filtered_block);
         blobs.push(blob_txs);
@@ -136,7 +136,7 @@ async fn main() -> Result<(), anyhow::Error> {
     for height in start_height..end_height {
         let filtered_block = &blocks[height as usize];
 
-        let mut data_to_commit = SlotCommit::new(*filtered_block);
+        let mut data_to_commit = SlotCommit::new(filtered_block.clone());
 
         let now = Instant::now();
 

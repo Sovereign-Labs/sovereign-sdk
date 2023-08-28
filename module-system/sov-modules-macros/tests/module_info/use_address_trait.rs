@@ -2,7 +2,7 @@
 
 #![allow(unused_imports)]
 
-use sov_modules_api::{AddressTrait, Context, ModuleInfo};
+use sov_modules_api::{Context, ModuleInfo, RollupAddress};
 
 #[derive(ModuleInfo)]
 struct TestModule<C: Context> {
