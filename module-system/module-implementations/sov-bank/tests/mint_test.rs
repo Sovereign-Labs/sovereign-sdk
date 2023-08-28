@@ -99,7 +99,7 @@ fn mint_token() {
 
     assert_eq!(
         format!(
-            "Failed mint coins(token_address={} amount={}) to {} by minter {}",
+            "Failed mint coins(token_address={} amount={}) to {} by authorizer {}",
             token_address, mint_amount, new_holder, unauthorized_address
         ),
         message_1
