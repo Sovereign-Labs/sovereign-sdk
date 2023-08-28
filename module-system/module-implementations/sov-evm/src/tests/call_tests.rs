@@ -6,8 +6,8 @@ use sov_modules_api::{Context, Module, PrivateKey, Spec};
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::call::CallMessage;
-use crate::evm::test_helpers::SimpleStorageContract;
 use crate::evm::EthAddress;
+use crate::smart_contracts::SimpleStorageContract;
 use crate::tests::dev_signer::DevSigner;
 use crate::{AccountData, Evm, EvmConfig};
 type C = DefaultContext;
@@ -18,7 +18,7 @@ fn create_messages(
     dev_signer: DevSigner,
 ) -> Vec<CallMessage> {
     let mut transactions = Vec::default();
-    let contract = SimpleStorageContract::new();
+    let contract = SimpleStorageContract::default();
 
     // Contract creation.
     {
