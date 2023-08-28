@@ -6,7 +6,7 @@ use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
     DataStruct, Fields, GenericParam, ImplGenerics, Meta, PathArguments, PathSegment, TypeGenerics,
-    TypeParamBound, TypePath, WhereClause, WherePredicate,
+    TypeParamBound,
 };
 
 #[derive(Clone)]
@@ -144,7 +144,7 @@ pub(crate) struct StructDef<'a> {
     pub(crate) type_generics: TypeGenerics<'a>,
     pub(crate) generic_param: &'a Ident,
     pub(crate) fields: Vec<StructNamedField>,
-    pub(crate) where_clause: Option<&'a WhereClause>,
+    pub(crate) where_clause: Option<&'a syn::WhereClause>,
 }
 
 impl<'a> StructDef<'a> {
@@ -154,7 +154,7 @@ impl<'a> StructDef<'a> {
         impl_generics: ImplGenerics<'a>,
         type_generics: TypeGenerics<'a>,
         generic_param: &'a Ident,
-        where_clause: Option<&'a WhereClause>,
+        where_clause: Option<&'a syn::WhereClause>,
     ) -> Self {
         Self {
             ident,
@@ -333,7 +333,7 @@ pub(crate) fn extract_generic_type_bounds(
         for predicate in &where_clause.predicates {
             // We can ignore lifetimes and "Eq" predicates since they don't add any trait bounds
             // so just match on `Type` predicates
-            if let WherePredicate::Type(predicate_type) = predicate {
+            if let syn::WherePredicate::Type(predicate_type) = predicate {
                 // If the bounded type is a regular type path, we need to extract the bounds and add them to the map.
                 // For now, we ignore more exotic bounds `[T; N]: SomeTrait`.
                 if let syn::Type::Path(type_path) = &predicate_type.bounded_ty {
@@ -352,18 +352,6 @@ pub(crate) fn extract_generic_type_bounds(
     generics_with_bounds
 }
 
-/// Extract the type ident from a `TypePath`.
-#[cfg_attr(not(feature = "native"), allow(unused))]
-pub fn extract_ident(type_path: &syn::TypePath) -> &Ident {
-    &type_path
-        .path
-        .segments
-        .last()
-        .expect("Type path must have at least one segment")
-        .ident
-}
-
-/// Build the generics for a field based on the generics of the outer struct.
 /// For example, given the following struct:
 /// ```rust,ignore
 /// struct MyStruct<T: SomeTrait, U: SomeOtherTrait> {
@@ -383,12 +371,9 @@ pub(crate) fn generics_for_field(
     match field_generic_types {
         PathArguments::AngleBracketed(angle_bracketed_data) => {
             let mut args_with_bounds = Punctuated::<GenericParam, syn::token::Comma>::new();
-            let mut where_predicates = Punctuated::<WherePredicate, syn::token::Comma>::new();
+            let mut where_predicates = Punctuated::<syn::WherePredicate, syn::token::Comma>::new();
             for generic_arg in &angle_bracketed_data.args {
                 if let syn::GenericArgument::Type(syn::Type::Path(type_path)) = generic_arg {
-                    // let ident = extract_ident(type_path);
-                    println!("SEGMENTS: {}", &type_path.path.segments.len());
-
                     let sub_path_segment_start = &type_path
                         .path
                         .segments
@@ -400,19 +385,19 @@ pub(crate) fn generics_for_field(
                     let bounds = generic_bounds.get(&sub_path).cloned().unwrap_or_default();
 
                     if type_path.path.segments.len() > 1 {
-                        for segment in type_path.path.segments.iter().skip(1) {
-                            let sub_path: syn::Path = segment.clone().into();
-                            let where_bounds =
-                                generic_bounds.get(&sub_path).cloned().unwrap_or_default();
+                        let where_bounds = generic_bounds
+                            .get(&type_path.path)
+                            .cloned()
+                            .unwrap_or_default();
+
+                        if !where_bounds.is_empty() {
                             let sub_type_path = syn::TypePath {
                                 // This needs to be addressed, from docs:
                                 // A path like `std::slice::Iter`, optionally qualified with a
                                 // self-type as in `<Vec<T> as SomeTrait>::Associated`.
                                 qself: None,
-                                path: sub_path,
+                                path: type_path.path.clone(),
                             };
-
-                            println!("THOSE BOUNDS: {}", where_bounds.to_token_stream());
 
                             let where_predicate = syn::WherePredicate::Type(syn::PredicateType {
                                 lifetimes: None,
@@ -421,21 +406,11 @@ pub(crate) fn generics_for_field(
                                 bounds: where_bounds,
                             });
 
-                            println!("WHERE: {}", where_predicate.to_token_stream());
-
                             where_predicates.push(where_predicate);
                         }
                     }
 
                     let ident = &sub_path_segment_start.ident;
-
-                    println!(
-                        "{} BOUNDS: {}",
-                        type_path.to_token_stream(),
-                        bounds.to_token_stream()
-                    );
-                    println!("=-=-=-=-=-=-=-=-=-=-");
-                    // T::Foo::Bar
 
                     // Construct a "type param" with the appropriate bounds. This corresponds to a syntax
                     // tree like `T: Trait1 + Trait2`
@@ -574,25 +549,25 @@ mod tests {
             }
         };
 
-        println!(
-            "actual {} {}",
-            actual_generics.to_token_stream(),
-            actual_generics
-                .where_clause
-                .map_or("".to_string(), |w| w.to_token_stream().to_string())
-        );
-        println!(
-            "expected {} {}",
-            expected.generics.to_token_stream(),
-            expected
-                .generics
-                .where_clause
-                .map_or("".to_string(), |w| w.to_token_stream().to_string())
-        );
+        // println!(
+        //     "actual {} {}",
+        //     actual_generics.to_token_stream(),
+        //     actual_generics
+        //         .where_clause
+        //         .map_or("".to_string(), |w| w.to_token_stream().to_string())
+        // );
+        // println!(
+        //     "expected {} {}",
+        //     expected.generics.to_token_stream(),
+        //     expected
+        //         .generics
+        //         .where_clause
+        //         .map_or("".to_string(), |w| w.to_token_stream().to_string())
+        // );
         // actual < U : SomeOtherTrait , Error : Debug >
         // expected < U : SomeOtherTrait , T : SomeThirdTrait >
 
-        // assert_eq!(expected.generics, actual_generics);
+        assert_eq!(expected.generics, actual_generics);
     }
 
     #[test]
@@ -626,4 +601,6 @@ mod tests {
     //                 field_1: Result<U, T::Error>,
     //             }
     //         };
+
+    // // T::Foo::Bar
 }
