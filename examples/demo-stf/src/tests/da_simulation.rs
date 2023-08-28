@@ -1,8 +1,8 @@
 use std::rc::Rc;
 
 use sov_data_generators::bank_data::{
-    BadSerializationBankCallMessages, BadSignatureBankCallMessages,
-    BankMessageGenerator, BadNonceBankCallMessages
+    BadNonceBankCallMessages, BadSerializationBankCallMessages, BadSignatureBankCallMessages,
+    BankMessageGenerator,
 };
 use sov_data_generators::value_setter_data::{ValueSetterMessage, ValueSetterMessages};
 use sov_data_generators::MessageGenerator;

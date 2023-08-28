@@ -14,8 +14,8 @@ use super::create_new_demo;
 use crate::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
 use crate::runtime::Runtime;
 use crate::tests::da_simulation::{
-    simulate_da_with_bad_serialization, simulate_da_with_bad_sig,
-    simulate_da_with_revert_msg, simulate_da_with_bad_nonce
+    simulate_da_with_bad_nonce, simulate_da_with_bad_serialization, simulate_da_with_bad_sig,
+    simulate_da_with_revert_msg,
 };
 
 const SEQUENCER_BALANCE_DELTA: u64 = 1;
@@ -213,7 +213,6 @@ fn test_tx_bad_nonce() {
         let data = MockBlock::default();
         let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
 
-
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let tx_receipts = apply_block_result.batch_receipts[0].tx_receipts.clone();
 
@@ -229,7 +228,6 @@ fn test_tx_bad_nonce() {
             apply_block_result.batch_receipts[0].inner,
             SequencerOutcome::Rewarded(0)
         );
-
     }
 }
 
