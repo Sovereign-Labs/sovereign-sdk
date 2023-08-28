@@ -11,7 +11,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Address, AddressBech32, EncodeCall, PrivateKey, PublicKey, Spec};
-use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::mocks::{
     MockBlob, MockBlock, MockBlockHeader, MockHash, MockValidityCond,
 };
@@ -89,7 +89,29 @@ impl Default for RngDaService {
     }
 }
 
+pub struct RngDaVerifier;
+impl DaVerifier for RngDaVerifier {
+    type Spec = RngDaSpec;
+
+    type Error = anyhow::Error;
+
+    fn new(_params: <Self::Spec as DaSpec>::ChainParams) -> Self {
+        Self
+    }
+
+    fn verify_relevant_tx_list(
+        &self,
+        _block_header: &<Self::Spec as DaSpec>::BlockHeader,
+        _txs: &[<Self::Spec as DaSpec>::BlobTransaction],
+        _inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
+        _completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
+    ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error> {
+        Ok(MockValidityCond { is_valid: true })
+    }
+}
+
 /// A simple DaSpec for a random number generator.
+#[derive(Debug)]
 pub struct RngDaSpec;
 
 impl DaSpec for RngDaSpec {
@@ -104,6 +126,7 @@ impl DaSpec for RngDaSpec {
 
 #[async_trait]
 impl DaService for RngDaService {
+    type Verifier = RngDaVerifier;
     type Spec = RngDaSpec;
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
@@ -133,7 +156,10 @@ impl DaService for RngDaService {
     fn extract_relevant_txs(
         &self,
         block: &Self::FilteredBlock,
-    ) -> Vec<<Self::Spec as DaSpec>::BlobTransaction> {
+    ) -> (
+        Vec<<Self::Spec as DaSpec>::BlobTransaction>,
+        MockValidityCond,
+    ) {
         let mut num_txns = 10000;
         if let Ok(val) = env::var("TXNS_PER_BLOCK") {
             num_txns = val
@@ -152,7 +178,7 @@ impl DaService for RngDaService {
         let address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
         let blob = MockBlob::new(data, address, [0u8; 32]);
 
-        vec![blob]
+        (vec![blob], Default::default())
     }
 
     async fn get_extraction_proof(

@@ -127,6 +127,7 @@ impl<A: BasicAddress> MockBlob<A> {
     Copy,
     Debug,
     PartialEq,
+    Eq,
     serde::Serialize,
     serde::Deserialize,
     borsh::BorshDeserialize,

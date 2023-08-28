@@ -8,9 +8,7 @@ use sov_chain_state::TransitionHeight;
 use sov_modules_api::{CallResponse, Context, Spec};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::optimistic::Attestation;
-use sov_rollup_interface::zk::{
-    StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
-};
+use sov_rollup_interface::zk::{StateTransition, ValidityConditionChecker, Zkvm};
 use sov_state::storage::StorageProof;
 use sov_state::{Storage, WorkingSet};
 use thiserror::Error;
@@ -668,7 +666,7 @@ impl<
             return Err(SlashingReason::InvalidInitialHash);
         }
 
-        if public_outputs.slot_hash != transition.da_block_hash() {
+        if &public_outputs.slot_hash != transition.da_block_hash() {
             return Err(SlashingReason::TransitionInvalid);
         }
 

@@ -35,11 +35,11 @@ pub struct Attestation<Da: DaSpec, StateProof: BorshSerialize> {
 /// The contents of a challenge to an attestation, which are contained as a public output of the proof
 /// Generic over an address type and a validity condition
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize)]
-pub struct ChallengeContents<Address, VC> {
+pub struct ChallengeContents<Address, Da: DaSpec> {
     /// The rollup address of the originator of this challenge
     pub challenger_address: Address,
     /// The state transition that was proven
-    pub state_transition: StateTransition<VC, Address>,
+    pub state_transition: StateTransition<Da, Address>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, Serialize, Deserialize)]

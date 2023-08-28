@@ -78,7 +78,7 @@ fn rollup_bench(_bench: &mut Criterion) {
         };
         blocks.push(filtered_block.clone());
 
-        let blob_txs = da_service.extract_relevant_txs(&filtered_block);
+        let blob_txs = da_service.extract_relevant_txs(&filtered_block).0;
         blobs.push(blob_txs.clone());
     }
 
@@ -90,7 +90,8 @@ fn rollup_bench(_bench: &mut Criterion) {
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
             let apply_block_result = demo.apply_slot(
                 Default::default(),
-                data_to_commit.slot_data(),
+                &data_to_commit.slot_data().header,
+                &Default::default(),
                 &mut blobs[height as usize],
             );
             for receipts in apply_block_result.batch_receipts {

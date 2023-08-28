@@ -1,4 +1,5 @@
 use sov_modules_api::default_context::DefaultContext;
+use sov_rollup_interface::mocks::MockHash;
 use sov_rollup_interface::optimistic::Attestation;
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -57,7 +58,7 @@ fn test_two_phase_unbonding() {
     {
         let attestation = Attestation {
             initial_state_root: initial_transition.state_root,
-            da_block_hash: [1; 32],
+            da_block_hash: MockHash([1; 32]),
             post_state_root: transition_1.state_root,
             proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
                 claimed_transition_num: INIT_HEIGHT + 1,

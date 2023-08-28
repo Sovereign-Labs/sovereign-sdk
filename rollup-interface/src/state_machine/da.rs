@@ -187,7 +187,16 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
 
 /// Trait with collection of trait bounds for a block hash.
 pub trait BlockHashTrait:
-    Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync + BorshSerialize + BorshDeserialize
+    Serialize
+    + DeserializeOwned
+    + PartialEq
+    + Eq
+    + Debug
+    + Send
+    + Sync
+    + BorshSerialize
+    + BorshDeserialize
+    + Clone
 {
 }
 

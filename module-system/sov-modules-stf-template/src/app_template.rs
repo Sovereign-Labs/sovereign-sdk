@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use borsh::BorshDeserialize;
 use sov_modules_api::{Context, DispatchCall};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader, DaSpec};
-use sov_rollup_interface::stf::{BatchReceipt, FromConfig, TransactionReceipt, ZkMode};
+use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt, ZkMode};
 use sov_rollup_interface::zk::ZkSystem;
 use sov_rollup_interface::{BasicAddress, Buf};
 use sov_state::{StateCheckpoint, ZkStorage};

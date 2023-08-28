@@ -5,7 +5,7 @@ use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Address, Genesis, Spec};
 use sov_rollup_interface::mocks::{
-    MockBlock, MockBlockHeader, MockCodeCommitment, MockDaSpec, MockHash, MockValidityCond,
+    MockBlockHeader, MockCodeCommitment, MockDaSpec, MockHash, MockValidityCond,
     MockValidityCondChecker, MockZkvm,
 };
 use sov_rollup_interface::zk::ValidityConditionChecker;

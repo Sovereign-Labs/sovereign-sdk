@@ -3,7 +3,6 @@
 
 mod batch_builder;
 mod config;
-use std::marker::PhantomData;
 use std::net::SocketAddr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -13,27 +12,14 @@ pub use batch_builder::FiFoStrictBatchBuilder;
 pub use config::{from_toml_path, RollupConfig, RunnerConfig, StorageConfig};
 use jsonrpsee::RpcModule;
 pub use ledger_rpc::get_ledger_rpc;
-use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::services::da::{DaService, SlotData};
-use sov_rollup_interface::stf::{FromConfig, StateTransitionFunction, ZkMode};
-use sov_rollup_interface::zk::{ZkSystem, Zkvm, ZkvmGuest, ZkvmHost};
-use sov_state::{Storage, ZkStorage};
+use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_rollup_interface::zk::{ZkSystem, ZkvmGuest, ZkvmHost};
 use tokio::sync::oneshot;
 use tracing::{debug, info};
-
-type StateRoot<ST, Vm, DA> = <ST as StateTransitionFunction<
-    Vm,
-    <<DA as DaService>::Spec as DaSpec>::BlobTransaction,
->>::StateRoot;
-
-type InitialState<ST, Vm, DA> = <ST as StateTransitionFunction<
-    Vm,
-    <<DA as DaService>::Spec as DaSpec>::BlobTransaction,
->>::InitialState;
 
 /// Verifies a state transition
 pub struct StateTransitionVerifier<ST, Da, Vm>
@@ -77,6 +63,7 @@ where
             &validity_condition,
             &mut data.blobs,
         );
+        self.vm_guest.commit(&result.state_root);
 
         Ok(())
     }
@@ -95,15 +82,14 @@ where
     ledger_db: LedgerDB,
     state_root: ST::StateRoot,
     listen_address: SocketAddr,
-    verifier: Option<StateTransitionVerifier<ST, DA::Verifier, Vm>>,
+    prover: Option<(Vm::Host, StateTransitionVerifier<ST, DA::Verifier, Vm>)>,
 }
 
-impl<ST, DA, Vm, StateRoot> StateTransitionRunner<ST, DA, Vm>
+impl<ST, DA, Vm> StateTransitionRunner<ST, DA, Vm>
 where
     DA: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
     Vm: ZkSystem,
-    ST: StateTransitionFunction<Vm, DA::Spec> + FromConfig<ZkMode, Config = StateRoot>,
-    StateRoot: Clone + Into<[u8; 32]>,
+    ST: StateTransitionFunction<Vm, DA::Spec>,
 {
     /// Creates a new `StateTransitionRunner` runner.
     pub fn new(
@@ -113,7 +99,7 @@ where
         mut app: ST,
         should_init_chain: bool,
         genesis_config: ST::InitialState,
-        verifier: Option<StateTransitionVerifier<ST, DA::Verifier, Vm>>,
+        prover: Option<(Vm::Host, StateTransitionVerifier<ST, DA::Verifier, Vm>)>,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
 
@@ -144,7 +130,7 @@ where
             ledger_db,
             state_root: prev_state_root,
             listen_address,
-            verifier,
+            prover,
         })
     }
 
@@ -173,10 +159,7 @@ where
     }
 
     /// Runs the rollup.
-    pub async fn run(&mut self, prover: Option<&Vm::Host>) -> Result<(), anyhow::Error> {
-        // FIXME!
-        let prover = prover.map(|p| (p, self.verifier.as_ref().unwrap()));
-
+    pub async fn run(&mut self) -> Result<(), anyhow::Error> {
         for height in self.start_height.. {
             debug!("Requesting data for height {}", height,);
 
@@ -210,7 +193,7 @@ where
                 data_to_commit.add_batch(receipt);
             }
             let next_state_root: ST::StateRoot = slot_result.state_root;
-            if let Some((prover_instance, ref guest)) = prover {
+            if let Some((prover_instance, guest)) = self.prover.as_mut() {
                 let (inclusion_proof, completeness_proof) = self
                     .da_service
                     .get_extraction_proof(&filtered_block, &blobs)
@@ -222,6 +205,7 @@ where
                 prover_instance.write_to_guest(&completeness_proof);
                 prover_instance.write_to_guest(&blobs);
                 prover_instance.write_to_guest(slot_result.witness);
+                guest.run_block().unwrap();
             }
 
             self.ledger_db.commit_slot(data_to_commit)?;

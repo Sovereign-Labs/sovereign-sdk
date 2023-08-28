@@ -1,7 +1,7 @@
 use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker, Zkvm};
+use sov_rollup_interface::zk::{ValidityConditionChecker, Zkvm};
 use sov_state::{Storage, WorkingSet};
 
 use crate::call::Role;

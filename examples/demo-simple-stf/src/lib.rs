@@ -5,9 +5,8 @@ use std::marker::PhantomData;
 
 use sha2::Digest;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{BatchReceipt, SlotResult, StateTransitionFunction};
-use sov_rollup_interface::zk::{ValidityCondition, ZkSystem, Zkvm};
+use sov_rollup_interface::zk::{ValidityCondition, ZkSystem};
 
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
@@ -63,9 +62,9 @@ impl<Vm: ZkSystem, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<
 
     fn apply_slot<'a, I>(
         &mut self,
-        witness: Self::Witness,
-        slot_header: &Da::BlockHeader,
-        validity_condition: &Da::ValidityCondition,
+        _witness: Self::Witness,
+        _slot_header: &Da::BlockHeader,
+        _validity_condition: &Da::ValidityCondition,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,

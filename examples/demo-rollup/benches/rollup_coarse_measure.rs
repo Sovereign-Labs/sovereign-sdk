@@ -17,7 +17,7 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
 use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash};
-use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tempfile::TempDir;
@@ -127,7 +127,7 @@ async fn main() -> Result<(), anyhow::Error> {
         };
         blocks.push(filtered_block.clone());
 
-        let blob_txs = da_service.extract_relevant_txs(&filtered_block);
+        let blob_txs = da_service.extract_relevant_txs(&filtered_block).0;
         blobs.push(blob_txs);
     }
 
@@ -143,7 +143,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
         let apply_block_results = demo.apply_slot(
             Default::default(),
-            data_to_commit.slot_data(),
+            data_to_commit.slot_data().header(),
+            &Default::default(),
             &mut blobs[height as usize],
         );
 

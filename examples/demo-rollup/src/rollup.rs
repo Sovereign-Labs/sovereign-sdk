@@ -10,11 +10,8 @@ use demo_stf::app::{App, DefaultContext};
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
 use risc0_adapter::host::Risc0Vm;
 use sov_db::ledger_db::LedgerDB;
-use sov_modules_stf_template::AppTemplate;
-use sov_rollup_interface::da::DaVerifier;
-use sov_rollup_interface::mocks::MockZkvm;
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::zk::{ZkSystem, Zkvm};
+use sov_rollup_interface::zk::ZkSystem;
 use sov_state::storage::Storage;
 use sov_stf_runner::{from_toml_path, RollupConfig, RunnerConfig, StateTransitionRunner};
 use tokio::sync::oneshot;
@@ -39,12 +36,12 @@ pub struct Rollup<Vm: ZkSystem, DA: DaService + Clone> {
     pub genesis_config: GenesisConfig<DefaultContext>,
 }
 
-pub struct RollupGuest<Vm: Zkvm, DA: DaVerifier> {
-    /// Implementation of the stf
-    pub app: App<Vm, DA::Spec>,
-    /// Initial rollup configuration.
-    pub genesis_config: GenesisConfig<DefaultContext>,
-}
+// pub struct RollupGuest<Vm: Zkvm, DA: DaVerifier> {
+//     /// Implementation of the stf
+//     pub app: App<Vm, DA::Spec>,
+//     /// Initial rollup configuration.
+//     pub genesis_config: GenesisConfig<DefaultContext>,
+// }
 
 /// Creates celestia based rollup.
 pub async fn new_rollup_with_celestia_da(
@@ -129,7 +126,7 @@ impl<Vm: ZkSystem, DA: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, DA> 
         )?;
 
         runner.start_rpc_server(methods, channel).await;
-        runner.run(prover).await?;
+        runner.run().await?;
 
         Ok(())
     }
