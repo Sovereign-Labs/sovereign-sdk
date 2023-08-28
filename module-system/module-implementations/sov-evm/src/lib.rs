@@ -4,7 +4,7 @@ pub mod call;
 pub mod evm;
 #[cfg(feature = "experimental")]
 pub mod genesis;
-#[cfg(feature = "smart_contracts")]
+#[cfg(feature = "experimental")]
 pub mod hooks;
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
