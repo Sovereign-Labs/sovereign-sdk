@@ -8,7 +8,7 @@ use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, TxEffect};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockDaSpec};
 use sov_rollup_interface::stf::BatchReceipt;
-use sov_rollup_interface::AddressTrait;
+use sov_rollup_interface::RollupAddress;
 
 pub mod bank_data;
 pub mod election_data;
@@ -24,7 +24,7 @@ pub fn new_test_blob_from_batch(
     MockBlob::new(data, address, hash)
 }
 
-pub fn has_tx_events<A: AddressTrait>(
+pub fn has_tx_events<A: RollupAddress>(
     apply_blob_outcome: &BatchReceipt<SequencerOutcome<A>, TxEffect>,
 ) -> bool {
     let events = apply_blob_outcome

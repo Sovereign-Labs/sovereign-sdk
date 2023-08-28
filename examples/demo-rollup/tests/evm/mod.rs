@@ -1,9 +1,6 @@
-mod test_helpers;
-use std::fs::remove_dir_all;
-use std::path::PathBuf;
+use std::net::SocketAddr;
 use std::str::FromStr;
 
-use demo_stf::app::App;
 use ethers_core::abi::Address;
 use ethers_core::k256::ecdsa::SigningKey;
 use ethers_core::types::transaction::eip2718::TypedTransaction;
@@ -11,54 +8,11 @@ use ethers_core::types::Eip1559TransactionRequest;
 use ethers_middleware::SignerMiddleware;
 use ethers_providers::{Http, Middleware, Provider};
 use ethers_signers::{LocalWallet, Signer, Wallet};
-use risc0_adapter::host::Risc0Verifier;
-use sov_demo_rollup::{get_genesis_config, initialize_ledger, Rollup};
-use sov_rollup_interface::mocks::{MockAddress, MockDaService};
-use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
-use test_helpers::SimpleStorageContract;
+use sov_evm::smart_contracts::SimpleStorageContract;
+
+use super::test_helpers::start_rollup;
 
 const MAX_FEE_PER_GAS: u64 = 100000001;
-
-fn create_mock_da_rollup(rollup_config: RollupConfig<()>) -> Rollup<Risc0Verifier, MockDaService> {
-    let _ = remove_dir_all(&rollup_config.storage.path);
-    let ledger_db = initialize_ledger(rollup_config.storage.path.clone());
-    let sequencer_da_address = MockAddress { addr: [99; 32] };
-    let da_service = MockDaService::new(sequencer_da_address);
-
-    let app = App::new(rollup_config.storage);
-
-    let genesis_config = get_genesis_config(sequencer_da_address);
-
-    Rollup {
-        app,
-        da_service,
-        ledger_db,
-        runner_config: rollup_config.runner,
-        genesis_config,
-    }
-}
-
-async fn start_rollup() {
-    let mut mock_path = PathBuf::from("tests");
-    mock_path.push("test_data");
-    mock_path.push("tmp");
-    mock_path.push("mocks");
-
-    let rollup_config = RollupConfig {
-        storage: StorageConfig { path: mock_path },
-        runner: RunnerConfig {
-            start_height: 0,
-            rpc_config: RpcConfig {
-                bind_host: "127.0.0.1".into(),
-                bind_port: 12345,
-            },
-        },
-        da: (),
-    };
-
-    let rollup = create_mock_da_rollup(rollup_config);
-    rollup.run().await.unwrap();
-}
 
 struct TestClient {
     chain_id: u64,
@@ -69,14 +23,15 @@ struct TestClient {
 
 impl TestClient {
     #[allow(dead_code)]
-    async fn new_demo_rollup_client(
+    async fn new(
         chain_id: u64,
         key: Wallet<SigningKey>,
         from_addr: Address,
         contract: SimpleStorageContract,
+        rpc_addr: std::net::SocketAddr,
     ) -> Self {
-        let endpoint = format!("http://localhost:{}", 12345);
-        let provider = Provider::try_from(endpoint).unwrap();
+        let provider =
+            Provider::try_from(&format!("http://localhost:{}", rpc_addr.port())).unwrap();
 
         let client = SignerMiddleware::new_with_provider_chain(provider, key)
             .await
@@ -161,34 +116,32 @@ impl TestClient {
     }
 }
 
-async fn send_tx_test_to_eth() -> Result<(), Box<dyn std::error::Error>> {
+async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std::error::Error>> {
     let chain_id: u64 = 1;
     let key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
         .parse::<LocalWallet>()
         .unwrap()
         .with_chain_id(chain_id);
 
-    let contract = SimpleStorageContract::new();
+    let contract = SimpleStorageContract::default();
 
     let from_addr = Address::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
 
-    let test_client = TestClient::new_demo_rollup_client(chain_id, key, from_addr, contract).await;
+    let test_client = TestClient::new(chain_id, key, from_addr, contract, rpc_address).await;
     test_client.execute().await
 }
 
 #[tokio::test]
-async fn tx_tests() -> Result<(), anyhow::Error> {
-    let (tx, rx) = tokio::sync::oneshot::channel();
+async fn evm_tx_tests() -> Result<(), anyhow::Error> {
+    let (port_tx, port_rx) = tokio::sync::oneshot::channel();
 
     let rollup_task = tokio::spawn(async {
-        tx.send(()).unwrap();
-        start_rollup().await;
+        start_rollup(port_tx).await;
     });
 
     // Wait for rollup task to start:
-    let _ = rx.await;
-
-    send_tx_test_to_eth().await.unwrap();
+    let port = port_rx.await.unwrap();
+    send_tx_test_to_eth(port).await.unwrap();
     rollup_task.abort();
     Ok(())
 }

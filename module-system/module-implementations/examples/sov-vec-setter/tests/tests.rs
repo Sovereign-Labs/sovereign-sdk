@@ -1,7 +1,6 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Context, Module};
-use sov_state::codec::StateValueCodec;
-use sov_state::{ProverStorage, StateVec, Storage, WorkingSet};
+use sov_state::{ProverStorage, WorkingSet};
 use sov_vec_setter::{CallMessage, VecSetter, VecSetterConfig};
 
 // rustfmt doesn't like long lines, but it's easier to read in this case.
@@ -47,23 +46,10 @@ fn test_vec_setter_calls() {
         let call_result = vec_setter.call(call, &context, &mut working_set);
 
         if call_result.is_ok() {
-            let vec_contents = state_vec_get_all(&vec_setter.vector, &mut working_set);
+            let vec_contents = vec_setter.vector.iter(&mut working_set).collect::<Vec<_>>();
             assert_eq!(Some(vec_contents), expected_contents);
         } else {
             assert_eq!(expected_contents, None);
         }
     }
-}
-
-fn state_vec_get_all<T, VC, C>(sv: &StateVec<T, VC>, ws: &mut WorkingSet<C>) -> Vec<T>
-where
-    VC: StateValueCodec<T> + StateValueCodec<usize>,
-    C: Storage,
-{
-    let mut result = Vec::new();
-    let len = sv.len(ws);
-    for i in 0..len {
-        result.push(sv.get(i, ws).unwrap());
-    }
-    result
 }

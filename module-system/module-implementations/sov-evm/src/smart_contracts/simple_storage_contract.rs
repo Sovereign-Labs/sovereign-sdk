@@ -3,17 +3,6 @@ use std::path::PathBuf;
 use ethers_contract::BaseContract;
 use ethers_core::abi::Abi;
 use ethers_core::types::Bytes;
-use revm::primitives::{ExecutionResult, Output};
-
-pub(crate) fn output(result: ExecutionResult) -> bytes::Bytes {
-    match result {
-        ExecutionResult::Success { output, .. } => match output {
-            Output::Call(out) => out,
-            Output::Create(out, _) => out,
-        },
-        _ => panic!("Expected successful ExecutionResult"),
-    }
-}
 
 fn test_data_path() -> PathBuf {
     let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
@@ -29,13 +18,14 @@ fn make_contract_from_abi(path: PathBuf) -> BaseContract {
     BaseContract::from(abi)
 }
 
-pub(crate) struct SimpleStorageContract {
+/// SimpleStorageContract wrapper.
+pub struct SimpleStorageContract {
     bytecode: Bytes,
     base_contract: BaseContract,
 }
 
-impl SimpleStorageContract {
-    pub(crate) fn new() -> Self {
+impl Default for SimpleStorageContract {
+    fn default() -> Self {
         let contract_data = {
             let mut path = test_data_path();
             path.push("SimpleStorage.bin");
@@ -56,17 +46,22 @@ impl SimpleStorageContract {
             base_contract: contract,
         }
     }
+}
 
-    pub(crate) fn byte_code(&self) -> Bytes {
+impl SimpleStorageContract {
+    /// SimpleStorage bytecode.
+    pub fn byte_code(&self) -> Bytes {
         self.bytecode.clone()
     }
 
-    pub(crate) fn set_call_data(&self, set_arg: u32) -> Bytes {
+    /// Setter for the smart contract.
+    pub fn set_call_data(&self, set_arg: u32) -> Bytes {
         let set_arg = ethereum_types::U256::from(set_arg);
         self.base_contract.encode("set", set_arg).unwrap()
     }
 
-    pub(crate) fn get_call_data(&self) -> Bytes {
+    /// Getter for the smart contract.
+    pub fn get_call_data(&self) -> Bytes {
         self.base_contract.encode("get", ()).unwrap()
     }
 }
