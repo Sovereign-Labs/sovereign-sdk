@@ -63,5 +63,10 @@ impl<Ctx: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<Ctx, 
         );
     }
 
-    fn end_slot_hook(&self, _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>) {}
+    fn end_slot_hook(
+        &self,
+        _root_hash: [u8; 32],
+        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) {
+    }
 }
