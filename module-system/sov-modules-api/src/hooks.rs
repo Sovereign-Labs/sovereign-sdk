@@ -65,7 +65,7 @@ pub trait SlotHooks<Condition: ValidityCondition> {
 
     fn end_slot_hook(
         &self,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
         root_hash: [u8; 32],
+        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     );
 }
