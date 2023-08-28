@@ -11,7 +11,6 @@ use sov_rollup_interface::stf::BatchReceipt;
 use sov_rollup_interface::RollupAddress;
 
 pub mod bank_data;
-pub mod election_data;
 pub mod value_setter_data;
 
 pub fn new_test_blob_from_batch(

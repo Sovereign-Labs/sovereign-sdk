@@ -36,7 +36,6 @@ members = [
     "module-system/module-implementations/module-template",
     "module-system/module-implementations/examples/sov-value-setter",
     "module-system/module-implementations/examples/sov-vec-setter",
-    "module-system/module-implementations/examples/sov-election",
     "module-system/module-implementations/integration-tests",
 ]
 exclude = [
