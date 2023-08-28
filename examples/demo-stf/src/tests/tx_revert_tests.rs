@@ -1,12 +1,10 @@
-use borsh::BorshSerialize;
 use sov_accounts::query::Response;
+use sov_data_generators::bank_data::{get_default_private_key, get_default_token_address};
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
-use sov_election::Election;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{EncodeCall, PrivateKey, PublicKey};
-use sov_modules_stf_template::{Batch, RawTx, SequencerOutcome, SlashingReason};
+use sov_modules_api::PrivateKey;
+use sov_modules_stf_template::{Batch, SequencerOutcome, SlashingReason, TxEffect};
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::mocks::MockBlock;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -16,7 +14,8 @@ use super::create_new_demo;
 use crate::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};
 use crate::runtime::Runtime;
 use crate::tests::da_simulation::{
-    simulate_da_with_bad_serialization, simulate_da_with_bad_sig, simulate_da_with_revert_msg,
+    simulate_da_with_bad_nonce, simulate_da_with_bad_serialization, simulate_da_with_bad_sig,
+    simulate_da_with_revert_msg,
 };
 
 const SEQUENCER_BALANCE_DELTA: u64 = 1;
@@ -28,14 +27,9 @@ const SEQUENCER_DA_ADDRESS: [u8; 32] = [1; 32];
 fn test_tx_revert() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
-    let value_setter_admin_private_key = DefaultPrivateKey::generate();
-    let election_admin_private_key = DefaultPrivateKey::generate();
+    let admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_demo_config(
-        SEQUENCER_BALANCE,
-        &value_setter_admin_private_key,
-        &election_admin_private_key,
-    );
+    let config = create_demo_config(SEQUENCER_BALANCE, &admin_private_key);
     let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
 
     {
@@ -44,14 +38,13 @@ fn test_tx_revert() {
         let _data = MockBlock::default();
         demo.init_chain(config);
 
-        let txs = simulate_da_with_revert_msg(election_admin_private_key);
+        let txs = simulate_da_with_revert_msg();
         let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
         let data = MockBlock::default();
 
         let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
 
-        // TODO: Check witness.
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
 
@@ -61,8 +54,14 @@ fn test_tx_revert() {
             "Unexpected outcome: Batch execution should have succeeded",
         );
 
-        // Some events were observed
-        assert!(has_tx_events(&apply_blob_outcome), "No events were taken");
+        let txn_receipts = apply_block_result.batch_receipts[0].tx_receipts.clone();
+        // 3 transactions
+        // create 1000 tokens
+        // transfer 15 tokens
+        // transfer 5000 tokens // this should be reverted
+        assert_eq!(txn_receipts[0].receipt, TxEffect::Successful);
+        assert_eq!(txn_receipts[1].receipt, TxEffect::Successful);
+        assert_eq!(txn_receipts[2].receipt, TxEffect::Reverted);
     }
 
     // Checks
@@ -70,21 +69,16 @@ fn test_tx_revert() {
         let runtime = &mut Runtime::<DefaultContext>::default();
         let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
+        let resp = runtime
+            .bank
+            .balance_of(
+                get_default_private_key().default_address(),
+                get_default_token_address(),
+                &mut working_set,
+            )
+            .unwrap();
 
-        // We sent 4 vote messages but one of them is invalid and should be reverted.
-        let resp = runtime.election.number_of_votes(&mut working_set).unwrap();
-
-        assert_eq!(resp, sov_election::query::GetNbOfVotesResponse::Result(3));
-
-        let resp = runtime.election.results(&mut working_set).unwrap();
-
-        assert_eq!(
-            resp,
-            sov_election::query::GetResultResponse::Result(Some(sov_election::Candidate {
-                name: "candidate_2".to_owned(),
-                count: 3
-            }))
-        );
+        assert_eq!(resp.amount, Some(985));
 
         let resp = runtime
             .sequencer_registry
@@ -96,71 +90,24 @@ fn test_tx_revert() {
 }
 
 #[test]
-// In this test single call is invalid, which means it returned error on dispatch,
-// But nonce of the account should be increased.
 fn test_nonce_incremented_on_revert() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
-    let value_setter_admin_private_key = DefaultPrivateKey::generate();
-    let election_admin_private_key = DefaultPrivateKey::generate();
-    let voter = DefaultPrivateKey::generate();
-    let original_nonce = 0;
+    let admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_demo_config(
-        SEQUENCER_BALANCE,
-        &value_setter_admin_private_key,
-        &election_admin_private_key,
-    );
+    let config = create_demo_config(SEQUENCER_BALANCE, &admin_private_key);
 
     {
+        let mut demo = create_new_demo(path);
         // TODO: Maybe complete with actual block data
         let _data = MockBlock::default();
-        let mut demo = create_new_demo(path);
         demo.init_chain(config);
 
-        let set_candidates_message =
-            <Runtime<DefaultContext> as EncodeCall<Election<DefaultContext>>>::encode_call(
-                sov_election::CallMessage::SetCandidates {
-                    names: vec!["candidate_1".to_owned(), "candidate_2".to_owned()],
-                },
-            );
-
-        let set_candidates_message = Transaction::<DefaultContext>::new_signed_tx(
-            &election_admin_private_key,
-            set_candidates_message,
-            0,
-        );
-
-        let add_voter_message =
-            <Runtime<DefaultContext> as EncodeCall<Election<DefaultContext>>>::encode_call(
-                sov_election::CallMessage::AddVoter(voter.pub_key().to_address()),
-            );
-        let add_voter_message = Transaction::<DefaultContext>::new_signed_tx(
-            &election_admin_private_key,
-            add_voter_message,
-            1,
-        );
-
-        // There's only 2 candidates
-        let vote_message =
-            <Runtime<DefaultContext> as EncodeCall<Election<DefaultContext>>>::encode_call(
-                sov_election::CallMessage::Vote(100),
-            );
-        let vote_message =
-            Transaction::<DefaultContext>::new_signed_tx(&voter, vote_message, original_nonce);
-
-        let txs = vec![set_candidates_message, add_voter_message, vote_message];
-        let txs = txs
-            .into_iter()
-            .map(|t| RawTx {
-                data: t.try_to_vec().unwrap(),
-            })
-            .collect();
-
+        let txs = simulate_da_with_revert_msg();
         let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
         let mut blobs = [blob];
-
         let data = MockBlock::default();
+
         let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
@@ -171,29 +118,36 @@ fn test_nonce_incremented_on_revert() {
             apply_blob_outcome.inner,
             "Unexpected outcome: Batch execution should have succeeded",
         );
+
+        let txn_receipts = apply_block_result.batch_receipts[0].tx_receipts.clone();
+        // 3 transactions
+        // create 1000 tokens
+        // transfer 15 tokens
+        // transfer 5000 tokens // this should be reverted
+        assert_eq!(txn_receipts[0].receipt, TxEffect::Successful);
+        assert_eq!(txn_receipts[1].receipt, TxEffect::Successful);
+        assert_eq!(txn_receipts[2].receipt, TxEffect::Reverted);
     }
 
+    // with 3 transactions, the final nonce should be 3
+    // 0 -> 1
+    // 1 -> 2
+    // 2 -> 3
     {
         let runtime = &mut Runtime::<DefaultContext>::default();
         let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
-
-        // No votes actually recorded, because there was invalid vote
-        let resp = runtime.election.number_of_votes(&mut working_set).unwrap();
-
-        assert_eq!(resp, sov_election::query::GetNbOfVotesResponse::Result(0));
-
         let nonce = match runtime
             .accounts
-            .get_account(voter.pub_key(), &mut working_set)
+            .get_account(get_default_private_key().pub_key(), &mut working_set)
             .unwrap()
         {
             Response::AccountExists { nonce, .. } => nonce,
             Response::AccountEmpty => 0,
         };
 
-        // Voter should have its nonce increased
-        assert_eq!(original_nonce + 1, nonce);
+        // minter account should have its nonce increased for 3 transactions
+        assert_eq!(3, nonce);
     }
 }
 
@@ -201,14 +155,9 @@ fn test_nonce_incremented_on_revert() {
 fn test_tx_bad_sig() {
     let tempdir = tempfile::tempdir().unwrap();
     let path = tempdir.path();
-    let value_setter_admin_private_key = DefaultPrivateKey::generate();
-    let election_admin_private_key = DefaultPrivateKey::generate();
+    let admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_demo_config(
-        SEQUENCER_BALANCE,
-        &value_setter_admin_private_key,
-        &election_admin_private_key,
-    );
+    let config = create_demo_config(SEQUENCER_BALANCE, &admin_private_key);
 
     {
         let mut demo = create_new_demo(path);
@@ -216,7 +165,7 @@ fn test_tx_bad_sig() {
         let _data = MockBlock::default();
         demo.init_chain(config);
 
-        let txs = simulate_da_with_bad_sig(election_admin_private_key);
+        let txs = simulate_da_with_bad_sig();
 
         let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
         let blob_sender = blob.sender();
@@ -240,20 +189,44 @@ fn test_tx_bad_sig() {
         // The batch receipt contains no events.
         assert!(!has_tx_events(&apply_blob_outcome));
     }
+}
+
+#[test]
+fn test_tx_bad_nonce() {
+    let tempdir = tempfile::tempdir().unwrap();
+    let path = tempdir.path();
+    let admin_private_key = DefaultPrivateKey::generate();
+
+    let config = create_demo_config(SEQUENCER_BALANCE, &admin_private_key);
 
     {
-        let runtime = &mut Runtime::<DefaultContext>::default();
-        let storage = ProverStorage::with_path(path).unwrap();
-        let mut working_set = WorkingSet::new(storage);
+        let mut demo = create_new_demo(path);
+        // TODO: Maybe complete with actual block data
+        let _data = MockBlock::default();
+        demo.init_chain(config);
 
-        let resp = runtime.election.results(&mut working_set).unwrap();
+        let txs = simulate_da_with_bad_nonce();
 
+        let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
+        let mut blobs = [blob];
+
+        let data = MockBlock::default();
+        let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
+
+        assert_eq!(1, apply_block_result.batch_receipts.len());
+        let tx_receipts = apply_block_result.batch_receipts[0].tx_receipts.clone();
+        // Bad nonce means that the transaction has to be reverted
+        assert_eq!(tx_receipts[0].receipt, TxEffect::Reverted);
+
+        // We don't expect the sequencer to be slashed for a bad nonce
+        // The reason for this is that in cases such as based sequencing, the sequencer can
+        // still post under the assumption that the nonce is valid (It doesn't know other sequencers
+        // are also doing this) so it needs to be rewarded.
+        // We're asserting that here to track if the logic changes
         assert_eq!(
-            resp,
-            sov_election::query::GetResultResponse::Err("Election is not frozen".to_owned())
+            apply_block_result.batch_receipts[0].inner,
+            SequencerOutcome::Rewarded(0)
         );
-
-        // TODO: Sequencer is slashed
     }
 }
 
@@ -263,13 +236,8 @@ fn test_tx_bad_serialization() {
     let path = tempdir.path();
 
     let value_setter_admin_private_key = DefaultPrivateKey::generate();
-    let election_admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_demo_config(
-        SEQUENCER_BALANCE,
-        &value_setter_admin_private_key,
-        &election_admin_private_key,
-    );
+    let config = create_demo_config(SEQUENCER_BALANCE, &value_setter_admin_private_key);
     let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
     let sequencer_balance_before = {
         let mut demo = create_new_demo(path);
@@ -298,7 +266,7 @@ fn test_tx_bad_serialization() {
 
         let mut demo = create_new_demo(path);
 
-        let txs = simulate_da_with_bad_serialization(election_admin_private_key);
+        let txs = simulate_da_with_bad_serialization();
         let blob = new_test_blob_from_batch(Batch { txs }, &DEMO_SEQUENCER_DA_ADDRESS, [0; 32]);
         let blob_sender = blob.sender();
         let mut blobs = [blob];
@@ -326,13 +294,6 @@ fn test_tx_bad_serialization() {
         let runtime = &mut Runtime::<DefaultContext>::default();
         let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
-
-        let resp = runtime.election.results(&mut working_set).unwrap();
-
-        assert_eq!(
-            resp,
-            sov_election::query::GetResultResponse::Err("Election is not frozen".to_owned())
-        );
 
         // Sequencer is not in the list of allowed sequencers
 

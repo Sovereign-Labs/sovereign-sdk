@@ -9,7 +9,7 @@ mod utils;
 
 /// Specifies the call methods using in that module.
 pub use call::CallMessage;
-use sov_modules_api::{Error, ModuleInfo};
+use sov_modules_api::{CallResponse, Error, ModuleInfo};
 use sov_state::WorkingSet;
 use token::Token;
 /// Specifies an interfact to interact with tokens.
@@ -80,15 +80,18 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
                 initial_balance,
                 minter_address,
                 authorized_minters,
-            } => Ok(self.create_token(
-                token_name,
-                salt,
-                initial_balance,
-                minter_address,
-                authorized_minters,
-                context,
-                working_set,
-            )?),
+            } => {
+                self.create_token(
+                    token_name,
+                    salt,
+                    initial_balance,
+                    minter_address,
+                    authorized_minters,
+                    context,
+                    working_set,
+                )?;
+                Ok(CallResponse::default())
+            }
 
             call::CallMessage::Transfer { to, coins } => {
                 Ok(self.transfer(to, coins, context, working_set)?)
@@ -99,7 +102,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
             call::CallMessage::Mint {
                 coins,
                 minter_address,
-            } => Ok(self.mint(&coins, &minter_address, context, working_set)?),
+            } => Ok(self.mint_from_eoa(&coins, &minter_address, context, working_set)?),
 
             call::CallMessage::Freeze { token_address } => {
                 Ok(self.freeze(token_address, context, working_set)?)
