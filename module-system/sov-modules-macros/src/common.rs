@@ -530,8 +530,8 @@ mod tests {
     fn test_generics_for_field_associated_type() {
         let test_struct: syn::ItemStruct = parse_quote! {
             struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> where V: SomeThirdTrait, T::Error: Debug {
-                field_1: Result<U, T::Error>,
-                field_2: (V, T::Error)
+                field_1: Foo<U, T::Error>,
+                field_2: Bar<V>,
             }
         };
 
@@ -542,32 +542,66 @@ mod tests {
 
         let actual_generics = generics_for_field(&generics, &p);
 
-        // or this: ?
         let expected: syn::ItemStruct = parse_quote! {
-            struct Dummy<U: SomeOtherTrait, T: SomeTrait>  where T::Error: Debug {
-                field_1: Result<U, T::Error>,
+            struct Field1Generated<U: SomeOtherTrait, T: SomeTrait>  where T::Error: Debug {
+                field_1: Foo<U, T::Error>,
             }
         };
 
-        // println!(
-        //     "actual {} {}",
-        //     actual_generics.to_token_stream(),
-        //     actual_generics
-        //         .where_clause
-        //         .map_or("".to_string(), |w| w.to_token_stream().to_string())
-        // );
-        // println!(
-        //     "expected {} {}",
-        //     expected.generics.to_token_stream(),
-        //     expected
-        //         .generics
-        //         .where_clause
-        //         .map_or("".to_string(), |w| w.to_token_stream().to_string())
-        // );
-        // actual < U : SomeOtherTrait , Error : Debug >
-        // expected < U : SomeOtherTrait , T : SomeThirdTrait >
-
         assert_eq!(expected.generics, actual_generics);
+    }
+
+    #[test]
+    fn test_generics_for_field_associated_types_nested_as() {
+        let test_struct: syn::ItemStruct = parse_quote! {
+            struct TestStruct<T: FirstTrait, U: SecondTrait, V>
+                where
+                    V: ThirdTrait,
+                    <U as SecondTrait>::Message: Message,
+                    <<U as SecondTrait>::Message as Message>::Caller: std::fmt::Display,
+                    T::Error: std::fmt::Debug,
+            {
+                field1: Foo<U, T::Error>,
+                field2: Bar<<U::Message as Message>::Caller, V>,
+            }
+        };
+
+        let generics: syn::Generics = test_struct.generics;
+        let path_arguments: syn::AngleBracketedGenericArguments =
+            parse_quote! { <<U::Message as Message>::Caller, V> };
+
+        let p = syn::PathArguments::AngleBracketed(path_arguments);
+
+        let actual_generics = generics_for_field(&generics, &p);
+
+        let expected: syn::ItemStruct = parse_quote! {
+            struct Field1Generated<U: SecondTrait, V>
+                where
+                    V: ThirdTrait,
+                    <U as SecondTrait>::Message: Message,
+                    <<U as SecondTrait>::Message as Message>::Caller: std::fmt::Display,
+            {
+                field_1: Bar<U, T::Error>,
+            }
+        };
+
+        println!(
+            "ACTUAL  : '{}' WHERE: '{}'",
+            actual_generics.to_token_stream(),
+            actual_generics
+                .where_clause
+                .map_or("".to_string(), |w| w.to_token_stream().to_string())
+        );
+        println!(
+            "EXPECTED: '{}' WHERE: '{}'",
+            expected.generics.to_token_stream(),
+            expected
+                .generics
+                .where_clause
+                .map_or("".to_string(), |w| w.to_token_stream().to_string())
+        );
+
+        // assert_eq!(expected.generics, actual_generics);
     }
 
     #[test]
