@@ -46,6 +46,7 @@ reth-revm = { workspace = true }
 
 
 [dev-dependencies]
+sov-evm = { path = ".",  features = ["smart_contracts"] }
 primitive-types = "0.12.1"
 tokio = { workspace = true }
 tempfile = { workspace = true }
@@ -58,4 +59,5 @@ default = []
 serde = ["dep:serde", "dep:serde_json"]
 native = ["serde", "dep:jsonrpsee", "dep:schemars", "dep:clap", "sov-state/native", "sov-modules-api/native", ]
 experimental = ["native"]
+smart_contracts = ["experimental"]
 

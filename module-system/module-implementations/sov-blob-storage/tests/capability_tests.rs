@@ -12,7 +12,7 @@ use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
 use sov_state::{ProverStorage, WorkingSet};
 
 type C = DefaultContext;
-type B = MockBlob<MockAddress>;
+type B = MockBlob;
 
 const PREFERRED_SEQUENCER_KEY: &str = "preferred";
 const REGULAR_SEQUENCER_KEY: &str = "regular";

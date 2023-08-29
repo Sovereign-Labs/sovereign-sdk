@@ -16,7 +16,17 @@ use crate::{BasicAddress, RollupAddress};
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
 #[derive(
-    Debug, PartialEq, Clone, Eq, Copy, serde::Serialize, serde::Deserialize, Hash, Default,
+    Debug,
+    PartialEq,
+    Clone,
+    Eq,
+    Copy,
+    serde::Serialize,
+    serde::Deserialize,
+    Hash,
+    Default,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
 )]
 pub struct MockAddress {
     /// Underlying mock address.
@@ -83,18 +93,18 @@ impl RollupAddress for MockAddress {}
 )]
 
 /// A mock BlobTransaction from a DA layer used for testing.
-pub struct MockBlob<A> {
-    address: A,
+pub struct MockBlob {
+    address: MockAddress,
     hash: [u8; 32],
     data: CountedBufReader<Bytes>,
 }
 
-impl<A: BasicAddress> BlobReaderTrait for MockBlob<A> {
+impl BlobReaderTrait for MockBlob {
     type Data = Bytes;
-    type Address = A;
+    type Address = MockAddress;
 
     fn sender(&self) -> Self::Address {
-        self.address.clone()
+        self.address
     }
 
     fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
@@ -110,9 +120,9 @@ impl<A: BasicAddress> BlobReaderTrait for MockBlob<A> {
     }
 }
 
-impl<A: BasicAddress> MockBlob<A> {
+impl MockBlob {
     /// Creates a new mock blob with the given data, claiming to have been published by the provided address.
-    pub fn new(data: Vec<u8>, address: A, hash: [u8; 32]) -> Self {
+    pub fn new(data: Vec<u8>, address: MockAddress, hash: [u8; 32]) -> Self {
         Self {
             address,
             data: CountedBufReader::new(bytes::Bytes::from(data)),
@@ -174,7 +184,7 @@ pub struct MockBlock {
     /// Validity condition
     pub validity_cond: MockValidityCond,
     /// Blobs
-    pub blobs: Vec<MockBlob<MockAddress>>,
+    pub blobs: Vec<MockBlob>,
 }
 
 impl Default for MockBlock {
@@ -214,7 +224,7 @@ pub struct MockDaSpec;
 impl DaSpec for MockDaSpec {
     type SlotHash = MockHash;
     type BlockHeader = MockBlockHeader;
-    type BlobTransaction = MockBlob<MockAddress>;
+    type BlobTransaction = MockBlob;
     type ValidityCondition = MockValidityCond;
     type InclusionMultiProof = ();
     type CompletenessProof = ();
@@ -262,7 +272,7 @@ impl DaService for MockDaService {
         let data = data.unwrap();
         let hash = [0; 32];
 
-        let blob = MockBlob::<MockAddress>::new(data, self.sequencer_da_address, hash);
+        let blob = MockBlob::new(data, self.sequencer_da_address, hash);
 
         Ok(MockBlock {
             blobs: vec![blob],

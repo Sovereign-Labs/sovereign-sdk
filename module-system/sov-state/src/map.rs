@@ -171,3 +171,35 @@ where
         working_set.delete_value(self.prefix(), key);
     }
 }
+
+#[cfg(feature = "arbitrary")]
+impl<'a, K, V, VC> StateMap<K, V, VC>
+where
+    K: arbitrary::Arbitrary<'a> + Hash + Eq,
+    V: arbitrary::Arbitrary<'a> + Hash + Eq,
+    VC: StateValueCodec<V> + Default,
+{
+    pub fn arbitrary_workset<S>(
+        u: &mut arbitrary::Unstructured<'a>,
+        working_set: &mut WorkingSet<S>,
+    ) -> arbitrary::Result<Self>
+    where
+        S: Storage,
+    {
+        use arbitrary::Arbitrary;
+
+        let prefix = Prefix::arbitrary(u)?;
+        let len = u.arbitrary_len::<(K, V)>()?;
+        let codec = VC::default();
+        let map = StateMap::with_codec(prefix, codec);
+
+        (0..len).try_fold(map, |map, _| {
+            let key = K::arbitrary(u)?;
+            let value = V::arbitrary(u)?;
+
+            map.set(&key, &value, working_set);
+
+            Ok(map)
+        })
+    }
+}

@@ -1,4 +1,4 @@
-#![allow(missing_docs)]
+//! Defines rpc queries exposed by the accounts module, along with the relevant types
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::AddressBech32;
@@ -23,6 +23,7 @@ pub enum Response {
 #[rpc_gen(client, server, namespace = "accounts")]
 impl<C: sov_modules_api::Context> Accounts<C> {
     #[rpc_method(name = "getAccount")]
+    /// Get the account corresponding to the given public key.
     pub fn get_account(
         &self,
         pub_key: C::PublicKey,

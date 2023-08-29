@@ -2,19 +2,29 @@ use std::convert::Infallible;
 
 use reth_primitives::TransactionKind;
 use revm::db::CacheDB;
-use revm::primitives::{CfgEnv, KECCAK_EMPTY, U256};
+use revm::primitives::{CfgEnv, ExecutionResult, Output, KECCAK_EMPTY, U256};
 use revm::{Database, DatabaseCommit};
 use sov_state::{ProverStorage, WorkingSet};
 
 use super::db::EvmDb;
 use super::db_init::InitEvmDb;
 use super::executor;
-use crate::evm::test_helpers::{output, SimpleStorageContract};
 use crate::evm::transaction::BlockEnv;
 use crate::evm::{contract_address, AccountInfo};
+use crate::smart_contracts::SimpleStorageContract;
 use crate::tests::dev_signer::DevSigner;
 use crate::Evm;
 type C = sov_modules_api::default_context::DefaultContext;
+
+pub(crate) fn output(result: ExecutionResult) -> bytes::Bytes {
+    match result {
+        ExecutionResult::Success { output, .. } => match output {
+            Output::Call(out) => out,
+            Output::Create(out, _) => out,
+        },
+        _ => panic!("Expected successful ExecutionResult"),
+    }
+}
 
 #[test]
 fn simple_contract_execution_sov_state() {
@@ -49,7 +59,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
         },
     );
 
-    let contract = SimpleStorageContract::new();
+    let contract = SimpleStorageContract::default();
 
     let contract_address = {
         let tx = dev_signer

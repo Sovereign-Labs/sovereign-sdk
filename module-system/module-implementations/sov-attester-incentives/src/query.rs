@@ -1,3 +1,4 @@
+//! Defines the query methods for the attester incentives module
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::Spec;
@@ -9,8 +10,10 @@ use sov_state::{Storage, WorkingSet};
 use super::AttesterIncentives;
 use crate::call::Role;
 
+/// The response type to the `getBondAmount` query.
 #[derive(Serialize, Deserialize, Debug, Eq, PartialEq)]
 pub struct BondAmountResponse {
+    /// The value of the bond
     pub value: u64,
 }
 

@@ -34,7 +34,6 @@ celestia = { path = "../../adapters/celestia", features = ["native"] }
 tempfile = { workspace = true }
 rand = { workspace = true }
 
-sov-election = { path = "../../module-system/module-implementations/examples/sov-election", features = ["native"] }
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry", features = ["native"] }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
@@ -44,7 +43,6 @@ sov-accounts = { path = "../../module-system/module-implementations/sov-accounts
 #[features]
 #default = []
 #native = [
-#    "sov-election/native",
 #    "sov-sequencer-registry/native",
 #    "sov-bank/native",
 #    "sov-value-setter/native",

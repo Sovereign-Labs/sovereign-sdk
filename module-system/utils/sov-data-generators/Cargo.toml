@@ -16,7 +16,6 @@ resolver = "2"
 sov-modules-api = { path = "../../sov-modules-api", features = ["native"] }
 sov-modules-stf-template = { path = "../../sov-modules-stf-template", features = ["native"] }
 sov-value-setter = { path = "../../module-implementations/examples/sov-value-setter", features = ["native"] }
-sov-election = { path = "../../module-implementations/examples/sov-election", features = ["native"] }
 sov-bank = { path = "../../module-implementations/sov-bank", features = ["native"] }
 sov-state = { path = "../../sov-state" }
 sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"] }

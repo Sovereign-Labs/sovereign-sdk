@@ -71,7 +71,12 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
             .begin_slot_hook(slot_header, validity_condition, working_set)
     }
 
-    fn end_slot_hook(&self, _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>) {}
+    fn end_slot_hook(
+        &self,
+        _root_hash: [u8; 32],
+        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+    ) {
+    }
 }
 
 impl<C: Context, Da: DaSpec> BlobSelector<Da> for TestRuntime<C, Da> {

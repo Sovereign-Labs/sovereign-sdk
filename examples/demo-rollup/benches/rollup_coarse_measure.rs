@@ -103,7 +103,6 @@ async fn main() -> Result<(), anyhow::Error> {
         sequencer_private_key.default_address(),
         sequencer_da_address.as_ref().to_vec(),
         &sequencer_private_key,
-        &sequencer_private_key,
     );
 
     demo.init_chain(demo_genesis_config);

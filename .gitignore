@@ -3,6 +3,7 @@
 .idea/
 
 target/
+fuzz/Cargo.lock
 
 .DS_Store
 

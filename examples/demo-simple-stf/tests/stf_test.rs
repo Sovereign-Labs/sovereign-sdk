@@ -10,7 +10,7 @@ fn test_stf() {
     let address = MockAddress { addr: [1; 32] };
     let preimage = vec![0; 32];
 
-    let test_blob = MockBlob::<MockAddress>::new(preimage, address, [0; 32]);
+    let test_blob = MockBlob::new(preimage, address, [0; 32]);
     let stf = &mut CheckHashPreimageStf::<MockValidityCond>::default();
 
     let data = MockBlock::default();

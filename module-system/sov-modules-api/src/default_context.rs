@@ -12,6 +12,7 @@ use crate::default_signature::{DefaultPublicKey, DefaultSignature};
 use crate::{Address, Context, PublicKey, Spec};
 
 #[cfg(feature = "native")]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DefaultContext {
     pub sender: Address,
