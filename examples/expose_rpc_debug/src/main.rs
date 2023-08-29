@@ -103,7 +103,8 @@ pub mod phantom_module {
         pub address: C::Address,
 
         #[state]
-        _t: std::marker::PhantomData<T>,
+        #[allow(dead_code)]
+        t: StateValue<std::marker::PhantomData<T>>,
     }
 
     impl<C: Context, T> Module for PhantomModule<C, T> {
@@ -135,6 +136,16 @@ pub mod phantom_module {
     }
 }
 
+trait Rollup {
+
+    ///
+}
+
+
+
+struct SlotHooks<> {}
+
+
 use my_module::query::{QueryModuleRpcImpl, QueryModuleRpcServer};
 use phantom_module::query::{PhantomModuleRpcImpl, PhantomModuleRpcServer};
 
@@ -157,11 +168,11 @@ impl TestSpec for ActualSpec {
 
 fn main() {
     type C = ZkDefaultContext;
-    type RT = Runtime<C, u32>;
+    type RT = Runtime<C, ActualSpec>;
     let storage = ZkStorage::new([1u8; 32]);
     let working_set = &mut WorkingSet::new(storage);
-    let runtime = &mut Runtime::<C, u32>::default();
-    let config = GenesisConfig::new(22);
+    let runtime = &mut Runtime::<C, ActualSpec>::default();
+    let config = GenesisConfig::new(22, ());
     runtime.genesis(&config, working_set).unwrap();
 
     let message: u32 = 33;

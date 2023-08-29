@@ -543,10 +543,32 @@ mod tests {
         let actual_generics = generics_for_field(&generics, &p);
 
         let expected: syn::ItemStruct = parse_quote! {
-            struct Field1Generated<U: SomeOtherTrait, T: SomeTrait>  where T::Error: Debug {
-                field_1: Foo<U, T::Error>,
+            struct Field1Generated<U: SomeOtherTrait, Error: Debug>  {
+                field_1: Foo<U, Error>,
             }
         };
+
+        //         // WRONG
+        //
+        //         impl<C: Context, S: TestSpec> QueryModuleRpcImpl<C, S::Data> for RpcStorage<C> {
+        //             /// Get a working set on top of the current storage
+        //             fn get_working_set(
+        //                 &self,
+        //             ) -> ::sov_state::WorkingSet<<C as ::sov_modules_api::Spec>::Storage> {
+        //                 ::sov_state::WorkingSet::new(self.storage.clone())
+        //             }
+        //         }
+        //
+        // // SHOULD BE
+        //
+        //         impl<C: Context, D: Data> QueryModuleRpcImpl<C, D> for RpcStorage<C> {
+        //             /// Get a working set on top of the current storage
+        //             fn get_working_set(
+        //                 &self,
+        //             ) -> ::sov_state::WorkingSet<<C as ::sov_modules_api::Spec>::Storage> {
+        //                 ::sov_state::WorkingSet::new(self.storage.clone())
+        //             }
+        //         }
 
         assert_eq!(expected.generics, actual_generics);
     }
