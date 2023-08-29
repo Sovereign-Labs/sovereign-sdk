@@ -57,13 +57,14 @@ env:
 # Source: <https://stackoverflow.com/a/72408109/5148606>
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # Except in `nightly` and `stable` branches! Any cancelled job will cause the
+  # CI run to fail, and we want to keep a clean history for major branches.
+  cancel-in-progress: ${{ (github.ref == 'refs/heads/nightly') || (github.ref == 'refs/heads/stable') }}
 
 jobs:
   check:
     name: check
-    runs-on:
-      group: 4-cores_16GB_Ubuntu Group
+    runs-on: buildjet-4vcpu-ubuntu-2204
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v3
@@ -72,6 +73,7 @@ jobs:
         run: rustup show
       - uses: Swatinem/rust-cache@v2
         with:
+          cache-provider: "buildjet"
           shared-key: cargo-check
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
@@ -90,8 +92,7 @@ jobs:
     # building dependencies, only chceking them, so we can share caches
     # effectively.
     needs: check
-    runs-on:
-      group: 4-cores_16GB_Ubuntu Group
+    runs-on: buildjet-4vcpu-ubuntu-2204
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v3
@@ -102,6 +103,7 @@ jobs:
         uses: taiki-e/install-action@cargo-hack
       - uses: Swatinem/rust-cache@v2
         with:
+          cache-provider: "buildjet"
           shared-key: cargo-check
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
@@ -111,8 +113,7 @@ jobs:
       - name: cargo hack
         run: make check-features
   test:
-    runs-on:
-      group: 4-cores_16GB_Ubuntu Group
+    runs-on: buildjet-4vcpu-ubuntu-2204
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v3
@@ -123,6 +124,7 @@ jobs:
       - uses: taiki-e/install-action@nextest
       - uses: Swatinem/rust-cache@v2
         with:
+          cache-provider: "buildjet"
           shared-key: cargo-build
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
@@ -137,8 +139,7 @@ jobs:
     # `test` has already built dependencies, so we can share
     # caches (the profile is `dev` in both cases).
     needs: test
-    runs-on:
-      group: 8-cores_32GB_Ubuntu Group
+    runs-on: buildjet-8vcpu-ubuntu-2204
     steps:
       - uses: actions/checkout@v3
       - uses: rui314/setup-mold@v1
@@ -146,6 +147,7 @@ jobs:
         run: rustup show
       - uses: Swatinem/rust-cache@v2
         with:
+          cache-provider: "buildjet"
           shared-key: cargo-build
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
@@ -201,8 +203,7 @@ jobs:
   # profile from the rest of the codebase, so caches can't be shared.
   check-demo-prover:
     name: check demo prover
-    runs-on:
-      group: 4-cores_16GB_Ubuntu Group
+    runs-on: buildjet-4vcpu-ubuntu-2204
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v3
@@ -211,6 +212,7 @@ jobs:
         run: rustup show
       - uses: Swatinem/rust-cache@v2
         with:
+          cache-provider: "buildjet"
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
             .
@@ -226,8 +228,7 @@ jobs:
             exit 1
           fi
   coverage:
-    runs-on:
-      group: 8-cores_32GB_Ubuntu Group
+    runs-on: buildjet-8vcpu-ubuntu-2204
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v3
@@ -242,6 +243,7 @@ jobs:
         uses: taiki-e/install-action@cargo-llvm-cov
       - uses: Swatinem/rust-cache@v2
         with:
+          cache-provider: "buildjet"
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
             .
@@ -278,6 +280,7 @@ jobs:
         run: rustup show
       - uses: Swatinem/rust-cache@v2
         with:
+          cache-provider: "buildjet"
           shared-key: cargo-check
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |

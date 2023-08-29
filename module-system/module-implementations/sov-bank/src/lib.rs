@@ -102,7 +102,10 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
             call::CallMessage::Mint {
                 coins,
                 minter_address,
-            } => Ok(self.mint_from_eoa(&coins, &minter_address, context, working_set)?),
+            } => {
+                self.mint_from_eoa(&coins, &minter_address, context, working_set)?;
+                Ok(CallResponse::default())
+            }
 
             call::CallMessage::Freeze { token_address } => {
                 Ok(self.freeze(token_address, context, working_set)?)

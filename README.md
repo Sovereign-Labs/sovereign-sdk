@@ -106,6 +106,10 @@ to have adapters for almost all Data Availability Layers and LLVM-compatible pro
 maintain adapters for [`Risc0`](https://www.risczero.com) (a ZKVM) and [`Celestia`](https://www.celestia.org) a (DA layer).
 The Avail project also maintains an adapter for their DA layer, which can be found [here](https://github.com/availproject/avail-sovereign-da-adapter).
 
+## Testing
+
+An implementation of LLVM's libFUZZER is available under [fuzz/README.md](./fuzz/README.md).
+
 ## Warning
 
 The Sovereign SDK is Alpha software. It has not been audited and should not be used in production under any circumstances.

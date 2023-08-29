@@ -137,7 +137,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
         Ok(CallResponse::default())
     }
 
-    /// Mints the `coins`to the address `mint_to_address` using `context.sender()` as the authorizer.
+    /// Mints the `coins`to the address `mint_to_address` using the externally owned account ("EOA") supplied by
+    /// `context.sender()` as the authorizer.
     /// Returns an error if the token address doesn't exist or `context.sender()` is not authorized to mint tokens.
     /// Calls the [`Token::mint`] function and update the `self.tokens` set to store the new balance.
     pub fn mint_from_eoa(
@@ -146,7 +147,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         mint_to_address: &C::Address,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse> {
+    ) -> Result<()> {
         self.mint(coins, mint_to_address, context.sender(), working_set)
     }
 
@@ -159,10 +160,10 @@ impl<C: sov_modules_api::Context> Bank<C> {
         mint_to_address: &C::Address,
         authorizer: &C::Address,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse> {
+    ) -> Result<()> {
         let context_logger = || {
             format!(
-                "Failed mint coins({}) to {} by minter {}",
+                "Failed mint coins({}) to {} by authorizer {}",
                 coins, mint_to_address, authorizer
             )
         };
@@ -175,7 +176,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
             .with_context(context_logger)?;
         self.tokens.set(&coins.token_address, &token, working_set);
 
-        Ok(CallResponse::default())
+        Ok(())
     }
 
     /// Tries to freeze the token address `token_address`.

@@ -427,7 +427,7 @@ impl LedgerDB {
 
 #[cfg(test)]
 mod tests {
-    use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockBlock};
+    use sov_rollup_interface::mocks::{MockBlob, MockBlock};
     use sov_rollup_interface::rpc::LedgerRpcProvider;
 
     use crate::ledger_db::{LedgerDB, SlotCommit};
@@ -438,10 +438,8 @@ mod tests {
         let db = LedgerDB::with_path(path).unwrap();
 
         let mut rx = db.subscribe_slots().unwrap();
-        db.commit_slot(SlotCommit::<_, MockBlob<MockAddress>, Vec<u8>>::new(
-            MockBlock::default(),
-        ))
-        .unwrap();
+        db.commit_slot(SlotCommit::<_, MockBlob, Vec<u8>>::new(MockBlock::default()))
+            .unwrap();
 
         assert_eq!(rx.blocking_recv().unwrap(), 1);
     }
