@@ -51,7 +51,7 @@ where
 
     // The escrow address follows the format as outlined in ADR 028:
     // https://github.com/cosmos/cosmos-sdk/blob/master/docs/architecture/adr-028-public-key-addresses.md
-    // We use a
+    // except that we don't use a different hash function.
     fn get_escrow_account(&self, port_id: &PortId, channel_id: &ChannelId) -> C::Address {
         // TODO: Probably cache so we don't need to hash every time
         let escrow_account_bytes: [u8; 32] = {
