@@ -8,7 +8,7 @@ use sov_chain_state::TransitionHeight;
 use sov_modules_api::{CallResponse, Context, Spec};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::optimistic::Attestation;
-use sov_rollup_interface::zk::{StateTransition, ValidityConditionChecker, Zkvm};
+use sov_rollup_interface::zk::{StateTransition, ValidityConditionChecker, ZkVerifier};
 use sov_state::storage::StorageProof;
 use sov_state::{Storage, WorkingSet};
 use thiserror::Error;
@@ -121,7 +121,7 @@ pub enum Role {
 
 impl<
         C: sov_modules_api::Context,
-        Vm: Zkvm,
+        Vm: ZkVerifier,
         Da: DaSpec,
         Checker: ValidityConditionChecker<Da::ValidityCondition> + BorshDeserialize + BorshSerialize,
     > AttesterIncentives<C, Vm, Da, Checker>

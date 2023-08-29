@@ -23,13 +23,13 @@ use sov_chain_state::TransitionHeight;
 use sov_modules_api::{Context, Error};
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::zk::{StoredCodeCommitment, ValidityConditionChecker, Zkvm};
+use sov_rollup_interface::zk::{StoredCodeCommitment, ValidityConditionChecker, ZkVerifier};
 use sov_state::{Storage, WorkingSet};
 
 /// Configuration of the attester incentives module
 pub struct AttesterIncentivesConfig<
     C: Context,
-    Vm: Zkvm,
+    Vm: ZkVerifier,
     Da: DaSpec,
     Checker: ValidityConditionChecker<Da::ValidityCondition>,
 > {
@@ -73,7 +73,7 @@ pub struct UnbondingInfo {
 #[derive(ModuleInfo)]
 pub struct AttesterIncentives<
     C: sov_modules_api::Context,
-    Vm: Zkvm,
+    Vm: ZkVerifier,
     Da: DaSpec,
     Checker: ValidityConditionChecker<Da::ValidityCondition>,
 > {
@@ -152,7 +152,7 @@ pub struct AttesterIncentives<
 impl<C, Vm, S, P, Da, Checker> sov_modules_api::Module for AttesterIncentives<C, Vm, Da, Checker>
 where
     C: sov_modules_api::Context<Storage = S>,
-    Vm: Zkvm,
+    Vm: ZkVerifier,
     S: Storage<Proof = P>,
     P: BorshDeserialize + BorshSerialize,
     Da: DaSpec,

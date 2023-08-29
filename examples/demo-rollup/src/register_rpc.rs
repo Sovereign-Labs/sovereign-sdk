@@ -6,7 +6,7 @@ use demo_stf::app::App;
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_stf_template::{SequencerOutcome, TxEffect};
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::zk::Zkvm;
+use sov_rollup_interface::zk::ZkVerifier;
 use sov_sequencer::get_sequencer_rpc;
 use sov_stf_runner::get_ledger_rpc;
 
@@ -21,7 +21,7 @@ pub fn register_sequencer<Vm, DA>(
 ) -> Result<(), anyhow::Error>
 where
     DA: DaService,
-    Vm: Zkvm,
+    Vm: ZkVerifier,
 {
     let batch_builder = app.batch_builder.take().unwrap();
     let sequencer_rpc = get_sequencer_rpc(batch_builder, da_service);

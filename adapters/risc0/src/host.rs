@@ -5,7 +5,7 @@ use risc0_zkvm::serde::to_vec;
 use risc0_zkvm::{
     Executor, ExecutorEnvBuilder, LocalExecutor, SegmentReceipt, Session, SessionReceipt,
 };
-use sov_rollup_interface::zk::{ZkSystem, Zkvm, ZkvmHost};
+use sov_rollup_interface::zk::{ProofSystem, ZkVerifier, ZkvmHost};
 #[cfg(feature = "bench")]
 use zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cycles};
 
@@ -70,7 +70,7 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
 
 pub struct Risc0Vm;
 
-impl Zkvm for Risc0Vm {
+impl ZkVerifier for Risc0Vm {
     type CodeCommitment = Risc0MethodId;
 
     type Error = anyhow::Error;
@@ -83,12 +83,12 @@ impl Zkvm for Risc0Vm {
     }
 }
 
-impl ZkSystem for Risc0Vm {
+impl ProofSystem for Risc0Vm {
     type Guest = Risc0Guest;
     type Host = Risc0Host<'static>;
 }
 
-impl<'host> Zkvm for Risc0Host<'host> {
+impl<'host> ZkVerifier for Risc0Host<'host> {
     type CodeCommitment = Risc0MethodId;
 
     type Error = anyhow::Error;

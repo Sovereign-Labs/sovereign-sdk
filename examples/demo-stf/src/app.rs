@@ -8,7 +8,7 @@ use sov_modules_api::Spec;
 use sov_modules_stf_template::AppTemplate;
 pub use sov_modules_stf_template::Batch;
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::zk::Zkvm;
+use sov_rollup_interface::zk::ZkVerifier;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
 use sov_state::{Storage, ZkStorage};
@@ -20,13 +20,13 @@ use sov_stf_runner::StorageConfig;
 use crate::runtime::Runtime;
 
 #[cfg(feature = "native")]
-pub struct App<Vm: Zkvm, DA: DaSpec> {
+pub struct App<Vm: ZkVerifier, DA: DaSpec> {
     pub stf: AppTemplate<DefaultContext, DA, Vm, Runtime<DefaultContext>>,
     pub batch_builder: Option<FiFoStrictBatchBuilder<Runtime<DefaultContext>, DefaultContext>>,
 }
 
 #[cfg(feature = "native")]
-impl<Vm: Zkvm, DA: DaSpec> App<Vm, DA> {
+impl<Vm: ZkVerifier, DA: DaSpec> App<Vm, DA> {
     pub fn new(storage_config: StorageConfig) -> Self {
         let storage =
             ProverStorage::with_config(storage_config).expect("Failed to open prover storage");
@@ -49,7 +49,7 @@ impl<Vm: Zkvm, DA: DaSpec> App<Vm, DA> {
     }
 }
 
-pub fn create_zk_app_template<Vm: Zkvm, DA: DaSpec>(
+pub fn create_zk_app_template<Vm: ZkVerifier, DA: DaSpec>(
     runtime_config: [u8; 32],
 ) -> AppTemplate<ZkDefaultContext, DA, Vm, Runtime<ZkDefaultContext>> {
     let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");

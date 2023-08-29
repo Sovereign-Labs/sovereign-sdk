@@ -4,7 +4,7 @@ use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::Coins;
 use sov_modules_api::CallResponse;
-use sov_rollup_interface::zk::Zkvm;
+use sov_rollup_interface::zk::ZkVerifier;
 use sov_state::WorkingSet;
 
 use crate::ProverIncentives;
@@ -23,7 +23,7 @@ pub enum CallMessage {
     VerifyProof(Vec<u8>),
 }
 
-impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
+impl<C: sov_modules_api::Context, Vm: ZkVerifier> ProverIncentives<C, Vm> {
     /// A helper function for the `bond_prover` call. Also used to bond provers
     /// during genesis when no context is available.
     pub(super) fn bond_prover_helper(

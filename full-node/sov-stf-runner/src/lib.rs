@@ -17,7 +17,7 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::zk::{ZkSystem, ZkvmGuest, ZkvmHost};
+use sov_rollup_interface::zk::{ProofSystem, ZkVerifier, ZkvmGuest, ZkvmHost};
 use tokio::sync::oneshot;
 use tracing::{debug, info};
 
@@ -25,8 +25,8 @@ use tracing::{debug, info};
 pub struct StateTransitionVerifier<ST, Da, Vm>
 where
     Da: DaVerifier,
-    Vm: ZkSystem,
-    ST: StateTransitionFunction<Vm, Da::Spec>,
+    Vm: ProofSystem,
+    ST: StateTransitionFunction<Vm::Guest, Da::Spec>,
 {
     app: ST,
     da_verifier: Da,
@@ -35,8 +35,8 @@ where
 impl<ST, Da, Vm> StateTransitionVerifier<ST, Da, Vm>
 where
     Da: DaVerifier,
-    Vm: ZkSystem,
-    ST: StateTransitionFunction<Vm, Da::Spec>,
+    Vm: ProofSystem,
+    ST: StateTransitionFunction<Vm::Guest, Da::Spec>,
 {
     /// Create a [`StateTransitionVerifier`]
     pub fn new(app: ST, da_verifier: Da, vm_guest: Vm::Guest) -> Self {
@@ -49,7 +49,7 @@ where
 
     /// Verify the next block
     pub fn run_block(&mut self) -> Result<(), Da::Error> {
-        let mut data: StateTransitionData<ST, Da::Spec, Vm> = self.vm_guest.read_from_host();
+        let mut data: StateTransitionData<ST, Da::Spec, Vm::Guest> = self.vm_guest.read_from_host();
         let validity_condition = self.da_verifier.verify_relevant_tx_list(
             &data.da_block_header,
             &data.blobs,
@@ -70,11 +70,12 @@ where
 }
 
 /// Combines `DaService` with `StateTransitionFunction` and "runs" the rollup.
-pub struct StateTransitionRunner<ST, DA, Vm>
+pub struct StateTransitionRunner<ST, DA, Vm, V>
 where
     DA: DaService,
-    Vm: ZkSystem,
-    ST: StateTransitionFunction<Vm, DA::Spec>,
+    Vm: ProofSystem,
+    ST: StateTransitionFunction<Vm::Host, DA::Spec>,
+    V: StateTransitionFunction<Vm::Guest, DA::Spec>,
 {
     start_height: u64,
     da_service: DA,
@@ -82,14 +83,15 @@ where
     ledger_db: LedgerDB,
     state_root: ST::StateRoot,
     listen_address: SocketAddr,
-    prover: Option<(Vm::Host, StateTransitionVerifier<ST, DA::Verifier, Vm>)>,
+    prover: Option<(Vm::Host, StateTransitionVerifier<V, DA::Verifier, Vm>)>,
 }
 
-impl<ST, DA, Vm> StateTransitionRunner<ST, DA, Vm>
+impl<ST, DA, Vm, V> StateTransitionRunner<ST, DA, Vm, V>
 where
     DA: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
-    Vm: ZkSystem,
-    ST: StateTransitionFunction<Vm, DA::Spec>,
+    Vm: ProofSystem,
+    ST: StateTransitionFunction<Vm::Host, DA::Spec>,
+    V: StateTransitionFunction<Vm::Guest, DA::Spec>,
 {
     /// Creates a new `StateTransitionRunner` runner.
     pub fn new(
@@ -99,7 +101,7 @@ where
         mut app: ST,
         should_init_chain: bool,
         genesis_config: ST::InitialState,
-        prover: Option<(Vm::Host, StateTransitionVerifier<ST, DA::Verifier, Vm>)>,
+        prover: Option<(Vm::Host, StateTransitionVerifier<V, DA::Verifier, Vm>)>,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
 
@@ -223,7 +225,7 @@ where
 /// Data required to verify a state transition.
 pub struct StateTransitionData<ST: StateTransitionFunction<Vm, DA>, DA: DaSpec, Vm>
 where
-    Vm: ZkSystem,
+    Vm: ZkVerifier,
 {
     /// The state root before the state transition
     pub pre_state_root: ST::StateRoot,

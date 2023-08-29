@@ -15,14 +15,14 @@ pub use call::CallMessage;
 #[cfg(feature = "native")]
 pub use query::Response;
 use sov_modules_api::{Context, Error, ModuleInfo};
-use sov_rollup_interface::zk::{StoredCodeCommitment, Zkvm};
+use sov_rollup_interface::zk::{StoredCodeCommitment, ZkVerifier};
 use sov_state::WorkingSet;
 
 /// Configuration of the prover incentives module. Specifies the
 /// address of the bonding token, the minimum bond, the commitment to
 /// the allowed verifier method and a set of initial provers with their
 /// bonding amount.
-pub struct ProverIncentivesConfig<C: Context, Vm: Zkvm> {
+pub struct ProverIncentivesConfig<C: Context, Vm: ZkVerifier> {
     /// The address of the token to be used for bonding.
     bonding_token_address: C::Address,
     /// The minimum bond for a prover.
@@ -39,7 +39,7 @@ pub struct ProverIncentivesConfig<C: Context, Vm: Zkvm> {
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo)]
-pub struct ProverIncentives<C: Context, Vm: Zkvm> {
+pub struct ProverIncentives<C: Context, Vm: ZkVerifier> {
     /// Address of the module.
     #[address]
     pub address: C::Address,
@@ -65,7 +65,7 @@ pub struct ProverIncentives<C: Context, Vm: Zkvm> {
     pub(crate) bank: sov_bank::Bank<C>,
 }
 
-impl<C: Context, Vm: Zkvm> sov_modules_api::Module for ProverIncentives<C, Vm> {
+impl<C: Context, Vm: ZkVerifier> sov_modules_api::Module for ProverIncentives<C, Vm> {
     type Context = C;
 
     type Config = ProverIncentivesConfig<C, Vm>;

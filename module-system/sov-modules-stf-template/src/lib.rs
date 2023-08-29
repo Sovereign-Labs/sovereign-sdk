@@ -10,9 +10,8 @@ use sov_modules_api::capabilities::BlobSelector;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
-use sov_rollup_interface::zk::{ValidityCondition, ZkSystem, Zkvm};
+use sov_rollup_interface::zk::ZkVerifier;
 use sov_rollup_interface::BasicAddress;
 use sov_state::{StateCheckpoint, Storage, WorkingSet};
 use tracing::info;
@@ -74,7 +73,7 @@ pub enum SlashingReason {
 impl<C, RT, Vm, DA> AppTemplate<C, DA, Vm, RT>
 where
     C: Context,
-    Vm: ZkSystem,
+    Vm: ZkVerifier,
     DA: DaSpec,
     RT: Runtime<C, DA>,
 {
@@ -115,7 +114,7 @@ impl<C, RT, Vm, DA> StateTransitionFunction<Vm, DA> for AppTemplate<C, DA, Vm, R
 where
     C: Context,
     DA: DaSpec,
-    Vm: ZkSystem,
+    Vm: ZkVerifier,
     RT: Runtime<C, DA>,
 {
     type StateRoot = jmt::RootHash;

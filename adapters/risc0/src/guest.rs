@@ -1,6 +1,6 @@
 #[cfg(target_os = "zkvm")]
 use risc0_zkvm::guest::env;
-use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
+use sov_rollup_interface::zk::{ZkVerifier, ZkvmGuest};
 
 use crate::Risc0MethodId;
 
@@ -28,7 +28,7 @@ impl ZkvmGuest for Risc0Guest {
     }
 }
 
-impl Zkvm for Risc0Guest {
+impl ZkVerifier for Risc0Guest {
     type CodeCommitment = Risc0MethodId;
 
     type Error = anyhow::Error;

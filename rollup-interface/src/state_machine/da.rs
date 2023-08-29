@@ -6,7 +6,6 @@ use std::io::Read;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Buf;
-use digest::Digest;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 

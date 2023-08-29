@@ -3,10 +3,9 @@ use std::marker::PhantomData;
 use borsh::BorshDeserialize;
 use sov_modules_api::{Context, DispatchCall};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader, DaSpec};
-use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt, ZkMode};
-use sov_rollup_interface::zk::ZkSystem;
+use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
 use sov_rollup_interface::{BasicAddress, Buf};
-use sov_state::{StateCheckpoint, ZkStorage};
+use sov_state::StateCheckpoint;
 use tracing::{debug, error};
 
 use crate::tx_verifier::{verify_txs_stateless, TransactionAndRawHash};
@@ -74,7 +73,7 @@ impl<A: BasicAddress> From<ApplyBatchError<A>> for BatchReceipt<SequencerOutcome
 // where
 //     C: Context,
 //     DA: DaSpec,
-//     Vm: ZkSystem,
+//     Vm: ProofSystem,
 //     RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
 // {
 //     type Config = [u8; 32];

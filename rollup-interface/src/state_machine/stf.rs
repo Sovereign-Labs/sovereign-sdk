@@ -7,38 +7,11 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::da::{BlobReaderTrait, DaSpec};
-use crate::services::da::SlotData;
-use crate::zk::{ValidityCondition, ZkSystem, Zkvm};
+use crate::da::DaSpec;
+use crate::zk::{ValidityCondition, ZkVerifier};
 
 #[cfg(any(test, feature = "fuzzing"))]
 pub mod fuzzing;
-
-/// The configuration of a full node of the rollup which creates zk proofs.
-pub struct ProverMode;
-/// The configuration used to initialize the "Verifier" of the state transition function
-/// which runs inside of the zkvm.
-pub struct ZkMode;
-/// The configuration of a standard full node of the rollup which does not create zk proofs
-pub struct StandardMode;
-
-/// A special marker trait which allows us to define different rollup configurations. There are
-/// only 3 possible instantiations of this trait: [`ProverMode`], [`ZkMode`], and [`StandardMode`].
-pub trait StateTransitionMode: sealed::Sealed {}
-impl StateTransitionMode for ProverMode {}
-impl StateTransitionMode for ZkMode {}
-impl StateTransitionMode for StandardMode {}
-
-// https://rust-lang.github.io/api-guidelines/future-proofing.html
-mod sealed {
-    use super::{ProverMode, StandardMode, ZkMode};
-
-    pub trait Sealed {}
-    impl Sealed for ProverMode {}
-    impl Sealed for ZkMode {}
-    impl Sealed for StandardMode {}
-}
-
 /// A receipt for a single transaction. These receipts are stored in the rollup's database
 /// and may be queried via RPC. Receipts are generic over a type `R` which the rollup can use to
 /// store additional data, such as the status code of the transaction or the amout of gas used.s
@@ -103,7 +76,7 @@ pub struct SlotResult<S, B, T, W> {
 ///  - block: DA layer block
 ///  - batch: Set of transactions grouped together, or block on L2
 ///  - blob: Non serialised batch or anything else that can be posted on DA layer, like attestation or proof.
-pub trait StateTransitionFunction<Vm: ZkSystem, Da: DaSpec> {
+pub trait StateTransitionFunction<Vm: ZkVerifier, Da: DaSpec> {
     /// Root hash of state merkle tree
     type StateRoot: Serialize + DeserializeOwned + Clone;
     /// The initial state of the rollup.

@@ -6,7 +6,7 @@ use std::marker::PhantomData;
 use sha2::Digest;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::stf::{BatchReceipt, SlotResult, StateTransitionFunction};
-use sov_rollup_interface::zk::{ValidityCondition, ZkSystem};
+use sov_rollup_interface::zk::{ProofSystem, ValidityCondition};
 
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
@@ -33,7 +33,7 @@ pub enum ApplySlotResult {
     Success,
 }
 
-impl<Vm: ZkSystem, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, Da>
+impl<Vm: ProofSystem, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, Da>
     for CheckHashPreimageStf<Cond>
 {
     /// The state root is a 32-byte array.

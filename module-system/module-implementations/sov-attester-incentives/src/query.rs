@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::Spec;
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::zk::{ValidityConditionChecker, Zkvm};
+use sov_rollup_interface::zk::{ValidityConditionChecker, ZkVerifier};
 use sov_state::storage::{NativeStorage, StorageProof};
 use sov_state::{Storage, WorkingSet};
 
@@ -18,7 +18,7 @@ pub struct BondAmountResponse {
 impl<C, Vm, Da, Checker> AttesterIncentives<C, Vm, Da, Checker>
 where
     C: sov_modules_api::Context,
-    Vm: Zkvm,
+    Vm: ZkVerifier,
     Da: DaSpec,
     Checker: ValidityConditionChecker<Da::ValidityCondition> + BorshDeserialize + BorshSerialize,
 {

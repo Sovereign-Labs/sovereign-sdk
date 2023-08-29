@@ -1,7 +1,5 @@
-use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::io::Write;
-use std::sync::atomic::AtomicUsize;
 use std::sync::Mutex;
 
 use anyhow::ensure;
@@ -9,7 +7,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
-use crate::zk::{Matches, ZkSystem, Zkvm, ZkvmGuest, ZkvmHost};
+use crate::zk::{Matches, ProofSystem, ZkVerifier, ZkvmGuest, ZkvmHost};
 
 /// A mock commitment to a particular zkVM program.
 #[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Serialize, Deserialize)]
@@ -95,12 +93,12 @@ impl ZkvmHost for MockZkvm {
             .push_back(serialized);
     }
 }
-impl ZkSystem for MockZkvm {
+impl ProofSystem for MockZkvm {
     type Guest = Self;
     type Host = Self;
 }
 
-impl Zkvm for MockZkvm {
+impl ZkVerifier for MockZkvm {
     type CodeCommitment = MockCodeCommitment;
 
     type Error = anyhow::Error;
