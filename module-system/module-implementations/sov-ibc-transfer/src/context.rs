@@ -369,10 +369,10 @@ where
 
     fn burn_coins_execute(
         &mut self,
-        _account: &Self::AccountId,
+        account: &Self::AccountId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        let _token_address = {
+        let token_address = {
             let mut hasher = <C::Hasher as Digest>::new();
             hasher.update(coin.denom.to_string());
             let denom_hash = hasher.finalize().to_vec();
@@ -385,9 +385,24 @@ where
                 })?
         };
 
-        // TODO: burn when `burn_from()` method is added to bank
+        let amount: sov_bank::Amount = (*coin.amount.as_ref())
+            .try_into()
+            .map_err(|_| TokenTransferError::InvalidAmount(FromDecStrErr::InvalidLength))?;
+        let sdk_coins = Coins {
+            amount,
+            token_address,
+        };
 
-        todo!()
+        self.transfer_mod
+            .bank
+            .burn(
+                sdk_coins,
+                &account.address,
+                &mut self.working_set.borrow_mut(),
+            )
+            .map_err(|err| TokenTransferError::Other(err.to_string()))?;
+
+        Ok(())
     }
 
     /// This is called in a `send_transfer()` in the case where we are the token source
