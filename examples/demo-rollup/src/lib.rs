@@ -59,6 +59,5 @@ pub fn get_genesis_config<A: BasicAddress>(
         sequencer_private_key.default_address(),
         sequencer_da_address.as_ref().to_vec(),
         &sequencer_private_key,
-        &sequencer_private_key,
     )
 }

@@ -98,9 +98,7 @@ where
             .expect("jellyfish merkle tree update must succeed");
 
         let mut working_set = WorkingSet::new(self.current_storage.clone());
-        self.runtime.end_slot_hook(&mut working_set);
-
-        //
+        self.runtime.end_slot_hook(root_hash.0, &mut working_set);
 
         self.current_storage.commit(&authenticated_node_batch);
         (root_hash, witness)
@@ -134,12 +132,13 @@ where
             .expect("module initialization must succeed");
 
         let (log, witness) = working_set.checkpoint().freeze();
-        let genesis_hash = self
+        let (genesis_hash, node_batch) = self
             .current_storage
             .get_new_root(log, &witness)
             .expect("Storage update must succeed");
 
-        jmt::RootHash(genesis_hash)
+        self.current_storage.commit(&node_batch);
+        genesis_hash
     }
 
     fn apply_slot<'a, I, Data>(

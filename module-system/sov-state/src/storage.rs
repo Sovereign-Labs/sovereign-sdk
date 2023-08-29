@@ -5,7 +5,7 @@ use std::sync::Arc;
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
 use hex;
-use jmt::storage::{NodeBatch, TreeUpdateBatch};
+use jmt::storage::NodeBatch;
 use jmt::RootHash;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};

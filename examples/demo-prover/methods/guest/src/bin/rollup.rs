@@ -11,6 +11,7 @@ use celestia::{BlobWithSender, CelestiaHeader};
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::create_zk_app_template;
 use demo_stf::ArrayWitness;
+
 use risc0_adapter::guest::Risc0Guest;
 use risc0_zkvm::guest::env;
 use sov_rollup_interface::crypto::NoOpHasher;
@@ -103,7 +104,6 @@ pub fn main() {
         let metrics_syscall_name = unsafe {
             risc0_zkvm_platform::syscall::SyscallName::from_bytes_with_nul(cycle_string.as_ptr())
         };
-
         risc0_zkvm::guest::env::send_recv_slice::<u8, u8>(metrics_syscall_name, &serialized);
     }
 }

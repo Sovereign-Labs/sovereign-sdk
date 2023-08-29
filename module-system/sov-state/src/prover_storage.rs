@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::Arc;
 
-use jmt::storage::{NodeBatch, TreeUpdateBatch, TreeWriter};
+use jmt::storage::{NodeBatch, TreeWriter};
 use jmt::{JellyfishMerkleTree, KeyHash, RootHash, Version};
 use sov_db::state_db::StateDB;
 
