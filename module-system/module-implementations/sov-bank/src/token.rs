@@ -164,14 +164,14 @@ impl<C: sov_modules_api::Context> Token<C> {
         Ok(())
     }
 
-    /// Mints a given `amount` of token sent by `sender` to the specified `minter_address`.
+    /// Mints a given `amount` of token sent by `sender` to the specified `mint_to_address`.
     /// Checks that the `authorized_minters` set is not empty for the token and that the `sender`
-    /// is an `authorized_minter`. If so, update the balances of token for the `minter_address` by
+    /// is an `authorized_minter`. If so, update the balances of token for the `mint_to_address` by
     /// adding the minted tokens. Updates the `total_supply` of that token.
     pub(crate) fn mint(
         &mut self,
-        sender: &C::Address,
-        minter_address: &C::Address,
+        authorizer: &C::Address,
+        mint_to_address: &C::Address,
         amount: Amount,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<()> {
@@ -179,17 +179,17 @@ impl<C: sov_modules_api::Context> Token<C> {
             bail!("Attempt to mint frozen token {}", self.name)
         }
 
-        self.is_authorized_minter(sender)?;
+        self.is_authorized_minter(authorizer)?;
         let to_balance: Amount = self
             .balances
-            .get(minter_address, working_set)
+            .get(mint_to_address, working_set)
             .unwrap_or_default()
             .checked_add(amount)
             .ok_or(anyhow::Error::msg(
                 "Account balance overflow in the mint method of bank module",
             ))?;
 
-        self.balances.set(minter_address, &to_balance, working_set);
+        self.balances.set(mint_to_address, &to_balance, working_set);
         self.total_supply = self
             .total_supply
             .checked_add(amount)
