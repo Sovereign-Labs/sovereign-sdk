@@ -537,119 +537,214 @@ mod tests {
         );
     }
 
-    // #[test]
-    // fn how_to_flatten_arguments() {
-    //     let associated_path_arguments: syn::AngleBracketedGenericArguments =
-    //         parse_quote! { <C, T::Error> };
-    //
-    //     for arg in associated_path_arguments.args.iter() {
-    //         println!("ARG: {:?}", arg);
-    //     }
-    //
-    //     let flattened_arguments: syn::AngleBracketedGenericArguments = parse_quote! { <C, Error> };
-    // }
-
     #[test]
     fn test_generics_for_field_associated_type() {
+        let path_arguments: syn::AngleBracketedGenericArguments = parse_quote! { <C, T::Error> };
         let test_struct: syn::ItemStruct = parse_quote! {
             struct Runtime<C: Context, D: SomeOtherTrait, V> where V: SomeThirdTrait, T::Error: Debug {
-                module_1: Module1<C, T::Error>,
+                module_1: Module1 #path_arguments ,
                 module_2: Module2<C, D>,
                 module_3: Module3<C, V>,
             }
         };
 
         let generics: syn::Generics = test_struct.generics;
-        let path_arguments: syn::AngleBracketedGenericArguments = parse_quote! { <C, T::Error> };
 
-        let p = syn::PathArguments::AngleBracketed(path_arguments);
+        let field_generic_types = syn::PathArguments::AngleBracketed(path_arguments);
 
         let GenericWithMatchingPathArguments {
             generics: actual_generics,
             ..
-        } = generics_for_field(&generics, &p);
+        } = generics_for_field(&generics, &field_generic_types);
 
         let expected: syn::ItemStruct = parse_quote! {
-            struct Module1Generated<C: Context, Error: Debug>  {
-                module_1: Module1<C, Error>,
+            struct Module1Generated<C: Context, __Error: Debug>  {
+                module_1: Module1<C, __Error>,
             }
         };
-        println!(
-            "ACTUAL  : '{}' WHERE: '{}'",
-            actual_generics.to_token_stream(),
-            actual_generics
-                .where_clause
-                .map_or("".to_string(), |w| w.to_token_stream().to_string())
-        );
-        println!(
-            "EXPECTED: '{}' WHERE: '{}'",
-            expected.generics.to_token_stream(),
-            expected
-                .generics
-                .where_clause
-                .map_or("".to_string(), |w| w.to_token_stream().to_string())
-        );
-
-        // ACTUAL  : '< C : Context , T >' WHERE: 'where T :: Error : Debug'
-        // EXPECTED: '< C : Context , Error : Debug >' WHERE: ''
-
-        // assert_eq!(expected.generics, actual_generics);
+        assert_eq!(expected.generics, actual_generics);
     }
 
     #[test]
+    fn test_generics_more_generics_for_field_associated_type() {
+        let path_arguments_1: syn::AngleBracketedGenericArguments =
+            parse_quote! { <C, T::Error, D::Message> };
+        let path_arguments_2: syn::AngleBracketedGenericArguments = parse_quote! { <C, T, D, V> };
+        let path_arguments_3: syn::AngleBracketedGenericArguments =
+            parse_quote! { <C, V, D::Message> };
+        let test_struct: syn::ItemStruct = parse_quote! {
+            struct Runtime<C: Context, T: FirstTrait, D: SomeOtherTrait, V>
+                where
+                    V: SomeThirdTrait,
+                    T::Error: Debug,
+                    D::Message: Message,
+                    D::Caller: Caller
+            {
+                module_1: Module1 #path_arguments_1 ,
+                module_2: Module2 #path_arguments_2 ,
+                module_3: Module3 #path_arguments_3 ,
+            }
+        };
+        let outer_generics: syn::Generics = test_struct.generics;
+
+        let expected_1: syn::ItemStruct = parse_quote! {
+            struct Module1Generated<C: Context, __Error: Debug, __Message: Message>  {
+                module_1: Module1<C, __Error, __Message>,
+            }
+        };
+
+        let expected_2: syn::ItemStruct = parse_quote! {
+            struct Module2Generated <C: Context, T: FirstTrait, D: SomeOtherTrait, V: SomeThirdTrait>
+            // TODO: Should bounds to be presented? What if module_1 require them in their definition?
+            // where
+            //         T::Error: Debug,
+            //         D::Message: Message,
+            //         D::Caller: Caller
+            {
+                module_1: Module1 #path_arguments_2,
+            }
+        };
+
+        let expected_3: syn::ItemStruct = parse_quote! {
+            struct Module3Generated<C: Context, V: SomeThirdTrait, __Message: Message>  {
+                module_1: Module1<C, V, __Message>,
+            }
+        };
+
+        // Validating
+        let GenericWithMatchingPathArguments {
+            generics: actual_generics_1,
+            ..
+        } = generics_for_field(
+            &outer_generics,
+            &syn::PathArguments::AngleBracketed(path_arguments_1),
+        );
+        assert_eq!(expected_1.generics, actual_generics_1);
+
+        let GenericWithMatchingPathArguments {
+            generics: actual_generics_2,
+            ..
+        } = generics_for_field(
+            &outer_generics,
+            &syn::PathArguments::AngleBracketed(path_arguments_2),
+        );
+        assert_eq!(expected_2.generics, actual_generics_2);
+
+        let GenericWithMatchingPathArguments {
+            generics: actual_generics_3,
+            ..
+        } = generics_for_field(
+            &outer_generics,
+            &syn::PathArguments::AngleBracketed(path_arguments_3),
+        );
+        assert_eq!(expected_3.generics, actual_generics_3);
+    }
+
+    #[test]
+    #[ignore = "To Be Fixed"]
     fn test_generics_for_field_associated_types_nested_as() {
+        let path_arguments_1: syn::AngleBracketedGenericArguments = parse_quote! { <U, T::Error> };
+        let path_arguments_2: syn::AngleBracketedGenericArguments =
+            parse_quote! { <<U::Message as Message>::Caller, V> };
+        let path_arguments_3: syn::AngleBracketedGenericArguments = parse_quote! {
+            <<U::Message as Message>::Data, T>
+        };
         let test_struct: syn::ItemStruct = parse_quote! {
             struct TestStruct<T: FirstTrait, U: SecondTrait, V>
                 where
-                    V: ThirdTrait,
-                    <U as SecondTrait>::Message: Message,
-                    <<U as SecondTrait>::Message as Message>::Caller: std::fmt::Display,
-                    T::Error: std::fmt::Debug,
+                V: ThirdTrait,
+                <U as SecondTrait>::Message: Message,
+                <<U as SecondTrait>::Message as Message>::Caller: std::fmt::Display,
+                T::Error: std::fmt::Debug,
             {
-                field1: Foo<U, T::Error>,
-                field2: Bar<<U::Message as Message>::Caller, V>,
+                field_1: Foo #path_arguments_1 ,
+                field_2: Bar #path_arguments_2 ,
+                field_3: Bar #path_arguments_3 ,
+            }
+        };
+
+        let expected_1: syn::ItemStruct = parse_quote! {
+            struct Field1Generated<U: SecondTrait, __Error: std::fmt::Debug> {
+                field_1: Bar<U, __Error>,
+            }
+        };
+
+        let expected_2: syn::ItemStruct = parse_quote! {
+            struct Field2Generated<V: ThirdTrait, __Message: Message> {
+                field_2: Bar<__Message::Caller, V>,
+            }
+        };
+
+        let expected_3: syn::ItemStruct = parse_quote! {
+            struct Field3Generated<T: FirstTrait, __Message: Message> {
+                field_3: Bar<__Message::Data, T>,
             }
         };
 
         let generics: syn::Generics = test_struct.generics;
-        let path_arguments: syn::AngleBracketedGenericArguments =
-            parse_quote! { <<U::Message as Message>::Caller, V> };
 
-        let p = syn::PathArguments::AngleBracketed(path_arguments);
-
+        // Case 1
         let GenericWithMatchingPathArguments {
-            generics: actual_generics,
+            generics: actual_generics_1,
             ..
-        } = generics_for_field(&generics, &p);
-
-        let expected: syn::ItemStruct = parse_quote! {
-            struct Field1Generated<U: SecondTrait, V>
-                where
-                    V: ThirdTrait,
-                    <U as SecondTrait>::Message: Message,
-                    <<U as SecondTrait>::Message as Message>::Caller: std::fmt::Display,
-            {
-                field_1: Bar<U, T::Error>,
-            }
-        };
-
-        println!(
-            "ACTUAL  : '{}' WHERE: '{}'",
-            actual_generics.to_token_stream(),
-            actual_generics
-                .where_clause
-                .map_or("".to_string(), |w| w.to_token_stream().to_string())
+        } = generics_for_field(
+            &generics,
+            &syn::PathArguments::AngleBracketed(path_arguments_1),
         );
-        println!(
-            "EXPECTED: '{}' WHERE: '{}'",
-            expected.generics.to_token_stream(),
-            expected
-                .generics
-                .where_clause
-                .map_or("".to_string(), |w| w.to_token_stream().to_string())
+        assert_eq!(expected_1.generics, actual_generics_1);
+
+        // Case 2
+        let GenericWithMatchingPathArguments {
+            generics: actual_generics_2,
+            ..
+        } = generics_for_field(
+            &generics,
+            &syn::PathArguments::AngleBracketed(path_arguments_2),
         );
 
-        // assert_eq!(expected.generics, actual_generics);
+        // println!(
+        //     "ACTUAL  2: '{}' WHERE: '{}'",
+        //     actual_generics_2.to_token_stream(),
+        //     actual_generics_2
+        //         .where_clause
+        //         .map_or("".to_string(), |w| w.to_token_stream().to_string())
+        // );
+        // println!(
+        //     "EXPECTED2: '{}' WHERE: '{}'",
+        //     expected_2.generics.to_token_stream(),
+        //     expected_2
+        //         .generics
+        //         .where_clause
+        //         .map_or("".to_string(), |w| w.to_token_stream().to_string())
+        // );
+        assert_eq!(expected_2.generics, actual_generics_2);
+
+        // Case 3
+        let GenericWithMatchingPathArguments {
+            generics: actual_generics_3,
+            ..
+        } = generics_for_field(
+            &generics,
+            &syn::PathArguments::AngleBracketed(path_arguments_3),
+        );
+
+        // println!(
+        //     "ACTUAL  3: '{}' WHERE: '{}'",
+        //     actual_generics_3.to_token_stream(),
+        //     actual_generics_3
+        //         .where_clause
+        //         .map_or("".to_string(), |w| w.to_token_stream().to_string())
+        // );
+        // println!(
+        //     "EXPECTED3: '{}' WHERE: '{}'",
+        //     expected_3.generics.to_token_stream(),
+        //     expected_3
+        //         .generics
+        //         .where_clause
+        //         .map_or("".to_string(), |w| w.to_token_stream().to_string())
+        // );
+
+        assert_eq!(expected_3.generics, actual_generics_3);
     }
 
     #[test]
@@ -676,13 +771,4 @@ mod tests {
         // TODO: Add checks
         // let expected_bounds_for_t: syn::TypeParam = syn::parse_quote!(T: SomeTrait);
     }
-
-    // TODO: Test with deeper nesting.
-    //         let expected: syn::ItemStruct = parse_quote! {
-    //             struct Dummy<U: SomeOtherTrait, T: SomeTrait>  where T::Error: Debug, <T::Error> as SomeTrait: AnotherTrait {
-    //                 field_1: Result<U, T::Error>,
-    //             }
-    //         };
-
-    // // T::Foo::Bar
 }
