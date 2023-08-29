@@ -12,7 +12,7 @@ pub use call::CallMessage;
 use sov_modules_api::{CallResponse, Error, ModuleInfo};
 use sov_state::WorkingSet;
 use token::Token;
-/// Specifies an interfact to interact with tokens.
+/// Specifies an interface to interact with tokens.
 pub use token::{Amount, Coins};
 /// Methods to get a token address.
 pub use utils::{get_genesis_token_address, get_token_address};

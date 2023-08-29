@@ -1,5 +1,5 @@
 use jsonrpsee::core::RpcResult;
-use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
+use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::{expose_rpc, rpc_gen, DefaultRuntime};
 use sov_modules_api::{
     Address, CallResponse, Context, DispatchCall, EncodeCall, Error, Genesis, MessageCodec, Module,
@@ -86,6 +86,7 @@ where
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 struct Runtime<C: Context, S: TestSpec> {
     pub first: QueryModule<C, S::Data>,
+    phantom_spec: std::marker::PhantomData<S>,
 }
 
 struct ActualSpec;
