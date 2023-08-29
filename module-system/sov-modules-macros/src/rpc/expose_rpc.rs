@@ -1,7 +1,7 @@
-use quote::quote;
+use quote::{quote, ToTokens};
 use syn::DeriveInput;
 
-use crate::common::{generics_for_field, StructFieldExtractor};
+use crate::common::{generics_for_field, GenericWithMatchingPathArguments, StructFieldExtractor};
 
 pub(crate) struct ExposeRpcMacro {
     field_extractor: StructFieldExtractor,
@@ -61,7 +61,12 @@ impl ExposeRpcMacro {
                 .last()
                 .expect("A type path must have at least one segment")
                 .arguments;
-            let field_generics = generics_for_field(&generics, field_path_args);
+
+            // let field_generics = generics_for_field(&generics, field_path_args);
+            let GenericWithMatchingPathArguments {
+                path_arguments: matched_field_path_args,
+                generics: field_generics,
+            } = generics_for_field(&generics, field_path_args);
 
             let module_ident = ty.path.segments.last().unwrap().clone().ident;
 
@@ -79,9 +84,25 @@ impl ExposeRpcMacro {
 
             merge_operations.extend(merge_operation);
 
+            println!("HERE WE GO! RpcStorage!");
+            println!(
+                "FIELD GENERICS: '{}' {}",
+                field_generics.clone().to_token_stream(),
+                field_generics
+                    .clone()
+                    .where_clause
+                    .map_or("".to_string(), |w| w.to_token_stream().to_string())
+            );
+            println!("RPC TRAIT IDENT: {}", rpc_trait_ident.to_token_stream());
+            println!("FIELD PATH ARGS: {}", field_path_args.to_token_stream());
+            println!(
+                "MATCHED PATH ARGS: {}",
+                matched_field_path_args.to_token_stream()
+            );
+
             // TODO: double check where
             let rpc_trait_impl = quote! {
-                impl #field_generics #rpc_trait_ident #field_path_args for RpcStorage<#context_type> {
+                impl #field_generics #rpc_trait_ident #matched_field_path_args for RpcStorage<#context_type> {
                     /// Get a working set on top of the current storage
                     fn get_working_set(&self) -> ::sov_state::WorkingSet<<#context_type as ::sov_modules_api::Spec>::Storage>
                     {

@@ -136,16 +136,6 @@ pub mod phantom_module {
     }
 }
 
-trait Rollup {
-
-    ///
-}
-
-
-
-struct SlotHooks<> {}
-
-
 use my_module::query::{QueryModuleRpcImpl, QueryModuleRpcServer};
 use phantom_module::query::{PhantomModuleRpcImpl, PhantomModuleRpcServer};
 
