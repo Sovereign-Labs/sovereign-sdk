@@ -111,8 +111,8 @@ impl<C: sov_modules_api::Context> KeyWorkflow<C> {
 pub fn load_key<C: sov_modules_api::Context>(
     path: impl AsRef<Path>,
 ) -> Result<C::PrivateKey, anyhow::Error> {
-    let data = std::fs::read(path)?;
-    let key = serde_json::from_slice(data.as_slice())?;
+    let data = std::fs::read_to_string(path)?;
+    let key = serde_json::from_str(&data)?;
     Ok(key)
 }
 
