@@ -94,51 +94,7 @@ pub mod my_module {
     }
 }
 
-pub mod phantom_module {
-    use sov_modules_api::NonInstantiable;
-
-    use super::*;
-    #[derive(ModuleInfo)]
-    pub struct PhantomModule<C: Context, T> {
-        #[address]
-        pub address: C::Address,
-
-        #[state]
-        #[allow(dead_code)]
-        t: StateValue<std::marker::PhantomData<T>>,
-    }
-
-    impl<C: Context, T> Module for PhantomModule<C, T> {
-        type Context = C;
-        type Config = ();
-        type CallMessage = NonInstantiable;
-    }
-
-    pub mod query {
-        use super::*;
-        use crate::phantom_module::PhantomModule;
-
-        #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-        pub struct PhantomQueryResponse {
-            pub value: Option<String>,
-        }
-
-        #[rpc_gen(client, server, namespace = "phantomModule")]
-        impl<C: Context, T> PhantomModule<C, T> {
-            #[rpc_method(name = "queryValue")]
-            pub fn query_value(
-                &self,
-                _working_set: &mut WorkingSet<C::Storage>,
-            ) -> RpcResult<PhantomQueryResponse> {
-                let value = Some("hello world".to_string());
-                Ok(PhantomQueryResponse { value })
-            }
-        }
-    }
-}
-
 // use my_module::query::{QueryModuleRpcImpl, QueryModuleRpcServer};
-// use phantom_module::query::{PhantomModuleRpcImpl, PhantomModuleRpcServer};
 
 // #[expose_rpc(DefaultContext)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
@@ -148,7 +104,6 @@ where
     S::Data: Data,
 {
     pub first: my_module::QueryModule<C, S::Data>,
-    pub phantom: phantom_module::PhantomModule<C, S>,
 }
 
 struct ActualSpec;
@@ -163,7 +118,7 @@ fn main() {
     let storage = ZkStorage::new([1u8; 32]);
     let working_set = &mut WorkingSet::new(storage);
     let runtime = &mut Runtime::<C, ActualSpec>::default();
-    let config = GenesisConfig::new(22, ());
+    let config = GenesisConfig::new(22);
     runtime.genesis(&config, working_set).unwrap();
 
     let message: u32 = 33;
