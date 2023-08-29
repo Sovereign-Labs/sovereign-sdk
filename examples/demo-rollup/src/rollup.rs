@@ -26,6 +26,17 @@ use crate::register_rpc::register_ethereum;
 use crate::register_rpc::{register_ledger, register_sequencer};
 use crate::{get_genesis_config, initialize_ledger, ROLLUP_NAMESPACE};
 
+type AppVerifier<DA, Vm> = StateTransitionVerifier<
+    AppTemplate<
+        ZkDefaultContext,
+        <DA as DaService>::Spec,
+        <Vm as ProofSystem>::Guest,
+        Runtime<ZkDefaultContext>,
+    >,
+    <DA as DaService>::Verifier,
+    Vm,
+>;
+
 /// Dependencies needed to run the rollup.
 pub struct Rollup<Vm: ProofSystem, DA: DaService + Clone> {
     /// Implementation of the STF.
@@ -88,14 +99,7 @@ impl<Vm: ProofSystem, DA: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, D
     pub async fn run_with_prover_opt(
         mut self,
         channel: Option<oneshot::Sender<SocketAddr>>,
-        prover: Option<(
-            <Vm as ProofSystem>::Host,
-            StateTransitionVerifier<
-                AppTemplate<ZkDefaultContext, DA::Spec, Vm::Guest, Runtime<ZkDefaultContext>>,
-                DA::Verifier,
-                Vm,
-            >,
-        )>,
+        prover: Option<(<Vm as ProofSystem>::Host, AppVerifier<DA, Vm>)>,
     ) -> Result<(), anyhow::Error> {
         let storage = self.app.get_storage();
         let mut methods = get_rpc_methods::<DefaultContext>(storage);

@@ -249,7 +249,7 @@ impl DaService for CelestiaService {
         (
             output,
             ChainValidityCondition {
-                prev_hash: block.header().prev_hash().inner().clone(),
+                prev_hash: *block.header().prev_hash().inner(),
                 block_hash: block.hash(),
             },
         )

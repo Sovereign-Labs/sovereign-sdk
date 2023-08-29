@@ -2,8 +2,8 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::Mutex;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use serde::de::DeserializeOwned;
 use jmt::storage::TreeReader;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 // TODO: Refactor witness trait so it only require Serialize / Deserialize

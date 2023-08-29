@@ -83,6 +83,7 @@ where
     ledger_db: LedgerDB,
     state_root: ST::StateRoot,
     listen_address: SocketAddr,
+    #[allow(clippy::type_complexity)]
     prover: Option<(Vm::Host, StateTransitionVerifier<V, DA::Verifier, Vm>)>,
 }
 
@@ -101,7 +102,10 @@ where
         mut app: ST,
         should_init_chain: bool,
         genesis_config: ST::InitialState,
-        prover: Option<(Vm::Host, StateTransitionVerifier<V, DA::Verifier, Vm>)>,
+        #[allow(clippy::type_complexity)] prover: Option<(
+            Vm::Host,
+            StateTransitionVerifier<V, DA::Verifier, Vm>,
+        )>,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
 

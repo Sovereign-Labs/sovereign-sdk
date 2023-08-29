@@ -56,7 +56,7 @@ impl<Ctx: Context, Da: DaSpec> SlotHooks<Da> for ChainState<Ctx, Da> {
         self.in_progress_transition.set(
             &TransitionInProgress {
                 da_block_hash: slot_header.hash(),
-                validity_condition: validity_condition.clone(),
+                validity_condition: *validity_condition,
             },
             working_set,
         );

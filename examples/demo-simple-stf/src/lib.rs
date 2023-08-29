@@ -55,9 +55,8 @@ impl<Vm: ProofSystem, Cond: ValidityCondition, Da: DaSpec> StateTransitionFuncti
     type Condition = Cond;
 
     // Perform one-time initialization for the genesis block.
-    fn init_chain(&mut self, _params: Self::InitialState) -> () {
+    fn init_chain(&mut self, _params: Self::InitialState) {
         // Do nothing and return an empty state root
-        ()
     }
 
     fn apply_slot<'a, I>(
