@@ -27,18 +27,24 @@ use crate::Transfer;
 /// because we only get the `WorkingSet` at call-time from the Sovereign SDK,
 /// which must be passed to `TokenTransferValidationContext` methods through
 /// the `self` argument.
-pub struct TransferContext<'ws, C: sov_modules_api::Context> {
+pub struct TransferContext<'ws, 'c, C: sov_modules_api::Context> {
     pub transfer_mod: Transfer<C>,
+    pub sdk_context: &'c C,
     pub working_set: RefCell<&'ws mut WorkingSet<C::Storage>>,
 }
 
-impl<'ws, C> TransferContext<'ws, C>
+impl<'ws, 'c, C> TransferContext<'ws, 'c, C>
 where
     C: sov_modules_api::Context,
 {
-    pub fn new(transfer_mod: Transfer<C>, working_set: &'ws mut WorkingSet<C::Storage>) -> Self {
+    pub fn new(
+        transfer_mod: Transfer<C>,
+        sdk_context: &'c C,
+        working_set: &'ws mut WorkingSet<C::Storage>,
+    ) -> Self {
         Self {
             transfer_mod,
+            sdk_context,
             working_set: RefCell::new(working_set),
         }
     }
@@ -91,7 +97,7 @@ where
     }
 }
 
-impl<'ws, C> core::fmt::Debug for TransferContext<'ws, C>
+impl<'ws, 'c, C> core::fmt::Debug for TransferContext<'ws, 'c, C>
 where
     C: sov_modules_api::Context,
 {
@@ -108,7 +114,7 @@ pub struct EscrowExtraData<C: sov_modules_api::Context> {
     pub token_address: C::Address,
 }
 
-impl<'ws, C> TokenTransferValidationContext<EscrowExtraData<C>> for TransferContext<'ws, C>
+impl<'ws, 'c, C> TokenTransferValidationContext<EscrowExtraData<C>> for TransferContext<'ws, 'c, C>
 where
     C: sov_modules_api::Context,
 {
@@ -131,7 +137,8 @@ where
         _account: &Self::AccountId,
         _coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        todo!()
+        // We can always mint
+        Ok(())
     }
 
     /// Any token that is to be burned will have been previously minted, so we
@@ -278,18 +285,84 @@ where
     }
 }
 
-impl<'ws, C> TokenTransferExecutionContext<EscrowExtraData<C>> for TransferContext<'ws, C>
+impl<'ws, 'c, C> TokenTransferExecutionContext<EscrowExtraData<C>> for TransferContext<'ws, 'c, C>
 where
     C: sov_modules_api::Context,
 {
     fn mint_coins_execute(
         &mut self,
-        _account: &Self::AccountId,
-        _coin: &PrefixedCoin,
+        account: &Self::AccountId,
+        coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         // 1. if token address doesn't exist in `minted_tokens`, then create a new token and store in `minted_tokens`
+        let token_address: C::Address = {
+            // TODO: Put this in a function
+            let mut hasher = <C::Hasher as Digest>::new();
+            hasher.update(coin.denom.to_string());
+            let denom_hash = hasher.finalize().to_vec();
+
+            let maybe_token_address = self
+                .transfer_mod
+                .minted_tokens
+                .get(&denom_hash, &mut self.working_set.borrow_mut());
+
+            match maybe_token_address {
+                Some(token_address) => token_address,
+                // Create a new token
+                None => {
+                    let token_name = coin.denom.to_string();
+                    let salt = 0u64; // FIXME: proper salt to use?
+                    let initial_balance = 0;
+                    // Note: unused since initial_balance = 0
+                    let minter_address = account.address.clone();
+                    // Only the transfer module is allowed to mint
+                    let authorized_minters = vec![self.transfer_mod.address.clone()];
+                    let new_token_addr = self
+                        .transfer_mod
+                        .bank
+                        .create_token(
+                            token_name,
+                            salt,
+                            initial_balance,
+                            minter_address,
+                            authorized_minters,
+                            self.sdk_context,
+                            &mut self.working_set.borrow_mut(),
+                        )
+                        .map_err(|err| TokenTransferError::Other(err.to_string()))?;
+
+                    // Store the new address in `minted_tokens`
+                    self.transfer_mod.minted_tokens.set(
+                        &denom_hash,
+                        &new_token_addr,
+                        &mut self.working_set.borrow_mut(),
+                    );
+
+                    new_token_addr
+                }
+            }
+        };
 
         // 2. mint tokens
+        {
+            let amount: sov_bank::Amount = (*coin.amount.as_ref())
+                .try_into()
+                .map_err(|_| TokenTransferError::InvalidAmount(FromDecStrErr::InvalidLength))?;
+            let sdk_coins = Coins {
+                amount,
+                token_address,
+            };
+
+            self.transfer_mod
+                .bank
+                .mint(
+                    &sdk_coins,
+                    &account.address,
+                    &self.transfer_mod.address,
+                    &mut self.working_set.borrow_mut(),
+                )
+                .map_err(|err| TokenTransferError::Other(err.to_string()))?;
+        }
 
         Ok(())
     }
@@ -413,7 +486,7 @@ where
     }
 }
 
-impl<'ws, C> ibc::core::router::Module for TransferContext<'ws, C>
+impl<'ws, 'c, C> ibc::core::router::Module for TransferContext<'ws, 'c, C>
 where
     C: sov_modules_api::Context,
 {

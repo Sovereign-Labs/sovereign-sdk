@@ -62,25 +62,29 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcRouterModule<C>
     }
 }
 
-pub struct IbcRouter<'ws, C: sov_modules_api::Context> {
-    pub transfer_ctx: TransferContext<'ws, C>,
+pub struct IbcRouter<'ws, 'c, C: sov_modules_api::Context> {
+    pub transfer_ctx: TransferContext<'ws, 'c, C>,
 }
 
-impl<'t, 'ws, C> IbcRouter<'ws, C>
+impl<'t, 'ws, 'c, C> IbcRouter<'ws, 'c, C>
 where
     C: sov_modules_api::Context,
 {
     pub fn new(
         router_mod: &'t IbcRouterModule<C>,
+        sdk_context: &'c C,
         working_set: &'ws mut WorkingSet<C::Storage>,
-    ) -> IbcRouter<'ws, C> {
+    ) -> IbcRouter<'ws, 'c, C> {
         IbcRouter {
-            transfer_ctx: router_mod.transfer.clone().into_context(working_set),
+            transfer_ctx: router_mod
+                .transfer
+                .clone()
+                .into_context(sdk_context, working_set),
         }
     }
 }
 
-impl<'ws, C> Router for IbcRouter<'ws, C>
+impl<'ws, 'c, C> Router for IbcRouter<'ws, 'c, C>
 where
     C: sov_modules_api::Context,
 {
