@@ -11,10 +11,8 @@ use celestia::{BlobWithSender, CelestiaHeader};
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::create_zk_app_template;
 use demo_stf::ArrayWitness;
-
 use risc0_adapter::guest::Risc0Guest;
 use risc0_zkvm::guest::env;
-use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -67,7 +65,7 @@ pub fn main() {
     });
 
     let validity_condition = verifier
-        .verify_relevant_tx_list::<NoOpHasher>(&header, &blobs, inclusion_proof, completeness_proof)
+        .verify_relevant_tx_list(&header, &blobs, inclusion_proof, completeness_proof)
         .expect("Transaction list must be correct");
     env::write(&"Relevant txs verified\n");
 
