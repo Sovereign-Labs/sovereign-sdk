@@ -178,16 +178,20 @@ pub trait Storage: Clone {
     /// Returns the latest state root hash from the storage.
     fn get_state_root(&self, witness: &Self::Witness) -> anyhow::Result<[u8; 32]>;
 
+    /// Calculates new state root but does not commit any changes to the database.
     fn calculate_state_root_and_node_batch(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
     ) -> Result<([u8; 32], NodeBatch), anyhow::Error>;
 
+    /// Commits state changes to the database.
     fn commit(&self, node_batch: &NodeBatch);
 
     /// Validate all of the storage accesses in a particular cache log,
-    /// returning the new state root after applying all writes
+    /// returning the new state root after applying all writes.
+    /// This function is equivalent to calling:
+    /// `self.calculate_state_root_and_node_batch & self.commit`
     fn validate_and_commit(
         &self,
         state_accesses: OrderedReadsAndWrites,
