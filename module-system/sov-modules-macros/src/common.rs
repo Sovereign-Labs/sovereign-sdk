@@ -414,31 +414,31 @@ pub(crate) fn generics_for_field(
                     //
                     // let bounds = generic_bounds.get(&sub_path).cloned().unwrap_or_default();
                     //
-                    if type_path.path.segments.len() > 1 {
-                        let where_bounds = generic_bounds
-                            .get(&type_path.path)
-                            .cloned()
-                            .unwrap_or_default();
-
-                        if !where_bounds.is_empty() {
-                            let sub_type_path = syn::TypePath {
-                                // This needs to be addressed, from docs:
-                                // A path like `std::slice::Iter`, optionally qualified with a
-                                // self-type as in `<Vec<T> as SomeTrait>::Associated`.
-                                qself: None,
-                                path: type_path.path.clone(),
-                            };
-
-                            let where_predicate = syn::WherePredicate::Type(syn::PredicateType {
-                                lifetimes: None,
-                                bounded_ty: syn::Type::Path(sub_type_path),
-                                colon_token: Default::default(),
-                                bounds: where_bounds,
-                            });
-
-                            where_predicates.push(where_predicate);
-                        }
-                    }
+                    // if type_path.path.segments.len() > 1 {
+                    //     let where_bounds = generic_bounds
+                    //         .get(&type_path.path)
+                    //         .cloned()
+                    //         .unwrap_or_default();
+                    //
+                    //     if !where_bounds.is_empty() {
+                    //         let sub_type_path = syn::TypePath {
+                    //             // This needs to be addressed, from docs:
+                    //             // A path like `std::slice::Iter`, optionally qualified with a
+                    //             // self-type as in `<Vec<T> as SomeTrait>::Associated`.
+                    //             qself: None,
+                    //             path: type_path.path.clone(),
+                    //         };
+                    //
+                    //         let where_predicate = syn::WherePredicate::Type(syn::PredicateType {
+                    //             lifetimes: None,
+                    //             bounded_ty: syn::Type::Path(sub_type_path),
+                    //             colon_token: Default::default(),
+                    //             bounds: where_bounds,
+                    //         });
+                    //
+                    //         where_predicates.push(where_predicate);
+                    //     }
+                    // }
 
                     // Construct a "type param" with the appropriate bounds. This corresponds to a syntax
                     // tree like `T: Trait1 + Trait2`
@@ -484,7 +484,7 @@ pub(crate) fn generics_for_field(
                 gt_token: Some(syn::token::Gt {
                     spans: [field_generic_types.span()],
                 }),
-                where_clause,
+                where_clause: None,
             };
 
             GenericWithMatchingPathArguments {

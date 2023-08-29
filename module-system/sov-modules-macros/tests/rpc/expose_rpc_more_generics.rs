@@ -26,67 +26,83 @@ pub trait Data:
 
 impl Data for u32 {}
 
-#[derive(ModuleInfo)]
-pub struct QueryModule<C: Context, D: Data> {
-    #[address]
-    pub address: C::Address,
+pub mod my_module {
+    use super::*;
 
-    #[state]
-    pub data: StateValue<D>,
-}
+    #[derive(ModuleInfo)]
+    pub struct QueryModule<C: Context, D: Data> {
+        #[address]
+        pub address: C::Address,
 
-impl<C: Context, D: Data> Module for QueryModule<C, D> {
-    type Context = C;
-    type Config = D;
-    type CallMessage = D;
-
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), Error> {
-        self.data.set(config, working_set);
-        Ok(())
+        #[state]
+        pub data: StateValue<D>,
     }
 
-    fn call(
-        &self,
-        msg: Self::CallMessage,
-        _context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse, Error> {
-        self.data.set(&msg, working_set);
-        Ok(CallResponse::default())
+    impl<C: Context, D> Module for QueryModule<C, D>
+    where
+        D: Data,
+    {
+        type Context = C;
+        type Config = D;
+        type CallMessage = D;
+
+        fn genesis(
+            &self,
+            config: &Self::Config,
+            working_set: &mut WorkingSet<C::Storage>,
+        ) -> Result<(), Error> {
+            self.data.set(config, working_set);
+            Ok(())
+        }
+
+        fn call(
+            &self,
+            msg: Self::CallMessage,
+            _context: &Self::Context,
+            working_set: &mut WorkingSet<C::Storage>,
+        ) -> Result<CallResponse, Error> {
+            self.data.set(&msg, working_set);
+            Ok(CallResponse::default())
+        }
+    }
+
+    pub mod query {
+
+        use super::*;
+        use crate::my_module::QueryModule;
+
+        #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
+        pub struct QueryResponse {
+            pub value: Option<String>,
+        }
+
+        #[rpc_gen(client, server, namespace = "queryModule")]
+        impl<C, D: Data> QueryModule<C, D>
+        where
+            C: Context,
+        {
+            #[rpc_method(name = "queryValue")]
+            pub fn query_value(
+                &self,
+                working_set: &mut WorkingSet<C::Storage>,
+            ) -> RpcResult<QueryResponse> {
+                let value = self.data.get(working_set).map(|d| format!("{:?}", d));
+                Ok(QueryResponse { value })
+            }
+        }
     }
 }
 
-#[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
-pub struct QueryResponse {
-    pub value: Option<String>,
-}
-
-#[rpc_gen(client, server, namespace = "queryModule")]
-impl<C, D> QueryModule<C, D>
-where
-    C: Context,
-    D: Data,
-{
-    #[rpc_method(name = "queryValue")]
-    pub fn query_value(
-        &self,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> RpcResult<QueryResponse> {
-        let value = self.data.get(working_set).map(|d| format!("{:?}", d));
-        Ok(QueryResponse { value })
-    }
-}
+use my_module::query::{QueryModuleRpcImpl, QueryModuleRpcServer};
 
 #[expose_rpc(DefaultContext)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-struct Runtime<C: Context, S: TestSpec> {
-    pub first: QueryModule<C, S::Data>,
-    phantom_spec: std::marker::PhantomData<S>,
+struct Runtime<C: Context, S: TestSpec>
+where
+    S::Data: Data,
+{
+    pub first: my_module::QueryModule<C, S::Data>,
 }
 
 struct ActualSpec;
@@ -99,17 +115,19 @@ fn main() {
     type C = ZkDefaultContext;
     type RT = Runtime<C, ActualSpec>;
     let storage = ZkStorage::new([1u8; 32]);
-    let working_set = &mut sov_state::WorkingSet::new(storage);
+    let working_set = &mut WorkingSet::new(storage);
     let runtime = &mut Runtime::<C, ActualSpec>::default();
     let config = GenesisConfig::new(22);
     runtime.genesis(&config, working_set).unwrap();
 
     let message: u32 = 33;
-    let serialized_message = <RT as EncodeCall<QueryModule<C, u32>>>::encode_call(message);
+    let serialized_message =
+        <RT as EncodeCall<my_module::QueryModule<C, u32>>>::encode_call(message);
     let module = RT::decode_call(&serialized_message).unwrap();
     let context = C::new(Address::try_from([11; 32].as_ref()).unwrap());
 
     let _ = runtime
         .dispatch_call(module, working_set, &context)
         .unwrap();
+    println!("Done!");
 }

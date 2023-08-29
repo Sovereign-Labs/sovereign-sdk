@@ -1,7 +1,6 @@
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::default_context::ZkDefaultContext;
-// use sov_modules_api::macros::{expose_rpc, rpc_gen, DefaultRuntime};
-use sov_modules_api::macros::{rpc_gen, DefaultRuntime};
+use sov_modules_api::macros::{expose_rpc, rpc_gen, DefaultRuntime};
 use sov_modules_api::{
     Address, CallResponse, Context, DispatchCall, EncodeCall, Error, Genesis, MessageCodec, Module,
     ModuleInfo,
@@ -94,9 +93,9 @@ pub mod my_module {
     }
 }
 
-// use my_module::query::{QueryModuleRpcImpl, QueryModuleRpcServer};
+use my_module::query::{QueryModuleRpcImpl, QueryModuleRpcServer};
 
-// #[expose_rpc(DefaultContext)]
+#[expose_rpc(DefaultContext)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 struct Runtime<C: Context, S: TestSpec>
