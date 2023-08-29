@@ -62,7 +62,6 @@ impl ExposeRpcMacro {
                 .expect("A type path must have at least one segment")
                 .arguments;
 
-            // let field_generics = generics_for_field(&generics, field_path_args);
             let GenericWithMatchingPathArguments {
                 path_arguments: matched_field_path_args,
                 generics: field_generics,
@@ -84,7 +83,7 @@ impl ExposeRpcMacro {
 
             merge_operations.extend(merge_operation);
 
-            // TODO: double check where
+            // We don't need to render where, because all bounds are inside `field_generics`
             let rpc_trait_impl = quote! {
                 impl #field_generics #rpc_trait_ident #matched_field_path_args for RpcStorage<#context_type> {
                     /// Get a working set on top of the current storage

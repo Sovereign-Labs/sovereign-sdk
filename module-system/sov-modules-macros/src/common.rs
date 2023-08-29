@@ -307,7 +307,6 @@ pub(crate) fn get_serialization_attrs(
 /// let our_bounds = extract_generic_type_bounds(&test_struct.generics);
 /// assert_eq!(our_bounds.get(T), Some(&desired_bounds_for_t.bounds));
 /// ```
-/// TODO: DO WE REALLY NEED TYPE_PATH? WOULDN'T IT BE ENOUGH TO JUST HAVE THE PATH?
 #[cfg_attr(not(feature = "native"), allow(unused))]
 pub(crate) fn extract_generic_type_bounds(
     generics: &syn::Generics,
@@ -378,8 +377,8 @@ pub(crate) fn generics_for_field(
     match field_generic_types {
         PathArguments::AngleBracketed(angle_bracketed_data) => {
             let mut args_with_bounds = Punctuated::<GenericParam, syn::token::Comma>::new();
-            // let mut where_predicates = Punctuated::<syn::WherePredicate, syn::token::Comma>::new();
-            let mut new_generic_args = Punctuated::<syn::GenericArgument, syn::token::Comma>::new();
+            let mut new_generic_path_args =
+                Punctuated::<syn::GenericArgument, syn::token::Comma>::new();
             for generic_arg in &angle_bracketed_data.args {
                 if let syn::GenericArgument::Type(syn::Type::Path(type_path)) = generic_arg {
                     let last_segment = type_path
@@ -412,14 +411,13 @@ pub(crate) fn generics_for_field(
                         path: new_path,
                     };
 
-                    new_generic_args.push(GenericArgument::Type(syn::Type::Path(last)));
+                    new_generic_path_args.push(GenericArgument::Type(syn::Type::Path(last)));
 
                     // Construct a "type param" with the appropriate bounds. This corresponds to a syntax
                     // tree like `T: Trait1 + Trait2`
 
                     let generic_type_param_with_bounds = syn::TypeParam {
                         attrs: Vec::new(),
-                        // Adjust here..
                         ident,
                         colon_token: Some(syn::token::Colon {
                             spans: [type_path.span()],
@@ -437,7 +435,7 @@ pub(crate) fn generics_for_field(
                 syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
                     colon2_token: None,
                     lt_token: Default::default(),
-                    args: new_generic_args,
+                    args: new_generic_path_args,
                     gt_token: Default::default(),
                 });
 
@@ -466,7 +464,6 @@ pub(crate) fn generics_for_field(
 
 #[cfg(test)]
 mod tests {
-    use quote::ToTokens;
     use syn::parse_quote;
 
     use crate::common::{
@@ -745,30 +742,5 @@ mod tests {
         // );
 
         assert_eq!(expected_3.generics, actual_generics_3);
-    }
-
-    #[test]
-    fn test_generic_types_with_associated_type_bounds_2() {
-        // where T::Error: Debug
-        let test_struct: syn::ItemStruct = syn::parse_quote! {
-            struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V, X> where T::Error: Debug, X::Thing: std::fmt::Display {
-                field: (T::Error, U, V),
-                fiel2: X::Thing,
-            }
-        };
-        let generics = test_struct.generics;
-        let our_bounds = extract_generic_type_bounds(&generics);
-        for (t, p) in our_bounds {
-            println!("{} _::_ {}", t.to_token_stream(), p.to_token_stream());
-        }
-        // U _::_ SomeOtherTrait
-        // T _::_ SomeTrait
-        // X _::_
-        // T :: Error _::_ Debug
-        // V _::_
-        // X :: Thing _::_ std :: fmt :: Display
-
-        // TODO: Add checks
-        // let expected_bounds_for_t: syn::TypeParam = syn::parse_quote!(T: SomeTrait);
     }
 }

@@ -14,7 +14,6 @@ members = [
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
     "full-node/sov-ethereum",
-    "examples/expose_rpc_debug",
 
     "full-node/sov-stf-runner",
     
