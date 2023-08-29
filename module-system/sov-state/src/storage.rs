@@ -6,7 +6,6 @@ use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
 use hex;
 use jmt::storage::NodeBatch;
-use jmt::RootHash;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
@@ -179,13 +178,27 @@ pub trait Storage: Clone {
     /// Returns the latest state root hash from the storage.
     fn get_state_root(&self, witness: &Self::Witness) -> anyhow::Result<[u8; 32]>;
 
-    fn get_new_root(
+    fn calculate_state_root_and_node_batch(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<(RootHash, NodeBatch), anyhow::Error>;
+    ) -> Result<([u8; 32], NodeBatch), anyhow::Error>;
 
     fn commit(&self, node_batch: &NodeBatch);
+
+    /// Validate all of the storage accesses in a particular cache log,
+    /// returning the new state root after applying all writes
+    fn validate_and_commit(
+        &self,
+        state_accesses: OrderedReadsAndWrites,
+        witness: &Self::Witness,
+    ) -> Result<[u8; 32], anyhow::Error> {
+        let (root_hash, node_batch) =
+            self.calculate_state_root_and_node_batch(state_accesses, witness)?;
+        self.commit(&node_batch);
+
+        Ok(root_hash)
+    }
 
     /// Opens a storage access proof and validates it against a state root.
     /// It returns a result with the opened leaf (key, value) pair in case of success.

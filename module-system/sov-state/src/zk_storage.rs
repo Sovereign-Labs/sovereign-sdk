@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 use std::sync::Arc;
 
 use jmt::storage::NodeBatch;
-use jmt::{JellyfishMerkleTree, KeyHash, RootHash, Version};
+use jmt::{JellyfishMerkleTree, KeyHash, Version};
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use zk_cycle_macros::cycle_tracker;
 
@@ -57,11 +57,11 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
-    fn get_new_root(
+    fn calculate_state_root_and_node_batch(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<(RootHash, NodeBatch), anyhow::Error> {
+    ) -> Result<([u8; 32], NodeBatch), anyhow::Error> {
         let latest_version: Version = witness.get_hint();
         let reader = TreeWitnessReader::new(witness);
 
@@ -100,7 +100,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         let (new_root, tree_update) = jmt
             .put_value_set(batch, next_version)
             .expect("JMT update must succeed");
-        Ok((new_root, tree_update.node_batch))
+        Ok((new_root.0, tree_update.node_batch))
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]

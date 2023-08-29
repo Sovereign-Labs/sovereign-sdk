@@ -79,11 +79,11 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .map(|root| root.0)
     }
 
-    fn get_new_root(
+    fn calculate_state_root_and_node_batch(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<(RootHash, NodeBatch), anyhow::Error> {
+    ) -> Result<([u8; 32], NodeBatch), anyhow::Error> {
         let latest_version = self.db.get_next_version() - 1;
         witness.add_hint(latest_version);
 
@@ -139,7 +139,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .put_value_set(batch, next_version)
             .expect("JMT update must succeed");
 
-        Ok((new_root, tree_update.node_batch))
+        Ok((new_root.0, tree_update.node_batch))
     }
 
     fn commit(&self, node_batch: &NodeBatch) {
