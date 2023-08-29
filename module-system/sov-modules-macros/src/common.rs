@@ -353,6 +353,7 @@ pub(crate) fn extract_generic_type_bounds(
 }
 
 #[derive(Default)]
+/// Container for [`syn::Generics`] and matching `[syn::PathArguments`] for a field
 pub struct GenericWithMatchingPathArguments {
     pub path_arguments: syn::PathArguments,
     pub generics: syn::Generics,
@@ -366,8 +367,8 @@ pub struct GenericWithMatchingPathArguments {
 /// }
 /// ```
 ///
-/// This function will return a `syn::Generics` corresponding to `<T: SomeTrait>` when
-/// invoked on the PathArguments for field1.
+/// This function will return a [`GenericWithMatchingPathArguments`] corresponding to `<T: SomeTrait>`
+/// when invoked on the PathArguments for field1.
 #[cfg_attr(not(feature = "native"), allow(unused))]
 pub(crate) fn generics_for_field(
     outer_generics: &syn::Generics,
@@ -390,6 +391,7 @@ pub(crate) fn generics_for_field(
 
                     let parent_ident = &last_segment.ident;
 
+                    // Indicates that we deal with associated type, so we need to rename identity
                     let ident = if type_path.path.segments.len() > 1 {
                         format_ident!("__{parent_ident}")
                     } else {
@@ -407,49 +409,10 @@ pub(crate) fn generics_for_field(
 
                     let last: syn::TypePath = syn::TypePath {
                         qself: None,
-                        // Adjust path here
                         path: new_path,
                     };
 
-                    // AngleBracketedGenericArguments -> Punctuated<GenericArgument -> Type -> TypePath
-
                     new_generic_args.push(GenericArgument::Type(syn::Type::Path(last)));
-
-                    // let sub_path_segment_start = &type_path
-                    //     .path
-                    //     .segments
-                    //     .first()
-                    //     .expect("Type path must have at least one segment")
-                    //     .clone();
-                    // let sub_path: syn::Path = sub_path_segment_start.clone().into();
-                    //
-                    // let bounds = generic_bounds.get(&sub_path).cloned().unwrap_or_default();
-                    //
-                    // if type_path.path.segments.len() > 1 {
-                    //     let where_bounds = generic_bounds
-                    //         .get(&type_path.path)
-                    //         .cloned()
-                    //         .unwrap_or_default();
-                    //
-                    //     if !where_bounds.is_empty() {
-                    //         let sub_type_path = syn::TypePath {
-                    //             // This needs to be addressed, from docs:
-                    //             // A path like `std::slice::Iter`, optionally qualified with a
-                    //             // self-type as in `<Vec<T> as SomeTrait>::Associated`.
-                    //             qself: None,
-                    //             path: type_path.path.clone(),
-                    //         };
-                    //
-                    //         let where_predicate = syn::WherePredicate::Type(syn::PredicateType {
-                    //             lifetimes: None,
-                    //             bounded_ty: syn::Type::Path(sub_type_path),
-                    //             colon_token: Default::default(),
-                    //             bounds: where_bounds,
-                    //         });
-                    //
-                    //         where_predicates.push(where_predicate);
-                    //     }
-                    // }
 
                     // Construct a "type param" with the appropriate bounds. This corresponds to a syntax
                     // tree like `T: Trait1 + Trait2`
@@ -468,18 +431,8 @@ pub(crate) fn generics_for_field(
                     args_with_bounds.push(GenericParam::Type(generic_type_param_with_bounds))
                 }
             }
-            // Construct a `Generics` struct with the generic type parameters and their bounds.
-            // This corresponds to a syntax tree like `<T: Trait1 + Trait2>`
 
-            // let where_clause = if where_predicates.is_empty() {
-            //     None
-            // } else {
-            //     Some(syn::WhereClause {
-            //         where_token: Default::default(),
-            //         predicates: where_predicates,
-            //     })
-            // };
-            //
+            // Construct a matching `PathArguments` struct for the new generic type parameters.
             let path_arguments =
                 syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
                     colon2_token: None,
@@ -488,6 +441,8 @@ pub(crate) fn generics_for_field(
                     gt_token: Default::default(),
                 });
 
+            // Construct a `Generics` struct with the generic type parameters and their bounds.
+            // This corresponds to a syntax tree like `<T: Trait1 + Trait2>`
             let generics = syn::Generics {
                 lt_token: Some(syn::token::Lt {
                     spans: [field_generic_types.span()],
