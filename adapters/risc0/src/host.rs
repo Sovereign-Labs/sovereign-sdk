@@ -25,7 +25,7 @@ fn add_benchmarking_callbacks(env: ExecutorEnvBuilder<'_>) -> ExecutorEnvBuilder
 }
 
 #[cfg(feature = "bench")]
-fn add_benchmarking_callbacks<'env>(env: ExecutorEnvBuilder<'env>) -> ExecutorEnvBuilder<'env> {
+fn add_benchmarking_callbacks<'env>(mut env: ExecutorEnvBuilder<'env>) -> ExecutorEnvBuilder<'env> {
     let metrics_syscall_name = get_syscall_name();
     env.io_callback(metrics_syscall_name, metrics_callback);
 
