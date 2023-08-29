@@ -5,8 +5,8 @@ use quote::{format_ident, ToTokens};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    AngleBracketedGenericArguments, DataStruct, Fields, GenericArgument, GenericParam,
-    ImplGenerics, Meta, PathArguments, PathSegment, TypeGenerics, TypeParamBound,
+    DataStruct, Fields, GenericArgument, GenericParam, ImplGenerics, Meta, PathArguments,
+    PathSegment, TypeGenerics, TypeParamBound,
 };
 
 #[derive(Clone)]
