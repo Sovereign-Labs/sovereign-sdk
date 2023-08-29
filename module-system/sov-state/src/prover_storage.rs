@@ -79,7 +79,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .map(|root| root.0)
     }
 
-    fn calculate_state_root_and_node_batch(
+    fn compute_state_update(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,

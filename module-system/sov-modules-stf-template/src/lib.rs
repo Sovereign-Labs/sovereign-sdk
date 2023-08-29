@@ -94,7 +94,7 @@ where
         let (cache_log, witness) = self.checkpoint.take().unwrap().freeze();
         let (root_hash, authenticated_node_batch) = self
             .current_storage
-            .calculate_state_root_and_node_batch(cache_log, &witness)
+            .compute_state_update(cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
 
         let mut working_set = WorkingSet::new(self.current_storage.clone());
@@ -134,7 +134,7 @@ where
         let (log, witness) = working_set.checkpoint().freeze();
         let (genesis_hash, node_batch) = self
             .current_storage
-            .calculate_state_root_and_node_batch(log, &witness)
+            .compute_state_update(log, &witness)
             .expect("Storage update must succeed");
 
         self.current_storage.commit(&node_batch);

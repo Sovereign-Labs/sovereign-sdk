@@ -179,7 +179,7 @@ pub trait Storage: Clone {
     fn get_state_root(&self, witness: &Self::Witness) -> anyhow::Result<[u8; 32]>;
 
     /// Calculates new state root but does not commit any changes to the database.
-    fn calculate_state_root_and_node_batch(
+    fn compute_state_update(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
@@ -191,14 +191,13 @@ pub trait Storage: Clone {
     /// Validate all of the storage accesses in a particular cache log,
     /// returning the new state root after applying all writes.
     /// This function is equivalent to calling:
-    /// `self.calculate_state_root_and_node_batch & self.commit`
+    /// `self.compute_state_update & self.commit`
     fn validate_and_commit(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error> {
-        let (root_hash, node_batch) =
-            self.calculate_state_root_and_node_batch(state_accesses, witness)?;
+        let (root_hash, node_batch) = self.compute_state_update(state_accesses, witness)?;
         self.commit(&node_batch);
 
         Ok(root_hash)
