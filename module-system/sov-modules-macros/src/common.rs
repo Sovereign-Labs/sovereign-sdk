@@ -377,7 +377,7 @@ pub(crate) fn generics_for_field(
     match field_generic_types {
         PathArguments::AngleBracketed(angle_bracketed_data) => {
             let mut args_with_bounds = Punctuated::<GenericParam, syn::token::Comma>::new();
-            let mut where_predicates = Punctuated::<syn::WherePredicate, syn::token::Comma>::new();
+            // let mut where_predicates = Punctuated::<syn::WherePredicate, syn::token::Comma>::new();
             let mut new_generic_args = Punctuated::<syn::GenericArgument, syn::token::Comma>::new();
             for generic_arg in &angle_bracketed_data.args {
                 if let syn::GenericArgument::Type(syn::Type::Path(type_path)) = generic_arg {
@@ -471,15 +471,15 @@ pub(crate) fn generics_for_field(
             // Construct a `Generics` struct with the generic type parameters and their bounds.
             // This corresponds to a syntax tree like `<T: Trait1 + Trait2>`
 
-            let where_clause = if where_predicates.is_empty() {
-                None
-            } else {
-                Some(syn::WhereClause {
-                    where_token: Default::default(),
-                    predicates: where_predicates,
-                })
-            };
-
+            // let where_clause = if where_predicates.is_empty() {
+            //     None
+            // } else {
+            //     Some(syn::WhereClause {
+            //         where_token: Default::default(),
+            //         predicates: where_predicates,
+            //     })
+            // };
+            //
             let path_arguments =
                 syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
                     colon2_token: None,
@@ -514,7 +514,9 @@ mod tests {
     use quote::ToTokens;
     use syn::parse_quote;
 
-    use crate::common::{extract_generic_type_bounds, generics_for_field};
+    use crate::common::{
+        extract_generic_type_bounds, generics_for_field, GenericWithMatchingPathArguments,
+    };
 
     #[test]
     fn test_generic_types_with_bounds() {
@@ -580,17 +582,17 @@ mod tests {
         );
     }
 
-    #[test]
-    fn how_to_flatten_arguments() {
-        let associated_path_arguments: syn::AngleBracketedGenericArguments =
-            parse_quote! { <C, T::Error> };
-
-        for arg in associated_path_arguments.args.iter() {
-            println!("ARG: {:?}", arg);
-        }
-
-        let flattened_arguments: syn::AngleBracketedGenericArguments = parse_quote! { <C, Error> };
-    }
+    // #[test]
+    // fn how_to_flatten_arguments() {
+    //     let associated_path_arguments: syn::AngleBracketedGenericArguments =
+    //         parse_quote! { <C, T::Error> };
+    //
+    //     for arg in associated_path_arguments.args.iter() {
+    //         println!("ARG: {:?}", arg);
+    //     }
+    //
+    //     let flattened_arguments: syn::AngleBracketedGenericArguments = parse_quote! { <C, Error> };
+    // }
 
     #[test]
     fn test_generics_for_field_associated_type() {

@@ -1,4 +1,4 @@
-use quote::{quote, ToTokens};
+use quote::quote;
 use syn::DeriveInput;
 
 use crate::common::{generics_for_field, GenericWithMatchingPathArguments, StructFieldExtractor};
@@ -83,22 +83,6 @@ impl ExposeRpcMacro {
             };
 
             merge_operations.extend(merge_operation);
-
-            println!("HERE WE GO! RpcStorage!");
-            println!(
-                "FIELD GENERICS: '{}' {}",
-                field_generics.clone().to_token_stream(),
-                field_generics
-                    .clone()
-                    .where_clause
-                    .map_or("".to_string(), |w| w.to_token_stream().to_string())
-            );
-            println!("RPC TRAIT IDENT: {}", rpc_trait_ident.to_token_stream());
-            println!("FIELD PATH ARGS: {}", field_path_args.to_token_stream());
-            println!(
-                "MATCHED PATH ARGS: {}",
-                matched_field_path_args.to_token_stream()
-            );
 
             // TODO: double check where
             let rpc_trait_impl = quote! {
