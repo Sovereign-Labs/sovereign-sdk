@@ -225,7 +225,12 @@ fn test_tx_bad_nonce() {
         let mut blobs = [blob];
 
         let data = MockBlock::default();
-        let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
+        let apply_block_result = demo.apply_slot(
+            Default::default(),
+            &data.header,
+            &data.validity_cond,
+            &mut blobs,
+        );
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let tx_receipts = apply_block_result.batch_receipts[0].tx_receipts.clone();

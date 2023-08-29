@@ -48,6 +48,11 @@ pub fn main() {
     let mut blobs: Vec<BlobWithSender> = guest.read_from_host();
     env::write(&"blobs have been read\n");
 
+    let validity_condition = verifier
+        .verify_relevant_tx_list(&header, &blobs, inclusion_proof, completeness_proof)
+        .expect("Transaction list must be correct");
+    env::write(&"Relevant txs verified\n");
+
     // Step 2: Apply blobs
     let mut app = create_zk_app_template::<Risc0Guest, CelestiaSpec>(prev_state_root_hash);
 
@@ -55,7 +60,7 @@ pub fn main() {
     env::write(&"Witness have been read\n");
 
     env::write(&"Applying slot...\n");
-    let result = app.apply_slot(witness, &header, &mut blobs);
+    let result = app.apply_slot(witness, &header, &validity_condition, &mut blobs);
 
     env::write(&"Slot has been applied\n");
 
@@ -63,11 +68,6 @@ pub fn main() {
     let verifier = CelestiaVerifier::new(celestia::verifier::RollupParams {
         namespace: ROLLUP_NAMESPACE,
     });
-
-    let validity_condition = verifier
-        .verify_relevant_tx_list(&header, &blobs, inclusion_proof, completeness_proof)
-        .expect("Transaction list must be correct");
-    env::write(&"Relevant txs verified\n");
 
     // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/647
     let rewarded_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
