@@ -13,8 +13,7 @@ use demo_stf::app::create_zk_app_template;
 use demo_stf::ArrayWitness;
 use risc0_adapter::guest::Risc0Guest;
 use risc0_zkvm::guest::env;
-use sov_rollup_interface::da::{DaSpec, DaVerifier};
-use sov_rollup_interface::services::da::SlotData;
+use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::{StateTransition, ZkvmGuest};
 
@@ -48,12 +47,17 @@ pub fn main() {
     let mut blobs: Vec<BlobWithSender> = guest.read_from_host();
     env::write(&"blobs have been read\n");
 
+    // Step 2: Verify tx list
+    let verifier = CelestiaVerifier::new(celestia::verifier::RollupParams {
+        namespace: ROLLUP_NAMESPACE,
+    });
+
     let validity_condition = verifier
         .verify_relevant_tx_list(&header, &blobs, inclusion_proof, completeness_proof)
         .expect("Transaction list must be correct");
     env::write(&"Relevant txs verified\n");
 
-    // Step 2: Apply blobs
+    // Step 3: Apply blobs
     let mut app = create_zk_app_template::<Risc0Guest, CelestiaSpec>(prev_state_root_hash);
 
     let witness: ArrayWitness = guest.read_from_host();
@@ -64,14 +68,9 @@ pub fn main() {
 
     env::write(&"Slot has been applied\n");
 
-    // Step 3: Verify tx list
-    let verifier = CelestiaVerifier::new(celestia::verifier::RollupParams {
-        namespace: ROLLUP_NAMESPACE,
-    });
-
     // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/647
     let rewarded_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
-    let output = StateTransition {
+    let output = StateTransition::<CelestiaSpec, _> {
         initial_state_root: prev_state_root_hash,
         final_state_root: result.state_root.0,
         validity_condition,

@@ -95,6 +95,7 @@ where
     V: StateTransitionFunction<Vm::Guest, DA::Spec>,
 {
     /// Creates a new `StateTransitionRunner` runner.
+    #[allow(clippy::type_complexity)]
     pub fn new(
         runner_config: RunnerConfig,
         da_service: DA,
@@ -102,10 +103,7 @@ where
         mut app: ST,
         should_init_chain: bool,
         genesis_config: ST::InitialState,
-        #[allow(clippy::type_complexity)] prover: Option<(
-            Vm::Host,
-            StateTransitionVerifier<V, DA::Verifier, Vm>,
-        )>,
+        prover: Option<(Vm::Host, StateTransitionVerifier<V, DA::Verifier, Vm>)>,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
 

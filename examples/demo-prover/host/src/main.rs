@@ -103,8 +103,10 @@ async fn main() -> Result<(), anyhow::Error> {
         host.write_to_guest(&filtered_block.header);
         // When we get a block from DA, we also need to provide proofs of completeness and correctness
         // https://github.com/Sovereign-Labs/sovereign-sdk/blob/nightly/rollup-interface/specs/interfaces/da.md#type-inclusionmultiproof
-        let (mut blobs, inclusion_proof, completeness_proof) = da_service
-            .extract_relevant_txs_with_proof(&filtered_block)
+        let (mut blobs, validity_condition) = da_service.extract_relevant_txs(&filtered_block);
+
+        let (inclusion_proof, completeness_proof) = da_service
+            .get_extraction_proof(&filtered_block, &blobs[..])
             .await;
 
         info!(
@@ -120,9 +122,12 @@ async fn main() -> Result<(), anyhow::Error> {
         // The extracted blobs need to be passed to the prover
         host.write_to_guest(&blobs);
 
-        let result = app
-            .stf
-            .apply_slot(Default::default(), &filtered_block, &mut blobs);
+        let result = app.stf.apply_slot(
+            Default::default(),
+            &filtered_block.header,
+            &validity_condition,
+            &mut blobs,
+        );
 
         // Witness contains the merkle paths to the state root so that the code inside the VM
         // can access state values (Witness can also contain other hints and proofs)
