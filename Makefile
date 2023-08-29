@@ -33,8 +33,8 @@ lint-fix:  ## cargo fmt, fix and clippy
 	cargo fix --allow-dirty
 	cargo clippy --fix --allow-dirty
 
-check-features: check-fuzz ## Checks that project compiles with all combinations of features
-	cargo hack --feature-powerset check
+check-features: ## Checks that project compiles with all combinations of features. default is not needed because we never check `cfg(default)`, we only use it as an alias.
+	cargo hack check --workspace --feature-powerset --exclude-features default
 
 check-fuzz: ## Checks that fuzz member compiles
 	$(MAKE) -C fuzz check

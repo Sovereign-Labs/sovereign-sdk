@@ -52,11 +52,16 @@ impl RegexAppender {
 impl log::Log for RegexAppender {
     fn log(&self, record: &log::Record) {
         if let Some(captures) = self.regex.captures(record.args().to_string().as_str()) {
+            let mut file_guard = self.file.lock().unwrap();
             if let Some(matched_pc) = captures.get(1) {
                 let pc_value_num = u64::from_str_radix(&matched_pc.as_str()[2..], 16).unwrap();
-                let pc_value = format!("{}\n", pc_value_num);
-                let mut file_guard = self.file.lock().unwrap();
+                let pc_value = format!("{}\t", pc_value_num);
                 file_guard.write_all(pc_value.as_bytes()).unwrap();
+            }
+            if let Some(matched_iname) = captures.get(2) {
+                let iname = matched_iname.as_str().to_uppercase();
+                let iname_value = format!("{}\n", iname);
+                file_guard.write_all(iname_value.as_bytes()).unwrap();
             }
         }
     }
@@ -69,8 +74,8 @@ impl log::Log for RegexAppender {
 }
 
 fn get_config(rollup_trace: &str) -> Config {
-    let regex_pattern = r".*?pc: (0x[0-9a-fA-F]+), insn.*";
-    // let log_file = "/Users/dubbelosix/sovereign/examples/demo-prover/matched_pattern.log";
+    // [942786] pc: 0x0008e564, insn: 0xffc67613 => andi x12, x12, -4
+    let regex_pattern = r".*?pc: (0x[0-9a-fA-F]+), insn: .*?=> ([a-z]*?) ";
 
     let custom_appender = RegexAppender::new(regex_pattern, rollup_trace);
 
