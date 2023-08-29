@@ -388,16 +388,27 @@ pub(crate) fn generics_for_field(
                         .expect("Type path must have at least one segment")
                         .clone();
 
-                    let ident = &last_segment.ident;
+                    let parent_ident = &last_segment.ident;
+
+                    let ident = if type_path.path.segments.len() > 1 {
+                        format_ident!("__{parent_ident}")
+                    } else {
+                        parent_ident.clone()
+                    };
 
                     let bounds = generic_bounds
                         .get(&type_path.path)
                         .cloned()
                         .unwrap_or_default();
 
+                    let mut new_path: syn::Path = last_segment.clone().into();
+
+                    new_path.segments.last_mut().unwrap().ident = ident.clone();
+
                     let last: syn::TypePath = syn::TypePath {
                         qself: None,
-                        path: last_segment.clone().into(),
+                        // Adjust path here
+                        path: new_path,
                     };
 
                     // AngleBracketedGenericArguments -> Punctuated<GenericArgument -> Type -> TypePath
@@ -445,7 +456,8 @@ pub(crate) fn generics_for_field(
 
                     let generic_type_param_with_bounds = syn::TypeParam {
                         attrs: Vec::new(),
-                        ident: ident.clone(),
+                        // Adjust here..
+                        ident,
                         colon_token: Some(syn::token::Colon {
                             spans: [type_path.span()],
                         }),
