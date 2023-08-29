@@ -638,7 +638,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "To Be Fixed"]
+    #[ignore = "To Be Fixed: https://github.com/Sovereign-Labs/sovereign-sdk/issues/757"]
     fn test_generics_for_field_associated_types_nested_as() {
         let path_arguments_1: syn::AngleBracketedGenericArguments = parse_quote! { <U, T::Error> };
         let path_arguments_2: syn::AngleBracketedGenericArguments =
