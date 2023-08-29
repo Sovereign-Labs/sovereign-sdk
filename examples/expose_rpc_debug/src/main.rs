@@ -25,21 +25,23 @@ pub trait Data:
 }
 
 impl Data for u32 {}
-type D = u32;
 
 pub mod my_module {
     use super::*;
 
     #[derive(ModuleInfo)]
-    pub struct QueryModule<C: Context> {
+    pub struct QueryModule<C: Context, D: Data> {
         #[address]
         pub address: C::Address,
 
         #[state]
-        pub data: StateValue<u32>,
+        pub data: StateValue<D>,
     }
 
-    impl<C: Context> Module for QueryModule<C> {
+    impl<C: Context, D> Module for QueryModule<C, D>
+    where
+        D: Data,
+    {
         type Context = C;
         type Config = D;
         type CallMessage = D;
@@ -75,7 +77,7 @@ pub mod my_module {
         }
 
         #[rpc_gen(client, server, namespace = "queryModule")]
-        impl<C> QueryModule<C>
+        impl<C, D: Data> QueryModule<C, D>
         where
             C: Context,
         {
@@ -92,13 +94,14 @@ pub mod my_module {
 }
 
 use my_module::query::{QueryModuleRpcImpl, QueryModuleRpcServer};
-// use sov_bank::query::{BankRpcImpl, BankRpcServer};
 
 #[expose_rpc(DefaultContext)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-struct Runtime<C: Context> {
-    pub first: my_module::QueryModule<C>,
+struct Runtime<C: Context, S: TestSpec> {
+    pub first: my_module::QueryModule<C, S::Data>,
+
+    _spec: std::marker::PhantomData<S>,
 }
 
 struct ActualSpec;
@@ -109,15 +112,16 @@ impl TestSpec for ActualSpec {
 
 fn main() {
     type C = ZkDefaultContext;
-    type RT = Runtime<C>;
+    type RT = Runtime<C, u32>;
     let storage = ZkStorage::new([1u8; 32]);
     let working_set = &mut WorkingSet::new(storage);
-    let runtime = &mut Runtime::<C>::default();
+    let runtime = &mut Runtime::<C, u32>::default();
     let config = GenesisConfig::new(22);
     runtime.genesis(&config, working_set).unwrap();
 
     let message: u32 = 33;
-    let serialized_message = <RT as EncodeCall<my_module::QueryModule<C>>>::encode_call(message);
+    let serialized_message =
+        <RT as EncodeCall<my_module::QueryModule<C, u32>>>::encode_call(message);
     let module = RT::decode_call(&serialized_message).unwrap();
     let context = C::new(Address::try_from([11; 32].as_ref()).unwrap());
 
