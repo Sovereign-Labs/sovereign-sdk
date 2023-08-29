@@ -14,14 +14,14 @@ use sov_stf_runner::get_ledger_rpc;
 const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
 
 /// register sequencer rpc methods.
-pub fn register_sequencer<Vm, DA>(
+pub fn register_sequencer<Zk, DA>(
     da_service: DA,
-    app: &mut App<Vm, DA::Spec>,
+    app: &mut App<Zk, DA::Spec>,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error>
 where
     DA: DaService,
-    Vm: ZkVerifier,
+    Zk: ZkVerifier,
 {
     let batch_builder = app.batch_builder.take().unwrap();
     let sequencer_rpc = get_sequencer_rpc(batch_builder, da_service);

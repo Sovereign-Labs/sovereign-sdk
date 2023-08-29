@@ -29,7 +29,7 @@ use sov_state::{Storage, WorkingSet};
 /// Configuration of the attester incentives module
 pub struct AttesterIncentivesConfig<
     C: Context,
-    Vm: ZkVerifier,
+    Zk: ZkVerifier,
     Da: DaSpec,
     Checker: ValidityConditionChecker<Da::ValidityCondition>,
 > {
@@ -42,7 +42,7 @@ pub struct AttesterIncentivesConfig<
     /// The minimum bond for a challenger.
     pub minimum_challenger_bond: Amount,
     /// A code commitment to be used for verifying proofs
-    pub commitment_to_allowed_challenge_method: Vm::CodeCommitment,
+    pub commitment_to_allowed_challenge_method: Zk::CodeCommitment,
     /// A list of initial provers and their bonded amount.
     pub initial_attesters: Vec<(C::Address, Amount)>,
     /// The finality period of the rollup (constant) in the number of DA layer slots processed.
@@ -73,7 +73,7 @@ pub struct UnbondingInfo {
 #[derive(ModuleInfo)]
 pub struct AttesterIncentives<
     C: sov_modules_api::Context,
-    Vm: ZkVerifier,
+    Zk: ZkVerifier,
     Da: DaSpec,
     Checker: ValidityConditionChecker<Da::ValidityCondition>,
 > {
@@ -99,7 +99,7 @@ pub struct AttesterIncentives<
 
     /// The code commitment to be used for verifying proofs
     #[state]
-    pub commitment_to_allowed_challenge_method: sov_state::StateValue<StoredCodeCommitment<Vm>>,
+    pub commitment_to_allowed_challenge_method: sov_state::StateValue<StoredCodeCommitment<Zk>>,
 
     /// Constant validity condition checker for the module.
     #[state]
@@ -149,10 +149,10 @@ pub struct AttesterIncentives<
     pub(crate) chain_state: sov_chain_state::ChainState<C, Da>,
 }
 
-impl<C, Vm, S, P, Da, Checker> sov_modules_api::Module for AttesterIncentives<C, Vm, Da, Checker>
+impl<C, Zk, S, P, Da, Checker> sov_modules_api::Module for AttesterIncentives<C, Zk, Da, Checker>
 where
     C: sov_modules_api::Context<Storage = S>,
-    Vm: ZkVerifier,
+    Zk: ZkVerifier,
     S: Storage<Proof = P>,
     P: BorshDeserialize + BorshSerialize,
     Da: DaSpec,
@@ -160,7 +160,7 @@ where
 {
     type Context = C;
 
-    type Config = AttesterIncentivesConfig<C, Vm, Da, Checker>;
+    type Config = AttesterIncentivesConfig<C, Zk, Da, Checker>;
 
     type CallMessage = call::CallMessage<C, Da>;
 

@@ -11,7 +11,7 @@ pub struct Response {
     pub value: u64,
 }
 
-impl<C: sov_modules_api::Context, Vm: ZkVerifier> ProverIncentives<C, Vm> {
+impl<C: sov_modules_api::Context, Zk: ZkVerifier> ProverIncentives<C, Zk> {
     /// Queries the state of the module and returns the bond amount of the address `address`.
     /// If the `address` is not bonded, returns a default value.
     pub fn get_bond_amount(

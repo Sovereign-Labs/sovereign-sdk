@@ -76,7 +76,7 @@ pub struct SlotResult<S, B, T, W> {
 ///  - block: DA layer block
 ///  - batch: Set of transactions grouped together, or block on L2
 ///  - blob: Non serialised batch or anything else that can be posted on DA layer, like attestation or proof.
-pub trait StateTransitionFunction<Vm: ZkVerifier, Da: DaSpec> {
+pub trait StateTransitionFunction<Zk: ZkVerifier, Da: DaSpec> {
     /// Root hash of state merkle tree
     type StateRoot: Serialize + DeserializeOwned + Clone;
     /// The initial state of the rollup.

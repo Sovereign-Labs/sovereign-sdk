@@ -15,10 +15,10 @@ pub struct BondAmountResponse {
 }
 
 // TODO: implement rpc_gen macro
-impl<C, Vm, Da, Checker> AttesterIncentives<C, Vm, Da, Checker>
+impl<C, Zk, Da, Checker> AttesterIncentives<C, Zk, Da, Checker>
 where
     C: sov_modules_api::Context,
-    Vm: ZkVerifier,
+    Zk: ZkVerifier,
     Da: DaSpec,
     Checker: ValidityConditionChecker<Da::ValidityCondition> + BorshDeserialize + BorshSerialize,
 {

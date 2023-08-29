@@ -223,9 +223,9 @@ where
 // StateTransitionFunction, DA, and Zkvm traits.
 #[serde(bound = "")]
 /// Data required to verify a state transition.
-pub struct StateTransitionData<ST: StateTransitionFunction<Vm, DA>, DA: DaSpec, Vm>
+pub struct StateTransitionData<ST: StateTransitionFunction<Zk, DA>, DA: DaSpec, Zk>
 where
-    Vm: ZkVerifier,
+    Zk: ZkVerifier,
 {
     /// The state root before the state transition
     pub pre_state_root: ST::StateRoot,

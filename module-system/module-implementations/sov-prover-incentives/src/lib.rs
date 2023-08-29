@@ -22,13 +22,13 @@ use sov_state::WorkingSet;
 /// address of the bonding token, the minimum bond, the commitment to
 /// the allowed verifier method and a set of initial provers with their
 /// bonding amount.
-pub struct ProverIncentivesConfig<C: Context, Vm: ZkVerifier> {
+pub struct ProverIncentivesConfig<C: Context, Zk: ZkVerifier> {
     /// The address of the token to be used for bonding.
     bonding_token_address: C::Address,
     /// The minimum bond for a prover.
     minimum_bond: u64,
     /// A code commitment to be used for verifying proofs
-    commitment_of_allowed_verifier_method: Vm::CodeCommitment,
+    commitment_of_allowed_verifier_method: Zk::CodeCommitment,
     /// A list of initial provers and their bonded amount.
     initial_provers: Vec<(C::Address, u64)>,
 }
@@ -39,7 +39,7 @@ pub struct ProverIncentivesConfig<C: Context, Vm: ZkVerifier> {
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo)]
-pub struct ProverIncentives<C: Context, Vm: ZkVerifier> {
+pub struct ProverIncentives<C: Context, Zk: ZkVerifier> {
     /// Address of the module.
     #[address]
     pub address: C::Address,
@@ -50,7 +50,7 @@ pub struct ProverIncentives<C: Context, Vm: ZkVerifier> {
 
     /// The code commitment to be used for verifying proofs
     #[state]
-    pub commitment_of_allowed_verifier_method: sov_state::StateValue<StoredCodeCommitment<Vm>>,
+    pub commitment_of_allowed_verifier_method: sov_state::StateValue<StoredCodeCommitment<Zk>>,
 
     /// The set of registered provers and their bonded amount.
     #[state]
@@ -65,10 +65,10 @@ pub struct ProverIncentives<C: Context, Vm: ZkVerifier> {
     pub(crate) bank: sov_bank::Bank<C>,
 }
 
-impl<C: Context, Vm: ZkVerifier> sov_modules_api::Module for ProverIncentives<C, Vm> {
+impl<C: Context, Zk: ZkVerifier> sov_modules_api::Module for ProverIncentives<C, Zk> {
     type Context = C;
 
-    type Config = ProverIncentivesConfig<C, Vm>;
+    type Config = ProverIncentivesConfig<C, Zk>;
 
     type CallMessage = call::CallMessage;
 

@@ -7,10 +7,10 @@ use sov_state::{Storage, WorkingSet};
 use crate::call::Role;
 use crate::AttesterIncentives;
 
-impl<C, Vm, S, P, Da, Checker> AttesterIncentives<C, Vm, Da, Checker>
+impl<C, Zk, S, P, Da, Checker> AttesterIncentives<C, Zk, Da, Checker>
 where
     C: sov_modules_api::Context<Storage = S>,
-    Vm: ZkVerifier,
+    Zk: ZkVerifier,
     S: Storage<Proof = P>,
     P: BorshDeserialize + BorshSerialize,
     Da: DaSpec,

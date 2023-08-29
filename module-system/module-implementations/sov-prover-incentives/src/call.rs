@@ -23,7 +23,7 @@ pub enum CallMessage {
     VerifyProof(Vec<u8>),
 }
 
-impl<C: sov_modules_api::Context, Vm: ZkVerifier> ProverIncentives<C, Vm> {
+impl<C: sov_modules_api::Context, Zk: ZkVerifier> ProverIncentives<C, Zk> {
     /// A helper function for the `bond_prover` call. Also used to bond provers
     /// during genesis when no context is available.
     pub(super) fn bond_prover_helper(
@@ -135,7 +135,7 @@ impl<C: sov_modules_api::Context, Vm: ZkVerifier> ProverIncentives<C, Vm> {
 
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
         if let Ok(_public_outputs) =
-            Vm::verify(proof, &code_commitment).map_err(|e| anyhow::format_err!("{:?}", e))
+            Zk::verify(proof, &code_commitment).map_err(|e| anyhow::format_err!("{:?}", e))
         {
             // TODO: decide what the proof output is and do something with it
             //     https://github.com/Sovereign-Labs/sovereign-sdk/issues/272

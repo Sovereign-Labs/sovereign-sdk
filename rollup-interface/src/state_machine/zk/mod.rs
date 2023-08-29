@@ -70,12 +70,12 @@ pub trait ZkVerifier {
 
 /// A wrapper around a code commitment which implements borsh serialization
 #[derive(Clone, Debug)]
-pub struct StoredCodeCommitment<Vm: ZkVerifier> {
+pub struct StoredCodeCommitment<Zk: ZkVerifier> {
     /// The inner field of the wrapper that contains the code commitment.
-    pub commitment: Vm::CodeCommitment,
+    pub commitment: Zk::CodeCommitment,
 }
 
-impl<Vm: ZkVerifier> BorshSerialize for StoredCodeCommitment<Vm> {
+impl<Zk: ZkVerifier> BorshSerialize for StoredCodeCommitment<Zk> {
     fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
         bincode::serialize_into(writer, &self.commitment)
             .expect("Serialization to vec is infallible");
@@ -83,9 +83,9 @@ impl<Vm: ZkVerifier> BorshSerialize for StoredCodeCommitment<Vm> {
     }
 }
 
-impl<Vm: ZkVerifier> BorshDeserialize for StoredCodeCommitment<Vm> {
+impl<Zk: ZkVerifier> BorshDeserialize for StoredCodeCommitment<Zk> {
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
-        let commitment: Vm::CodeCommitment = bincode::deserialize_from(reader)
+        let commitment: Zk::CodeCommitment = bincode::deserialize_from(reader)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
         Ok(Self { commitment })
     }

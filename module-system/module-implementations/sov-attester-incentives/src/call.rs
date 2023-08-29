@@ -121,10 +121,10 @@ pub enum Role {
 
 impl<
         C: sov_modules_api::Context,
-        Vm: ZkVerifier,
+        Zk: ZkVerifier,
         Da: DaSpec,
         Checker: ValidityConditionChecker<Da::ValidityCondition> + BorshDeserialize + BorshSerialize,
-    > AttesterIncentives<C, Vm, Da, Checker>
+    > AttesterIncentives<C, Zk, Da, Checker>
 {
     /// This returns the address of the reward token supply
     pub fn get_reward_token_supply_address(
@@ -727,7 +727,7 @@ impl<
             })?;
 
         let public_outputs_opt: Result<StateTransition<Da, C::Address>> =
-            Vm::verify_and_extract_output::<Da, C::Address>(proof, &code_commitment)
+            Zk::verify_and_extract_output::<Da, C::Address>(proof, &code_commitment)
                 .map_err(|e| anyhow::format_err!("{:?}", e));
 
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
