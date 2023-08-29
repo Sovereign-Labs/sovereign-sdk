@@ -39,10 +39,9 @@ impl<S: MerkleProofSpec> ZkStorage<S> {
 
 impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     type Witness = S::Witness;
-
     type RuntimeConfig = [u8; 32];
-
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
+    type StateUpdate = NodeBatch;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Ok(Self::new(config))
@@ -61,7 +60,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<([u8; 32], NodeBatch), anyhow::Error> {
+    ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error> {
         let latest_version: Version = witness.get_hint();
         let reader = TreeWitnessReader::new(witness);
 
@@ -104,7 +103,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
-    fn commit(&self, _node_batch: &NodeBatch) {}
+    fn commit(&self, _node_batch: &Self::StateUpdate) {}
 
     fn is_empty(&self) -> bool {
         unimplemented!("Needs simplification in JellyfishMerkleTree: https://github.com/Sovereign-Labs/sovereign-sdk/issues/362")

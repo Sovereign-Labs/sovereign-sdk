@@ -63,6 +63,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type Witness = S::Witness;
     type RuntimeConfig = Config;
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
+    type StateUpdate = NodeBatch;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Self::with_path(config.path.as_path())
@@ -83,7 +84,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<([u8; 32], NodeBatch), anyhow::Error> {
+    ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error> {
         let latest_version = self.db.get_next_version() - 1;
         witness.add_hint(latest_version);
 
@@ -142,7 +143,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         Ok((new_root.0, tree_update.node_batch))
     }
 
-    fn commit(&self, node_batch: &NodeBatch) {
+    fn commit(&self, node_batch: &Self::StateUpdate) {
         self.db
             .write_node_batch(node_batch)
             .expect("db write must succeed");

@@ -5,7 +5,6 @@ use std::sync::Arc;
 use anyhow::ensure;
 use borsh::{BorshDeserialize, BorshSerialize};
 use hex;
-use jmt::storage::NodeBatch;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
@@ -170,6 +169,9 @@ pub trait Storage: Clone {
         + BorshSerialize
         + BorshDeserialize;
 
+    /// State update that will be committed to the database.
+    type StateUpdate;
+
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error>;
 
     /// Returns the value corresponding to the key or None if key is absent.
@@ -183,10 +185,10 @@ pub trait Storage: Clone {
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<([u8; 32], NodeBatch), anyhow::Error>;
+    ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error>;
 
     /// Commits state changes to the database.
-    fn commit(&self, node_batch: &NodeBatch);
+    fn commit(&self, node_batch: &Self::StateUpdate);
 
     /// Validate all of the storage accesses in a particular cache log,
     /// returning the new state root after applying all writes.
