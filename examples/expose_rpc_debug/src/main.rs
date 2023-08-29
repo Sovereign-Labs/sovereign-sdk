@@ -65,8 +65,10 @@ pub mod my_module {
     }
 
     pub mod query {
+
         use super::*;
         use crate::my_module::QueryModule;
+
         #[derive(Debug, Eq, PartialEq, Clone, serde::Serialize, serde::Deserialize)]
         pub struct QueryResponse {
             pub value: Option<String>,
@@ -122,4 +124,5 @@ fn main() {
     let _ = runtime
         .dispatch_call(module, working_set, &context)
         .unwrap();
+    println!("Done!");
 }

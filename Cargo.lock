@@ -2248,6 +2248,7 @@ dependencies = [
  "serde",
  "sov-modules-api",
  "sov-state",
+ "tracing",
 ]
 
 [[package]]

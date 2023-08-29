@@ -15,6 +15,7 @@ rust-version.workspace = true
 anyhow = { workspace = true }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native", "macros"] }
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
-jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+jsonrpsee = { workspace = true, features = ["http-client", "server", "macros"] }
 serde = { workspace = true }
 borsh = { workspace = true }
+tracing = { workspace = true }
