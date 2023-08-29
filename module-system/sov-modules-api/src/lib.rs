@@ -70,6 +70,7 @@ impl BasicAddress for Address {}
 impl RollupAddress for Address {}
 
 #[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(PartialEq, Clone, Copy, Eq, borsh::BorshDeserialize, borsh::BorshSerialize, Hash)]
 pub struct Address {
     addr: [u8; 32],
