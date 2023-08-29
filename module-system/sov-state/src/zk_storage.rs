@@ -1,13 +1,13 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use jmt::{KeyHash, RootHash};
+use jmt::{JellyfishMerkleTree, KeyHash, Version};
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use zk_cycle_macros::cycle_tracker;
 
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::storage::{StorageKey, StorageProof, StorageValue};
-use crate::witness::Witness;
+use crate::witness::{TreeWitnessReader, Witness};
 use crate::{MerkleProofSpec, Storage};
 
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
@@ -61,6 +61,9 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error> {
+        let latest_version: Version = witness.get_hint();
+        let reader = TreeWitnessReader::new(witness);
+
         // For each value that's been read from the tree, verify the provided smt proof
         for (key, read_value) in state_accesses.ordered_reads {
             let key_hash = KeyHash::with::<S::Hasher>(key.key.as_ref());
@@ -76,9 +79,6 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
             }
         }
 
-        let update_proof: jmt::proof::UpdateMerkleProof<S::Hasher> = witness.get_hint();
-        let new_root = RootHash(witness.get_hint());
-
         // Compute the jmt update from the write batch
         let batch = state_accesses
             .ordered_writes
@@ -89,15 +89,16 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
                     key_hash,
                     value.map(|v| Arc::try_unwrap(v.value).unwrap_or_else(|arc| (*arc).clone())),
                 )
-            })
-            .collect::<Vec<_>>();
+            });
 
+        let next_version = latest_version + 1;
         // TODO: Make updates verifiable. Currently, writes don't verify that the provided siblings existed in the old tree
         // because the TreeReader is trusted
-        update_proof
-            .verify_update(RootHash(self.prev_state_root), new_root, batch)
-            .expect("Update proof was invalid! The prover was malicious");
+        let jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&reader);
 
+        let (new_root, _tree_update) = jmt
+            .put_value_set(batch, next_version)
+            .expect("JMT update must succeed");
         Ok(new_root.0)
     }
 
