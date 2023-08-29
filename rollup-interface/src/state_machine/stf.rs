@@ -60,15 +60,6 @@ pub struct SlotResult<S, B, T, W> {
     pub witness: W,
 }
 
-// /// Create a specialized version of a struct for a particular StateTransitionMode
-// pub trait FromConfig<Mode: StateTransitionMode>: Sized {
-//     /// The config type needed for this struct in this mode
-//     type Config;
-
-//     /// Creatse the struct from the provided config
-//     fn from_config(config: &Self::Config) -> Self;
-// }
-
 // TODO(@preston-evans98): update spec with simplified API
 /// State transition function defines business logic that responsible for changing state.
 /// Terminology:

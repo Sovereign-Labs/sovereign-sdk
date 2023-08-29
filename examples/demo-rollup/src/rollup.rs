@@ -40,13 +40,6 @@ pub struct Rollup<Vm: ProofSystem, DA: DaService + Clone> {
     pub genesis_config: GenesisConfig<DefaultContext>,
 }
 
-// pub struct RollupGuest<Vm: Zkvm, DA: DaVerifier> {
-//     /// Implementation of the stf
-//     pub app: App<Vm, DA::Spec>,
-//     /// Initial rollup configuration.
-//     pub genesis_config: GenesisConfig<DefaultContext>,
-// }
-
 /// Creates celestia based rollup.
 pub async fn new_rollup_with_celestia_da(
     rollup_config_path: &str,

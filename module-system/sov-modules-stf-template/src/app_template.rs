@@ -69,27 +69,6 @@ impl<A: BasicAddress> From<ApplyBatchError<A>> for BatchReceipt<SequencerOutcome
     }
 }
 
-// impl<C, Vm, DA, RT> FromConfig<ZkMode> for AppTemplate<C, DA, Vm, RT>
-// where
-//     C: Context,
-//     DA: DaSpec,
-//     Vm: ProofSystem,
-//     RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
-// {
-//     type Config = [u8; 32];
-
-//     fn from_config(config: &Self::Config) -> Self {
-//         let storage = ZkStorage::new(config.clone());
-//         Self {
-//             current_storage: storage,
-//             runtime: RT::,
-//             checkpoint: todo!(),
-//             phantom_vm: PhantomData,
-//             phantom_da: PhantomData,
-//         }
-//     }
-// }
-
 impl<C, Vm, DA, RT> AppTemplate<C, DA, Vm, RT>
 where
     C: Context,

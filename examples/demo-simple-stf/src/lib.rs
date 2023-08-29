@@ -36,8 +36,8 @@ pub enum ApplySlotResult {
 impl<Vm: ProofSystem, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, Da>
     for CheckHashPreimageStf<Cond>
 {
-    /// The state root is a 32-byte array.
-    type StateRoot = [u8; 32];
+    // Since our rollup is stateless, we don't need to consider the StateRoot.
+    type StateRoot = ();
 
     // This represents the initial configuration of the rollup, but it is not supported in this tutorial.
     type InitialState = ();
@@ -55,9 +55,9 @@ impl<Vm: ProofSystem, Cond: ValidityCondition, Da: DaSpec> StateTransitionFuncti
     type Condition = Cond;
 
     // Perform one-time initialization for the genesis block.
-    fn init_chain(&mut self, _params: Self::InitialState) -> [u8; 32] {
+    fn init_chain(&mut self, _params: Self::InitialState) -> () {
         // Do nothing and return an empty state root
-        [0u8; 32]
+        ()
     }
 
     fn apply_slot<'a, I>(
@@ -111,13 +111,13 @@ impl<Vm: ProofSystem, Cond: ValidityCondition, Da: DaSpec> StateTransitionFuncti
         }
 
         SlotResult {
-            state_root: [0u8; 32],
+            state_root: (),
             batch_receipts: receipts,
             witness: (),
         }
     }
 
     fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot> {
-        Ok([0u8; 32])
+        Ok(())
     }
 }
