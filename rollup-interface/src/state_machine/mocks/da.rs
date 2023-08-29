@@ -4,7 +4,6 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use sha2::Digest;
 
 use crate::da::{
     BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec, DaVerifier,
@@ -158,6 +157,8 @@ impl BlockHashTrait for MockHash {}
 pub struct MockBlockHeader {
     /// The hash of the previous block.
     pub prev_hash: MockHash,
+    /// The hash of the current
+    pub hash: MockHash,
 }
 
 impl BlockHeaderTrait for MockBlockHeader {
@@ -168,15 +169,13 @@ impl BlockHeaderTrait for MockBlockHeader {
     }
 
     fn hash(&self) -> Self::Hash {
-        MockHash(sha2::Sha256::digest(self.prev_hash.0).into())
+        self.hash
     }
 }
 
 /// A mock block type used for testing.
 #[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
 pub struct MockBlock {
-    /// The hash of this block.
-    pub curr_hash: [u8; 32],
     /// The header of this block.
     pub header: MockBlockHeader,
     /// The height of this block
@@ -190,9 +189,9 @@ pub struct MockBlock {
 impl Default for MockBlock {
     fn default() -> Self {
         Self {
-            curr_hash: [0; 32],
             header: MockBlockHeader {
                 prev_hash: MockHash([0; 32]),
+                hash: MockHash([1; 32]),
             },
             height: 0,
             validity_cond: Default::default(),
@@ -206,7 +205,7 @@ impl SlotData for MockBlock {
     type Cond = MockValidityCond;
 
     fn hash(&self) -> [u8; 32] {
-        self.curr_hash
+        self.header.hash().0
     }
 
     fn header(&self) -> &Self::BlockHeader {

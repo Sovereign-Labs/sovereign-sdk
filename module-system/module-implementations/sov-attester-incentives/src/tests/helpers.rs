@@ -165,6 +165,7 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
         });
         let mock_header = MockBlockHeader {
             prev_hash: MockHash([i; 32]),
+            hash: MockHash([i + 1; 32]),
         };
         let mock_validity_condition = MockValidityCond { is_valid: true };
 

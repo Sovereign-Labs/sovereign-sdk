@@ -46,7 +46,8 @@ fn test_simple_value_setter_with_chain_state() {
     );
 
     let mock_header = MockBlockHeader {
-        prev_hash: MockHash([0; 32]),
+        prev_hash: MockHash([1; 32]),
+        hash: MockHash([10; 32]),
     };
     let mock_validity_condition = Default::default();
 
@@ -111,6 +112,7 @@ fn test_simple_value_setter_with_chain_state() {
     // We apply a new transaction with the same values
     let new_header = MockBlockHeader {
         prev_hash: MockHash([10; 32]),
+        hash: MockHash([20; 32]),
     };
     let new_validity_cond = MockValidityCond::default();
 

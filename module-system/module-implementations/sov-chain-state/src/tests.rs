@@ -43,9 +43,10 @@ fn test_simple_chain_state() {
 
     // Then simulate a transaction execution: call the begin_slot hook on a mock slot_data.
     let header = MockBlockHeader {
-        prev_hash: MockHash([1; 32]),
+        prev_hash: MockHash([0; 32]),
+        hash: MockHash([1; 32]),
     };
-    let validity_condition = Default::default();
+    let validity_condition = MockValidityCond { is_valid: true };
 
     chain_state.begin_slot_hook(&header, &validity_condition, &mut working_set);
 
@@ -89,7 +90,8 @@ fn test_simple_chain_state() {
     // And we simulate a new slot application by calling the `begin_slot` hook.
     // Then simulate a transaction execution: call the begin_slot hook on a mock slot_data.
     let new_header = MockBlockHeader {
-        prev_hash: MockHash([2; 32]),
+        prev_hash: MockHash([1; 32]),
+        hash: MockHash([2; 32]),
     };
     let new_validity_condition = MockValidityCond { is_valid: false };
 

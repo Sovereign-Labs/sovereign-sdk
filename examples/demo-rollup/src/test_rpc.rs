@@ -110,9 +110,9 @@ fn batch2_tx_receipts() -> Vec<TransactionReceipt<u32>> {
 
 fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value) {
     let mut slots: Vec<SlotCommit<MockBlock, u32, u32>> = vec![SlotCommit::new(MockBlock {
-        curr_hash: sha2::Sha256::digest(b"slot_data"),
         header: MockBlockHeader {
             prev_hash: MockHash(sha2::Sha256::digest(b"prev_header")),
+            hash: MockHash(sha2::Sha256::digest(b"slot_data")),
         },
         height: 0,
         validity_cond: Default::default(),
@@ -315,9 +315,9 @@ prop_compose! {
 
         for (batches, hash) in batches_and_hashes{
             let mut new_slot = SlotCommit::new(MockBlock {
-                curr_hash: hash,
                 header: MockBlockHeader {
                     prev_hash,
+                    hash: MockHash(hash),
                 },
                 height: 0,
                 validity_cond: Default::default(),
