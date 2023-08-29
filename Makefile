@@ -36,6 +36,9 @@ lint-fix:  ## cargo fmt, fix and clippy
 check-features: ## Checks that project compiles with all combinations of features. default is not needed because we never check `cfg(default)`, we only use it as an alias.
 	cargo hack check --workspace --feature-powerset --exclude-features default
 
+check-fuzz: ## Checks that fuzz member compiles
+	$(MAKE) -C fuzz check
+
 find-unused-deps: ## Prints unused dependencies for project. Note: requires nightly
 	cargo udeps --all-targets --all-features
 
