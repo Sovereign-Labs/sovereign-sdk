@@ -20,7 +20,7 @@ impl ExposeRpcMacro {
         input: DeriveInput,
     ) -> Result<proc_macro::TokenStream, syn::Error> {
         let DeriveInput { data, generics, .. } = input;
-        let (impl_generics, _ty_generics, where_clause) = generics.split_for_impl();
+        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
         let context_type = generics
             .params
             .iter()
@@ -40,8 +40,9 @@ impl ExposeRpcMacro {
 
         let rpc_storage_struct = quote! {
             #[derive(Clone)]
-            struct RpcStorage<C: ::sov_modules_api::Context> {
-                 storage: C::Storage
+            struct RpcStorage<#impl_generics> #where_clause {
+                storage: C::Storage
+                phantom_data: ::std::marker::PhantomData<#ty_generics>,
             }
         };
 

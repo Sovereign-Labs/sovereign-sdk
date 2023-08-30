@@ -15,8 +15,8 @@ use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec, Spec};
-use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::zk::ValidityCondition;
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
+use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 use sov_state::WorkingSet;
@@ -81,6 +81,16 @@ pub struct Runtime<C: Context> {
     pub blob_storage: sov_blob_storage::BlobStorage<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
+}
+
+
+struct RT<C: Context, Da: DaSpec, Vm: Zkvm> {
+    phantom_data: std::marker::PhantomData<(C, Da, Vm)>,
+}
+
+struct RpcStorage2<C: Context, Da: DaSpec, Vm: Zkvm> {
+    storage: C::Storage,
+    phantom_data: std::marker::PhantomData<(C, Da, Vm)>,
 }
 
 #[cfg(feature = "experimental")]
