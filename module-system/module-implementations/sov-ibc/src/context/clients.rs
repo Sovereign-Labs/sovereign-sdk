@@ -264,7 +264,7 @@ where
         client_state: Self::AnyClientState,
     ) -> Result<(), ContextError> {
         self.ibc.client_state_store.set(
-            &client_state_path.to_string(),
+            &client_state_path.0,
             &client_state,
             &mut self.working_set.borrow_mut(),
         );

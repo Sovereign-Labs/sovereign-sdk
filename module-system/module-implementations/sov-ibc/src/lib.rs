@@ -10,7 +10,7 @@ mod router;
 
 use codec::ProtobufCodec;
 use context::clients::{AnyClientState, AnyConsensusState};
-use ibc::core::ics24_host::path::ClientConsensusStatePath;
+use ibc::core::ics24_host::{path::ClientConsensusStatePath, identifier::ClientId};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;
@@ -19,7 +19,7 @@ pub struct ExampleModuleConfig {}
 
 #[derive(Hash, PartialEq, Eq)]
 pub struct ConsensusStateKey {
-    pub client_id: String,
+    pub client_id: ClientId,
     pub epoch: u64,
     pub height: u64,
 }
@@ -27,7 +27,7 @@ pub struct ConsensusStateKey {
 impl From<ClientConsensusStatePath> for ConsensusStateKey {
     fn from(path: ClientConsensusStatePath) -> Self {
         Self {
-            client_id: path.client_id.to_string(),
+            client_id: path.client_id,
             epoch: path.epoch,
             height: path.height,
         }
@@ -40,12 +40,8 @@ pub struct IbcModule<C: sov_modules_api::Context> {
     #[address]
     pub address: C::Address,
 
-    /// The `ClientState` store indexed by `ClientId`. Note: we cannot index by
-    /// `ClientId` StateMap requires `ClientId` to implement `BorshSerialize`,
-    /// which isn't the case even with ibc-rs's borsh feature since ibc-rs uses
-    /// borsh v0.9 and the Sovereign SDK uses v0.10.
     #[state]
-    pub client_state_store: sov_state::StateMap<String, AnyClientState, ProtobufCodec>,
+    pub client_state_store: sov_state::StateMap<ClientId, AnyClientState, ProtobufCodec>,
 
     #[state]
     pub consensus_state_store:
