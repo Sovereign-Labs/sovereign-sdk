@@ -11,14 +11,11 @@ impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
     /// Get the height of the current slot.
     /// Panics if the slot height is not set
     #[rpc_method(name = "getSlotHeight")]
-    pub fn get_slot_height(
+    pub fn get_slot_height_rpc(
         &self,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<TransitionHeight> {
-        Ok(self
-            .slot_height
-            .get(working_set)
-            .expect("Slot height should be set at initialization"))
+        Ok(self.get_slot_height(working_set))
     }
 
     /// Return the genesis hash of the module.

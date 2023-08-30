@@ -101,10 +101,10 @@ impl<Cond> TransitionInProgress<Cond> {
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[derive(ModuleInfo)]
-pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
+pub struct ChainState<C: sov_modules_api::Context, Cond: ValidityCondition> {
     /// Address of the module.
     #[address]
-    pub address: Ctx::Address,
+    pub address: C::Address,
 
     /// The current block height
     #[state]
@@ -138,10 +138,19 @@ pub struct ChainStateConfig {
     pub initial_slot_height: TransitionHeight,
 }
 
-impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Module
-    for ChainState<Ctx, Cond>
+impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
+    /// Returns transition height in the current slot
+    pub fn get_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> TransitionHeight {
+        self.slot_height
+            .get(working_set)
+            .expect("Slot height should be set at initialization")
+    }
+}
+
+impl<C: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Module
+    for ChainState<C, Cond>
 {
-    type Context = Ctx;
+    type Context = C;
 
     type Config = ChainStateConfig;
 
@@ -150,7 +159,7 @@ impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Mo
     fn genesis(
         &self,
         config: &Self::Config,
-        working_set: &mut WorkingSet<Ctx::Storage>,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(), Error> {
         // The initialization logic
         Ok(self.init_module(config, working_set)?)
