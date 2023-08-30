@@ -23,10 +23,7 @@ where
         working_set: Rc<RefCell<&'ws mut WorkingSet<C::Storage>>>,
     ) -> IbcRouter<'ws, 'c, C> {
         IbcRouter {
-            transfer_ctx: ibc_mod
-                .transfer
-                .clone()
-                .into_context(sdk_context, working_set),
+            transfer_ctx: TransferContext::new(ibc_mod.transfer.clone(), sdk_context, working_set),
         }
     }
 }

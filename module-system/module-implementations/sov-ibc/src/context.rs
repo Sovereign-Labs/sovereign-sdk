@@ -44,7 +44,7 @@ where
     fn client_state(&self, client_id: &ClientId) -> Result<Self::AnyClientState, ContextError> {
         self.ibc
             .client_state_store
-            .get(&client_id, *self.working_set.borrow_mut())
+            .get(client_id, *self.working_set.borrow_mut())
             .ok_or(
                 ClientError::ClientStateNotFound {
                     client_id: client_id.clone(),

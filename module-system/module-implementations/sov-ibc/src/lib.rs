@@ -10,7 +10,8 @@ mod router;
 
 use codec::ProtobufCodec;
 use context::clients::{AnyClientState, AnyConsensusState};
-use ibc::core::ics24_host::{path::ClientConsensusStatePath, identifier::ClientId};
+use ibc::core::ics24_host::identifier::ClientId;
+use ibc::core::ics24_host::path::ClientConsensusStatePath;
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_state::WorkingSet;

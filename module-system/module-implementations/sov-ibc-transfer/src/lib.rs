@@ -8,11 +8,7 @@ mod tests;
 #[cfg(feature = "native")]
 mod query;
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
 pub use call::CallMessage;
-use context::TransferContext;
 #[cfg(feature = "native")]
 pub use query::Response;
 use sov_modules_api::{Error, ModuleInfo};
@@ -53,17 +49,6 @@ pub struct Transfer<C: sov_modules_api::Context> {
     /// to hash it to the key a constant size.
     #[state]
     pub(crate) escrowed_tokens: sov_state::StateMap<Vec<u8>, C::Address>,
-}
-
-impl<C: sov_modules_api::Context> Transfer<C> {
-    // TODO: Remove, this is redundant with simply calling `TransferContext::new()`
-    pub fn into_context<'ws, 'c>(
-        self,
-        sdk_context: &'c C,
-        working_set: Rc<RefCell<&'ws mut WorkingSet<C::Storage>>>,
-    ) -> TransferContext<'ws, 'c, C> {
-        TransferContext::new(self, sdk_context, working_set)
-    }
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Transfer<C> {
