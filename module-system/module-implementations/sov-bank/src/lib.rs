@@ -97,7 +97,9 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
                 Ok(self.transfer(to, coins, context, working_set)?)
             }
 
-            call::CallMessage::Burn { coins } => Ok(self.burn(coins, context, working_set)?),
+            call::CallMessage::Burn { coins } => {
+                Ok(self.burn_from_eoa(coins, context, working_set)?)
+            }
 
             call::CallMessage::Mint {
                 coins,
