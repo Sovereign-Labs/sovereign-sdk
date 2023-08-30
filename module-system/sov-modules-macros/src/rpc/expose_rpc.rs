@@ -33,8 +33,7 @@ impl ExposeRpcMacro {
             })
             .ok_or(syn::Error::new_spanned(
                 &generics,
-                // CliWallet?
-                "a runtime must be generic over a sov_modules_api::Context to derive CliWallet",
+                "a runtime must be generic over a sov_modules_api::Context to generate rpc methods",
             ))?;
 
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
