@@ -30,9 +30,6 @@ pub mod private_key {
             expected_2: usize,
             actual: usize,
         },
-        // This error is thrown only if private methods are misused.
-        #[error("Potential bug: failed to convert from slice")]
-        SliceError(#[from] std::array::TryFromSliceError),
     }
 
     /// A private key for the default signature scheme.
@@ -138,11 +135,11 @@ pub mod private_key {
             use rand::SeedableRng;
 
             // it is important to generate the secret deterministically from the arbitrary argument
-            // so keys and signatures will be reproductible for a given seed. this unlocks fuzzy
-            // replay
+            // so keys and signatures will be reproducible for a given seed.
+            // this unlocks fuzzy replay
             let seed = <[u8; 32]>::arbitrary(u)?;
             let rng = &mut StdRng::from_seed(seed);
-            let key_pair = Keypair::generate(rng);
+            let key_pair = SigningKey::generate(rng);
 
             Ok(Self { key_pair })
         }
@@ -262,7 +259,7 @@ impl FromStr for DefaultPublicKey {
 
         let bytes: [u8; PUBLIC_KEY_LENGTH] = bytes
             .try_into()
-            .map_err(|_| anyhow::anyhow!("Invalid public key"))?;
+            .map_err(|_| anyhow::anyhow!("Invalid public key size"))?;
 
         let pub_key = DalekPublicKey::from_bytes(&bytes)
             .map_err(|_| anyhow::anyhow!("Invalid public key"))?;
