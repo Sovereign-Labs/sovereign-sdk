@@ -5,11 +5,10 @@ use risc0_zkvm::serde::to_vec;
 use risc0_zkvm::{
     Executor, ExecutorEnvBuilder, LocalExecutor, SegmentReceipt, Session, SessionReceipt,
 };
-use sov_rollup_interface::zk::{ProofSystem, ZkVerifier, ZkvmHost};
+use sov_rollup_interface::zk::{ZkVerifier, ZkvmHost};
 #[cfg(feature = "bench")]
 use zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cycles};
 
-use crate::guest::Risc0Guest;
 #[cfg(feature = "bench")]
 use crate::metrics::metrics_callback;
 use crate::Risc0MethodId;
@@ -66,26 +65,6 @@ impl<'a> ZkvmHost for Risc0Host<'a> {
         let serialized = to_vec(&item).expect("Serialization to vec is infallible");
         self.env.lock().unwrap().extend_from_slice(&serialized);
     }
-}
-
-pub struct Risc0Vm;
-
-impl ZkVerifier for Risc0Vm {
-    type CodeCommitment = Risc0MethodId;
-
-    type Error = anyhow::Error;
-
-    fn verify<'a>(
-        serialized_proof: &'a [u8],
-        code_commitment: &Self::CodeCommitment,
-    ) -> Result<&'a [u8], Self::Error> {
-        verify_from_slice(serialized_proof, code_commitment)
-    }
-}
-
-impl ProofSystem for Risc0Vm {
-    type Guest = Risc0Guest;
-    type Host = Risc0Host<'static>;
 }
 
 impl<'host> ZkVerifier for Risc0Host<'host> {

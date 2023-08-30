@@ -8,7 +8,7 @@ use anyhow::Context;
 use criterion::{criterion_group, criterion_main, Criterion};
 use demo_stf::app::App;
 use demo_stf::genesis_config::create_demo_genesis_config;
-use risc0_adapter::host::Risc0Vm;
+use risc0_adapter::host::Risc0Host;
 use rng_xfers::{RngDaService, RngDaSpec, SEQUENCER_DA_ADDRESS};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
@@ -42,7 +42,7 @@ fn rollup_bench(_bench: &mut Criterion) {
 
     let da_service = Arc::new(RngDaService::new());
 
-    let demo_runner = App::<Risc0Vm, RngDaSpec>::new(rollup_config.storage);
+    let demo_runner = App::<Risc0Host, RngDaSpec>::new(rollup_config.storage);
 
     let mut demo = demo_runner.stf;
     let sequencer_private_key = DefaultPrivateKey::generate();

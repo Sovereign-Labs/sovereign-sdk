@@ -24,7 +24,7 @@ pub trait ZkvmHost: ZkVerifier {
 
 /// A Zk proof system capable of proving and verifying arbitrary Rust code
 /// Must support recursive proofs.
-pub trait ProofSystem: ZkVerifier {
+pub trait ProofSystem {
     /// The guest of a zkVM program
     type Guest: ZkvmGuest;
 

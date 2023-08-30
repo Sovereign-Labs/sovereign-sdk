@@ -1,6 +1,7 @@
+use guest::Risc0Guest;
 use risc0_zkvm::sha::Digest;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::Matches;
+use sov_rollup_interface::zk::{Matches, ProofSystem};
 
 pub mod guest;
 #[cfg(feature = "native")]
@@ -28,4 +29,12 @@ impl Matches<[u32; 8]> for Risc0MethodId {
     fn matches(&self, other: &[u32; 8]) -> bool {
         &self.0 == other
     }
+}
+
+pub struct Risc0Vm;
+
+impl ProofSystem for Risc0Vm {
+    type Guest = Risc0Guest;
+    #[cfg(feature = "native")]
+    type Host = crate::host::Risc0Host<'static>;
 }

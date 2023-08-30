@@ -2,7 +2,7 @@ use std::fs::remove_dir_all;
 use std::net::SocketAddr;
 
 use demo_stf::app::App;
-use risc0_adapter::host::Risc0Vm;
+use risc0_adapter::Risc0Vm;
 use sov_demo_rollup::{get_genesis_config, initialize_ledger, Rollup};
 use sov_rollup_interface::mocks::{MockAddress, MockDaService};
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};

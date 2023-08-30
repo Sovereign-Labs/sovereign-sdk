@@ -95,6 +95,7 @@ impl ZkvmHost for MockZkvm {
 }
 impl ProofSystem for MockZkvm {
     type Guest = Self;
+    #[cfg(feature = "native")]
     type Host = Self;
 }
 
