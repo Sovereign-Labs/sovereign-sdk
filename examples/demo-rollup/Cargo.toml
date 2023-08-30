@@ -29,7 +29,7 @@ tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
 celestia = { path = "../../adapters/celestia", features = ["native"] }
 demo-stf = { path = "../demo-stf", features = ["native"] }
-sov-rollup-interface = { path = "../../rollup-interface" }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["native"] }
 sov-db = { path = "../../full-node/db/sov-db" }
 sov-ethereum = { path = "../../full-node/sov-ethereum", optional = true }
 sov-sequencer = { path = "../../full-node/sov-sequencer" }
