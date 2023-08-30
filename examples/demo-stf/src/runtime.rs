@@ -5,8 +5,6 @@ use sov_bank::query::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
 use sov_blob_storage::{BlobStorageRpcImpl, BlobStorageRpcServer};
 #[cfg(feature = "native")]
-use sov_election::query::{ElectionRpcImpl, ElectionRpcServer};
-#[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
 use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
@@ -29,7 +27,6 @@ use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 pub mod query {
     pub use sov_accounts::query as accounts;
     pub use sov_bank::query as bank;
-    pub use sov_election::query as election;
     pub use sov_sequencer_registry::query as sequencer_registry;
     pub use sov_value_setter::query as value_setter;
 }
@@ -82,7 +79,6 @@ pub struct Runtime<C: Context> {
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub blob_storage: sov_blob_storage::BlobStorage<C>,
-    pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
 }
@@ -100,7 +96,6 @@ pub struct Runtime<C: Context> {
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub blob_storage: sov_blob_storage::BlobStorage<C>,
-    pub election: sov_election::Election<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
     #[cfg_attr(feature = "native", cli_skip)]
@@ -119,8 +114,13 @@ impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for Runtime<C> {
 
     fn end_slot_hook(
         &self,
-        _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+        #[allow(unused_variables)] root_hash: [u8; 32],
+        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
+            <Self::Context as sov_modules_api::Spec>::Storage,
+        >,
     ) {
+        #[cfg(feature = "experimental")]
+        self.evm.end_slot_hook(root_hash, working_set);
     }
 }
 
@@ -132,16 +132,15 @@ where
 {
 }
 
-impl<C: Context> BlobSelector for Runtime<C> {
+impl<C: Context, B: BlobReaderTrait> BlobSelector<B> for Runtime<C> {
     type Context = C;
 
-    fn get_blobs_for_this_slot<'a, I, B>(
+    fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, B>>>
     where
-        B: BlobReaderTrait,
         I: IntoIterator<Item = &'a mut B>,
     {
         self.blob_storage

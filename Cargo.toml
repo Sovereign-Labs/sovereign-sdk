@@ -36,7 +36,6 @@ members = [
     "module-system/module-implementations/module-template",
     "module-system/module-implementations/examples/sov-value-setter",
     "module-system/module-implementations/examples/sov-vec-setter",
-    "module-system/module-implementations/examples/sov-election",
     "module-system/module-implementations/integration-tests",
 ]
 exclude = [
@@ -61,10 +60,12 @@ jmt = { git = "https://github.com/penumbra-zone/jmt", commit = "46b4b00" }
 # External dependencies
 async-trait = "0.1.71"
 anyhow = "1.0.68"
+arbitrary = { version = "1.3.0", features = ["derive"] }
 borsh = { version = "0.10.3", features = ["rc", "bytes"] }
 # TODO: Consider replacing this serialization format
 #     https://github.com/Sovereign-Labs/sovereign-sdk/issues/283
 bincode = "1.3.3"
+bcs = "0.1.5"
 byteorder = "1.4.3"
 bytes = "1.2.1"
 hex = "0.4.3"
@@ -75,7 +76,7 @@ proptest-derive = "0.3.0"
 rand = "0.8"
 rayon = "1.5.2"
 rocksdb = { version = "0.21.0", features = ["lz4"] }
-serde = { version = "1.0.185", features = ["derive", "rc"] }
+serde = { version = "1.0.188", features = ["derive", "rc"]}
 serde_json = { version = "1.0" }
 sha2 = "0.10.6"
 digest = "0.10.6"

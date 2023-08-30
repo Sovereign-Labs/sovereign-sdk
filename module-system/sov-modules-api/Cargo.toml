@@ -14,9 +14,11 @@ resolver = "2"
 [dependencies]
 jsonrpsee = { workspace = true, optional = true }
 anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
 sov-state = { path = "../sov-state", version = "0.1" }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
 sov-modules-macros = { path = "../sov-modules-macros", version = "0.1", optional = true }
+sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
 serde = { workspace = true }
 borsh = { workspace = true }
 thiserror = { workspace = true }
@@ -43,5 +45,5 @@ bincode = { workspace = true }
 bench = ["zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
 default = ["macros"]
 serde = ["dep:serde_json"]
-native = ["serde", "rand", "hex", "schemars", "ed25519-dalek/default", "clap", "jsonrpsee", "macros", "sov-modules-macros/native", "sov-state/native"]
+native = ["serde", "rand", "hex", "schemars", "ed25519-dalek/default", "clap", "jsonrpsee", "macros", "sov-modules-macros/native", "sov-state/native", "sov-sequencer"]
 macros = ["sov-modules-macros"]

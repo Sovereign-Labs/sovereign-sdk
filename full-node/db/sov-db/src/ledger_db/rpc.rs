@@ -5,6 +5,7 @@ use sov_rollup_interface::rpc::{
     TxIdentifier, TxResponse,
 };
 use sov_rollup_interface::stf::Event;
+use tokio::sync::broadcast::Receiver;
 
 use crate::schema::tables::{
     BatchByHash, BatchByNumber, EventByNumber, SlotByHash, SlotByNumber, TxByHash, TxByNumber,
@@ -267,6 +268,10 @@ impl LedgerRpcProvider for LedgerDB {
         let ids: Vec<_> = (start..=end).map(TxIdentifier::Number).collect();
         self.get_transactions(&ids, query_mode)
     }
+
+    fn subscribe_slots(&self) -> Result<Receiver<u64>, anyhow::Error> {
+        Ok(self.slot_subscriptions.subscribe())
+    }
 }
 
 impl LedgerDB {
@@ -417,5 +422,25 @@ impl LedgerDB {
                 batch_response
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sov_rollup_interface::mocks::{MockBlob, MockBlock};
+    use sov_rollup_interface::rpc::LedgerRpcProvider;
+
+    use crate::ledger_db::{LedgerDB, SlotCommit};
+    #[test]
+    fn test_slot_subscription() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let path = temp_dir.path();
+        let db = LedgerDB::with_path(path).unwrap();
+
+        let mut rx = db.subscribe_slots().unwrap();
+        db.commit_slot(SlotCommit::<_, MockBlob, Vec<u8>>::new(MockBlock::default()))
+            .unwrap();
+
+        assert_eq!(rx.blocking_recv().unwrap(), 1);
     }
 }

@@ -24,7 +24,7 @@ This command is similar to serialize call from [`demo-rollup` README](../../exam
 
 When demo-rollup with enabled sequencer starts, it prints on which endpoint it listens:
 
-```
+```bash
 2023-07-07T14:53:02.280562Z  INFO sov_demo_rollup: Starting RPC server at 127.0.0.1:12345
 ```
 

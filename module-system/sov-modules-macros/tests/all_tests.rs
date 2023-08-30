@@ -6,6 +6,7 @@ fn module_info_tests() {
     t.pass("tests/module_info/use_address_trait.rs");
     t.pass("tests/module_info/not_supported_attribute.rs");
     t.pass("tests/module_info/custom_codec_builder.rs");
+    t.pass("tests/custom_codec_must_be_used.rs");
     t.compile_fail("tests/module_info/derive_on_enum_not_supported.rs");
     t.compile_fail("tests/module_info/field_missing_attribute.rs");
     t.compile_fail("tests/module_info/missing_address.rs");
@@ -22,14 +23,15 @@ fn module_dispatch_tests() {
     t.compile_fail("tests/dispatch/missing_serialization.rs");
 }
 
-#[cfg(feature = "native")]
 #[test]
 fn rpc_tests() {
     let t = trybuild::TestCases::new();
-    t.pass("tests/derive_rpc.rs");
+    t.pass("tests/rpc/derive_rpc.rs");
+    t.pass("tests/rpc/derive_rpc_with_where.rs");
+    t.pass("tests/rpc/expose_rpc.rs");
+    t.pass("tests/rpc/expose_rpc_more_generics.rs");
 }
 
-#[cfg(feature = "native")]
 #[test]
 fn cli_wallet_arg_tests() {
     let t: trybuild::TestCases = trybuild::TestCases::new();

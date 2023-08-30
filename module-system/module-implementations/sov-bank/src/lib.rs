@@ -9,10 +9,10 @@ mod utils;
 
 /// Specifies the call methods using in that module.
 pub use call::CallMessage;
-use sov_modules_api::{Error, ModuleInfo};
+use sov_modules_api::{CallResponse, Error, ModuleInfo};
 use sov_state::WorkingSet;
 use token::Token;
-/// Specifies an interfact to interact with tokens.
+/// Specifies an interface to interact with tokens.
 pub use token::{Amount, Coins};
 /// Methods to get a token address.
 pub use utils::{get_genesis_token_address, get_token_address};
@@ -80,26 +80,34 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
                 initial_balance,
                 minter_address,
                 authorized_minters,
-            } => Ok(self.create_token(
-                token_name,
-                salt,
-                initial_balance,
-                minter_address,
-                authorized_minters,
-                context,
-                working_set,
-            )?),
+            } => {
+                self.create_token(
+                    token_name,
+                    salt,
+                    initial_balance,
+                    minter_address,
+                    authorized_minters,
+                    context,
+                    working_set,
+                )?;
+                Ok(CallResponse::default())
+            }
 
             call::CallMessage::Transfer { to, coins } => {
                 Ok(self.transfer(to, coins, context, working_set)?)
             }
 
-            call::CallMessage::Burn { coins } => Ok(self.burn(coins, context, working_set)?),
+            call::CallMessage::Burn { coins } => {
+                Ok(self.burn_from_eoa(coins, context, working_set)?)
+            }
 
             call::CallMessage::Mint {
                 coins,
                 minter_address,
-            } => Ok(self.mint(&coins, &minter_address, context, working_set)?),
+            } => {
+                self.mint_from_eoa(&coins, &minter_address, context, working_set)?;
+                Ok(CallResponse::default())
+            }
 
             call::CallMessage::Freeze { token_address } => {
                 Ok(self.freeze(token_address, context, working_set)?)

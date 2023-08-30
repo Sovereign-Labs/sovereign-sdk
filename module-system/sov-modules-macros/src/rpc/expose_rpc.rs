@@ -1,7 +1,7 @@
 use quote::quote;
 use syn::DeriveInput;
 
-use crate::common::{generics_for_field, StructFieldExtractor};
+use crate::common::{generics_for_field, GenericWithMatchingPathArguments, StructFieldExtractor};
 
 pub(crate) struct ExposeRpcMacro {
     field_extractor: StructFieldExtractor,
@@ -33,7 +33,7 @@ impl ExposeRpcMacro {
             })
             .ok_or(syn::Error::new_spanned(
                 &generics,
-                "a runtime must be generic over a sov_modules_api::Context to derive CliWallet",
+                "a runtime must be generic over a sov_modules_api::Context to generate rpc methods",
             ))?;
 
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
@@ -60,7 +60,11 @@ impl ExposeRpcMacro {
                 .last()
                 .expect("A type path must have at least one segment")
                 .arguments;
-            let field_generics = generics_for_field(&generics, field_path_args);
+
+            let GenericWithMatchingPathArguments {
+                path_arguments: matched_field_path_args,
+                generics: field_generics,
+            } = generics_for_field(&generics, field_path_args);
 
             let module_ident = ty.path.segments.last().unwrap().clone().ident;
 
@@ -78,8 +82,10 @@ impl ExposeRpcMacro {
 
             merge_operations.extend(merge_operation);
 
+            // We don't need to render where, because all bounds are inside `field_generics`
             let rpc_trait_impl = quote! {
-                impl #field_generics #rpc_trait_ident #field_path_args for RpcStorage<#context_type> {
+                impl #field_generics #rpc_trait_ident #matched_field_path_args for RpcStorage<#context_type> {
+                    /// Get a working set on top of the current storage
                     fn get_working_set(&self) -> ::sov_state::WorkingSet<<#context_type as ::sov_modules_api::Spec>::Storage>
                     {
                         ::sov_state::WorkingSet::new(self.storage.clone())
@@ -90,8 +96,9 @@ impl ExposeRpcMacro {
         }
 
         let get_rpc_methods: proc_macro2::TokenStream = quote! {
-            pub fn get_rpc_methods #impl_generics (storage: <#context_type as ::sov_modules_api::Spec>::Storage) -> jsonrpsee::RpcModule<()> #where_clause{
-                let mut module = jsonrpsee::RpcModule::new(());
+            /// Returns a [`jsonrpsee::RpcModule`] with all the rpc methods exposed by the module
+            pub fn get_rpc_methods #impl_generics (storage: <#context_type as ::sov_modules_api::Spec>::Storage) -> ::jsonrpsee::RpcModule<()> #where_clause {
+                let mut module = ::jsonrpsee::RpcModule::new(());
                 let r = RpcStorage::<#context_type> {
                     storage: storage.clone(),
                 };

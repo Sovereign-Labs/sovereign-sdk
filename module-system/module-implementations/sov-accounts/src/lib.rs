@@ -10,18 +10,27 @@ pub mod query;
 mod tests;
 
 pub use call::{CallMessage, UPDATE_ACCOUNT_MSG};
-use sov_modules_api::{Error, ModuleInfo};
+use sov_modules_api::{Context, Error, ModuleInfo};
 use sov_state::WorkingSet;
 
 /// Initial configuration for sov-accounts module.
-pub struct AccountConfig<C: sov_modules_api::Context> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountConfig<C: Context> {
     /// Public keys to initialize the rollup.
     pub pub_keys: Vec<C::PublicKey>,
 }
 
+impl<C: Context> FromIterator<C::PublicKey> for AccountConfig<C> {
+    fn from_iter<T: IntoIterator<Item = C::PublicKey>>(iter: T) -> Self {
+        Self {
+            pub_keys: iter.into_iter().collect(),
+        }
+    }
+}
+
 /// An account on the rollup.
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Copy, Clone)]
-pub struct Account<C: sov_modules_api::Context> {
+pub struct Account<C: Context> {
     /// The address of the account.
     pub addr: C::Address,
     /// The current nonce value associated with the account.
@@ -31,7 +40,7 @@ pub struct Account<C: sov_modules_api::Context> {
 /// A module responsible for managing accounts on the rollup.
 #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo, Clone)]
-pub struct Accounts<C: sov_modules_api::Context> {
+pub struct Accounts<C: Context> {
     /// The address of the sov-accounts module.
     #[address]
     pub address: C::Address,
@@ -45,7 +54,7 @@ pub struct Accounts<C: sov_modules_api::Context> {
     pub(crate) accounts: sov_state::StateMap<C::PublicKey, Account<C>>,
 }
 
-impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
+impl<C: Context> sov_modules_api::Module for Accounts<C> {
     type Context = C;
 
     type Config = AccountConfig<C>;
@@ -71,5 +80,58 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Accounts<C> {
                 Ok(self.update_public_key(new_pub_key, sig, context, working_set)?)
             }
         }
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl<'a, C> arbitrary::Arbitrary<'a> for Account<C>
+where
+    C: Context,
+    C::Address: arbitrary::Arbitrary<'a>,
+{
+    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        let addr = u.arbitrary()?;
+        let nonce = u.arbitrary()?;
+        Ok(Self { addr, nonce })
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl<'a, C> arbitrary::Arbitrary<'a> for AccountConfig<C>
+where
+    C: Context,
+    C::PublicKey: arbitrary::Arbitrary<'a>,
+{
+    fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+        // TODO we might want a dedicated struct that will generate the private key counterpart so
+        // payloads can be signed and verified
+        Ok(Self {
+            pub_keys: u.arbitrary_iter()?.collect::<Result<_, _>>()?,
+        })
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+impl<'a, C> Accounts<C>
+where
+    C: Context,
+    C::Address: arbitrary::Arbitrary<'a>,
+    C::PublicKey: arbitrary::Arbitrary<'a>,
+{
+    /// Creates an arbitrary set of accounts and stores it under `working_set`.
+    pub fn arbitrary_workset(
+        u: &mut arbitrary::Unstructured<'a>,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> arbitrary::Result<Self> {
+        use sov_modules_api::Module;
+
+        let config: AccountConfig<C> = u.arbitrary()?;
+        let accounts = Accounts::default();
+
+        accounts
+            .genesis(&config, working_set)
+            .map_err(|_| arbitrary::Error::IncorrectFormat)?;
+
+        Ok(accounts)
     }
 }
