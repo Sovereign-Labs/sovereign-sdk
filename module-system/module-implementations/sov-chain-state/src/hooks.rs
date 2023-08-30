@@ -7,8 +7,8 @@ use sov_state::{Storage, WorkingSet};
 use super::ChainState;
 use crate::{StateTransitionId, TransitionInProgress};
 
-impl<Ctx: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<Ctx, Cond> {
-    type Context = Ctx;
+impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for ChainState<C, Cond> {
+    type Context = C;
 
     fn begin_slot_hook(
         &self,
