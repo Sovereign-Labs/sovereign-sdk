@@ -36,7 +36,6 @@ impl From<ClientConsensusStatePath> for ConsensusStateKey {
 
 #[derive(ModuleInfo)]
 pub struct IbcModule<C: sov_modules_api::Context> {
-    /// Address of the module.
     #[address]
     pub address: C::Address,
 
