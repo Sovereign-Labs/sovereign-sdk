@@ -196,14 +196,13 @@ where
             for receipt in slot_result.batch_receipts {
                 data_to_commit.add_batch(receipt);
             }
-            let next_state_root: ST::StateRoot = slot_result.state_root;
             if let Some((prover_instance, guest)) = self.prover.as_mut() {
                 let (inclusion_proof, completeness_proof) = self
                     .da_service
                     .get_extraction_proof(&filtered_block, &blobs)
                     .await;
 
-                prover_instance.write_to_guest(&next_state_root);
+                prover_instance.write_to_guest(&self.state_root);
                 prover_instance.write_to_guest(filtered_block.header());
                 prover_instance.write_to_guest(&inclusion_proof);
                 prover_instance.write_to_guest(&completeness_proof);
@@ -213,7 +212,7 @@ where
             }
 
             self.ledger_db.commit_slot(data_to_commit)?;
-            self.state_root = next_state_root;
+            self.state_root = slot_result.state_root;
         }
 
         Ok(())
