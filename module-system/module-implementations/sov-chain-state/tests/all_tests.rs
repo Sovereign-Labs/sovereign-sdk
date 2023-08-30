@@ -1,10 +1,9 @@
+use sov_chain_state::{ChainState, ChainStateConfig, StateTransitionId, TransitionInProgress};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::Genesis;
 use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash, MockValidityCond};
 use sov_state::{ProverStorage, Storage, WorkingSet};
-
-use crate::{ChainState, ChainStateConfig, StateTransitionId, TransitionInProgress};
 
 /// This simply tests that the chain_state reacts properly with the invocation of the `begin_slot`
 /// hook. For more complete integration tests, feel free to have a look at the integration tests folder.

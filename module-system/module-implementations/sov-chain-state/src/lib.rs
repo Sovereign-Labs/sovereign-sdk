@@ -10,9 +10,6 @@ pub mod genesis;
 /// Hook implementation for the module
 pub mod hooks;
 
-#[cfg(test)]
-pub mod tests;
-
 /// The query interface with the module
 #[cfg(feature = "native")]
 pub mod query;

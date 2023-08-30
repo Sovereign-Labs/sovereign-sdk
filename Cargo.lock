@@ -6680,6 +6680,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-bank",
+ "sov-chain-state",
  "sov-data-generators",
  "sov-modules-api",
  "sov-modules-macros",
