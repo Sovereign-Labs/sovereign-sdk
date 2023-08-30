@@ -1,9 +1,10 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sov_modules_api::clap;
+use sov_modules_api::{clap, PrivateKey};
 
 /// A struct representing the current state of the CLI wallet
 #[derive(Debug, Serialize, Deserialize)]
@@ -49,6 +50,63 @@ impl<Tx: Serialize + DeserializeOwned, Ctx: sov_modules_api::Context> WalletStat
         let data = serde_json::to_string_pretty(self)?;
         fs::write(path, data)?;
         Ok(())
+    }
+}
+
+/// A struct representing private key and associated address
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(bound = "Ctx::Address: Serialize + DeserializeOwned")]
+pub struct PrivateKeyAndAddress<Ctx: sov_modules_api::Context> {
+    /// Private key of the address
+    private_key: Ctx::PrivateKey,
+    /// Address associated from the private key
+    address: Ctx::Address,
+}
+
+impl<Ctx: sov_modules_api::Context> PartialEq for PrivateKeyAndAddress<Ctx> {
+    fn eq(&self, other: &Self) -> bool {
+        self.private_key.pub_key() == other.private_key.pub_key() && self.address == other.address
+    }
+}
+
+impl<Ctx: sov_modules_api::Context> PrivateKeyAndAddress<Ctx> {
+    /// Returns boolean if address actually matches the private key
+    pub fn is_matching(&self) -> bool {
+        self.private_key.to_address::<Ctx::Address>() == self.address
+    }
+
+    /// Randomly generates a new private key and address
+    pub fn generate() -> Self {
+        let private_key = Ctx::PrivateKey::generate();
+        let address = private_key.to_address::<Ctx::Address>();
+        Self {
+            private_key,
+            address,
+        }
+    }
+}
+
+/// A simplified struct representing private key and associated address
+/// where the private key is represented as a hex string
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct HexPrivateAndAddress {
+    /// Private key is hex encoded bytes, without leading 0x
+    hex_priv_key: String,
+    /// Address is in canonical string format
+    address: String,
+}
+
+impl<Ctx: sov_modules_api::Context> TryFrom<HexPrivateAndAddress> for PrivateKeyAndAddress<Ctx> {
+    type Error = anyhow::Error;
+
+    fn try_from(value: HexPrivateAndAddress) -> Result<Self, Self::Error> {
+        let private_key_bytes = hex::decode(value.hex_priv_key)?;
+        let private_key = Ctx::PrivateKey::try_from(&private_key_bytes)?;
+        let address = Ctx::Address::from_str(&value.address)?;
+        Ok(PrivateKeyAndAddress {
+            private_key,
+            address,
+        })
     }
 }
 
@@ -225,5 +283,41 @@ mod pubkey_hex {
         }
 
         deserializer.deserialize_str(HexPubkeyVisitor(PhantomData::<C>))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sov_modules_api::default_context::DefaultContext;
+
+    use super::*;
+
+    type C = DefaultContext;
+    #[test]
+    fn test_private_key_and_address() {
+        let private_key_and_address = PrivateKeyAndAddress::<C>::generate();
+
+        let json = serde_json::to_string_pretty(&private_key_and_address).unwrap();
+
+        let decoded: PrivateKeyAndAddress<C> = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(private_key_and_address, decoded);
+    }
+
+    #[test]
+    fn test_hex_private_key_conversion() {
+        let private_key_and_address = PrivateKeyAndAddress::<C>::generate();
+
+        let hex_private_key = private_key_and_address.private_key.as_hex();
+        let address_string = private_key_and_address.address.to_string();
+
+        let hex_private_key_and_address = HexPrivateAndAddress {
+            hex_priv_key: hex_private_key,
+            address: address_string,
+        };
+
+        let converted = PrivateKeyAndAddress::<C>::try_from(hex_private_key_and_address).unwrap();
+
+        assert_eq!(private_key_and_address, converted)
     }
 }
