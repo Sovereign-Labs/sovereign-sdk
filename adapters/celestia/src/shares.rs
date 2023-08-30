@@ -413,13 +413,25 @@ impl<'a> BlobRef<'a> {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BlobIterator {
     sequence_len: usize,
     consumed: usize,
     current: Bytes,
     current_idx: usize,
     blob: Blob,
+}
+
+impl BlobIterator {
+    /// Consume the iterator and return the underlying blob
+    pub fn take_blob(self) -> Blob {
+        self.blob
+    }
+
+    /// The number of bytes read from this iterator
+    pub fn num_bytes_read(&self) -> usize {
+        self.consumed
+    }
 }
 
 impl Iterator for BlobIterator {

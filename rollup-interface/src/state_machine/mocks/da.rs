@@ -1,13 +1,12 @@
 use std::fmt::Display;
+use std::io::Read;
 use std::sync::Arc;
 
 use async_trait::async_trait;
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
-use crate::da::{
-    BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec, DaVerifier,
-};
+use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, DaSpec, DaVerifier};
 use crate::mocks::MockValidityCond;
 use crate::services::batch_builder::BatchBuilder;
 use crate::services::da::{DaService, SlotData};
@@ -95,27 +94,54 @@ impl RollupAddress for MockAddress {}
 pub struct MockBlob {
     address: MockAddress,
     hash: [u8; 32],
-    data: CountedBufReader<Bytes>,
+    data: Bytes,
+    bytes_read: usize,
 }
 
+impl MockBlob {
+    /// The number of bytes left to read from this blob
+    pub fn remaining(&self) -> usize {
+        self.data.len() - self.bytes_read
+    }
+}
+
+impl Read for MockBlob {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let bytes_to_read = std::cmp::min(buf.len(), self.remaining());
+        let data = &self.data[self.remaining()..];
+        buf.copy_from_slice(&data[..bytes_to_read]);
+        self.bytes_read += bytes_to_read;
+        Ok(bytes_to_read)
+    }
+}
+
+// impl Buf for MockBlob {
+//     fn remaining(&self) -> usize {
+//         self.data.len() - self.bytes_read
+//     }
+
+//     fn chunk(&self) -> &[u8] {
+//         self.data[self.bytes_read..];
+//     }
+
+//     fn advance(&mut self, cnt: usize) {
+//         self.data
+//     }
+// }
+
 impl BlobReaderTrait for MockBlob {
-    type Data = Bytes;
     type Address = MockAddress;
 
     fn sender(&self) -> Self::Address {
         self.address
     }
 
-    fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
-        &mut self.data
-    }
-
-    fn data(&self) -> &CountedBufReader<Self::Data> {
-        &self.data
-    }
-
     fn hash(&self) -> [u8; 32] {
         self.hash
+    }
+
+    fn num_bytes_read(&self) -> usize {
+        self.bytes_read
     }
 }
 
@@ -124,8 +150,9 @@ impl MockBlob {
     pub fn new(data: Vec<u8>, address: MockAddress, hash: [u8; 32]) -> Self {
         Self {
             address,
-            data: CountedBufReader::new(bytes::Bytes::from(data)),
+            data: bytes::Bytes::from(data),
             hash,
+            bytes_read: 0,
         }
     }
 }

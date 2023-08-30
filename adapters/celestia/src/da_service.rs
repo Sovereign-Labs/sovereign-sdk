@@ -8,7 +8,7 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::core::params::ArrayParams;
 use jsonrpsee::http_client::{HeaderMap, HttpClient};
 use nmt_rs::NamespaceId;
-use sov_rollup_interface::da::{BlockHeaderTrait, CountedBufReader};
+use sov_rollup_interface::da::{BlockHeaderTrait};
 use sov_rollup_interface::services::da::{DaService, SlotData};
 use tracing::{debug, info, span, Level};
 
@@ -22,7 +22,7 @@ use crate::verifier::{
     CelestiaSpec, CelestiaVerifier, ChainValidityCondition, RollupParams, PFB_NAMESPACE,
 };
 use crate::{
-    parse_pfb_namespace, BlobWithSender, CelestiaHeader, CelestiaHeaderResponse,
+    parse_pfb_namespace, BlobIteratorWithSender, CelestiaHeader, CelestiaHeaderResponse,
     DataAvailabilityHeader,
 };
 
@@ -238,8 +238,8 @@ impl DaService for CelestiaService {
 
             let blob: Blob = blob_ref.into();
 
-            let blob_tx = BlobWithSender {
-                blob: CountedBufReader::new(blob.into_iter()),
+            let blob_tx = BlobIteratorWithSender {
+                iterator: blob.into_iter(),
                 sender: CelestiaAddress::from_str(&sender).expect("Incorrect sender address"),
                 hash: commitment,
             };

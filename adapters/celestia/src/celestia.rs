@@ -8,7 +8,7 @@ use nmt_rs::NamespacedHash;
 use prost::bytes::Buf;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::da::{BlockHeaderTrait as BlockHeader, CountedBufReader};
+use sov_rollup_interface::da::BlockHeaderTrait as BlockHeader;
 use sov_rollup_interface::services::da::SlotData;
 pub use tendermint::block::Header as TendermintHeader;
 use tendermint::block::Height;
@@ -24,7 +24,7 @@ const NAMESPACED_HASH_LEN: usize = 48;
 pub const GENESIS_PLACEHOLDER_HASH: &[u8; 32] = &[255; 32];
 
 use crate::pfb::{BlobTx, MsgPayForBlobs, Tx};
-use crate::shares::{read_varint, BlobIterator, BlobRefIterator, NamespaceGroup};
+use crate::shares::{read_varint, Blob, BlobIterator, BlobRefIterator, NamespaceGroup};
 use crate::utils::BoxError;
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::{ChainValidityCondition, TmHash, PFB_NAMESPACE};
@@ -256,11 +256,45 @@ impl CelestiaHeader {
     }
 }
 
-#[derive(PartialEq, Clone, Debug, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]
-pub struct BlobWithSender {
-    pub blob: CountedBufReader<BlobIterator>,
+#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[serde(from = "BlobWithSender", into = "BlobWithSender")]
+pub struct BlobIteratorWithSender {
+    pub iterator: BlobIterator,
     pub sender: CelestiaAddress,
     pub hash: [u8; 32],
+}
+
+impl From<BlobWithSender> for BlobIteratorWithSender {
+    fn from(value: BlobWithSender) -> Self {
+        Self {
+            iterator: value.blob.into_iter(),
+            sender: value.sender,
+            hash: value.hash,
+        }
+    }
+}
+
+impl From<BlobIteratorWithSender> for BlobWithSender {
+    fn from(value: BlobIteratorWithSender) -> Self {
+        Self {
+            blob: value.iterator.take_blob(),
+            sender: value.sender,
+            hash: value.hash,
+        }
+    }
+}
+
+#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
+pub struct BlobWithSender {
+    pub blob: Blob,
+    pub sender: CelestiaAddress,
+    pub hash: [u8; 32],
+}
+
+impl std::io::Read for BlobIteratorWithSender {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.iterator.read(buf)
+    }
 }
 
 impl BlockHeader for CelestiaHeader {

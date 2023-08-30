@@ -434,13 +434,10 @@ fn blobs_are_equal<B: BlobReaderTrait>(
     );
 
     let mut read_actual = vec![];
-    actual_inner
-        .data_mut()
-        .read_to_end(&mut read_actual)
-        .unwrap();
+    actual_inner.read_to_end(&mut read_actual).unwrap();
 
     let mut read_expected = vec![];
-    expected.data_mut().read_to_end(&mut read_expected).unwrap();
+    expected.read_to_end(&mut read_expected).unwrap();
     assert_eq!(
         read_expected, read_actual,
         "incorrect data read in {}",

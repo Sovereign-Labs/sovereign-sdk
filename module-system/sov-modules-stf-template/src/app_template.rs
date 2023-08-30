@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
@@ -116,7 +117,7 @@ where
         // TODO: don't ignore these events: https://github.com/Sovereign-Labs/sovereign/issues/350
         let _ = batch_workspace.take_events();
 
-        let (txs, messages) = match self.pre_process_batch(blob.data_mut()) {
+        let (txs, messages) = match self.pre_process_batch(blob) {
             Ok((txs, messages)) => (txs, messages),
             Err(reason) => {
                 // Explicitly revert on slashing, even though nothing has changed in pre_process.
@@ -242,7 +243,7 @@ where
     // Do all stateless checks and data formatting, that can be results in sequencer slashing
     fn pre_process_batch(
         &self,
-        blob_data: &mut CountedBufReader<impl Buf>,
+        blob_data: &mut impl Read,
     ) -> Result<
         (
             Vec<TransactionAndRawHash<C>>,
@@ -262,10 +263,7 @@ where
     }
 
     // Attempt to deserialize batch, error results in sequencer slashing.
-    fn deserialize_batch(
-        &self,
-        blob_data: &mut CountedBufReader<impl Buf>,
-    ) -> Result<Batch, SlashingReason> {
+    fn deserialize_batch(&self, blob_data: &mut impl Read) -> Result<Batch, SlashingReason> {
         match Batch::deserialize_reader(blob_data) {
             Ok(batch) => Ok(batch),
             Err(e) => {

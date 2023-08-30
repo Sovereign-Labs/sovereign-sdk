@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{
-    self, BlobReaderTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, CountedBufReader, DaSpec,
+    self, BlobReaderTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, DaSpec,
 };
 use sov_rollup_interface::digest::Digest;
 use sov_rollup_interface::zk::ValidityCondition;
@@ -18,9 +18,9 @@ use zk_cycle_macros::cycle_tracker;
 
 use self::address::CelestiaAddress;
 use crate::share_commit::recreate_commitment;
-use crate::shares::{read_varint, BlobIterator, NamespaceGroup, Share};
+use crate::shares::{read_varint, NamespaceGroup, Share};
 use crate::types::ValidationError;
-use crate::{pfb_from_iter, BlobWithSender, CelestiaHeader, DataAvailabilityHeader};
+use crate::{pfb_from_iter, BlobIteratorWithSender, CelestiaHeader, DataAvailabilityHeader};
 
 pub struct CelestiaVerifier {
     pub rollup_namespace: NamespaceId,
@@ -29,26 +29,19 @@ pub struct CelestiaVerifier {
 pub const PFB_NAMESPACE: NamespaceId = NamespaceId(hex_literal::hex!("0000000000000004"));
 pub const PARITY_SHARES_NAMESPACE: NamespaceId = NamespaceId(hex_literal::hex!("ffffffffffffffff"));
 
-impl BlobReaderTrait for BlobWithSender {
-    type Data = BlobIterator;
+impl BlobReaderTrait for BlobIteratorWithSender {
     type Address = CelestiaAddress;
 
     fn sender(&self) -> CelestiaAddress {
         self.sender.clone()
     }
 
-    // Creates a new BufWithCounter structure to read the data
-    fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
-        &mut self.blob
-    }
-
-    // Creates a new BufWithCounter structure to read the data
-    fn data(&self) -> &CountedBufReader<Self::Data> {
-        &self.blob
-    }
-
     fn hash(&self) -> [u8; 32] {
         self.hash
+    }
+
+    fn num_bytes_read(&self) -> usize {
+        self.iterator.num_bytes_read()
     }
 }
 
@@ -107,7 +100,7 @@ impl DaSpec for CelestiaSpec {
 
     type BlockHeader = CelestiaHeader;
 
-    type BlobTransaction = BlobWithSender;
+    type BlobTransaction = BlobIteratorWithSender;
 
     type InclusionMultiProof = Vec<EtxProof>;
 
@@ -255,7 +248,8 @@ impl da::DaVerifier for CelestiaVerifier {
                 if nid != &self.rollup_namespace.0[..] {
                     continue;
                 }
-                let tx: &BlobWithSender = tx_iter.next().ok_or(ValidationError::MissingTx)?;
+                let tx: &BlobIteratorWithSender =
+                    tx_iter.next().ok_or(ValidationError::MissingTx)?;
                 if tx.sender.to_string() != pfb.signer {
                     return Err(ValidationError::InvalidSigner);
                 }
@@ -265,18 +259,6 @@ impl da::DaVerifier for CelestiaVerifier {
                 let mut blob_iter = blob_ref.data();
                 let mut blob_data = vec![0; blob_iter.remaining()];
                 blob_iter.copy_to_slice(blob_data.as_mut_slice());
-
-                let tx_data = tx.data().accumulator();
-
-                match tx_data {
-                    da::Accumulator::Completed(tx_data) => {
-                        assert_eq!(blob_data, *tx_data);
-                    }
-                    // For now we bail and return, maybe want to change that behaviour in the future
-                    da::Accumulator::InProgress(_) => {
-                        return Err(ValidationError::IncompleteData);
-                    }
-                }
 
                 // Link blob commitment to e-tx commitment
                 let expected_commitment =

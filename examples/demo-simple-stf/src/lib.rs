@@ -4,7 +4,7 @@ use std::io::Read;
 use std::marker::PhantomData;
 
 use sha2::Digest;
-use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::stf::{BatchReceipt, SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, ZkVerifier};
 
@@ -76,16 +76,13 @@ impl<Vm: ZkVerifier, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunctio
     {
         let mut receipts = vec![];
         for blob in blobs {
-            let blob_data = blob.data_mut();
-
             // Read the data from the blob as a byte vec.
             let mut data = Vec::new();
 
             // Panicking within the `StateTransitionFunction` is generally not recommended.
             // But here, if we encounter an error while reading the bytes,
             // it suggests a serious issue with the DA layer or our setup.
-            blob_data
-                .read_to_end(&mut data)
+            blob.read_to_end(&mut data)
                 .unwrap_or_else(|e| panic!("Unable to read blob data {}", e));
 
             // Check if the sender submitted the preimage of the hash.

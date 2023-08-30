@@ -174,10 +174,7 @@ mod tests {
 
         let mut block = vec![];
         let mut submitted_block = da_service.get_block_at(0).await.unwrap();
-        let _ = submitted_block.blobs[0]
-            .data_mut()
-            .read_to_end(&mut block)
-            .unwrap();
+        let _ = submitted_block.blobs[0].read_to_end(&mut block).unwrap();
 
         // First bytes of each tx, flattened
         let blob: Vec<Vec<u8>> = vec![vec![tx1[0]], vec![tx2[0]]];
@@ -203,10 +200,7 @@ mod tests {
 
         let mut block = vec![];
         let mut submitted_block = da_service.get_block_at(0).await.unwrap();
-        let _ = submitted_block.blobs[0]
-            .data_mut()
-            .read_to_end(&mut block)
-            .unwrap();
+        let _ = submitted_block.blobs[0].read_to_end(&mut block).unwrap();
 
         // First bytes of each tx, flattened
         let blob: Vec<Vec<u8>> = vec![vec![tx[0]]];

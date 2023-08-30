@@ -7,7 +7,7 @@ use std::str::FromStr;
 use celestia::types::NamespaceId;
 use celestia::verifier::address::CelestiaAddress;
 use celestia::verifier::{CelestiaSpec, CelestiaVerifier};
-use celestia::{BlobWithSender, CelestiaHeader};
+use celestia::{BlobIteratorWithSender, CelestiaHeader};
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::create_zk_app_template;
 use demo_stf::ArrayWitness;
@@ -44,7 +44,7 @@ pub fn main() {
     env::write(&"inclusion proof has been read\n");
     let completeness_proof: <CelestiaSpec as DaSpec>::CompletenessProof = guest.read_from_host();
     env::write(&"completeness proof has been read\n");
-    let mut blobs: Vec<BlobWithSender> = guest.read_from_host();
+    let mut blobs: Vec<BlobIteratorWithSender> = guest.read_from_host();
     env::write(&"blobs have been read\n");
 
     // Step 2: Verify tx list
