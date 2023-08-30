@@ -34,7 +34,7 @@ pub mod private_key {
 
     /// A private key for the default signature scheme.
     /// This struct also stores the corresponding public key.
-    #[derive(serde::Serialize, serde::Deserialize)]
+    #[derive(Clone, serde::Serialize, serde::Deserialize)]
     pub struct DefaultPrivateKey {
         key_pair: SigningKey,
     }
