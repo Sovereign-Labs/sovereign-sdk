@@ -452,7 +452,7 @@ where
         channel_id: &ChannelId,
         to_account: &Self::AccountId,
         coin: &PrefixedCoin,
-) -> Result<(), TokenTransferError> {
+    ) -> Result<(), TokenTransferError> {
         let token_address = {
             let mut hasher = <C::Hasher as Digest>::new();
             hasher.update(coin.denom.to_string());

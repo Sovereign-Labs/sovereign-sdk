@@ -2915,7 +2915,7 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.44.1"
-source = "git+https://github.com/cosmos/ibc-rs?rev=3bd0bc9#3bd0bc9d2ebb6b948d466b752603b8fce3d25d02"
+source = "git+https://github.com/cosmos/ibc-rs?rev=a0ef6de#a0ef6de981c5be88d4785cc70950ff696385c4d6"
 dependencies = [
  "borsh",
  "bytes",
@@ -2928,6 +2928,7 @@ dependencies = [
  "primitive-types",
  "prost",
  "safe-regex",
+ "schemars",
  "serde",
  "serde_derive",
  "serde_json",
@@ -2944,7 +2945,7 @@ dependencies = [
 [[package]]
 name = "ibc-derive"
 version = "0.3.0"
-source = "git+https://github.com/cosmos/ibc-rs?rev=3bd0bc9#3bd0bc9d2ebb6b948d466b752603b8fce3d25d02"
+source = "git+https://github.com/cosmos/ibc-rs?rev=a0ef6de#a0ef6de981c5be88d4785cc70950ff696385c4d6"
 dependencies = [
  "darling",
  "proc-macro2 1.0.66",

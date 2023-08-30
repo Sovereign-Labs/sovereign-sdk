@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use ibc::applications::transfer::msgs::transfer::MsgTransfer;
 use thiserror::Error;
 
 use crate::Transfer;
@@ -8,10 +9,17 @@ use crate::Transfer;
 /// the `ExampleModule` module.
 /// The `derive` for [`schemars::JsonSchema`] is a requirement of
 /// [`sov_modules_api::ModuleCallJsonSchema`].
-#[cfg_attr(feature = "native", derive(schemars::JsonSchema))]
+#[cfg_attr(
+    feature = "native",
+    derive(schemars::JsonSchema),
+    schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")
+)]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
-pub enum CallMessage {
-    SetValue(u32),
+pub enum CallMessage<C: sov_modules_api::Context> {
+    Transfer {
+        msg_transfer: MsgTransfer,
+        token_address: C::Address,
+    },
 }
 
 /// Example of a custom error.

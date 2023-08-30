@@ -67,7 +67,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Transfer<C> {
 
     type Config = TransferConfig;
 
-    type CallMessage = call::CallMessage;
+    type CallMessage = call::CallMessage<C>;
 
     fn genesis(
         &self,
