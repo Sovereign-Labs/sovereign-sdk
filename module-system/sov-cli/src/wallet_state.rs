@@ -58,9 +58,9 @@ impl<Tx: Serialize + DeserializeOwned, Ctx: sov_modules_api::Context> WalletStat
 #[serde(bound = "Ctx::Address: Serialize + DeserializeOwned")]
 pub struct PrivateKeyAndAddress<Ctx: sov_modules_api::Context> {
     /// Private key of the address
-    private_key: Ctx::PrivateKey,
+    pub private_key: Ctx::PrivateKey,
     /// Address associated from the private key
-    address: Ctx::Address,
+    pub address: Ctx::Address,
 }
 
 impl<Ctx: sov_modules_api::Context> PartialEq for PrivateKeyAndAddress<Ctx> {
@@ -91,9 +91,9 @@ impl<Ctx: sov_modules_api::Context> PrivateKeyAndAddress<Ctx> {
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct HexPrivateAndAddress {
     /// Private key is hex encoded bytes, without leading 0x
-    hex_priv_key: String,
+    pub hex_priv_key: String,
     /// Address is in canonical string format
-    address: String,
+    pub address: String,
 }
 
 impl<Ctx: sov_modules_api::Context> TryFrom<HexPrivateAndAddress> for PrivateKeyAndAddress<Ctx> {

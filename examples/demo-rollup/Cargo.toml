@@ -39,6 +39,7 @@ sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-templat
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
+sov-cli = { path = "../../module-system/sov-cli" }
 
 [dev-dependencies]
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
