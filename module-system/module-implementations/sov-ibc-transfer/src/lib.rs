@@ -72,7 +72,9 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Transfer<C> {
         _context: &Self::Context,
         _working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
-        Err(Error::ModuleError(anyhow!("Cannot call sov-ibc-transfer; use sov-ibc instead")))
+        Err(Error::ModuleError(anyhow!(
+            "Cannot call sov-ibc-transfer; use sov-ibc instead"
+        )))
     }
 }
 

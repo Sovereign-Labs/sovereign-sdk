@@ -35,7 +35,7 @@ pub struct RawMsgCreateClient {
 // )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage<C: sov_modules_api::Context> {
-    // Currently a hack since our types are not borsh de/serializable
+    // TODO: Change to Core(MsgEnvelope)
     MsgCreateClient(RawMsgCreateClient),
 
     // TODO: add Transfer message, and remove from transfer module
