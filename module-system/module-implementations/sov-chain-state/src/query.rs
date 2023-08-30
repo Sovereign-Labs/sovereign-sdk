@@ -1,22 +1,24 @@
+use jsonrpsee::core::RpcResult;
+use sov_modules_api::macros::rpc_gen;
 use sov_rollup_interface::zk::ValidityCondition;
 use sov_state::WorkingSet;
 
 use super::ChainState;
 use crate::{StateTransitionId, TransitionHeight, TransitionInProgress};
 
-/// Structure returned by the query methods.
-pub struct Response {
-    /// Value returned by the queries
-    pub value: u64,
-}
-
+#[rpc_gen(client, server, namespace = "chainState")]
 impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
     /// Get the height of the current slot.
     /// Panics if the slot height is not set
-    pub fn get_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> TransitionHeight {
-        self.slot_height
+    #[rpc_method(name = "getSlotHeight")]
+    pub fn get_slot_height(
+        &self,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> RpcResult<TransitionHeight> {
+        Ok(self
+            .slot_height
             .get(working_set)
-            .expect("Slot height should be set at initialization")
+            .expect("Slot height should be set at initialization"))
     }
 
     /// Return the genesis hash of the module.
