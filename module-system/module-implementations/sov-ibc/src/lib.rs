@@ -56,7 +56,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcModule<C> {
 
     type Config = ExampleModuleConfig;
 
-    type CallMessage = call::CallMessage;
+    type CallMessage = call::CallMessage<C>;
 
     fn genesis(
         &self,
@@ -78,6 +78,10 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcModule<C> {
             call::CallMessage::MsgCreateClient(msg) => {
                 Ok(self.create_client(msg, context, working_set)?)
             }
+            call::CallMessage::Transfer {
+                msg_transfer,
+                token_address,
+            } => Ok(self.transfer(msg_transfer, token_address, context, working_set)?),
         }
 
         // Q: Do we have to checkpoint the working set here, given that there were no errors?

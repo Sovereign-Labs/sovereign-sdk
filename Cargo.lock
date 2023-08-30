@@ -6935,6 +6935,7 @@ dependencies = [
  "ibc",
  "ibc-proto",
  "prost",
+ "schemars",
  "serde",
  "serde_json",
  "sov-bank",
