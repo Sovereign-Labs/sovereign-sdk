@@ -43,10 +43,15 @@ pub fn register_ledger(
 
 #[cfg(feature = "experimental")]
 /// register ethereum methods.
-pub fn register_ethereum<DA: DaService>(
+pub fn register_ethereum<Vm, DA>(
     da_service: DA,
+    app: &mut App<Vm, DA::Spec>,
     methods: &mut jsonrpsee::RpcModule<()>,
-) -> Result<(), anyhow::Error> {
+) -> Result<(), anyhow::Error>
+where
+    DA: DaService,
+    Vm: Zkvm,
+{
     use std::fs;
 
     let data = fs::read_to_string(TX_SIGNER_PRIV_KEY_PATH).context("Unable to read file")?;
@@ -60,7 +65,9 @@ pub fn register_ethereum<DA: DaService>(
         )
         .unwrap();
 
-    let ethereum_rpc = sov_ethereum::get_ethereum_rpc(da_service, tx_signer_private_key);
+    let batch_builder = sov_ethereum::EthBatchBuilder {};
+    let ethereum_rpc =
+        sov_ethereum::get_ethereum_rpc(da_service, tx_signer_private_key, batch_builder);
     methods
         .merge(ethereum_rpc)
         .context("Failed to merge Ethereum RPC modules")

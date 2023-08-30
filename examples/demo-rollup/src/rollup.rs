@@ -86,7 +86,7 @@ impl<Vm: Zkvm, DA: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, DA> {
             register_ledger(self.ledger_db.clone(), &mut methods)?;
             register_sequencer(self.da_service.clone(), &mut self.app, &mut methods)?;
             #[cfg(feature = "experimental")]
-            register_ethereum(self.da_service.clone(), &mut methods)?;
+            register_ethereum(self.da_service.clone(), &mut self.app, &mut methods)?;
         }
 
         let storage = self.app.get_storage();

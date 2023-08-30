@@ -1,4 +1,7 @@
 #[cfg(feature = "experimental")]
+mod batch_builder;
+pub use batch_builder::EthBatchBuilder;
+#[cfg(feature = "experimental")]
 pub use experimental::{get_ethereum_rpc, Ethereum};
 
 #[cfg(feature = "experimental")]
@@ -19,30 +22,34 @@ pub mod experimental {
     use sov_modules_api::transaction::Transaction;
     use sov_modules_api::utils::to_jsonrpsee_error_object;
     use sov_modules_api::EncodeCall;
+    use sov_rollup_interface::services::batch_builder::{self, BatchBuilder};
     use sov_rollup_interface::services::da::DaService;
 
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 
-    pub fn get_ethereum_rpc<DA: DaService>(
+    pub fn get_ethereum_rpc<B: BatchBuilder + Send + Sync + 'static, DA: DaService>(
         da_service: DA,
         tx_signer_prov_key: DefaultPrivateKey,
-    ) -> RpcModule<Ethereum<DA>> {
+        batch_builder: B,
+    ) -> RpcModule<Ethereum<B, DA>> {
         let mut rpc = RpcModule::new(Ethereum {
             nonces: Default::default(),
             tx_signer_prov_key,
             da_service,
+            batch_builder,
         });
         register_rpc_methods(&mut rpc).expect("Failed to register sequencer RPC methods");
         rpc
     }
 
-    pub struct Ethereum<DA: DaService> {
+    pub struct Ethereum<B: BatchBuilder, DA: DaService> {
         nonces: Mutex<HashMap<EthAddress, u64>>,
         tx_signer_prov_key: DefaultPrivateKey,
         da_service: DA,
+        batch_builder: B,
     }
 
-    impl<DA: DaService> Ethereum<DA> {
+    impl<B: BatchBuilder, DA: DaService> Ethereum<B, DA> {
         fn make_raw_tx(
             &self,
             raw_tx: RawEvmTransaction,
@@ -76,8 +83,8 @@ pub mod experimental {
         }
     }
 
-    fn register_rpc_methods<DA: DaService>(
-        rpc: &mut RpcModule<Ethereum<DA>>,
+    fn register_rpc_methods<B: BatchBuilder + Send + Sync + 'static, DA: DaService>(
+        rpc: &mut RpcModule<Ethereum<B, DA>>,
     ) -> Result<(), jsonrpsee::core::Error> {
         rpc.register_async_method(
             "eth_sendRawTransaction",

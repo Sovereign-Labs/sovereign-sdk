@@ -6795,6 +6795,7 @@ dependencies = [
 name = "sov-ethereum"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "borsh",
  "celestia",
  "const-rollup-config",
