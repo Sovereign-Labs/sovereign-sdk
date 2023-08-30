@@ -49,16 +49,16 @@ pub mod second_test_module {
     use super::*;
 
     #[derive(ModuleInfo)]
-    pub struct SecondTestStruct<Ctx: Context> {
+    pub struct SecondTestStruct<C: Context> {
         #[address]
-        pub address: Ctx::Address,
+        pub address: C::Address,
 
         #[state]
         pub state_in_second_struct: StateValue<u8>,
     }
 
-    impl<Ctx: Context> SecondTestStruct<Ctx> {
-        pub fn get_state_value(&self, working_set: &mut WorkingSet<Ctx::Storage>) -> u8 {
+    impl<C: Context> SecondTestStruct<C> {
+        pub fn get_state_value(&self, working_set: &mut WorkingSet<C::Storage>) -> u8 {
             self.state_in_second_struct.get(working_set).unwrap()
         }
     }

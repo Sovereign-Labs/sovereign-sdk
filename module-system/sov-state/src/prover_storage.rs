@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::Arc;
 
-use jmt::storage::TreeWriter;
+use jmt::storage::{NodeBatch, TreeWriter};
 use jmt::{JellyfishMerkleTree, KeyHash, RootHash, Version};
 use sov_db::state_db::StateDB;
 
@@ -63,6 +63,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type Witness = S::Witness;
     type RuntimeConfig = Config;
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
+    type StateUpdate = NodeBatch;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Self::with_path(config.path.as_path())
@@ -79,11 +80,11 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .map(|root| root.0)
     }
 
-    fn validate_and_commit(
+    fn compute_state_update(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<[u8; 32], anyhow::Error> {
+    ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error> {
         let latest_version = self.db.get_next_version() - 1;
         witness.add_hint(latest_version);
 
@@ -139,11 +140,14 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .put_value_set(batch, next_version)
             .expect("JMT update must succeed");
 
+        Ok((new_root.0, tree_update.node_batch))
+    }
+
+    fn commit(&self, node_batch: &Self::StateUpdate) {
         self.db
-            .write_node_batch(&tree_update.node_batch)
+            .write_node_batch(node_batch)
             .expect("db write must succeed");
         self.db.inc_next_version();
-        Ok(new_root.0)
     }
 
     // Based on assumption `validate_and_commit` increments version.

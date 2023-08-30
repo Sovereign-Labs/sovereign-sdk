@@ -5,8 +5,8 @@ use quote::{format_ident, ToTokens};
 use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
 use syn::{
-    DataStruct, Fields, GenericParam, Generics, ImplGenerics, Meta, PathArguments, PathSegment,
-    TypeGenerics, TypeParamBound, TypePath, WhereClause, WherePredicate,
+    DataStruct, Fields, GenericArgument, GenericParam, ImplGenerics, Meta, PathArguments,
+    PathSegment, TypeGenerics, TypeParamBound,
 };
 
 #[derive(Clone)]
@@ -144,7 +144,7 @@ pub(crate) struct StructDef<'a> {
     pub(crate) type_generics: TypeGenerics<'a>,
     pub(crate) generic_param: &'a Ident,
     pub(crate) fields: Vec<StructNamedField>,
-    pub(crate) where_clause: Option<&'a WhereClause>,
+    pub(crate) where_clause: Option<&'a syn::WhereClause>,
 }
 
 impl<'a> StructDef<'a> {
@@ -154,7 +154,7 @@ impl<'a> StructDef<'a> {
         impl_generics: ImplGenerics<'a>,
         type_generics: TypeGenerics<'a>,
         generic_param: &'a Ident,
-        where_clause: Option<&'a WhereClause>,
+        where_clause: Option<&'a syn::WhereClause>,
     ) -> Self {
         Self {
             ident,
@@ -194,7 +194,7 @@ impl<'a> StructDef<'a> {
 
 /// Gets the type parameter's identifier from [`syn::Generics`].
 pub(crate) fn get_generics_type_param(
-    generics: &Generics,
+    generics: &syn::Generics,
     error_span: Span,
 ) -> Result<Ident, syn::Error> {
     let generic_param = match generics
@@ -307,11 +307,10 @@ pub(crate) fn get_serialization_attrs(
 /// let our_bounds = extract_generic_type_bounds(&test_struct.generics);
 /// assert_eq!(our_bounds.get(T), Some(&desired_bounds_for_t.bounds));
 /// ```
-///
 #[cfg_attr(not(feature = "native"), allow(unused))]
 pub(crate) fn extract_generic_type_bounds(
-    generics: &Generics,
-) -> HashMap<TypePath, Punctuated<TypeParamBound, syn::token::Add>> {
+    generics: &syn::Generics,
+) -> HashMap<syn::Path, Punctuated<TypeParamBound, syn::token::Add>> {
     let mut generics_with_bounds: HashMap<_, _> = Default::default();
     // Collect the inline bounds from each generic param
     for param in generics.params.iter() {
@@ -324,8 +323,7 @@ pub(crate) fn extract_generic_type_bounds(
                 leading_colon: None,
                 segments: Punctuated::from_iter(vec![path_segment]),
             };
-            let type_path = syn::TypePath { qself: None, path };
-            generics_with_bounds.insert(type_path, ty.bounds.clone());
+            generics_with_bounds.insert(path, ty.bounds.clone());
         }
     }
 
@@ -334,11 +332,11 @@ pub(crate) fn extract_generic_type_bounds(
         for predicate in &where_clause.predicates {
             // We can ignore lifetimes and "Eq" predicates since they don't add any trait bounds
             // so just match on `Type` predicates
-            if let WherePredicate::Type(predicate_type) = predicate {
+            if let syn::WherePredicate::Type(predicate_type) = predicate {
                 // If the bounded type is a regular type path, we need to extract the bounds and add them to the map.
                 // For now, we ignore more exotic bounds `[T; N]: SomeTrait`.
                 if let syn::Type::Path(type_path) = &predicate_type.bounded_ty {
-                    match generics_with_bounds.entry(type_path.clone()) {
+                    match generics_with_bounds.entry(type_path.path.clone()) {
                         std::collections::hash_map::Entry::Occupied(mut entry) => {
                             entry.get_mut().extend(predicate_type.bounds.clone())
                         }
@@ -353,18 +351,13 @@ pub(crate) fn extract_generic_type_bounds(
     generics_with_bounds
 }
 
-/// Extract the type ident from a `TypePath`.
-#[cfg_attr(not(feature = "native"), allow(unused))]
-pub fn extract_ident(type_path: &syn::TypePath) -> &Ident {
-    &type_path
-        .path
-        .segments
-        .last()
-        .expect("Type path must have at least one segment")
-        .ident
+#[derive(Default)]
+/// Container for [`syn::Generics`] and matching `[syn::PathArguments`] for a field
+pub struct GenericWithMatchingPathArguments {
+    pub path_arguments: syn::PathArguments,
+    pub generics: syn::Generics,
 }
 
-/// Build the generics for a field based on the generics of the outer struct.
 /// For example, given the following struct:
 /// ```rust,ignore
 /// struct MyStruct<T: SomeTrait, U: SomeOtherTrait> {
@@ -373,27 +366,59 @@ pub fn extract_ident(type_path: &syn::TypePath) -> &Ident {
 /// }
 /// ```
 ///
-/// This function will return a `syn::Generics` corresponding to `<T: SomeTrait>` when
-/// invoked on the PathArguments for field1.
+/// This function will return a [`GenericWithMatchingPathArguments`] corresponding to `<T: SomeTrait>`
+/// when invoked on the PathArguments for field1.
 #[cfg_attr(not(feature = "native"), allow(unused))]
 pub(crate) fn generics_for_field(
-    outer_generics: &Generics,
+    outer_generics: &syn::Generics,
     field_generic_types: &PathArguments,
-) -> Generics {
+) -> GenericWithMatchingPathArguments {
     let generic_bounds = extract_generic_type_bounds(outer_generics);
     match field_generic_types {
         PathArguments::AngleBracketed(angle_bracketed_data) => {
             let mut args_with_bounds = Punctuated::<GenericParam, syn::token::Comma>::new();
+            let mut new_generic_path_args =
+                Punctuated::<syn::GenericArgument, syn::token::Comma>::new();
             for generic_arg in &angle_bracketed_data.args {
                 if let syn::GenericArgument::Type(syn::Type::Path(type_path)) = generic_arg {
-                    let ident = extract_ident(type_path);
-                    let bounds = generic_bounds.get(type_path).cloned().unwrap_or_default();
+                    let last_segment = type_path
+                        .path
+                        .segments
+                        .last()
+                        .expect("Type path must have at least one segment")
+                        .clone();
+
+                    let parent_ident = &last_segment.ident;
+
+                    // Indicates that we deal with associated type, so we need to rename identity
+                    let ident = if type_path.path.segments.len() > 1 {
+                        format_ident!("__{parent_ident}")
+                    } else {
+                        parent_ident.clone()
+                    };
+
+                    let bounds = generic_bounds
+                        .get(&type_path.path)
+                        .cloned()
+                        .unwrap_or_default();
+
+                    let mut new_path: syn::Path = last_segment.clone().into();
+
+                    new_path.segments.last_mut().unwrap().ident = ident.clone();
+
+                    let last: syn::TypePath = syn::TypePath {
+                        qself: None,
+                        path: new_path,
+                    };
+
+                    new_generic_path_args.push(GenericArgument::Type(syn::Type::Path(last)));
 
                     // Construct a "type param" with the appropriate bounds. This corresponds to a syntax
                     // tree like `T: Trait1 + Trait2`
+
                     let generic_type_param_with_bounds = syn::TypeParam {
                         attrs: Vec::new(),
-                        ident: ident.clone(),
+                        ident,
                         colon_token: Some(syn::token::Colon {
                             spans: [type_path.span()],
                         }),
@@ -404,9 +429,19 @@ pub(crate) fn generics_for_field(
                     args_with_bounds.push(GenericParam::Type(generic_type_param_with_bounds))
                 }
             }
+
+            // Construct a matching `PathArguments` struct for the new generic type parameters.
+            let path_arguments =
+                syn::PathArguments::AngleBracketed(syn::AngleBracketedGenericArguments {
+                    colon2_token: None,
+                    lt_token: Default::default(),
+                    args: new_generic_path_args,
+                    gt_token: Default::default(),
+                });
+
             // Construct a `Generics` struct with the generic type parameters and their bounds.
             // This corresponds to a syntax tree like `<T: Trait1 + Trait2>`
-            syn::Generics {
+            let generics = syn::Generics {
                 lt_token: Some(syn::token::Lt {
                     spans: [field_generic_types.span()],
                 }),
@@ -415,6 +450,11 @@ pub(crate) fn generics_for_field(
                     spans: [field_generic_types.span()],
                 }),
                 where_clause: None,
+            };
+
+            GenericWithMatchingPathArguments {
+                path_arguments,
+                generics,
             }
         }
         // We don't need to do anything if the generic type parameters are not angle bracketed
@@ -426,7 +466,9 @@ pub(crate) fn generics_for_field(
 mod tests {
     use syn::parse_quote;
 
-    use crate::common::extract_generic_type_bounds;
+    use crate::common::{
+        extract_generic_type_bounds, generics_for_field, GenericWithMatchingPathArguments,
+    };
 
     #[test]
     fn test_generic_types_with_bounds() {
@@ -490,5 +532,215 @@ mod tests {
             our_bounds.get(&parse_quote!(V)),
             Some(&syn::punctuated::Punctuated::new())
         );
+    }
+
+    #[test]
+    fn test_generics_for_field_associated_type() {
+        let path_arguments: syn::AngleBracketedGenericArguments = parse_quote! { <C, T::Error> };
+        let test_struct: syn::ItemStruct = parse_quote! {
+            struct Runtime<C: Context, D: SomeOtherTrait, V> where V: SomeThirdTrait, T::Error: Debug {
+                module_1: Module1 #path_arguments ,
+                module_2: Module2<C, D>,
+                module_3: Module3<C, V>,
+            }
+        };
+
+        let generics: syn::Generics = test_struct.generics;
+
+        let field_generic_types = syn::PathArguments::AngleBracketed(path_arguments);
+
+        let GenericWithMatchingPathArguments {
+            generics: actual_generics,
+            ..
+        } = generics_for_field(&generics, &field_generic_types);
+
+        let expected: syn::ItemStruct = parse_quote! {
+            struct Module1Generated<C: Context, __Error: Debug>  {
+                module_1: Module1<C, __Error>,
+            }
+        };
+        assert_eq!(expected.generics, actual_generics);
+    }
+
+    #[test]
+    fn test_generics_more_generics_for_field_associated_type() {
+        let path_arguments_1: syn::AngleBracketedGenericArguments =
+            parse_quote! { <C, T::Error, D::Message> };
+        let path_arguments_2: syn::AngleBracketedGenericArguments = parse_quote! { <C, T, D, V> };
+        let path_arguments_3: syn::AngleBracketedGenericArguments =
+            parse_quote! { <C, V, D::Message> };
+        let test_struct: syn::ItemStruct = parse_quote! {
+            struct Runtime<C: Context, T: FirstTrait, D: SomeOtherTrait, V>
+                where
+                    V: SomeThirdTrait,
+                    T::Error: Debug,
+                    D::Message: Message,
+                    D::Caller: Caller
+            {
+                module_1: Module1 #path_arguments_1 ,
+                module_2: Module2 #path_arguments_2 ,
+                module_3: Module3 #path_arguments_3 ,
+            }
+        };
+        let outer_generics: syn::Generics = test_struct.generics;
+
+        let expected_1: syn::ItemStruct = parse_quote! {
+            struct Module1Generated<C: Context, __Error: Debug, __Message: Message>  {
+                module_1: Module1<C, __Error, __Message>,
+            }
+        };
+
+        let expected_2: syn::ItemStruct = parse_quote! {
+            struct Module2Generated <C: Context, T: FirstTrait, D: SomeOtherTrait, V: SomeThirdTrait>
+            // TODO: Should bounds to be presented? What if module_1 require them in their definition?
+            // where
+            //         T::Error: Debug,
+            //         D::Message: Message,
+            //         D::Caller: Caller
+            {
+                module_1: Module1 #path_arguments_2,
+            }
+        };
+
+        let expected_3: syn::ItemStruct = parse_quote! {
+            struct Module3Generated<C: Context, V: SomeThirdTrait, __Message: Message>  {
+                module_1: Module1<C, V, __Message>,
+            }
+        };
+
+        // Validating
+        let GenericWithMatchingPathArguments {
+            generics: actual_generics_1,
+            ..
+        } = generics_for_field(
+            &outer_generics,
+            &syn::PathArguments::AngleBracketed(path_arguments_1),
+        );
+        assert_eq!(expected_1.generics, actual_generics_1);
+
+        let GenericWithMatchingPathArguments {
+            generics: actual_generics_2,
+            ..
+        } = generics_for_field(
+            &outer_generics,
+            &syn::PathArguments::AngleBracketed(path_arguments_2),
+        );
+        assert_eq!(expected_2.generics, actual_generics_2);
+
+        let GenericWithMatchingPathArguments {
+            generics: actual_generics_3,
+            ..
+        } = generics_for_field(
+            &outer_generics,
+            &syn::PathArguments::AngleBracketed(path_arguments_3),
+        );
+        assert_eq!(expected_3.generics, actual_generics_3);
+    }
+
+    #[test]
+    #[ignore = "To Be Fixed: https://github.com/Sovereign-Labs/sovereign-sdk/issues/757"]
+    fn test_generics_for_field_associated_types_nested_as() {
+        let path_arguments_1: syn::AngleBracketedGenericArguments = parse_quote! { <U, T::Error> };
+        let path_arguments_2: syn::AngleBracketedGenericArguments =
+            parse_quote! { <<U::Message as Message>::Caller, V> };
+        let path_arguments_3: syn::AngleBracketedGenericArguments = parse_quote! {
+            <<U::Message as Message>::Data, T>
+        };
+        let test_struct: syn::ItemStruct = parse_quote! {
+            struct TestStruct<T: FirstTrait, U: SecondTrait, V>
+                where
+                V: ThirdTrait,
+                <U as SecondTrait>::Message: Message,
+                <<U as SecondTrait>::Message as Message>::Caller: std::fmt::Display,
+                T::Error: std::fmt::Debug,
+            {
+                field_1: Foo #path_arguments_1 ,
+                field_2: Bar #path_arguments_2 ,
+                field_3: Bar #path_arguments_3 ,
+            }
+        };
+
+        let expected_1: syn::ItemStruct = parse_quote! {
+            struct Field1Generated<U: SecondTrait, __Error: std::fmt::Debug> {
+                field_1: Bar<U, __Error>,
+            }
+        };
+
+        let expected_2: syn::ItemStruct = parse_quote! {
+            struct Field2Generated<V: ThirdTrait, __Message: Message> {
+                field_2: Bar<__Message::Caller, V>,
+            }
+        };
+
+        let expected_3: syn::ItemStruct = parse_quote! {
+            struct Field3Generated<T: FirstTrait, __Message: Message> {
+                field_3: Bar<__Message::Data, T>,
+            }
+        };
+
+        let generics: syn::Generics = test_struct.generics;
+
+        // Case 1
+        let GenericWithMatchingPathArguments {
+            generics: actual_generics_1,
+            ..
+        } = generics_for_field(
+            &generics,
+            &syn::PathArguments::AngleBracketed(path_arguments_1),
+        );
+        assert_eq!(expected_1.generics, actual_generics_1);
+
+        // Case 2
+        let GenericWithMatchingPathArguments {
+            generics: actual_generics_2,
+            ..
+        } = generics_for_field(
+            &generics,
+            &syn::PathArguments::AngleBracketed(path_arguments_2),
+        );
+
+        // println!(
+        //     "ACTUAL  2: '{}' WHERE: '{}'",
+        //     actual_generics_2.to_token_stream(),
+        //     actual_generics_2
+        //         .where_clause
+        //         .map_or("".to_string(), |w| w.to_token_stream().to_string())
+        // );
+        // println!(
+        //     "EXPECTED2: '{}' WHERE: '{}'",
+        //     expected_2.generics.to_token_stream(),
+        //     expected_2
+        //         .generics
+        //         .where_clause
+        //         .map_or("".to_string(), |w| w.to_token_stream().to_string())
+        // );
+        assert_eq!(expected_2.generics, actual_generics_2);
+
+        // Case 3
+        let GenericWithMatchingPathArguments {
+            generics: actual_generics_3,
+            ..
+        } = generics_for_field(
+            &generics,
+            &syn::PathArguments::AngleBracketed(path_arguments_3),
+        );
+
+        // println!(
+        //     "ACTUAL  3: '{}' WHERE: '{}'",
+        //     actual_generics_3.to_token_stream(),
+        //     actual_generics_3
+        //         .where_clause
+        //         .map_or("".to_string(), |w| w.to_token_stream().to_string())
+        // );
+        // println!(
+        //     "EXPECTED3: '{}' WHERE: '{}'",
+        //     expected_3.generics.to_token_stream(),
+        //     expected_3
+        //         .generics
+        //         .where_clause
+        //         .map_or("".to_string(), |w| w.to_token_stream().to_string())
+        // );
+
+        assert_eq!(expected_3.generics, actual_generics_3);
     }
 }
