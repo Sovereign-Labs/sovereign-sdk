@@ -15,11 +15,9 @@ use crate::Transfer;
     schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
-pub enum CallMessage<C: sov_modules_api::Context> {
-    Transfer {
-        msg_transfer: MsgTransfer,
-        token_address: C::Address,
-    },
+pub struct CallMessage<C: sov_modules_api::Context> {
+    pub msg_transfer: MsgTransfer,
+    pub token_address: C::Address,
 }
 
 /// Example of a custom error.
