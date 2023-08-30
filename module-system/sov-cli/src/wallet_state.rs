@@ -84,6 +84,15 @@ impl<Ctx: sov_modules_api::Context> PrivateKeyAndAddress<Ctx> {
             address,
         }
     }
+
+    /// Generates valid private key and address from given private key
+    pub fn from_key(private_key: Ctx::PrivateKey) -> Self {
+        let address = private_key.to_address::<Ctx::Address>();
+        Self {
+            private_key,
+            address,
+        }
+    }
 }
 
 /// A simplified struct representing private key and associated address
