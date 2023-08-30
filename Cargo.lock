@@ -741,36 +741,13 @@ dependencies = [
 
 [[package]]
 name = "borsh"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15bf3650200d8bffa99015595e10f1fbd17de07abbc25bb067da79e769939bfa"
-dependencies = [
- "borsh-derive 0.9.3",
- "hashbrown 0.11.2",
-]
-
-[[package]]
-name = "borsh"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4114279215a005bc675e386011e594e1d9b800918cea18fcadadcce864a2046b"
 dependencies = [
- "borsh-derive 0.10.3",
+ "borsh-derive",
  "bytes",
  "hashbrown 0.13.2",
-]
-
-[[package]]
-name = "borsh-derive"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6441c552f230375d18e3cc377677914d2ca2b0d36e52129fe15450a2dce46775"
-dependencies = [
- "borsh-derive-internal 0.9.3",
- "borsh-schema-derive-internal 0.9.3",
- "proc-macro-crate 0.1.5",
- "proc-macro2 1.0.66",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -779,21 +756,10 @@ version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0754613691538d51f329cce9af41d7b7ca150bc973056f1156611489475f54f7"
 dependencies = [
- "borsh-derive-internal 0.10.3",
- "borsh-schema-derive-internal 0.10.3",
+ "borsh-derive-internal",
+ "borsh-schema-derive-internal",
  "proc-macro-crate 0.1.5",
  "proc-macro2 1.0.66",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "borsh-derive-internal"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5449c28a7b352f2d1e592a8a28bf139bc71afb0764a14f3c02500935d8c44065"
-dependencies = [
- "proc-macro2 1.0.66",
- "quote 1.0.33",
  "syn 1.0.109",
 ]
 
@@ -802,17 +768,6 @@ name = "borsh-derive-internal"
 version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "afb438156919598d2c7bad7e1c0adf3d26ed3840dbc010db1a882a65583ca2fb"
-dependencies = [
- "proc-macro2 1.0.66",
- "quote 1.0.33",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "borsh-schema-derive-internal"
-version = "0.9.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdbd5696d8bfa21d53d9fe39a714a18538bad11492a42d066dbbc395fb1951c0"
 dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.33",
@@ -974,7 +929,7 @@ dependencies = [
  "async-trait",
  "base64 0.21.3",
  "bech32",
- "borsh 0.10.3",
+ "borsh",
  "hex",
  "hex-literal 0.4.1",
  "jsonrpsee 0.16.3",
@@ -1529,7 +1484,7 @@ name = "demo-nft-module"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "demo-nft-module",
  "jsonrpsee 0.18.2",
  "serde",
@@ -1556,7 +1511,7 @@ name = "demo-stf"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "clap",
  "const-rollup-config",
  "hex",
@@ -2727,15 +2682,6 @@ dependencies = [
 
 [[package]]
 name = "hashbrown"
-version = "0.11.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
-dependencies = [
- "ahash 0.7.6",
-]
-
-[[package]]
-name = "hashbrown"
 version = "0.12.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
@@ -2969,14 +2915,14 @@ dependencies = [
 [[package]]
 name = "ibc"
 version = "0.44.1"
-source = "git+https://github.com/cosmos/ibc-rs?rev=0a4b42b#0a4b42b0746316b37f6b203d11af490d08990183"
+source = "git+https://github.com/cosmos/ibc-rs?rev=3bd0bc9#3bd0bc9d2ebb6b948d466b752603b8fce3d25d02"
 dependencies = [
- "borsh 0.9.3",
+ "borsh",
  "bytes",
  "derive_more",
  "displaydoc",
  "ibc-derive",
- "ibc-proto 0.33.0",
+ "ibc-proto",
  "ics23",
  "num-traits",
  "primitive-types",
@@ -2998,7 +2944,7 @@ dependencies = [
 [[package]]
 name = "ibc-derive"
 version = "0.3.0"
-source = "git+https://github.com/cosmos/ibc-rs?rev=0a4b42b#0a4b42b0746316b37f6b203d11af490d08990183"
+source = "git+https://github.com/cosmos/ibc-rs?rev=3bd0bc9#3bd0bc9d2ebb6b948d466b752603b8fce3d25d02"
 dependencies = [
  "darling",
  "proc-macro2 1.0.66",
@@ -3008,29 +2954,12 @@ dependencies = [
 
 [[package]]
 name = "ibc-proto"
-version = "0.32.1"
+version = "0.34.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "11c352715b36685c2543556a77091fb16af5d26257d5ce9c28e6756c1ccd71aa"
+checksum = "46349dc9a3baa6c72c4c9e7e137bb3f679ccef2e25d84261624bbebc982be184"
 dependencies = [
  "base64 0.21.3",
- "borsh 0.9.3",
- "bytes",
- "flex-error",
- "ics23",
- "prost",
- "serde",
- "subtle-encoding",
- "tendermint-proto 0.32.2",
-]
-
-[[package]]
-name = "ibc-proto"
-version = "0.33.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59d0bc49ee5fc8e5d0e668765d470cb201fd0cdee4166f49c6cbcf3100466137"
-dependencies = [
- "base64 0.21.3",
- "borsh 0.9.3",
+ "borsh",
  "bytes",
  "flex-error",
  "ics23",
@@ -3279,7 +3208,7 @@ name = "integration-tests"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "sov-chain-state",
  "sov-data-generators",
  "sov-modules-api",
@@ -3345,7 +3274,7 @@ version = "0.7.0"
 source = "git+https://github.com/penumbra-zone/jmt#aa91b7599e4f5daa1fc9152f4c8b133046f1ac57"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "digest 0.10.7",
  "hashbrown 0.13.2",
  "hex",
@@ -3916,7 +3845,7 @@ name = "module-template"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "module-template",
  "schemars",
  "serde",
@@ -3978,7 +3907,7 @@ name = "nmt-rs"
 version = "0.1.0"
 source = "git+https://github.com/Sovereign-Labs/nmt-rs.git?rev=dd37588444fca72825d11fe4a46838f66525c49f#dd37588444fca72825d11fe4a46838f66525c49f"
 dependencies = [
- "borsh 0.10.3",
+ "borsh",
  "bytes",
  "serde",
  "sha2 0.10.7",
@@ -6738,7 +6667,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arbitrary",
- "borsh 0.10.3",
+ "borsh",
  "clap",
  "jsonrpsee 0.18.2",
  "schemars",
@@ -6755,7 +6684,7 @@ name = "sov-attester-incentives"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "jmt",
  "serde",
  "serde_json",
@@ -6774,7 +6703,7 @@ name = "sov-bank"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "clap",
  "hex",
  "jsonrpsee 0.18.2",
@@ -6794,7 +6723,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
- "borsh 0.10.3",
+ "borsh",
  "clap",
  "hex",
  "jsonrpsee 0.18.2",
@@ -6816,7 +6745,7 @@ name = "sov-chain-state"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "jsonrpsee 0.18.2",
  "serde",
  "serde_json",
@@ -6836,7 +6765,7 @@ name = "sov-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "demo-stf",
  "directories",
  "hex",
@@ -6854,7 +6783,7 @@ dependencies = [
 name = "sov-data-generators"
 version = "0.1.0"
 dependencies = [
- "borsh 0.10.3",
+ "borsh",
  "proptest",
  "sov-bank",
  "sov-modules-api",
@@ -6870,7 +6799,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
- "borsh 0.10.3",
+ "borsh",
  "byteorder",
  "jmt",
  "rocksdb",
@@ -6887,7 +6816,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "borsh 0.10.3",
+ "borsh",
  "bytes",
  "celestia",
  "clap",
@@ -6936,7 +6865,7 @@ dependencies = [
 name = "sov-ethereum"
 version = "0.1.0"
 dependencies = [
- "borsh 0.10.3",
+ "borsh",
  "celestia",
  "const-rollup-config",
  "demo-stf",
@@ -6956,7 +6885,7 @@ name = "sov-evm"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "bytes",
  "clap",
  "derive_more",
@@ -7000,10 +6929,10 @@ name = "sov-ibc"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "derive_more",
  "ibc",
- "ibc-proto 0.32.1",
+ "ibc-proto",
  "prost",
  "serde",
  "serde_json",
@@ -7022,7 +6951,7 @@ name = "sov-ibc-router"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "ibc",
  "schemars",
  "serde",
@@ -7040,7 +6969,7 @@ name = "sov-ibc-transfer"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "ibc",
  "schemars",
  "serde",
@@ -7076,7 +7005,7 @@ dependencies = [
  "arbitrary",
  "bech32",
  "bincode",
- "borsh 0.10.3",
+ "borsh",
  "clap",
  "derive_more",
  "ed25519-dalek",
@@ -7102,7 +7031,7 @@ name = "sov-modules-macros"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "clap",
  "jsonrpsee 0.18.2",
  "proc-macro2 1.0.66",
@@ -7124,7 +7053,7 @@ name = "sov-modules-stf-template"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "hex",
  "jmt",
  "risc0-zkvm",
@@ -7145,7 +7074,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "bincode",
- "borsh 0.10.3",
+ "borsh",
  "schemars",
  "serde",
  "serde_json",
@@ -7164,7 +7093,7 @@ dependencies = [
  "anyhow",
  "async-trait",
  "bincode",
- "borsh 0.10.3",
+ "borsh",
  "bytes",
  "digest 0.10.7",
  "hex",
@@ -7196,7 +7125,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
- "borsh 0.10.3",
+ "borsh",
  "hex",
  "jsonrpsee 0.18.2",
  "serde",
@@ -7210,7 +7139,7 @@ name = "sov-sequencer-registry"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "clap",
  "jsonrpsee 0.18.2",
  "risc0-zkvm",
@@ -7235,7 +7164,7 @@ dependencies = [
  "anyhow",
  "arbitrary",
  "bcs",
- "borsh 0.10.3",
+ "borsh",
  "hex",
  "jmt",
  "risc0-zkvm",
@@ -7255,7 +7184,7 @@ name = "sov-stf-runner"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "celestia",
  "futures",
  "hex",
@@ -7284,7 +7213,7 @@ name = "sov-value-setter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "clap",
  "jsonrpsee 0.18.2",
  "schemars",
@@ -7302,7 +7231,7 @@ name = "sov-vec-setter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "clap",
  "jsonrpsee 0.18.2",
  "schemars",
@@ -8706,7 +8635,7 @@ name = "zk-cycle-macros"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "borsh 0.10.3",
+ "borsh",
  "proc-macro2 1.0.66",
  "quote 1.0.33",
  "risc0-zkvm",

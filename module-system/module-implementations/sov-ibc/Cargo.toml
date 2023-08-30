@@ -24,7 +24,7 @@ thiserror = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 
 ibc = { workspace = true }
-ibc-proto = { version = "0.32.1", default-features = false, features = ["borsh"] }
+ibc-proto = { workspace = true }
 prost = { version = "0.11", default-features = false }
 tendermint-proto = {version = "0.32", default-features = false}
 derive_more = { version = "0.99", default-features = false, features = ["from", "try_into"] }
