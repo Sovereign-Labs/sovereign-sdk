@@ -56,12 +56,13 @@ pub struct Transfer<C: sov_modules_api::Context> {
 }
 
 impl<C: sov_modules_api::Context> Transfer<C> {
+    // TODO: Remove, this is redundant with simply calling `TransferContext::new()`
     pub fn into_context<'ws, 'c>(
         self,
         sdk_context: &'c C,
-        working_set: &'ws mut WorkingSet<C::Storage>,
+        working_set: Rc<RefCell<&'ws mut WorkingSet<C::Storage>>>,
     ) -> TransferContext<'ws, 'c, C> {
-        TransferContext::new(self, sdk_context, Rc::new(RefCell::new(working_set)))
+        TransferContext::new(self, sdk_context, working_set)
     }
 }
 

@@ -39,6 +39,9 @@ pub struct IbcModule<C: sov_modules_api::Context> {
     #[address]
     pub address: C::Address,
 
+    #[module]
+    pub(crate) transfer: sov_ibc_transfer::Transfer<C>,
+
     #[state]
     pub client_state_store: sov_state::StateMap<ClientId, AnyClientState, ProtobufCodec>,
 

@@ -39,7 +39,7 @@ impl<C: sov_modules_api::Context> IbcModule<C> {
     pub(crate) fn create_client(
         &self,
         raw_msg: RawMsgCreateClient,
-        _context: &C,
+        context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse> {
         // Hack: Normally this value would be converted from the incoming message
@@ -59,10 +59,10 @@ impl<C: sov_modules_api::Context> IbcModule<C> {
 
         let mut execution_context = IbcExecutionContext {
             ibc: self,
-            working_set: shared_working_set,
+            working_set: shared_working_set.clone(),
         };
 
-        let mut router = IbcRouter;
+        let mut router = IbcRouter::new(self, context, shared_working_set);
 
         match dispatch(&mut execution_context, &mut router, domain_msg) {
             Ok(_) => Ok(CallResponse::default()),

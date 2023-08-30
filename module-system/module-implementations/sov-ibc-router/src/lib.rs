@@ -4,6 +4,9 @@ mod genesis;
 #[cfg(test)]
 mod tests;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 pub use call::CallMessage;
 use ibc::applications::transfer::{MODULE_ID_STR, PORT_ID_STR};
 use ibc::core::ics24_host::identifier::PortId;
@@ -73,7 +76,7 @@ where
     pub fn new(
         router_mod: &'t IbcRouterModule<C>,
         sdk_context: &'c C,
-        working_set: &'ws mut WorkingSet<C::Storage>,
+        working_set: Rc<RefCell<&'ws mut WorkingSet<C::Storage>>>,
     ) -> IbcRouter<'ws, 'c, C> {
         IbcRouter {
             transfer_ctx: router_mod
