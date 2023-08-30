@@ -8,6 +8,9 @@ mod tests;
 #[cfg(feature = "native")]
 mod query;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 pub use call::CallMessage;
 use context::TransferContext;
 #[cfg(feature = "native")]
@@ -58,7 +61,7 @@ impl<C: sov_modules_api::Context> Transfer<C> {
         sdk_context: &'c C,
         working_set: &'ws mut WorkingSet<C::Storage>,
     ) -> TransferContext<'ws, 'c, C> {
-        TransferContext::new(self, sdk_context, working_set)
+        TransferContext::new(self, sdk_context, Rc::new(RefCell::new(working_set)))
     }
 }
 

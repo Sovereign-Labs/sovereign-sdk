@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use ibc::applications::transfer::context::{
     on_acknowledgement_packet_validate, on_chan_open_ack_validate, on_chan_open_confirm_validate,
@@ -30,7 +31,7 @@ use crate::Transfer;
 pub struct TransferContext<'ws, 'c, C: sov_modules_api::Context> {
     pub transfer_mod: Transfer<C>,
     pub sdk_context: &'c C,
-    pub working_set: RefCell<&'ws mut WorkingSet<C::Storage>>,
+    pub working_set: Rc<RefCell<&'ws mut WorkingSet<C::Storage>>>,
 }
 
 impl<'ws, 'c, C> TransferContext<'ws, 'c, C>
@@ -40,12 +41,12 @@ where
     pub fn new(
         transfer_mod: Transfer<C>,
         sdk_context: &'c C,
-        working_set: &'ws mut WorkingSet<C::Storage>,
+        working_set: Rc<RefCell<&'ws mut WorkingSet<C::Storage>>>,
     ) -> Self {
         Self {
             transfer_mod,
             sdk_context,
-            working_set: RefCell::new(working_set),
+            working_set,
         }
     }
 
