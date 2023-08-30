@@ -1,4 +1,3 @@
-mod call;
 pub mod context;
 mod genesis;
 
@@ -8,7 +7,7 @@ mod tests;
 #[cfg(feature = "native")]
 mod query;
 
-pub use call::CallMessage;
+use anyhow::anyhow;
 #[cfg(feature = "native")]
 pub use query::Response;
 use sov_modules_api::{Error, ModuleInfo};
@@ -56,7 +55,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Transfer<C> {
 
     type Config = TransferConfig;
 
-    type CallMessage = call::CallMessage<C>;
+    type CallMessage = ();
 
     fn genesis(
         &self,
@@ -73,7 +72,7 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Transfer<C> {
         _context: &Self::Context,
         _working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
-        todo!()
+        Err(Error::ModuleError(anyhow!("Cannot call sov-ibc-transfer; use sov-ibc instead")))
     }
 }
 
