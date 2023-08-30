@@ -266,7 +266,7 @@ where
         self.ibc.client_state_store.set(
             &client_state_path.to_string(),
             &client_state,
-            self.working_set.get_mut(),
+            &mut self.working_set.borrow_mut(),
         );
 
         Ok(())
@@ -279,9 +279,11 @@ where
     ) -> Result<(), ContextError> {
         let key: ConsensusStateKey = consensus_state_path.into();
 
-        self.ibc
-            .consensus_state_store
-            .set(&key, &consensus_state, self.working_set.get_mut());
+        self.ibc.consensus_state_store.set(
+            &key,
+            &consensus_state,
+            &mut self.working_set.borrow_mut(),
+        );
 
         Ok(())
     }

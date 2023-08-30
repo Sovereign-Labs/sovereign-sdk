@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::fmt::Debug;
+use std::rc::Rc;
 
 use anyhow::{bail, Result};
 use ibc::clients::ics07_tendermint::client_state::TENDERMINT_CLIENT_STATE_TYPE_URL;
@@ -54,9 +55,11 @@ impl<C: sov_modules_api::Context> IbcModule<C> {
             raw_msg.signer.into(),
         )));
 
+        let shared_working_set = Rc::new(RefCell::new(working_set));
+
         let mut execution_context = IbcExecutionContext {
             ibc: self,
-            working_set: RefCell::new(working_set),
+            working_set: shared_working_set,
         };
 
         let mut router = IbcRouter;

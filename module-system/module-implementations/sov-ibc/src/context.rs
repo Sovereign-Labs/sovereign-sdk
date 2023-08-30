@@ -1,6 +1,7 @@
 pub(crate) mod clients;
 
 use std::cell::RefCell;
+use std::rc::Rc;
 
 use ibc::clients::ics07_tendermint::client_state::ClientState as TmClientState;
 use ibc::core::events::IbcEvent;
@@ -24,7 +25,7 @@ use crate::{ConsensusStateKey, IbcModule};
 
 pub struct IbcExecutionContext<'a, C: sov_modules_api::Context> {
     pub ibc: &'a IbcModule<C>,
-    pub working_set: RefCell<&'a mut WorkingSet<C::Storage>>,
+    pub working_set: Rc<RefCell<&'a mut WorkingSet<C::Storage>>>,
 }
 
 impl<'a, C> ValidationContext for IbcExecutionContext<'a, C>
