@@ -6949,24 +6949,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sov-ibc-router"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "ibc",
- "schemars",
- "serde",
- "serde_json",
- "sov-ibc-transfer",
- "sov-modules-api",
- "sov-rollup-interface",
- "sov-state",
- "tempfile",
- "thiserror",
-]
-
-[[package]]
 name = "sov-ibc-transfer"
 version = "0.1.0"
 dependencies = [
