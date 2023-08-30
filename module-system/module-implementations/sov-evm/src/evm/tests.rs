@@ -69,7 +69,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
         let tx = &tx.try_into().unwrap();
         let result =
             executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
-        contract_address(result).expect("Expected successful contract creation")
+        contract_address(&result).expect("Expected successful contract creation")
     };
 
     let set_arg = 21989;

@@ -1,33 +1,5 @@
-use reth_primitives::{
-    TransactionSignedEcRecovered as RethTransactionSignedEcRecovered, H160, H256,
-};
-
-use super::{Bytes32, EthAddress};
-
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
-pub(crate) struct BlockEnv {
-    pub(crate) number: u64,
-    pub(crate) coinbase: EthAddress,
-    pub(crate) timestamp: Bytes32,
-    /// Prevrandao is used after Paris (aka TheMerge) instead of the difficulty value.
-    pub(crate) prevrandao: Option<Bytes32>,
-    /// basefee is added in EIP1559 London upgrade
-    pub(crate) basefee: Bytes32,
-    pub(crate) gas_limit: Bytes32,
-}
-
-impl Default for BlockEnv {
-    fn default() -> Self {
-        Self {
-            number: Default::default(),
-            coinbase: Default::default(),
-            timestamp: Default::default(),
-            prevrandao: Some(Default::default()),
-            basefee: Default::default(),
-            gas_limit: [u8::MAX; 32],
-        }
-    }
-}
+use ethers::types::Transaction;
+use primitive_types::U256;
 
 /// Rlp encoded evm transaction.
 #[cfg_attr(
@@ -42,41 +14,31 @@ pub struct RawEvmTransaction {
     pub rlp: Vec<u8>,
 }
 
-/// EC recovered evm transaction.
-pub struct EvmTransactionSignedEcRecovered {
-    tx: RethTransactionSignedEcRecovered,
+pub trait EvmTransaction {
+    fn effective_gas_price(&self, base_fee: Option<u64>) -> U256;
 }
 
-impl EvmTransactionSignedEcRecovered {
-    /// Creates a new EvmTransactionSignedEcRecovered.
-    pub fn new(tx: RethTransactionSignedEcRecovered) -> Self {
-        Self { tx }
-    }
-
-    /// Transaction hash. Used to identify transaction.
-    pub fn hash(&self) -> H256 {
-        self.tx.hash()
-    }
-
-    /// Signer of transaction recovered from signature.
-    pub fn signer(&self) -> H160 {
-        self.tx.signer()
-    }
-
-    /// Receiver of the transaction.
-    pub fn to(&self) -> Option<EthAddress> {
-        self.tx.to().map(|to| to.into())
-    }
-}
-
-impl AsRef<RethTransactionSignedEcRecovered> for EvmTransactionSignedEcRecovered {
-    fn as_ref(&self) -> &RethTransactionSignedEcRecovered {
-        &self.tx
-    }
-}
-
-impl From<EvmTransactionSignedEcRecovered> for RethTransactionSignedEcRecovered {
-    fn from(tx: EvmTransactionSignedEcRecovered) -> Self {
-        tx.tx
+impl EvmTransaction for Transaction {
+    fn effective_gas_price(&self, base_fee: Option<u64>) -> U256 {
+        match self.transaction_type {
+            Some(tx_type) => match tx_type.as_u64() {
+                2u64 => match base_fee {
+                    None => self.max_fee_per_gas.unwrap_or_default(),
+                    Some(base_fee_value) => {
+                        let tip = self
+                            .max_fee_per_gas
+                            .unwrap_or_default()
+                            .saturating_sub(base_fee_value as U256);
+                        if tip > self.max_priority_fee_per_gas.unwrap_or_default() {
+                            self.max_priority_fee_per_gas + base_fee_value as U256
+                        } else {
+                            self.max_fee_per_gas
+                        }
+                    }
+                },
+                _ => self.gas_price,
+            },
+            None => self.gas_price,
+        }
     }
 }

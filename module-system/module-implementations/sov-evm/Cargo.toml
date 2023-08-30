@@ -32,6 +32,7 @@ derive_more = { workspace = true }
 
 
 ethereum-types = "0.14.1"
+primitive-types = "0.12.1"
 ethers-core = { workspace = true }
 ethers-contract = { workspace = true }
 ethers-middleware = { workspace = true }
@@ -47,7 +48,6 @@ reth-revm = { workspace = true }
 
 [dev-dependencies]
 sov-evm = { path = ".",  features = ["smart_contracts"] }
-primitive-types = "0.12.1"
 tokio = { workspace = true }
 tempfile = { workspace = true }
 bytes = { workspace = true }

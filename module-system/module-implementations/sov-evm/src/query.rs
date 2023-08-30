@@ -62,7 +62,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<Transaction>> {
         info!("evm module: eth_getTransactionByHash");
-        let evm_transaction = self.transactions.get(hash.as_fixed_bytes(), working_set);
+        let evm_transaction = self.transactions.get(&hash, working_set);
         let result = evm_transaction.map(Transaction::try_from).transpose();
         result.map_err(|e| to_jsonrpsee_error_object(e, "ETH_RPC_ERROR"))
     }
@@ -112,14 +112,14 @@ impl<C: sov_modules_api::Context> Evm<C> {
         info!("evm module: eth_call");
         let tx_env = prepare_call_env(request);
 
-        let block_env = self.block_env.get(working_set).unwrap_or_default();
+        let block_env = self.current_block.get(working_set).unwrap_or_default();
         let cfg = self.cfg.get(working_set).unwrap_or_default();
         let cfg_env = get_cfg_env(&block_env, cfg, Some(Self::CALL_CFG_ENV_TEMPLATE));
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
-        let result = executor::inspect(evm_db, block_env, tx_env, cfg_env).unwrap();
+        let result = executor::inspect(evm_db, &block_env, tx_env, cfg_env).unwrap();
         let output = match result.result {
             ExecutionResult::Success { output, .. } => output,
             _ => todo!(),

@@ -63,12 +63,12 @@ impl DbAccount {
     }
 }
 
-pub(crate) fn contract_address(result: ExecutionResult) -> Option<B160> {
+pub(crate) fn contract_address(result: &ExecutionResult) -> Option<B160> {
     match result {
         ExecutionResult::Success {
             output: Output::Create(_, Some(addr)),
             ..
-        } => Some(addr),
+        } => Some(*addr),
         _ => None,
     }
 }

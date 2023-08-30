@@ -4,8 +4,6 @@ pub mod call;
 pub mod evm;
 #[cfg(feature = "experimental")]
 pub mod genesis;
-#[cfg(feature = "experimental")]
-pub mod hooks;
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
 pub mod query;
@@ -24,15 +22,16 @@ mod experimental {
     use std::collections::HashMap;
 
     use derive_more::{From, Into};
-    use ethers::types::TransactionReceipt;
+    use ethers::types::{Block, Transaction, TransactionReceipt, TxHash, H256};
+    use ethers_core::types::Bytes;
     use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo};
+    use sov_state::codec::BcsCodec;
     use sov_state::WorkingSet;
 
     use super::evm::db::EvmDb;
-    use super::evm::transaction::BlockEnv;
     use super::evm::{DbAccount, EthAddress};
-    use crate::evm::{Bytes32, EvmChainCfg, RawEvmTransaction};
+    use crate::evm::{Bytes32, EvmChainCfg};
     #[derive(Clone, Debug)]
     pub struct AccountData {
         pub address: EthAddress,
@@ -85,17 +84,26 @@ mod experimental {
         pub(crate) cfg: sov_state::StateValue<EvmChainCfg>,
 
         #[state]
-        pub(crate) block_env: sov_state::StateValue<BlockEnv>,
+        pub(crate) head_number: sov_state::StateValue<u64>,
+
+        // TODO: Everything below shouldn't be in the state trie
+        #[state]
+        pub(crate) current_block: sov_state::StateValue<Block<TxHash>, BcsCodec>,
 
         #[state]
-        pub(crate) transactions: sov_state::StateMap<Bytes32, RawEvmTransaction>,
+        pub(crate) blocks: sov_state::StateMap<u64, Block<TxHash>, BcsCodec>,
 
         #[state]
-        pub(crate) receipts: sov_state::StateMap<
-            ethereum_types::H256,
-            TransactionReceipt,
-            sov_state::codec::BcsCodec,
-        >,
+        pub(crate) block_hashes: sov_state::StateMap<H256, u64, BcsCodec>,
+
+        #[state]
+        pub(crate) transactions: sov_state::StateMap<H256, Transaction, BcsCodec>,
+
+        #[state]
+        pub(crate) receipts: sov_state::StateMap<H256, TransactionReceipt, BcsCodec>,
+
+        #[state]
+        pub(crate) code: sov_state::StateMap<H256, Bytes, BcsCodec>,
     }
 
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {

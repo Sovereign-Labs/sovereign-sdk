@@ -1,12 +1,11 @@
 use anyhow::Result;
-use ethers_core::types::{OtherFields, TransactionReceipt};
+use ethers_core::types::{Block, OtherFields, Transaction, TransactionReceipt, TxHash};
 use revm::primitives::{CfgEnv, U256};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
-use crate::evm::transaction::{BlockEnv, EvmTransactionSignedEcRecovered};
 use crate::evm::{contract_address, EvmChainCfg, RawEvmTransaction};
 use crate::experimental::SpecIdWrapper;
 use crate::Evm;
@@ -29,20 +28,22 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let evm_tx_recovered: EvmTransactionSignedEcRecovered = tx.clone().try_into()?;
+        let mut tx: Transaction = tx.try_into()?;
+        tx.recover_from_mut()?;
 
-        let block_env = self.block_env.get(working_set).unwrap_or_default();
+        let current_block = self.current_block.get(working_set).unwrap_or_default();
         let cfg = self.cfg.get(working_set).unwrap_or_default();
-        let cfg_env = get_cfg_env(&block_env, cfg, None);
+        let cfg_env = get_cfg_env(&current_block, cfg, None);
 
-        let hash = evm_tx_recovered.hash();
-        self.transactions
-            .set(hash.as_fixed_bytes(), &tx, working_set);
+        let hash = tx.hash();
+        self.transactions.set(&hash, &tx, working_set);
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
+        let tx_env = tx.into();
+
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
-        let result = executor::execute_tx(evm_db, block_env, &evm_tx_recovered, cfg_env).unwrap();
+        let result = executor::execute_tx(evm_db, &current_block, &tx_env, cfg_env).unwrap();
 
         let receipt = TransactionReceipt {
             transaction_hash: hash.into(),
@@ -51,19 +52,20 @@ impl<C: sov_modules_api::Context> Evm<C> {
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
             block_hash: Default::default(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            block_number: Some(0u64.into()),
-            from: evm_tx_recovered.signer().into(),
-            to: evm_tx_recovered.to().map(|to| to.into()),
+            block_number: current_block.number,
+            from: tx.from,
+            to: tx.to,
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
             cumulative_gas_used: Default::default(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            gas_used: Default::default(),
-            contract_address: contract_address(result).map(|addr| addr.into()),
+            gas_used: Some(result.gas_used().into()),
+            contract_address: contract_address(&result).map(|addr| addr.into()),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            status: Some(1u64.into()),
+            status: Some(if result.is_success() { 1u64 } else { 0u64 }.into()),
+            // Post transaction root was removed in https://eips.ethereum.org/EIPS/eip-658, we don't plan to support it
             root: Default::default(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            transaction_type: Some(1u64.into()),
+            transaction_type: tx.transaction_type,
             effective_gas_price: Default::default(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
             logs_bloom: Default::default(),
@@ -84,14 +86,14 @@ impl<C: sov_modules_api::Context> Evm<C> {
 /// Returns correct config depending on spec for given block number
 /// Copies context dependent values from template_cfg or default if not provided
 pub(crate) fn get_cfg_env(
-    block_env: &BlockEnv,
+    current_block: &Block<TxHash>,
     cfg: EvmChainCfg,
     template_cfg: Option<CfgEnv>,
 ) -> CfgEnv {
     CfgEnv {
         chain_id: U256::from(cfg.chain_id),
         limit_contract_code_size: cfg.limit_contract_code_size,
-        spec_id: get_spec_id(cfg.spec, block_env.number).into(),
+        spec_id: get_spec_id(cfg.spec, current_block.number.unwrap_or_default().as_u64()).into(),
         // disable_gas_refund: !cfg.gas_refunds, // option disabled for now, we could add if needed
         ..template_cfg.unwrap_or_default()
     }
