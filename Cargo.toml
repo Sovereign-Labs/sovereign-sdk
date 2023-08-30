@@ -9,6 +9,7 @@ members = [
     "examples/demo-simple-stf",
     "examples/demo-rollup",
     "examples/demo-nft-module",
+    "examples/expose_rpc_debug",
 
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
@@ -17,7 +18,7 @@ members = [
 
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
-    
+
     "module-system/sov-cli",
     "module-system/sov-modules-stf-template",
     "module-system/sov-modules-macros",
