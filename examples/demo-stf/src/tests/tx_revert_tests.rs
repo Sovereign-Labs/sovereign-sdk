@@ -29,7 +29,7 @@ fn test_tx_revert() {
     let path = tempdir.path();
     let admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_demo_config(SEQUENCER_BALANCE, &admin_private_key);
+    let config = create_demo_config::<MockDaSpec>(SEQUENCER_BALANCE, &admin_private_key);
     let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
 
     {
@@ -95,7 +95,7 @@ fn test_nonce_incremented_on_revert() {
     let path = tempdir.path();
     let admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_demo_config(SEQUENCER_BALANCE, &admin_private_key);
+    let config = create_demo_config::<MockDaSpec>(SEQUENCER_BALANCE, &admin_private_key);
 
     {
         let mut demo = create_new_demo(path);
@@ -157,7 +157,7 @@ fn test_tx_bad_sig() {
     let path = tempdir.path();
     let admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_demo_config(SEQUENCER_BALANCE, &admin_private_key);
+    let config = create_demo_config::<MockDaSpec>(SEQUENCER_BALANCE, &admin_private_key);
 
     {
         let mut demo = create_new_demo(path);
@@ -197,7 +197,7 @@ fn test_tx_bad_nonce() {
     let path = tempdir.path();
     let admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_demo_config(SEQUENCER_BALANCE, &admin_private_key);
+    let config = create_demo_config::<MockDaSpec>(SEQUENCER_BALANCE, &admin_private_key);
 
     {
         let mut demo = create_new_demo(path);
@@ -237,7 +237,8 @@ fn test_tx_bad_serialization() {
 
     let value_setter_admin_private_key = DefaultPrivateKey::generate();
 
-    let config = create_demo_config(SEQUENCER_BALANCE, &value_setter_admin_private_key);
+    let config =
+        create_demo_config::<MockDaSpec>(SEQUENCER_BALANCE, &value_setter_admin_private_key);
     let sequencer_rollup_address = config.sequencer_registry.seq_rollup_address;
     let sequencer_balance_before = {
         let mut demo = create_new_demo(path);

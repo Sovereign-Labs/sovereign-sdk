@@ -7,7 +7,7 @@ pub mod test {
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_api::PrivateKey;
     use sov_modules_stf_template::{Batch, SequencerOutcome};
-    use sov_rollup_interface::mocks::MockBlock;
+    use sov_rollup_interface::mocks::{MockBlock, MockDaSpec};
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::{ProverStorage, WorkingSet};
 
@@ -22,7 +22,8 @@ pub mod test {
         let path = tempdir.path();
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = create_demo_config(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
+        let config =
+            create_demo_config::<MockDaSpec>(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
         {
             let mut demo = create_new_demo(path);
 
@@ -79,7 +80,8 @@ pub mod test {
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = create_demo_config(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
+        let config =
+            create_demo_config::<MockDaSpec>(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
 
         demo.init_chain(config);
 
@@ -127,7 +129,8 @@ pub mod test {
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
 
-        let config = create_demo_config(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
+        let config =
+            create_demo_config::<MockDaSpec>(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
         {
             let mut demo = create_new_demo(path);
             demo.init_chain(config);
@@ -177,7 +180,8 @@ pub mod test {
 
         let value_setter_admin_private_key = DefaultPrivateKey::generate();
 
-        let mut config = create_demo_config(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
+        let mut config =
+            create_demo_config::<MockDaSpec>(LOCKED_AMOUNT + 1, &value_setter_admin_private_key);
         config.sequencer_registry.is_preferred_sequencer = false;
 
         let mut demo = create_new_demo(path);

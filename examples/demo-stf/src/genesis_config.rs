@@ -1,9 +1,11 @@
+use sov_chain_state::ChainStateConfig;
 #[cfg(feature = "experimental")]
 use sov_evm::{AccountData, EvmConfig, SpecId};
 pub use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Context, PrivateKey, PublicKey};
+use sov_rollup_interface::da::DaSpec;
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
 
@@ -15,12 +17,12 @@ pub const LOCKED_AMOUNT: u64 = 50;
 pub const DEMO_SEQ_PUB_KEY_STR: &str = "seq_pub_key";
 pub const DEMO_TOKEN_NAME: &str = "sov-demo-token";
 
-pub fn create_demo_genesis_config<C: Context>(
+pub fn create_demo_genesis_config<C: Context, DA: DaSpec>(
     initial_sequencer_balance: u64,
     sequencer_address: C::Address,
     sequencer_da_address: Vec<u8>,
     value_setter_admin_private_key: &DefaultPrivateKey,
-) -> GenesisConfig<C> {
+) -> GenesisConfig<C, DA> {
     let token_config: sov_bank::TokenConfig<C> = sov_bank::TokenConfig {
         token_name: DEMO_TOKEN_NAME.to_owned(),
         address_and_balances: vec![(sequencer_address.clone(), initial_sequencer_balance)],
@@ -51,6 +53,8 @@ pub fn create_demo_genesis_config<C: Context>(
         admin: value_setter_admin_private_key.pub_key().to_address(),
     };
 
+    let chain_state_config = ChainStateConfig {};
+
     #[cfg(feature = "experimental")]
     let genesis_evm_address = hex::decode("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
         .unwrap()
@@ -61,6 +65,7 @@ pub fn create_demo_genesis_config<C: Context>(
         bank_config,
         sequencer_registry_config,
         (),
+        chain_state_config,
         value_setter_config,
         sov_accounts::AccountConfig { pub_keys: vec![] },
         #[cfg(feature = "experimental")]
@@ -79,11 +84,11 @@ pub fn create_demo_genesis_config<C: Context>(
     )
 }
 
-pub fn create_demo_config(
+pub fn create_demo_config<DA: DaSpec>(
     initial_sequencer_balance: u64,
     value_setter_admin_private_key: &DefaultPrivateKey,
-) -> GenesisConfig<DefaultContext> {
-    create_demo_genesis_config::<DefaultContext>(
+) -> GenesisConfig<DefaultContext, DA> {
+    create_demo_genesis_config::<DefaultContext, DA>(
         initial_sequencer_balance,
         generate_address::<DefaultContext>(DEMO_SEQ_PUB_KEY_STR),
         DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
