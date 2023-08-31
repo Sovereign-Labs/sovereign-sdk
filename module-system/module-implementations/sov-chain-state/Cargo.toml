@@ -34,5 +34,4 @@ sov-chain-state = { path = ".", features = ["native"] }
 
 [features]
 default = []
-serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "dep:jsonrpsee", "sov-state/native", "sov-modules-api/native", ]
+native = ["serde", "serde_json", "jsonrpsee", "sov-state/native", "sov-modules-api/native", ]
