@@ -46,6 +46,7 @@ pub struct IbcModule<C: sov_modules_api::Context> {
     #[state]
     pub client_state_store: sov_state::StateMap<ClientId, AnyClientState, ProtobufCodec>,
 
+    // TODO: Use ClientConsensusStatePath as key
     #[state]
     pub consensus_state_store:
         sov_state::StateMap<ConsensusStateKey, AnyConsensusState, ProtobufCodec>,
