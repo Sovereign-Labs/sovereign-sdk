@@ -18,23 +18,6 @@ use sov_state::WorkingSet;
 
 pub struct ExampleModuleConfig {}
 
-#[derive(Hash, PartialEq, Eq)]
-pub struct ConsensusStateKey {
-    pub client_id: ClientId,
-    pub epoch: u64,
-    pub height: u64,
-}
-
-impl From<ClientConsensusStatePath> for ConsensusStateKey {
-    fn from(path: ClientConsensusStatePath) -> Self {
-        Self {
-            client_id: path.client_id,
-            epoch: path.epoch,
-            height: path.height,
-        }
-    }
-}
-
 #[derive(ModuleInfo)]
 pub struct IbcModule<C: sov_modules_api::Context> {
     #[address]
@@ -46,10 +29,9 @@ pub struct IbcModule<C: sov_modules_api::Context> {
     #[state]
     pub client_state_store: sov_state::StateMap<ClientId, AnyClientState, ProtobufCodec>,
 
-    // TODO: Use ClientConsensusStatePath as key
     #[state]
     pub consensus_state_store:
-        sov_state::StateMap<ConsensusStateKey, AnyConsensusState, ProtobufCodec>,
+        sov_state::StateMap<ClientConsensusStatePath, AnyConsensusState, ProtobufCodec>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcModule<C> {

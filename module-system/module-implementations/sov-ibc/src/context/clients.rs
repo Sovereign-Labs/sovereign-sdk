@@ -22,7 +22,6 @@ use ibc::Any;
 use ibc_proto::protobuf::Protobuf;
 
 use super::IbcExecutionContext;
-use crate::ConsensusStateKey;
 
 #[derive(Clone, From, TryInto, ConsensusState)]
 pub enum AnyConsensusState {
@@ -277,10 +276,8 @@ where
         consensus_state_path: ClientConsensusStatePath,
         consensus_state: Self::AnyConsensusState,
     ) -> Result<(), ContextError> {
-        let key: ConsensusStateKey = consensus_state_path.into();
-
         self.ibc.consensus_state_store.set(
-            &key,
+            &consensus_state_path,
             &consensus_state,
             &mut self.working_set.borrow_mut(),
         );

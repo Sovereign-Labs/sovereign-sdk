@@ -21,7 +21,7 @@ use ibc::core::{ContextError, ExecutionContext, ValidationContext};
 use ibc::Height;
 use sov_state::WorkingSet;
 
-use crate::{ConsensusStateKey, IbcModule};
+use crate::IbcModule;
 
 pub struct IbcExecutionContext<'a, C: sov_modules_api::Context> {
     pub ibc: &'a IbcModule<C>,
@@ -66,11 +66,9 @@ where
         &self,
         client_cons_state_path: &ClientConsensusStatePath,
     ) -> Result<Self::AnyConsensusState, ContextError> {
-        let key: ConsensusStateKey = client_cons_state_path.clone().into();
-
         self.ibc
             .consensus_state_store
-            .get(&key, *self.working_set.borrow_mut())
+            .get(client_cons_state_path, *self.working_set.borrow_mut())
             .ok_or(
                 ClientError::ConsensusStateNotFound {
                     client_id: client_cons_state_path.client_id.clone(),
