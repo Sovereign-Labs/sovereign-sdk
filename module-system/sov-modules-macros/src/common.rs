@@ -313,7 +313,7 @@ mod tests {
             <const T: Trait>
         };
         let span = Span::call_site();
-        let generic_param = get_generics_type_param(&generics, span.clone());
+        let generic_param = get_generics_type_param(&generics, Span::call_site());
 
         let error = generic_param.unwrap_err();
         assert_eq!(error.to_string(), "Const parameters are not supported.");
