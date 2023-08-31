@@ -44,6 +44,5 @@ sov-modules-api = { path = ".", features = ["native"] }
 [features]
 bench = ["zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
 default = ["macros"]
-serde = ["dep:serde_json"]
-native = ["serde", "rand", "hex", "schemars", "ed25519-dalek/default", "ed25519-dalek/serde", "ed25519-dalek/rand_core", "clap", "jsonrpsee", "macros", "sov-modules-macros/native", "sov-state/native", "sov-sequencer"]
+native = ["serde_json", "rand", "hex", "schemars", "ed25519-dalek/default", "ed25519-dalek/serde", "ed25519-dalek/rand_core", "clap", "jsonrpsee", "macros", "sov-modules-macros/native", "sov-state/native", "sov-sequencer"]
 macros = ["sov-modules-macros"]
