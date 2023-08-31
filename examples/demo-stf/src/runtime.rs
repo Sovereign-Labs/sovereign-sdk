@@ -15,8 +15,8 @@ use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
 use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec, Spec};
-use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
+use sov_rollup_interface::da::BlobReaderTrait;
+use sov_rollup_interface::zk::ValidityCondition;
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 use sov_state::WorkingSet;
@@ -67,7 +67,7 @@ pub mod query {
 /// instead of going through the DA layer.
 
 #[cfg(not(feature = "experimental"))]
-#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc(DefaultContext))]
+#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 #[cfg_attr(
@@ -83,18 +83,8 @@ pub struct Runtime<C: Context> {
     pub accounts: sov_accounts::Accounts<C>,
 }
 
-
-struct RT<C: Context, Da: DaSpec, Vm: Zkvm> {
-    phantom_data: std::marker::PhantomData<(C, Da, Vm)>,
-}
-
-struct RpcStorage2<C: Context, Da: DaSpec, Vm: Zkvm> {
-    storage: C::Storage,
-    phantom_data: std::marker::PhantomData<(C, Da, Vm)>,
-}
-
 #[cfg(feature = "experimental")]
-#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc(DefaultContext))]
+#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 #[cfg_attr(

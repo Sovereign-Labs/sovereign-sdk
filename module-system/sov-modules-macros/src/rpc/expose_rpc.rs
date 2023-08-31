@@ -1,4 +1,4 @@
-use quote::{quote, ToTokens};
+use quote::quote;
 use syn::DeriveInput;
 
 use crate::common::StructFieldExtractor;
@@ -66,12 +66,6 @@ impl ExposeRpcMacro {
             unsafe impl #impl_generics ::std::marker::Send for RpcStorage #ty_generics #where_clause {}
         };
 
-        println!("// -------------------");
-        println!("// -------------------");
-        println!("// RPC: \n{}", rpc_storage_struct.to_token_stream());
-        println!("// -------------------");
-        println!("// -------------------");
-
         let mut merge_operations = proc_macro2::TokenStream::new();
         let mut rpc_trait_impls = proc_macro2::TokenStream::new();
 
@@ -116,11 +110,6 @@ impl ExposeRpcMacro {
                 }
             };
 
-            println!("// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
-            println!("// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
-            println!("// RPC TRAIT IMPL: \n{}", rpc_trait_impl.to_token_stream());
-            println!("// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
-            println!("// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
             rpc_trait_impls.extend(rpc_trait_impl);
         }
 
@@ -137,12 +126,6 @@ impl ExposeRpcMacro {
                 module
             }
         };
-
-        println!("// ==========================");
-        println!("// ==========================");
-        println!("// GET RPC METHOD:\n{}", get_rpc_methods.to_token_stream());
-        println!("// ==========================");
-        println!("// ==========================");
 
         let mut tokens = proc_macro::TokenStream::new();
         tokens.extend(original);

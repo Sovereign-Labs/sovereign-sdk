@@ -56,7 +56,7 @@ impl<C: Context> QueryModule<C> {
     }
 }
 
-#[expose_rpc(DefaultContext)]
+#[expose_rpc]
 struct Runtime<C: Context> {
     pub first: QueryModule<C>,
 }

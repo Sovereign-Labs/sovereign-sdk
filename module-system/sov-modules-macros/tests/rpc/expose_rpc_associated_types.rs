@@ -7,7 +7,7 @@ use sov_modules_api::{
 };
 use sov_state::{StateValue, WorkingSet, ZkStorage};
 
-pub trait TestSpec {
+pub trait TestSpec: 'static {
     type Data: Data;
 }
 
@@ -95,13 +95,10 @@ pub mod my_module {
 
 use my_module::query::{QueryModuleRpcImpl, QueryModuleRpcServer};
 
-#[expose_rpc(DefaultContext)]
+#[expose_rpc]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-struct Runtime<C: Context, S: TestSpec>
-where
-    S::Data: Data,
-{
+struct Runtime<C: Context, S: TestSpec> {
     pub first: my_module::QueryModule<C, S::Data>,
 }
 
