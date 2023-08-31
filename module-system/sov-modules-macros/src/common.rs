@@ -312,7 +312,6 @@ mod tests {
         let generics = syn::parse_quote! {
             <const T: Trait>
         };
-        let span = Span::call_site();
         let generic_param = get_generics_type_param(&generics, Span::call_site());
 
         let error = generic_param.unwrap_err();
