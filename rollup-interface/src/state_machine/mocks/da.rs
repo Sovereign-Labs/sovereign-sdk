@@ -95,6 +95,7 @@ pub struct MockBlob {
     address: MockAddress,
     hash: [u8; 32],
     data: Bytes,
+    #[serde(skip)]
     bytes_read: usize,
 }
 
@@ -108,26 +109,12 @@ impl MockBlob {
 impl Read for MockBlob {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let bytes_to_read = std::cmp::min(buf.len(), self.remaining());
-        let data = &self.data[self.remaining()..];
-        buf.copy_from_slice(&data[..bytes_to_read]);
+        let data = &self.data[self.bytes_read..];
+        buf[..bytes_to_read].copy_from_slice(&data[..bytes_to_read]);
         self.bytes_read += bytes_to_read;
         Ok(bytes_to_read)
     }
 }
-
-// impl Buf for MockBlob {
-//     fn remaining(&self) -> usize {
-//         self.data.len() - self.bytes_read
-//     }
-
-//     fn chunk(&self) -> &[u8] {
-//         self.data[self.bytes_read..];
-//     }
-
-//     fn advance(&mut self, cnt: usize) {
-//         self.data
-//     }
-// }
 
 impl BlobReaderTrait for MockBlob {
     type Address = MockAddress;
@@ -337,7 +324,7 @@ impl DaService for MockDaService {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 /// DaService used in tests.
 pub struct MockDaVerifier {}
 

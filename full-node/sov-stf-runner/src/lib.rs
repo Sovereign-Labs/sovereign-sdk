@@ -3,9 +3,12 @@
 
 mod batch_builder;
 mod config;
+use std::marker::PhantomData;
 use std::net::SocketAddr;
 
+use anyhow::Context;
 use borsh::{BorshDeserialize, BorshSerialize};
+use celestia::{BlobIteratorWithSender, BlobWithSender};
 pub use config::RpcConfig;
 mod ledger_rpc;
 pub use batch_builder::FiFoStrictBatchBuilder;
@@ -22,34 +25,37 @@ use tokio::sync::oneshot;
 use tracing::{debug, info};
 
 /// Verifies a state transition
-pub struct StateTransitionVerifier<ST, Da, Vm>
+pub struct StateTransitionVerifier<ST, Da, Zk>
 where
     Da: DaVerifier,
-    Vm: ProofSystem,
-    ST: StateTransitionFunction<Vm::Guest, Da::Spec>,
+    Zk: ZkVerifier,
+    ST: StateTransitionFunction<Zk, Da::Spec>,
 {
     app: ST,
     da_verifier: Da,
-    vm_guest: Vm::Guest,
+    phantom: PhantomData<Zk>,
 }
-impl<ST, Da, Vm> StateTransitionVerifier<ST, Da, Vm>
+impl<ST, Da, Zk> StateTransitionVerifier<ST, Da, Zk>
 where
     Da: DaVerifier,
-    Vm: ProofSystem,
-    ST: StateTransitionFunction<Vm::Guest, Da::Spec>,
+    Zk: ZkvmGuest,
+    ST: StateTransitionFunction<Zk, Da::Spec>,
 {
     /// Create a [`StateTransitionVerifier`]
-    pub fn new(app: ST, da_verifier: Da, vm_guest: Vm::Guest) -> Self {
+    pub fn new(app: ST, da_verifier: Da) -> Self {
         Self {
             app,
             da_verifier,
-            vm_guest,
+            phantom: Default::default(),
         }
     }
 
     /// Verify the next block
-    pub fn run_block(&mut self) -> Result<(), Da::Error> {
-        let mut data: StateTransitionData<ST, Da::Spec, Vm::Guest> = self.vm_guest.read_from_host();
+    pub fn run_block(&mut self, zkvm: Zk) -> Result<ST::StateRoot, Da::Error> {
+        let mut data: StateTransitionData<ST, Da::Spec, Zk> = zkvm.read_from_host();
+        for blob in data.blobs.iter() {
+            println!("blob before validation: {:?}", blob);
+        }
         let validity_condition = self.da_verifier.verify_relevant_tx_list(
             &data.da_block_header,
             &data.blobs,
@@ -57,25 +63,28 @@ where
             data.completeness_proof,
         )?;
 
+        for blob in data.blobs.iter() {
+            println!("blob after validation: {:?}", blob);
+        }
+
         let result = self.app.apply_slot(
             data.state_transition_witness,
             &data.da_block_header,
             &validity_condition,
             &mut data.blobs,
         );
-        self.vm_guest.commit(&result.state_root);
 
-        Ok(())
+        Ok(result.state_root)
     }
 }
 
 /// Combines `DaService` with `StateTransitionFunction` and "runs" the rollup.
-pub struct StateTransitionRunner<ST, DA, Vm, V>
+pub struct StateTransitionRunner<ST, DA, Zk, V>
 where
     DA: DaService,
-    Vm: ProofSystem,
-    ST: StateTransitionFunction<Vm::Host, DA::Spec>,
-    V: StateTransitionFunction<Vm::Guest, DA::Spec>,
+    Zk: ZkvmHost,
+    ST: StateTransitionFunction<Zk, DA::Spec>,
+    V: StateTransitionFunction<Zk::Guest, DA::Spec>,
 {
     start_height: u64,
     da_service: DA,
@@ -84,15 +93,17 @@ where
     state_root: ST::StateRoot,
     listen_address: SocketAddr,
     #[allow(clippy::type_complexity)]
-    prover: Option<(Vm::Host, StateTransitionVerifier<V, DA::Verifier, Vm>)>,
+    verifier: Option<(Zk, StateTransitionVerifier<V, DA::Verifier, Zk::Guest>)>,
 }
 
-impl<ST, DA, Vm, V> StateTransitionRunner<ST, DA, Vm, V>
+impl<ST, DA, Zk, V, Root, Witness> StateTransitionRunner<ST, DA, Zk, V>
 where
     DA: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
-    Vm: ProofSystem,
-    ST: StateTransitionFunction<Vm::Host, DA::Spec>,
-    V: StateTransitionFunction<Vm::Guest, DA::Spec>,
+    Zk: ZkvmHost,
+    ST: StateTransitionFunction<Zk, DA::Spec, StateRoot = Root, Witness = Witness>,
+    V: StateTransitionFunction<Zk::Guest, DA::Spec, StateRoot = Root, Witness = Witness>,
+    Witness: Default,
+    Root: Clone,
 {
     /// Creates a new `StateTransitionRunner` runner.
     #[allow(clippy::type_complexity)]
@@ -103,7 +114,7 @@ where
         mut app: ST,
         should_init_chain: bool,
         genesis_config: ST::InitialState,
-        prover: Option<(Vm::Host, StateTransitionVerifier<V, DA::Verifier, Vm>)>,
+        verifier: Option<(Zk, StateTransitionVerifier<V, DA::Verifier, Zk::Guest>)>,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
 
@@ -134,7 +145,7 @@ where
             ledger_db,
             state_root: prev_state_root,
             listen_address,
-            prover,
+            verifier,
         })
     }
 
@@ -196,19 +207,26 @@ where
             for receipt in slot_result.batch_receipts {
                 data_to_commit.add_batch(receipt);
             }
-            if let Some((prover_instance, guest)) = self.prover.as_mut() {
+            if let Some((host, verifier)) = self.verifier.as_mut() {
                 let (inclusion_proof, completeness_proof) = self
                     .da_service
                     .get_extraction_proof(&filtered_block, &blobs)
                     .await;
 
-                prover_instance.write_to_guest(&self.state_root);
-                prover_instance.write_to_guest(filtered_block.header());
-                prover_instance.write_to_guest(&inclusion_proof);
-                prover_instance.write_to_guest(&completeness_proof);
-                prover_instance.write_to_guest(&blobs);
-                prover_instance.write_to_guest(slot_result.witness);
-                guest.run_block().unwrap();
+                let transition_data: StateTransitionData<V, DA::Spec, Zk::Guest> =
+                    StateTransitionData {
+                        pre_state_root: self.state_root.clone(),
+                        da_block_header: filtered_block.header().clone(),
+                        inclusion_proof,
+                        completeness_proof,
+                        blobs,
+                        state_transition_witness: slot_result.witness,
+                    };
+                host.add_hint(transition_data);
+
+                verifier.run_block(host.guest_with_hints()).map_err(|e| {
+                    anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
+                })?;
             }
 
             self.ledger_db.commit_slot(data_to_commit)?;

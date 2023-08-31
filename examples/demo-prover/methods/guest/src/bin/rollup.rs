@@ -58,7 +58,7 @@ pub fn main() {
     env::write(&"Relevant txs verified\n");
 
     // Step 3: Apply blobs
-    let mut app = create_zk_app_template::<Risc0Guest, CelestiaSpec>(prev_state_root_hash);
+    let mut app = create_zk_app_template::<Risc0Guest, CelestiaSpec>();
 
     let witness: ArrayWitness = guest.read_from_host();
     env::write(&"Witness have been read\n");

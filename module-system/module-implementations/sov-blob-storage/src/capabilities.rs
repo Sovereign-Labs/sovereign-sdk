@@ -41,6 +41,7 @@ impl<Da: DaSpec, C: Context> BlobSelector<Da> for BlobStorage<C> {
         let mut to_defer: Vec<&mut Da::BlobTransaction> = Vec::new();
 
         for blob in current_blobs {
+            println!("Found blob: {:?}", &blob);
             if blob.sender().as_ref() == &preferred_sequencer[..] {
                 priority_blobs.push(blob);
             } else {

@@ -86,7 +86,6 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         witness: &Self::Witness,
     ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error> {
         let latest_version = self.db.get_next_version() - 1;
-        witness.add_hint(latest_version);
 
         let read_logger = TreeReadLogger::with_db_and_witness(self.db.clone(), witness);
         let untracked_jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&self.db);
@@ -106,6 +105,12 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
                 .write_node_batch(&tree_update.node_batch)
                 .expect("db write must succeed");
         }
+        witness.add_hint(
+            self.get_root_hash(latest_version)
+                .expect("Db must have root hash")
+                .0,
+        );
+        witness.add_hint(latest_version);
 
         // For each value that's been read from the tree, read it from the logged JMT to populate hints
         for (key, read_value) in state_accesses.ordered_reads {

@@ -61,6 +61,7 @@ impl<'a> MockProof<'a> {
 }
 
 /// A mock implementing the zkVM trait.
+#[derive(Default)]
 pub struct MockZkvm {
     hints: Mutex<VecDeque<Vec<u8>>>,
     outputs: Mutex<Vec<Vec<u8>>>,
@@ -85,12 +86,21 @@ impl ZkvmGuest for MockZkvm {
 }
 
 impl ZkvmHost for MockZkvm {
-    fn write_to_guest<T: Serialize>(&self, item: T) {
+    fn add_hint<T: Serialize>(&self, item: T) {
         let serialized = bincode::serialize(&item).expect("serialization to vec is infallible");
         self.hints
             .lock()
             .expect("lock may not be poisoned")
             .push_back(serialized);
+    }
+
+    type Guest = Self;
+
+    fn guest_with_hints(&mut self) -> Self::Guest {
+        MockZkvm {
+            hints: Mutex::new(std::mem::take(&mut self.hints.lock().unwrap())),
+            outputs: Default::default(),
+        }
     }
 }
 impl ProofSystem for MockZkvm {

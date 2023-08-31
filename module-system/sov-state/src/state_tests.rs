@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -9,8 +10,6 @@ enum Operation {
     Merge,
     Finalize,
 }
-
-const EMPTY_ROOT: [u8; 32] = *b"SPARSE_MERKLE_PLACEHOLDER_HASH__";
 
 impl Operation {
     fn execute<S: Storage>(&self, working_set: WorkingSet<S>) -> StateCheckpoint<S> {
@@ -195,7 +194,7 @@ fn test_witness_roundtrip() {
     };
 
     {
-        let storage = ZkStorage::<DefaultStorageSpec>::new(EMPTY_ROOT);
+        let storage = ZkStorage::<DefaultStorageSpec>::new();
         let mut working_set = WorkingSet::with_witness(storage.clone(), witness);
         state_value.set(&11, &mut working_set);
         let _ = state_value.get(&mut working_set);
@@ -208,7 +207,7 @@ fn test_witness_roundtrip() {
     };
 }
 
-fn create_state_vec_and_storage<T: BorshDeserialize + BorshSerialize>(
+fn create_state_vec_and_storage<T: BorshDeserialize + BorshSerialize + Debug>(
     values: Vec<T>,
     path: impl AsRef<Path>,
 ) -> (StateVec<T>, WorkingSet<ProverStorage<DefaultStorageSpec>>) {

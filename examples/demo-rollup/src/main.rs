@@ -2,6 +2,7 @@ use std::env;
 use std::str::FromStr;
 
 use sov_demo_rollup::new_rollup_with_celestia_da;
+use sov_rollup_interface::mocks::MockZkvm;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -24,6 +25,6 @@ async fn main() -> Result<(), anyhow::Error> {
         .nth(1)
         .unwrap_or_else(|| "rollup_config.toml".to_string());
 
-    let rollup = new_rollup_with_celestia_da(&rollup_config_path).await?;
+    let rollup = new_rollup_with_celestia_da::<MockZkvm>(&rollup_config_path, None).await?;
     rollup.run().await
 }

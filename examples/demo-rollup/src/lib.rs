@@ -9,7 +9,7 @@ use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 use demo_stf::app::DefaultPrivateKey;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runtime::GenesisConfig;
-pub use rollup::{new_rollup_with_celestia_da, Rollup};
+pub use rollup::{new_rollup_with_celestia_da, AppVerifier, Rollup};
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::BasicAddress;

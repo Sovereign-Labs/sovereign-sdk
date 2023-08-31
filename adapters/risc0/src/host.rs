@@ -9,6 +9,7 @@ use sov_rollup_interface::zk::{ZkVerifier, ZkvmHost};
 #[cfg(feature = "bench")]
 use zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cycles};
 
+use crate::guest::Risc0Guest;
 #[cfg(feature = "bench")]
 use crate::metrics::metrics_callback;
 use crate::Risc0MethodId;
@@ -61,9 +62,15 @@ impl<'a> Risc0Host<'a> {
 }
 
 impl<'a> ZkvmHost for Risc0Host<'a> {
-    fn write_to_guest<T: serde::Serialize>(&self, item: T) {
+    fn add_hint<T: serde::Serialize>(&self, item: T) {
         let serialized = to_vec(&item).expect("Serialization to vec is infallible");
         self.env.lock().unwrap().extend_from_slice(&serialized);
+    }
+
+    type Guest = Risc0Guest;
+
+    fn guest_with_hints(&mut self) -> Self::Guest {
+        todo!()
     }
 }
 

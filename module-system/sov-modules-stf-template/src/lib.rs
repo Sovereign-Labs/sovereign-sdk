@@ -142,6 +142,7 @@ where
             .expect("Storage update must succeed");
 
         self.current_storage.commit(&node_batch);
+        println!("-----------------Done with chain init -----------------");
         jmt::RootHash(genesis_hash)
     }
 

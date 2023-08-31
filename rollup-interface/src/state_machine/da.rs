@@ -148,7 +148,8 @@ impl<B: Buf> CountedBufReader<B> {
 
 /// A transaction on a data availability layer, including the address of the sender.
 pub trait BlobReaderTrait:
-    std::io::Read + Serialize + DeserializeOwned + Send + Sync + 'static
+// FIXME: remove `Debug`
+    Debug + std::io::Read + Serialize + DeserializeOwned + Send + Sync + 'static
 {
     /// The type used to represent addresses on the DA layer.
     type Address: BasicAddress;
