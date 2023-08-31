@@ -43,7 +43,10 @@ pub fn get_genesis_config<A: BasicAddress>(
     let key_and_address: PrivateKeyAndAddress<DefaultContext> = hex_key
         .try_into()
         .expect("Failed to parse sequencer private key and address");
-    assert!(key_and_address.is_matching(), "Inconsistent key data");
+    assert!(
+        key_and_address.is_matching_to_default(),
+        "Inconsistent key data"
+    );
 
     create_demo_genesis_config(
         100000000,

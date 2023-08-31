@@ -63,15 +63,9 @@ pub struct PrivateKeyAndAddress<Ctx: sov_modules_api::Context> {
     pub address: Ctx::Address,
 }
 
-impl<Ctx: sov_modules_api::Context> PartialEq for PrivateKeyAndAddress<Ctx> {
-    fn eq(&self, other: &Self) -> bool {
-        self.private_key.pub_key() == other.private_key.pub_key() && self.address == other.address
-    }
-}
-
 impl<Ctx: sov_modules_api::Context> PrivateKeyAndAddress<Ctx> {
-    /// Returns boolean if address actually matches the private key
-    pub fn is_matching(&self) -> bool {
+    /// Returns boolean if the private key matches default address
+    pub fn is_matching_to_default(&self) -> bool {
         self.private_key.to_address::<Ctx::Address>() == self.address
     }
 
@@ -96,7 +90,8 @@ impl<Ctx: sov_modules_api::Context> PrivateKeyAndAddress<Ctx> {
 }
 
 /// A simplified struct representing private key and associated address
-/// where the private key is represented as a hex string
+/// where the private key is represented as a hex string and address as canonical string
+/// TODO: Remove it https://github.com/Sovereign-Labs/sovereign-sdk/issues/766
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct HexPrivateAndAddress {
     /// Private key is hex encoded bytes, without leading 0x
@@ -310,7 +305,11 @@ mod tests {
 
         let decoded: PrivateKeyAndAddress<C> = serde_json::from_str(&json).unwrap();
 
-        assert_eq!(private_key_and_address, decoded);
+        assert_eq!(
+            private_key_and_address.private_key.pub_key(),
+            decoded.private_key.pub_key()
+        );
+        assert_eq!(private_key_and_address.address, decoded.address);
     }
 
     #[test]
@@ -327,6 +326,10 @@ mod tests {
 
         let converted = PrivateKeyAndAddress::<C>::try_from(hex_private_key_and_address).unwrap();
 
-        assert_eq!(private_key_and_address, converted)
+        assert_eq!(
+            private_key_and_address.private_key.pub_key(),
+            converted.private_key.pub_key()
+        );
+        assert_eq!(private_key_and_address.address, converted.address);
     }
 }

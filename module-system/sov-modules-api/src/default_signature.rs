@@ -40,6 +40,7 @@ pub mod private_key {
     }
 
     impl DefaultPrivateKey {
+        // This is private method and panics if input slice has incorrect length
         fn try_from_keypair(value: &[u8]) -> Result<Self, DefaultPrivateKeyDeserializationError> {
             let value: [u8; KEYPAIR_LENGTH] = value
                 .try_into()
@@ -48,6 +49,7 @@ pub mod private_key {
             Ok(Self { key_pair })
         }
 
+        // This is private method and panics if input slice has incorrect length
         fn try_from_private_key(value: &[u8]) -> Self {
             let value: [u8; SECRET_KEY_LENGTH] = value
                 .try_into()
