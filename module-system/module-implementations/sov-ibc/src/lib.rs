@@ -66,9 +66,5 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcModule<C> {
                 token_address,
             } => Ok(self.transfer(msg_transfer, token_address, context, working_set)?),
         }
-
-        // Q: Do we have to checkpoint the working set here, given that there were no errors?
-        // Or is this done by the caller?
-        // Similarly for reverting.
     }
 }
