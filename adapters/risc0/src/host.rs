@@ -1,10 +1,8 @@
 use std::cell::RefCell;
 
-use risc0_zkvm::receipt::Receipt;
+use risc0_zkvm::receipt::{Receipt, SegmentReceipts};
 use risc0_zkvm::serde::to_vec;
-use risc0_zkvm::{
-    Executor, ExecutorEnvBuilder, LocalExecutor, SegmentReceipt, Session, SessionReceipt,
-};
+use risc0_zkvm::{default_prover, Executor, ExecutorEnvBuilder, SegmentReceipt, Session};
 use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
 #[cfg(feature = "bench")]
 use zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cycles};
@@ -49,14 +47,14 @@ impl<'a> Risc0Host<'a> {
     /// This creates the "Session" trace without invoking the heavy cryptographic machinery.
     pub fn run_without_proving(&mut self) -> anyhow::Result<Session> {
         let env = self.env.borrow_mut().build()?;
-        let mut executor = LocalExecutor::from_elf(env, self.elf)?;
-        executor.run()
+        Ok(Executor::from_elf(env, self.elf)?.run()?)
+        // let mut executor = LocalExecutor::from_elf(env, self.elf)?;
     }
 
     /// Run a computation in the zkvm and generate a receipt.
-    pub fn run(&mut self) -> anyhow::Result<SessionReceipt> {
-        let session = self.run_without_proving()?;
-        session.prove()
+    pub fn run(&mut self) -> anyhow::Result<Receipt> {
+        let env = self.env.borrow_mut().build()?;
+        Ok(default_prover().prove_elf(env, self.elf)?)
     }
 }
 
@@ -105,11 +103,12 @@ fn verify_from_slice<'a>(
         ..
     } = bincode::deserialize(serialized_proof)?;
 
-    let receipts = segment_receipts
-        .into_iter()
-        .map(|r| r as Box<dyn Receipt>)
-        .collect::<Vec<_>>();
-    SessionReceipt::new(receipts, journal.to_vec()).verify(code_commitment.0)?;
+    let receipts = SegmentReceipts(segment_receipts);
+    Receipt::new(
+        risc0_zkvm::receipt::InnerReceipt::Flat(receipts),
+        journal.to_vec(),
+    )
+    .verify(code_commitment.0)?;
     Ok(journal)
 }
 
@@ -117,6 +116,6 @@ fn verify_from_slice<'a>(
 /// data. This allows to avoid one unnecessary copy during proof verification.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Risc0Proof<'a> {
-    pub segment_receipts: Vec<Box<SegmentReceipt>>,
+    pub segment_receipts: Vec<SegmentReceipt>,
     pub journal: &'a [u8],
 }
