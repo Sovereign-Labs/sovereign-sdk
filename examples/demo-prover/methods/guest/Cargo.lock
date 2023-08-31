@@ -429,12 +429,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "demo-nft-module"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "sov-modules-api",
+ "sov-modules-macros",
+ "sov-state",
+]
+
+[[package]]
 name = "demo-stf"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
  "const-rollup-config",
+ "demo-nft-module",
  "hex",
  "serde",
  "sov-accounts",

@@ -22,6 +22,8 @@ use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServe
 use sov_state::WorkingSet;
 #[cfg(feature = "native")]
 use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
+#[cfg(feature = "native")]
+use demo_nft_module::{NonFungibleTokenRpcImpl,NonFungibleTokenRpcServer};
 
 #[cfg(feature = "native")]
 pub mod query {
@@ -81,6 +83,7 @@ pub struct Runtime<C: Context> {
     pub blob_storage: sov_blob_storage::BlobStorage<C>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
+    pub nft: demo_nft_module::NonFungibleToken<C>
 }
 
 #[cfg(feature = "experimental")]
@@ -100,6 +103,7 @@ pub struct Runtime<C: Context> {
     pub accounts: sov_accounts::Accounts<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub evm: sov_evm::Evm<C>,
+    pub nft: demo_nft_module::NonFungibleToken<C>
 }
 
 impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for Runtime<C> {

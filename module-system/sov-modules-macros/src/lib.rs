@@ -11,6 +11,7 @@ mod module_call_json_schema;
 mod module_info;
 #[cfg(feature = "native")]
 mod rpc;
+mod offchain;
 
 #[cfg(feature = "native")]
 use cli_parser::{derive_cli_wallet_arg, CliParserMacro};
@@ -23,6 +24,8 @@ use proc_macro::TokenStream;
 #[cfg(feature = "native")]
 use rpc::ExposeRpcMacro;
 use syn::parse_macro_input;
+use syn::ItemFn;
+use offchain::offchain_generator;
 
 /// Derives the [`ModuleInfo`](trait.ModuleInfo.html) trait for the underlying `struct`.
 ///
@@ -337,4 +340,15 @@ pub fn cli_parser(input: TokenStream) -> TokenStream {
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
     let input: syn::DeriveInput = parse_macro_input!(input);
     handle_macro_error(derive_cli_wallet_arg(input))
+}
+
+/// placeholder
+#[proc_macro_attribute]
+pub fn offchain(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(item as ItemFn);
+
+    match offchain_generator(input) {
+        Ok(ok) => ok,
+        Err(err) => err.to_compile_error().into(),
+    }
 }

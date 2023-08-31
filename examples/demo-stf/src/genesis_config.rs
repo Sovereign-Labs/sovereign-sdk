@@ -6,6 +6,7 @@ use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Context, PrivateKey, PublicKey};
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
+use demo_nft_module::NonFungibleTokenConfig;
 
 /// Creates config for a rollup with some default settings, the config is used in demos and tests.
 use crate::runtime::GenesisConfig;
@@ -38,7 +39,7 @@ pub fn create_demo_genesis_config<C: Context>(
     );
 
     let sequencer_registry_config = sov_sequencer_registry::SequencerConfig {
-        seq_rollup_address: sequencer_address,
+        seq_rollup_address: sequencer_address.clone(),
         seq_da_address: sequencer_da_address,
         coins_to_lock: sov_bank::Coins {
             amount: LOCKED_AMOUNT,
@@ -49,6 +50,13 @@ pub fn create_demo_genesis_config<C: Context>(
 
     let value_setter_config = ValueSetterConfig {
         admin: value_setter_admin_private_key.pub_key().to_address(),
+    };
+
+
+
+    let nft_config = NonFungibleTokenConfig{
+        admin: sequencer_address,
+        owners: vec![]
     };
 
     #[cfg(feature = "experimental")]
@@ -76,6 +84,7 @@ pub fn create_demo_genesis_config<C: Context>(
             limit_contract_code_size: None,
             spec: vec![(0, SpecId::LATEST)].into_iter().collect(),
         },
+        nft_config
     )
 }
 

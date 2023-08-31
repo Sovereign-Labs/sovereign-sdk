@@ -10,6 +10,7 @@ mod query;
 pub use query::{NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer, OwnerResponse};
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
 use sov_state::WorkingSet;
+mod offchain;
 
 #[derive(ModuleInfo, Clone)]
 /// Module for non-fungible tokens (NFT).

@@ -1,8 +1,8 @@
 use anyhow::{bail, Result};
 use sov_modules_api::{CallResponse, Context};
 use sov_state::WorkingSet;
-
 use crate::NonFungibleToken;
+use crate::offchain::insert_owner;
 
 #[cfg_attr(
     feature = "native",
@@ -41,9 +41,9 @@ impl<C: Context> NonFungibleToken<C> {
         if self.owners.get(&id, working_set).is_some() {
             bail!("Token with id {} already exists", id);
         }
-
+        println!("Starting");
         self.owners.set(&id, context.sender(), working_set);
-
+        insert_owner(&context.sender().to_string(), &id, &context.sender().to_string());
         working_set.add_event("NFT mint", &format!("A token with id {id} was minted"));
         Ok(CallResponse::default())
     }

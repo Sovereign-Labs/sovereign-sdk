@@ -68,6 +68,7 @@ sov-demo-rollup = { path = ".", features = ["experimental"] }
 [features]
 default = []
 experimental = ["sov-ethereum/experimental"]
+offchain = ["demo-stf/offchain"]
 
 [[bench]]
 name = "rollup_bench"
