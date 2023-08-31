@@ -127,7 +127,7 @@ impl CelestiaService {
 
             jsonrpsee::http_client::HttpClientBuilder::default()
                 .set_headers(headers)
-                .max_request_body_size(config.max_celestia_response_body_size) // 100 MB
+                .max_request_size(config.max_celestia_response_body_size)
                 .request_timeout(std::time::Duration::from_secs(
                     config.celestia_rpc_timeout_seconds,
                 ))

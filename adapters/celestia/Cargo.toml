@@ -23,7 +23,7 @@ sha2 = { workspace = true }
 base64 = "0.21.2"
 hex = { version = "0.4.3", features = ["serde"] }
 hex-literal = "0.4.1"
-jsonrpsee = { version = "0.16.2", features = ["http-client"], optional = true }
+jsonrpsee = { workspace = true, features = ["http-client"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
