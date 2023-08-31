@@ -51,7 +51,7 @@ impl ExposeRpcMacro {
                 _phantom: ::std::marker::PhantomData< #input_ident #ty_generics >,
             }
 
-            /// Manually implementing clone, as in reality only cloning storage
+            // Manually implementing clone, as in reality only cloning storage
             impl #impl_generics ::std::clone::Clone for RpcStorage #ty_generics #where_clause {
                 fn clone(&self) -> Self {
                     Self {
@@ -98,9 +98,7 @@ impl ExposeRpcMacro {
 
             merge_operations.extend(merge_operation);
 
-            // We don't need to render where, because all bounds are inside `field_generics`
             let rpc_trait_impl = quote! {
-                // impl #field_generics #rpc_trait_ident #matched_field_path_args for RpcStorage<#context_type> {
                 impl #impl_generics #rpc_trait_ident #field_path_args for RpcStorage #ty_generics #where_clause {
                     /// Get a working set on top of the current storage
                     fn get_working_set(&self) -> ::sov_state::WorkingSet<<#context_type as ::sov_modules_api::Spec>::Storage>

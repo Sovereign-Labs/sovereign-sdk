@@ -7,8 +7,12 @@ use sov_modules_api::{
 };
 use sov_state::{StateValue, WorkingSet, ZkStorage};
 
-pub trait TestSpec: 'static {
+pub trait Message: 'static {
+    type Caller: std::fmt::Display;
     type Data: Data;
+}
+pub trait TestSpec: 'static {
+    type Message: Message;
 }
 
 pub trait Data:
@@ -99,13 +103,20 @@ use my_module::query::{QueryModuleRpcImpl, QueryModuleRpcServer};
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 struct Runtime<C: Context, S: TestSpec> {
-    pub first: my_module::QueryModule<C, S::Data>,
+    pub first: my_module::QueryModule<C, <<S as TestSpec>::Message as Message>::Data>,
+}
+
+struct ActualMessage;
+
+impl Message for ActualMessage {
+    type Caller = String;
+    type Data = u32;
 }
 
 struct ActualSpec;
 
 impl TestSpec for ActualSpec {
-    type Data = u32;
+    type Message = ActualMessage;
 }
 
 fn main() {

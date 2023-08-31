@@ -98,7 +98,7 @@ use my_module::query::{QueryModuleRpcImpl, QueryModuleRpcServer};
 #[expose_rpc]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
-struct Runtime<C: Context, S: TestSpec> {
+struct Runtime<S: TestSpec, C: Context> {
     pub first: my_module::QueryModule<C, S::Data>,
 }
 

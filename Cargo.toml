@@ -9,7 +9,6 @@ members = [
     "examples/demo-simple-stf",
     "examples/demo-rollup",
     "examples/demo-nft-module",
-    "examples/expose_rpc_debug",
 
     "full-node/db/sov-db",
     "full-node/sov-sequencer",

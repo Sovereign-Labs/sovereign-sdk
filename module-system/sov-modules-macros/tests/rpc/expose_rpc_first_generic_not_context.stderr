@@ -1,0 +1,7 @@
+error[E0220]: associated type `Storage` not found for `S`
+  --> tests/rpc/expose_rpc_first_generic_not_context.rs:98:1
+   |
+98 | #[expose_rpc]
+   | ^^^^^^^^^^^^^ associated type `Storage` not found
+   |
+   = note: this error originates in the attribute macro `expose_rpc` (in Nightly builds, run with -Z macro-backtrace for more info)

@@ -7,7 +7,7 @@ use sov_modules_api::{
 };
 use sov_state::{StateValue, WorkingSet, ZkStorage};
 
-pub trait TestSpec: 'static {
+pub trait TestSpec {
     type Data: Data;
 }
 
