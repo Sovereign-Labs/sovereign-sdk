@@ -186,7 +186,7 @@ impl<'a> StructDef<'a> {
     }
 }
 
-/// Gets the type parameter's identifier from [`syn::Generics`].
+/// Gets the first type parameter's identifier from [`syn::Generics`].
 pub(crate) fn get_generics_type_param(
     generics: &syn::Generics,
     error_span: Span,
@@ -200,13 +200,13 @@ pub(crate) fn get_generics_type_param(
         GenericParam::Lifetime(lf) => {
             return Err(syn::Error::new_spanned(
                 lf,
-                "Lifetime parameters not supported.",
+                "Lifetime parameters are not supported.",
             ))
         }
         GenericParam::Const(cnst) => {
             return Err(syn::Error::new_spanned(
                 cnst,
-                "Const parameters not supported.",
+                "Const parameters are not supported.",
             ))
         }
     };
@@ -279,4 +279,43 @@ pub(crate) fn get_serialization_attrs(
     }
 
     Ok(serialization_attrs)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_generic_type_param_success() {
+        // tests for get_generics_type_param
+        let generics = syn::parse_quote! {
+            <T: Trait>
+        };
+
+        let generic_param = get_generics_type_param(&generics, Span::call_site()).unwrap();
+        assert_eq!(generic_param, "T");
+    }
+
+    #[test]
+    fn get_generic_type_param_first_lifetime() {
+        let generics = syn::parse_quote! {
+            <'a, T: Trait>
+        };
+        let generic_param = get_generics_type_param(&generics, Span::call_site());
+        let error = generic_param.unwrap_err();
+        assert_eq!(error.to_string(), "Lifetime parameters are not supported.");
+    }
+
+    #[test]
+    fn get_generic_type_param_first_const() {
+        // error test case for get_generics_type_param when first generic param is const
+        let generics = syn::parse_quote! {
+            <const T: Trait>
+        };
+        let span = Span::call_site();
+        let generic_param = get_generics_type_param(&generics, span.clone());
+
+        let error = generic_param.unwrap_err();
+        assert_eq!(error.to_string(), "Const parameters are not supported.");
+    }
 }

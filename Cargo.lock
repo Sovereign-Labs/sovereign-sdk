@@ -2259,19 +2259,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0206175f82b8d6bf6652ff7d71a1e27fd2e4efde587fd368662814d6ec1d9ce0"
 
 [[package]]
-name = "expose_rpc_debug"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "jsonrpsee",
- "serde",
- "sov-modules-api",
- "sov-state",
- "tracing",
-]
-
-[[package]]
 name = "eyre"
 version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
