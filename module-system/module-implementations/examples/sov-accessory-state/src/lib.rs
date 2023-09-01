@@ -1,3 +1,6 @@
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
+
 #[cfg(feature = "native")]
 pub mod query;
 
@@ -6,17 +9,34 @@ use sov_state::codec::BorshCodec;
 use sov_state::storage::{StorageKey, StorageValue};
 use sov_state::{Prefix, StateValue, WorkingSet};
 
+/// [`AccessorySetter`] is a module that stores data both *inside* the JMT and
+/// *outside* the JMT.
+///
+/// Data stored inside the JMT contributes to the state root hash, and is always
+/// accessible. This costs significant compute, and should be avoided for all
+/// data that is not necessary to the core functioning of the rollup. Other data
+/// that facilitates serving queries over JSON-RPC or only accessed by tooling
+/// doesn't need to be verifiable, and can thus be stored outside the JMT much
+/// more cheaply. Since accessory data is not included in the state root hash,
+/// it is not accessible inside the zkVM and can only be accessed with
+/// `#[cfg(feature = "native")]`.
 #[derive(ModuleInfo)]
 pub struct AccessorySetter<C: sov_modules_api::Context> {
+    /// The address of the module.
     #[address]
     pub address: C::Address,
+    /// Some arbitrary value stored in the JMT to demonstrate the difference
+    /// between the JMT and accessory state.
     #[state]
     pub latest_value: StateValue<String>,
 }
 
+/// The [`Module::CallMessage`] for [`AccessorySetter`].
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage {
+    /// Sets the value of [`AccessorySetter::latest_value`].
     SetValue(String),
+    /// Stores some arbitrary value in the accessory state.
     SetValueAccessory(String),
 }
 
@@ -26,7 +46,7 @@ impl<C: Context> AccessorySetter<C> {
         self.latest_value.set(&s, working_set);
     }
 
-    /// Sets a value in the non-JMT state.
+    /// Sets a value in the accessory state.
     fn set_value_accessory(&self, s: String, working_set: &mut WorkingSet<C::Storage>) {
         let prefix = Prefix::new(self.address.as_ref().to_vec());
         let key = StorageKey::new(&prefix, "value");
@@ -34,10 +54,13 @@ impl<C: Context> AccessorySetter<C> {
         working_set.set_accessory(key, new_value);
     }
 
+    /// Returns the value of [`AccessorySetter::latest_value`].
     pub fn get_value(&self, working_set: &mut WorkingSet<C::Storage>) -> Option<String> {
         self.latest_value.get(working_set)
     }
 
+    /// Returns the latest value set in the accessory state via
+    /// [`CallMessage::SetValueAccessory`].
     #[cfg(feature = "native")]
     pub fn get_value_accessory(&self, working_set: &mut WorkingSet<C::Storage>) -> Option<String> {
         use sov_state::codec::StateValueCodec;
