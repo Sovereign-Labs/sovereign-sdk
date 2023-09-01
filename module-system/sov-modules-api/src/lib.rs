@@ -67,7 +67,7 @@ use thiserror::Error;
 pub use crate::bech32::AddressBech32;
 
 pub mod optimistic {
-    pub use sov_rollup_interface::optimistic::Attestation;
+    pub use sov_rollup_interface::optimistic::{Attestation, ProofOfBond};
 }
 
 impl AsRef<[u8]> for Address {

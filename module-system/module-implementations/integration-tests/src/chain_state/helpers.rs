@@ -62,7 +62,7 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
 
     fn begin_slot_hook(
         &self,
-        slot_data: &impl sov_rollup_interface::services::da::SlotData<Cond = Da::ValidityCondition>,
+        slot_data: &impl sov_modules_api::SlotData<Cond = Da::ValidityCondition>,
         working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
     ) {
         self.chain_state.begin_slot_hook(slot_data, working_set)
