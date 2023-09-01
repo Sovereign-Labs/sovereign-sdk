@@ -87,6 +87,9 @@ impl<S: Storage> StateCheckpoint<S> {
 }
 
 struct AccessoryDelta<S: Storage> {
+    // This inner storage is never accessed inside the zkVM because reads are
+    // not allowed, so it can result as dead code.
+    #[allow(dead_code)]
     storage: S,
     writes: RevertableWrites,
 }
