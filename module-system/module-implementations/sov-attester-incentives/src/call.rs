@@ -25,7 +25,7 @@ pub enum CallMessage<C: sov_modules_api::Context> {
     EndUnbondingAttester,
     /// Bonds a challenger, the parameter is the bond amount
     BondChallenger(Amount),
-    /// Unbinds a challenger
+    /// Unbonds a challenger
     UnbondChallenger,
     /// Processes an attestation.
     ProcessAttestation(Attestation<StorageProof<<<C as Spec>::Storage as Storage>::Proof>>),
