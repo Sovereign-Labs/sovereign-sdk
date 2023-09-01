@@ -224,9 +224,11 @@ where
                     };
                 host.add_hint(transition_data);
 
-                verifier.run_block(host.guest_with_hints()).map_err(|e| {
-                    anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
-                })?;
+                verifier
+                    .run_block(host.simulate_with_hints())
+                    .map_err(|e| {
+                        anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
+                    })?;
             }
 
             self.ledger_db.commit_slot(data_to_commit)?;

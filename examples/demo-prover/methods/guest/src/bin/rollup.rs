@@ -31,7 +31,7 @@ risc0_zkvm::guest::entry!(main);
 //  6. Output (Da hash, start_root, end_root, event_root)
 pub fn main() {
     env::write(&"Start guest\n");
-    let guest = Risc0Guest;
+    let guest = Risc0Guest::new();
 
     #[cfg(feature = "bench")]
     let start_cycles = env::get_cycle_count();

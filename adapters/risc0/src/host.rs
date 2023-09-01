@@ -15,6 +15,7 @@ use crate::metrics::metrics_callback;
 use crate::Risc0MethodId;
 
 pub struct Risc0Host<'a> {
+    prove: Box<dyn Fn(u64) -> bool>,
     env: Mutex<Vec<u32>>,
     elf: &'a [u8],
 }
@@ -37,7 +38,15 @@ fn add_benchmarking_callbacks(mut env: ExecutorEnvBuilder<'_>) -> ExecutorEnvBui
 
 impl<'a> Risc0Host<'a> {
     pub fn new(elf: &'a [u8]) -> Self {
+        Self::with_proof_selector(elf, |_| true)
+    }
+
+    pub fn with_proof_selector<F>(elf: &'a [u8], prove_at_heights: F) -> Self
+    where
+        F: Fn(u64) -> bool + 'static,
+    {
         Self {
+            prove: Box::new(prove_at_heights),
             env: Default::default(),
             elf,
         }
@@ -64,13 +73,13 @@ impl<'a> Risc0Host<'a> {
 impl<'a> ZkvmHost for Risc0Host<'a> {
     fn add_hint<T: serde::Serialize>(&self, item: T) {
         let serialized = to_vec(&item).expect("Serialization to vec is infallible");
-        self.env.lock().unwrap().extend_from_slice(&serialized);
+        self.env.lock().unwrap().extend_from_slice(&serialized[..]);
     }
 
     type Guest = Risc0Guest;
 
-    fn guest_with_hints(&mut self) -> Self::Guest {
-        todo!()
+    fn simulate_with_hints(&mut self) -> Self::Guest {
+        Risc0Guest::with_hints(std::mem::take(&mut self.env.lock().unwrap()))
     }
 }
 

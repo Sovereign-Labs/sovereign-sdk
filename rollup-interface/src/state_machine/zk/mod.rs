@@ -24,7 +24,7 @@ pub trait ZkvmHost: ZkVerifier {
     fn add_hint<T: Serialize>(&self, item: T);
 
     /// Drain the accumualted hints, sending them to a new guest instance
-    fn guest_with_hints(&mut self) -> Self::Guest;
+    fn simulate_with_hints(&mut self) -> Self::Guest;
 }
 
 /// A Zk proof system capable of proving and verifying arbitrary Rust code

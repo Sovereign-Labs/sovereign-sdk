@@ -96,7 +96,7 @@ impl ZkvmHost for MockZkvm {
 
     type Guest = Self;
 
-    fn guest_with_hints(&mut self) -> Self::Guest {
+    fn simulate_with_hints(&mut self) -> Self::Guest {
         MockZkvm {
             hints: Mutex::new(std::mem::take(&mut self.hints.lock().unwrap())),
             outputs: Default::default(),
