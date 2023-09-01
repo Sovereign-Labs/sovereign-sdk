@@ -11,14 +11,15 @@ mod da_simulation;
 mod stf_tests;
 mod tx_revert_tests;
 pub(crate) type C = DefaultContext;
+pub(crate) type Da = MockDaSpec;
 
 pub fn create_new_demo(
     path: impl AsRef<Path>,
 ) -> AppTemplate<
     DefaultContext,
-    MockDaSpec,
+    Da,
     sov_rollup_interface::mocks::MockZkvm,
-    Runtime<DefaultContext>,
+    Runtime<DefaultContext, Da>,
 > {
     let runtime = Runtime::default();
     let storage = ProverStorage::with_path(path).unwrap();

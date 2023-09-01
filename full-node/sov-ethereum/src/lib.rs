@@ -70,7 +70,7 @@ pub mod experimental {
         }
     }
 
-    impl<DA: DaService> Ethereum<DA> {
+    impl<Da: DaService> Ethereum<Da> {
         fn make_raw_tx(
             &self,
             raw_tx: RawEvmTransaction,
@@ -90,10 +90,9 @@ pub mod experimental {
                 .or_insert(0);
 
             let tx = CallMessage { tx: raw_tx };
-            let message =
-                <Runtime<DefaultContext> as EncodeCall<sov_evm::Evm<DefaultContext>>>::encode_call(
-                    tx,
-                );
+            let message = <Runtime<DefaultContext, Da::Spec> as EncodeCall<
+                sov_evm::Evm<DefaultContext>,
+            >>::encode_call(tx);
 
             let tx = Transaction::<DefaultContext>::new_signed_tx(
                 &self.eth_rpc_config.tx_signer_priv_key,
