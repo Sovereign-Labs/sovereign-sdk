@@ -7,7 +7,7 @@ pub mod test {
     use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
     use sov_modules_api::PrivateKey;
     use sov_modules_stf_template::{Batch, SequencerOutcome};
-    use sov_rollup_interface::mocks::MockBlock;
+    use sov_rollup_interface::mocks::{MockBlock, MockDaSpec};
     use sov_rollup_interface::stf::StateTransitionFunction;
     use sov_state::{ProverStorage, WorkingSet};
 
@@ -53,7 +53,7 @@ pub mod test {
 
         // Generate a new storage instance after dumping data to the db.
         {
-            let runtime = &mut Runtime::<DefaultContext>::default();
+            let runtime = &mut Runtime::<DefaultContext, MockDaSpec>::default();
             let storage = ProverStorage::with_path(path).unwrap();
             let mut working_set = WorkingSet::new(storage);
             let resp = runtime
@@ -102,7 +102,7 @@ pub mod test {
 
         assert!(has_tx_events(&apply_blob_outcome),);
 
-        let runtime = &mut Runtime::<DefaultContext>::default();
+        let runtime = &mut Runtime::<DefaultContext, MockDaSpec>::default();
         let mut working_set = WorkingSet::new(demo.current_storage.clone());
 
         let resp = runtime
@@ -149,9 +149,9 @@ pub mod test {
             );
         }
 
-        // Generate a new storage instance, value are missing because we didn't call `end_slot()`;
+        // Generate a new storage instance, values are missing because we didn't call `end_slot()`;
         {
-            let runtime = &mut Runtime::<C>::default();
+            let runtime = &mut Runtime::<C, MockDaSpec>::default();
             let storage = ProverStorage::with_path(path).unwrap();
             let mut working_set = WorkingSet::new(storage);
 

@@ -6,7 +6,7 @@ use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
 use sov_modules_stf_template::{Batch, SequencerOutcome, SlashingReason, TxEffect};
 use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::mocks::MockBlock;
+use sov_rollup_interface::mocks::{MockBlock, MockDaSpec};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_state::{ProverStorage, WorkingSet};
 
@@ -66,7 +66,7 @@ fn test_tx_revert() {
 
     // Checks
     {
-        let runtime = &mut Runtime::<DefaultContext>::default();
+        let runtime = &mut Runtime::<DefaultContext, MockDaSpec>::default();
         let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
         let resp = runtime
@@ -134,7 +134,7 @@ fn test_nonce_incremented_on_revert() {
     // 1 -> 2
     // 2 -> 3
     {
-        let runtime = &mut Runtime::<DefaultContext>::default();
+        let runtime = &mut Runtime::<DefaultContext, MockDaSpec>::default();
         let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
         let nonce = match runtime
@@ -291,7 +291,7 @@ fn test_tx_bad_serialization() {
     }
 
     {
-        let runtime = &mut Runtime::<DefaultContext>::default();
+        let runtime = &mut Runtime::<DefaultContext, MockDaSpec>::default();
         let storage = ProverStorage::with_path(path).unwrap();
         let mut working_set = WorkingSet::new(storage);
 

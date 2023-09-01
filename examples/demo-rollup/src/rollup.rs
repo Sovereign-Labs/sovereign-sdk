@@ -30,17 +30,17 @@ use crate::{get_genesis_config, initialize_ledger, ROLLUP_NAMESPACE};
 const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
 
 /// Dependencies needed to run the rollup.
-pub struct Rollup<Vm: Zkvm, DA: DaService + Clone> {
+pub struct Rollup<Vm: Zkvm, Da: DaService + Clone> {
     /// Implementation of the STF.
-    pub app: App<Vm, DA::Spec>,
+    pub app: App<Vm, Da::Spec>,
     /// Data availability service.
-    pub da_service: DA,
+    pub da_service: Da,
     /// Ledger db.
     pub ledger_db: LedgerDB,
     /// Runner configuration.
     pub runner_config: RunnerConfig,
     /// Initial rollup configuration.
-    pub genesis_config: GenesisConfig<DefaultContext>,
+    pub genesis_config: GenesisConfig<DefaultContext, Da::Spec>,
     #[cfg(feature = "experimental")]
     /// Configuration for the Ethereum RPC.
     pub eth_rpc_config: EthRpcConfig,
@@ -98,7 +98,7 @@ pub fn read_tx_signer_priv_key() -> Result<DefaultPrivateKey, anyhow::Error> {
     Ok(priv_key)
 }
 
-impl<Vm: Zkvm, DA: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, DA> {
+impl<Vm: Zkvm, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> {
     /// Runs the rollup.
     pub async fn run(self) -> Result<(), anyhow::Error> {
         self.run_and_report_rpc_port(None).await
@@ -110,7 +110,7 @@ impl<Vm: Zkvm, DA: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, DA> {
         channel: Option<oneshot::Sender<SocketAddr>>,
     ) -> Result<(), anyhow::Error> {
         let storage = self.app.get_storage();
-        let mut methods = get_rpc_methods::<DefaultContext>(storage);
+        let mut methods = get_rpc_methods::<DefaultContext, Da::Spec>(storage);
 
         // register rpc methods
         {

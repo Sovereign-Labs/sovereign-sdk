@@ -7,6 +7,7 @@ license = { workspace = true }
 homepage = "sovereign.xyz"
 publish = false
 resolver = "2"
+default-run = "sov-demo-rollup"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -77,3 +78,7 @@ harness = false
 [[bench]]
 name = "rollup_coarse_measure"
 harness = false
+
+[[bin]]
+name = "sov-cli"
+path = "src/sov-cli/main.rs"

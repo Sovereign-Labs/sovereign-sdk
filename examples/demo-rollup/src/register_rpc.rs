@@ -13,13 +13,13 @@ use sov_sequencer::get_sequencer_rpc;
 use sov_stf_runner::get_ledger_rpc;
 
 /// register sequencer rpc methods.
-pub fn register_sequencer<Vm, DA>(
-    da_service: DA,
-    app: &mut App<Vm, DA::Spec>,
+pub fn register_sequencer<Vm, Da>(
+    da_service: Da,
+    app: &mut App<Vm, Da::Spec>,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error>
 where
-    DA: DaService,
+    Da: DaService,
     Vm: Zkvm,
 {
     let batch_builder = app.batch_builder.take().unwrap();
