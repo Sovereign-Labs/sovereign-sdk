@@ -1,13 +1,12 @@
 #[cfg(feature = "experimental")]
 mod batch_builder;
-pub use batch_builder::EthBatchBuilder;
 #[cfg(feature = "experimental")]
 pub use experimental::{get_ethereum_rpc, Ethereum};
 
 #[cfg(feature = "experimental")]
 pub mod experimental {
     use std::collections::HashMap;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     use borsh::ser::BorshSerialize;
     use demo_stf::app::DefaultPrivateKey;
@@ -22,34 +21,56 @@ pub mod experimental {
     use sov_modules_api::transaction::Transaction;
     use sov_modules_api::utils::to_jsonrpsee_error_object;
     use sov_modules_api::EncodeCall;
-    use sov_rollup_interface::services::batch_builder::{self, BatchBuilder};
     use sov_rollup_interface::services::da::DaService;
+
+    use super::batch_builder::EthBatchBuilder;
 
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 
-    pub fn get_ethereum_rpc<B: BatchBuilder + Send + Sync + 'static, DA: DaService>(
+    pub struct EthRpcConfig {
+        pub min_blob_size: Option<usize>,
+        pub tx_signer_priv_key: DefaultPrivateKey,
+    }
+
+    pub fn get_ethereum_rpc<DA: DaService>(
         da_service: DA,
-        tx_signer_prov_key: DefaultPrivateKey,
-        batch_builder: B,
-    ) -> RpcModule<Ethereum<B, DA>> {
-        let mut rpc = RpcModule::new(Ethereum {
-            nonces: Default::default(),
-            tx_signer_prov_key,
+        eth_rpc_config: EthRpcConfig,
+    ) -> RpcModule<Ethereum<DA>> {
+        let mut rpc = RpcModule::new(Ethereum::new(
+            Default::default(),
             da_service,
-            batch_builder,
-        });
+            Arc::new(Mutex::new(EthBatchBuilder::default())),
+            eth_rpc_config,
+        ));
+
         register_rpc_methods(&mut rpc).expect("Failed to register sequencer RPC methods");
         rpc
     }
 
-    pub struct Ethereum<B: BatchBuilder, DA: DaService> {
+    pub struct Ethereum<DA: DaService> {
         nonces: Mutex<HashMap<EthAddress, u64>>,
-        tx_signer_prov_key: DefaultPrivateKey,
         da_service: DA,
-        batch_builder: B,
+        batch_builder: Arc<Mutex<EthBatchBuilder>>,
+        eth_rpc_config: EthRpcConfig,
     }
 
-    impl<B: BatchBuilder, DA: DaService> Ethereum<B, DA> {
+    impl<DA: DaService> Ethereum<DA> {
+        fn new(
+            nonces: Mutex<HashMap<EthAddress, u64>>,
+            da_service: DA,
+            batch_builder: Arc<Mutex<EthBatchBuilder>>,
+            eth_rpc_config: EthRpcConfig,
+        ) -> Self {
+            Self {
+                nonces,
+                da_service,
+                batch_builder,
+                eth_rpc_config,
+            }
+        }
+    }
+
+    impl<DA: DaService> Ethereum<DA> {
         fn make_raw_tx(
             &self,
             raw_tx: RawEvmTransaction,
@@ -75,37 +96,79 @@ pub mod experimental {
                 );
 
             let tx = Transaction::<DefaultContext>::new_signed_tx(
-                &self.tx_signer_prov_key,
+                &self.eth_rpc_config.tx_signer_priv_key,
                 message,
                 nonce,
             );
             Ok((H256::from(tx_hash), tx.try_to_vec()?))
         }
+
+        async fn submit_batch(&self, raw_txs: Vec<Vec<u8>>) -> Result<(), jsonrpsee::core::Error> {
+            let blob = raw_txs
+                .try_to_vec()
+                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+
+            self.da_service
+                .send_transaction(&blob)
+                .await
+                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+
+            Ok(())
+        }
     }
 
-    fn register_rpc_methods<B: BatchBuilder + Send + Sync + 'static, DA: DaService>(
-        rpc: &mut RpcModule<Ethereum<B, DA>>,
+    fn register_rpc_methods<DA: DaService>(
+        rpc: &mut RpcModule<Ethereum<DA>>,
     ) -> Result<(), jsonrpsee::core::Error> {
+        rpc.register_async_method("eth_publishBatch", |params, ethereum| async move {
+            let mut params_iter = params.sequence();
+
+            let mut txs = Vec::default();
+            while let Some(tx) = params_iter.optional_next::<Vec<u8>>()? {
+                txs.push(tx)
+            }
+
+            let blob = ethereum
+                .batch_builder
+                .lock()
+                .unwrap()
+                .add_transactions_and_get_next_blob(Some(1), txs);
+
+            if !blob.is_empty() {
+                ethereum
+                    .submit_batch(blob)
+                    .await
+                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+            }
+            Ok::<String, ErrorObjectOwned>(format!("Submitted transaction"))
+        })?;
+
         rpc.register_async_method(
             "eth_sendRawTransaction",
             |parameters, ethereum| async move {
                 let data: Bytes = parameters.one().unwrap();
 
                 let raw_evm_tx = RawEvmTransaction { rlp: data.to_vec() };
+
                 let (tx_hash, raw_tx) = ethereum
                     .make_raw_tx(raw_evm_tx)
                     .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
-                let blob = vec![raw_tx]
-                    .try_to_vec()
-                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+                let blob = ethereum
+                    .batch_builder
+                    .lock()
+                    .unwrap()
+                    .add_transactions_and_get_next_blob(
+                        ethereum.eth_rpc_config.min_blob_size,
+                        vec![raw_tx],
+                    );
 
-                ethereum
-                    .da_service
-                    .send_transaction(&blob)
-                    .await
-                    .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
-
+                if !blob.is_empty() {
+                    ethereum
+                        .submit_batch(blob)
+                        .await
+                        .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
+                }
                 Ok::<_, ErrorObjectOwned>(tx_hash)
             },
         )?;
