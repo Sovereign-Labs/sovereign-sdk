@@ -206,6 +206,7 @@ impl SlotData for MockBlock {
 }
 
 /// A [`DaSpec`] suitable for testing.
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct MockDaSpec;
 
 impl DaSpec for MockDaSpec {

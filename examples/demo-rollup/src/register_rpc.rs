@@ -42,8 +42,8 @@ pub fn register_ledger(
 
 #[cfg(feature = "experimental")]
 /// register ethereum methods.
-pub fn register_ethereum<DA: DaService>(
-    da_service: DA,
+pub fn register_ethereum<Da: DaService>(
+    da_service: Da,
     eth_rpc_config: EthRpcConfig,
     methods: &mut jsonrpsee::RpcModule<()>,
 ) -> Result<(), anyhow::Error> {
