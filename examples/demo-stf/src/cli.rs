@@ -1,6 +1,3 @@
-use std::path::PathBuf;
-
-use demo_stf::runtime::{Runtime, RuntimeCall, RuntimeSubcommand};
 use sov_cli::wallet_state::WalletState;
 use sov_cli::workflows::keys::KeyWorkflow;
 use sov_cli::workflows::rpc::RpcWorkflows;
@@ -10,7 +7,8 @@ use sov_modules_api::clap::Parser;
 use sov_modules_api::cli::{FileNameArg, JsonStringArg};
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::mocks::MockDaSpec;
+
+use crate::runtime::{Runtime, RuntimeCall, RuntimeSubcommand};
 
 type Ctx = DefaultContext;
 
@@ -37,10 +35,11 @@ pub struct App<Da: DaSpec> {
     workflow: Workflows<Da>,
 }
 
-async fn run_workflow<Da: DaSpec>(
-    app_dir: impl AsRef<std::path::Path>,
-    wallet_state_path: PathBuf,
-) -> Result<(), anyhow::Error> {
+pub async fn run<Da: DaSpec>() -> Result<(), anyhow::Error> {
+    let app_dir = wallet_dir()?;
+    std::fs::create_dir_all(app_dir.as_ref())?;
+    let wallet_state_path = app_dir.as_ref().join("wallet_state.json");
+
     let mut wallet_state: WalletState<RuntimeCall<Ctx, Da>, Ctx> =
         WalletState::load(&wallet_state_path)?;
 
@@ -58,13 +57,4 @@ async fn run_workflow<Da: DaSpec>(
         }
     }
     wallet_state.save(wallet_state_path)
-}
-
-pub async fn main() -> Result<(), anyhow::Error> {
-    let app_dir = wallet_dir()?;
-    std::fs::create_dir_all(app_dir.as_ref())?;
-    let wallet_state_path = app_dir.as_ref().join("wallet_state.json");
-
-    // TODO: Add params here
-    run_workflow::<MockDaSpec>(app_dir, wallet_state_path).await
 }

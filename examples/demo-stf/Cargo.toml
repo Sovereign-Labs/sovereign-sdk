@@ -8,10 +8,6 @@ license = { workspace = true }
 homepage = "sovereign.xyz"
 publish = false
 
-[[bin]]
-name = "sov-cli"
-path = "src/sov-cli/main.rs"
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

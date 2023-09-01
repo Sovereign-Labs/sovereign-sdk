@@ -1,10 +1,7 @@
 #[cfg(feature = "native")]
-mod native;
-
-#[cfg(feature = "native")]
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    native::main().await
+    demo_stf::cli::run::<celestia::CelestiaService::Spec>().await
 }
 
 #[cfg(not(feature = "native"))]

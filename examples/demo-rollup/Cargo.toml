@@ -77,3 +77,7 @@ harness = false
 [[bench]]
 name = "rollup_coarse_measure"
 harness = false
+
+[[bin]]
+name = "sov-cli"
+path = "src/sov-cli/main.rs"
