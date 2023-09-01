@@ -140,7 +140,7 @@ pub mod experimental {
                     .await
                     .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
             }
-            Ok::<String, ErrorObjectOwned>(format!("Submitted transaction"))
+            Ok::<String, ErrorObjectOwned>("Submitted transaction".to_string())
         })?;
 
         rpc.register_async_method(
