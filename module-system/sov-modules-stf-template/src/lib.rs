@@ -68,18 +68,18 @@ pub enum SlashingReason {
     InvalidTransactionEncoding,
 }
 
-impl<C, RT, Vm, DA> AppTemplate<C, DA, Vm, RT>
+impl<C, RT, Vm, Da> AppTemplate<C, Da, Vm, RT>
 where
     C: Context,
     Vm: Zkvm,
-    DA: DaSpec,
-    RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
+    Da: DaSpec,
+    RT: Runtime<C, Da::ValidityCondition, Da::BlobTransaction>,
 {
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_slot(
         &mut self,
-        slot_data: &impl SlotData<Cond = DA::ValidityCondition>,
-        witness: <Self as StateTransitionFunction<Vm, DA::BlobTransaction>>::Witness,
+        slot_data: &impl SlotData<Cond = Da::ValidityCondition>,
+        witness: <Self as StateTransitionFunction<Vm, Da::BlobTransaction>>::Witness,
     ) {
         let state_checkpoint = StateCheckpoint::with_witness(self.current_storage.clone(), witness);
         let mut working_set = state_checkpoint.to_revertable();
@@ -105,12 +105,12 @@ where
     }
 }
 
-impl<C, RT, Vm, DA> StateTransitionFunction<Vm, DA::BlobTransaction> for AppTemplate<C, DA, Vm, RT>
+impl<C, RT, Vm, Da> StateTransitionFunction<Vm, Da::BlobTransaction> for AppTemplate<C, Da, Vm, RT>
 where
     C: Context,
-    DA: DaSpec,
+    Da: DaSpec,
     Vm: Zkvm,
-    RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
+    RT: Runtime<C, Da::ValidityCondition, Da::BlobTransaction>,
 {
     type StateRoot = jmt::RootHash;
 
@@ -118,11 +118,11 @@ where
 
     type TxReceiptContents = TxEffect;
 
-    type BatchReceiptContents = SequencerOutcome<<DA::BlobTransaction as BlobReaderTrait>::Address>;
+    type BatchReceiptContents = SequencerOutcome<<Da::BlobTransaction as BlobReaderTrait>::Address>;
 
     type Witness = <<C as Spec>::Storage as Storage>::Witness;
 
-    type Condition = DA::ValidityCondition;
+    type Condition = Da::ValidityCondition;
 
     fn init_chain(&mut self, params: Self::InitialState) -> jmt::RootHash {
         let mut working_set = StateCheckpoint::new(self.current_storage.clone()).to_revertable();
@@ -153,7 +153,7 @@ where
         Self::Witness,
     >
     where
-        I: IntoIterator<Item = &'a mut DA::BlobTransaction>,
+        I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
         Data: SlotData<Cond = Self::Condition>,
     {
         self.begin_slot(slot_data, witness);

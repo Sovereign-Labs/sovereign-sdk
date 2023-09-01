@@ -116,8 +116,8 @@ pub(crate) fn create_demo_genesis_config<C: Context, Cond: ValidityCondition>(
 }
 
 /// Clones the [`AppTemplate`]'s [`Storage`] and extract the underlying [`WorkingSet`]
-pub(crate) fn get_working_set<C: Context, DA: DaSpec>(
-    app_template: &AppTemplate<C, DA, MockZkvm, TestRuntime<C, DA::ValidityCondition>>,
+pub(crate) fn get_working_set<C: Context, Da: DaSpec>(
+    app_template: &AppTemplate<C, Da, MockZkvm, TestRuntime<C, Da::ValidityCondition>>,
 ) -> WorkingSet<<C as Spec>::Storage> {
     WorkingSet::new(app_template.current_storage.clone())
 }

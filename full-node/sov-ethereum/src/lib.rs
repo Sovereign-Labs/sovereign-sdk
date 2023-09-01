@@ -32,10 +32,10 @@ pub mod experimental {
         pub tx_signer_priv_key: DefaultPrivateKey,
     }
 
-    pub fn get_ethereum_rpc<DA: DaService>(
-        da_service: DA,
+    pub fn get_ethereum_rpc<Da: DaService>(
+        da_service: Da,
         eth_rpc_config: EthRpcConfig,
-    ) -> RpcModule<Ethereum<DA>> {
+    ) -> RpcModule<Ethereum<Da>> {
         let mut rpc = RpcModule::new(Ethereum::new(
             Default::default(),
             da_service,
@@ -47,17 +47,17 @@ pub mod experimental {
         rpc
     }
 
-    pub struct Ethereum<DA: DaService> {
+    pub struct Ethereum<Da: DaService> {
         nonces: Mutex<HashMap<EthAddress, u64>>,
-        da_service: DA,
+        da_service: Da,
         batch_builder: Arc<Mutex<EthBatchBuilder>>,
         eth_rpc_config: EthRpcConfig,
     }
 
-    impl<DA: DaService> Ethereum<DA> {
+    impl<Da: DaService> Ethereum<Da> {
         fn new(
             nonces: Mutex<HashMap<EthAddress, u64>>,
-            da_service: DA,
+            da_service: Da,
             batch_builder: Arc<Mutex<EthBatchBuilder>>,
             eth_rpc_config: EthRpcConfig,
         ) -> Self {
@@ -116,8 +116,8 @@ pub mod experimental {
         }
     }
 
-    fn register_rpc_methods<DA: DaService>(
-        rpc: &mut RpcModule<Ethereum<DA>>,
+    fn register_rpc_methods<Da: DaService>(
+        rpc: &mut RpcModule<Ethereum<Da>>,
     ) -> Result<(), jsonrpsee::core::Error> {
         rpc.register_async_method("eth_publishBatch", |params, ethereum| async move {
             let mut params_iter = params.sequence();
