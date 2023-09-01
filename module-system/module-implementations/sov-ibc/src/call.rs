@@ -37,6 +37,7 @@ pub struct RawMsgCreateClient {
 pub enum CallMessage<C: sov_modules_api::Context> {
     // TODO: Change to Core(MsgEnvelope)
     MsgCreateClient(RawMsgCreateClient),
+    Core(MsgEnvelope),
 
     // TODO: add Transfer message, and remove from transfer module
     Transfer {
@@ -79,6 +80,27 @@ impl<C: sov_modules_api::Context> IbcModule<C> {
         let mut router = IbcRouter::new(self, context, shared_working_set);
 
         match dispatch(&mut execution_context, &mut router, domain_msg) {
+            Ok(_) => Ok(CallResponse::default()),
+            Err(e) => bail!(e.to_string()),
+        }
+    }
+
+    pub(crate) fn process_core_message(
+        &self,
+        msg: MsgEnvelope,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<sov_modules_api::CallResponse> {
+        let shared_working_set = Rc::new(RefCell::new(working_set));
+
+        let mut execution_context = IbcExecutionContext {
+            ibc: self,
+            working_set: shared_working_set.clone(),
+        };
+
+        let mut router = IbcRouter::new(self, context, shared_working_set);
+
+        match dispatch(&mut execution_context, &mut router, msg) {
             Ok(_) => Ok(CallResponse::default()),
             Err(e) => bail!(e.to_string()),
         }

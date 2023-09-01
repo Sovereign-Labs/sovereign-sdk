@@ -61,6 +61,9 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcModule<C> {
             call::CallMessage::MsgCreateClient(msg) => {
                 Ok(self.create_client(msg, context, working_set)?)
             }
+            call::CallMessage::Core(msg_envelope) => {
+                Ok(self.process_core_message(msg_envelope, context, working_set)?)
+            }
             call::CallMessage::Transfer {
                 msg_transfer,
                 token_address,

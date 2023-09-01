@@ -93,7 +93,7 @@ jsonrpsee = {version = "0.18.2", features = ["jsonrpsee-types"] }
 schemars = { version = "0.8.12", features = ["derive"] }
 tempfile = "3.5"
 tokio = { version = "1", features = ["full"] }
-ibc = { git = "https://github.com/cosmos/ibc-rs", rev = "1ed7d2e", features = ["borsh", "schema", "serde"]}
+ibc = { git = "https://github.com/cosmos/ibc-rs", rev = "7c49ec1", features = ["borsh", "schema", "serde"]}
 ibc-proto = { version = "0.34.1", default-features = false, features = ["borsh"] }
 
 
