@@ -3,22 +3,34 @@ use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockBlock, MockValidity
 use sov_rollup_interface::stf::StateTransitionFunction;
 
 #[test]
-fn test_stf() {
+fn test_stf_success() {
     let address = MockAddress { addr: [1; 32] };
-    let preimage = vec![0; 32];
 
-    let test_blob = MockBlob::new(preimage, address, [0; 32]);
     let stf = &mut CheckHashPreimageStf::<MockValidityCond>::default();
-
-    let data = MockBlock::default();
-    let mut blobs = [test_blob];
-
     StateTransitionFunction::<MockZkvm, MockBlob>::init_chain(stf, ());
 
-    let result =
-        StateTransitionFunction::<MockZkvm, MockBlob>::apply_slot(stf, (), &data, &mut blobs);
+    let mut blobs = {
+        let incorrect_preimage = vec![1; 32];
+        let correct_preimage = vec![0; 32];
 
-    assert_eq!(1, result.batch_receipts.len());
-    let receipt = result.batch_receipts[0].clone();
+        [
+            MockBlob::new(incorrect_preimage, address, [0; 32]),
+            MockBlob::new(correct_preimage, address, [0; 32]),
+        ]
+    };
+
+    let result = StateTransitionFunction::<MockZkvm, MockBlob>::apply_slot(
+        stf,
+        (),
+        &MockBlock::default(),
+        &mut blobs,
+    );
+
+    assert_eq!(2, result.batch_receipts.len());
+
+    let receipt = &result.batch_receipts[0];
+    assert_eq!(receipt.inner, ApplySlotResult::Failure);
+
+    let receipt = &result.batch_receipts[1];
     assert_eq!(receipt.inner, ApplySlotResult::Success);
 }
