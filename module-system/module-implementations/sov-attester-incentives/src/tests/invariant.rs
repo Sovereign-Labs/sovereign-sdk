@@ -1,5 +1,5 @@
 use sov_modules_api::default_context::DefaultContext;
-use sov_rollup_interface::optimistic::Attestation;
+use sov_modules_api::optimistic::Attestation;
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::call::AttesterIncentiveErrors;
