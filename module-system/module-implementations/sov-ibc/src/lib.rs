@@ -58,9 +58,6 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for IbcModule<C> {
     ) -> Result<sov_modules_api::CallResponse, Error> {
         // Note: Here, we would convert into a `MsgEnvelope`, and send to `dispatch()` (i.e. no match statement)
         match msg {
-            call::CallMessage::MsgCreateClient(msg) => {
-                Ok(self.create_client(msg, context, working_set)?)
-            }
             call::CallMessage::Core(msg_envelope) => {
                 Ok(self.process_core_message(msg_envelope, context, working_set)?)
             }
