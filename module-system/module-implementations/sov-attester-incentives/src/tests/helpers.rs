@@ -75,7 +75,7 @@ pub(crate) fn create_bank_config_with_token(
 pub(crate) fn setup(
     working_set: &mut WorkingSet<<C as Spec>::Storage>,
 ) -> (
-    AttesterIncentives<C, MockZkvm, MockValidityCond, MockValidityCondChecker<MockValidityCond>>,
+    AttesterIncentives<C, MockZkvm, MockDaSpec, MockValidityCondChecker<MockValidityCond>>,
     Address,
     Address,
     Address,
@@ -98,7 +98,7 @@ pub(crate) fn setup(
         initial_slot_height: INIT_HEIGHT,
     };
 
-    let chain_state = sov_chain_state::ChainState::<C, MockValidityCond>::default();
+    let chain_state = sov_chain_state::ChainState::<C, MockDaSpec>::default();
     chain_state
         .genesis(&chain_state_config, working_set)
         .expect("Chain state genesis must succeed");
@@ -107,7 +107,7 @@ pub(crate) fn setup(
     let module = AttesterIncentives::<
         C,
         MockZkvm,
-        MockValidityCond,
+        MockDaSpec,
         MockValidityCondChecker<MockValidityCond>,
     >::default();
     let config = crate::AttesterIncentivesConfig {

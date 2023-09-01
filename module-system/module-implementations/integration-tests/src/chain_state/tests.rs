@@ -27,12 +27,10 @@ fn test_simple_value_setter_with_chain_state() {
         ProverStorage::with_path(tmpdir.path()).unwrap();
 
     let mut app_template =
-        AppTemplate::<C, MockDaSpec, MockZkvm, TestRuntime<C, MockValidityCond>>::new(
-            storage, runtime,
-        );
+        AppTemplate::<C, MockDaSpec, MockZkvm, TestRuntime<C, MockDaSpec>>::new(storage, runtime);
 
     let value_setter_messages = ValueSetterMessages::default();
-    let value_setter = value_setter_messages.create_raw_txs::<TestRuntime<C, MockValidityCond>>();
+    let value_setter = value_setter_messages.create_raw_txs::<TestRuntime<C, MockDaSpec>>();
 
     let admin_pub_key = value_setter_messages.messages[0].admin.default_address();
 
