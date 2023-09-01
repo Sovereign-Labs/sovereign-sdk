@@ -6,7 +6,9 @@ use celestia::verifier::address::CelestiaAddress;
 use celestia::verifier::RollupParams;
 use celestia::CelestiaService;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
-use demo_stf::app::{App, DefaultContext, DefaultPrivateKey};
+#[cfg(feature = "experimental")]
+use demo_stf::app::DefaultPrivateKey;
+use demo_stf::app::{App, DefaultContext};
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
 use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::LedgerDB;
