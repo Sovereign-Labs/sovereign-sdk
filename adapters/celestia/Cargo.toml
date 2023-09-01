@@ -13,7 +13,7 @@ prost = "0.11"
 prost-types = "0.11"
 # I keep this commented as a reminder to opportunity to optimze this crate for non native compilation
 #tendermint = { version = "0.32", default-features = false, features = ["std"] }
-tendermint = "0.32"
+tendermint = "0.33"
 tendermint-proto = "0.32"
 
 # Convenience

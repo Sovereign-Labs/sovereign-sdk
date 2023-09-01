@@ -46,7 +46,7 @@ sov-evm = { path = "../../module-system/module-implementations/sov-evm", feature
 sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
 sha2 = { workspace = true }
 reqwest = "0.11"
-tendermint = "0.32"
+tendermint = "0.33"
 tempfile = { workspace = true }
 proptest = { workspace = true }
 clap = { workspace = true }
