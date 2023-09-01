@@ -103,7 +103,7 @@ impl GenesisMacro {
         quote::quote! {
             #[doc = "Initial configuration for the rollup."]
             pub struct GenesisConfig #impl_generics #where_clause{
-                #(#[doc = "Module configuration"] #fields)*
+                #(#[doc = "Module configuration"] pub #fields)*
             }
 
             impl #impl_generics GenesisConfig #type_generics #where_clause {
