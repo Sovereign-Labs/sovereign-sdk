@@ -1,6 +1,6 @@
 #![cfg(feature = "native")]
 
-use sov_accessory_state::{CallMessage, UnprovableSetter};
+use sov_accessory_state::{AccessorySetter, CallMessage};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Address, Context, Module};
 use sov_state::{ProverStorage, Storage, WorkingSet};
@@ -17,7 +17,7 @@ fn test_value_setter() {
     let context = DefaultContext::new(admin);
     let config = ();
 
-    let module = UnprovableSetter::<DefaultContext>::default();
+    let module = AccessorySetter::<DefaultContext>::default();
 
     module.genesis(&config, &mut working_set).unwrap();
     module
@@ -33,7 +33,7 @@ fn test_value_setter() {
 
     module
         .call(
-            CallMessage::SetValueUnprovable("FooBar".to_string()),
+            CallMessage::SetValueAccessory("FooBar".to_string()),
             &context,
             &mut working_set_2,
         )
@@ -51,7 +51,7 @@ fn test_value_setter() {
         Some("FooBar".to_string())
     );
     assert_eq!(
-        module.get_value_unprovable(&mut working_set_4),
+        module.get_value_accessory(&mut working_set_4),
         Some("FooBar".to_string())
     );
 

@@ -208,14 +208,12 @@ impl<S: Storage> WorkingSet<S> {
         }
     }
 
-    pub fn set_unprovable(&mut self, key: StorageKey, value: StorageValue) {
-        println!("setting unprovable, key: {:?}, value: {:?}", key, value);
+    pub fn set_accessory(&mut self, key: StorageKey, value: StorageValue) {
         self.accessory_delta.set(&key, value)
     }
 
     #[cfg(feature = "native")]
-    pub fn get_unprovable(&mut self, key: StorageKey) -> Option<StorageValue> {
-        println!("getting unprovable in working set, key: {:?}", key);
+    pub fn get_accessory(&mut self, key: StorageKey) -> Option<StorageValue> {
         self.accessory_delta.get(&key)
     }
 

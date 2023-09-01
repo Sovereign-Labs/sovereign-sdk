@@ -7,7 +7,7 @@ use sov_state::storage::{StorageKey, StorageValue};
 use sov_state::{Prefix, StateValue, WorkingSet};
 
 #[derive(ModuleInfo)]
-pub struct UnprovableSetter<C: sov_modules_api::Context> {
+pub struct AccessorySetter<C: sov_modules_api::Context> {
     #[address]
     pub address: C::Address,
     #[state]
@@ -17,21 +17,21 @@ pub struct UnprovableSetter<C: sov_modules_api::Context> {
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage {
     SetValue(String),
-    SetValueUnprovable(String),
+    SetValueAccessory(String),
 }
 
-impl<C: Context> UnprovableSetter<C> {
+impl<C: Context> AccessorySetter<C> {
     /// Sets a value in the JMT state.
     fn set_value(&self, s: String, working_set: &mut WorkingSet<C::Storage>) {
         self.latest_value.set(&s, working_set);
     }
 
     /// Sets a value in the non-JMT state.
-    fn set_value_unprovable(&self, s: String, working_set: &mut WorkingSet<C::Storage>) {
+    fn set_value_accessory(&self, s: String, working_set: &mut WorkingSet<C::Storage>) {
         let prefix = Prefix::new(self.address.as_ref().to_vec());
         let key = StorageKey::new(&prefix, "value");
         let new_value = StorageValue::new(&s.into_bytes(), &BorshCodec);
-        working_set.set_unprovable(key, new_value);
+        working_set.set_accessory(key, new_value);
     }
 
     pub fn get_value(&self, working_set: &mut WorkingSet<C::Storage>) -> Option<String> {
@@ -39,18 +39,18 @@ impl<C: Context> UnprovableSetter<C> {
     }
 
     #[cfg(feature = "native")]
-    pub fn get_value_unprovable(&self, working_set: &mut WorkingSet<C::Storage>) -> Option<String> {
+    pub fn get_value_accessory(&self, working_set: &mut WorkingSet<C::Storage>) -> Option<String> {
         use sov_state::codec::StateValueCodec;
 
         let prefix = Prefix::new(self.address.as_ref().to_vec());
         let key = StorageKey::new(&prefix, "value");
-        let storage_value = working_set.get_unprovable(key);
+        let storage_value = working_set.get_accessory(key);
         let value = storage_value.and_then(|v| BorshCodec.try_decode_value(v.value()).ok());
         value
     }
 }
 
-impl<C: Context> Module for UnprovableSetter<C> {
+impl<C: Context> Module for AccessorySetter<C> {
     type Context = C;
 
     type Config = ();
@@ -64,8 +64,8 @@ impl<C: Context> Module for UnprovableSetter<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
-            CallMessage::SetValueUnprovable(new_value) => {
-                self.set_value_unprovable(new_value, working_set);
+            CallMessage::SetValueAccessory(new_value) => {
+                self.set_value_accessory(new_value, working_set);
             }
             CallMessage::SetValue(new_value) => {
                 self.set_value(new_value, working_set);
