@@ -67,7 +67,7 @@ pub mod query {
 /// instead of going through the DA layer.
 
 #[cfg(not(feature = "experimental"))]
-#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc(DefaultContext))]
+#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 #[cfg_attr(
@@ -84,7 +84,7 @@ pub struct Runtime<C: Context> {
 }
 
 #[cfg(feature = "experimental")]
-#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc(DefaultContext))]
+#[cfg_attr(feature = "native", derive(CliWallet), expose_rpc)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 #[cfg_attr(
