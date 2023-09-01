@@ -32,7 +32,7 @@ pub trait Runtime<C: Context, Da: DaSpec>:
         BlobResult = SequencerOutcome<
             <<Da as DaSpec>::BlobTransaction as BlobReaderTrait>::Address,
         >,
-    > + BlobSelector<Da::BlobTransaction, Context = C>
+    > + BlobSelector<Da, Context = C>
 {
 }
 

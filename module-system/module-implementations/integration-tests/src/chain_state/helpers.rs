@@ -77,7 +77,7 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
     }
 }
 
-impl<C, Da> BlobSelector<Da::BlobTransaction> for TestRuntime<C, Da>
+impl<C, Da> BlobSelector<Da> for TestRuntime<C, Da>
 where
     C: Context,
     Da: DaSpec,

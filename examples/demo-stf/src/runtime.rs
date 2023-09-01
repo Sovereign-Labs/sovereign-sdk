@@ -136,7 +136,7 @@ where
 {
 }
 
-impl<C: Context, Da: DaSpec> BlobSelector<Da::BlobTransaction> for Runtime<C, Da> {
+impl<C: Context, Da: DaSpec> BlobSelector<Da> for Runtime<C, Da> {
     type Context = C;
 
     fn get_blobs_for_this_slot<'a, I>(
@@ -147,7 +147,10 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da::BlobTransaction> for Runtime<C, Da
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
     {
-        self.blob_storage
-            .get_blobs_for_this_slot(current_blobs, working_set)
+        <sov_blob_storage::BlobStorage<C> as BlobSelector<Da>>::get_blobs_for_this_slot(
+            &self.blob_storage,
+            current_blobs,
+            working_set,
+        )
     }
 }

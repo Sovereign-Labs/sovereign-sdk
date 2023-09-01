@@ -7,12 +7,13 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::digest::Digest;
 use sov_modules_api::{Address, Context, Module, Spec};
 use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::mocks::{MockAddress, MockBlob};
+use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockDaSpec};
 use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
 use sov_state::{ProverStorage, WorkingSet};
 
 type C = DefaultContext;
 type B = MockBlob;
+type Da = MockDaSpec;
 
 const PREFERRED_SEQUENCER_KEY: &str = "preferred";
 const REGULAR_SEQUENCER_KEY: &str = "regular";
@@ -109,32 +110,44 @@ fn priority_sequencer_flow() {
     let mut slot_4 = vec![];
 
     // Slot 1: 3rd blob is from preferred sequencer, only it should be executed
-    let mut execute_in_slot_1 = blob_storage
-        .get_blobs_for_this_slot(&mut slot_1, &mut working_set)
-        .unwrap();
+    let mut execute_in_slot_1 = <BlobStorage<C> as BlobSelector<Da>>::get_blobs_for_this_slot(
+        &blob_storage,
+        &mut slot_1,
+        &mut working_set,
+    )
+    .unwrap();
     assert_eq!(1, execute_in_slot_1.len());
     blobs_are_equal(blob_3, execute_in_slot_1.remove(0), "slot 1");
 
     // Slot 2: 5th blob is from preferred sequencer + 2nd and 3rd that were deferred previously
-    let mut execute_in_slot_2 = blob_storage
-        .get_blobs_for_this_slot(&mut slot_2, &mut working_set)
-        .unwrap();
+    let mut execute_in_slot_2 = <BlobStorage<C> as BlobSelector<Da>>::get_blobs_for_this_slot(
+        &blob_storage,
+        &mut slot_2,
+        &mut working_set,
+    )
+    .unwrap();
     assert_eq!(3, execute_in_slot_2.len());
     blobs_are_equal(blob_5, execute_in_slot_2.remove(0), "slot 2");
     blobs_are_equal(blob_1, execute_in_slot_2.remove(0), "slot 2");
     blobs_are_equal(blob_2, execute_in_slot_2.remove(0), "slot 2");
 
     // Slot 3: no blobs from preferred sequencer, so deferred executed first and then current
-    let mut execute_in_slot_3 = blob_storage
-        .get_blobs_for_this_slot(&mut slot_3, &mut working_set)
-        .unwrap();
+    let mut execute_in_slot_3 = <BlobStorage<C> as BlobSelector<Da>>::get_blobs_for_this_slot(
+        &blob_storage,
+        &mut slot_3,
+        &mut working_set,
+    )
+    .unwrap();
     assert_eq!(2, execute_in_slot_3.len());
     blobs_are_equal(blob_4, execute_in_slot_3.remove(0), "slot 3");
     blobs_are_equal(blob_6, execute_in_slot_3.remove(0), "slot 3");
 
-    let mut execute_in_slot_4 = blob_storage
-        .get_blobs_for_this_slot(&mut slot_4, &mut working_set)
-        .unwrap();
+    let mut execute_in_slot_4 = <BlobStorage<C> as BlobSelector<Da>>::get_blobs_for_this_slot(
+        &blob_storage,
+        &mut slot_4,
+        &mut working_set,
+    )
+    .unwrap();
 
     assert_eq!(2, execute_in_slot_4.len());
     blobs_are_equal(blob_7, execute_in_slot_4.remove(0), "slot 4");
@@ -197,15 +210,21 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
     let mut slot_1 = vec![blob_1.clone(), blob_2, blob_3.clone()];
     let mut slot_2 = vec![];
 
-    let mut execute_in_slot_1 = blob_storage
-        .get_blobs_for_this_slot(&mut slot_1, &mut working_set)
-        .unwrap();
+    let mut execute_in_slot_1 = <BlobStorage<C> as BlobSelector<Da>>::get_blobs_for_this_slot(
+        &blob_storage,
+        &mut slot_1,
+        &mut working_set,
+    )
+    .unwrap();
     assert_eq!(1, execute_in_slot_1.len());
     blobs_are_equal(blob_3, execute_in_slot_1.remove(0), "slot 1");
 
-    let mut execute_in_slot_2 = blob_storage
-        .get_blobs_for_this_slot(&mut slot_2, &mut working_set)
-        .unwrap();
+    let mut execute_in_slot_2 = <BlobStorage<C> as BlobSelector<Da>>::get_blobs_for_this_slot(
+        &blob_storage,
+        &mut slot_2,
+        &mut working_set,
+    )
+    .unwrap();
     assert_eq!(1, execute_in_slot_2.len());
     blobs_are_equal(blob_1, execute_in_slot_2.remove(0), "slot 2");
 }
@@ -265,16 +284,23 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
     let mut slot_1 = vec![blob_1.clone(), blob_2.clone(), blob_3.clone()];
     let mut slot_2: Vec<_> = vec![];
 
-    let mut execute_in_slot_1 = blob_storage
-        .get_blobs_for_this_slot(&mut slot_1, &mut working_set)
-        .unwrap();
+    let mut execute_in_slot_1 = <BlobStorage<C> as BlobSelector<Da>>::get_blobs_for_this_slot(
+        &blob_storage,
+        &mut slot_1,
+        &mut working_set,
+    )
+    .unwrap();
     assert_eq!(3, execute_in_slot_1.len());
     blobs_are_equal(blob_1, execute_in_slot_1.remove(0), "slot 1");
     blobs_are_equal(blob_2, execute_in_slot_1.remove(0), "slot 1");
     blobs_are_equal(blob_3, execute_in_slot_1.remove(0), "slot 1");
 
-    let execute_in_slot_2: Vec<BlobRefOrOwned<'_, B>> = blob_storage
-        .get_blobs_for_this_slot(&mut slot_2, &mut working_set)
+    let execute_in_slot_2: Vec<BlobRefOrOwned<'_, B>> =
+        <BlobStorage<C> as BlobSelector<Da>>::get_blobs_for_this_slot(
+            &blob_storage,
+            &mut slot_2,
+            &mut working_set,
+        )
         .unwrap();
     assert!(execute_in_slot_2.is_empty());
 }
@@ -337,9 +363,12 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
     let mut slot_2 = vec![blob_4.clone(), blob_5.clone()];
     let mut slot_3: Vec<_> = vec![];
 
-    let mut execute_in_slot_1 = blob_storage
-        .get_blobs_for_this_slot(&mut slot_1, &mut working_set)
-        .unwrap();
+    let mut execute_in_slot_1 = <BlobStorage<C> as BlobSelector<Da>>::get_blobs_for_this_slot(
+        &blob_storage,
+        &mut slot_1,
+        &mut working_set,
+    )
+    .unwrap();
 
     assert_eq!(1, execute_in_slot_1.len());
     blobs_are_equal(blob_3, execute_in_slot_1.remove(0), "slot 1");
@@ -360,17 +389,24 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
         .get_preferred_sequencer(&mut working_set)
         .is_none());
 
-    let mut execute_in_slot_2 = blob_storage
-        .get_blobs_for_this_slot(&mut slot_2, &mut working_set)
-        .unwrap();
+    let mut execute_in_slot_2 = <BlobStorage<C> as BlobSelector<Da>>::get_blobs_for_this_slot(
+        &blob_storage,
+        &mut slot_2,
+        &mut working_set,
+    )
+    .unwrap();
     assert_eq!(4, execute_in_slot_2.len());
     blobs_are_equal(blob_1, execute_in_slot_2.remove(0), "slot 2");
     blobs_are_equal(blob_2, execute_in_slot_2.remove(0), "slot 2");
     blobs_are_equal(blob_4, execute_in_slot_2.remove(0), "slot 2");
     blobs_are_equal(blob_5, execute_in_slot_2.remove(0), "slot 2");
 
-    let execute_in_slot_3: Vec<BlobRefOrOwned<'_, B>> = blob_storage
-        .get_blobs_for_this_slot(&mut slot_3, &mut working_set)
+    let execute_in_slot_3: Vec<BlobRefOrOwned<'_, B>> =
+        <BlobStorage<C> as BlobSelector<Da>>::get_blobs_for_this_slot(
+            &blob_storage,
+            &mut slot_3,
+            &mut working_set,
+        )
         .unwrap();
     assert!(execute_in_slot_3.is_empty());
 }
