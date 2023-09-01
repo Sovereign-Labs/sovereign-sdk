@@ -64,7 +64,7 @@ impl TestClient {
     async fn deploy_contract(
         &self,
     ) -> Result<PendingTransaction<'_, Http>, Box<dyn std::error::Error>> {
-        let request = Eip1559TransactionRequest::new()
+        let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)
             .chain_id(self.chain_id)
             .nonce(0u64)
@@ -73,7 +73,7 @@ impl TestClient {
             .gas(900000u64)
             .data(self.contract.byte_code());
 
-        let typed_transaction = TypedTransaction::Eip1559(request);
+        let typed_transaction = TypedTransaction::Eip1559(req);
 
         let receipt_req = self
             .client
@@ -89,7 +89,7 @@ impl TestClient {
         set_arg: u32,
         nonce: u64,
     ) -> PendingTransaction<'_, Http> {
-        let request = Eip1559TransactionRequest::new()
+        let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
             .chain_id(self.chain_id)
@@ -99,7 +99,7 @@ impl TestClient {
             .max_fee_per_gas(MAX_FEE_PER_GAS)
             .gas(900000u64);
 
-        let typed_transaction = TypedTransaction::Eip1559(request);
+        let typed_transaction = TypedTransaction::Eip1559(req);
 
         self.client
             .send_transaction(typed_transaction, None)
@@ -112,7 +112,7 @@ impl TestClient {
         contract_address: H160,
         nonce: u64,
     ) -> Result<ethereum_types::U256, Box<dyn std::error::Error>> {
-        let request = Eip1559TransactionRequest::new()
+        let req = Eip1559TransactionRequest::new()
             .from(self.from_addr)
             .to(contract_address)
             .chain_id(self.chain_id)
@@ -120,7 +120,7 @@ impl TestClient {
             .data(self.contract.get_call_data())
             .gas(900000u64);
 
-        let typed_transaction = TypedTransaction::Eip1559(request);
+        let typed_transaction = TypedTransaction::Eip1559(req);
 
         let response = self.client.call(&typed_transaction, None).await?;
 
@@ -152,6 +152,7 @@ impl TestClient {
             assert_eq!(set_arg, get_arg.as_u32());
         }
 
+        // Create a blob with multiple transactions.
         let mut requests = Vec::default();
         let mut nonce = 2;
         for value in 100..103 {
