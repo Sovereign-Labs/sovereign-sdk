@@ -54,6 +54,11 @@ pub use error::Error;
 pub use prefix::Prefix;
 pub use response::CallResponse;
 use serde::{Deserialize, Serialize};
+pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
+pub use sov_rollup_interface::stf::Event;
+pub use sov_rollup_interface::zk::{
+    StoredCodeCommitment, ValidityCondition, ValidityConditionChecker, Zkvm,
+};
 pub use sov_rollup_interface::{digest, BasicAddress, RollupAddress};
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
