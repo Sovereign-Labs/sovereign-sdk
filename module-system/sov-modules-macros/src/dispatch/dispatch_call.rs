@@ -14,6 +14,7 @@ impl<'a> StructDef<'a> {
                 let ty = &field.ty;
 
                 quote::quote!(
+                    #[doc = "Module call message."]
                     #name(<#ty as sov_modules_api::Module>::CallMessage),
                 )
             })
