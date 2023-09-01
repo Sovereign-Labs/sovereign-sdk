@@ -24,12 +24,7 @@ use zk_cycle_macros::cycle_tracker;
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to work with the module-system.
-pub struct AppTemplate<
-    C: Context,
-    Da: DaSpec,
-    Vm,
-    RT: Runtime<C, Da::ValidityCondition, Da::BlobTransaction>,
-> {
+pub struct AppTemplate<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>> {
     /// State storage used by the rollup.
     pub current_storage: C::Storage,
     /// The runtime includes all the modules that the rollup supports.
@@ -78,7 +73,7 @@ impl<C, Vm, Da, RT> AppTemplate<C, Da, Vm, RT>
 where
     C: Context,
     Da: DaSpec,
-    RT: Runtime<C, Da::ValidityCondition, Da::BlobTransaction>,
+    RT: Runtime<C, Da>,
 {
     /// [`AppTemplate`] constructor.
     pub fn new(storage: C::Storage, runtime: RT) -> Self {

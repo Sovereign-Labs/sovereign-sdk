@@ -12,7 +12,7 @@ use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
-use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
+use sov_rollup_interface::zk::Zkvm;
 use sov_rollup_interface::BasicAddress;
 use sov_state::{StateCheckpoint, Storage, WorkingSet};
 use tracing::info;
@@ -21,13 +21,18 @@ pub use tx_verifier::RawTx;
 use zk_cycle_macros::cycle_tracker;
 
 /// This trait has to be implemented by a runtime in order to be used in `AppTemplate`.
-pub trait Runtime<C: Context, Cond: ValidityCondition, B: BlobReaderTrait>:
+pub trait Runtime<C: Context, Da: DaSpec>:
     DispatchCall<Context = C>
     + Genesis<Context = C>
     + TxHooks<Context = C>
-    + SlotHooks<Cond, Context = C>
-    + ApplyBlobHooks<B, Context = C, BlobResult = SequencerOutcome<B::Address>>
-    + BlobSelector<B, Context = C>
+    + SlotHooks<Da, Context = C>
+    + ApplyBlobHooks<
+        Da::BlobTransaction,
+        Context = C,
+        BlobResult = SequencerOutcome<
+            <<Da as DaSpec>::BlobTransaction as BlobReaderTrait>::Address,
+        >,
+    > + BlobSelector<Da::BlobTransaction, Context = C>
 {
 }
 
@@ -73,7 +78,7 @@ where
     C: Context,
     Vm: Zkvm,
     Da: DaSpec,
-    RT: Runtime<C, Da::ValidityCondition, Da::BlobTransaction>,
+    RT: Runtime<C, Da>,
 {
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn begin_slot(
@@ -110,7 +115,7 @@ where
     C: Context,
     Da: DaSpec,
     Vm: Zkvm,
-    RT: Runtime<C, Da::ValidityCondition, Da::BlobTransaction>,
+    RT: Runtime<C, Da>,
 {
     type StateRoot = jmt::RootHash;
 

@@ -5,7 +5,7 @@ use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Address, Genesis, Spec};
 use sov_rollup_interface::mocks::{
-    MockBlock, MockBlockHeader, MockCodeCommitment, MockHash, MockValidityCond,
+    MockBlock, MockBlockHeader, MockCodeCommitment, MockDaSpec, MockHash, MockValidityCond,
     MockValidityCondChecker, MockZkvm,
 };
 use sov_rollup_interface::zk::ValidityConditionChecker;
@@ -140,7 +140,7 @@ pub(crate) struct ExecutionSimulationVars {
 /// with associated bonding proofs, as long as the last state root
 pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidityCond>>(
     rounds: u8,
-    module: &AttesterIncentives<C, MockZkvm, MockValidityCond, Checker>,
+    module: &AttesterIncentives<C, MockZkvm, MockDaSpec, Checker>,
     storage: &ProverStorage<DefaultStorageSpec>,
     attester_address: <C as Spec>::Address,
     mut working_set: WorkingSet<<C as Spec>::Storage>,

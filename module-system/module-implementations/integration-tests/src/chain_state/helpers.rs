@@ -8,7 +8,6 @@ use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::mocks::MockZkvm;
 use sov_rollup_interface::zk::ValidityCondition;
-use sov_state::WorkingSet;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
@@ -24,7 +23,7 @@ impl<C: Context, Cond: ValidityCondition> TxHooks for TestRuntime<C, Cond> {
     fn pre_dispatch_tx_hook(
         &self,
         tx: &Transaction<Self::Context>,
-        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<<Self::Context as Spec>::Address> {
         Ok(tx.pub_key().to_address())
     }
@@ -47,7 +46,7 @@ impl<C: Context, Cond: ValidityCondition, B: BlobReaderTrait> ApplyBlobHooks<B>
     fn begin_blob_hook(
         &self,
         _blob: &mut B,
-        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
@@ -55,19 +54,19 @@ impl<C: Context, Cond: ValidityCondition, B: BlobReaderTrait> ApplyBlobHooks<B>
     fn end_blob_hook(
         &self,
         _result: Self::BlobResult,
-        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        _working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<()> {
         Ok(())
     }
 }
 
-impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for TestRuntime<C, Cond> {
+impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da::ValidityCondition> {
     type Context = C;
 
     fn begin_slot_hook(
         &self,
-        slot_data: &impl sov_rollup_interface::services::da::SlotData<Cond = Cond>,
-        working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+        slot_data: &impl sov_rollup_interface::services::da::SlotData<Cond = Da::ValidityCondition>,
+        working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
     ) {
         self.chain_state.begin_slot_hook(slot_data, working_set)
     }

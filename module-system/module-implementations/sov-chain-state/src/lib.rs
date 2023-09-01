@@ -18,6 +18,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub use query::{ChainStateRpcImpl, ChainStateRpcServer};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
+use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
 use sov_state::WorkingSet;
 
@@ -101,7 +102,7 @@ impl<Cond> TransitionInProgress<Cond> {
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[derive(ModuleInfo)]
-pub struct ChainState<C: sov_modules_api::Context, Cond: ValidityCondition> {
+pub struct ChainState<C: sov_modules_api::Context, Da: DaSpec> {
     /// Address of the module.
     #[address]
     pub address: C::Address,
@@ -116,11 +117,12 @@ pub struct ChainState<C: sov_modules_api::Context, Cond: ValidityCondition> {
     /// is stored during transition i+1. This is mainly due to the fact that this structure depends on the
     /// rollup's root hash which is only stored once the transition has completed.
     #[state]
-    pub historical_transitions: sov_state::StateMap<TransitionHeight, StateTransitionId<Cond>>,
+    pub historical_transitions:
+        sov_state::StateMap<TransitionHeight, StateTransitionId<Da::ValidityCondition>>,
 
     /// The transition that is currently processed
     #[state]
-    pub in_progress_transition: sov_state::StateValue<TransitionInProgress<Cond>>,
+    pub in_progress_transition: sov_state::StateValue<TransitionInProgress<Da::ValidityCondition>>,
 
     /// The genesis root hash.
     /// Set after the first transaction of the rollup is executed, using the `begin_slot` hook.
@@ -138,7 +140,7 @@ pub struct ChainStateConfig {
     pub initial_slot_height: TransitionHeight,
 }
 
-impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
+impl<C: sov_modules_api::Context, Da: DaSpec> ChainState<C, Da> {
     /// Returns transition height in the current slot
     pub fn get_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> TransitionHeight {
         self.slot_height
@@ -155,7 +157,7 @@ impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
     pub fn get_in_progress_transition(
         &self,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<TransitionInProgress<Cond>> {
+    ) -> Option<TransitionInProgress<Da::ValidityCondition>> {
         self.in_progress_transition.get(working_set)
     }
 
@@ -164,15 +166,13 @@ impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
         &self,
         transition_num: TransitionHeight,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<StateTransitionId<Cond>> {
+    ) -> Option<StateTransitionId<Da::ValidityCondition>> {
         self.historical_transitions
             .get(&transition_num, working_set)
     }
 }
 
-impl<C: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Module
-    for ChainState<C, Cond>
-{
+impl<C: sov_modules_api::Context, Da: DaSpec> sov_modules_api::Module for ChainState<C, Da> {
     type Context = C;
 
     type Config = ChainStateConfig;

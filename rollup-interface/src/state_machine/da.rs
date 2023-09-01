@@ -14,7 +14,7 @@ use crate::zk::ValidityCondition;
 use crate::BasicAddress;
 
 /// A specification for the types used by a DA layer.
-pub trait DaSpec: 'static {
+pub trait DaSpec: Serialize + DeserializeOwned + 'static {
     /// The hash of a DA layer block
     type SlotHash: BlockHashTrait;
 
