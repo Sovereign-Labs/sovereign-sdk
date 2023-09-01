@@ -83,7 +83,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         self.native_db
             .get_value_option(key.as_ref())
             .unwrap()
-            .map(|v| v.as_ref().to_vec().into())
+            .map(Into::into)
     }
 
     fn get_state_root(&self, _witness: &Self::Witness) -> anyhow::Result<[u8; 32]> {

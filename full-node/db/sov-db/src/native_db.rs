@@ -5,7 +5,7 @@ use sov_schema_db::DB;
 
 use crate::rocks_db_config::gen_rocksdb_options;
 use crate::schema::tables::{ModuleAccessoryState, NATIVE_TABLES};
-use crate::schema::types::{DbBytes, StateKey};
+use crate::schema::types::StateKey;
 
 /// A typed wrapper around RocksDB for storing native-only accessory state.
 /// Internally, this is roughly just an [`Arc<SchemaDB>`].
@@ -37,19 +37,15 @@ impl NativeDB {
     }
 
     /// Queries for a value in the [`NativeDB`], given a key.
-    pub fn get_value_option(&self, key: &StateKey) -> anyhow::Result<Option<DbBytes>> {
-        let value = self.db.get::<ModuleAccessoryState>(key)?;
-        match value {
-            Some(value) if value.as_ref().is_empty() => Ok(None),
-            Some(value) => Ok(Some(value)),
-            None => Ok(None),
-        }
+    pub fn get_value_option(&self, key: &StateKey) -> anyhow::Result<Option<Vec<u8>>> {
+        self.db
+            .get::<ModuleAccessoryState>(key)
+            .map(Option::flatten)
     }
 
     /// Sets a key-value pair in the [`NativeDB`].
     pub fn set_value(&self, key: Vec<u8>, value: Option<Vec<u8>>) -> anyhow::Result<()> {
-        self.db
-            .put::<ModuleAccessoryState>(&key, &DbBytes::new(value.unwrap_or_default()))
+        self.db.put::<ModuleAccessoryState>(&key, &value)
     }
 }
 
@@ -65,10 +61,7 @@ mod tests {
         let key = b"foo".to_vec();
         let value = b"bar".to_vec();
         db.set_value(key.clone(), Some(value.clone())).unwrap();
-        assert_eq!(
-            db.get_value_option(&key).unwrap(),
-            Some(DbBytes::new(value))
-        );
+        assert_eq!(db.get_value_option(&key).unwrap(), Some(value));
     }
 
     #[test]
