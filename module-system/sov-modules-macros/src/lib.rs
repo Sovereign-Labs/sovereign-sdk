@@ -235,8 +235,13 @@ fn handle_macro_error(result: Result<proc_macro::TokenStream, syn::Error>) -> To
     }
 }
 
-/// This proc macro generates the actual implementations for the trait created above for the module
-/// It iterates over each struct
+/// The macro exposes RPC endpoints from all modules in the runtime.
+/// It gets storage from the Context generic
+/// and utilizes output of [`#[rpc_gen]`] macro to generate RPC methods.
+///
+/// It has limitations:
+///   - First type generic attribute must have bound to [`sov_modules_api::Context`] trait
+///   - All generic attributes must own the data, thus have bound `'static`
 #[cfg(feature = "native")]
 #[proc_macro_attribute]
 pub fn expose_rpc(_attr: TokenStream, input: TokenStream) -> TokenStream {

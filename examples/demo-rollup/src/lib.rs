@@ -8,6 +8,8 @@ use celestia::types::NamespaceId;
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runtime::GenesisConfig;
+#[cfg(feature = "experimental")]
+pub use rollup::read_tx_signer_priv_key;
 pub use rollup::{new_rollup_with_celestia_da, Rollup};
 use sov_cli::wallet_state::{HexPrivateAndAddress, PrivateKeyAndAddress};
 use sov_db::ledger_db::LedgerDB;
