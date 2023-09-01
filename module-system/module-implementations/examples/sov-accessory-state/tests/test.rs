@@ -15,11 +15,10 @@ fn test_value_setter() {
 
     let admin = Address::from([1; 32]);
     let context = DefaultContext::new(admin);
-    let config = ();
 
     let module = AccessorySetter::<DefaultContext>::default();
 
-    module.genesis(&config, &mut working_set).unwrap();
+    module.genesis(&(), &mut working_set).unwrap();
     module
         .call(
             CallMessage::SetValue("FooBar".to_string()),

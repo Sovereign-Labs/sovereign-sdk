@@ -45,8 +45,7 @@ impl<C: Context> AccessorySetter<C> {
         let prefix = Prefix::new(self.address.as_ref().to_vec());
         let key = StorageKey::new(&prefix, "value");
         let storage_value = working_set.get_accessory(key);
-        let value = storage_value.and_then(|v| BorshCodec.try_decode_value(v.value()).ok());
-        value
+        storage_value.and_then(|v| BorshCodec.try_decode_value(v.value()).ok())
     }
 }
 
