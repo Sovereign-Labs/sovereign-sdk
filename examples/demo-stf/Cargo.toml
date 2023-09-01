@@ -45,6 +45,7 @@ sov-evm = { path = "../../module-system/module-implementations/sov-evm", optiona
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
 sov-data-generators = { path = "../../module-system/utils/sov-data-generators" }
+demo-stf = { path = ".", features = ["native"] }
 tempfile = { workspace = true }
 rand = "0.8"
 

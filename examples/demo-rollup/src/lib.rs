@@ -6,10 +6,10 @@ mod rollup;
 
 use celestia::types::NamespaceId;
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
-use demo_stf::app::DefaultPrivateKey;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runtime::GenesisConfig;
 pub use rollup::{new_rollup_with_celestia_da, Rollup};
+use sov_cli::wallet_state::{HexPrivateAndAddress, PrivateKeyAndAddress};
 use sov_db::ledger_db::LedgerDB;
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::BasicAddress;
@@ -21,13 +21,6 @@ pub const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
 /// Initializes a [`LedgerDB`] using the provided `path`.
 pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
     LedgerDB::with_path(path).expect("Ledger DB failed to open")
-}
-
-/// TODO: Remove this when sov-cli is in its own crate.
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
-pub struct HexKey {
-    hex_priv_key: String,
-    address: String,
 }
 
 /// Configure our rollup with a centralized sequencer using the SEQUENCER_DA_ADDRESS
@@ -43,21 +36,22 @@ pub struct HexKey {
 pub fn get_genesis_config<A: BasicAddress>(
     sequencer_da_address: A,
 ) -> GenesisConfig<DefaultContext> {
-    let hex_key: HexKey = serde_json::from_slice(include_bytes!(
+    let hex_key: HexPrivateAndAddress = serde_json::from_slice(include_bytes!(
         "../../test-data/keys/token_deployer_private_key.json"
     ))
     .expect("Broken key data file");
-    let sequencer_private_key = DefaultPrivateKey::from_hex(&hex_key.hex_priv_key).unwrap();
-    assert_eq!(
-        sequencer_private_key.default_address().to_string(),
-        hex_key.address,
-        "Inconsistent key data",
+    let key_and_address: PrivateKeyAndAddress<DefaultContext> = hex_key
+        .try_into()
+        .expect("Failed to parse sequencer private key and address");
+    assert!(
+        key_and_address.is_matching_to_default(),
+        "Inconsistent key data"
     );
 
     create_demo_genesis_config(
         100000000,
-        sequencer_private_key.default_address(),
+        key_and_address.address,
         sequencer_da_address.as_ref().to_vec(),
-        &sequencer_private_key,
+        &key_and_address.private_key,
     )
 }

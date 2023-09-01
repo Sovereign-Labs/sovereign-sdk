@@ -51,16 +51,16 @@ pub fn register_ethereum<DA: DaService>(
 
     let data = fs::read_to_string(TX_SIGNER_PRIV_KEY_PATH).context("Unable to read file")?;
 
-    let hex_key: crate::HexKey =
-        serde_json::from_str(&data).context("JSON does not have correct format.")?;
+    let hex_key: sov_cli::wallet_state::HexPrivateAndAddress =
+        serde_json::from_str(&data).context("JSON does not have a correct format.")?;
 
-    let tx_signer_private_key =
-        sov_modules_api::default_signature::private_key::DefaultPrivateKey::from_hex(
-            &hex_key.hex_priv_key,
-        )
-        .unwrap();
+    let key_and_address: sov_cli::wallet_state::PrivateKeyAndAddress<
+        sov_modules_api::default_context::DefaultContext,
+    > = hex_key
+        .try_into()
+        .expect("Failed to parse sequencer private key and address");
 
-    let ethereum_rpc = sov_ethereum::get_ethereum_rpc(da_service, tx_signer_private_key);
+    let ethereum_rpc = sov_ethereum::get_ethereum_rpc(da_service, key_and_address.private_key);
     methods
         .merge(ethereum_rpc)
         .context("Failed to merge Ethereum RPC modules")

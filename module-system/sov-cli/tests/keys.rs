@@ -1,5 +1,5 @@
 use demo_stf::runtime::RuntimeCall;
-use sov_cli::wallet_state::{KeyIdentifier, WalletState};
+use sov_cli::wallet_state::{KeyIdentifier, PrivateKeyAndAddress, WalletState};
 use sov_cli::workflows::keys::KeyWorkflow;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{PrivateKey, PublicKey, Spec};
@@ -20,7 +20,8 @@ fn test_key_import() {
     // Generate a key and write it to a file
     let generated_key = <DefaultContext as Spec>::PrivateKey::generate();
     let key_path = app_dir.path().join("test_key");
-    std::fs::write(&key_path, serde_json::to_string(&generated_key).unwrap())
+    let key_and_address = PrivateKeyAndAddress::<DefaultContext>::from_key(generated_key.clone());
+    std::fs::write(&key_path, serde_json::to_string(&key_and_address).unwrap())
         .expect("Failed to write key to tempdir");
 
     // Initialize an empty wallet
