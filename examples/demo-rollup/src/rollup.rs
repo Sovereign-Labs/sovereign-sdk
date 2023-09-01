@@ -88,7 +88,7 @@ pub async fn new_rollup_with_celestia_da(
 pub fn read_tx_signer_priv_key() -> Result<DefaultPrivateKey, anyhow::Error> {
     let data = std::fs::read_to_string(TX_SIGNER_PRIV_KEY_PATH).context("Unable to read file")?;
 
-    let hex_key: crate::HexKey =
+    let hex_key: crate::HexPrivateAndAddress =
         serde_json::from_str(&data).context("JSON does not have correct format.")?;
 
     let priv_key = sov_modules_api::default_signature::private_key::DefaultPrivateKey::from_hex(
