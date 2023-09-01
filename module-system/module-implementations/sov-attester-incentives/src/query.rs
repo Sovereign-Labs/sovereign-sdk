@@ -1,8 +1,6 @@
 //! Defines the query methods for the attester incentives module
 use serde::{Deserialize, Serialize};
-use sov_modules_api::Spec;
-use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::zk::{ValidityConditionChecker, Zkvm};
+use sov_modules_api::{Spec, ValidityConditionChecker};
 use sov_state::storage::{NativeStorage, StorageProof};
 use sov_state::{Storage, WorkingSet};
 
@@ -20,8 +18,8 @@ pub struct BondAmountResponse {
 impl<C, Vm, Da, Checker> AttesterIncentives<C, Vm, Da, Checker>
 where
     C: sov_modules_api::Context,
-    Vm: Zkvm,
-    Da: DaSpec,
+    Vm: sov_modules_api::Zkvm,
+    Da: sov_modules_api::DaSpec,
     Checker: ValidityConditionChecker<Da::ValidityCondition>,
 {
     /// Queries the state of the module.

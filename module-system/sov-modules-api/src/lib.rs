@@ -58,13 +58,17 @@ pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 pub use sov_rollup_interface::services::da::SlotData;
 pub use sov_rollup_interface::stf::Event;
 pub use sov_rollup_interface::zk::{
-    StoredCodeCommitment, ValidityCondition, ValidityConditionChecker, Zkvm,
+    StateTransition, StoredCodeCommitment, ValidityCondition, ValidityConditionChecker, Zkvm,
 };
 pub use sov_rollup_interface::{digest, BasicAddress, RollupAddress};
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
 
 pub use crate::bech32::AddressBech32;
+
+pub mod optimistic {
+    pub use sov_rollup_interface::optimistic::Attestation;
+}
 
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {
