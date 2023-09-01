@@ -5,6 +5,7 @@ use std::sync::Arc;
 
 use jmt::storage::{NodeBatch, TreeWriter};
 use jmt::{JellyfishMerkleTree, KeyHash, RootHash, Version};
+use sov_db::native_db::NativeDB;
 use sov_db::state_db::StateDB;
 
 use crate::config::Config;
@@ -16,6 +17,7 @@ use crate::{MerkleProofSpec, Storage};
 
 pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,
+    native_db: NativeDB,
     _phantom_hasher: PhantomData<S::Hasher>,
 }
 
@@ -23,6 +25,7 @@ impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
     fn clone(&self) -> Self {
         Self {
             db: self.db.clone(),
+            native_db: self.native_db.clone(),
             _phantom_hasher: Default::default(),
         }
     }
@@ -30,13 +33,12 @@ impl<S: MerkleProofSpec> Clone for ProverStorage<S> {
 
 impl<S: MerkleProofSpec> ProverStorage<S> {
     pub fn with_path(path: impl AsRef<Path>) -> Result<Self, anyhow::Error> {
-        let db = StateDB::with_path(&path)?;
-        Self::with_db(db)
-    }
+        let state_db = StateDB::with_path(&path)?;
+        let native_db = NativeDB::with_path(&path)?;
 
-    fn with_db(db: StateDB) -> Result<Self, anyhow::Error> {
         Ok(Self {
-            db,
+            db: state_db,
+            native_db,
             _phantom_hasher: Default::default(),
         })
     }
@@ -64,6 +66,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type RuntimeConfig = Config;
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
     type StateUpdate = NodeBatch;
+    type AccessoryUpdate = OrderedReadsAndWrites;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Self::with_path(config.path.as_path())
@@ -73,6 +76,14 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         let val = self.read_value(key);
         witness.add_hint(val.clone());
         val
+    }
+
+    #[cfg(feature = "native")]
+    fn get_accessory(&self, key: &StorageKey) -> Option<StorageValue> {
+        self.native_db
+            .get_value_option(key.as_ref())
+            .unwrap()
+            .map(|v| v.as_ref().to_vec().into())
     }
 
     fn get_state_root(&self, _witness: &Self::Witness) -> anyhow::Result<[u8; 32]> {
@@ -143,10 +154,17 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         Ok((new_root.0, tree_update.node_batch))
     }
 
-    fn commit(&self, node_batch: &Self::StateUpdate) {
+    fn commit(&self, node_batch: &Self::StateUpdate, accessory_writes: &Self::AccessoryUpdate) {
         self.db
             .write_node_batch(node_batch)
             .expect("db write must succeed");
+
+        for (key, value) in accessory_writes.ordered_writes.clone().into_iter() {
+            self.native_db
+                .set_value(key.key.to_vec(), value.map(|v| v.value.to_vec()))
+                .expect("native db write must succeed");
+        }
+
         self.db.inc_next_version();
     }
 

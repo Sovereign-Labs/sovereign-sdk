@@ -100,7 +100,8 @@ where
         let mut working_set = WorkingSet::new(self.current_storage.clone());
         self.runtime.end_slot_hook(root_hash, &mut working_set);
 
-        self.current_storage.commit(&authenticated_node_batch);
+        self.current_storage
+            .commit(&authenticated_node_batch, &Default::default());
         (jmt::RootHash(root_hash), witness)
     }
 }
@@ -137,7 +138,8 @@ where
             .compute_state_update(log, &witness)
             .expect("Storage update must succeed");
 
-        self.current_storage.commit(&node_batch);
+        self.current_storage
+            .commit(&node_batch, &Default::default());
         jmt::RootHash(genesis_hash)
     }
 

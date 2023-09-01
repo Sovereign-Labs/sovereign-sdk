@@ -15,6 +15,7 @@ pub struct StorageInternalCache {
 
 /// A struct that contains the values read from the DB and the values to be written, both in
 /// deterministic order.
+#[derive(Debug, Default)]
 pub struct OrderedReadsAndWrites {
     pub ordered_reads: Vec<(CacheKey, Option<CacheValue>)>,
     pub ordered_writes: Vec<(CacheKey, Option<CacheValue>)>,
