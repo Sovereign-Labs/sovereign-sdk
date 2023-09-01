@@ -80,16 +80,20 @@ impl<C: Context, Cond: ValidityCondition> SlotHooks<Cond> for TestRuntime<C, Con
     }
 }
 
-impl<C: Context, Cond: ValidityCondition> BlobSelector for TestRuntime<C, Cond> {
+impl<C, Cond, B> BlobSelector<B> for TestRuntime<C, Cond>
+where
+    C: Context,
+    Cond: ValidityCondition,
+    B: BlobReaderTrait,
+{
     type Context = C;
 
-    fn get_blobs_for_this_slot<'a, I, B>(
+    fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
         _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, B>>>
     where
-        B: BlobReaderTrait,
         I: IntoIterator<Item = &'a mut B>,
     {
         Ok(current_blobs.into_iter().map(Into::into).collect())

@@ -32,5 +32,4 @@ tempfile = { workspace = true }
 [features]
 default = []
 arbitrary = ["dep:arbitrary", "sov-state/arbitrary"]
-serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "dep:jsonrpsee", "dep:schemars", "dep:clap", "sov-state/native", "sov-modules-api/native"]
+native = ["serde", "serde_json", "jsonrpsee", "schemars", "clap", "sov-state/native", "sov-modules-api/native"]

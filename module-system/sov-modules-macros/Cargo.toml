@@ -44,4 +44,4 @@ syn = { version = "1.0", features = ["full"] }
 
 [features]
 default = []
-native = ["dep:jsonrpsee"]
+native = ["jsonrpsee"]

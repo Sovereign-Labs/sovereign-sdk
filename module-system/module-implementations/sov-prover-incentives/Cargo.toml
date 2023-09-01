@@ -32,6 +32,4 @@ bincode = { workspace = true }
 
 [features]
 default = []
-serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "dep:schemars", "sov-state/native", "sov-modules-api/native"]
-test = ["native"]
+native = ["serde", "serde_json", "schemars", "sov-state/native", "sov-modules-api/native"]

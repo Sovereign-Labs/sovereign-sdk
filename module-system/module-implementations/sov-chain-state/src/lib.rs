@@ -10,13 +10,12 @@ pub mod genesis;
 /// Hook implementation for the module
 pub mod hooks;
 
-#[cfg(test)]
-pub mod tests;
-
 /// The query interface with the module
+#[cfg(feature = "native")]
 pub mod query;
-
 use borsh::{BorshDeserialize, BorshSerialize};
+#[cfg(feature = "native")]
+pub use query::{ChainStateRpcImpl, ChainStateRpcServer};
 use sov_modules_api::Error;
 use sov_modules_macros::ModuleInfo;
 use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
@@ -102,10 +101,10 @@ impl<Cond> TransitionInProgress<Cond> {
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[derive(ModuleInfo)]
-pub struct ChainState<Ctx: sov_modules_api::Context, Cond: ValidityCondition> {
+pub struct ChainState<C: sov_modules_api::Context, Cond: ValidityCondition> {
     /// Address of the module.
     #[address]
-    pub address: Ctx::Address,
+    pub address: C::Address,
 
     /// The current block height
     #[state]
@@ -139,10 +138,42 @@ pub struct ChainStateConfig {
     pub initial_slot_height: TransitionHeight,
 }
 
-impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Module
-    for ChainState<Ctx, Cond>
+impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
+    /// Returns transition height in the current slot
+    pub fn get_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> TransitionHeight {
+        self.slot_height
+            .get(working_set)
+            .expect("Slot height should be set at initialization")
+    }
+
+    /// Return the genesis hash of the module.
+    pub fn get_genesis_hash(&self, working_set: &mut WorkingSet<C::Storage>) -> Option<[u8; 32]> {
+        self.genesis_hash.get(working_set)
+    }
+
+    /// Returns the transition in progress of the module.
+    pub fn get_in_progress_transition(
+        &self,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Option<TransitionInProgress<Cond>> {
+        self.in_progress_transition.get(working_set)
+    }
+
+    /// Returns the completed transition associated with the provided `transition_num`.
+    pub fn get_historical_transitions(
+        &self,
+        transition_num: TransitionHeight,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Option<StateTransitionId<Cond>> {
+        self.historical_transitions
+            .get(&transition_num, working_set)
+    }
+}
+
+impl<C: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Module
+    for ChainState<C, Cond>
 {
-    type Context = Ctx;
+    type Context = C;
 
     type Config = ChainStateConfig;
 
@@ -151,7 +182,7 @@ impl<Ctx: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Mo
     fn genesis(
         &self,
         config: &Self::Config,
-        working_set: &mut WorkingSet<Ctx::Storage>,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<(), Error> {
         // The initialization logic
         Ok(self.init_module(config, working_set)?)

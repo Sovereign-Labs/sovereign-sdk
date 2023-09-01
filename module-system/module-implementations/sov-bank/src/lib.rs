@@ -12,7 +12,7 @@ pub use call::CallMessage;
 use sov_modules_api::{CallResponse, Error, ModuleInfo};
 use sov_state::WorkingSet;
 use token::Token;
-/// Specifies an interfact to interact with tokens.
+/// Specifies an interface to interact with tokens.
 pub use token::{Amount, Coins};
 /// Methods to get a token address.
 pub use utils::{get_genesis_token_address, get_token_address};
@@ -97,7 +97,9 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
                 Ok(self.transfer(to, coins, context, working_set)?)
             }
 
-            call::CallMessage::Burn { coins } => Ok(self.burn(coins, context, working_set)?),
+            call::CallMessage::Burn { coins } => {
+                Ok(self.burn_from_eoa(coins, context, working_set)?)
+            }
 
             call::CallMessage::Mint {
                 coins,

@@ -111,29 +111,34 @@ impl<C: sov_modules_api::Context> Bank<C> {
     /// Burns the set of `coins`. If there is no token at the address specified in the
     /// `Coins` structure, return an error.
     /// Calls the [`Token::burn`] function and updates the total supply of tokens.
-    pub(crate) fn burn(
+    pub fn burn(
         &self,
         coins: Coins<C>,
-        context: &C,
+        owner: &C::Address,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse> {
-        let context_logger = || {
-            format!(
-                "Failed burn coins({}) by sender {}",
-                coins,
-                context.sender()
-            )
-        };
+    ) -> Result<()> {
+        let context_logger = || format!("Failed to burn coins({}) from owner {}", coins, owner,);
         let mut token = self
             .tokens
             .get_or_err(&coins.token_address, working_set)
             .with_context(context_logger)?;
         token
-            .burn(context.sender(), coins.amount, working_set)
+            .burn(owner, coins.amount, working_set)
             .with_context(context_logger)?;
         token.total_supply -= coins.amount;
         self.tokens.set(&coins.token_address, &token, working_set);
 
+        Ok(())
+    }
+
+    /// Burns coins from an externally owned address ("EOA")
+    pub(crate) fn burn_from_eoa(
+        &self,
+        coins: Coins<C>,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<CallResponse> {
+        self.burn(coins, context.sender(), working_set)?;
         Ok(CallResponse::default())
     }
 

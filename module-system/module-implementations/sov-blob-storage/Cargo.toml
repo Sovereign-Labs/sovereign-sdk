@@ -27,7 +27,6 @@ sov-state = { path = "../../sov-state", version = "0.1" }
 sov-sequencer-registry = { path = "../sov-sequencer-registry", version = "0.1" }
 
 
-# TODO: these 5 can be deleted, after: https://github.com/Sovereign-Labs/sovereign-sdk/issues/524
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
@@ -41,13 +40,13 @@ tempfile = { workspace = true }
 
 [features]
 default = []
-serde = ["dep:serde", "dep:serde_json"]
 native = [
-    "sov-modules-api/native",
-    "sov-state/native",
-    "sov-modules-macros/native",
-    "sov-sequencer-registry/native",
     "jsonrpsee",
     "schemars",
     "serde",
+    "serde_json",
+    "sov-modules-api/native",
+    "sov-state/native",
+    "sov-modules-macros/native",
+    "sov-sequencer-registry/native"
 ]
