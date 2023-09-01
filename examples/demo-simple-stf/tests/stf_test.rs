@@ -10,13 +10,13 @@ fn test_stf_success() {
     StateTransitionFunction::<MockZkvm, MockBlob>::init_chain(stf, ());
 
     let mut blobs = {
-        let correct_preimage = vec![0; 32];
-        let correct_test_blob = MockBlob::new(correct_preimage, address, [0; 32]);
-
         let incorrect_preimage = vec![1; 32];
-        let incorrect_test_blob = MockBlob::new(incorrect_preimage, address, [0; 32]);
+        let correct_preimage = vec![0; 32];
 
-        [incorrect_test_blob, correct_test_blob]
+        [
+            MockBlob::new(incorrect_preimage, address, [0; 32]),
+            MockBlob::new(correct_preimage, address, [0; 32]),
+        ]
     };
 
     let result = StateTransitionFunction::<MockZkvm, MockBlob>::apply_slot(
