@@ -210,7 +210,7 @@ pub trait Storage: Clone {
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error> {
         Self::validate_and_commit_with_accessory_update(
-            &self,
+            self,
             state_accesses,
             witness,
             &Default::default(),
@@ -227,7 +227,7 @@ pub trait Storage: Clone {
         accessory_update: &Self::AccessoryUpdate,
     ) -> Result<[u8; 32], anyhow::Error> {
         let (root_hash, node_batch) = self.compute_state_update(state_accesses, witness)?;
-        self.commit(&node_batch, &accessory_update);
+        self.commit(&node_batch, accessory_update);
 
         Ok(root_hash)
     }
