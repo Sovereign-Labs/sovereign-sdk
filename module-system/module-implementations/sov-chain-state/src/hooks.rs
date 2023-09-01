@@ -1,13 +1,11 @@
 use sov_modules_api::hooks::SlotHooks;
-use sov_modules_api::{Context, Spec};
-use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::services::da::SlotData;
+use sov_modules_api::{Context, SlotData, Spec};
 use sov_state::{Storage, WorkingSet};
 
 use super::ChainState;
 use crate::{StateTransitionId, TransitionInProgress};
 
-impl<C: Context, Da: DaSpec> SlotHooks<Da> for ChainState<C, Da> {
+impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da> {
     type Context = C;
 
     fn begin_slot_hook(

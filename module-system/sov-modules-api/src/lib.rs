@@ -55,6 +55,7 @@ pub use prefix::Prefix;
 pub use response::CallResponse;
 use serde::{Deserialize, Serialize};
 pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
+pub use sov_rollup_interface::services::da::SlotData;
 pub use sov_rollup_interface::stf::Event;
 pub use sov_rollup_interface::zk::{
     StoredCodeCommitment, ValidityCondition, ValidityConditionChecker, Zkvm,

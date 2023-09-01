@@ -1,4 +1,3 @@
-use sov_rollup_interface::da::DaSpec;
 use sov_state::WorkingSet;
 
 use crate::{ChainState, StateTransitionId, TransitionHeight};
@@ -6,7 +5,7 @@ use crate::{ChainState, StateTransitionId, TransitionHeight};
 impl<C, Da> ChainState<C, Da>
 where
     C: sov_modules_api::Context,
-    Da: DaSpec,
+    Da: sov_modules_api::DaSpec,
 {
     /// Increment the current slot height
     pub(crate) fn increment_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) {

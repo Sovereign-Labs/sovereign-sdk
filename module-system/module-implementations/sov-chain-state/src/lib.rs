@@ -16,10 +16,8 @@ pub mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use query::{ChainStateRpcImpl, ChainStateRpcServer};
-use sov_modules_api::Error;
+use sov_modules_api::{Error, ValidityCondition, ValidityConditionChecker};
 use sov_modules_macros::ModuleInfo;
-use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
 use sov_state::WorkingSet;
 
 /// Type alias that contains the height of a given transition
@@ -102,7 +100,7 @@ impl<Cond> TransitionInProgress<Cond> {
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[derive(ModuleInfo)]
-pub struct ChainState<C: sov_modules_api::Context, Da: DaSpec> {
+pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> {
     /// Address of the module.
     #[address]
     pub address: C::Address,
@@ -140,7 +138,7 @@ pub struct ChainStateConfig {
     pub initial_slot_height: TransitionHeight,
 }
 
-impl<C: sov_modules_api::Context, Da: DaSpec> ChainState<C, Da> {
+impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {
     /// Returns transition height in the current slot
     pub fn get_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> TransitionHeight {
         self.slot_height
@@ -172,7 +170,9 @@ impl<C: sov_modules_api::Context, Da: DaSpec> ChainState<C, Da> {
     }
 }
 
-impl<C: sov_modules_api::Context, Da: DaSpec> sov_modules_api::Module for ChainState<C, Da> {
+impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> sov_modules_api::Module
+    for ChainState<C, Da>
+{
     type Context = C;
 
     type Config = ChainStateConfig;
