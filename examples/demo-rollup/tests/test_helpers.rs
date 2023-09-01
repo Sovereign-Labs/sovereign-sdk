@@ -4,6 +4,8 @@ use std::net::SocketAddr;
 use demo_stf::app::App;
 use risc0_adapter::host::Risc0Verifier;
 use sov_demo_rollup::{get_genesis_config, initialize_ledger, Rollup};
+#[cfg(feature = "experimental")]
+use sov_ethereum::experimental::EthRpcConfig;
 use sov_rollup_interface::mocks::{MockAddress, MockDaService};
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
 use tokio::sync::oneshot;
@@ -15,7 +17,6 @@ fn create_mock_da_rollup(rollup_config: RollupConfig<()>) -> Rollup<Risc0Verifie
     let da_service = MockDaService::new(sequencer_da_address);
 
     let app = App::new(rollup_config.storage);
-
     let genesis_config = get_genesis_config(sequencer_da_address);
 
     Rollup {
@@ -24,6 +25,12 @@ fn create_mock_da_rollup(rollup_config: RollupConfig<()>) -> Rollup<Risc0Verifie
         ledger_db,
         runner_config: rollup_config.runner,
         genesis_config,
+        #[cfg(feature = "experimental")]
+        eth_rpc_config: EthRpcConfig {
+            min_blob_size: None,
+            tx_signer_priv_key: sov_demo_rollup::read_tx_signer_priv_key()
+                .expect("Unable to read signer private key"),
+        },
     }
 }
 
