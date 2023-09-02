@@ -6587,6 +6587,8 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-bank",
+ "sov-blob-storage",
+ "sov-chain-state",
  "sov-modules-api",
  "sov-modules-macros",
  "sov-rollup-interface",
