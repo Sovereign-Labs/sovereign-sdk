@@ -1,5 +1,5 @@
 //! Procedural macros to assist in the creation of Sovereign modules.
-//! 
+//!
 //! This crate is not intended to be used directly, please refer to the
 //! documentation of [`sov_modules_api`](https://docs.rs/sov-modules-api) for
 //! more information with the `macros` feature flag.
