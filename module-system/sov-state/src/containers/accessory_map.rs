@@ -10,27 +10,27 @@ use crate::{Prefix, Storage, WorkingSet};
 /// A container that maps keys to values.
 ///
 /// # Type parameters
-/// [`AccessoryMap`] is generic over:
+/// [`AccessoryStateMap`] is generic over:
 /// - a key type `K`;
 /// - a value type `V`;
 /// - a [`StateValueCodec`] `VC`.
 #[derive(Debug, Clone, PartialEq, borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub struct AccessoryMap<K, V, VC = BorshCodec> {
+pub struct AccessoryStateMap<K, V, VC = BorshCodec> {
     _phantom: (PhantomData<K>, PhantomData<V>),
     value_codec: VC,
     prefix: Prefix,
 }
 
-impl<K, V> AccessoryMap<K, V> {
-    /// Creates a new [`AccessoryMap`] with the given prefix and the default
+impl<K, V> AccessoryStateMap<K, V> {
+    /// Creates a new [`AccessoryStateMap`] with the given prefix and the default
     /// [`StateValueCodec`] (i.e. [`BorshCodec`]).
     pub fn new(prefix: Prefix) -> Self {
         Self::with_codec(prefix, BorshCodec)
     }
 }
 
-impl<K, V, VC> AccessoryMap<K, V, VC> {
-    /// Creates a new [`AccessoryMap`] with the given prefix and [`StateValueCodec`].
+impl<K, V, VC> AccessoryStateMap<K, V, VC> {
+    /// Creates a new [`AccessoryStateMap`] with the given prefix and [`StateValueCodec`].
     pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
         Self {
             _phantom: (PhantomData, PhantomData),
@@ -39,20 +39,20 @@ impl<K, V, VC> AccessoryMap<K, V, VC> {
         }
     }
 
-    /// Returns the prefix used when this [`AccessoryMap`] was created.
+    /// Returns the prefix used when this [`AccessoryStateMap`] was created.
     pub fn prefix(&self) -> &Prefix {
         &self.prefix
     }
 }
 
-impl<K, V, VC> AccessoryMap<K, V, VC>
+impl<K, V, VC> AccessoryStateMap<K, V, VC>
 where
     K: Hash + Eq,
     VC: StateValueCodec<V>,
 {
     /// Inserts a key-value pair into the map.
     ///
-    /// Much like [`AccessoryMap::get`], the key may be any borrowed form of the
+    /// Much like [`AccessoryStateMap::get`], the key may be any borrowed form of the
     /// map’s key type.
     pub fn set<Q, S: Storage>(&self, key: &Q, value: &V, working_set: &mut WorkingSet<S>)
     where
@@ -165,7 +165,7 @@ where
 }
 
 #[cfg(feature = "arbitrary")]
-impl<'a, K, V, VC> AccessoryMap<K, V, VC>
+impl<'a, K, V, VC> AccessoryStateMap<K, V, VC>
 where
     K: arbitrary::Arbitrary<'a> + Hash + Eq,
     V: arbitrary::Arbitrary<'a> + Hash + Eq,
@@ -183,7 +183,7 @@ where
         let prefix = Prefix::arbitrary(u)?;
         let len = u.arbitrary_len::<(K, V)>()?;
         let codec = VC::default();
-        let map = AccessoryMap::with_codec(prefix, codec);
+        let map = AccessoryStateMap::with_codec(prefix, codec);
 
         (0..len).try_fold(map, |map, _| {
             let key = K::arbitrary(u)?;

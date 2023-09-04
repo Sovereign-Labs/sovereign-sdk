@@ -46,11 +46,11 @@ fn test_value_setter() {
         .unwrap();
 
     assert_eq!(
-        module.get_value(&mut working_set_4),
+        module.state_value.get(&mut working_set_4),
         Some("FooBar".to_string())
     );
     assert_eq!(
-        module.get_value_accessory(&mut working_set_4),
+        module.accessory_value.get(&mut working_set_4),
         Some("FooBar".to_string())
     );
 

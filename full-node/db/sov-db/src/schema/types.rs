@@ -44,7 +44,7 @@ pub type AccessoryKey = Vec<u8>;
 /// The "value" half of a key/value pair from accessory state.
 ///
 /// See [`NativeDB`](crate::native_db::NativeDB) for more information.
-pub type AccessoryValue = Option<Vec<u8>>;
+pub type AccessoryStateValue = Option<Vec<u8>>;
 
 /// A hash stored in the database
 pub type DbHash = [u8; 32];
