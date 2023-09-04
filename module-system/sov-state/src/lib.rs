@@ -1,6 +1,8 @@
 pub mod codec;
 mod internal_cache;
-mod map;
+
+mod containers;
+pub use containers::*;
 
 #[cfg(feature = "native")]
 mod prover_storage;
@@ -13,8 +15,6 @@ mod scratchpad;
 pub mod storage;
 
 mod utils;
-mod value;
-mod vec;
 mod witness;
 
 mod zk_storage;
@@ -28,7 +28,6 @@ mod state_tests;
 use std::fmt::Display;
 use std::str;
 
-pub use map::{StateMap, StateMapError};
 #[cfg(feature = "native")]
 pub use prover_storage::{delete_storage, ProverStorage};
 pub use scratchpad::*;
@@ -36,8 +35,6 @@ pub use sov_first_read_last_write_cache::cache::CacheLog;
 use sov_rollup_interface::digest::Digest;
 pub use storage::Storage;
 use utils::AlignedVec;
-pub use value::StateValue;
-pub use vec::StateVec;
 
 pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 
