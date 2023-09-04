@@ -21,7 +21,10 @@ pub trait DaSpec: 'static {
     type BlockHeader: BlockHeaderTrait<Hash = Self::SlotHash>;
 
     /// The transaction type used by the DA layer.
-    type BlobTransaction: BlobReaderTrait;
+    type BlobTransaction: BlobReaderTrait<Address = Self::Address>;
+
+    /// The type used to represent addresses on the DA layer.
+    type Address: BasicAddress;
 
     /// Any conditions imposed by the DA layer which need to be checked outside of the SNARK
     type ValidityCondition: ValidityCondition;
