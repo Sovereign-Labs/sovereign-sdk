@@ -12,7 +12,6 @@ use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
@@ -105,32 +104,6 @@ pub struct Runtime<C: Context, Da: DaSpec> {
     pub accounts: sov_accounts::Accounts<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub evm: sov_evm::Evm<C>,
-}
-
-impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
-    type Context = C;
-
-    fn begin_slot_hook(
-        &self,
-        #[allow(unused_variables)] slot_data: &impl sov_rollup_interface::services::da::SlotData,
-        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
-            <Self::Context as Spec>::Storage,
-        >,
-    ) {
-        #[cfg(feature = "experimental")]
-        self.evm.begin_slot_hook(working_set);
-    }
-
-    fn end_slot_hook(
-        &self,
-        #[allow(unused_variables)] root_hash: [u8; 32],
-        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
-            <Self::Context as Spec>::Storage,
-        >,
-    ) {
-        #[cfg(feature = "experimental")]
-        self.evm.end_slot_hook(root_hash, working_set);
-    }
 }
 
 impl<C, Da> sov_modules_stf_template::Runtime<C, Da> for Runtime<C, Da>

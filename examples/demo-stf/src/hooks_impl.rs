@@ -1,4 +1,4 @@
-use sov_modules_api::hooks::{ApplyBlobHooks, TxHooks};
+use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, Spec};
 use sov_modules_stf_template::SequencerOutcome;
@@ -71,5 +71,31 @@ impl<C: Context, Da: DaSpec> ApplyBlobHooks<Da::BlobTransaction> for Runtime<C, 
                 )
             }
         }
+    }
+}
+
+impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
+    type Context = C;
+
+    fn begin_slot_hook(
+        &self,
+        #[allow(unused_variables)] slot_data: &impl sov_rollup_interface::services::da::SlotData,
+        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
+            <Self::Context as Spec>::Storage,
+        >,
+    ) {
+        #[cfg(feature = "experimental")]
+        self.evm.begin_slot_hook(working_set);
+    }
+
+    fn end_slot_hook(
+        &self,
+        #[allow(unused_variables)] root_hash: [u8; 32],
+        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
+            <Self::Context as Spec>::Storage,
+        >,
+    ) {
+        #[cfg(feature = "experimental")]
+        self.evm.end_slot_hook(root_hash, working_set);
     }
 }
