@@ -389,15 +389,21 @@ where
         let bonding_root = {
             // If we cannot get the transition before the current one, it means that we are trying
             // to get the genesis state root
-            if let Some(transition) = self.chain_state.historical_transitions.get(
-                &(attestation.proof_of_bond.claimed_transition_num - 1),
-                working_set,
-            ) {
+            let transition_height = TransitionHeight::from(
+                attestation
+                    .proof_of_bond
+                    .claimed_transition_num
+                    .checked_sub(1)
+                    .expect("The transition height should be greater than 1"),
+            );
+            if let Some(transition) = self
+                .chain_state
+                .get_historical_transitions(transition_height, working_set)
+            {
                 transition.post_state_root()
             } else {
                 self.chain_state
-                    .genesis_hash
-                    .get(working_set)
+                    .get_genesis_hash(working_set)
                     .expect("The genesis hash should be set at genesis")
             }
         };
@@ -439,8 +445,7 @@ where
     ) -> anyhow::Result<CallResponse, AttesterIncentiveErrors> {
         if let Some(curr_tx) = self
             .chain_state
-            .historical_transitions
-            .get(&claimed_transition_height, working_set)
+            .get_historical_transitions(claimed_transition_height, working_set)
         {
             // We first need to compare the initial block hash to the previous post state root
             if !curr_tx.compare_hashes(&attestation.da_block_hash, &attestation.post_state_root) {
@@ -476,8 +481,7 @@ where
         // Normal state
         if let Some(transition) = self
             .chain_state
-            .historical_transitions
-            .get(&claimed_transition_height.saturating_sub(1), working_set)
+            .get_historical_transitions(claimed_transition_height.saturating_sub(1), working_set)
         {
             if transition.post_state_root() != attestation.initial_state_root {
                 // The initial root hashes don't match, just slash the attester
@@ -495,13 +499,14 @@ where
             // minimal bond and that the attester is not unbonding
 
             // We add a check here that the claimed transition height is the same as the genesis height.
-            if self
+            let genesis_height = self
                 .chain_state
-                .genesis_height
-                .get(working_set)
-                .expect("Must be set at genesis")
-                != (claimed_transition_height - 1)
-            {
+                .get_genesis_height(working_set)
+                .expect("Must be set at genesis");
+            let previous = claimed_transition_height
+                .checked_sub(1)
+                .expect("Transition height must be > 0");
+            if genesis_height != previous {
                 return Err(self.slash_burn_reward(
                     attester,
                     Role::Attester,
@@ -638,21 +643,18 @@ where
     ) -> anyhow::Result<(), SlashingReason> {
         let transition = self
             .chain_state
-            .historical_transitions
-            .get_or_err(height, working_set)
-            .map_err(|_| SlashingReason::TransitionInvalid)?;
+            .get_historical_transitions(*height, working_set)
+            .ok_or(SlashingReason::TransitionInvalid)?;
 
         let initial_hash = {
             if let Some(prev_transition) = self
                 .chain_state
-                .historical_transitions
-                .get(&height.saturating_sub(1), working_set)
+                .get_historical_transitions(height.saturating_sub(1), working_set)
             {
                 prev_transition.post_state_root()
             } else {
                 self.chain_state
-                    .genesis_hash
-                    .get(working_set)
+                    .get_genesis_hash(working_set)
                     .expect("The genesis hash should be set")
             }
         };
