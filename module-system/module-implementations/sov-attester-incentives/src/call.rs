@@ -4,10 +4,8 @@ use std::fmt::Debug;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::{Amount, Coins};
 use sov_chain_state::TransitionHeight;
-use sov_modules_api::{CallResponse, Spec};
-use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::optimistic::Attestation;
-use sov_rollup_interface::zk::{StateTransition, ValidityConditionChecker, Zkvm};
+use sov_modules_api::optimistic::Attestation;
+use sov_modules_api::{CallResponse, Spec, StateTransition, ValidityConditionChecker};
 use sov_state::storage::StorageProof;
 use sov_state::{Storage, WorkingSet};
 use thiserror::Error;
@@ -117,8 +115,8 @@ pub enum Role {
 impl<C, Vm, Da, Checker> AttesterIncentives<C, Vm, Da, Checker>
 where
     C: sov_modules_api::Context,
-    Vm: Zkvm,
-    Da: DaSpec,
+    Vm: sov_modules_api::Zkvm,
+    Da: sov_modules_api::DaSpec,
     Checker: ValidityConditionChecker<Da::ValidityCondition>,
 {
     /// This returns the address of the reward token supply

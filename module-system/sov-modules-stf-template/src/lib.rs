@@ -8,12 +8,10 @@ pub use app_template::AppTemplate;
 pub use batch::Batch;
 use sov_modules_api::capabilities::BlobSelector;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
-use sov_modules_api::{Context, DispatchCall, Genesis, Spec};
-use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-use sov_rollup_interface::services::da::SlotData;
+use sov_modules_api::{
+    BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, SlotData, Spec, Zkvm,
+};
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
-use sov_rollup_interface::zk::Zkvm;
-use sov_rollup_interface::BasicAddress;
 use sov_state::{StateCheckpoint, Storage, WorkingSet};
 use tracing::info;
 pub use tx_verifier::RawTx;

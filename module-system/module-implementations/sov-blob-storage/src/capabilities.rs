@@ -1,6 +1,5 @@
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
-use sov_modules_api::{Context, Spec};
-use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
+use sov_modules_api::{BlobReaderTrait, Context, DaSpec, Spec};
 use sov_state::WorkingSet;
 use tracing::info;
 

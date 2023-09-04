@@ -1,10 +1,9 @@
 use anyhow::Result;
-use sov_rollup_interface::zk::Zkvm;
 use sov_state::WorkingSet;
 
 use crate::ProverIncentives;
 
-impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
+impl<C: sov_modules_api::Context, Vm: sov_modules_api::Zkvm> ProverIncentives<C, Vm> {
     /// Init the [`ProverIncentives`] module using the provided `config`.
     /// Sets the minimum amount necessary to bond, the commitment to the verifier circuit
     /// the bonding token address and builds the set of initial provers.

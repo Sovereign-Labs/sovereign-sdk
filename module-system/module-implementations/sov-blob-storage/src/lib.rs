@@ -6,8 +6,7 @@ mod capabilities;
 mod query;
 #[cfg(feature = "native")]
 pub use query::{BlobStorageRpcImpl, BlobStorageRpcServer, Response};
-use sov_modules_api::{Module, ModuleInfo};
-use sov_rollup_interface::da::BlobReaderTrait;
+use sov_modules_api::{BlobReaderTrait, Module, ModuleInfo};
 use sov_state::{StateMap, StateValue, WorkingSet};
 
 /// For how many slots deferred blobs are stored before being executed

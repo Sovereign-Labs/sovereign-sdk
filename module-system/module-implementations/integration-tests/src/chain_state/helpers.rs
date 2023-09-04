@@ -2,10 +2,9 @@ use sov_chain_state::{ChainState, ChainStateConfig};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Context, PublicKey, Spec};
+use sov_modules_api::{BlobReaderTrait, Context, DaSpec, PublicKey, Spec};
 use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
 use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
-use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::mocks::MockZkvm;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
@@ -63,7 +62,7 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
 
     fn begin_slot_hook(
         &self,
-        slot_data: &impl sov_rollup_interface::services::da::SlotData<Cond = Da::ValidityCondition>,
+        slot_data: &impl sov_modules_api::SlotData<Cond = Da::ValidityCondition>,
         working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
     ) {
         self.chain_state.begin_slot_hook(slot_data, working_set)

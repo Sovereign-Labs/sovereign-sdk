@@ -14,8 +14,7 @@ pub use call::CallMessage;
 /// The response type used by RPC queries.
 #[cfg(feature = "native")]
 pub use query::Response;
-use sov_modules_api::{Context, Error, ModuleInfo};
-use sov_rollup_interface::zk::{StoredCodeCommitment, Zkvm};
+use sov_modules_api::{Context, Error, ModuleInfo, StoredCodeCommitment, Zkvm};
 use sov_state::WorkingSet;
 
 /// Configuration of the prover incentives module. Specifies the

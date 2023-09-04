@@ -7022,7 +7022,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
  "tempfile",
  "thiserror",
