@@ -111,6 +111,7 @@ impl BlobReaderTrait for MockBlob {
         self.data.accumulator()
     }
 
+    #[cfg(feature = "native")]
     fn advance(&mut self, num_bytes: usize) -> &[u8] {
         self.data.advance(num_bytes);
         self.verified_data()

@@ -44,6 +44,7 @@ impl BlobReaderTrait for BlobWithSender {
         self.blob.accumulator()
     }
 
+    #[cfg(feature = "native")]
     fn advance(&mut self, num_bytes: usize) -> &[u8] {
         self.blob.advance(num_bytes);
         self.verified_data()
