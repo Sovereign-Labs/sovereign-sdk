@@ -4,7 +4,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
 use crate::codec::{BorshCodec, StateValueCodec};
-use crate::{Prefix, Storage, WorkingSet};
+use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
 
 /// Container for a single value.
 #[derive(Debug, PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize)]

@@ -4,7 +4,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
 use crate::codec::{BorshCodec, StateValueCodec};
-use crate::{Prefix, Storage, WorkingSet};
+use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
 
 /// Container for a single value.
 #[derive(Debug, PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize)]
@@ -51,12 +51,16 @@ where
 {
     /// Sets a value in the AccessoryStateValue.
     pub fn set<S: Storage>(&self, value: &V, working_set: &mut WorkingSet<S>) {
-        working_set.set_accessory_value(self.prefix(), &SingletonKey, value, &self.codec)
+        working_set
+            .accessory_state()
+            .set_value(self.prefix(), &SingletonKey, value, &self.codec)
     }
 
     /// Gets a value from the AccessoryStateValue or None if the value is absent.
     pub fn get<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
-        working_set.get_value(self.prefix(), &SingletonKey, &self.codec)
+        working_set
+            .accessory_state()
+            .get_value(self.prefix(), &SingletonKey, &self.codec)
     }
 
     /// Gets a value from the AccessoryStateValue or Error if the value is absent.
@@ -67,7 +71,9 @@ where
 
     /// Removes a value from the AccessoryStateValue, returning the value (or None if the key is absent).
     pub fn remove<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
-        working_set.remove_value(self.prefix(), &SingletonKey, &self.codec)
+        working_set
+            .accessory_state()
+            .remove_value(self.prefix(), &SingletonKey, &self.codec)
     }
 
     /// Removes a value and from the AccessoryStateValue, returning the value (or Error if the key is absent).
@@ -78,7 +84,9 @@ where
 
     /// Deletes a value from the AccessoryStateValue.
     pub fn delete<S: Storage>(&self, working_set: &mut WorkingSet<S>) {
-        working_set.delete_value(self.prefix(), &SingletonKey);
+        working_set
+            .accessory_state()
+            .delete_value(self.prefix(), &SingletonKey);
     }
 }
 

@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use thiserror::Error;
 
 use crate::codec::{BorshCodec, StateValueCodec};
-use crate::{Prefix, StateMap, StateValue, Storage, WorkingSet};
+use crate::{AccessoryStateMap, AccessoryStateValue, Prefix, Storage, WorkingSet};
 
 #[derive(Debug, Clone)]
 pub struct AccessoryStateVec<V, VC = BorshCodec>
@@ -13,8 +13,8 @@ where
 {
     _phantom: PhantomData<V>,
     prefix: Prefix,
-    len_value: StateValue<usize>,
-    elems: StateMap<usize, V, VC>,
+    len_value: AccessoryStateValue<usize>,
+    elems: AccessoryStateMap<usize, V, VC>,
 }
 
 /// Error type for `AccessoryStateVec` get method.
@@ -47,8 +47,8 @@ where
         // shouldn't be necessary, but it's best not to rely on implementation
         // details of `StateValue` and `StateMap` as they both have the right to
         // reserve the whole key space for themselves.
-        let len_value = StateValue::<usize>::new(prefix.extended(b"l"));
-        let elems = StateMap::with_codec(prefix.extended(b"e"), codec);
+        let len_value = AccessoryStateValue::<usize>::new(prefix.extended(b"l"));
+        let elems = AccessoryStateMap::with_codec(prefix.extended(b"e"), codec);
         Self {
             _phantom: PhantomData,
             prefix,

@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::codec::{BorshCodec, StateValueCodec};
 use crate::storage::StorageKey;
-use crate::{Prefix, Storage, WorkingSet};
+use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
 
 /// A container that maps keys to values.
 ///

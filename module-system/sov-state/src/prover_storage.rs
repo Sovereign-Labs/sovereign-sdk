@@ -222,7 +222,7 @@ mod test {
     use jmt::Version;
 
     use super::*;
-    use crate::{DefaultStorageSpec, WorkingSet};
+    use crate::{DefaultStorageSpec, StateReaderAndWriter, WorkingSet};
 
     #[derive(Clone)]
     struct TestCase {
@@ -262,7 +262,7 @@ mod test {
                 let mut storage = WorkingSet::new(prover_storage.clone());
                 assert_eq!(prover_storage.db.get_next_version(), test.version);
 
-                storage.set(test.key.clone(), test.value.clone());
+                storage.set(&test.key, test.value.clone());
                 let (cache, witness) = storage.checkpoint().freeze();
                 prover_storage
                     .validate_and_commit(cache, &witness)
@@ -301,7 +301,7 @@ mod test {
             let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
             assert!(prover_storage.is_empty());
             let mut storage = WorkingSet::new(prover_storage.clone());
-            storage.set(key.clone(), value.clone());
+            storage.set(&key, value.clone());
             let (cache, witness) = storage.checkpoint().freeze();
             prover_storage
                 .validate_and_commit(cache, &witness)
