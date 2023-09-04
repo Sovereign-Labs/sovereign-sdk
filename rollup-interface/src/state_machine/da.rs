@@ -67,27 +67,6 @@ pub trait DaVerifier {
     ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error>;
 }
 
-/// [`AccumulatorStatus`] is a wrapper around an accumulator vector that specifies
-/// whether a [`CountedBufReader`] has finished reading the underlying buffer.
-#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum Accumulator {
-    /// The underlying buffer has been completely read and [`Vec<u8>`] contains the result
-    Completed(Vec<u8>),
-    /// The underlying buffer still contains elements to be read. [`Vec<u8>`] contains the
-    /// accumulated elements.
-    InProgress(Vec<u8>),
-}
-
-impl Accumulator {
-    /// Returns the length of the accumulated data
-    pub fn len(&self) -> usize {
-        match self {
-            Accumulator::Completed(inner) => inner.len(),
-            Accumulator::InProgress(inner) => inner.len(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, BorshDeserialize, BorshSerialize, PartialEq)]
 /// Simple structure that implements the Read trait for a buffer and  counts the number of bytes read from the beginning.
 /// Useful for the partial blob reading optimization: we know for each blob how many bytes have been read from the beginning.
@@ -99,7 +78,7 @@ pub struct CountedBufReader<B: Buf> {
 
     /// An accumulator that stores the data read from the blob buffer into a vector.
     /// Allows easy access to the data that has already been read
-    accumulator: Accumulator,
+    accumulator: Vec<u8>,
 }
 
 impl<B: Buf> CountedBufReader<B> {
@@ -108,7 +87,7 @@ impl<B: Buf> CountedBufReader<B> {
         let buf_size = inner.remaining();
         CountedBufReader {
             inner,
-            accumulator: Accumulator::InProgress(Vec::with_capacity(buf_size)),
+            accumulator: Vec::with_capacity(buf_size),
         }
     }
 
@@ -116,32 +95,26 @@ impl<B: Buf> CountedBufReader<B> {
     /// of remaining unverified data, then all remaining unverified data is added to the accumulator.
     pub fn advance(&mut self, num_bytes: usize) {
         let requested = num_bytes;
-        let acc_vec = match &mut self.accumulator {
-            Accumulator::Completed(_) => {
-                return;
-            }
-            Accumulator::InProgress(inner_vec) => inner_vec,
-        };
+        let remaining = self.inner.remaining();
+        if remaining == 0 {
+            return;
+        }
         // `Buf::advance` would panic if `num_bytes` was greater than the length of the remaining unverified data,
         // but we just advance to the end of the buffer.
-        let remaining_before_read = self.inner.remaining();
-        let num_to_read = min(remaining_before_read, requested);
-        // Extend the inner vector with zeros (copy_to_slice requires the vector to have the correct *length* not just
-        // capacity)
-        acc_vec.extend(std::iter::repeat(0).take(num_to_read));
-        // Use copy_to_slice to overwrite the zeros we just added
-        let accumulator_len = acc_vec.len();
-        self.inner
-            .copy_to_slice(acc_vec[accumulator_len - num_to_read..].as_mut());
+        let num_to_read = min(remaining, requested);
+        // Extend the inner vector with zeros (copy_to_slice requires the vector to have
+        // the correct *length* not just capacity)
+        self.accumulator
+            .resize(self.accumulator.len() + num_to_read, 0);
 
-        // If we exhausted the inner buffer, mark the accumulator completed
-        if num_to_read == remaining_before_read {
-            self.accumulator = Accumulator::Completed(std::mem::take(acc_vec));
-        }
+        // Use copy_to_slice to overwrite the zeros we just added
+        let accumulator_len = self.accumulator.len();
+        self.inner
+            .copy_to_slice(self.accumulator[accumulator_len - num_to_read..].as_mut());
     }
 
     /// Getter: returns a reference to an accumulator of the blob data read by the rollup
-    pub fn accumulator(&self) -> &Accumulator {
+    pub fn accumulator(&self) -> &[u8] {
         &self.accumulator
     }
 
@@ -171,28 +144,53 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
     fn hash(&self) -> [u8; 32];
 
     /// Returns a slice containing all the data accessible to the rollup at this point in time.
-    /// When running in zk mode, all of this data will be verified by a [`DaVerifier`] implementation.
+    /// When running in native mode, the rollup can extend this slice by calling `advance`. In zk-mode,
+    /// the rollup is limited to only the verified data.
     ///
     /// Rollups should use this method in conjunction with `advance` to read only the minimum amount
     /// of data required for execution
-    fn partial_data(&self) -> &[u8];
+    fn verified_data(&self) -> &[u8];
+
+    /// Returns the total number of bytes in the blob. Note that this may be unequal to `verified_data.len()`.
+    fn total_len(&self) -> usize;
 
     /// Extends the `partial_data` accumulator with the next `num_bytes` of  data from the blob
     /// and returns a reference to the entire contents of the blob up to this point.
     ///
     /// If `num_bytes` is greater than the length of the remaining unverified data,
     /// then all remaining unverified data is added to the accumulator.
+    ///
+    /// ### Note:
+    /// This method is only available when the `native` feature is enabled because it is unsafe to access
+    /// unverified data during execution
+    #[cfg(feature = "native")]
     fn advance(&mut self, num_bytes: usize) -> &[u8];
 
-    /// Returns the total number of bytes in the blob.
-    fn total_len(&self) -> usize;
-
-    /// Verifies all remaining unverified data in the blob and return a reference to the entire contents of the blob.
-    /// For efficiency, rollups should prefer use of `partial_data` and `advance` unless they know that all of the
-    /// blob data is required for execution.
+    /// Verifies all remaining unverified data in the blob and returns a reference to the entire contents of the blob.
+    /// For efficiency, rollups should prefer use of `verified_data` and `advance` unless they know that all of the
+    /// blob data will be required for execution.
+    #[cfg(feature = "native")]
     fn full_data(&mut self) -> &[u8] {
         self.advance(self.total_len())
     }
+}
+
+/// This trait wraps "blob transaction" from a data availability layer which has been verified by the DA layer
+pub trait VerifiedBlobtrait: Serialize + DeserializeOwned + Send + Sync + 'static {
+    /// The type used to represent addresses on the DA layer.
+    type Address: BasicAddress;
+
+    /// Returns the address (on the DA layer) of the entity which submitted the blob transaction
+    fn sender(&self) -> Self::Address;
+
+    /// Returns the hash of the blob as it appears on the DA layer
+    fn hash(&self) -> [u8; 32];
+
+    /// Returns a slice containing all of the *verified* data. This may not be the full contents of the blob!
+    fn verified_data(&self) -> &[u8];
+
+    /// Returns the total number of bytes in the blob. This may be unequal to `verified_data.len()`.
+    fn total_len(&self) -> usize;
 }
 
 /// Trait with collection of trait bounds for a block hash.

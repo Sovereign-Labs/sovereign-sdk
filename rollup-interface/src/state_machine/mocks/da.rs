@@ -107,16 +107,13 @@ impl BlobReaderTrait for MockBlob {
         self.hash
     }
 
-    fn partial_data(&self) -> &[u8] {
-        match self.data.accumulator() {
-            crate::da::Accumulator::Completed(data) => data,
-            crate::da::Accumulator::InProgress(data) => data,
-        }
+    fn verified_data(&self) -> &[u8] {
+        self.data.accumulator()
     }
 
     fn advance(&mut self, num_bytes: usize) -> &[u8] {
         self.data.advance(num_bytes);
-        self.partial_data()
+        self.verified_data()
     }
 
     fn total_len(&self) -> usize {

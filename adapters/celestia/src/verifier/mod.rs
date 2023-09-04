@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{
-    self, Accumulator, BlobReaderTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, DaSpec,
+    self, BlobReaderTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, DaSpec,
 };
 use sov_rollup_interface::digest::Digest;
 use sov_rollup_interface::zk::ValidityCondition;
@@ -40,16 +40,13 @@ impl BlobReaderTrait for BlobWithSender {
         self.hash
     }
 
-    fn partial_data(&self) -> &[u8] {
-        match self.blob.accumulator() {
-            Accumulator::Completed(ref data) => data,
-            Accumulator::InProgress(ref data) => data,
-        }
+    fn verified_data(&self) -> &[u8] {
+        self.blob.accumulator()
     }
 
     fn advance(&mut self, num_bytes: usize) -> &[u8] {
         self.blob.advance(num_bytes);
-        self.partial_data()
+        self.verified_data()
     }
 
     fn total_len(&self) -> usize {
@@ -258,7 +255,7 @@ impl da::DaVerifier for CelestiaVerifier {
                 let mut blob_data = vec![0; blob_iter.remaining()];
                 blob_iter.copy_to_slice(blob_data.as_mut_slice());
 
-                let tx_data = tx.partial_data();
+                let tx_data = tx.verified_data();
 
                 assert!(
                     tx_data.len() <= blob_data.len(),

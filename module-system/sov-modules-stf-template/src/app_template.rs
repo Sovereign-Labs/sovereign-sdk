@@ -264,7 +264,7 @@ where
         &self,
         blob_data: &mut impl BlobReaderTrait,
     ) -> Result<Batch, SlashingReason> {
-        match Batch::deserialize(&mut blob_data.full_data()) {
+        match Batch::deserialize(&mut data_for_deserialization(blob_data)) {
             Ok(batch) => Ok(batch),
             Err(e) => {
                 error!(
@@ -309,4 +309,14 @@ where
         }
         Ok(decoded_messages)
     }
+}
+
+#[cfg(feature = "native")]
+fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> &[u8] {
+    blob.full_data()
+}
+
+#[cfg(not(feature = "native"))]
+fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> &[u8] {
+    blob.verified_data()
 }
