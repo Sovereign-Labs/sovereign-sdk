@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use thiserror::Error;
 
 use crate::codec::{BorshCodec, StateValueCodec};
-use crate::{AccessoryStateMap, AccessoryStateValue, Prefix, Storage, WorkingSet};
+use crate::{AccessoryStateMap, AccessoryStateValue, AccessoryWorkingSet, Prefix, Storage};
 
 #[derive(Debug, Clone)]
 pub struct AccessoryStateVec<V, VC = BorshCodec>
@@ -62,7 +62,7 @@ where
         &self.prefix
     }
 
-    fn set_len<S: Storage>(&self, length: usize, working_set: &mut WorkingSet<S>) {
+    fn set_len<S: Storage>(&self, length: usize, working_set: &mut AccessoryWorkingSet<S>) {
         self.len_value.set(&length, working_set);
     }
 
@@ -73,7 +73,7 @@ where
         &self,
         index: usize,
         value: &V,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut AccessoryWorkingSet<S>,
     ) -> Result<(), Error> {
         let len = self.len(working_set);
 
@@ -86,7 +86,11 @@ where
     }
 
     /// Returns the value for the given index.
-    pub fn get<S: Storage>(&self, index: usize, working_set: &mut WorkingSet<S>) -> Option<V> {
+    pub fn get<S: Storage>(
+        &self,
+        index: usize,
+        working_set: &mut AccessoryWorkingSet<S>,
+    ) -> Option<V> {
         self.elems.get(&index, working_set)
     }
 
@@ -96,7 +100,7 @@ where
     pub fn get_or_err<S: Storage>(
         &self,
         index: usize,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut AccessoryWorkingSet<S>,
     ) -> Result<V, Error> {
         let len = self.len(working_set);
 
@@ -110,12 +114,12 @@ where
     }
 
     /// Returns the length of the [`AccessoryStateVec`].
-    pub fn len<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> usize {
+    pub fn len<S: Storage>(&self, working_set: &mut AccessoryWorkingSet<S>) -> usize {
         self.len_value.get(working_set).unwrap_or_default()
     }
 
     /// Pushes a value to the end of the [`AccessoryStateVec`].
-    pub fn push<S: Storage>(&self, value: &V, working_set: &mut WorkingSet<S>) {
+    pub fn push<S: Storage>(&self, value: &V, working_set: &mut AccessoryWorkingSet<S>) {
         let len = self.len(working_set);
 
         self.elems.set(&len, value, working_set);
@@ -123,7 +127,7 @@ where
     }
 
     /// Pops a value from the end of the [`AccessoryStateVec`] and returns it.
-    pub fn pop<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
+    pub fn pop<S: Storage>(&self, working_set: &mut AccessoryWorkingSet<S>) -> Option<V> {
         let len = self.len(working_set);
         let last_i = len.checked_sub(1)?;
         let elem = self.elems.remove(&last_i, working_set)?;
@@ -134,7 +138,7 @@ where
         Some(elem)
     }
 
-    pub fn clear<S: Storage>(&self, working_set: &mut WorkingSet<S>) {
+    pub fn clear<S: Storage>(&self, working_set: &mut AccessoryWorkingSet<S>) {
         let len = self.len_value.remove(working_set).unwrap_or_default();
 
         for i in 0..len {
@@ -146,7 +150,7 @@ where
     ///
     /// If the length of the provided values is less than the length of the
     /// [`AccessoryStateVec`], the remaining values will be removed from storage.
-    pub fn set_all<S: Storage>(&self, values: Vec<V>, working_set: &mut WorkingSet<S>) {
+    pub fn set_all<S: Storage>(&self, values: Vec<V>, working_set: &mut AccessoryWorkingSet<S>) {
         let old_len = self.len(working_set);
         let new_len = values.len();
 
@@ -164,7 +168,7 @@ where
     /// Returns an iterator over all the values in the [`AccessoryStateVec`].
     pub fn iter<'a, 'ws, S: Storage>(
         &'a self,
-        working_set: &'ws mut WorkingSet<S>,
+        working_set: &'ws mut AccessoryWorkingSet<'ws, S>,
     ) -> AccessoryStateVecIter<'a, 'ws, V, VC, S> {
         let len = self.len(working_set);
         AccessoryStateVecIter {
@@ -185,7 +189,7 @@ where
     S: Storage,
 {
     state_vec: &'a AccessoryStateVec<V, VC>,
-    ws: &'ws mut WorkingSet<S>,
+    ws: &'ws mut AccessoryWorkingSet<'ws, S>,
     len: usize,
     next_i: usize,
 }
@@ -229,7 +233,7 @@ mod test {
     use std::fmt::Debug;
 
     use super::*;
-    use crate::{DefaultStorageSpec, ProverStorage};
+    use crate::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
     enum TestCaseAction<T> {
         Push(T),
@@ -284,14 +288,18 @@ mod test {
         let state_vec = AccessoryStateVec::<u32>::new(prefix);
 
         for test_case_action in test_cases() {
-            check_test_case_action(&state_vec, test_case_action, &mut working_set);
+            check_test_case_action(
+                &state_vec,
+                test_case_action,
+                &mut working_set.accessory_state(),
+            );
         }
     }
 
-    fn check_test_case_action<T, S>(
+    fn check_test_case_action<'ws, T, S>(
         state_vec: &AccessoryStateVec<T>,
         action: TestCaseAction<T>,
-        ws: &mut WorkingSet<S>,
+        ws: &'ws mut AccessoryWorkingSet<'ws, S>,
     ) where
         S: Storage,
         BorshCodec: StateValueCodec<T> + StateValueCodec<usize>,

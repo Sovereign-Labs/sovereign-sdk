@@ -5,7 +5,7 @@ use std::marker::PhantomData;
 use super::StateMapError;
 use crate::codec::{BorshCodec, StateValueCodec};
 use crate::storage::StorageKey;
-use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
+use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
 
 /// A container that maps keys to values.
 ///
@@ -54,7 +54,7 @@ where
     ///
     /// Much like [`AccessoryStateMap::get`], the key may be any borrowed form of the
     /// map’s key type.
-    pub fn set<Q, S: Storage>(&self, key: &Q, value: &V, working_set: &mut WorkingSet<S>)
+    pub fn set<Q, S: Storage>(&self, key: &Q, value: &V, working_set: &mut AccessoryWorkingSet<S>)
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -72,9 +72,9 @@ where
     /// type.
     ///
     /// ```
-    /// use sov_state::{StateMap, Storage, WorkingSet};
+    /// use sov_state::{StateMap, Storage, AccessoryWorkingSet};
     ///
-    /// fn foo<S>(map: StateMap<Vec<u8>, u64>, key: &[u8], ws: &mut WorkingSet<S>) -> Option<u64>
+    /// fn foo<S>(map: StateMap<Vec<u8>, u64>, key: &[u8], ws: &mut AccessoryWorkingSet<S>) -> Option<u64>
     /// where
     ///     S: Storage,
     /// {
@@ -90,16 +90,16 @@ where
     /// maps:
     ///
     /// ```
-    /// use sov_state::{StateMap, Storage, WorkingSet};
+    /// use sov_state::{StateMap, Storage, AccessoryWorkingSet};
     ///
-    /// fn foo<S>(map: StateMap<Vec<u8>, u64>, key: [u8; 32], ws: &mut WorkingSet<S>) -> Option<u64>
+    /// fn foo<S>(map: StateMap<Vec<u8>, u64>, key: [u8; 32], ws: &mut AccessoryWorkingSet<S>) -> Option<u64>
     /// where
     ///     S: Storage,
     /// {
     ///     map.get(&key[..], ws)
     /// }
     /// ```
-    pub fn get<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Option<V>
+    pub fn get<Q, S: Storage>(&self, key: &Q, working_set: &mut AccessoryWorkingSet<S>) -> Option<V>
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -112,7 +112,7 @@ where
     pub fn get_or_err<Q, S: Storage>(
         &self,
         key: &Q,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut AccessoryWorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
         K: Borrow<Q>,
@@ -125,7 +125,11 @@ where
 
     /// Removes a key from the map, returning the corresponding value (or
     /// [`None`] if the key is absent).
-    pub fn remove<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Option<V>
+    pub fn remove<Q, S: Storage>(
+        &self,
+        key: &Q,
+        working_set: &mut AccessoryWorkingSet<S>,
+    ) -> Option<V>
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -140,7 +144,7 @@ where
     pub fn remove_or_err<Q, S: Storage>(
         &self,
         key: &Q,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut AccessoryWorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
         K: Borrow<Q>,
@@ -155,7 +159,7 @@ where
     ///
     /// This is equivalent to [`StateMap::remove`], but doesn't deserialize and
     /// return the value beforing deletion.
-    pub fn delete<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>)
+    pub fn delete<Q, S: Storage>(&self, key: &Q, working_set: &mut AccessoryWorkingSet<S>)
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -173,7 +177,7 @@ where
 {
     pub fn arbitrary_workset<S>(
         u: &mut arbitrary::Unstructured<'a>,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut AccessoryWorkingSet<S>,
     ) -> arbitrary::Result<Self>
     where
         S: Storage,

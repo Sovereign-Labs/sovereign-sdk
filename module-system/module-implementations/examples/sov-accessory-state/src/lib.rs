@@ -56,7 +56,8 @@ impl<C: Context> Module for AccessorySetter<C> {
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
             CallMessage::SetValueAccessory(new_value) => {
-                self.accessory_value.set(&new_value, working_set);
+                self.accessory_value
+                    .set(&new_value, &mut working_set.accessory_state());
             }
             CallMessage::SetValue(new_value) => {
                 self.state_value.set(&new_value, working_set);

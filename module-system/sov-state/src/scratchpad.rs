@@ -175,6 +175,8 @@ impl<S: Storage> StateReaderAndWriter for WorkingSet<S> {
     }
 }
 
+/// A wrapper over [`WorkingSet`] that only allows access to the accessory
+/// state (non-JMT state).
 pub struct AccessoryWorkingSet<'a, S: Storage> {
     ws: &'a mut WorkingSet<S>,
 }

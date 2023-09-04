@@ -50,7 +50,9 @@ fn test_value_setter() {
         Some("FooBar".to_string())
     );
     assert_eq!(
-        module.accessory_value.get(&mut working_set_4),
+        module
+            .accessory_value
+            .get(&mut working_set_4.accessory_state()),
         Some("FooBar".to_string())
     );
 

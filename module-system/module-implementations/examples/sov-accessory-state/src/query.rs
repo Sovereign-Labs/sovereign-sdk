@@ -23,7 +23,7 @@ impl<C: sov_modules_api::Context> AccessorySetter<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<ValueResponse> {
         Ok(ValueResponse {
-            value: self.accessory_value.get(working_set),
+            value: self.accessory_value.get(&mut working_set.accessory_state()),
         })
     }
 }
