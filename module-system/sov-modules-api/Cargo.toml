@@ -40,6 +40,7 @@ risc0-zkvm-platform = { version = "0.16", optional = true }
 [dev-dependencies]
 bincode = { workspace = true }
 sov-modules-api = { path = ".", features = ["native"] }
+sov-bank = { path = "../module-implementations/sov-bank", version = "0.1", features = ["native"] }
 
 [features]
 bench = ["zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]

@@ -6817,6 +6817,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.7",
+ "sov-bank",
  "sov-modules-api",
  "sov-modules-macros",
  "sov-rollup-interface",
