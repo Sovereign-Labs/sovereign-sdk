@@ -20,12 +20,11 @@ bincode = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
 
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
 sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
 sov-state = { path = "../../sov-state", version = "0.1" }
 sov-sequencer-registry = { path = "../sov-sequencer-registry", version = "0.1" }
-
+sov-chain-state = { path = "../sov-chain-state" }
 
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
@@ -33,9 +32,11 @@ serde_json = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 
+
 [dev-dependencies]
 sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"] }
-sov-bank = { path = "../sov-bank", version = "0.1" }
+sov-blob-storage = { path = ".", features = ["native"] }
+sov-bank = { path = "../sov-bank" }
 tempfile = { workspace = true }
 
 [features]

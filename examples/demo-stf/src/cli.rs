@@ -35,7 +35,8 @@ pub struct App<Da: DaSpec> {
     workflow: Workflows<Da>,
 }
 
-pub async fn run<Da: DaSpec>() -> Result<(), anyhow::Error> {
+pub async fn run<Da: DaSpec + serde::Serialize + serde::de::DeserializeOwned>(
+) -> Result<(), anyhow::Error> {
     let app_dir = wallet_dir()?;
     std::fs::create_dir_all(app_dir.as_ref())?;
     let wallet_state_path = app_dir.as_ref().join("wallet_state.json");

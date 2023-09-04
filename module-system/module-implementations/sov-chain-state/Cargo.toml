@@ -21,7 +21,7 @@ jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], 
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
 sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
 sov-state = { path = "../../sov-state", version = "0.1" }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
+
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -30,6 +30,7 @@ sov-value-setter = { path = "../examples/sov-value-setter" }
 sov-modules-stf-template = { path = "../../sov-modules-stf-template" }
 sov-data-generators = { path = "../../utils/sov-data-generators" }
 sov-chain-state = { path = ".", features = ["native"] }
+sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"] }
 
 
 [features]

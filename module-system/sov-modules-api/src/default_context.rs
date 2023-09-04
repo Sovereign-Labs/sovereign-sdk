@@ -22,8 +22,8 @@ pub struct DefaultContext {
 impl Spec for DefaultContext {
     type Address = Address;
     type Storage = ProverStorage<DefaultStorageSpec>;
-    type PublicKey = DefaultPublicKey;
     type PrivateKey = DefaultPrivateKey;
+    type PublicKey = DefaultPublicKey;
     type Hasher = sha2::Sha256;
     type Signature = DefaultSignature;
     type Witness = ArrayWitness;

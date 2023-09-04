@@ -30,42 +30,42 @@ type InitialState<ST, Vm, DA> = <ST as StateTransitionFunction<
 >>::InitialState;
 
 /// Combines `DaService` with `StateTransitionFunction` and "runs" the rollup.
-pub struct StateTransitionRunner<ST, DA, Vm>
+pub struct StateTransitionRunner<ST, Da, Vm>
 where
-    DA: DaService,
+    Da: DaService,
     Vm: Zkvm,
     ST: StateTransitionFunction<
         Vm,
-        <<DA as DaService>::Spec as DaSpec>::BlobTransaction,
-        Condition = <DA::Spec as DaSpec>::ValidityCondition,
+        <<Da as DaService>::Spec as DaSpec>::BlobTransaction,
+        Condition = <Da::Spec as DaSpec>::ValidityCondition,
     >,
 {
     start_height: u64,
-    da_service: DA,
+    da_service: Da,
     app: ST,
     ledger_db: LedgerDB,
-    state_root: StateRoot<ST, Vm, DA>,
+    state_root: StateRoot<ST, Vm, Da>,
     listen_address: SocketAddr,
 }
 
-impl<ST, DA, Vm> StateTransitionRunner<ST, DA, Vm>
+impl<ST, Da, Vm> StateTransitionRunner<ST, Da, Vm>
 where
-    DA: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
+    Da: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
     Vm: Zkvm,
     ST: StateTransitionFunction<
         Vm,
-        <<DA as DaService>::Spec as DaSpec>::BlobTransaction,
-        Condition = <DA::Spec as DaSpec>::ValidityCondition,
+        <<Da as DaService>::Spec as DaSpec>::BlobTransaction,
+        Condition = <Da::Spec as DaSpec>::ValidityCondition,
     >,
 {
     /// Creates a new `StateTransitionRunner` runner.
     pub fn new(
         runner_config: RunnerConfig,
-        da_service: DA,
+        da_service: Da,
         ledger_db: LedgerDB,
         mut app: ST,
         should_init_chain: bool,
-        genesis_config: InitialState<ST, Vm, DA>,
+        genesis_config: InitialState<ST, Vm, Da>,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
 

@@ -12,7 +12,6 @@ use sov_evm::query::{EvmRpcImpl, EvmRpcServer};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 #[cfg(feature = "native")]
 pub use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::macros::DefaultRuntime;
 #[cfg(feature = "native")]
 use sov_modules_api::macros::{expose_rpc, CliWallet};
@@ -20,7 +19,6 @@ use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec, Spec};
 use sov_rollup_interface::da::DaSpec;
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
-use sov_state::WorkingSet;
 #[cfg(feature = "native")]
 use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
@@ -80,9 +78,9 @@ pub struct Runtime<C: Context, Da: DaSpec> {
     pub bank: sov_bank::Bank<C>,
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]
-    pub blob_storage: sov_blob_storage::BlobStorage<C>,
+    pub blob_storage: sov_blob_storage::BlobStorage<C, Da>,
     #[cfg_attr(feature = "native", cli_skip)]
-    pub chain_state: sov_chain_state::ChainState<C, Da::ValidityCondition>,
+    pub chain_state: sov_chain_state::ChainState<C, Da>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
 }
@@ -99,57 +97,37 @@ pub struct Runtime<C: Context, Da: DaSpec> {
     pub bank: sov_bank::Bank<C>,
     pub sequencer_registry: sov_sequencer_registry::SequencerRegistry<C>,
     #[cfg_attr(feature = "native", cli_skip)]
-    pub blob_storage: sov_blob_storage::BlobStorage<C>,
+    pub blob_storage: sov_blob_storage::BlobStorage<C, Da>,
     #[cfg_attr(feature = "native", cli_skip)]
-    pub chain_state: sov_chain_state::ChainState<C, Da::ValidityCondition>,
+    pub chain_state: sov_chain_state::ChainState<C, Da>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub evm: sov_evm::Evm<C>,
 }
 
-impl<C: Context, Da: DaSpec> SlotHooks<Da::ValidityCondition> for Runtime<C, Da> {
-    type Context = C;
-
-    fn begin_slot_hook(
-        &self,
-        _slot_data: &impl sov_rollup_interface::services::da::SlotData,
-        _working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
-    ) {
-    }
-
-    fn end_slot_hook(
-        &self,
-        #[allow(unused_variables)] root_hash: [u8; 32],
-        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
-            <Self::Context as sov_modules_api::Spec>::Storage,
-        >,
-    ) {
-        #[cfg(feature = "experimental")]
-        self.evm.end_slot_hook(root_hash, working_set);
-    }
-}
-
-impl<C, Da> sov_modules_stf_template::Runtime<C, Da::ValidityCondition, Da::BlobTransaction>
-    for Runtime<C, Da>
+impl<C, Da> sov_modules_stf_template::Runtime<C, Da> for Runtime<C, Da>
 where
     C: Context,
     Da: DaSpec,
 {
 }
 
-impl<C: Context, Da: DaSpec> BlobSelector<Da::BlobTransaction> for Runtime<C, Da> {
+impl<C: Context, Da: DaSpec> BlobSelector<Da> for Runtime<C, Da> {
     type Context = C;
 
     fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
     {
-        self.blob_storage
-            .get_blobs_for_this_slot(current_blobs, working_set)
+        <sov_blob_storage::BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
+            &self.blob_storage,
+            current_blobs,
+            working_set,
+        )
     }
 }

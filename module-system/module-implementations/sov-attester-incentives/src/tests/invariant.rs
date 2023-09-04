@@ -1,5 +1,5 @@
 use sov_modules_api::default_context::DefaultContext;
-use sov_rollup_interface::optimistic::Attestation;
+use sov_modules_api::optimistic::Attestation;
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::call::AttesterIncentiveErrors;
@@ -55,7 +55,7 @@ fn test_transition_invariant() {
             initial_state_root: exec_vars[init_height_usize].state_root,
             da_block_hash: [(init_height_usize + 1).try_into().unwrap(); 32],
             post_state_root: exec_vars[init_height_usize + 1].state_root,
-            proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
+            proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
                 claimed_transition_num: INIT_HEIGHT + 1,
                 proof: exec_vars[init_height_usize].state_proof.clone(),
             },
@@ -92,7 +92,7 @@ fn test_transition_invariant() {
             initial_state_root: exec_vars[new_height - 1].state_root,
             da_block_hash: [(new_height).try_into().unwrap(); 32],
             post_state_root: exec_vars[new_height].state_root,
-            proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
+            proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
                 claimed_transition_num: new_height.try_into().unwrap(),
                 proof: exec_vars[new_height - 1].state_proof.clone(),
             },
@@ -102,7 +102,7 @@ fn test_transition_invariant() {
             initial_state_root: exec_vars[new_height + i - 1].state_root,
             da_block_hash: [(new_height + i).try_into().unwrap(); 32],
             post_state_root: exec_vars[new_height + i].state_root,
-            proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
+            proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
                 claimed_transition_num: (new_height + i).try_into().unwrap(),
                 proof: exec_vars[new_height + i - 1].state_proof.clone(),
             },
@@ -151,7 +151,7 @@ fn test_transition_invariant() {
         initial_state_root: exec_vars[new_height].state_root,
         da_block_hash: [(new_height + finality_usize + 1).try_into().unwrap(); 32],
         post_state_root: exec_vars[new_height + 1].state_root,
-        proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
+        proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
             claimed_transition_num: new_height.try_into().unwrap(),
             proof: exec_vars[new_height - 1].state_proof.clone(),
         },
@@ -191,7 +191,7 @@ fn test_transition_invariant() {
         initial_state_root: exec_vars[new_height + finality_usize].state_root,
         da_block_hash: [(new_height + finality_usize + 1).try_into().unwrap(); 32],
         post_state_root: exec_vars[new_height + finality_usize + 1].state_root,
-        proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
+        proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
             claimed_transition_num: (new_height + finality_usize + 2).try_into().unwrap(),
             proof: exec_vars[new_height + finality_usize + 1]
                 .state_proof

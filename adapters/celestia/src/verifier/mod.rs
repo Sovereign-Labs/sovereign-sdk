@@ -86,6 +86,7 @@ impl AsRef<TmHash> for tendermint::Hash {
 
 impl BlockHash for TmHash {}
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct CelestiaSpec;
 
 impl DaSpec for CelestiaSpec {

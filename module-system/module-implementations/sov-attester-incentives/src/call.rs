@@ -1,15 +1,11 @@
 use core::result::Result::Ok;
 use std::fmt::Debug;
 
-use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::{Amount, Coins};
 use sov_chain_state::TransitionHeight;
-use sov_modules_api::{CallResponse, Context, Spec};
-use sov_rollup_interface::optimistic::Attestation;
-use sov_rollup_interface::zk::{
-    StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
-};
+use sov_modules_api::optimistic::Attestation;
+use sov_modules_api::{CallResponse, Spec, StateTransition, ValidityConditionChecker};
 use sov_state::storage::StorageProof;
 use sov_state::{Storage, WorkingSet};
 use thiserror::Error;
@@ -18,13 +14,10 @@ use crate::{AttesterIncentives, UnbondingInfo};
 
 /// This enumeration represents the available call messages for interacting with the `AttesterIncentives` module.
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
-pub enum CallMessage<C>
-where
-    C: Context,
-{
+pub enum CallMessage<C: sov_modules_api::Context> {
     /// Bonds an attester, the parameter is the bond amount
     BondAttester(Amount),
-    /// Start the first phase of the two phase unbonding process
+    /// Start the first phase of the two-phase unbonding process
     BeginUnbondingAttester,
     /// Finish the two phase unbonding
     EndUnbondingAttester,
@@ -32,21 +25,21 @@ where
     BondChallenger(Amount),
     /// Unbonds a challenger
     UnbondChallenger,
-    /// Proccesses an attestation.
+    /// Processes an attestation.
     ProcessAttestation(Attestation<StorageProof<<<C as Spec>::Storage as Storage>::Proof>>),
     /// Processes a challenge. The challenge is encoded as a [`Vec<u8>`]. The second parameter is the transition number
     ProcessChallenge(Vec<u8>, TransitionHeight),
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
-/// Error type that explains why an user is slashed
+/// Error type that explains why a user is slashed
 pub enum SlashingReason {
-    #[error("Transition not found")]
+    #[error("Transition isn't found")]
     /// The specified transition does not exist
     TransitionNotFound,
 
-    #[error("The attestation does not contain the right block hash and post state transition")]
-    /// The specified transition is invalid (block hash, post root hash or validity condition)
+    #[error("The attestation does not contain the right block hash and post-state transition")]
+    /// The specified transition is invalid (block hash, post-root hash or validity condition)
     TransitionInvalid,
 
     #[error("The initial hash of the transition is invalid")]
@@ -62,7 +55,7 @@ pub enum SlashingReason {
     NoInvalidTransition,
 }
 
-/// Error raised while processessing the attester incentives
+/// Error raised while processing the attester incentives
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum AttesterIncentiveErrors {
     #[error("Attester slashed")]
@@ -85,28 +78,28 @@ pub enum AttesterIncentiveErrors {
     /// User is not trying to unbond at the time of the transaction
     AttesterIsNotUnbonding,
 
-    #[error("First phase unbonding has not been finalized")]
-    /// The attester is trying to finish the two phase unbonding too soon
+    #[error("The first phase of unbonding has not been finalized")]
+    /// The attester is trying to finish the two-phase unbonding too soon
     UnbondingNotFinalized,
 
-    #[error("The bond is not a 64 bit number")]
-    /// The bond is not a 64 bit number
+    #[error("The bond is not a 64-bit number")]
+    /// The bond is not a 64-bit number
     InvalidBondFormat,
 
     #[error("User is not bonded at the time of the transaction")]
     /// User is not bonded at the time of the transaction
     UserNotBonded,
 
-    #[error("Transition invariant not respected")]
-    /// Transition invariant not respected
+    #[error("Transition invariant isn't respected")]
+    /// Transition invariant isn't respected
     InvalidTransitionInvariant,
 
-    #[error("Error occured when transfered funds")]
-    /// An error occured when transfered funds
+    #[error("Error occurred when transferred funds")]
+    /// An error occurred when transferred funds
     TransferFailure,
 
     #[error("Error when trying to mint the reward token")]
-    /// An error occured when trying to mint the reward token
+    /// An error occurred when trying to mint the reward token
     MintFailure,
 }
 
@@ -119,12 +112,12 @@ pub enum Role {
     Challenger,
 }
 
-impl<
-        C: sov_modules_api::Context,
-        Vm: Zkvm,
-        Cond: ValidityCondition,
-        Checker: ValidityConditionChecker<Cond> + BorshDeserialize + BorshSerialize,
-    > AttesterIncentives<C, Vm, Cond, Checker>
+impl<C, Vm, Da, Checker> AttesterIncentives<C, Vm, Da, Checker>
+where
+    C: sov_modules_api::Context,
+    Vm: sov_modules_api::Zkvm,
+    Da: sov_modules_api::DaSpec,
+    Checker: ValidityConditionChecker<Da::ValidityCondition>,
 {
     /// This returns the address of the reward token supply
     pub fn get_reward_token_supply_address(
@@ -145,7 +138,8 @@ impl<
     ) -> u64 {
         let bonded_set = match role {
             Role::Attester => {
-                // We have to remove the attester from the unbonding set to prevent him from skiping the first phase
+                // We have to remove the attester from the unbonding set
+                // to prevent him from skipping the first phase
                 // unbonding if he bonds himself again.
                 self.unbonding_attesters.remove(user, working_set);
 
@@ -237,7 +231,7 @@ impl<
         role: Role,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse, AttesterIncentiveErrors> {
-        // If the user is an attester we have to check that he's not trying to unbond
+        // If the user is an attester, we have to check that he's not trying to unbond
         if role == Role::Attester
             && self
                 .unbonding_attesters
@@ -286,7 +280,7 @@ impl<
         &self,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse> {
+    ) -> anyhow::Result<CallResponse> {
         // Get the user's old balance.
         if let Some(old_balance) = self.bonded_challengers.get(context.sender(), working_set) {
             // Transfer the bond amount from the sender to the module's address.
@@ -303,14 +297,15 @@ impl<
         Ok(CallResponse::default())
     }
 
-    /// The attester starts the first phase of the two phase unbonding. We put the current max
-    /// finalized height with the attester address in the set of unbonding attesters iff the attester
+    /// The attester starts the first phase of the two-phase unbonding.
+    /// We put the current max finalized height with the attester address
+    /// in the set of unbonding attesters if the attester
     /// is already present in the unbonding set
     pub(crate) fn begin_unbond_attester(
         &self,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
+    ) -> anyhow::Result<CallResponse, AttesterIncentiveErrors> {
         // First get the bonded attester
         if let Some(bond) = self.bonded_attesters.get(context.sender(), working_set) {
             let finalized_height = self
@@ -339,7 +334,7 @@ impl<
         &self,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
+    ) -> anyhow::Result<CallResponse, AttesterIncentiveErrors> {
         // We have to ensure that the attester is unbonding, and that the unbonding transaction
         // occurred at least `finality_period` blocks ago to let the attester unbond
         if let Some(unbonding_info) = self.unbonding_attesters.get(context.sender(), working_set) {
@@ -390,19 +385,25 @@ impl<
         context: &C,
         attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), AttesterIncentiveErrors> {
+    ) -> anyhow::Result<(), AttesterIncentiveErrors> {
         let bonding_root = {
             // If we cannot get the transition before the current one, it means that we are trying
             // to get the genesis state root
-            if let Some(transition) = self.chain_state.historical_transitions.get(
-                &(attestation.proof_of_bond.claimed_transition_num - 1),
-                working_set,
-            ) {
+            let transition_height = TransitionHeight::from(
+                attestation
+                    .proof_of_bond
+                    .claimed_transition_num
+                    .checked_sub(1)
+                    .expect("The transition height should be greater than 1"),
+            );
+            if let Some(transition) = self
+                .chain_state
+                .get_historical_transitions(transition_height, working_set)
+            {
                 transition.post_state_root()
             } else {
                 self.chain_state
-                    .genesis_hash
-                    .get(working_set)
+                    .get_genesis_hash(working_set)
                     .expect("The genesis hash should be set at genesis")
             }
         };
@@ -441,11 +442,10 @@ impl<
         attester: &C::Address,
         attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
+    ) -> anyhow::Result<CallResponse, AttesterIncentiveErrors> {
         if let Some(curr_tx) = self
             .chain_state
-            .historical_transitions
-            .get(&claimed_transition_height, working_set)
+            .get_historical_transitions(claimed_transition_height, working_set)
         {
             // We first need to compare the initial block hash to the previous post state root
             if !curr_tx.compare_hashes(&attestation.da_block_hash, &attestation.post_state_root) {
@@ -477,12 +477,11 @@ impl<
         attester: &C::Address,
         attestation: &Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
+    ) -> anyhow::Result<CallResponse, AttesterIncentiveErrors> {
         // Normal state
         if let Some(transition) = self
             .chain_state
-            .historical_transitions
-            .get(&claimed_transition_height.saturating_sub(1), working_set)
+            .get_historical_transitions(claimed_transition_height.saturating_sub(1), working_set)
         {
             if transition.post_state_root() != attestation.initial_state_root {
                 // The initial root hashes don't match, just slash the attester
@@ -500,13 +499,14 @@ impl<
             // minimal bond and that the attester is not unbonding
 
             // We add a check here that the claimed transition height is the same as the genesis height.
-            if self
+            let genesis_height = self
                 .chain_state
-                .genesis_height
-                .get(working_set)
-                .expect("Must be set at genesis")
-                != (claimed_transition_height - 1)
-            {
+                .get_genesis_height(working_set)
+                .expect("Must be set at genesis");
+            let previous = claimed_transition_height
+                .checked_sub(1)
+                .expect("Transition height must be > 0");
+            if genesis_height != previous {
                 return Err(self.slash_burn_reward(
                     attester,
                     Role::Attester,
@@ -536,13 +536,13 @@ impl<
         Ok(CallResponse::default())
     }
 
-    /// Try to process an attestation, if the attester is bonded
+    /// Try to process an attestation if the attester is bonded
     pub(crate) fn process_attestation(
         &self,
         context: &C,
         attestation: Attestation<StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
+    ) -> anyhow::Result<CallResponse, AttesterIncentiveErrors> {
         // We first need to check that the attester is still in the bonding set
         if self
             .bonded_attesters
@@ -614,7 +614,7 @@ impl<
         );
 
         // Now we have to check whether the claimed_transition_num is the max_attested_height.
-        // If so update the maximum attested height and reward the sender
+        // If so, update the maximum attested height and reward the sender
         if attestation.proof_of_bond.claimed_transition_num == new_height_to_attest {
             // Update the maximum attested height
             self.maximum_attested_height
@@ -636,28 +636,25 @@ impl<
 
     fn check_challenge_outputs_against_transition(
         &self,
-        public_outputs: StateTransition<Cond, C::Address>,
+        public_outputs: StateTransition<Da::ValidityCondition, C::Address>,
         height: &TransitionHeight,
-        condition_checker: &mut impl ValidityConditionChecker<Cond>,
+        condition_checker: &mut impl ValidityConditionChecker<Da::ValidityCondition>,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), SlashingReason> {
+    ) -> anyhow::Result<(), SlashingReason> {
         let transition = self
             .chain_state
-            .historical_transitions
-            .get_or_err(height, working_set)
-            .map_err(|_| SlashingReason::TransitionInvalid)?;
+            .get_historical_transitions(*height, working_set)
+            .ok_or(SlashingReason::TransitionInvalid)?;
 
         let initial_hash = {
             if let Some(prev_transition) = self
                 .chain_state
-                .historical_transitions
-                .get(&height.saturating_sub(1), working_set)
+                .get_historical_transitions(height.saturating_sub(1), working_set)
             {
                 prev_transition.post_state_root()
             } else {
                 self.chain_state
-                    .genesis_hash
-                    .get(working_set)
+                    .get_genesis_hash(working_set)
                     .expect("The genesis hash should be set")
             }
         };
@@ -682,14 +679,14 @@ impl<
         Ok(())
     }
 
-    /// Try to process a zk proof, if the challenger is bonded.
+    /// Try to process a zk proof if the challenger is bonded.
     pub(crate) fn process_challenge(
         &self,
         context: &C,
         proof: &[u8],
         transition_num: &TransitionHeight,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<sov_modules_api::CallResponse, AttesterIncentiveErrors> {
+    ) -> anyhow::Result<CallResponse, AttesterIncentiveErrors> {
         // Get the challenger's old balance.
         // Revert if they aren't bonded
         let old_balance = self
@@ -726,9 +723,12 @@ impl<
                 )
             })?;
 
-        let public_outputs_opt: Result<StateTransition<Cond, C::Address>> =
-            Vm::verify_and_extract_output::<Cond, C::Address>(proof, &code_commitment)
-                .map_err(|e| anyhow::format_err!("{:?}", e));
+        let public_outputs_opt: anyhow::Result<StateTransition<Da::ValidityCondition, C::Address>> =
+            Vm::verify_and_extract_output::<Da::ValidityCondition, C::Address>(
+                proof,
+                &code_commitment,
+            )
+            .map_err(|e| anyhow::format_err!("{:?}", e));
 
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
         match public_outputs_opt {

@@ -23,7 +23,6 @@ clap = { workspace = true, optional = true }
 sov-bank = { path = "../sov-bank", version = "0.1" }
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
 sov-state = { path = "../../sov-state", version = "0.1" }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
@@ -45,6 +44,7 @@ native = [
     "clap",
     "sov-state/native",
     "sov-modules-api/native",
+    # This:
     "sov-bank/native",
 ]
 
