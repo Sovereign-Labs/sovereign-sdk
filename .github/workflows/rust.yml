@@ -270,6 +270,8 @@ jobs:
     # `cargo doc` requires `cargo check`, so we can share caches.
     needs: check
     timeout-minutes: 90
+    env:
+      RUSTDOCFLAGS: "-D warnings"
     steps:
       - uses: actions/checkout@v3
         # Not sure installing `mold` is actually needed, but it's what the
