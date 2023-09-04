@@ -112,9 +112,13 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
 
     fn begin_slot_hook(
         &self,
-        _slot_data: &impl sov_rollup_interface::services::da::SlotData,
-        _working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
+        #[allow(unused_variables)] slot_data: &impl sov_rollup_interface::services::da::SlotData,
+        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
+            <Self::Context as Spec>::Storage,
+        >,
     ) {
+        #[cfg(feature = "experimental")]
+        self.evm.begin_slot_hook(working_set);
     }
 
     fn end_slot_hook(
