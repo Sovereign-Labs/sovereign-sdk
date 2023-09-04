@@ -22,8 +22,6 @@ mod zk_storage;
 pub use zk_storage::ZkStorage;
 
 pub mod config;
-#[cfg(test)]
-mod state_tests;
 
 use std::fmt::Display;
 use std::str;
