@@ -159,11 +159,15 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .write_node_batch(node_batch)
             .expect("db write must succeed");
 
-        for (key, value) in accessory_writes.ordered_writes.clone().into_iter() {
-            self.native_db
-                .set_value(key.key.to_vec(), value.map(|v| v.value.to_vec()))
-                .expect("native db write must succeed");
-        }
+        self.native_db
+            .set_values(
+                accessory_writes
+                    .ordered_writes
+                    .iter()
+                    .map(|(k, v_opt)| (k.key.to_vec(), v_opt.as_ref().map(|v| v.value.to_vec())))
+                    .collect(),
+            )
+            .expect("native db write must succeed");
 
         self.db.inc_next_version();
     }

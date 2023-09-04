@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use sov_schema_db::DB;
+use sov_schema_db::{SchemaBatch, DB};
 
 use crate::rocks_db_config::gen_rocksdb_options;
 use crate::schema::tables::{ModuleAccessoryState, NATIVE_TABLES};
@@ -45,7 +45,19 @@ impl NativeDB {
 
     /// Sets a key-value pair in the [`NativeDB`].
     pub fn set_value(&self, key: Vec<u8>, value: Option<Vec<u8>>) -> anyhow::Result<()> {
-        self.db.put::<ModuleAccessoryState>(&key, &value)
+        self.set_values(vec![(key, value)])
+    }
+
+    /// Sets a sequence of key-value pairs in the [`NativeDB`]. The write is atomic.
+    pub fn set_values(
+        &self,
+        key_value_pairs: Vec<(Vec<u8>, Option<Vec<u8>>)>,
+    ) -> anyhow::Result<()> {
+        let batch = SchemaBatch::default();
+        for (key, value) in key_value_pairs {
+            batch.put::<ModuleAccessoryState>(&key, &value)?;
+        }
+        self.db.write_schemas(batch)
     }
 }
 
@@ -60,7 +72,8 @@ mod tests {
 
         let key = b"foo".to_vec();
         let value = b"bar".to_vec();
-        db.set_value(key.clone(), Some(value.clone())).unwrap();
+        db.set_values(vec![(key.clone(), Some(value.clone()))])
+            .unwrap();
         assert_eq!(db.get_value_option(&key).unwrap(), Some(value));
     }
 
