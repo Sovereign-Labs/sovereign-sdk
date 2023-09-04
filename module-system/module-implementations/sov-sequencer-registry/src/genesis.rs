@@ -1,9 +1,14 @@
 use anyhow::Result;
+use sov_modules_api::{BlobReaderTrait, Context, DaSpec};
 use sov_state::WorkingSet;
 
 use crate::SequencerRegistry;
 
-impl<C: sov_modules_api::Context> SequencerRegistry<C> {
+impl<C: Context, Da: DaSpec> SequencerRegistry<C, Da>
+where
+    <<Da as DaSpec>::BlobTransaction as BlobReaderTrait>::Address:
+        borsh::BorshSerialize + borsh::BorshDeserialize,
+{
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,

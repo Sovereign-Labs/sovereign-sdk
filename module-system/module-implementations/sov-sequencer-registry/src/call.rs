@@ -1,10 +1,10 @@
 use anyhow::{bail, Result};
 #[cfg(feature = "native")]
 use sov_modules_api::macros::CliWalletArg;
-use sov_modules_api::CallResponse;
+use sov_modules_api::{BlobReaderTrait, CallResponse, Context, DaSpec};
 use sov_state::WorkingSet;
 
-use crate::{DaAddress, SequencerRegistry};
+use crate::{DaAddressSpec, SequencerRegistry};
 
 /// This enumeration represents the available call messages for interacting with
 /// the `sov-sequencer-registry` module.
@@ -20,19 +20,23 @@ pub enum CallMessage {
     /// Add a new sequencer to the sequencer registry.
     Register {
         /// The DA address of the sequencer you're registering.
-        da_address: DaAddress,
+        da_address: String,
     },
     /// Remove a sequencer from the sequencer registry.
     Exit {
         /// The DA address of the sequencer you're removing.
-        da_address: DaAddress,
+        da_address: String,
     },
 }
 
-impl<C: sov_modules_api::Context> SequencerRegistry<C> {
+impl<C: Context, Da: DaSpec> SequencerRegistry<C, Da>
+where
+    <<Da as DaSpec>::BlobTransaction as BlobReaderTrait>::Address:
+        borsh::BorshSerialize + borsh::BorshDeserialize,
+{
     pub(crate) fn register(
         &self,
-        da_address: Vec<u8>,
+        da_address: DaAddressSpec<Da>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
@@ -43,7 +47,7 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
 
     pub(crate) fn exit(
         &self,
-        da_address: Vec<u8>,
+        da_address: DaAddressSpec<Da>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
@@ -67,7 +71,11 @@ impl<C: sov_modules_api::Context> SequencerRegistry<C> {
         Ok(CallResponse::default())
     }
 
-    pub(crate) fn delete(&self, da_address: Vec<u8>, working_set: &mut WorkingSet<C::Storage>) {
+    pub(crate) fn delete(
+        &self,
+        da_address: DaAddressSpec<Da>,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) {
         self.allowed_sequencers.delete(&da_address, working_set);
 
         if let Some(preferred_sequencer) = self.preferred_sequencer.get(working_set) {
