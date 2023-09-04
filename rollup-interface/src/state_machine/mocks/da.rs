@@ -212,6 +212,7 @@ impl DaSpec for MockDaSpec {
     type SlotHash = MockHash;
     type BlockHeader = MockBlockHeader;
     type BlobTransaction = MockBlob;
+    type Address = MockAddress;
     type ValidityCondition = MockValidityCond;
     type InclusionMultiProof = [u8; 32];
     type CompletenessProof = ();
@@ -287,3 +288,7 @@ impl DaService for MockDaService {
         Ok(())
     }
 }
+
+/// The configuration for mock da
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct MockDaConfig {}

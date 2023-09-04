@@ -5,7 +5,8 @@ mod da;
 mod validity_condition;
 mod zk_vm;
 pub use da::{
-    MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaService, MockDaSpec, MockHash,
+    MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaConfig, MockDaService, MockDaSpec,
+    MockHash,
 };
 pub use validity_condition::{MockValidityCond, MockValidityCondChecker};
 pub use zk_vm::{MockCodeCommitment, MockProof, MockZkvm};
