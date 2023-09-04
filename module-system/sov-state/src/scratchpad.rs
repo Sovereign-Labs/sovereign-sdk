@@ -47,15 +47,15 @@ impl<S: Storage> Debug for Delta<S> {
 
 impl<S: Storage> StateReaderAndWriter for Delta<S> {
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
-        self.cache.get_or_fetch(&key, &self.inner, &self.witness)
+        self.cache.get_or_fetch(key, &self.inner, &self.witness)
     }
 
     fn set(&mut self, key: &StorageKey, value: StorageValue) {
-        self.cache.set(&key, value)
+        self.cache.set(key, value)
     }
 
     fn delete(&mut self, key: &StorageKey) {
-        self.cache.delete(&key)
+        self.cache.delete(key)
     }
 }
 
@@ -247,7 +247,7 @@ impl<T: StateReaderAndWriter> StateReaderAndWriter for RevertableWriter<T> {
         if let Some(value) = self.writes.get(&key.to_cache_key()) {
             value.as_ref().cloned().map(Into::into)
         } else {
-            self.inner.get(&key)
+            self.inner.get(key)
         }
     }
 
