@@ -16,8 +16,7 @@ pub mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use query::{ChainStateRpcImpl, ChainStateRpcServer};
-use sov_modules_api::{Error, ValidityCondition, ValidityConditionChecker};
-use sov_modules_macros::ModuleInfo;
+use sov_modules_api::{Error, ModuleInfo, ValidityCondition, ValidityConditionChecker};
 use sov_state::WorkingSet;
 
 /// Type alias that contains the height of a given transition

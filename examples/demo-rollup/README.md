@@ -17,31 +17,33 @@ This is a demo full node running a simple Sovereign SDK rollup on [Celestia](htt
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
-- [What is This?](#what-is-this)
-- [Getting Started](#getting-started)
-  - [Run a local DA layer instance](#run-a-local-da-layer-instance)
-  - [Start the Rollup Full Node](#start-the-rollup-full-node)
-  - [Sanity Check: Creating a Token](#sanity-check-creating-a-token)
-  - [How to Submit Transactions](#how-to-submit-transactions)
-    - [1. Build `sov-cli`](#1-build-sov-cli)
-    - [2. Generate the Transaction](#2-generate-the-transaction)
-    - [3. Submit the Transaction(s)](#3-submit-the-transactions)
-    - [4. Verify the Token Supply](#4-verify-the-token-supply)
-  - [Makefile](#makefile)
-  - [Remote setup](#remote-setup)
-- [How to Customize This Example](#how-to-customize-this-example)
-  - [1. Initialize the DA Service](#1-initialize-the-da-service)
-  - [2. Run the Main Loop](#2-run-the-main-loop)
-- [Disclaimer](#disclaimer)
-- [Interacting with your Node via RPC](#interacting-with-your-node-via-rpc)
-  - [Key Concepts](#key-concepts)
-  - [RPC Methods](#rpc-methods)
-    - [`ledger_getHead`](#ledger_gethead)
-    - [`ledger_getSlots`](#ledger_getslots)
-    - [`ledger_getBatches`](#ledger_getbatches)
-    - [`ledger_getTransactions`](#ledger_gettransactions)
-    - [`ledger_getEvents`](#ledger_getevents)
-- [License](#license)
+- [Demo Rollup ](#demo-rollup-)
+      - [Table of Contents](#table-of-contents)
+  - [What is This?](#what-is-this)
+  - [Getting Started](#getting-started)
+    - [Run a local DA layer instance](#run-a-local-da-layer-instance)
+    - [Start the Rollup Full Node](#start-the-rollup-full-node)
+    - [Sanity Check: Creating a Token](#sanity-check-creating-a-token)
+    - [How to Submit Transactions](#how-to-submit-transactions)
+      - [1. Build `sov-cli`](#1-build-sov-cli)
+      - [2. Generate the Transaction](#2-generate-the-transaction)
+      - [3. Submit the Transaction(s)](#3-submit-the-transactions)
+      - [4. Verify the Token Supply](#4-verify-the-token-supply)
+    - [Makefile](#makefile)
+    - [Remote setup](#remote-setup)
+  - [How to Customize This Example](#how-to-customize-this-example)
+    - [1. Initialize the DA Service](#1-initialize-the-da-service)
+    - [2. Run the Main Loop](#2-run-the-main-loop)
+  - [Disclaimer](#disclaimer)
+  - [Interacting with your Node via RPC](#interacting-with-your-node-via-rpc)
+    - [Key Concepts](#key-concepts)
+    - [RPC Methods](#rpc-methods)
+      - [`ledger_getHead`](#ledger_gethead)
+      - [`ledger_getSlots`](#ledger_getslots)
+      - [`ledger_getBatches`](#ledger_getbatches)
+      - [`ledger_getTransactions`](#ledger_gettransactions)
+      - [`ledger_getEvents`](#ledger_getevents)
+  - [License](#license)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -61,7 +63,7 @@ understand how to build your own state transition function, check out at the doc
 
 ### Run a local DA layer instance
 
-1. Install Docker: https://www.docker.com.
+1. Install Docker: <https://www.docker.com>.
 
 2. Switch to the `examples/demo-rollup` directory (which is where this `README.md` is located!).
 
