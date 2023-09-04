@@ -264,9 +264,12 @@ where
         &self,
         blob_data: &mut impl BlobReaderTrait,
     ) -> Result<Batch, SlashingReason> {
-        match Batch::deserialize(&mut data_for_deserialization(blob_data)) {
+        match Batch::try_from_slice(data_for_deserialization(blob_data)) {
             Ok(batch) => Ok(batch),
             Err(e) => {
+                assert_eq!(blob_data.verified_data().len(), blob_data.total_len(), "Batch deserialization failed and some data was not provided. The prover might be malicious");
+                // If the deserialization fails, we need to make sure it's not because the prover was malicious and left
+                // out some relevant data! Make that check here. If the data is missing, panic.
                 error!(
                     "Unable to deserialize batch provided by the sequencer {}",
                     e
