@@ -14,9 +14,9 @@ use crate::{Batch, Runtime, SequencerOutcome, SlashingReason, TxEffect};
 type ApplyBatchResult<T, A> = Result<T, ApplyBatchError<A>>;
 
 #[allow(type_alias_bounds)]
-type ApplyBatch<DA: DaSpec> = ApplyBatchResult<
-    BatchReceipt<SequencerOutcome<<DA::BlobTransaction as BlobReaderTrait>::Address>, TxEffect>,
-    <DA::BlobTransaction as BlobReaderTrait>::Address,
+type ApplyBatch<Da: DaSpec> = ApplyBatchResult<
+    BatchReceipt<SequencerOutcome<<Da::BlobTransaction as BlobReaderTrait>::Address>, TxEffect>,
+    <Da::BlobTransaction as BlobReaderTrait>::Address,
 >;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use zk_cycle_macros::cycle_tracker;
@@ -24,19 +24,14 @@ use zk_cycle_macros::cycle_tracker;
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to work with the module-system.
-pub struct AppTemplate<
-    C: Context,
-    DA: DaSpec,
-    Vm,
-    RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
-> {
+pub struct AppTemplate<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>> {
     /// State storage used by the rollup.
     pub current_storage: C::Storage,
     /// The runtime includes all the modules that the rollup supports.
     pub runtime: RT,
     pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
-    phantom_da: PhantomData<DA>,
+    phantom_da: PhantomData<Da>,
 }
 
 pub(crate) enum ApplyBatchError<A: BasicAddress> {
@@ -74,11 +69,11 @@ impl<A: BasicAddress> From<ApplyBatchError<A>> for BatchReceipt<SequencerOutcome
     }
 }
 
-impl<C, Vm, DA, RT> AppTemplate<C, DA, Vm, RT>
+impl<C, Vm, Da, RT> AppTemplate<C, Da, Vm, RT>
 where
     C: Context,
-    DA: DaSpec,
-    RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
+    Da: DaSpec,
+    RT: Runtime<C, Da>,
 {
     /// [`AppTemplate`] constructor.
     pub fn new(storage: C::Storage, runtime: RT) -> Self {
@@ -92,7 +87,7 @@ where
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
-    pub(crate) fn apply_blob(&mut self, blob: &mut DA::BlobTransaction) -> ApplyBatch<DA> {
+    pub(crate) fn apply_blob(&mut self, blob: &mut Da::BlobTransaction) -> ApplyBatch<Da> {
         debug!(
             "Applying batch from sequencer: 0x{}",
             hex::encode(blob.sender())

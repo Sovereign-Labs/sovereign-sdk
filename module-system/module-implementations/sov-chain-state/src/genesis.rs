@@ -1,10 +1,10 @@
 use anyhow::Result;
-use sov_rollup_interface::zk::ValidityCondition;
+use sov_rollup_interface::da::DaSpec;
 use sov_state::WorkingSet;
 
 use crate::ChainState;
 
-impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
+impl<C: sov_modules_api::Context, Da: DaSpec> ChainState<C, Da> {
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,

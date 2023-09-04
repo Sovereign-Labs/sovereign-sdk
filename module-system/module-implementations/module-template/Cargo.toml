@@ -13,15 +13,17 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+thiserror = { workspace = true }
+schemars = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+
 sov-bank = { path = "../sov-bank" }
 sov-modules-api = { path = "../../sov-modules-api" }
 sov-state = { path = "../../sov-state" }
 sov-rollup-interface = { path = "../../../rollup-interface" }
-schemars = { workspace = true, optional = true }
-serde = { workspace = true, optional = true }
-serde_json = { workspace = true, optional = true }
-thiserror = { workspace = true }
-borsh = { workspace = true, features = ["rc"] }
+
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -29,5 +31,4 @@ module-template = { path = ".", version = "*", features = ["native"] }
 
 [features]
 default = []
-serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-modules-api/native", "dep:schemars"]
+native = ["serde", "serde_json", "schemars", "sov-modules-api/native"]

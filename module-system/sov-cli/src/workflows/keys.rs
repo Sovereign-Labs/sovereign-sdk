@@ -5,7 +5,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_modules_api::{clap, PrivateKey, PublicKey, Spec};
 
-use crate::wallet_state::{KeyIdentifier, WalletState};
+use crate::wallet_state::{KeyIdentifier, PrivateKeyAndAddress, WalletState};
 
 #[derive(clap::Subcommand)]
 /// View and manage keys associated with this wallet
@@ -111,9 +111,9 @@ impl<C: sov_modules_api::Context> KeyWorkflow<C> {
 pub fn load_key<C: sov_modules_api::Context>(
     path: impl AsRef<Path>,
 ) -> Result<C::PrivateKey, anyhow::Error> {
-    let data = std::fs::read(path)?;
-    let key = serde_json::from_slice(data.as_slice())?;
-    Ok(key)
+    let data = std::fs::read_to_string(path)?;
+    let key_and_address: PrivateKeyAndAddress<C> = serde_json::from_str(&data)?;
+    Ok(key_and_address.private_key)
 }
 
 /// Generate a new key pair and save it to the wallet

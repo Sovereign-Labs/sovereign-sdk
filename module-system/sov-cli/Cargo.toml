@@ -32,3 +32,4 @@ tokio = { workspace = true }
 [dev-dependencies]
 tempfile = { workspace = true }
 demo-stf = { path = "../../examples/demo-stf", features = ["native"] }
+sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }

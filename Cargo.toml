@@ -9,14 +9,15 @@ members = [
     "examples/demo-simple-stf",
     "examples/demo-rollup",
     "examples/demo-nft-module",
+
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
+    "full-node/sov-ethereum",
+    "full-node/sov-stf-runner",
+
     "utils/zk-cycle-macros",
     "utils/zk-cycle-utils",
-    "full-node/sov-ethereum",
 
-    "full-node/sov-stf-runner",
-    
     "module-system/sov-cli",
     "module-system/sov-modules-stf-template",
     "module-system/sov-modules-macros",
@@ -27,7 +28,7 @@ members = [
     "module-system/utils/sov-data-generators",
     "module-system/module-implementations/sov-accounts",
     "module-system/module-implementations/sov-bank",
-    "module-system/module-implementations/sov-chain-state", 
+    "module-system/module-implementations/sov-chain-state",
     "module-system/module-implementations/sov-blob-storage",
     "module-system/module-implementations/sov-evm",
     "module-system/module-implementations/sov-prover-incentives",
@@ -53,9 +54,8 @@ repository = "https://github.com/sovereign-labs/sovereign-sdk"
 rust-version = "1.66"
 
 [workspace.dependencies]
-# Dependencies maintained by sovereign
-# TODO: replace by release number once available on crates.io: tracking issue https://github.com/Sovereign-Labs/sovereign-sdk/issues/632
-jmt = { git = "https://github.com/penumbra-zone/jmt", commit = "46b4b00" }
+# Dependencies maintained by Sovereign
+jmt = { version = "0.7.0" }
 
 # External dependencies
 async-trait = "0.1.71"
@@ -76,7 +76,7 @@ proptest-derive = "0.3.0"
 rand = "0.8"
 rayon = "1.5.2"
 rocksdb = { version = "0.21.0", features = ["lz4"] }
-serde = { version = "1.0.188", features = ["derive", "rc"]}
+serde = { version = "1.0.188", features = ["derive", "rc"] }
 serde_json = { version = "1.0" }
 sha2 = "0.10.6"
 digest = "0.10.6"
@@ -87,7 +87,7 @@ bech32 = "0.9.1"
 derive_more = "0.99.11"
 clap = { version = "4.2.7", features = ["derive"] }
 toml = "0.7.3"
-jsonrpsee = {version = "0.18.2", features = ["jsonrpsee-types"] }
+jsonrpsee = { version = "0.18.2", features = ["jsonrpsee-types"] }
 schemars = { version = "0.8.12", features = ["derive"] }
 tempfile = "3.5"
 tokio = { version = "1", features = ["full"] }
@@ -101,10 +101,10 @@ ethers-providers = "=2.0.8"
 ethers-signers = { version = "=2.0.8", default-features = false }
 ethers-middleware = "=2.0.8"
 
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7"}
-reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7"}
-reth-rpc = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7"}
-reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7"}
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
+reth-rpc-types = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
+reth-rpc = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
+reth-revm = { git = "https://github.com/paradigmxyz/reth", rev = "4ab924c5d361bbfdcdad9f997d16d67b4a1730b7" }
 
 revm = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }
 revm-primitives = { git = "https://github.com/bluealloy/revm/", branch = "release/v25" }

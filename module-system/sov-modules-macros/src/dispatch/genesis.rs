@@ -102,10 +102,11 @@ impl GenesisMacro {
         quote::quote! {
             #[doc = "Initial configuration for the rollup."]
             pub struct GenesisConfig #impl_generics #where_clause{
-                #(pub #fields)*
+                #(#[doc = "Module configuration"] pub #fields)*
             }
 
             impl #impl_generics GenesisConfig #type_generics #where_clause {
+                #[doc = "GenesisConfig constructor."]
                 pub fn new(#(#fields)*) -> Self {
                     Self {
                         #(#field_names),*

@@ -86,6 +86,7 @@ impl AsRef<TmHash> for tendermint::Hash {
 
 impl BlockHash for TmHash {}
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct CelestiaSpec;
 
 impl DaSpec for CelestiaSpec {
@@ -95,13 +96,13 @@ impl DaSpec for CelestiaSpec {
 
     type BlobTransaction = BlobWithSender;
 
+    type ValidityCondition = ChainValidityCondition;
+
     type InclusionMultiProof = Vec<EtxProof>;
 
     type CompletenessProof = Vec<RelevantRowProof>;
 
     type ChainParams = RollupParams;
-
-    type ValidityCondition = ChainValidityCondition;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

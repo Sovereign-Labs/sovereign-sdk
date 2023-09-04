@@ -8,10 +8,6 @@ license = { workspace = true }
 homepage = "sovereign.xyz"
 publish = false
 
-[[bin]]
-name = "sov-cli"
-path = "src/sov-cli/main.rs"
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -32,6 +28,7 @@ sov-cli = { path = "../../module-system/sov-cli", optional = true }
 sov-sequencer-registry = { path = "../../module-system/module-implementations/sov-sequencer-registry" }
 sov-blob-storage = { path = "../../module-system/module-implementations/sov-blob-storage" }
 sov-bank = { path = "../../module-system/module-implementations/sov-bank" }
+sov-chain-state = { path = "../../module-system/module-implementations/sov-chain-state" }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }
 sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter" }
 sov-accounts = { path = "../../module-system/module-implementations/sov-accounts" }
@@ -45,6 +42,7 @@ sov-evm = { path = "../../module-system/module-implementations/sov-evm", optiona
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }
 sov-data-generators = { path = "../../module-system/utils/sov-data-generators" }
+demo-stf = { path = ".", features = ["native"] }
 tempfile = { workspace = true }
 rand = "0.8"
 
@@ -57,6 +55,7 @@ native = [
     "sov-accounts/native",
     "sov-sequencer-registry/native",
     "sov-blob-storage/native",
+    "sov-chain-state/native",
     "sov-value-setter/native",
     "sov-modules-api/native",
     "sov-rollup-interface/mocks",
