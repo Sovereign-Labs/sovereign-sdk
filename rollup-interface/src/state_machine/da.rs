@@ -175,24 +175,6 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
     }
 }
 
-/// This trait wraps "blob transaction" from a data availability layer which has been verified by the DA layer
-pub trait VerifiedBlobtrait: Serialize + DeserializeOwned + Send + Sync + 'static {
-    /// The type used to represent addresses on the DA layer.
-    type Address: BasicAddress;
-
-    /// Returns the address (on the DA layer) of the entity which submitted the blob transaction
-    fn sender(&self) -> Self::Address;
-
-    /// Returns the hash of the blob as it appears on the DA layer
-    fn hash(&self) -> [u8; 32];
-
-    /// Returns a slice containing all of the *verified* data. This may not be the full contents of the blob!
-    fn verified_data(&self) -> &[u8];
-
-    /// Returns the total number of bytes in the blob. This may be unequal to `verified_data.len()`.
-    fn total_len(&self) -> usize;
-}
-
 /// Trait with collection of trait bounds for a block hash.
 pub trait BlockHashTrait: Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync {}
 
