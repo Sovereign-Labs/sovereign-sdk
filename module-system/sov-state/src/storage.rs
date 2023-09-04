@@ -172,11 +172,6 @@ pub trait Storage: Clone {
     /// State update that will be committed to the database.
     type StateUpdate;
 
-    /// The state update type for "accessory" data that will be written to the
-    /// database for use in JSON-RPC and tooling, but won't contribute to the
-    /// state root.
-    type AccessoryUpdate: Default;
-
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error>;
 
     /// Returns the value corresponding to the key or None if key is absent.
@@ -198,7 +193,7 @@ pub trait Storage: Clone {
     ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error>;
 
     /// Commits state changes to the database.
-    fn commit(&self, node_batch: &Self::StateUpdate, accessory_update: &Self::AccessoryUpdate);
+    fn commit(&self, node_batch: &Self::StateUpdate, accessory_update: &OrderedReadsAndWrites);
 
     /// Validate all of the storage accesses in a particular cache log,
     /// returning the new state root after applying all writes.
@@ -224,7 +219,7 @@ pub trait Storage: Clone {
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-        accessory_update: &Self::AccessoryUpdate,
+        accessory_update: &OrderedReadsAndWrites,
     ) -> Result<[u8; 32], anyhow::Error> {
         let (root_hash, node_batch) = self.compute_state_update(state_accesses, witness)?;
         self.commit(&node_batch, accessory_update);

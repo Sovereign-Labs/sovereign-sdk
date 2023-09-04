@@ -66,7 +66,6 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type RuntimeConfig = Config;
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
     type StateUpdate = NodeBatch;
-    type AccessoryUpdate = OrderedReadsAndWrites;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Self::with_path(config.path.as_path())
@@ -154,7 +153,7 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         Ok((new_root.0, tree_update.node_batch))
     }
 
-    fn commit(&self, node_batch: &Self::StateUpdate, accessory_writes: &Self::AccessoryUpdate) {
+    fn commit(&self, node_batch: &Self::StateUpdate, accessory_writes: &OrderedReadsAndWrites) {
         self.db
             .write_node_batch(node_batch)
             .expect("db write must succeed");

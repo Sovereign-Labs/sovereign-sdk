@@ -42,7 +42,6 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     type RuntimeConfig = [u8; 32];
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
     type StateUpdate = NodeBatch;
-    type AccessoryUpdate = Vec<(StorageKey, Option<StorageValue>)>;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Ok(Self::new(config))
@@ -104,7 +103,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
-    fn commit(&self, _node_batch: &Self::StateUpdate, _non_jmt_state: &Self::AccessoryUpdate) {}
+    fn commit(&self, _node_batch: &Self::StateUpdate, _accessory_writes: &OrderedReadsAndWrites) {}
 
     fn is_empty(&self) -> bool {
         unimplemented!("Needs simplification in JellyfishMerkleTree: https://github.com/Sovereign-Labs/sovereign-sdk/issues/362")

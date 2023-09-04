@@ -132,14 +132,16 @@ where
             .genesis(&params, &mut working_set)
             .expect("module initialization must succeed");
 
-        let (log, witness) = working_set.checkpoint().freeze();
+        let mut checkpoint = working_set.checkpoint();
+        let (log, witness) = checkpoint.freeze();
+        let accessory_log = checkpoint.freeze_non_provable();
+
         let (genesis_hash, node_batch) = self
             .current_storage
             .compute_state_update(log, &witness)
             .expect("Storage update must succeed");
 
-        self.current_storage
-            .commit(&node_batch, &Default::default());
+        self.current_storage.commit(&node_batch, &accessory_log);
         jmt::RootHash(genesis_hash)
     }
 
