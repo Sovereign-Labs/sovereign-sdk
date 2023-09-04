@@ -181,7 +181,11 @@ pub struct AccessoryWorkingSet<'a, S: Storage> {
 
 impl<'a, S: Storage> StateReaderAndWriter for AccessoryWorkingSet<'a, S> {
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
-        self.ws.accessory_delta.get(key)
+        if !cfg!(feature = "native") {
+            None
+        } else {
+            self.ws.accessory_delta.get(key)
+        }
     }
 
     fn set(&mut self, key: &StorageKey, value: StorageValue) {
