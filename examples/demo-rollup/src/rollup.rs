@@ -104,7 +104,7 @@ pub fn new_rollup_with_mock_da_from_config(
 ) -> Result<Rollup<Risc0Verifier, MockDaService>, anyhow::Error> {
     let ledger_db = initialize_ledger(&rollup_config.storage.path);
     let sequencer_da_address = MockAddress::from([0u8; 32]);
-    let da_service = MockDaService::new(sequencer_da_address.clone());
+    let da_service = MockDaService::new(sequencer_da_address);
 
     let app = App::new(rollup_config.storage);
     let genesis_config = get_genesis_config(sequencer_da_address);
