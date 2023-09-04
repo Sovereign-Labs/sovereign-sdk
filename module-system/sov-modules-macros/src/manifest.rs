@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use toml::Table;
 
@@ -15,7 +15,7 @@ const MANIFEST_NAME: &str = "sovereign.toml";
 ///
 /// Tracking issue: https://github.com/Sovereign-Labs/sovereign-sdk/issues/786
 #[allow(dead_code)]
-pub fn fetch_manifest_toml(span: proc_macro2::Span) -> anyhow::Result<Table> {
+pub fn fetch_manifest_toml(span: proc_macro2::Span) -> anyhow::Result<(PathBuf, Table)> {
     #[cfg(procmacro2_semver_exempt)]
     let initial_path = span
         .source_file()
@@ -40,9 +40,12 @@ pub fn fetch_manifest_toml(span: proc_macro2::Span) -> anyhow::Result<Table> {
     fetch_manifest_toml_from_path(initial_path)
 }
 
-fn fetch_manifest_toml_from_path(initial_path: PathBuf) -> anyhow::Result<Table> {
+fn fetch_manifest_toml_from_path<P>(initial_path: P) -> anyhow::Result<(PathBuf, Table)>
+where
+    P: AsRef<Path>,
+{
     let path: PathBuf;
-    let mut current_path = initial_path.as_path();
+    let mut current_path = initial_path.as_ref();
     loop {
         if current_path.join(MANIFEST_NAME).exists() {
             path = current_path.join(MANIFEST_NAME);
@@ -57,20 +60,23 @@ fn fetch_manifest_toml_from_path(initial_path: PathBuf) -> anyhow::Result<Table>
     let manifest = fs::read_to_string(&path)
         .map_err(|e| anyhow::anyhow!("Could not read the parent `{}`: {e}", path.display()))?;
 
-    toml::from_str(&manifest)
-        .map_err(|e| anyhow::anyhow!("Could not parse `{}`: {}", path.display(), e))
+    let manifest = toml::from_str(&manifest)
+        .map_err(|e| anyhow::anyhow!("Could not parse `{}`: {}", path.display(), e))?;
+
+    Ok((path, manifest))
 }
 
 #[test]
 fn fetch_manifest_works() {
     let path = env!("CARGO_MANIFEST_DIR");
     let path = PathBuf::from(path).join("src").join("invalid");
-    let manifest = fetch_manifest_toml_from_path(path).unwrap();
+    let (_, manifest) = fetch_manifest_toml_from_path(&path).unwrap();
 
-    let path = env!("CARGO_MANIFEST_DIR");
-    let path = PathBuf::from(path).join("sovereign.toml");
-    let expected = fs::read_to_string(path).unwrap();
+    let expected_path = env!("CARGO_MANIFEST_DIR");
+    let expected_path = PathBuf::from(expected_path).join("sovereign.toml");
+    let expected = fs::read_to_string(&expected_path).unwrap();
     let expected = toml::from_str(&expected).unwrap();
 
+    assert_eq!(path, expected_path);
     assert_eq!(manifest, expected);
 }
