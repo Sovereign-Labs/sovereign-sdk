@@ -38,7 +38,7 @@ which is boilerplate that can be customized to easily build modules.
 
 Here are defining basic dependencies in `Cargo.toml` that module needs to get started:
 
-```text,toml
+```toml
 [dependencies]
 anyhow = { anyhow = "1.0.62" }
 sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", features = ["macros"] }
@@ -110,7 +110,7 @@ Before we start implementing the `Module` trait, there are several preparatory s
 
 1.  Define `native` feature in `Cargo.toml` and add additional dependencies:
 
-    ```text,toml
+    ```toml
     [dependencies]
     anyhow = "1.0.62"
     borsh = { version = "0.10.3", features = ["bytes"] }
