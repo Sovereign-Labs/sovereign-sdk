@@ -134,8 +134,6 @@ pub enum SubmitTransactionResponse {
 #[cfg(test)]
 mod tests {
 
-    use std::io::Read;
-
     use sov_rollup_interface::da::BlobReaderTrait;
     use sov_rollup_interface::mocks::{MockAddress, MockDaService};
 
@@ -204,17 +202,13 @@ mod tests {
         let arg: &[u8] = &[];
         let _: String = rpc.call("sequencer_publishBatch", arg).await.unwrap();
 
-        let mut block = vec![];
         let mut submitted_block = da_service.get_block_at(0).await.unwrap();
-        let _ = submitted_block.blobs[0]
-            .data_mut()
-            .read_to_end(&mut block)
-            .unwrap();
+        let block_data = submitted_block.blobs[0].full_data();
 
         // First bytes of each tx, flattened
         let blob: Vec<Vec<u8>> = vec![vec![tx1[0]], vec![tx2[0]]];
         let expected: Vec<u8> = borsh::to_vec(&blob).unwrap();
-        assert_eq!(expected, block);
+        assert_eq!(expected, block_data);
     }
 
     #[tokio::test]
@@ -233,17 +227,13 @@ mod tests {
         let arg: &[u8] = &[];
         let _: String = rpc.call("sequencer_publishBatch", arg).await.unwrap();
 
-        let mut block = vec![];
         let mut submitted_block = da_service.get_block_at(0).await.unwrap();
-        let _ = submitted_block.blobs[0]
-            .data_mut()
-            .read_to_end(&mut block)
-            .unwrap();
+        let block_data = submitted_block.blobs[0].full_data();
 
         // First bytes of each tx, flattened
         let blob: Vec<Vec<u8>> = vec![vec![tx[0]]];
         let expected: Vec<u8> = borsh::to_vec(&blob).unwrap();
-        assert_eq!(expected, block);
+        assert_eq!(expected, block_data);
     }
 
     #[tokio::test]

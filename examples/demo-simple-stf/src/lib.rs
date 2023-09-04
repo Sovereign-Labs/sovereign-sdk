@@ -1,6 +1,5 @@
 #![deny(missing_docs)]
 #![doc = include_str!("../README.md")]
-use std::io::Read;
 use std::marker::PhantomData;
 
 use sha2::Digest;
@@ -69,17 +68,7 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
     {
         let mut receipts = vec![];
         for blob in blobs {
-            let blob_data = blob.data_mut();
-
-            // Read the data from the blob as a byte vec.
-            let mut data = Vec::new();
-
-            // Panicking within the `StateTransitionFunction` is generally not recommended.
-            // But here, if we encounter an error while reading the bytes,
-            // it suggests a serious issue with the DA layer or our setup.
-            blob_data
-                .read_to_end(&mut data)
-                .unwrap_or_else(|e| panic!("Unable to read blob data {}", e));
+            let data = blob.full_data();
 
             // Check if the sender submitted the preimage of the hash.
             let hash = sha2::Sha256::digest(&data).into();

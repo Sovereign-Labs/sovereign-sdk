@@ -2,9 +2,7 @@ use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
 use sov_modules_api::{BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall};
-use sov_rollup_interface::da::CountedBufReader;
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
-use sov_rollup_interface::Buf;
 use sov_state::StateCheckpoint;
 use tracing::{debug, error};
 
@@ -116,7 +114,7 @@ where
         // TODO: don't ignore these events: https://github.com/Sovereign-Labs/sovereign/issues/350
         let _ = batch_workspace.take_events();
 
-        let (txs, messages) = match self.pre_process_batch(blob.data_mut()) {
+        let (txs, messages) = match self.pre_process_batch(blob) {
             Ok((txs, messages)) => (txs, messages),
             Err(reason) => {
                 // Explicitly revert on slashing, even though nothing has changed in pre_process.
@@ -242,7 +240,7 @@ where
     // Do all stateless checks and data formatting, that can be results in sequencer slashing
     fn pre_process_batch(
         &self,
-        blob_data: &mut CountedBufReader<impl Buf>,
+        blob_data: &mut impl BlobReaderTrait,
     ) -> Result<
         (
             Vec<TransactionAndRawHash<C>>,
@@ -264,9 +262,9 @@ where
     // Attempt to deserialize batch, error results in sequencer slashing.
     fn deserialize_batch(
         &self,
-        blob_data: &mut CountedBufReader<impl Buf>,
+        blob_data: &mut impl BlobReaderTrait,
     ) -> Result<Batch, SlashingReason> {
-        match Batch::deserialize_reader(blob_data) {
+        match Batch::deserialize(&mut blob_data.full_data()) {
             Ok(batch) => Ok(batch),
             Err(e) => {
                 error!(
