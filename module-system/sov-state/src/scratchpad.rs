@@ -102,6 +102,7 @@ impl<S: Storage> AccessoryDelta<S> {
         }
     }
 
+    #[cfg(feature = "native")]
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
         let cache_key = key.to_cache_key();
         if let Some(value) = self.writes.get(&cache_key) {
@@ -148,6 +149,7 @@ impl<S: Storage> RevertableAccessoryDelta<S> {
         }
     }
 
+    #[cfg(feature = "native")]
     fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
         let cache_key = key.to_cache_key();
         if let Some(value) = self.writes.get(&cache_key) {
