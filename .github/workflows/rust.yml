@@ -267,8 +267,6 @@ jobs:
       - run: cargo deny check licenses
   cargo-doc-artifact:
     runs-on: ubuntu-latest
-    # `cargo doc` requires `cargo check`, so we can share caches.
-    needs: check
     timeout-minutes: 90
     env:
       RUSTDOCFLAGS: "-D warnings"
@@ -283,7 +281,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-provider: "buildjet"
-          shared-key: cargo-check
+          shared-key: cargo-doc
           save-if: ${{ github.ref == 'refs/heads/nightly' }}
           workspaces: |
             .
