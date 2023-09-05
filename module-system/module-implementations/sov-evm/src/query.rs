@@ -1,10 +1,4 @@
-use ethereum_types::{Address, U256, U64};
-use ethers::types::Bytes;
-use ethers_core::types::{BlockId, FeeHistory};
 use jsonrpsee::core::RpcResult;
-use reth_rpc_types::state::StateOverride;
-use reth_rpc_types::{BlockOverrides, CallRequest, RichBlock, TransactionRequest};
-use revm::primitives::{CfgEnv, ExecutionResult};
 use sov_modules_api::macros::rpc_gen;
 use sov_state::WorkingSet;
 use tracing::info;
@@ -18,9 +12,12 @@ use crate::Evm;
 impl<C: sov_modules_api::Context> Evm<C> {
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "chainId")]
-    pub fn chain_id(&self, _working_set: &mut WorkingSet<C::Storage>) -> RpcResult<Option<U64>> {
+    pub fn chain_id(
+        &self,
+        _working_set: &mut WorkingSet<C::Storage>,
+    ) -> RpcResult<Option<reth_primitives::U64>> {
         info!("evm module: eth_chainId");
-        Ok(Some(U64::from(1u64)))
+        Ok(Some(reth_primitives::U64::from(1u64)))
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
@@ -30,8 +27,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _block_number: Option<String>,
         _details: Option<bool>,
         _working_set: &mut WorkingSet<C::Storage>,
-    ) -> RpcResult<Option<RichBlock>> {
-        println!("evm module: eth_getBlockByNumber");
+    ) -> RpcResult<Option<reth_rpc_types::RichBlock>> {
         info!("evm module: eth_getBlockByNumber");
 
         let header = reth_rpc_types::Header {
@@ -69,9 +65,12 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "feeHistory")]
-    pub fn fee_history(&self, _working_set: &mut WorkingSet<C::Storage>) -> RpcResult<FeeHistory> {
+    pub fn fee_history(
+        &self,
+        _working_set: &mut WorkingSet<C::Storage>,
+    ) -> RpcResult<reth_rpc_types::FeeHistory> {
         info!("evm module: eth_feeHistory");
-        Ok(FeeHistory {
+        Ok(reth_rpc_types::FeeHistory {
             base_fee_per_gas: Default::default(),
             gas_used_ratio: Default::default(),
             oldest_block: Default::default(),
@@ -86,13 +85,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
         hash: reth_primitives::H256,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<reth_rpc_types::Transaction>> {
-        println!("getTransactionByHash ========= ");
-        println!("Hash {}", hash);
-
-        let evm_transaction = self.transactions.get(&hash, working_set);
-
         info!("evm module: eth_getTransactionByHash");
-        println!("evm module: eth_getTransactionByHash {:?}", evm_transaction);
+        let evm_transaction = self.transactions.get(&hash, working_set);
         Ok(evm_transaction)
     }
 
@@ -103,7 +97,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         hash: reth_primitives::U256,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<reth_rpc_types::TransactionReceipt>> {
-        println!("getTransactionReceipt ========= ");
         info!("evm module: eth_getTransactionReceipt");
 
         let receipt = self.receipts.get(&hash, working_set);
@@ -114,7 +107,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     //https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-types/src/eth/call.rs#L7
 
     /// Template env for eth_call
-    const CALL_CFG_ENV_TEMPLATE: CfgEnv = CfgEnv {
+    const CALL_CFG_ENV_TEMPLATE: revm::primitives::CfgEnv = revm::primitives::CfgEnv {
         // Reth sets this to true and uses only timeout, but other clients use this as a part of DOS attacks protection, with 100mln gas limit
         // https://github.com/paradigmxyz/reth/blob/62f39a5a151c5f4ddc9bf0851725923989df0412/crates/rpc/rpc/src/eth/revm_utils.rs#L215
         disable_block_gas_limit: false,
@@ -132,13 +125,13 @@ impl<C: sov_modules_api::Context> Evm<C> {
     pub fn get_call(
         &self,
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/501
-        request: CallRequest,
-        _block_number: Option<BlockId>,
+        request: reth_rpc_types::CallRequest,
+        _block_number: Option<reth_primitives::BlockId>,
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/501
-        _state_overrides: Option<StateOverride>,
-        _block_overrides: Option<Box<BlockOverrides>>,
+        _state_overrides: Option<reth_rpc_types::state::StateOverride>,
+        _block_overrides: Option<Box<reth_rpc_types::BlockOverrides>>,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> RpcResult<Bytes> {
+    ) -> RpcResult<reth_primitives::Bytes> {
         info!("evm module: eth_call");
         let tx_env = prepare_call_env(request);
 
@@ -151,7 +144,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
         let result = executor::inspect(evm_db, block_env, tx_env, cfg_env).unwrap();
         let output = match result.result {
-            ExecutionResult::Success { output, .. } => output,
+            revm::primitives::ExecutionResult::Success { output, .. } => output,
             _ => todo!(),
         };
         Ok(output.into_data().into())
@@ -162,26 +155,18 @@ impl<C: sov_modules_api::Context> Evm<C> {
     pub fn send_transaction(
         &self,
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/501
-        _request: TransactionRequest,
+        _request: reth_rpc_types::TransactionRequest,
         _working_set: &mut WorkingSet<C::Storage>,
-    ) -> RpcResult<U256> {
+    ) -> RpcResult<reth_primitives::U256> {
         unimplemented!("eth_sendTransaction not implemented")
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "blockNumber")]
-    pub fn block_number(&self, _working_set: &mut WorkingSet<C::Storage>) -> RpcResult<U256> {
-        unimplemented!("eth_blockNumber not implemented")
-    }
-
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
-    #[rpc_method(name = "getTransactionCount")]
-    pub fn get_transaction_count(
+    pub fn block_number(
         &self,
-        _address: Address,
-        _block_number: Option<BlockId>,
         _working_set: &mut WorkingSet<C::Storage>,
-    ) -> RpcResult<Option<U256>> {
-        unimplemented!("eth_getTransactionCount not implemented")
+    ) -> RpcResult<reth_primitives::U256> {
+        unimplemented!("eth_blockNumber not implemented")
     }
 }
