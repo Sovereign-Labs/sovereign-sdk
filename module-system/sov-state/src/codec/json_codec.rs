@@ -1,8 +1,7 @@
 use serde_json;
-
 use crate::codec::StateValueCodec;
 
-/// A [`StateValueCodec`] that uses [`json`] for all values.
+/// A [`StateValueCodec`] that uses [`serde_json`] for all values.
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct JsonCodec;
 
