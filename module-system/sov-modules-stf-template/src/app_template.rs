@@ -2,9 +2,7 @@ use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
 use sov_modules_api::{BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall};
-use sov_rollup_interface::da::CountedBufReader;
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
-use sov_rollup_interface::Buf;
 use sov_state::StateCheckpoint;
 use tracing::{debug, error};
 
@@ -116,7 +114,7 @@ where
         // TODO: don't ignore these events: https://github.com/Sovereign-Labs/sovereign/issues/350
         let _ = batch_workspace.take_events();
 
-        let (txs, messages) = match self.pre_process_batch(blob.data_mut()) {
+        let (txs, messages) = match self.pre_process_batch(blob) {
             Ok((txs, messages)) => (txs, messages),
             Err(reason) => {
                 // Explicitly revert on slashing, even though nothing has changed in pre_process.
@@ -242,7 +240,7 @@ where
     // Do all stateless checks and data formatting, that can be results in sequencer slashing
     fn pre_process_batch(
         &self,
-        blob_data: &mut CountedBufReader<impl Buf>,
+        blob_data: &mut impl BlobReaderTrait,
     ) -> Result<
         (
             Vec<TransactionAndRawHash<C>>,
@@ -264,11 +262,14 @@ where
     // Attempt to deserialize batch, error results in sequencer slashing.
     fn deserialize_batch(
         &self,
-        blob_data: &mut CountedBufReader<impl Buf>,
+        blob_data: &mut impl BlobReaderTrait,
     ) -> Result<Batch, SlashingReason> {
-        match Batch::deserialize_reader(blob_data) {
+        match Batch::try_from_slice(data_for_deserialization(blob_data)) {
             Ok(batch) => Ok(batch),
             Err(e) => {
+                assert_eq!(blob_data.verified_data().len(), blob_data.total_len(), "Batch deserialization failed and some data was not provided. The prover might be malicious");
+                // If the deserialization fails, we need to make sure it's not because the prover was malicious and left
+                // out some relevant data! Make that check here. If the data is missing, panic.
                 error!(
                     "Unable to deserialize batch provided by the sequencer {}",
                     e
@@ -311,4 +312,14 @@ where
         }
         Ok(decoded_messages)
     }
+}
+
+#[cfg(feature = "native")]
+fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> &[u8] {
+    blob.full_data()
+}
+
+#[cfg(not(feature = "native"))]
+fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> &[u8] {
+    blob.verified_data()
 }

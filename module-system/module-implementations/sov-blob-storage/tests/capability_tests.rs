@@ -1,5 +1,3 @@
-use std::io::Read;
-
 use sov_bank::TokenConfig;
 use sov_blob_storage::BlobStorage;
 use sov_chain_state::{ChainState, ChainStateConfig};
@@ -603,16 +601,9 @@ fn blobs_are_equal<B: BlobReaderTrait>(
         slot_hint
     );
 
-    let mut read_actual = vec![];
-    actual_inner
-        .data_mut()
-        .read_to_end(&mut read_actual)
-        .unwrap();
-
-    let mut read_expected = vec![];
-    expected.data_mut().read_to_end(&mut read_expected).unwrap();
     assert_eq!(
-        read_expected, read_actual,
+        actual_inner.full_data(),
+        expected.full_data(),
         "incorrect data read in {}",
         slot_hint
     );

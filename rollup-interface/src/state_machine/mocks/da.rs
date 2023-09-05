@@ -97,23 +97,28 @@ pub struct MockBlob {
 }
 
 impl BlobReaderTrait for MockBlob {
-    type Data = Bytes;
     type Address = MockAddress;
 
     fn sender(&self) -> Self::Address {
         self.address
     }
 
-    fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
-        &mut self.data
-    }
-
-    fn data(&self) -> &CountedBufReader<Self::Data> {
-        &self.data
-    }
-
     fn hash(&self) -> [u8; 32] {
         self.hash
+    }
+
+    fn verified_data(&self) -> &[u8] {
+        self.data.accumulator()
+    }
+
+    #[cfg(feature = "native")]
+    fn advance(&mut self, num_bytes: usize) -> &[u8] {
+        self.data.advance(num_bytes);
+        self.verified_data()
+    }
+
+    fn total_len(&self) -> usize {
+        self.data.total_len()
     }
 }
 
