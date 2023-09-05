@@ -1,4 +1,5 @@
 use serde_json;
+
 use crate::codec::StateValueCodec;
 
 /// A [`StateValueCodec`] that uses [`serde_json`] for all values.
