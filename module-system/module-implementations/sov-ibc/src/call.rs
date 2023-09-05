@@ -15,13 +15,6 @@ use crate::context::IbcExecutionContext;
 use crate::router::IbcRouter;
 use crate::IbcModule;
 
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
-pub struct RawMsgCreateClient {
-    client_state: Vec<u8>,
-    consensus_state: Vec<u8>,
-    signer: String,
-}
-
 // TODO: Put back when we change `MsgCreateClient` with `Core(MsgEnvelope)`
 // #[cfg_attr(
 //     feature = "native",
