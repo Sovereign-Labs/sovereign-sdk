@@ -51,41 +51,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
             reth_primitives::U256::from(1),
         );
 
-        println!("Hash {}", hash);
-
-        let header = reth_rpc_types::Header {
-            hash: Default::default(),
-            parent_hash: Default::default(),
-            uncles_hash: Default::default(),
-            miner: Default::default(),
-            state_root: Default::default(),
-            transactions_root: Default::default(),
-            receipts_root: Default::default(),
-            logs_bloom: Default::default(),
-            difficulty: Default::default(),
-            number: Default::default(),
-            gas_limit: Default::default(),
-            gas_used: Default::default(),
-            timestamp: Default::default(),
-            extra_data: Default::default(),
-            mix_hash: Default::default(),
-            nonce: Default::default(),
-            base_fee_per_gas: Some(reth_primitives::U256::from(100)),
-            withdrawals_root: Default::default(),
-        };
-
-        let block = reth_rpc_types::Block {
-            header,
-            total_difficulty: Default::default(),
-            uncles: Default::default(),
-            transactions: reth_rpc_types::BlockTransactions::Hashes(Default::default()),
-            size: Default::default(),
-            withdrawals: Default::default(),
-        };
-
-        self.current_block.set(&block, working_set);
-        let x = self.current_block.get(working_set).unwrap();
-
         self.transactions.set(&hash, &transaction, working_set);
 
         let receipt = reth_rpc_types::TransactionReceipt {
