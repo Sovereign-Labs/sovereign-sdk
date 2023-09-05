@@ -196,7 +196,7 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// }
 ///
 /// #[jsonrpsee::proc_macros::rpc(client, server, namespace ="myNamespace")]
-/// pub trait MyModuleRpc {
+/// pub trait MyModuleRpc<C: Context> {
 ///     #[method(name = "myMethod")]
 ///     fn my_method(&self, param: u32) ->RpcResult<u32>;
 ///
