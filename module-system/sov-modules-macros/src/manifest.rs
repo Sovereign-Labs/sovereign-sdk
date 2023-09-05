@@ -71,7 +71,7 @@ where
 fn fetch_manifest_works() {
     let path = env!("CARGO_MANIFEST_DIR");
     let path = PathBuf::from(path).join("src").join("invalid");
-    let (path, manifest) = fetch_manifest_toml_from_path(&path).unwrap();
+    let (path, manifest) = fetch_manifest_toml_from_path(path).unwrap();
 
     let expected_path = env!("CARGO_MANIFEST_DIR");
     let expected_path = PathBuf::from(expected_path).join("sovereign.toml");
