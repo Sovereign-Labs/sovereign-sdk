@@ -1,7 +1,7 @@
 use quote::quote;
 use syn::DeriveInput;
 
-use crate::common::{generics_for_field, StructFieldExtractor};
+use crate::common::StructFieldExtractor;
 
 pub(crate) struct ExposeRpcMacro {
     field_extractor: StructFieldExtractor,
@@ -19,8 +19,15 @@ impl ExposeRpcMacro {
         original: proc_macro::TokenStream,
         input: DeriveInput,
     ) -> Result<proc_macro::TokenStream, syn::Error> {
-        let DeriveInput { data, generics, .. } = input;
-        let (impl_generics, _ty_generics, where_clause) = generics.split_for_impl();
+        let DeriveInput {
+            data,
+            generics,
+            ident: input_ident,
+            ..
+        } = input;
+
+        let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+
         let context_type = generics
             .params
             .iter()
@@ -33,16 +40,30 @@ impl ExposeRpcMacro {
             })
             .ok_or(syn::Error::new_spanned(
                 &generics,
-                "a runtime must be generic over a sov_modules_api::Context to derive CliWallet",
+                "a runtime must be generic over a sov_modules_api::Context to generate rpc methods",
             ))?;
 
         let fields = self.field_extractor.get_fields_from_struct(&data)?;
 
         let rpc_storage_struct = quote! {
-            #[derive(Clone)]
-            struct RpcStorage<C: ::sov_modules_api::Context> {
-                 storage: C::Storage
+            struct RpcStorage #impl_generics #where_clause {
+                storage: #context_type::Storage,
+                _phantom: ::std::marker::PhantomData< #input_ident #ty_generics >,
             }
+
+            // Manually implementing clone, as in reality only cloning storage
+            impl #impl_generics ::std::clone::Clone for RpcStorage #ty_generics #where_clause {
+                fn clone(&self) -> Self {
+                    Self {
+                        storage: self.storage.clone(),
+                        _phantom: ::std::marker::PhantomData,
+                    }
+                 }
+            }
+
+            // As long as RpcStorage only cares about C::Storage, which is Sync + Send, we can do this:
+            unsafe impl #impl_generics ::std::marker::Sync for RpcStorage #ty_generics #where_clause {}
+            unsafe impl #impl_generics ::std::marker::Send for RpcStorage #ty_generics #where_clause {}
         };
 
         let mut merge_operations = proc_macro2::TokenStream::new();
@@ -60,7 +81,6 @@ impl ExposeRpcMacro {
                 .last()
                 .expect("A type path must have at least one segment")
                 .arguments;
-            let field_generics = generics_for_field(&generics, field_path_args);
 
             let module_ident = ty.path.segments.last().unwrap().clone().ident;
 
@@ -79,7 +99,7 @@ impl ExposeRpcMacro {
             merge_operations.extend(merge_operation);
 
             let rpc_trait_impl = quote! {
-                impl #field_generics #rpc_trait_ident #field_path_args for RpcStorage<#context_type> {
+                impl #impl_generics #rpc_trait_ident #field_path_args for RpcStorage #ty_generics #where_clause {
                     /// Get a working set on top of the current storage
                     fn get_working_set(&self) -> ::sov_state::WorkingSet<<#context_type as ::sov_modules_api::Spec>::Storage>
                     {
@@ -87,15 +107,17 @@ impl ExposeRpcMacro {
                     }
                 }
             };
+
             rpc_trait_impls.extend(rpc_trait_impl);
         }
 
         let get_rpc_methods: proc_macro2::TokenStream = quote! {
             /// Returns a [`jsonrpsee::RpcModule`] with all the rpc methods exposed by the module
-            pub fn get_rpc_methods #impl_generics (storage: <#context_type as ::sov_modules_api::Spec>::Storage) -> ::jsonrpsee::RpcModule<()> #where_clause{
+            pub fn get_rpc_methods #impl_generics (storage: <#context_type as ::sov_modules_api::Spec>::Storage) -> ::jsonrpsee::RpcModule<()> #where_clause {
                 let mut module = ::jsonrpsee::RpcModule::new(());
-                let r = RpcStorage::<#context_type> {
+                let r = RpcStorage:: #ty_generics  {
                     storage: storage.clone(),
+                    _phantom: ::std::marker::PhantomData
                 };
 
                 #merge_operations

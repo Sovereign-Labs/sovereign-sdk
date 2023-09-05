@@ -30,9 +30,8 @@ hex = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true, features = [] }
 
-# TODO: try update 2.x
-ed25519-dalek = { version = "1.0.1", default-features = false, features = ["u64_backend"] }
-rand = { version = "0.7", optional = true }
+ed25519-dalek = { version = "2.0.0", default-features = false }
+rand = { version = "0.8", optional = true }
 
 zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
 risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
@@ -40,10 +39,11 @@ risc0-zkvm-platform = { version = "0.16", optional = true }
 
 [dev-dependencies]
 bincode = { workspace = true }
+sov-modules-api = { path = ".", features = ["native"] }
+sov-bank = { path = "../module-implementations/sov-bank", version = "0.1", features = ["native"] }
 
 [features]
 bench = ["zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
 default = ["macros"]
-serde = ["dep:serde_json"]
-native = ["serde", "rand", "hex", "schemars", "ed25519-dalek/default", "clap", "jsonrpsee", "macros", "sov-modules-macros/native", "sov-state/native", "sov-sequencer"]
+native = ["serde_json", "rand", "hex", "schemars", "ed25519-dalek/default", "ed25519-dalek/serde", "ed25519-dalek/rand_core", "clap", "jsonrpsee", "macros", "sov-modules-macros/native", "sov-state/native", "sov-sequencer"]
 macros = ["sov-modules-macros"]

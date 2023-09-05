@@ -1,19 +1,19 @@
 use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker, Zkvm};
+use sov_modules_api::ValidityConditionChecker;
 use sov_state::{Storage, WorkingSet};
 
 use crate::call::Role;
 use crate::AttesterIncentives;
 
-impl<C, Vm, S, P, Cond, Checker> AttesterIncentives<C, Vm, Cond, Checker>
+impl<C, Vm, S, P, Da, Checker> AttesterIncentives<C, Vm, Da, Checker>
 where
     C: sov_modules_api::Context<Storage = S>,
-    Vm: Zkvm,
+    Vm: sov_modules_api::Zkvm,
     S: Storage<Proof = P>,
     P: BorshDeserialize + BorshSerialize,
-    Cond: ValidityCondition,
-    Checker: ValidityConditionChecker<Cond>,
+    Da: sov_modules_api::DaSpec,
+    Checker: ValidityConditionChecker<Da::ValidityCondition>,
 {
     pub(crate) fn init_module(
         &self,

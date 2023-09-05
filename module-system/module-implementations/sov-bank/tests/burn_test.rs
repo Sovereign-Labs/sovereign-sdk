@@ -88,7 +88,7 @@ fn burn_deployed_tokens() {
     assert!(chain.next().is_none());
     assert_eq!(
         format!(
-            "Failed burn coins(token_address={} amount={}) by sender {}",
+            "Failed to burn coins(token_address={} amount={}) from owner {}",
             token_address, burn_amount, sender_address
         ),
         message_1
@@ -137,7 +137,7 @@ fn burn_deployed_tokens() {
     assert!(chain.next().is_none());
     assert_eq!(
         format!(
-            "Failed burn coins(token_address={} amount={}) by sender {}",
+            "Failed to burn coins(token_address={} amount={}) from owner {}",
             token_address,
             initial_balance + 10,
             minter_address
@@ -168,7 +168,7 @@ fn burn_deployed_tokens() {
     assert!(chain.next().is_none());
     assert_eq!(
         format!(
-            "Failed burn coins(token_address={} amount={}) by sender {}",
+            "Failed to burn coins(token_address={} amount={}) from owner {}",
             token_address, 1, minter_address
         ),
         message_1

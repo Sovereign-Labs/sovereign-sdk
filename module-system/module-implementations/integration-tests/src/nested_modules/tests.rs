@@ -1,6 +1,5 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_api::{Context, Prefix};
-use sov_rollup_interface::stf::Event;
+use sov_modules_api::{Context, Event, Prefix};
 use sov_state::{ProverStorage, StateMap, Storage, WorkingSet, ZkStorage};
 
 use super::helpers::module_c;

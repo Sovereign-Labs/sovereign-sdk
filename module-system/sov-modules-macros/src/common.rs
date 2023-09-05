@@ -1,13 +1,7 @@
-use std::collections::HashMap;
-
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::{format_ident, ToTokens};
-use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::{
-    DataStruct, Fields, GenericParam, Generics, ImplGenerics, Meta, PathArguments, PathSegment,
-    TypeGenerics, TypeParamBound, TypePath, WhereClause, WherePredicate,
-};
+use syn::{DataStruct, Fields, GenericParam, ImplGenerics, Meta, TypeGenerics};
 
 #[derive(Clone)]
 pub(crate) struct StructNamedField {
@@ -144,7 +138,7 @@ pub(crate) struct StructDef<'a> {
     pub(crate) type_generics: TypeGenerics<'a>,
     pub(crate) generic_param: &'a Ident,
     pub(crate) fields: Vec<StructNamedField>,
-    pub(crate) where_clause: Option<&'a WhereClause>,
+    pub(crate) where_clause: Option<&'a syn::WhereClause>,
 }
 
 impl<'a> StructDef<'a> {
@@ -154,7 +148,7 @@ impl<'a> StructDef<'a> {
         impl_generics: ImplGenerics<'a>,
         type_generics: TypeGenerics<'a>,
         generic_param: &'a Ident,
-        where_clause: Option<&'a WhereClause>,
+        where_clause: Option<&'a syn::WhereClause>,
     ) -> Self {
         Self {
             ident,
@@ -192,9 +186,9 @@ impl<'a> StructDef<'a> {
     }
 }
 
-/// Gets the type parameter's identifier from [`syn::Generics`].
+/// Gets the first type parameter's identifier from [`syn::Generics`].
 pub(crate) fn get_generics_type_param(
-    generics: &Generics,
+    generics: &syn::Generics,
     error_span: Span,
 ) -> Result<Ident, syn::Error> {
     let generic_param = match generics
@@ -206,13 +200,13 @@ pub(crate) fn get_generics_type_param(
         GenericParam::Lifetime(lf) => {
             return Err(syn::Error::new_spanned(
                 lf,
-                "Lifetime parameters not supported.",
+                "Lifetime parameters are not supported.",
             ))
         }
         GenericParam::Const(cnst) => {
             return Err(syn::Error::new_spanned(
                 cnst,
-                "Const parameters not supported.",
+                "Const parameters are not supported.",
             ))
         }
     };
@@ -287,208 +281,40 @@ pub(crate) fn get_serialization_attrs(
     Ok(serialization_attrs)
 }
 
-/// Extract a mapping from generic types to their associated trait bounds, including
-/// the ones from the where clause.
-///
-/// For example, given the following struct:
-/// ```rust,ignore
-/// use sov_modules_macros::common::GenericTypesWithBounds;
-/// let test_struct: syn::ItemStruct = syn::parse_quote! {
-///     struct TestStruct<T: SomeTrait> where T: SomeOtherTrait {
-///         field: T
-///     }
-/// };
-/// // We want to extract both the inline bounds, and the bounds from the where clause...
-/// // so that the generics from above definition are equivalent what we would have gotten
-/// // from writing `T: SomeTrait + SomeOtherTrait` inline
-/// let desired_bounds_for_t: syn::TypeParam = syn::parse_quote!(T: SomeTrait + SomeThirdTrait);
-///
-/// // That is exactly what `GenericTypesWithBounds` does
-/// let our_bounds = extract_generic_type_bounds(&test_struct.generics);
-/// assert_eq!(our_bounds.get(T), Some(&desired_bounds_for_t.bounds));
-/// ```
-///
-#[cfg_attr(not(feature = "native"), allow(unused))]
-pub(crate) fn extract_generic_type_bounds(
-    generics: &Generics,
-) -> HashMap<TypePath, Punctuated<TypeParamBound, syn::token::Add>> {
-    let mut generics_with_bounds: HashMap<_, _> = Default::default();
-    // Collect the inline bounds from each generic param
-    for param in generics.params.iter() {
-        if let GenericParam::Type(ty) = param {
-            let path_segment = PathSegment {
-                ident: ty.ident.clone(),
-                arguments: syn::PathArguments::None,
-            };
-            let path = syn::Path {
-                leading_colon: None,
-                segments: Punctuated::from_iter(vec![path_segment]),
-            };
-            let type_path = syn::TypePath { qself: None, path };
-            generics_with_bounds.insert(type_path, ty.bounds.clone());
-        }
-    }
-
-    // Iterate over the bounds in the `where_clause` and add them to the map
-    if let Some(where_clause) = &generics.where_clause {
-        for predicate in &where_clause.predicates {
-            // We can ignore lifetimes and "Eq" predicates since they don't add any trait bounds
-            // so just match on `Type` predicates
-            if let WherePredicate::Type(predicate_type) = predicate {
-                // If the bounded type is a regular type path, we need to extract the bounds and add them to the map.
-                // For now, we ignore more exotic bounds `[T; N]: SomeTrait`.
-                if let syn::Type::Path(type_path) = &predicate_type.bounded_ty {
-                    match generics_with_bounds.entry(type_path.clone()) {
-                        std::collections::hash_map::Entry::Occupied(mut entry) => {
-                            entry.get_mut().extend(predicate_type.bounds.clone())
-                        }
-                        std::collections::hash_map::Entry::Vacant(entry) => {
-                            entry.insert(predicate_type.bounds.clone());
-                        }
-                    }
-                }
-            }
-        }
-    }
-    generics_with_bounds
-}
-
-/// Extract the type ident from a `TypePath`.
-#[cfg_attr(not(feature = "native"), allow(unused))]
-pub fn extract_ident(type_path: &syn::TypePath) -> &Ident {
-    &type_path
-        .path
-        .segments
-        .last()
-        .expect("Type path must have at least one segment")
-        .ident
-}
-
-/// Build the generics for a field based on the generics of the outer struct.
-/// For example, given the following struct:
-/// ```rust,ignore
-/// struct MyStruct<T: SomeTrait, U: SomeOtherTrait> {
-///    field1: PhantomData<T>,
-///    field2: Vec<U>
-/// }
-/// ```
-///
-/// This function will return a `syn::Generics` corresponding to `<T: SomeTrait>` when
-/// invoked on the PathArguments for field1.
-#[cfg_attr(not(feature = "native"), allow(unused))]
-pub(crate) fn generics_for_field(
-    outer_generics: &Generics,
-    field_generic_types: &PathArguments,
-) -> Generics {
-    let generic_bounds = extract_generic_type_bounds(outer_generics);
-    match field_generic_types {
-        PathArguments::AngleBracketed(angle_bracketed_data) => {
-            let mut args_with_bounds = Punctuated::<GenericParam, syn::token::Comma>::new();
-            for generic_arg in &angle_bracketed_data.args {
-                if let syn::GenericArgument::Type(syn::Type::Path(type_path)) = generic_arg {
-                    let ident = extract_ident(type_path);
-                    let bounds = generic_bounds.get(type_path).cloned().unwrap_or_default();
-
-                    // Construct a "type param" with the appropriate bounds. This corresponds to a syntax
-                    // tree like `T: Trait1 + Trait2`
-                    let generic_type_param_with_bounds = syn::TypeParam {
-                        attrs: Vec::new(),
-                        ident: ident.clone(),
-                        colon_token: Some(syn::token::Colon {
-                            spans: [type_path.span()],
-                        }),
-                        bounds: bounds.clone(),
-                        eq_token: None,
-                        default: None,
-                    };
-                    args_with_bounds.push(GenericParam::Type(generic_type_param_with_bounds))
-                }
-            }
-            // Construct a `Generics` struct with the generic type parameters and their bounds.
-            // This corresponds to a syntax tree like `<T: Trait1 + Trait2>`
-            syn::Generics {
-                lt_token: Some(syn::token::Lt {
-                    spans: [field_generic_types.span()],
-                }),
-                params: args_with_bounds,
-                gt_token: Some(syn::token::Gt {
-                    spans: [field_generic_types.span()],
-                }),
-                where_clause: None,
-            }
-        }
-        // We don't need to do anything if the generic type parameters are not angle bracketed
-        _ => Default::default(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use syn::parse_quote;
-
-    use crate::common::extract_generic_type_bounds;
+    use super::*;
 
     #[test]
-    fn test_generic_types_with_bounds() {
-        let test_struct: syn::ItemStruct = syn::parse_quote! {
-            struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> where T: SomeThirdTrait {
-                field: (T, U, V)
-            }
+    fn get_generic_type_param_success() {
+        // tests for get_generics_type_param
+        let generics = syn::parse_quote! {
+            <T: Trait>
         };
-        let generics = test_struct.generics;
-        let our_bounds = extract_generic_type_bounds(&generics);
-        let expected_bounds_for_t: syn::TypeParam =
-            syn::parse_quote!(T: SomeTrait + SomeThirdTrait);
-        let expected_bounds_for_u: syn::TypeParam = syn::parse_quote!(U: SomeOtherTrait);
 
-        assert_eq!(
-            our_bounds.get(&parse_quote!(T)),
-            Some(&expected_bounds_for_t.bounds)
-        );
-        assert_eq!(
-            our_bounds.get(&parse_quote!(U)),
-            Some(&expected_bounds_for_u.bounds)
-        );
-        assert_eq!(
-            our_bounds.get(&parse_quote!(V)),
-            Some(&syn::punctuated::Punctuated::new())
-        );
+        let generic_param = get_generics_type_param(&generics, Span::call_site()).unwrap();
+        assert_eq!(generic_param, "T");
     }
 
     #[test]
-    fn test_generic_types_with_associated_type_bounds() {
-        let test_struct: syn::ItemStruct = syn::parse_quote! {
-            struct TestStruct<T: SomeTrait, U: SomeOtherTrait, V> where T::Error: Debug {
-                field: (T, U, V)
-            }
+    fn get_generic_type_param_first_lifetime() {
+        let generics = syn::parse_quote! {
+            <'a, T: Trait>
         };
-        let generics = test_struct.generics;
-        let our_bounds = extract_generic_type_bounds(&generics);
-        let expected_bounds_for_t: syn::TypeParam = syn::parse_quote!(T: SomeTrait);
-        let expected_bounds_for_t_error: syn::WherePredicate = syn::parse_quote!(T::Error: Debug);
-        if let syn::WherePredicate::Type(expected_bounds_for_t_error) = expected_bounds_for_t_error
-        {
-            assert_eq!(
-                our_bounds.get(&parse_quote!(T::Error)),
-                Some(&expected_bounds_for_t_error.bounds)
-            );
-        } else {
-            unreachable!("Expected a type predicate")
+        let generic_param = get_generics_type_param(&generics, Span::call_site());
+        let error = generic_param.unwrap_err();
+        assert_eq!(error.to_string(), "Lifetime parameters are not supported.");
+    }
+
+    #[test]
+    fn get_generic_type_param_first_const() {
+        // error test case for get_generics_type_param when first generic param is const
+        let generics = syn::parse_quote! {
+            <const T: Trait>
         };
-        let expected_bounds_for_u: syn::TypeParam = syn::parse_quote!(U: SomeOtherTrait);
+        let generic_param = get_generics_type_param(&generics, Span::call_site());
 
-        assert_eq!(
-            our_bounds.get(&parse_quote!(T)),
-            Some(&expected_bounds_for_t.bounds)
-        );
-
-        assert_eq!(
-            our_bounds.get(&parse_quote!(U)),
-            Some(&expected_bounds_for_u.bounds)
-        );
-        assert_eq!(
-            our_bounds.get(&parse_quote!(V)),
-            Some(&syn::punctuated::Punctuated::new())
-        );
+        let error = generic_param.unwrap_err();
+        assert_eq!(error.to_string(), "Const parameters are not supported.");
     }
 }

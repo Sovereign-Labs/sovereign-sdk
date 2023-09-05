@@ -97,7 +97,6 @@ impl<C: sov_modules_api::Context> Bank<C> {
     }
 
     /// Transfers the set of `coins` to the address specified by `to`.
-    /// Helper function that calls the [`transfer_from`] method from the bank module
     pub fn transfer(
         &self,
         to: C::Address,
@@ -108,39 +107,47 @@ impl<C: sov_modules_api::Context> Bank<C> {
         self.transfer_from(context.sender(), &to, coins, working_set)
     }
 
-    /// Burns the set of `coins`. If there is no token at the address specified in the
-    /// `Coins` structure, return an error.
-    /// Calls the [`Token::burn`] function and updates the total supply of tokens.
-    pub(crate) fn burn(
+    /// Burns the set of `coins`.
+    ///
+    /// If there is no token at the address specified in the
+    /// [`Coins`] structure, return an error; on success it updates the total
+    /// supply of tokens.
+    pub fn burn(
         &self,
         coins: Coins<C>,
-        context: &C,
+        owner: &C::Address,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<CallResponse> {
-        let context_logger = || {
-            format!(
-                "Failed burn coins({}) by sender {}",
-                coins,
-                context.sender()
-            )
-        };
+    ) -> Result<()> {
+        let context_logger = || format!("Failed to burn coins({}) from owner {}", coins, owner,);
         let mut token = self
             .tokens
             .get_or_err(&coins.token_address, working_set)
             .with_context(context_logger)?;
         token
-            .burn(context.sender(), coins.amount, working_set)
+            .burn(owner, coins.amount, working_set)
             .with_context(context_logger)?;
         token.total_supply -= coins.amount;
         self.tokens.set(&coins.token_address, &token, working_set);
 
+        Ok(())
+    }
+
+    /// Burns coins from an externally owned address ("EOA")
+    pub(crate) fn burn_from_eoa(
+        &self,
+        coins: Coins<C>,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<CallResponse> {
+        self.burn(coins, context.sender(), working_set)?;
         Ok(CallResponse::default())
     }
 
     /// Mints the `coins`to the address `mint_to_address` using the externally owned account ("EOA") supplied by
     /// `context.sender()` as the authorizer.
     /// Returns an error if the token address doesn't exist or `context.sender()` is not authorized to mint tokens.
-    /// Calls the [`Token::mint`] function and update the `self.tokens` set to store the new balance.
+    ///
+    /// On success, it updates the `self.tokens` set to store the new balance.
     pub fn mint_from_eoa(
         &self,
         coins: &Coins<C>,
@@ -153,7 +160,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
 
     /// Mints the `coins` to the address `mint_to_address` if `authorizer` is an allowed minter.
     /// Returns an error if the token address doesn't exist or `context.sender()` is not authorized to mint tokens.
-    /// Calls the [`Token::mint`] function and update the `self.tokens` set to store the new minted address.
+    ///
+    /// On success, it updates the `self.tokens` set to store the new minted address.
     pub fn mint(
         &self,
         coins: &Coins<C>,
@@ -210,7 +218,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
 
 impl<C: sov_modules_api::Context> Bank<C> {
     /// Transfers the set of `coins` from the address `from` to the address `to`.
-    /// Returns an error if the token address doesn't exist. Otherwise, call the [`Token::transfer`] function.
+    ///
+    /// Returns an error if the token address doesn't exist.
     pub fn transfer_from(
         &self,
         from: &C::Address,
@@ -234,7 +243,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         Ok(CallResponse::default())
     }
 
-    /// Helper function used by the rpc method [`balance_of`] to return the balance of the token stored at `token_address`
+    /// Helper function used by the rpc method [`balance_of`](Bank::balance_of) to return the balance of the token stored at `token_address`
     /// for the user having the address `user_address` from the underlying storage. If the token address doesn't exist, or
     /// if the user doesn't have tokens of that type, return `None`. Otherwise, wrap the resulting balance in `Some`.
     pub fn get_balance_of(

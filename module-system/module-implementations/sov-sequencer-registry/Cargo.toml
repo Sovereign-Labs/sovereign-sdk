@@ -13,7 +13,7 @@ readme = "README.md"
 resolver = "2"
 
 [dev-dependencies]
-sov-sequencer-registry = {path = ".", features = ["native"]}
+sov-sequencer-registry = { path = ".", features = ["native"] }
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1", features = ["mocks"] }
 tempfile = { workspace = true }
 
@@ -23,19 +23,28 @@ clap = { workspace = true, optional = true }
 sov-bank = { path = "../sov-bank", version = "0.1" }
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
 sov-state = { path = "../../sov-state", version = "0.1" }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["rc"] }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
-zk-cycle-macros = {path = "../../../utils/zk-cycle-macros", optional=true}
-risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional=true}
-risc0-zkvm-platform = { version = "0.16", optional=true}
-zk-cycle-utils = {path = "../../../utils/zk-cycle-utils", optional=true}
+zk-cycle-macros = { path = "../../../utils/zk-cycle-macros", optional = true }
+risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
+risc0-zkvm-platform = { version = "0.16", optional = true }
+zk-cycle-utils = { path = "../../../utils/zk-cycle-utils", optional = true }
 
 [features]
-bench = ["zk-cycle-macros/bench", "risc0-zkvm","risc0-zkvm-platform","zk-cycle-utils"]
+bench = ["zk-cycle-macros/bench", "risc0-zkvm", "risc0-zkvm-platform", "zk-cycle-utils"]
 default = []
-serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-bank/native", "dep:jsonrpsee", "dep:schemars", "dep:clap", "sov-state/native", "sov-modules-api/native"]
+native = [
+    "serde",
+    "serde_json",
+    "jsonrpsee",
+    "schemars",
+    "clap",
+    "sov-state/native",
+    "sov-modules-api/native",
+    # This:
+    "sov-bank/native",
+]
+

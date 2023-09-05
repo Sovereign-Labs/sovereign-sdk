@@ -7,7 +7,7 @@
 //! and write a state transition function from scratch.
 //! [See here for docs](https://github.com/Sovereign-Labs/sovereign-sdk/blob/nightly/examples/demo-stf/README.md)
 
-use sov_rollup_interface::da::BlobReaderTrait;
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_state::WorkingSet;
 
 use crate::{Context, Spec};
@@ -43,20 +43,19 @@ impl<'a, B: BlobReaderTrait> From<&'a mut B> for BlobRefOrOwned<'a, B> {
 }
 
 /// BlobSelector decides which blobs to process in a current slot.
-pub trait BlobSelector {
+pub trait BlobSelector<Da: DaSpec> {
     /// Context type
     type Context: Context;
 
-    /// It takes 2 arguments:
+    /// It takes two arguments.
     /// 1. `current_blobs` - blobs that were received from the network for the current slot.
     /// 2. `working_set` - the working to access storage.
     /// It returns a vector containing a mix of borrowed and owned blobs.
-    fn get_blobs_for_this_slot<'a, I, B>(
+    fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, B>>>
+    ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
     where
-        B: BlobReaderTrait,
-        I: IntoIterator<Item = &'a mut B>;
+        I: IntoIterator<Item = &'a mut Da::BlobTransaction>;
 }

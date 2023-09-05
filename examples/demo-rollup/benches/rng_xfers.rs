@@ -42,7 +42,9 @@ fn generate_transfers(n: usize, start_nonce: u64) -> Vec<u8> {
             },
         };
         let enc_msg =
-            <Runtime<DefaultContext> as EncodeCall<Bank<DefaultContext>>>::encode_call(msg);
+            <Runtime<DefaultContext, RngDaSpec> as EncodeCall<Bank<DefaultContext>>>::encode_call(
+                msg,
+            );
         let tx =
             Transaction::<DefaultContext>::new_signed_tx(&pk, enc_msg, start_nonce + (i as u64));
         let ser_tx = tx.try_to_vec().unwrap();
@@ -68,7 +70,8 @@ fn generate_create(start_nonce: u64) -> Vec<u8> {
         minter_address,
         authorized_minters: vec![minter_address],
     };
-    let enc_msg = <Runtime<DefaultContext> as EncodeCall<Bank<DefaultContext>>>::encode_call(msg);
+    let enc_msg =
+        <Runtime<DefaultContext, RngDaSpec> as EncodeCall<Bank<DefaultContext>>>::encode_call(msg);
     let tx = Transaction::<DefaultContext>::new_signed_tx(&pk, enc_msg, start_nonce);
     let ser_tx = tx.try_to_vec().unwrap();
     message_vec.push(ser_tx);
@@ -89,16 +92,18 @@ impl Default for RngDaService {
 }
 
 /// A simple DaSpec for a random number generator.
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct RngDaSpec;
 
 impl DaSpec for RngDaSpec {
     type SlotHash = MockHash;
     type BlockHeader = MockBlockHeader;
+    type Address = MockAddress;
     type BlobTransaction = MockBlob;
+    type ValidityCondition = MockValidityCond;
     type InclusionMultiProof = [u8; 32];
     type CompletenessProof = ();
     type ChainParams = ();
-    type ValidityCondition = MockValidityCond;
 }
 
 #[async_trait]

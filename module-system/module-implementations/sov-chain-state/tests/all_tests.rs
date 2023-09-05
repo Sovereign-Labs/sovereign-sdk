@@ -1,10 +1,11 @@
+use sov_chain_state::{ChainState, ChainStateConfig, StateTransitionId, TransitionInProgress};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::Genesis;
-use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash, MockValidityCond};
+use sov_rollup_interface::mocks::{
+    MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockValidityCond,
+};
 use sov_state::{ProverStorage, Storage, WorkingSet};
-
-use crate::{ChainState, ChainStateConfig, StateTransitionId, TransitionInProgress};
 
 /// This simply tests that the chain_state reacts properly with the invocation of the `begin_slot`
 /// hook. For more complete integration tests, feel free to have a look at the integration tests folder.
@@ -20,7 +21,7 @@ fn test_simple_chain_state() {
 
     let mut working_set = WorkingSet::new(storage.clone());
 
-    let chain_state = ChainState::<DefaultContext, MockValidityCond>::default();
+    let chain_state = ChainState::<DefaultContext, MockDaSpec>::default();
     let config = ChainStateConfig {
         initial_slot_height: INIT_HEIGHT,
     };
@@ -60,7 +61,7 @@ fn test_simple_chain_state() {
 
     assert_eq!(stored_root, init_root_hash, "Genesis hashes don't match");
 
-    // Check that the slot height have been updated
+    // Check that the slot height has been updated
     let new_height_storage = chain_state.get_slot_height(&mut working_set);
 
     assert_eq!(
@@ -101,7 +102,7 @@ fn test_simple_chain_state() {
 
     chain_state.begin_slot_hook(&new_slot_data, &mut working_set);
 
-    // Check that the slot height have been updated correctly
+    // Check that the slot height has been updated correctly
     let new_height_storage = chain_state.get_slot_height(&mut working_set);
     assert_eq!(
         new_height_storage,

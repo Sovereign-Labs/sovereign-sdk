@@ -1,6 +1,6 @@
 use crate::codec::StateValueCodec;
 
-/// A [`StateCodec`] that uses [`bcs`] for all keys and values.
+/// A [`StateValueCodec`] that uses [`bcs`] for all keys and values.
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct BcsCodec;
 

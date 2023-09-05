@@ -137,9 +137,41 @@ mod tests {
     use std::io::Read;
 
     use sov_rollup_interface::da::BlobReaderTrait;
-    use sov_rollup_interface::mocks::{MockAddress, MockBatchBuilder, MockDaService};
+    use sov_rollup_interface::mocks::{MockAddress, MockDaService};
 
     use super::*;
+
+    /// BatchBuilder used in tests.
+    pub struct MockBatchBuilder {
+        /// Mempool with transactions.
+        pub mempool: Vec<Vec<u8>>,
+    }
+
+    // It only takes the first byte of the tx, when submits it.
+    // This allows to show effect of batch builder
+    impl BatchBuilder for MockBatchBuilder {
+        fn accept_tx(&mut self, tx: Vec<u8>) -> anyhow::Result<()> {
+            self.mempool.push(tx);
+            Ok(())
+        }
+
+        fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
+            if self.mempool.is_empty() {
+                anyhow::bail!("Mock mempool is empty");
+            }
+            let txs = std::mem::take(&mut self.mempool)
+                .into_iter()
+                .filter_map(|tx| {
+                    if !tx.is_empty() {
+                        Some(vec![tx[0]])
+                    } else {
+                        None
+                    }
+                })
+                .collect();
+            Ok(txs)
+        }
+    }
 
     #[tokio::test]
     async fn test_submit_on_empty_mempool() {

@@ -105,6 +105,7 @@ Adapters contain the logic integrating 3rd party codebases into the Sovereign SD
 to have adapters for almost all Data Availability Layers and LLVM-compatible proof systems. Currently, we
 maintain adapters for [`Risc0`](https://www.risczero.com) (a ZKVM) and [`Celestia`](https://www.celestia.org) a (DA layer).
 The Avail project also maintains an adapter for their DA layer, which can be found [here](https://github.com/availproject/avail-sovereign-da-adapter).
+[Chainway](https://chainway.xyz/) team also maintains an open-source Bitcoin DA adapter for their Sovereign Rollup on Bitcoin, which can be found [here](https://github.com/chainwayxyz/bitcoin-da).
 
 ## Testing
 

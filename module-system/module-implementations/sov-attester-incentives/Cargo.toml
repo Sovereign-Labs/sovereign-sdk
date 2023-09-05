@@ -14,24 +14,30 @@ resolver = "2"
 [dev-dependencies]
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1", features = ["mocks"] }
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-attester-incentives = { path = ".", features = ["native"] }
 tempfile = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
-sov-bank = { path = "../sov-bank", version = "0.1", default-features = false }
-sov-chain-state = { path = "../sov-chain-state", version = "0.1", default-features = false }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false }
-sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
-serde = { workspace = true }
-serde_json = { workspace = true, optional = true }
-thiserror = { workspace = true }
-jmt = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
+jmt = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+
+sov-bank = { path = "../sov-bank", version = "0.1" }
+sov-chain-state = { path = "../sov-chain-state", version = "0.1" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-state = { path = "../../sov-state", version = "0.1" }
 
 
 [features]
-default = ["native"]
-serde = ["dep:serde_json"]
-native = ["serde", "sov-modules-api/native"]
+default = []
+native = [
+    "serde",
+    "serde_json",
+    "sov-modules-api/native",
+    "sov-bank/native",
+    "sov-chain-state/native",
+    "sov-state/native",
+]

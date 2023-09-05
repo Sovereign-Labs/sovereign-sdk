@@ -948,7 +948,7 @@ dependencies = [
  "borsh",
  "hex",
  "hex-literal 0.4.1",
- "jsonrpsee 0.16.2",
+ "jsonrpsee",
  "nmt-rs",
  "postcard",
  "proptest",
@@ -1402,15 +1402,30 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "3.2.0"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b9fdf9972b2bd6af2d913799d9ebc165ea4d2e65878e329d9c6b372c4491b61"
+checksum = "f711ade317dd348950a9910f81c5947e3d8907ebd2b83f76203ff1807e6a2bc2"
 dependencies = [
- "byteorder",
- "digest 0.9.0",
- "rand_core 0.5.1",
+ "cfg-if",
+ "cpufeatures",
+ "curve25519-dalek-derive",
+ "digest 0.10.7",
+ "fiat-crypto",
+ "platforms",
+ "rustc_version 0.4.0",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "curve25519-dalek-derive"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83fdaf97f4804dcebfa5862639bc9ce4121e82140bec2a987ac5140294865b5b"
+dependencies = [
+ "proc-macro2 1.0.66",
+ "quote 1.0.33",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -1506,7 +1521,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "demo-nft-module",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "serde",
  "sov-data-generators",
  "sov-modules-api",
@@ -1534,14 +1549,16 @@ dependencies = [
  "borsh",
  "clap",
  "const-rollup-config",
+ "demo-stf",
  "hex",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "rand 0.8.5",
  "serde",
  "serde_json",
  "sov-accounts",
  "sov-bank",
  "sov-blob-storage",
+ "sov-chain-state",
  "sov-cli",
  "sov-data-generators",
  "sov-evm",
@@ -1740,17 +1757,8 @@ dependencies = [
  "digest 0.10.7",
  "elliptic-curve",
  "rfc6979",
- "signature 2.1.0",
+ "signature",
  "spki",
-]
-
-[[package]]
-name = "ed25519"
-version = "1.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
-dependencies = [
- "signature 1.6.4",
 ]
 
 [[package]]
@@ -1760,7 +1768,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fb04eee5d9d907f29e80ee6b0e78f7e2c82342c63e3580d8c4f69d9d5aad963"
 dependencies = [
  "pkcs8",
- "signature 2.1.0",
+ "serde",
+ "signature",
 ]
 
 [[package]]
@@ -1778,15 +1787,15 @@ dependencies = [
 
 [[package]]
 name = "ed25519-dalek"
-version = "1.0.1"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
+checksum = "7277392b266383ef8396db7fdeb1e77b6c52fed775f5df15bb24f35b72156980"
 dependencies = [
  "curve25519-dalek",
- "ed25519 1.5.3",
- "rand 0.7.3",
+ "ed25519",
+ "rand_core 0.6.4",
  "serde",
- "sha2 0.9.9",
+ "sha2 0.10.7",
  "zeroize",
 ]
 
@@ -2328,6 +2337,12 @@ dependencies = [
  "quote 1.0.33",
  "syn 1.0.109",
 ]
+
+[[package]]
+name = "fiat-crypto"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e825f6987101665dea6ec934c09ec6d721de7bc1bf92248e1d5810c8cd636b77"
 
 [[package]]
 name = "fixed-hash"
@@ -2883,22 +2898,6 @@ dependencies = [
 
 [[package]]
 name = "hyper-rustls"
-version = "0.23.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1788965e61b367cd03a62950836d5cd41560c3577d90e40e0819373194d1661c"
-dependencies = [
- "http",
- "hyper",
- "log",
- "rustls 0.20.8",
- "rustls-native-certs",
- "tokio",
- "tokio-rustls 0.23.4",
- "webpki-roots 0.22.6",
-]
-
-[[package]]
-name = "hyper-rustls"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d78e1e73ec14cf7375674f74d7dde185c8206fd9dea6fb6295e8a98098aaa97"
@@ -2907,10 +2906,10 @@ dependencies = [
  "http",
  "hyper",
  "log",
- "rustls 0.21.6",
+ "rustls",
  "rustls-native-certs",
  "tokio",
- "tokio-rustls 0.24.1",
+ "tokio-rustls",
 ]
 
 [[package]]
@@ -3182,7 +3181,6 @@ dependencies = [
  "sov-chain-state",
  "sov-data-generators",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-modules-stf-template",
  "sov-rollup-interface",
  "sov-schema-db",
@@ -3240,8 +3238,9 @@ checksum = "af150ab688ff2122fcef229be89cb50dd66af9e01a4ff320cc137eecc9bacc38"
 
 [[package]]
 name = "jmt"
-version = "0.6.0"
-source = "git+https://github.com/penumbra-zone/jmt#46b4b0042f66506536097d689ac2201e3e430afd"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e49c5d2c13e15f77f22cee3df3dc822b46051b217112035d72687cb57a9cbde"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3279,27 +3278,16 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee"
-version = "0.16.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7d291e3a5818a2384645fd9756362e6d89cf0541b0b916fa7702ea4a9833608e"
-dependencies = [
- "jsonrpsee-core 0.16.2",
- "jsonrpsee-http-client 0.16.2",
- "jsonrpsee-types 0.16.2",
-]
-
-[[package]]
-name = "jsonrpsee"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1822d18e4384a5e79d94dc9e4d1239cfa9fad24e55b44d2efeff5b394c9fece4"
 dependencies = [
  "jsonrpsee-client-transport",
- "jsonrpsee-core 0.18.2",
- "jsonrpsee-http-client 0.18.2",
+ "jsonrpsee-core",
+ "jsonrpsee-http-client",
  "jsonrpsee-proc-macros",
  "jsonrpsee-server",
- "jsonrpsee-types 0.18.2",
+ "jsonrpsee-types",
  "jsonrpsee-wasm-client",
  "jsonrpsee-ws-client",
  "tracing",
@@ -3315,35 +3303,16 @@ dependencies = [
  "futures-util",
  "gloo-net",
  "http",
- "jsonrpsee-core 0.18.2",
+ "jsonrpsee-core",
  "pin-project",
  "rustls-native-certs",
  "soketto",
  "thiserror",
  "tokio",
- "tokio-rustls 0.24.1",
+ "tokio-rustls",
  "tokio-util",
  "tracing",
  "webpki-roots 0.23.1",
-]
-
-[[package]]
-name = "jsonrpsee-core"
-version = "0.16.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4e70b4439a751a5de7dd5ed55eacff78ebf4ffe0fc009cb1ebb11417f5b536b"
-dependencies = [
- "anyhow",
- "async-trait",
- "beef",
- "futures-channel",
- "futures-util",
- "hyper",
- "jsonrpsee-types 0.16.2",
- "serde",
- "serde_json",
- "thiserror",
- "tracing",
 ]
 
 [[package]]
@@ -3360,7 +3329,7 @@ dependencies = [
  "futures-util",
  "globset",
  "hyper",
- "jsonrpsee-types 0.18.2",
+ "jsonrpsee-types",
  "parking_lot 0.12.1",
  "rand 0.8.5",
  "rustc-hash",
@@ -3376,34 +3345,15 @@ dependencies = [
 
 [[package]]
 name = "jsonrpsee-http-client"
-version = "0.16.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc345b0a43c6bc49b947ebeb936e886a419ee3d894421790c969cc56040542ad"
-dependencies = [
- "async-trait",
- "hyper",
- "hyper-rustls 0.23.2",
- "jsonrpsee-core 0.16.2",
- "jsonrpsee-types 0.16.2",
- "rustc-hash",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "jsonrpsee-http-client"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1705c65069729e3dccff6fd91ee431d5d31cabcf00ce68a62a2c6435ac713af9"
 dependencies = [
  "async-trait",
  "hyper",
- "hyper-rustls 0.24.1",
- "jsonrpsee-core 0.18.2",
- "jsonrpsee-types 0.18.2",
+ "hyper-rustls",
+ "jsonrpsee-core",
+ "jsonrpsee-types",
  "serde",
  "serde_json",
  "thiserror",
@@ -3433,8 +3383,8 @@ checksum = "4f06661d1a6b6e5b85469dc9c29acfbb9b3bb613797a6fd10a3ebb8a70754057"
 dependencies = [
  "futures-util",
  "hyper",
- "jsonrpsee-core 0.18.2",
- "jsonrpsee-types 0.18.2",
+ "jsonrpsee-core",
+ "jsonrpsee-types",
  "serde",
  "serde_json",
  "soketto",
@@ -3442,20 +3392,6 @@ dependencies = [
  "tokio-stream",
  "tokio-util",
  "tower",
- "tracing",
-]
-
-[[package]]
-name = "jsonrpsee-types"
-version = "0.16.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5bd522fe1ce3702fd94812965d7bb7a3364b1c9aba743944c5a00529aae80f8c"
-dependencies = [
- "anyhow",
- "beef",
- "serde",
- "serde_json",
- "thiserror",
  "tracing",
 ]
 
@@ -3480,8 +3416,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34e6ea7c6d862e60f8baebd946c037b70c6808a4e4e31e792a4029184e3ce13a"
 dependencies = [
  "jsonrpsee-client-transport",
- "jsonrpsee-core 0.18.2",
- "jsonrpsee-types 0.18.2",
+ "jsonrpsee-core",
+ "jsonrpsee-types",
 ]
 
 [[package]]
@@ -3492,8 +3428,8 @@ checksum = "a64b2589680ba1ad7863f279cd2d5083c1dc0a7c0ea959d22924553050f8ab9f"
 dependencies = [
  "http",
  "jsonrpsee-client-transport",
- "jsonrpsee-core 0.18.2",
- "jsonrpsee-types 0.18.2",
+ "jsonrpsee-core",
+ "jsonrpsee-types",
 ]
 
 [[package]]
@@ -3521,7 +3457,7 @@ dependencies = [
  "elliptic-curve",
  "once_cell",
  "sha2 0.10.7",
- "signature 2.1.0",
+ "signature",
 ]
 
 [[package]]
@@ -4472,6 +4408,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "platforms"
+version = "3.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4503fa043bf02cee09a9582e9554b4c6403b2ef55e4612e96561d294419429f8"
+
+[[package]]
 name = "plotters"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5014,7 +4956,7 @@ dependencies = [
  "http",
  "http-body",
  "hyper",
- "hyper-rustls 0.24.1",
+ "hyper-rustls",
  "hyper-tls",
  "ipnet",
  "js-sys",
@@ -5024,14 +4966,14 @@ dependencies = [
  "once_cell",
  "percent-encoding",
  "pin-project-lite",
- "rustls 0.21.6",
+ "rustls",
  "rustls-pemfile",
  "serde",
  "serde_json",
  "serde_urlencoded",
  "tokio",
  "tokio-native-tls",
- "tokio-rustls 0.24.1",
+ "tokio-rustls",
  "tower-service",
  "url",
  "wasm-bindgen",
@@ -5442,7 +5384,7 @@ dependencies = [
  "http",
  "http-body",
  "hyper",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "jsonwebtoken",
  "pin-project",
  "rand 0.8.5",
@@ -5480,7 +5422,7 @@ name = "reth-rpc-api"
 version = "0.1.0-alpha.4"
 source = "git+https://github.com/paradigmxyz/reth?rev=4ab924c5d361bbfdcdad9f997d16d67b4a1730b7#4ab924c5d361bbfdcdad9f997d16d67b4a1730b7"
 dependencies = [
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "reth-primitives",
  "reth-rpc-types",
  "serde_json",
@@ -5492,8 +5434,8 @@ version = "0.1.0-alpha.4"
 source = "git+https://github.com/paradigmxyz/reth?rev=4ab924c5d361bbfdcdad9f997d16d67b4a1730b7#4ab924c5d361bbfdcdad9f997d16d67b4a1730b7"
 dependencies = [
  "async-trait",
- "jsonrpsee-core 0.18.2",
- "jsonrpsee-types 0.18.2",
+ "jsonrpsee-core",
+ "jsonrpsee-types",
  "reth-beacon-consensus",
  "reth-interfaces",
  "reth-payload-builder",
@@ -5512,7 +5454,7 @@ name = "reth-rpc-types"
 version = "0.1.0-alpha.4"
 source = "git+https://github.com/paradigmxyz/reth?rev=4ab924c5d361bbfdcdad9f997d16d67b4a1730b7#4ab924c5d361bbfdcdad9f997d16d67b4a1730b7"
 dependencies = [
- "jsonrpsee-types 0.18.2",
+ "jsonrpsee-types",
  "reth-primitives",
  "reth-rlp",
  "serde",
@@ -5967,18 +5909,6 @@ dependencies = [
  "libc",
  "linux-raw-sys",
  "windows-sys",
-]
-
-[[package]]
-name = "rustls"
-version = "0.20.8"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fff78fc74d175294f4e83b28343315ffcfb114b156f0185e9741cb5570f50e2f"
-dependencies = [
- "log",
- "ring",
- "sct",
- "webpki",
 ]
 
 [[package]]
@@ -6479,12 +6409,6 @@ dependencies = [
 
 [[package]]
 name = "signature"
-version = "1.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74233d3b3b2f6d4b006dc19dee745e73e2a6bfb6f93607cd3b02bd5b00797d7c"
-
-[[package]]
-name = "signature"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e1788eed21689f9cf370582dfc467ef36ed9c707f073528ddafa8d83e3b8500"
@@ -6599,7 +6523,7 @@ dependencies = [
  "arbitrary",
  "borsh",
  "clap",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "schemars",
  "serde",
  "serde_json",
@@ -6618,10 +6542,10 @@ dependencies = [
  "jmt",
  "serde",
  "serde_json",
+ "sov-attester-incentives",
  "sov-bank",
  "sov-chain-state",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
  "tempfile",
@@ -6636,7 +6560,7 @@ dependencies = [
  "borsh",
  "clap",
  "hex",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "schemars",
  "serde",
  "serde_json",
@@ -6656,13 +6580,14 @@ dependencies = [
  "borsh",
  "clap",
  "hex",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "schemars",
  "serde",
  "serde_json",
  "sov-bank",
+ "sov-blob-storage",
+ "sov-chain-state",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
@@ -6676,13 +6601,13 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "serde",
  "serde_json",
  "sov-bank",
+ "sov-chain-state",
  "sov-data-generators",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-modules-stf-template",
  "sov-rollup-interface",
  "sov-state",
@@ -6699,12 +6624,13 @@ dependencies = [
  "demo-stf",
  "directories",
  "hex",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "serde",
  "serde_json",
  "sov-accounts",
  "sov-bank",
  "sov-modules-api",
+ "sov-rollup-interface",
  "tempfile",
  "tokio",
 ]
@@ -6763,7 +6689,7 @@ dependencies = [
  "futures",
  "hex",
  "jmt",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "prettytable-rs",
  "prometheus 0.11.0",
  "proptest",
@@ -6774,6 +6700,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.7",
  "sov-bank",
+ "sov-cli",
  "sov-db",
  "sov-demo-rollup",
  "sov-ethereum",
@@ -6795,12 +6722,13 @@ dependencies = [
 name = "sov-ethereum"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "borsh",
  "celestia",
  "const-rollup-config",
  "demo-stf",
  "ethers",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "reth-primitives",
  "reth-rpc",
  "serde_json",
@@ -6826,7 +6754,7 @@ dependencies = [
  "ethers-middleware",
  "ethers-signers",
  "hex",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "primitive-types",
  "reth-primitives",
  "reth-revm",
@@ -6881,14 +6809,16 @@ dependencies = [
  "derive_more",
  "ed25519-dalek",
  "hex",
- "jsonrpsee 0.18.2",
- "rand 0.7.3",
+ "jsonrpsee",
+ "rand 0.8.5",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "schemars",
  "serde",
  "serde_json",
  "sha2 0.10.7",
+ "sov-bank",
+ "sov-modules-api",
  "sov-modules-macros",
  "sov-rollup-interface",
  "sov-sequencer",
@@ -6904,7 +6834,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "proc-macro2 1.0.66",
  "quote 1.0.33",
  "schemars",
@@ -6998,7 +6928,7 @@ dependencies = [
  "async-trait",
  "borsh",
  "hex",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "serde",
  "sov-rollup-interface",
  "tokio",
@@ -7012,7 +6942,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "schemars",
@@ -7059,7 +6989,7 @@ dependencies = [
  "celestia",
  "futures",
  "hex",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "rand 0.8.5",
  "serde",
  "serde_json",
@@ -7086,12 +7016,11 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "schemars",
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
  "tempfile",
  "thiserror",
@@ -7104,7 +7033,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "clap",
- "jsonrpsee 0.18.2",
+ "jsonrpsee",
  "schemars",
  "serde",
  "serde_json",
@@ -7346,7 +7275,7 @@ checksum = "3f0a7d05cf78524782337f8edd55cbc578d159a16ad4affe2135c92f7dbac7f0"
 dependencies = [
  "bytes",
  "digest 0.10.7",
- "ed25519 2.2.1",
+ "ed25519",
  "ed25519-consensus",
  "flex-error",
  "futures",
@@ -7359,7 +7288,7 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "sha2 0.10.7",
- "signature 2.1.0",
+ "signature",
  "subtle",
  "subtle-encoding",
  "tendermint-proto",
@@ -7557,22 +7486,11 @@ dependencies = [
 
 [[package]]
 name = "tokio-rustls"
-version = "0.23.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c43ee83903113e03984cb9e5cebe6c04a5116269e900e3ddba8f068a62adda59"
-dependencies = [
- "rustls 0.20.8",
- "tokio",
- "webpki",
-]
-
-[[package]]
-name = "tokio-rustls"
 version = "0.24.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c28327cf380ac148141087fbfb9de9d7bd4e84ab5d2c28fbc911d753de8a7081"
 dependencies = [
- "rustls 0.21.6",
+ "rustls",
  "tokio",
 ]
 
@@ -7596,9 +7514,9 @@ checksum = "ec509ac96e9a0c43427c74f003127d953a265737636129424288d27cb5c4b12c"
 dependencies = [
  "futures-util",
  "log",
- "rustls 0.21.6",
+ "rustls",
  "tokio",
- "tokio-rustls 0.24.1",
+ "tokio-rustls",
  "tungstenite",
  "webpki-roots 0.23.1",
 ]
@@ -7805,7 +7723,7 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.8.5",
- "rustls 0.21.6",
+ "rustls",
  "sha1",
  "thiserror",
  "url",
@@ -8123,15 +8041,6 @@ checksum = "f095d78192e208183081cc07bc5515ef55216397af48b873e5edcd72637fa1bd"
 dependencies = [
  "ring",
  "untrusted",
-]
-
-[[package]]
-name = "webpki-roots"
-version = "0.22.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6c71e40d7d2c34a5106301fb632274ca37242cd0c9d3e64dbece371a40a2d87"
-dependencies = [
- "webpki",
 ]
 
 [[package]]

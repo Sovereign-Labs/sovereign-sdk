@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::Zkvm;
 use sov_state::WorkingSet;
 
 use super::ProverIncentives;
@@ -11,7 +10,7 @@ pub struct Response {
     pub value: u64,
 }
 
-impl<C: sov_modules_api::Context, Vm: Zkvm> ProverIncentives<C, Vm> {
+impl<C: sov_modules_api::Context, Vm: sov_modules_api::Zkvm> ProverIncentives<C, Vm> {
     /// Queries the state of the module and returns the bond amount of the address `address`.
     /// If the `address` is not bonded, returns a default value.
     pub fn get_bond_amount(

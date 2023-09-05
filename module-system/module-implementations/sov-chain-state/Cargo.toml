@@ -19,18 +19,19 @@ serde_json = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
 sov-state = { path = "../../sov-state", version = "0.1" }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
+
 
 [dev-dependencies]
+tempfile = { workspace = true }
 sov-bank = { path = "../sov-bank" }
 sov-value-setter = { path = "../examples/sov-value-setter" }
 sov-modules-stf-template = { path = "../../sov-modules-stf-template" }
 sov-data-generators = { path = "../../utils/sov-data-generators" }
-tempfile = { workspace = true }
+sov-chain-state = { path = ".", features = ["native"] }
+sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"] }
+
 
 [features]
 default = []
-serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "dep:jsonrpsee", "sov-state/native", "sov-modules-api/native", ]
+native = ["serde", "serde_json", "jsonrpsee", "sov-state/native", "sov-modules-api/native"]

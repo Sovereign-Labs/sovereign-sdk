@@ -19,20 +19,19 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use call::Role;
 use sov_bank::Amount;
 use sov_chain_state::TransitionHeight;
-use sov_modules_api::{Context, Error};
-use sov_modules_macros::ModuleInfo;
-use sov_rollup_interface::zk::{
-    StoredCodeCommitment, ValidityCondition, ValidityConditionChecker, Zkvm,
+use sov_modules_api::{
+    Context, DaSpec, Error, ModuleInfo, StoredCodeCommitment, ValidityConditionChecker, Zkvm,
 };
 use sov_state::{Storage, WorkingSet};
 
 /// Configuration of the attester incentives module
-pub struct AttesterIncentivesConfig<
+pub struct AttesterIncentivesConfig<C, Vm, Da, Checker>
+where
     C: Context,
     Vm: Zkvm,
-    Cond: ValidityCondition,
-    Checker: ValidityConditionChecker<Cond>,
-> {
+    Da: DaSpec,
+    Checker: ValidityConditionChecker<Da::ValidityCondition>,
+{
     /// The address of the token to be used for bonding.
     pub bonding_token_address: C::Address,
     /// The address of the account holding the reward token supply
@@ -54,10 +53,10 @@ pub struct AttesterIncentivesConfig<
     /// The validity condition checker used to check validity conditions
     pub validity_condition_checker: Checker,
     /// Phantom data that contains the validity condition
-    phantom_data: PhantomData<Cond>,
+    phantom_data: PhantomData<Da::ValidityCondition>,
 }
 
-/// The information about an attester's unbonding
+/// The information about an attender's unbonding
 #[derive(BorshDeserialize, BorshSerialize, Clone, Debug)]
 pub struct UnbondingInfo {
     /// The height at which an attester started unbonding
@@ -71,12 +70,13 @@ pub struct UnbondingInfo {
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
 #[derive(ModuleInfo)]
-pub struct AttesterIncentives<
-    C: sov_modules_api::Context,
+pub struct AttesterIncentives<C, Vm, Da, Checker>
+where
+    C: Context,
     Vm: Zkvm,
-    Cond: ValidityCondition,
-    Checker: ValidityConditionChecker<Cond>,
-> {
+    Da: DaSpec,
+    Checker: ValidityConditionChecker<Da::ValidityCondition>,
+{
     /// Address of the module.
     #[address]
     pub address: C::Address,
@@ -92,7 +92,7 @@ pub struct AttesterIncentives<
     pub bonding_token_address: sov_state::StateValue<C::Address>,
 
     /// The address of the account holding the reward token supply
-    /// TODO: maybe mint the token before transfering it? The mint method is private in bank
+    /// TODO: maybe mint the token before transferring it? The mint method is private in bank
     /// so we need a reward address that contains the supply.
     #[state]
     pub reward_token_supply_address: sov_state::StateValue<C::Address>,
@@ -146,22 +146,21 @@ pub struct AttesterIncentives<
 
     /// Reference to the chain state module, used to check the initial hashes of the state transition.
     #[module]
-    pub(crate) chain_state: sov_chain_state::ChainState<C, Cond>,
+    pub(crate) chain_state: sov_chain_state::ChainState<C, Da>,
 }
 
-impl<C, Vm, S, P, Cond, Checker> sov_modules_api::Module
-    for AttesterIncentives<C, Vm, Cond, Checker>
+impl<C, Vm, S, P, Da, Checker> sov_modules_api::Module for AttesterIncentives<C, Vm, Da, Checker>
 where
     C: sov_modules_api::Context<Storage = S>,
     Vm: Zkvm,
     S: Storage<Proof = P>,
     P: BorshDeserialize + BorshSerialize,
-    Cond: ValidityCondition,
-    Checker: ValidityConditionChecker<Cond>,
+    Da: DaSpec,
+    Checker: ValidityConditionChecker<Da::ValidityCondition>,
 {
     type Context = C;
 
-    type Config = AttesterIncentivesConfig<C, Vm, Cond, Checker>;
+    type Config = AttesterIncentivesConfig<C, Vm, Da, Checker>;
 
     type CallMessage = call::CallMessage<C>;
 
