@@ -35,7 +35,7 @@ pub struct AccessorySetter<C: sov_modules_api::Context> {
 /// The [`Module::CallMessage`] for [`AccessorySetter`].
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq)]
 pub enum CallMessage {
-    /// Sets the value of [`AccessorySetter::latest_value`].
+    /// Sets the value of [`AccessorySetter::state_value`].
     SetValue(String),
     /// Stores some arbitrary value in the accessory state.
     SetValueAccessory(String),
