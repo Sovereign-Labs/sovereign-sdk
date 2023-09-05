@@ -102,7 +102,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     ) -> RpcResult<Option<reth_rpc_types::TransactionReceipt>> {
         info!("evm module: eth_getTransactionReceipt");
 
-        let receipt = self.receipts.get(&hash, working_set);
+        let receipt = self.receipts.get(&hash, &mut working_set.accessory_state());
         Ok(receipt)
     }
 

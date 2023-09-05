@@ -80,7 +80,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
             transaction_type: reth_primitives::U8::from(1),
         };
 
-        self.receipts.set(&hash.into(), &receipt, working_set);
+        self.receipts
+            .set(&hash.into(), &receipt, &mut working_set.accessory_state());
 
         println!("execute_call END");
         Ok(CallResponse::default())

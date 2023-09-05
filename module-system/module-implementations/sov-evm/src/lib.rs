@@ -95,10 +95,11 @@ mod experimental {
         pub(crate) current_block: sov_state::StateValue<reth_rpc_types::Block, JsonCodec>,
 
         #[state]
-        pub(crate) blocks: sov_state::StateMap<u64, reth_rpc_types::Block, JsonCodec>,
+        pub(crate) blocks: sov_state::AccessoryStateMap<u64, reth_rpc_types::Block, JsonCodec>,
 
         #[state]
-        pub(crate) block_hashes: sov_state::StateMap<reth_primitives::H256, u64, JsonCodec>,
+        pub(crate) block_hashes:
+            sov_state::AccessoryStateMap<reth_primitives::H256, u64, JsonCodec>,
 
         #[state]
         pub(crate) transactions: sov_state::AccessoryStateMap<
@@ -108,7 +109,7 @@ mod experimental {
         >,
 
         #[state]
-        pub(crate) receipts: sov_state::StateMap<
+        pub(crate) receipts: sov_state::AccessoryStateMap<
             reth_primitives::U256,
             reth_rpc_types::TransactionReceipt,
             JsonCodec,
@@ -116,7 +117,7 @@ mod experimental {
 
         #[state]
         pub(crate) code:
-            sov_state::StateMap<reth_primitives::H256, reth_primitives::Bytes, BcsCodec>,
+            sov_state::AccessoryStateMap<reth_primitives::H256, reth_primitives::Bytes, BcsCodec>,
     }
 
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {
