@@ -32,7 +32,7 @@ mod experimental {
     use super::evm::db::EvmDb;
     use super::evm::transaction::BlockEnv;
     use super::evm::{DbAccount, EthAddress};
-    use crate::evm::{Bytes32, EvmChainCfg, RawEvmTransaction};
+    use crate::evm::{Bytes32, EvmChainCfg};
     #[derive(Clone, Debug)]
     pub struct AccountData {
         pub address: EthAddress,
@@ -90,15 +90,19 @@ mod experimental {
         #[state]
         pub(crate) head_number: sov_state::StateValue<u64>,
 
-        //
+        // TODO: Everything below shouldn't be in the state trie
         #[state]
         pub(crate) current_block: sov_state::StateValue<reth_rpc_types::Block, BcsCodec>,
+
+        #[state]
+        pub(crate) blocks: sov_state::StateMap<u64, reth_rpc_types::Block, BcsCodec>,
 
         #[state]
         pub(crate) block_hashes: sov_state::StateMap<reth_primitives::H256, u64, BcsCodec>,
 
         #[state]
-        pub(crate) transactions: sov_state::StateMap<Bytes32, RawEvmTransaction>,
+        pub(crate) transactions:
+            sov_state::StateMap<reth_primitives::H256, reth_rpc_types::Transaction, BcsCodec>,
 
         #[state]
         pub(crate) receipts: sov_state::StateMap<
@@ -106,6 +110,10 @@ mod experimental {
             reth_rpc_types::TransactionReceipt,
             sov_state::codec::BcsCodec,
         >,
+
+        #[state]
+        pub(crate) code:
+            sov_state::StateMap<reth_primitives::H256, reth_primitives::Bytes, BcsCodec>,
     }
 
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {

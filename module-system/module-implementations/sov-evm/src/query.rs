@@ -1,12 +1,11 @@
-use ethereum_types::{Address, H256, U256, U64};
+use ethereum_types::{Address, U256, U64};
 use ethers::types::Bytes;
-use ethers_core::types::{BlockId, FeeHistory, Transaction, TransactionReceipt, TxHash};
+use ethers_core::types::{BlockId, FeeHistory};
 use jsonrpsee::core::RpcResult;
 use reth_rpc_types::state::StateOverride;
 use reth_rpc_types::{BlockOverrides, CallRequest, RichBlock, TransactionRequest};
 use revm::primitives::{CfgEnv, ExecutionResult};
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_state::WorkingSet;
 use tracing::info;
 
@@ -83,13 +82,12 @@ impl<C: sov_modules_api::Context> Evm<C> {
     #[rpc_method(name = "getTransactionByHash")]
     pub fn get_transaction_by_hash(
         &self,
-        hash: H256,
+        hash: reth_primitives::H256,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> RpcResult<Option<Transaction>> {
+    ) -> RpcResult<Option<reth_rpc_types::Transaction>> {
         info!("evm module: eth_getTransactionByHash");
-        let evm_transaction = self.transactions.get(hash.as_fixed_bytes(), working_set);
-        let result = evm_transaction.map(Transaction::try_from).transpose();
-        result.map_err(|e| to_jsonrpsee_error_object(e, "ETH_RPC_ERROR"))
+        let evm_transaction = self.transactions.get(&hash, working_set);
+        Ok(evm_transaction)
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502

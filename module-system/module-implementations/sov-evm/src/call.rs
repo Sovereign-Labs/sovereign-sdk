@@ -28,20 +28,22 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let evm_tx_recovered: EvmTransactionSignedEcRecovered = tx.clone().try_into()?;
+        let evm_tx_recovered: EvmTransactionSignedEcRecovered = tx.try_into()?;
 
         let block_env = self.block_env.get(working_set).unwrap_or_default();
         let cfg = self.cfg.get(working_set).unwrap_or_default();
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
         let hash = evm_tx_recovered.hash();
-        self.transactions
-            .set(hash.as_fixed_bytes(), &tx, working_set);
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
         let result = executor::execute_tx(evm_db, block_env, &evm_tx_recovered, cfg_env).unwrap();
+
+        let transaction = reth_rpc_types::Transaction::from_recovered(evm_tx_recovered.tx.clone());
+
+        self.transactions.set(&hash, &transaction, working_set);
 
         let receipt = reth_rpc_types::TransactionReceipt {
             transaction_hash: hash.into(),

@@ -44,7 +44,7 @@ pub struct RawEvmTransaction {
 
 /// EC recovered evm transaction.
 pub struct EvmTransactionSignedEcRecovered {
-    tx: RethTransactionSignedEcRecovered,
+    pub(crate) tx: RethTransactionSignedEcRecovered,
 }
 
 impl EvmTransactionSignedEcRecovered {
