@@ -76,7 +76,7 @@ pub trait DaVerifier {
 ///
 /// Because of soundness issues we cannot implement the Buf trait because the prover could get unproved blob data using the chunk method.
 pub struct CountedBufReader<B: Buf> {
-    /// The original blob data
+    /// The original blob data.
     inner: B,
 
     /// An accumulator that stores the data read from the blob buffer into a vector.

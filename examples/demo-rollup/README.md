@@ -61,7 +61,7 @@ understand how to build your own state transition function, check out at the doc
 
 ### Run a local DA layer instance
 
-1. Install Docker: https://www.docker.com.
+1. Install Docker: <https://www.docker.com>.
 
 2. Switch to the `examples/demo-rollup` directory (which is where this `README.md` is located!).
 

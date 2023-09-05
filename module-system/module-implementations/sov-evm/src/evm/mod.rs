@@ -77,7 +77,7 @@ pub(crate) fn contract_address(result: ExecutionResult) -> Option<B160> {
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
 pub struct EvmChainCfg {
     /// Unique chain id
-    /// Chains can be registered at https://github.com/ethereum-lists/chains
+    /// Chains can be registered at <https://github.com/ethereum-lists/chains>.
     pub chain_id: u64,
 
     /// Limits size of contract code size

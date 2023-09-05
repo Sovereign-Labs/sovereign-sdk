@@ -46,7 +46,7 @@ pub struct SequencerConfig<C: sov_modules_api::Context> {
     /// ([`ModuleInfo::address`]) and locked away until the sequencer
     /// decides to exit (unregister).
     ///
-    /// Only sequencers in the [`SequencerRegistry::allowed_sequencers`] list are
+    /// Only sequencers that are [`SequencerRegistry::is_sender_allowed`] list are
     /// allowed to exit.
     pub coins_to_lock: sov_bank::Coins<C>,
     /// Determines whether this sequencer is *regular* or *preferred*.
