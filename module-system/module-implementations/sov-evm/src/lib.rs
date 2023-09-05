@@ -92,13 +92,13 @@ mod experimental {
 
         // TODO: Everything below shouldn't be in the state trie
         #[state]
-        pub(crate) current_block: sov_state::StateValue<reth_rpc_types::Block, BcsCodec>,
+        pub(crate) current_block: sov_state::StateValue<reth_rpc_types::Block, JsonCodec>,
 
         #[state]
-        pub(crate) blocks: sov_state::StateMap<u64, reth_rpc_types::Block, BcsCodec>,
+        pub(crate) blocks: sov_state::StateMap<u64, reth_rpc_types::Block, JsonCodec>,
 
         #[state]
-        pub(crate) block_hashes: sov_state::StateMap<reth_primitives::H256, u64, BcsCodec>,
+        pub(crate) block_hashes: sov_state::StateMap<reth_primitives::H256, u64, JsonCodec>,
 
         #[state]
         pub(crate) transactions:
