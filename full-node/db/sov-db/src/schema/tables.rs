@@ -59,7 +59,7 @@ pub const LEDGER_TABLES: &[&str] = &[
     EventByNumber::table_name(),
 ];
 
-/// A list of all tables used by the [`NativeDB`]. These tables store
+/// A list of all tables used by the NativeDB. These tables store
 /// "accessory" state only accessible from a native execution context, to be
 /// used for JSON-RPC and other tooling.
 pub const NATIVE_TABLES: &[&str] = &[ModuleAccessoryState::table_name()];

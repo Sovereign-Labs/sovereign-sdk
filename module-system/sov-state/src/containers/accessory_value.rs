@@ -24,7 +24,7 @@ pub enum Error {
 
 impl<V> AccessoryStateValue<V> {
     /// Crates a new [`AccessoryStateValue`] with the given prefix and the default
-    /// [`AccessoryStateValueCodec`] (i.e. [`BorshCodec`]).
+    /// [`StateValueCodec`] (i.e. [`BorshCodec`]).
     pub fn new(prefix: Prefix) -> Self {
         Self::with_codec(prefix, BorshCodec)
     }

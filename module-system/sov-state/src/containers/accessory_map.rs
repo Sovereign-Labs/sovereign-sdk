@@ -141,7 +141,7 @@ where
     /// Removes a key from the map, returning the corresponding value (or
     /// [`StateMapError`] if the key is absent).
     ///
-    /// Use [`StateMap::remove`] if you want an [`Option`] instead of a [`Result`].
+    /// Use [`AccessoryStateMap::remove`] if you want an [`Option`] instead of a [`Result`].
     pub fn remove_or_err<Q, S: Storage>(
         &self,
         key: &Q,
@@ -158,7 +158,7 @@ where
 
     /// Deletes a key-value pair from the map.
     ///
-    /// This is equivalent to [`StateMap::remove`], but doesn't deserialize and
+    /// This is equivalent to [`AccessoryStateMap::remove`], but doesn't deserialize and
     /// return the value beforing deletion.
     pub fn delete<Q, S: Storage>(&self, key: &Q, working_set: &mut AccessoryWorkingSet<S>)
     where
