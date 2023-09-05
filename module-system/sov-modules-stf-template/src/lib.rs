@@ -103,7 +103,8 @@ where
         let mut working_set = WorkingSet::new(self.current_storage.clone());
         self.runtime.end_slot_hook(root_hash, &mut working_set);
 
-        self.current_storage.commit(&authenticated_node_batch);
+        self.current_storage
+            .commit(&authenticated_node_batch, &Default::default());
         (jmt::RootHash(root_hash), witness)
     }
 }
@@ -134,13 +135,16 @@ where
             .genesis(&params, &mut working_set)
             .expect("module initialization must succeed");
 
-        let (log, witness) = working_set.checkpoint().freeze();
+        let mut checkpoint = working_set.checkpoint();
+        let (log, witness) = checkpoint.freeze();
+        let accessory_log = checkpoint.freeze_non_provable();
+
         let (genesis_hash, node_batch) = self
             .current_storage
             .compute_state_update(log, &witness)
             .expect("Storage update must succeed");
 
-        self.current_storage.commit(&node_batch);
+        self.current_storage.commit(&node_batch, &accessory_log);
         jmt::RootHash(genesis_hash)
     }
 
