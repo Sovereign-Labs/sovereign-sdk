@@ -322,7 +322,7 @@ fn build_rpc_trait(
     };
 
     let doc_string = format!("Generated RPC trait for {}", type_name);
-    let where_clause = &generics.where_clause;
+    let (_, ty_generics, where_clause) = generics.split_for_impl();
 
     let rpc_output = quote! {
         #simplified_impl
@@ -340,6 +340,12 @@ fn build_rpc_trait(
             #[method(name = "health")]
             fn health(&self) -> ::jsonrpsee::core::RpcResult<()> {
                 Ok(())
+            }
+
+            /// Get the address of this module
+            #[method(name = "moduleAddress")]
+            fn module_address(&self) -> ::jsonrpsee::core::RpcResult<String> {
+                Ok(<#type_name #ty_generics as ::sov_modules_api::ModuleInfo>::address(&<#type_name #ty_generics as ::core::default::Default>::default()).to_string())
             }
 
         }

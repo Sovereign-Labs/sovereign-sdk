@@ -305,7 +305,7 @@ where
 
 /// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
 /// This allows developers to override only some of the methods in their implementation and safely ignore the others.
-pub trait Module {
+pub trait Module: Default {
     /// Execution context.
     type Context: Context;
 
