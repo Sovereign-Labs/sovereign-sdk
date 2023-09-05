@@ -14,7 +14,6 @@ pub mod experimental {
     use ethers::types::{Bytes, Transaction, H256};
     use jsonrpsee::types::ErrorObjectOwned;
     use jsonrpsee::RpcModule;
-    use reth_rpc::eth::error::EthApiError;
     use sov_evm::call::CallMessage;
     use sov_evm::evm::{EthAddress, RawEvmTransaction};
     use sov_modules_api::utils::to_jsonrpsee_error_object;
@@ -73,10 +72,12 @@ pub mod experimental {
             &self,
             raw_tx: RawEvmTransaction,
         ) -> Result<(H256, Vec<u8>), jsonrpsee::core::Error> {
-            let mut tx: Transaction = raw_tx.clone().try_into().unwrap();
-            //.map_err(EthApiError::from)?;
+            let mut tx: Transaction = raw_tx
+                .clone()
+                .try_into()
+                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
             tx.recover_from_mut()
-                .map_err(|_| EthApiError::InvalidTransactionSignature)?;
+                .map_err(|e| to_jsonrpsee_error_object(e, ETH_RPC_ERROR))?;
 
             let tx_hash = tx.hash();
             let sender = tx.from;

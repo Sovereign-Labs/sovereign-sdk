@@ -29,6 +29,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let mut tx: Transaction = tx.try_into()?;
+        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
         tx.recover_from_mut()?;
 
         let current_block = self.current_block.get(working_set).unwrap_or_default();
