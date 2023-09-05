@@ -73,7 +73,7 @@ pub mod experimental {
             &self,
             raw_tx: RawEvmTransaction,
         ) -> Result<(H256, Vec<u8>), jsonrpsee::core::Error> {
-            let mut tx: Transaction = raw_tx.try_into().unwrap();
+            let mut tx: Transaction = raw_tx.clone().try_into().unwrap();
             //.map_err(EthApiError::from)?;
             tx.recover_from_mut()
                 .map_err(|_| EthApiError::InvalidTransactionSignature)?;
@@ -92,7 +92,7 @@ pub mod experimental {
                 sov_evm::Evm<DefaultContext>,
             >>::encode_call(tx);
 
-            let tx = Transaction::<DefaultContext>::new_signed_tx(
+            let tx = sov_modules_api::transaction::Transaction::<DefaultContext>::new_signed_tx(
                 &self.eth_rpc_config.tx_signer_priv_key,
                 message,
                 nonce,
