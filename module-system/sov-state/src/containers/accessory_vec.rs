@@ -1,10 +1,10 @@
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
 
-use thiserror::Error;
-
 use crate::codec::{BorshCodec, StateValueCodec};
-use crate::{AccessoryStateMap, AccessoryStateValue, AccessoryWorkingSet, Prefix, Storage};
+use crate::{
+    AccessoryStateMap, AccessoryStateValue, AccessoryWorkingSet, Prefix, StateVecError, Storage,
+};
 
 #[derive(Debug, Clone)]
 pub struct AccessoryStateVec<V, VC = BorshCodec>
@@ -15,15 +15,6 @@ where
     prefix: Prefix,
     len_value: AccessoryStateValue<usize>,
     elems: AccessoryStateMap<usize, V, VC>,
-}
-
-/// Error type for `AccessoryStateVec` get method.
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("Index out of bounds for index: {0}")]
-    IndexOutOfBounds(usize),
-    #[error("Value not found for prefix: {0} and index: {1}")]
-    MissingValue(Prefix, usize),
 }
 
 impl<V> AccessoryStateVec<V>
@@ -74,14 +65,14 @@ where
         index: usize,
         value: &V,
         working_set: &mut AccessoryWorkingSet<S>,
-    ) -> Result<(), Error> {
+    ) -> Result<(), StateVecError> {
         let len = self.len(working_set);
 
         if index < len {
             self.elems.set(&index, value, working_set);
             Ok(())
         } else {
-            Err(Error::IndexOutOfBounds(index))
+            Err(StateVecError::IndexOutOfBounds(index))
         }
     }
 
@@ -101,15 +92,15 @@ where
         &self,
         index: usize,
         working_set: &mut AccessoryWorkingSet<S>,
-    ) -> Result<V, Error> {
+    ) -> Result<V, StateVecError> {
         let len = self.len(working_set);
 
         if index < len {
             self.elems
                 .get(&index, working_set)
-                .ok_or_else(|| Error::MissingValue(self.prefix().clone(), index))
+                .ok_or_else(|| StateVecError::MissingValue(self.prefix().clone(), index))
         } else {
-            Err(Error::IndexOutOfBounds(index))
+            Err(StateVecError::IndexOutOfBounds(index))
         }
     }
 

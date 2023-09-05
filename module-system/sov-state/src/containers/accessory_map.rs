@@ -7,7 +7,8 @@ use crate::codec::{BorshCodec, StateValueCodec};
 use crate::storage::StorageKey;
 use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
 
-/// A container that maps keys to values.
+/// A container that maps keys to values stored as "accessory" state, outside of
+/// the JMT.
 ///
 /// # Type parameters
 /// [`AccessoryStateMap`] is generic over:
@@ -72,9 +73,9 @@ where
     /// type.
     ///
     /// ```
-    /// use sov_state::{StateMap, Storage, AccessoryWorkingSet};
+    /// use sov_state::{AccessoryStateMap, Storage, AccessoryWorkingSet};
     ///
-    /// fn foo<S>(map: StateMap<Vec<u8>, u64>, key: &[u8], ws: &mut AccessoryWorkingSet<S>) -> Option<u64>
+    /// fn foo<S>(map: AccessoryStateMap<Vec<u8>, u64>, key: &[u8], ws: &mut AccessoryWorkingSet<S>) -> Option<u64>
     /// where
     ///     S: Storage,
     /// {
@@ -90,9 +91,9 @@ where
     /// maps:
     ///
     /// ```
-    /// use sov_state::{StateMap, Storage, AccessoryWorkingSet};
+    /// use sov_state::{AccessoryStateMap, Storage, AccessoryWorkingSet};
     ///
-    /// fn foo<S>(map: StateMap<Vec<u8>, u64>, key: [u8; 32], ws: &mut AccessoryWorkingSet<S>) -> Option<u64>
+    /// fn foo<S>(map: AccessoryStateMap<Vec<u8>, u64>, key: [u8; 32], ws: &mut AccessoryWorkingSet<S>) -> Option<u64>
     /// where
     ///     S: Storage,
     /// {

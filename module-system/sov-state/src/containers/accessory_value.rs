@@ -6,7 +6,8 @@ use thiserror::Error;
 use crate::codec::{BorshCodec, StateValueCodec};
 use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
 
-/// Container for a single value.
+/// Container for a single value stored as "accessory" state, outside of the
+/// JMT.
 #[derive(Debug, PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize)]
 pub struct AccessoryStateValue<V, VC = BorshCodec> {
     _phantom: PhantomData<V>,

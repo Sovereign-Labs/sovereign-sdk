@@ -11,4 +11,4 @@ pub use accessory_value::AccessoryStateValue;
 pub use accessory_vec::AccessoryStateVec;
 pub use map::{StateMap, StateMapError};
 pub use value::StateValue;
-pub use vec::StateVec;
+pub use vec::{Error as StateVecError, StateVec};
