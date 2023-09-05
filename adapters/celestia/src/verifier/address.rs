@@ -12,9 +12,9 @@ const HRP: &str = "celestia";
 const VARIANT: bech32::Variant = bech32::Variant::Bech32;
 
 /// Representation of the address in the Celestia network
-/// https://github.com/celestiaorg/celestia-specs/blob/e59efd63a2165866584833e91e1cb8a6ed8c8203/src/specs/data_structures.md#address
+/// <https://github.com/celestiaorg/celestia-specs/blob/e59efd63a2165866584833e91e1cb8a6ed8c8203/src/specs/data_structures.md#address>
 /// Spec says: "Addresses have a length of 32 bytes.", but in reality it is 32 `u5` elements, which can be compressed as 20 bytes.
-/// TODO: Switch to bech32::u5 when it has repr transparent: https://github.com/Sovereign-Labs/sovereign-sdk/issues/646
+/// TODO: Switch to bech32::u5 when it has repr transparent: <https://github.com/Sovereign-Labs/sovereign-sdk/issues/646>
 #[derive(
     Debug, PartialEq, Clone, Eq, Serialize, Deserialize, BorshDeserialize, BorshSerialize, Hash,
 )]

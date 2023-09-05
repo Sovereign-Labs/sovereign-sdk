@@ -20,7 +20,6 @@ name = "tests"
 path = "tests/all_tests.rs"
 
 [dev-dependencies]
-
 clap = { workspace = true }
 jsonrpsee = { workspace = true, features = ["macros", "http-client", "server"] }
 serde = { workspace = true }

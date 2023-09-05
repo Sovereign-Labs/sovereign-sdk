@@ -1,25 +1,25 @@
 //! This module defines the following tables:
 //!
 //! Slot Tables:
-//! - SlotNumber -> StoredSlot
-//! - SlotNumber -> Vec<BatchNumber>
+//! - `SlotNumber -> StoredSlot`
+//! - `SlotNumber -> Vec<BatchNumber>`
 //!
 //! Batch Tables:
-//! - BatchNumber -> StoredBatch
-//! - BatchHash -> BatchNumber
+//! - `BatchNumber -> StoredBatch`
+//! - `BatchHash -> BatchNumber`
 //!
 //! Tx Tables:
-//! - TxNumber -> (TxHash,Tx)
-//! - TxHash -> TxNumber
+//! - `TxNumber -> (TxHash,Tx)`
+//! - `TxHash -> TxNumber`
 //!
 //! Event Tables:
-//! - (EventKey, TxNumber) -> EventNumber
-//! - EventNumber -> (EventKey, EventValue)
+//! - `(EventKey, TxNumber) -> EventNumber`
+//! - `EventNumber -> (EventKey, EventValue)`
 //!
 //! JMT Tables:
-//! - KeyHash -> Key
-//! - (Key, Version) -> JmtValue
-//! - NodeKey -> Node
+//! - `KeyHash -> Key`
+//! - `(Key, Version) -> JmtValue`
+//! - `NodeKey -> Node`
 
 use borsh::{maybestd, BorshDeserialize, BorshSerialize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};

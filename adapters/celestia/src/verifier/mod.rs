@@ -96,6 +96,8 @@ impl DaSpec for CelestiaSpec {
 
     type BlobTransaction = BlobWithSender;
 
+    type Address = CelestiaAddress;
+
     type ValidityCondition = ChainValidityCondition;
 
     type InclusionMultiProof = Vec<EtxProof>;

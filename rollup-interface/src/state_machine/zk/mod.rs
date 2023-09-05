@@ -41,8 +41,8 @@ pub trait Zkvm {
         code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error>;
 
-    /// Same as [`verify`], except that instead of returning the output as a serialized array,
-    /// it returns a state transition structure.
+    /// Same as [`verify`](Zkvm::verify), except that instead of returning the output
+    /// as a serialized array, it returns a state transition structure.
     /// TODO: specify a deserializer for the output
     fn verify_and_extract_output<
         C: ValidityCondition,
