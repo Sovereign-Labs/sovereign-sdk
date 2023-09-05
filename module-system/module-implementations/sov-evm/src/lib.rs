@@ -108,7 +108,7 @@ mod experimental {
         pub(crate) receipts: sov_state::StateMap<
             reth_primitives::U256,
             reth_rpc_types::TransactionReceipt,
-            sov_state::codec::BcsCodec,
+            JsonCodec,
         >,
 
         #[state]

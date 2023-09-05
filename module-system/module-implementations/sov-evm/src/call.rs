@@ -42,8 +42,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
         let result = executor::execute_tx(evm_db, block_env, &evm_tx_recovered, cfg_env).unwrap();
 
-        let mut transaction =
-            reth_rpc_types::Transaction::from_recovered(evm_tx_recovered.tx.clone());
+        let transaction = reth_rpc_types::Transaction::from_recovered(evm_tx_recovered.tx.clone());
 
         println!("Hash {}", hash);
 
