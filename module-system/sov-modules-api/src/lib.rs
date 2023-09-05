@@ -348,6 +348,9 @@ pub trait ModuleInfo {
     /// Returns address of the module.
     fn address(&self) -> &<Self::Context as Spec>::Address;
 
+    /// Returns address of the module.
+    fn prefix(&self) -> Prefix;
+
     /// Returns addresses of all the other modules this module is dependent on
     fn dependencies(&self) -> Vec<&<Self::Context as Spec>::Address>;
 }
