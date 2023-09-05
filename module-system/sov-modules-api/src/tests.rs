@@ -58,6 +58,10 @@ impl crate::ModuleInfo for Module {
         &self.address
     }
 
+    fn prefix(&self) -> crate::Prefix {
+        crate::Prefix::new_module(module_path!(), "Module")
+    }
+
     fn dependencies(&self) -> Vec<&<Self::Context as crate::Spec>::Address> {
         self.dependencies.iter().collect()
     }
