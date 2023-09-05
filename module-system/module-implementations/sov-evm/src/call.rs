@@ -41,7 +41,9 @@ impl<C: sov_modules_api::Context> Evm<C> {
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
         let result = executor::execute_tx(evm_db, block_env, &evm_tx_recovered, cfg_env).unwrap();
 
-        let transaction = reth_rpc_types::Transaction::from_recovered(evm_tx_recovered.tx.clone());
+        let from = evm_tx_recovered.signer();
+        let to = evm_tx_recovered.to().map(|to| to.into());
+        let transaction = reth_rpc_types::Transaction::from_recovered(evm_tx_recovered.tx);
 
         self.pending_transactions
             .push(&transaction, &mut working_set.accessory_state());
@@ -54,9 +56,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
             block_hash: Default::default(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
             block_number: Some(reth_primitives::U256::from(0)),
-            from: evm_tx_recovered.signer(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            to: evm_tx_recovered.to().map(|to| to.into()),
+            from,
+            to,
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
             gas_used: Default::default(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
