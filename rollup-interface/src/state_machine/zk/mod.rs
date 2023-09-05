@@ -41,8 +41,8 @@ pub trait Zkvm {
         code_commitment: &Self::CodeCommitment,
     ) -> Result<&'a [u8], Self::Error>;
 
-    /// Same as [`verify`], except that instead of returning the output as a serialized array,
-    /// it returns a state transition structure.
+    /// Same as [`verify`](Zkvm::verify), except that instead of returning the output
+    /// as a serialized array, it returns a state transition structure.
     /// TODO: specify a deserializer for the output
     fn verify_and_extract_output<
         C: ValidityCondition,
@@ -89,7 +89,16 @@ pub trait ZkvmGuest: Zkvm {
 
 /// This trait is implemented on the struct/enum which expresses the validity condition
 pub trait ValidityCondition:
-    Serialize + DeserializeOwned + BorshDeserialize + BorshSerialize + Debug + Clone + Copy + PartialEq
+    Serialize
+    + DeserializeOwned
+    + BorshDeserialize
+    + BorshSerialize
+    + Debug
+    + Clone
+    + Copy
+    + PartialEq
+    + Send
+    + Sync
 {
     /// The error type returned when two [`ValidityCondition`]s cannot be combined.
     type Error: Into<anyhow::Error>;

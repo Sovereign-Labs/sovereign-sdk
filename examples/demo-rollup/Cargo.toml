@@ -7,6 +7,7 @@ license = { workspace = true }
 homepage = "sovereign.xyz"
 publish = false
 resolver = "2"
+default-run = "sov-demo-rollup"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -39,6 +40,7 @@ sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-templat
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
+sov-cli = { path = "../../module-system/sov-cli" }
 
 [dev-dependencies]
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
@@ -76,3 +78,7 @@ harness = false
 [[bench]]
 name = "rollup_coarse_measure"
 harness = false
+
+[[bin]]
+name = "sov-cli"
+path = "src/sov-cli/main.rs"

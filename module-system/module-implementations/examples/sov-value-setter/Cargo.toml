@@ -19,7 +19,6 @@ tempfile = { workspace = true }
 anyhow = { workspace = true }
 sov-modules-api = { path = "../../../sov-modules-api" }
 sov-state = { path = "../../../sov-state" }
-sov-rollup-interface = { path = "../../../../rollup-interface" }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }

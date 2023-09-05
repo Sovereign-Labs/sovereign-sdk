@@ -16,9 +16,7 @@ pub mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use query::{ChainStateRpcImpl, ChainStateRpcServer};
-use sov_modules_api::Error;
-use sov_modules_macros::ModuleInfo;
-use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker};
+use sov_modules_api::{Error, ModuleInfo, ValidityCondition, ValidityConditionChecker};
 use sov_state::WorkingSet;
 
 /// Type alias that contains the height of a given transition
@@ -100,15 +98,15 @@ impl<Cond> TransitionInProgress<Cond> {
 /// - Must derive `ModuleInfo`
 /// - Must contain `[address]` field
 /// - Can contain any number of ` #[state]` or `[module]` fields
-#[derive(ModuleInfo)]
-pub struct ChainState<C: sov_modules_api::Context, Cond: ValidityCondition> {
+#[derive(Clone, ModuleInfo)]
+pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> {
     /// Address of the module.
     #[address]
-    pub address: C::Address,
+    address: C::Address,
 
     /// The current block height
     #[state]
-    pub slot_height: sov_state::StateValue<TransitionHeight>,
+    slot_height: sov_state::StateValue<TransitionHeight>,
 
     /// A record of all previous state transitions which are available to the VM.
     /// Currently, this includes *all* historical state transitions, but that may change in the future.
@@ -116,20 +114,21 @@ pub struct ChainState<C: sov_modules_api::Context, Cond: ValidityCondition> {
     /// is stored during transition i+1. This is mainly due to the fact that this structure depends on the
     /// rollup's root hash which is only stored once the transition has completed.
     #[state]
-    pub historical_transitions: sov_state::StateMap<TransitionHeight, StateTransitionId<Cond>>,
+    historical_transitions:
+        sov_state::StateMap<TransitionHeight, StateTransitionId<Da::ValidityCondition>>,
 
     /// The transition that is currently processed
     #[state]
-    pub in_progress_transition: sov_state::StateValue<TransitionInProgress<Cond>>,
+    in_progress_transition: sov_state::StateValue<TransitionInProgress<Da::ValidityCondition>>,
 
     /// The genesis root hash.
     /// Set after the first transaction of the rollup is executed, using the `begin_slot` hook.
     #[state]
-    pub genesis_hash: sov_state::StateValue<[u8; 32]>,
+    genesis_hash: sov_state::StateValue<[u8; 32]>,
 
     /// The height of genesis
     #[state]
-    pub genesis_height: sov_state::StateValue<TransitionHeight>,
+    genesis_height: sov_state::StateValue<TransitionHeight>,
 }
 
 /// Initial configuration of the chain state
@@ -138,7 +137,7 @@ pub struct ChainStateConfig {
     pub initial_slot_height: TransitionHeight,
 }
 
-impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
+impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {
     /// Returns transition height in the current slot
     pub fn get_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> TransitionHeight {
         self.slot_height
@@ -151,11 +150,19 @@ impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
         self.genesis_hash.get(working_set)
     }
 
+    /// Returns the genesis height of the module.
+    pub fn get_genesis_height(
+        &self,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Option<TransitionHeight> {
+        self.genesis_height.get(working_set)
+    }
+
     /// Returns the transition in progress of the module.
     pub fn get_in_progress_transition(
         &self,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<TransitionInProgress<Cond>> {
+    ) -> Option<TransitionInProgress<Da::ValidityCondition>> {
         self.in_progress_transition.get(working_set)
     }
 
@@ -164,14 +171,14 @@ impl<C: sov_modules_api::Context, Cond: ValidityCondition> ChainState<C, Cond> {
         &self,
         transition_num: TransitionHeight,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> Option<StateTransitionId<Cond>> {
+    ) -> Option<StateTransitionId<Da::ValidityCondition>> {
         self.historical_transitions
             .get(&transition_num, working_set)
     }
 }
 
-impl<C: sov_modules_api::Context, Cond: ValidityCondition> sov_modules_api::Module
-    for ChainState<C, Cond>
+impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> sov_modules_api::Module
+    for ChainState<C, Da>
 {
     type Context = C;
 

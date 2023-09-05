@@ -1,7 +1,7 @@
 use borsh::BorshSerialize;
 use sov_modules_api::default_context::DefaultContext;
 use sov_rollup_interface::mocks::{
-    MockCodeCommitment, MockProof, MockValidityCond, MockValidityCondChecker,
+    MockCodeCommitment, MockDaSpec, MockProof, MockValidityCond, MockValidityCondChecker,
 };
 use sov_rollup_interface::zk::StateTransition;
 use sov_state::{ProverStorage, WorkingSet};
@@ -141,7 +141,7 @@ fn invalid_proof_helper(
     module: &crate::AttesterIncentives<
         DefaultContext,
         sov_rollup_interface::mocks::MockZkvm,
-        MockValidityCond,
+        MockDaSpec,
         MockValidityCondChecker<MockValidityCond>,
     >,
     working_set: &mut WorkingSet<ProverStorage<sov_state::DefaultStorageSpec>>,

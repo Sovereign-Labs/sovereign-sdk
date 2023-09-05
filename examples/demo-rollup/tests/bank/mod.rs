@@ -8,6 +8,7 @@ use jsonrpsee::rpc_params;
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{PrivateKey, Spec};
+use sov_rollup_interface::mocks::MockDaSpec;
 use sov_sequencer::utils::SimpleClient;
 
 use super::test_helpers::start_rollup;
@@ -24,7 +25,9 @@ async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow
         TOKEN_SALT,
     );
 
-    let msg = RuntimeCall::bank(sov_bank::CallMessage::<DefaultContext>::CreateToken {
+    let msg = RuntimeCall::<DefaultContext, MockDaSpec>::bank(sov_bank::CallMessage::<
+        DefaultContext,
+    >::CreateToken {
         salt: TOKEN_SALT,
         token_name: TOKEN_NAME.to_string(),
         initial_balance: 1000,

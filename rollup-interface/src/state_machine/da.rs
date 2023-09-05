@@ -14,7 +14,7 @@ use crate::zk::ValidityCondition;
 use crate::BasicAddress;
 
 /// A specification for the types used by a DA layer.
-pub trait DaSpec {
+pub trait DaSpec: 'static {
     /// The hash of a DA layer block
     type SlotHash: BlockHashTrait;
 
@@ -22,7 +22,10 @@ pub trait DaSpec {
     type BlockHeader: BlockHeaderTrait<Hash = Self::SlotHash>;
 
     /// The transaction type used by the DA layer.
-    type BlobTransaction: BlobReaderTrait;
+    type BlobTransaction: BlobReaderTrait<Address = Self::Address>;
+
+    /// The type used to represent addresses on the DA layer.
+    type Address: BasicAddress;
 
     /// Any conditions imposed by the DA layer which need to be checked outside of the SNARK
     type ValidityCondition: ValidityCondition;
@@ -68,7 +71,7 @@ pub trait DaVerifier {
     ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error>;
 }
 
-/// [`AccumulatorStatus`] is a wrapper around an accumulator vector that specifies
+/// [`Accumulator`] is a wrapper around an accumulator vector that specifies
 /// whether a [`CountedBufReader`] has finished reading the underlying buffer.
 #[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum Accumulator {
@@ -85,7 +88,7 @@ pub enum Accumulator {
 ///
 /// Because of soundness issues we cannot implement the Buf trait because the prover could get unproved blob data using the chunk method.
 pub struct CountedBufReader<B: Buf> {
-    /// The original blob data
+    /// The original blob data.
     inner: B,
 
     /// An internal counter used to know how far we should read the blob data when
@@ -162,7 +165,8 @@ impl<B: Buf> Read for CountedBufReader<B> {
 
 /// A transaction on a data availability layer, including the address of the sender.
 pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static {
-    /// The type of the raw data of the blob. For example, the "calldata" of an Ethereum rollup transaction
+    /// The type of the raw data of the blob. For example, the "calldata" of an
+    /// Ethereum rollup transaction.
     type Data: Buf;
 
     /// The type used to represent addresses on the DA layer.
@@ -172,16 +176,17 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
     fn sender(&self) -> Self::Address;
 
     /// The raw data of the blob. For example, the "calldata" of an Ethereum rollup transaction
-    /// This function clones the data of the blob to an external BufWithCounter
+    /// This function clones the data of the blob to an external [`CountedBufReader`].
     ///
     /// This function returns a mutable reference to the blob data
     fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data>;
 
-    /// Returns a reference to a `CountedBufReader`, which allows the caller to re-read
+    /// Returns a reference to a [`CountedBufReader`], which allows the caller to re-read
     /// any data read so far, but not to advance the buffer
     fn data(&self) -> &CountedBufReader<Self::Data>;
 
-    /// Returns the hash of the blob. If not provided with a hint, it is computed by hashing the blob data
+    /// Returns the hash of the blob. If not provided with a hint, it is
+    /// computed by hashing the blob data
     fn hash(&self) -> [u8; 32];
 }
 

@@ -24,7 +24,7 @@ simplicity, each token represents only an ID and won't hold any metadata.
 The Sovereign SDK provides a [module-template](../../module-system/module-implementations/module-template/README.md),
 which is boilerplate that can be customized to easily build modules.
 
-```ignore
+```text
 
 ├── Cargo.toml
 ├── README.md
@@ -38,7 +38,7 @@ which is boilerplate that can be customized to easily build modules.
 
 Here are defining basic dependencies in `Cargo.toml` that module needs to get started:
 
-```toml, ignore
+```toml
 [dependencies]
 anyhow = { anyhow = "1.0.62" }
 sov-modules-api = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", features = ["macros"] }
@@ -110,7 +110,7 @@ Before we start implementing the `Module` trait, there are several preparatory s
 
 1.  Define `native` feature in `Cargo.toml` and add additional dependencies:
 
-    ```toml, ignore
+    ```toml
     [dependencies]
     anyhow = "1.0.62"
     borsh = { version = "0.10.3", features = ["bytes"] }
@@ -140,19 +140,18 @@ Before we start implementing the `Module` trait, there are several preparatory s
     pub enum CallMessage<C: sov_modules_api::Context> {
         Mint {
             /// The id of new token. Caller is an owner
-            id: u64
+            id: u64,
         },
         Transfer {
             /// The address to which the token will be transferred.
             to: C::Address,
-            /// The token id to transfer
+            /// The token id to transfer.
             id: u64,
         },
         Burn {
             id: u64,
         }
     }
-
     ```
 
     As you can see, we derive the `borsh` serialization format for these messages. Unlike most serialization libraries,
@@ -243,7 +242,6 @@ impl<C: sov_modules_api::Context> NonFungibleToken<C> {
         Ok(())
     }
 }
-
 ```
 
 ### Call message
@@ -351,7 +349,6 @@ use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::Context;
 use sov_state::WorkingSet;
 
-
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 /// Response for `getOwner` method
 pub struct OwnerResponse<C: Context> {
@@ -381,7 +378,7 @@ that all public APIs function as intended.
 
 Temporary storage is needed for testing, so we enable the `temp` feature of `sov-state` as a `dev-dependency`
 
-```toml, ignore
+```toml,text
 [dev-dependencies]
 sov-state = { git = "https://github.com/Sovereign-Labs/sovereign-sdk.git", branch = "stable", features = ["temp"] }
 ```

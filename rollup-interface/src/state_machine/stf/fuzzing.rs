@@ -8,7 +8,7 @@ use proptest::strategy::{BoxedStrategy, Strategy};
 use super::{BatchReceipt, Event, TransactionReceipt};
 
 /// An object-safe hashing trait, which is blanket implemented for all
-/// [`SimpleHasher`]s.
+/// [`digest::Digest`] implementors.
 pub trait FuzzHasher {
     /// Hash the provided data
     fn hash(&self, data: &[u8]) -> [u8; 32];
@@ -145,7 +145,7 @@ impl<R: proptest::arbitrary::Arbitrary + 'static> proptest::arbitrary::Arbitrary
 
 /// The arguments needed to construct a batch receipt generation strategy.
 pub struct BatchReceiptStrategyArgs {
-    /// An optional SimpleHasher to use construct the tx hash from the `body_to_save`.
+    /// An optional [`digest::Digest`] to use construct the tx hash from the `body_to_save`.
     /// If no hasher is provided or the tx `body_to_save` is `None`, the hash will be populated
     /// with random bytes
     pub hasher: Option<Box<dyn FuzzHasher>>,

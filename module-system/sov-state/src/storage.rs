@@ -95,7 +95,7 @@ fn nohash_serialize<T: Hash>(item: T) -> Vec<u8> {
     hasher.0
 }
 
-/// A serialized value suitable for storing. Internally uses an Arc<Vec<u8>> for cheap cloning.
+/// A serialized value suitable for storing. Internally uses an [`Arc<Vec<u8>>`] for cheap cloning.
 #[derive(
     Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Default,
 )]
@@ -283,7 +283,8 @@ impl From<&'static str> for StorageValue {
 
 pub trait NativeStorage: Storage {
     /// Returns the value corresponding to the key or None if key is absent and a proof to
-    /// get the value. Panics if [`get_with_proof_opt`] returns `None` in place of the proof.
+    /// get the value. Panics if [`get_with_proof_from_state_map`](NativeStorage::get_with_proof_from_state_map)
+    /// returns [`None`] in place of the proof.
     fn get_with_proof(&self, key: StorageKey, witness: &Self::Witness)
         -> StorageProof<Self::Proof>;
 

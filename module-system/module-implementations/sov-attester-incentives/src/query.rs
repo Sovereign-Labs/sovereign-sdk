@@ -1,8 +1,6 @@
 //! Defines the query methods for the attester incentives module
-use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
-use sov_modules_api::Spec;
-use sov_rollup_interface::zk::{ValidityCondition, ValidityConditionChecker, Zkvm};
+use sov_modules_api::{Spec, ValidityConditionChecker};
 use sov_state::storage::{NativeStorage, StorageProof};
 use sov_state::{Storage, WorkingSet};
 
@@ -17,12 +15,12 @@ pub struct BondAmountResponse {
 }
 
 // TODO: implement rpc_gen macro
-impl<C, Vm, Cond, Checker> AttesterIncentives<C, Vm, Cond, Checker>
+impl<C, Vm, Da, Checker> AttesterIncentives<C, Vm, Da, Checker>
 where
     C: sov_modules_api::Context,
-    Vm: Zkvm,
-    Cond: ValidityCondition,
-    Checker: ValidityConditionChecker<Cond> + BorshDeserialize + BorshSerialize,
+    Vm: sov_modules_api::Zkvm,
+    Da: sov_modules_api::DaSpec,
+    Checker: ValidityConditionChecker<Da::ValidityCondition>,
 {
     /// Queries the state of the module.
     pub fn get_bond_amount(
@@ -32,22 +30,18 @@ where
         working_set: &mut WorkingSet<C::Storage>,
     ) -> BondAmountResponse {
         match role {
-            Role::Attester => {
-                BondAmountResponse {
-                    value: self
-                        .bonded_attesters
-                        .get(&address, working_set)
-                        .unwrap_or_default(), // self.value.get(working_set),
-                }
-            }
-            Role::Challenger => {
-                BondAmountResponse {
-                    value: self
-                        .bonded_challengers
-                        .get(&address, working_set)
-                        .unwrap_or_default(), // self.value.get(working_set),
-                }
-            }
+            Role::Attester => BondAmountResponse {
+                value: self
+                    .bonded_attesters
+                    .get(&address, working_set)
+                    .unwrap_or_default(),
+            },
+            Role::Challenger => BondAmountResponse {
+                value: self
+                    .bonded_challengers
+                    .get(&address, working_set)
+                    .unwrap_or_default(),
+            },
         }
     }
 
@@ -70,13 +64,13 @@ where
         )
     }
 
-    /// TODO: Make the unbonding amount queriable:
+    /// TODO: Make the unbonding amount queryable:
     pub fn get_unbonding_amount(
         &self,
         _address: C::Address,
         _witness: &<<C as Spec>::Storage as Storage>::Witness,
         _working_set: &mut WorkingSet<C::Storage>,
     ) -> u64 {
-        todo!("Make the unbonding amount queriable: https://github.com/Sovereign-Labs/sovereign-sdk/issues/675")
+        todo!("Make the unbonding amount queryable: https://github.com/Sovereign-Labs/sovereign-sdk/issues/675")
     }
 }

@@ -8,7 +8,6 @@ use sha2::Digest;
 
 use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
 use crate::mocks::MockValidityCond;
-use crate::services::batch_builder::BatchBuilder;
 use crate::services::da::{DaService, SlotData};
 use crate::{BasicAddress, RollupAddress};
 
@@ -207,12 +206,14 @@ impl SlotData for MockBlock {
 }
 
 /// A [`DaSpec`] suitable for testing.
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct MockDaSpec;
 
 impl DaSpec for MockDaSpec {
     type SlotHash = MockHash;
     type BlockHeader = MockBlockHeader;
     type BlobTransaction = MockBlob;
+    type Address = MockAddress;
     type ValidityCondition = MockValidityCond;
     type InclusionMultiProof = [u8; 32];
     type CompletenessProof = ();
@@ -288,34 +289,7 @@ impl DaService for MockDaService {
         Ok(())
     }
 }
-/// BatchBuilder used in tests.
-pub struct MockBatchBuilder {
-    /// Mempool with transactions.
-    pub mempool: Vec<Vec<u8>>,
-}
 
-// It only takes the first byte of the tx, when submits it.
-// This allows to show effect of batch builder
-impl BatchBuilder for MockBatchBuilder {
-    fn accept_tx(&mut self, tx: Vec<u8>) -> anyhow::Result<()> {
-        self.mempool.push(tx);
-        Ok(())
-    }
-
-    fn get_next_blob(&mut self) -> anyhow::Result<Vec<Vec<u8>>> {
-        if self.mempool.is_empty() {
-            anyhow::bail!("Mock mempool is empty");
-        }
-        let txs = std::mem::take(&mut self.mempool)
-            .into_iter()
-            .filter_map(|tx| {
-                if !tx.is_empty() {
-                    Some(vec![tx[0]])
-                } else {
-                    None
-                }
-            })
-            .collect();
-        Ok(txs)
-    }
-}
+/// The configuration for mock da
+#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct MockDaConfig {}
