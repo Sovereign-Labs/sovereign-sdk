@@ -50,7 +50,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
             reth_primitives::U256::from(1),
         );
 
-        self.transactions.set(&hash, &transaction, working_set);
+        self.transactions
+            .set(&hash, &transaction, &mut working_set.accessory_state());
 
         let receipt = reth_rpc_types::TransactionReceipt {
             transaction_hash: hash.into(),

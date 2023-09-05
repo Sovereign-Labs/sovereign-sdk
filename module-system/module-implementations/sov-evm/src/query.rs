@@ -86,7 +86,10 @@ impl<C: sov_modules_api::Context> Evm<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<reth_rpc_types::Transaction>> {
         info!("evm module: eth_getTransactionByHash");
-        let evm_transaction = self.transactions.get(&hash, working_set);
+        //let evm_transaction = self.transactions.get(&hash, working_set);
+        let evm_transaction = self
+            .transactions
+            .get(&hash, &mut working_set.accessory_state());
         Ok(evm_transaction)
     }
 

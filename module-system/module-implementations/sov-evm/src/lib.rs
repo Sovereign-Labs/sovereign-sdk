@@ -101,8 +101,11 @@ mod experimental {
         pub(crate) block_hashes: sov_state::StateMap<reth_primitives::H256, u64, JsonCodec>,
 
         #[state]
-        pub(crate) transactions:
-            sov_state::StateMap<reth_primitives::H256, reth_rpc_types::Transaction, JsonCodec>,
+        pub(crate) transactions: sov_state::AccessoryStateMap<
+            reth_primitives::H256,
+            reth_rpc_types::Transaction,
+            JsonCodec,
+        >,
 
         #[state]
         pub(crate) receipts: sov_state::StateMap<
