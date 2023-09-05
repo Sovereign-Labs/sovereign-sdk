@@ -137,7 +137,7 @@ pub fn codec(input: TokenStream) -> TokenStream {
 ///     fn health(&self) -> RpcResult<()> {
 ///         Ok(())
 ///     }
-/// 
+///
 ///     #[method(name = "moduleAddress")]
 ///     fn module_address(&self) -> ::jsonrpsee::core::RpcResult<String> {
 ///        Ok(<MyModule<C> as ModuleInfo>::address(&<MyModule<C> as ::core::default::Default>::default()).to_string())
