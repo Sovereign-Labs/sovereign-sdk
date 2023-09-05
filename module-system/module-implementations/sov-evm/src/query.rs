@@ -31,6 +31,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _details: Option<bool>,
         _working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<RichBlock>> {
+        println!("evm module: eth_getBlockByNumber");
         info!("evm module: eth_getBlockByNumber");
 
         let header = reth_rpc_types::Header {
@@ -85,8 +86,13 @@ impl<C: sov_modules_api::Context> Evm<C> {
         hash: reth_primitives::H256,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<reth_rpc_types::Transaction>> {
-        info!("evm module: eth_getTransactionByHash");
+        println!("getTransactionByHash ========= ");
+        println!("Hash {}", hash);
+
         let evm_transaction = self.transactions.get(&hash, working_set);
+
+        info!("evm module: eth_getTransactionByHash");
+        println!("evm module: eth_getTransactionByHash {:?}", evm_transaction);
         Ok(evm_transaction)
     }
 
@@ -97,6 +103,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         hash: reth_primitives::U256,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<reth_rpc_types::TransactionReceipt>> {
+        println!("getTransactionReceipt ========= ");
         info!("evm module: eth_getTransactionReceipt");
 
         let receipt = self.receipts.get(&hash, working_set);

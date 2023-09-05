@@ -6971,6 +6971,7 @@ dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
+ "serde_json",
  "sha2 0.10.7",
  "sov-db",
  "sov-first-read-last-write-cache",

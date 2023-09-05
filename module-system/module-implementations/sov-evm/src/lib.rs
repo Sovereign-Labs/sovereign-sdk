@@ -26,7 +26,7 @@ mod experimental {
     use derive_more::{From, Into};
     use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo};
-    use sov_state::codec::BcsCodec;
+    use sov_state::codec::{BcsCodec, JsonCodec};
     use sov_state::WorkingSet;
 
     use super::evm::db::EvmDb;
@@ -102,7 +102,7 @@ mod experimental {
 
         #[state]
         pub(crate) transactions:
-            sov_state::StateMap<reth_primitives::H256, reth_rpc_types::Transaction, BcsCodec>,
+            sov_state::StateMap<reth_primitives::H256, reth_rpc_types::Transaction, JsonCodec>,
 
         #[state]
         pub(crate) receipts: sov_state::StateMap<

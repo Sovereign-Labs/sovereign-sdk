@@ -17,6 +17,7 @@ arbitrary = { workspace = true, optional = true }
 borsh = { workspace = true }
 bcs = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
 sov-db = { path = "../../full-node/db/sov-db", version = "0.1", optional = true }

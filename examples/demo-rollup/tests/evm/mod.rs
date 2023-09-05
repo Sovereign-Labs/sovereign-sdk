@@ -130,14 +130,18 @@ impl TestClient {
 
     async fn execute(self) -> Result<(), Box<dyn std::error::Error>> {
         let contract_address = {
+            println!("Deploy Contract Start");
             let deploy_contract_req = self.deploy_contract().await?;
             self.send_publish_batch_request().await;
 
-            deploy_contract_req
+            let c = deploy_contract_req
                 .await?
                 .unwrap()
                 .contract_address
-                .unwrap()
+                .unwrap();
+
+            println!("Deploy Contract End");
+            c
         };
 
         let set_arg = 923;
