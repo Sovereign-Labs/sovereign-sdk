@@ -177,6 +177,11 @@ pub trait Storage: Clone {
     /// Returns the value corresponding to the key or None if key is absent.
     fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue>;
 
+    /// Returns the value corresponding to the key or None if key is absent.
+    fn get_accessory(&self, _key: &StorageKey) -> Option<StorageValue> {
+        None
+    }
+
     /// Returns the latest state root hash from the storage.
     fn get_state_root(&self, witness: &Self::Witness) -> anyhow::Result<[u8; 32]>;
 
@@ -188,7 +193,7 @@ pub trait Storage: Clone {
     ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error>;
 
     /// Commits state changes to the database.
-    fn commit(&self, node_batch: &Self::StateUpdate);
+    fn commit(&self, node_batch: &Self::StateUpdate, accessory_update: &OrderedReadsAndWrites);
 
     /// Validate all of the storage accesses in a particular cache log,
     /// returning the new state root after applying all writes.
@@ -199,8 +204,25 @@ pub trait Storage: Clone {
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
     ) -> Result<[u8; 32], anyhow::Error> {
+        Self::validate_and_commit_with_accessory_update(
+            self,
+            state_accesses,
+            witness,
+            &Default::default(),
+        )
+    }
+
+    /// A version of [`Storage::validate_and_commit`] that allows for
+    /// "accessory" non-JMT updates. See `sov_db::NativeDB` for more information
+    /// about accessory state.
+    fn validate_and_commit_with_accessory_update(
+        &self,
+        state_accesses: OrderedReadsAndWrites,
+        witness: &Self::Witness,
+        accessory_update: &OrderedReadsAndWrites,
+    ) -> Result<[u8; 32], anyhow::Error> {
         let (root_hash, node_batch) = self.compute_state_update(state_accesses, witness)?;
-        self.commit(&node_batch);
+        self.commit(&node_batch, accessory_update);
 
         Ok(root_hash)
     }
