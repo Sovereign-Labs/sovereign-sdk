@@ -91,7 +91,7 @@ impl<Ctx: sov_modules_api::Context> PrivateKeyAndAddress<Ctx> {
 
 /// A simplified struct representing private key and associated address
 /// where the private key is represented as a hex string and address as canonical string
-/// TODO: Remove it https://github.com/Sovereign-Labs/sovereign-sdk/issues/766
+/// TODO: Remove it <https://github.com/Sovereign-Labs/sovereign-sdk/issues/766>.
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct HexPrivateAndAddress {
     /// Private key is hex encoded bytes, without leading 0x

@@ -1,7 +1,8 @@
 use digest::typenum::U32;
 use digest::{Digest, FixedOutput, FixedOutputReset, OutputSizeUser, Reset, Update};
 
-/// A SimpleHasher implementation which always returns the digest `[0;32]`
+/// A [`digest::Digest`] implementation which always returns the digest
+/// `[0;32]`.
 pub struct NoOpHasher;
 
 impl OutputSizeUser for NoOpHasher {

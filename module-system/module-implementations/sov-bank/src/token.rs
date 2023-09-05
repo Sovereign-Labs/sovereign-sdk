@@ -16,7 +16,8 @@ use crate::call::prefix_from_address_with_parent;
 pub type Amount = u64;
 
 /// Structure that stores information specifying
-/// a given `amount` (type [`Amount`]) of coins stored at a `token_address` (type [`Context::Address`]).
+/// a given `amount` (type [`Amount`]) of coins stored at a `token_address`
+/// (type [`sov_modules_api::Spec::Address`]).
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),

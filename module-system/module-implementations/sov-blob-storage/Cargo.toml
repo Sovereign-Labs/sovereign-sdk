@@ -21,7 +21,6 @@ tracing = { workspace = true }
 hex = { workspace = true }
 
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
 sov-state = { path = "../../sov-state", version = "0.1" }
 sov-sequencer-registry = { path = "../sov-sequencer-registry", version = "0.1" }
 sov-chain-state = { path = "../sov-chain-state" }
@@ -48,6 +47,5 @@ native = [
     "serde_json",
     "sov-modules-api/native",
     "sov-state/native",
-    "sov-modules-macros/native",
-    "sov-sequencer-registry/native"
+    "sov-sequencer-registry/native",
 ]
