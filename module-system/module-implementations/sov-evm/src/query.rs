@@ -1,9 +1,9 @@
 use ethereum_types::{Address, H256, U256, U64};
 use ethers::types::Bytes;
-use ethers_core::types::{Block, BlockId, FeeHistory, Transaction, TransactionReceipt, TxHash};
+use ethers_core::types::{BlockId, FeeHistory, Transaction, TransactionReceipt, TxHash};
 use jsonrpsee::core::RpcResult;
 use reth_rpc_types::state::StateOverride;
-use reth_rpc_types::{BlockOverrides, CallRequest, TransactionRequest};
+use reth_rpc_types::{BlockOverrides, CallRequest, RichBlock, TransactionRequest};
 use revm::primitives::{CfgEnv, ExecutionResult};
 use sov_modules_api::macros::rpc_gen;
 use sov_modules_api::utils::to_jsonrpsee_error_object;
@@ -31,15 +31,40 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _block_number: Option<String>,
         _details: Option<bool>,
         _working_set: &mut WorkingSet<C::Storage>,
-    ) -> RpcResult<Option<Block<TxHash>>> {
+    ) -> RpcResult<Option<RichBlock>> {
         info!("evm module: eth_getBlockByNumber");
 
-        let block = Block::<TxHash> {
-            base_fee_per_gas: Some(100.into()),
-            ..Default::default()
+        let header = reth_rpc_types::Header {
+            hash: Default::default(),
+            parent_hash: Default::default(),
+            uncles_hash: Default::default(),
+            miner: Default::default(),
+            state_root: Default::default(),
+            transactions_root: Default::default(),
+            receipts_root: Default::default(),
+            logs_bloom: Default::default(),
+            difficulty: Default::default(),
+            number: Default::default(),
+            gas_limit: Default::default(),
+            gas_used: Default::default(),
+            timestamp: Default::default(),
+            extra_data: Default::default(),
+            mix_hash: Default::default(),
+            nonce: Default::default(),
+            base_fee_per_gas: Some(reth_primitives::U256::from(100)),
+            withdrawals_root: Default::default(),
         };
 
-        Ok(Some(block))
+        let block = reth_rpc_types::Block {
+            header,
+            total_difficulty: Default::default(),
+            uncles: Default::default(),
+            transactions: reth_rpc_types::BlockTransactions::Hashes(Default::default()),
+            size: Default::default(),
+            withdrawals: Default::default(),
+        };
+
+        Ok(Some(block.into()))
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502

@@ -27,6 +27,7 @@ mod experimental {
     use ethers::types::TransactionReceipt;
     use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo};
+    use sov_state::codec::BcsCodec;
     use sov_state::WorkingSet;
 
     use super::evm::db::EvmDb;
@@ -86,6 +87,16 @@ mod experimental {
 
         #[state]
         pub(crate) block_env: sov_state::StateValue<BlockEnv>,
+
+        #[state]
+        pub(crate) head_number: sov_state::StateValue<u64>,
+
+        //
+        #[state]
+        pub(crate) current_block: sov_state::StateValue<reth_rpc_types::Block, BcsCodec>,
+
+        #[state]
+        pub(crate) block_hashes: sov_state::StateMap<reth_primitives::H256, u64, BcsCodec>,
 
         #[state]
         pub(crate) transactions: sov_state::StateMap<Bytes32, RawEvmTransaction>,
