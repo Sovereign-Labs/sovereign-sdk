@@ -1,7 +1,6 @@
 use std::convert::Infallible;
 
 use ethers_core::types::{Block, Transaction, TxHash};
-use reth_primitives::U256;
 use reth_revm::tracing::{TracingInspector, TracingInspectorConfig};
 use revm::primitives::{
     BlockEnv, CfgEnv, EVMError, Env, ExecutionResult, ResultAndState, TransactTo, TxEnv,
@@ -22,7 +21,7 @@ pub(crate) fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
     let env = Env {
         block: block_env,
         cfg: config_env,
-        tx: convert_transaction(tx, &block_env),
+        tx: convert_transaction(tx, block),
     };
 
     evm.env = env;
@@ -54,13 +53,12 @@ pub(crate) fn inspect<DB: Database<Error = Infallible> + DatabaseCommit>(
     evm.inspect(&mut inspector)
 }
 
-fn convert_transaction(tx: &Transaction, block: &BlockEnv) -> TxEnv {
+fn convert_transaction(tx: &Transaction, block: &Block<TxHash>) -> TxEnv {
     TxEnv {
         caller: tx.from.into(),
         gas_limit: tx.gas_price.unwrap().as_u64(),
-        gas_price: U256::from(tx.effective_gas_price(block.basefee)),
-        gas_priority_fee: Default::default(),
-        //tx.max_fee_per_gas.map(|gas| U256::from(gas)),
+        gas_price: tx.effective_gas_price(block.base_fee_per_gas).into(),
+        gas_priority_fee: tx.max_fee_per_gas.map(|gas| gas.into()),
         transact_to: TransactTo::Call(tx.to.unwrap().into()),
         value: Default::default(),
         data: Default::default(),
@@ -73,7 +71,7 @@ fn convert_transaction(tx: &Transaction, block: &BlockEnv) -> TxEnv {
 fn convert_block(block: &Block<TxHash>) -> BlockEnv {
     BlockEnv {
         gas_limit: block.gas_limit.into(),
-        number: U256::from(block.number.unwrap_or_default().as_u64()),
+        number: revm::primitives::U256::from(block.number.unwrap_or_default().as_u64()),
         coinbase: block.author.unwrap().into(),
         timestamp: block.timestamp.into(),
         difficulty: block.difficulty.into(),

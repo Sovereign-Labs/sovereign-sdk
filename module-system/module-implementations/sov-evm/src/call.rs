@@ -40,10 +40,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
-        let tx_env = tx.into();
-
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
-        let result = executor::execute_tx(evm_db, &current_block, &tx_env, cfg_env).unwrap();
+        let result = executor::execute_tx(evm_db, &current_block, &tx, cfg_env).unwrap();
 
         let receipt = TransactionReceipt {
             transaction_hash: hash.into(),

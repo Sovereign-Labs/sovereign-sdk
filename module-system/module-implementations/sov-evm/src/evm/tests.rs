@@ -9,7 +9,6 @@ use sov_state::{ProverStorage, WorkingSet};
 use super::db::EvmDb;
 use super::db_init::InitEvmDb;
 use super::executor;
-use crate::evm::transaction::BlockEnv;
 use crate::evm::{contract_address, AccountInfo};
 use crate::smart_contracts::SimpleStorageContract;
 use crate::tests::dev_signer::DevSigner;
@@ -68,7 +67,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
 
         let tx = &tx.try_into().unwrap();
         let result =
-            executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
+            executor::execute_tx(&mut evm_db, &Default::default(), tx, CfgEnv::default()).unwrap();
         contract_address(&result).expect("Expected successful contract creation")
     };
 
@@ -86,7 +85,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
             .unwrap();
 
         let tx = &tx.try_into().unwrap();
-        executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
+        executor::execute_tx(&mut evm_db, &Default::default(), tx, CfgEnv::default()).unwrap();
     }
 
     let get_res = {
@@ -102,7 +101,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
 
         let tx = &tx.try_into().unwrap();
         let result =
-            executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
+            executor::execute_tx(&mut evm_db, &Default::default(), tx, CfgEnv::default()).unwrap();
 
         let out = output(result);
         ethereum_types::U256::from(out.as_ref())

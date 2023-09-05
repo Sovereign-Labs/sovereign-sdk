@@ -1,14 +1,14 @@
+use ethers_core::types::{Block, TxHash};
 use revm::primitives::{CfgEnv, SpecId, U256};
 
 use crate::call::{get_cfg_env, get_spec_id};
-use crate::evm::transaction::BlockEnv;
 use crate::evm::EvmChainCfg;
 use crate::SpecIdWrapper;
 
 #[test]
 fn cfg_test() {
-    let block_env = BlockEnv {
-        number: 10,
+    let block = Block::<TxHash> {
+        number: Some(10u64.into()),
         ..Default::default()
     };
 
@@ -26,7 +26,7 @@ fn cfg_test() {
         ..Default::default()
     };
 
-    let cfg_env = get_cfg_env(&block_env, cfg, Some(template_cfg));
+    let cfg_env = get_cfg_env(&block, cfg, Some(template_cfg));
 
     assert_eq!(
         cfg_env,
