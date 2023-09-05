@@ -1,6 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use proc_macro2::Span;
 use toml::Table;
 
 const MANIFEST_NAME: &str = "sovereign.toml";
@@ -15,7 +16,7 @@ const MANIFEST_NAME: &str = "sovereign.toml";
 ///
 /// Tracking issue: https://github.com/Sovereign-Labs/sovereign-sdk/issues/786
 #[allow(dead_code)]
-pub fn fetch_manifest_toml(span: proc_macro2::Span) -> anyhow::Result<(PathBuf, Table)> {
+pub fn fetch_manifest_toml(span: Span) -> anyhow::Result<(PathBuf, Table)> {
     #[cfg(procmacro2_semver_exempt)]
     let initial_path = span
         .source_file()
@@ -70,7 +71,7 @@ where
 fn fetch_manifest_works() {
     let path = env!("CARGO_MANIFEST_DIR");
     let path = PathBuf::from(path).join("src").join("invalid");
-    let (_, manifest) = fetch_manifest_toml_from_path(&path).unwrap();
+    let (path, manifest) = fetch_manifest_toml_from_path(&path).unwrap();
 
     let expected_path = env!("CARGO_MANIFEST_DIR");
     let expected_path = PathBuf::from(expected_path).join("sovereign.toml");
