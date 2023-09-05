@@ -24,7 +24,6 @@ mod experimental {
     use std::collections::HashMap;
 
     use derive_more::{From, Into};
-    use ethers::types::TransactionReceipt;
     use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo};
     use sov_state::codec::BcsCodec;
@@ -103,8 +102,8 @@ mod experimental {
 
         #[state]
         pub(crate) receipts: sov_state::StateMap<
-            ethereum_types::H256,
-            TransactionReceipt,
+            reth_primitives::U256,
+            reth_rpc_types::TransactionReceipt,
             sov_state::codec::BcsCodec,
         >,
     }

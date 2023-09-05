@@ -96,9 +96,9 @@ impl<C: sov_modules_api::Context> Evm<C> {
     #[rpc_method(name = "getTransactionReceipt")]
     pub fn get_transaction_receipt(
         &self,
-        hash: H256,
+        hash: reth_primitives::U256,
         working_set: &mut WorkingSet<C::Storage>,
-    ) -> RpcResult<Option<TransactionReceipt>> {
+    ) -> RpcResult<Option<reth_rpc_types::TransactionReceipt>> {
         info!("evm module: eth_getTransactionReceipt");
 
         let receipt = self.receipts.get(&hash, working_set);
