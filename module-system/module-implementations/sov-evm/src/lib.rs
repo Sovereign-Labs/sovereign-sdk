@@ -102,6 +102,10 @@ mod experimental {
             sov_state::AccessoryStateMap<reth_primitives::H256, u64, JsonCodec>,
 
         #[state]
+        pub(crate) pending_transactions:
+            sov_state::AccessoryStateVec<reth_rpc_types::Transaction, JsonCodec>,
+
+        #[state]
         pub(crate) transactions: sov_state::AccessoryStateMap<
             reth_primitives::H256,
             reth_rpc_types::Transaction,

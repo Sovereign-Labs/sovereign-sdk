@@ -41,17 +41,10 @@ impl<C: sov_modules_api::Context> Evm<C> {
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
         let result = executor::execute_tx(evm_db, block_env, &evm_tx_recovered, cfg_env).unwrap();
 
-        // TODO fill the missing values.
-        let transaction = reth_rpc_types::Transaction::from_recovered_with_block_context(
-            evm_tx_recovered.tx.clone(),
-            reth_primitives::H256::default(),
-            0,
-            None,
-            reth_primitives::U256::from(1),
-        );
+        let transaction = reth_rpc_types::Transaction::from_recovered(evm_tx_recovered.tx.clone());
 
-        self.transactions
-            .set(&hash, &transaction, &mut working_set.accessory_state());
+        self.pending_transactions
+            .push(&transaction, &mut working_set.accessory_state());
 
         let receipt = reth_rpc_types::TransactionReceipt {
             transaction_hash: hash.into(),
