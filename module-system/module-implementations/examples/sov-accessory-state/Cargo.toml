@@ -1,0 +1,26 @@
+[package]
+name = "sov-accessory-state"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+rust-version = { workspace = true }
+version = { workspace = true }
+readme = "README.md"
+publish = false
+resolver = "2"
+
+[dependencies]
+jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
+sov-modules-api = { path = "../../../sov-modules-api" }
+sov-state = { path = "../../../sov-state" }
+serde = { workspace = true, optional = true }
+borsh = { workspace = true, features = ["rc"] }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[features]
+default = []
+native = ["serde", "sov-modules-api/native", "dep:jsonrpsee"]

@@ -6516,6 +6516,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-accessory-state"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "jsonrpsee",
+ "serde",
+ "sov-modules-api",
+ "sov-state",
+ "tempfile",
+]
+
+[[package]]
 name = "sov-accounts"
 version = "0.1.0"
 dependencies = [
