@@ -28,7 +28,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        println!("execute_call START");
         let evm_tx_recovered: EvmTransactionSignedEcRecovered = tx.try_into()?;
 
         let block_env = self.block_env.get(working_set).unwrap_or_default();
