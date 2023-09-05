@@ -47,6 +47,7 @@ impl StateTransitionFunction for CheckHashPreimageStf {
 
     // This represents a proof of misbehavior by the sequencer, but we won't utilize it in this tutorial.
     type MisbehaviorProof = ();
+}
 ```
 
 Now that we have defined the necessary types, we need to implement the following functions:

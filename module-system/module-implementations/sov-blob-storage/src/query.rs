@@ -12,7 +12,7 @@ pub struct Response {
     pub address: String,
 }
 
-/// TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/626
+/// TODO: <https://github.com/Sovereign-Labs/sovereign-sdk/issues/626>
 #[rpc_gen(client, server, namespace = "blobStorage")]
 impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> BlobStorage<C, Da> {
     /// Queries the address of the module.

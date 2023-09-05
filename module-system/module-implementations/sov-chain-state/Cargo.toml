@@ -19,7 +19,6 @@ serde_json = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-modules-macros = { path = "../../sov-modules-macros", version = "0.1" }
 sov-state = { path = "../../sov-state", version = "0.1" }
 
 
@@ -35,4 +34,4 @@ sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"
 
 [features]
 default = []
-native = ["serde", "serde_json", "jsonrpsee", "sov-state/native", "sov-modules-api/native", ]
+native = ["serde", "serde_json", "jsonrpsee", "sov-state/native", "sov-modules-api/native"]

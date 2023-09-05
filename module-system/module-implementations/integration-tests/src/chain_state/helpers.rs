@@ -1,9 +1,11 @@
 use sov_chain_state::{ChainState, ChainStateConfig};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
+use sov_modules_api::macros::DefaultRuntime;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{BlobReaderTrait, Context, DaSpec, PublicKey, Spec};
-use sov_modules_macros::{DefaultRuntime, DispatchCall, Genesis, MessageCodec};
+use sov_modules_api::{
+    BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, MessageCodec, PublicKey, Spec,
+};
 use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
 use sov_rollup_interface::mocks::MockZkvm;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};

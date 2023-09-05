@@ -199,7 +199,7 @@
       }
     },
     "Coins": {
-      "description": "Structure that stores information specifying a given `amount` (type [`Amount`]) of coins stored at a `token_address` (type [`Context::Address`]).",
+      "description": "Structure that stores information specifying a given `amount` (type [`Amount`]) of coins stored at a `token_address` (type [`sov_modules_api::Spec::Address`]).",
       "type": "object",
       "required": [
         "amount",
