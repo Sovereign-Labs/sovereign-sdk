@@ -59,7 +59,7 @@ const main = async () => {
     await logBalance(trader)
 
     const tx = await router.connect(trader).swapExactTokensForTokens(
-        utils.parseUnits('10', 18),
+        utils.parseUnits('2', 18),
         utils.parseUnits('1', 18),
         [USDT_ADDRESS, USDC_ADDRESS],
         trader.address,
