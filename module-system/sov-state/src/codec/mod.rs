@@ -2,9 +2,11 @@
 
 mod bcs_codec;
 mod borsh_codec;
+mod json_codec;
 
 pub use bcs_codec::BcsCodec;
 pub use borsh_codec::BorshCodec;
+pub use json_codec::JsonCodec;
 
 /// A trait for types that can serialize and deserialize values for storage
 /// access.
