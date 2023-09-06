@@ -28,5 +28,5 @@ sp-core = { version = "16.0.0", optional = true }
 
 [features]
 default = ["native"]
-native = ["dep:tokio", "dep:codec", "dep:reqwest", "dep:avail-subxt", "dep:subxt", "dep:sp-keyring", "dep:sp-core"]
+native = ["dep:tokio", "dep:codec", "dep:reqwest", "dep:avail-subxt", "dep:subxt", "dep:sp-keyring", "dep:sp-core", "sov-rollup-interface/native"]
 verifier = []

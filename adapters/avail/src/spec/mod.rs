@@ -21,6 +21,8 @@ impl DaSpec for DaLayerSpec {
 
     type BlobTransaction = transaction::AvailBlobTransaction;
 
+    type Address = address::AvailAddress;
+
     type InclusionMultiProof = ();
 
     type CompletenessProof = ();
