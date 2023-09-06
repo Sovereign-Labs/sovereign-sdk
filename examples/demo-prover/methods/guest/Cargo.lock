@@ -454,7 +454,6 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-blob-storage",
- "sov-chain-state",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-rollup-interface",
@@ -2028,18 +2027,6 @@ dependencies = [
  "sov-sequencer-registry",
  "sov-state",
  "tracing",
-]
-
-[[package]]
-name = "sov-chain-state"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
- "sov-state",
 ]
 
 [[package]]

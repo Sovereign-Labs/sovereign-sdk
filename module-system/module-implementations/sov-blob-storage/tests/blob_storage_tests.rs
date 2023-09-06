@@ -1,21 +1,32 @@
 use sov_blob_storage::BlobStorage;
+use sov_chain_state::{ChainState, ChainStateConfig};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::Genesis;
-use sov_rollup_interface::mocks::{MockAddress, MockBlob};
+use sov_modules_api::Module;
+use sov_rollup_interface::mocks::{MockAddress, MockBlob, MockDaSpec};
 use sov_state::{ProverStorage, WorkingSet};
 
 type C = DefaultContext;
 type B = MockBlob;
+type Da = MockDaSpec;
 
 #[test]
 fn empty_test() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let blob_storage = BlobStorage::<C>::default();
 
-    blob_storage.genesis(&(), &mut working_set).unwrap();
+    let chain_state = ChainState::<C, Da>::default();
+    let initial_slot_height = 1;
+    let chain_state_config = ChainStateConfig {
+        initial_slot_height,
+    };
+    chain_state
+        .genesis(&chain_state_config, &mut working_set)
+        .unwrap();
 
-    let blobs: Vec<B> = blob_storage.take_blobs_for_block_number(1, &mut working_set);
+    let blob_storage = BlobStorage::<C, Da>::default();
+
+    let blobs: Vec<B> =
+        blob_storage.take_blobs_for_slot_height(initial_slot_height, &mut working_set);
 
     assert!(blobs.is_empty());
 }
@@ -24,21 +35,29 @@ fn empty_test() {
 fn store_and_retrieve_standard() {
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-    let blob_storage = BlobStorage::<C>::default();
 
-    blob_storage.genesis(&(), &mut working_set).unwrap();
+    let chain_state = ChainState::<C, Da>::default();
+    let initial_slot_height = 1;
+    let chain_state_config = ChainStateConfig {
+        initial_slot_height,
+    };
+    chain_state
+        .genesis(&chain_state_config, &mut working_set)
+        .unwrap();
+
+    let blob_storage = BlobStorage::<C, Da>::default();
 
     assert!(blob_storage
-        .take_blobs_for_block_number::<B>(1, &mut working_set)
+        .take_blobs_for_slot_height(1, &mut working_set)
         .is_empty());
     assert!(blob_storage
-        .take_blobs_for_block_number::<B>(2, &mut working_set)
+        .take_blobs_for_slot_height(2, &mut working_set)
         .is_empty());
     assert!(blob_storage
-        .take_blobs_for_block_number::<B>(3, &mut working_set)
+        .take_blobs_for_slot_height(3, &mut working_set)
         .is_empty());
     assert!(blob_storage
-        .take_blobs_for_block_number::<B>(4, &mut working_set)
+        .take_blobs_for_slot_height(4, &mut working_set)
         .is_empty());
 
     let sender = MockAddress::from([1u8; 32]);
@@ -69,25 +88,25 @@ fn store_and_retrieve_standard() {
 
     assert_eq!(
         slot_2_blobs,
-        blob_storage.take_blobs_for_block_number(2, &mut working_set)
+        blob_storage.take_blobs_for_slot_height(2, &mut working_set)
     );
     assert!(blob_storage
-        .take_blobs_for_block_number::<B>(2, &mut working_set)
+        .take_blobs_for_slot_height(2, &mut working_set)
         .is_empty());
 
     assert_eq!(
         slot_3_blobs,
-        blob_storage.take_blobs_for_block_number(3, &mut working_set)
+        blob_storage.take_blobs_for_slot_height(3, &mut working_set)
     );
     assert!(blob_storage
-        .take_blobs_for_block_number::<B>(3, &mut working_set)
+        .take_blobs_for_slot_height(3, &mut working_set)
         .is_empty());
 
     assert_eq!(
         slot_4_blobs,
-        blob_storage.take_blobs_for_block_number(4, &mut working_set)
+        blob_storage.take_blobs_for_slot_height(4, &mut working_set)
     );
     assert!(blob_storage
-        .take_blobs_for_block_number::<B>(4, &mut working_set)
+        .take_blobs_for_slot_height(4, &mut working_set)
         .is_empty());
 }

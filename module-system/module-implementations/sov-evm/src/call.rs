@@ -1,6 +1,5 @@
 use anyhow::Result;
-use ethers_core::types::{OtherFields, TransactionReceipt};
-use revm::primitives::{CfgEnv, U256};
+use revm::primitives::CfgEnv;
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
@@ -29,52 +28,54 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let evm_tx_recovered: EvmTransactionSignedEcRecovered = tx.clone().try_into()?;
+        let evm_tx_recovered: EvmTransactionSignedEcRecovered = tx.try_into()?;
 
         let block_env = self.block_env.get(working_set).unwrap_or_default();
         let cfg = self.cfg.get(working_set).unwrap_or_default();
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
         let hash = evm_tx_recovered.hash();
-        self.transactions
-            .set(hash.as_fixed_bytes(), &tx, working_set);
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
         let result = executor::execute_tx(evm_db, block_env, &evm_tx_recovered, cfg_env).unwrap();
 
-        let receipt = TransactionReceipt {
+        let from = evm_tx_recovered.signer();
+        let to = evm_tx_recovered.to().map(|to| to.into());
+        let transaction = reth_rpc_types::Transaction::from_recovered(evm_tx_recovered.tx);
+
+        self.pending_transactions
+            .push(&transaction, &mut working_set.accessory_state());
+
+        let receipt = reth_rpc_types::TransactionReceipt {
             transaction_hash: hash.into(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            transaction_index: 0u64.into(),
+            transaction_index: Some(reth_primitives::U256::from(0)),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
             block_hash: Default::default(),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            block_number: Some(0u64.into()),
-            from: evm_tx_recovered.signer().into(),
-            to: evm_tx_recovered.to().map(|to| to.into()),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            cumulative_gas_used: Default::default(),
+            block_number: Some(reth_primitives::U256::from(0)),
+            from,
+            to,
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
             gas_used: Default::default(),
-            contract_address: contract_address(result).map(|addr| addr.into()),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            status: Some(1u64.into()),
-            root: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            transaction_type: Some(1u64.into()),
-            effective_gas_price: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            logs_bloom: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            other: OtherFields::default(),
+            cumulative_gas_used: Default::default(),
+            contract_address: contract_address(result),
             // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
             logs: Default::default(),
+            state_root: Some(reth_primitives::U256::from(0).into()),
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
+            logs_bloom: Default::default(),
+            status_code: Some(1u64.into()),
+            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
+            effective_gas_price: Default::default(),
+            transaction_type: reth_primitives::U8::from(1),
         };
 
         self.receipts
-            .set(&receipt.transaction_hash, &receipt, working_set);
+            .set(&hash.into(), &receipt, &mut working_set.accessory_state());
 
         Ok(CallResponse::default())
     }
@@ -89,7 +90,7 @@ pub(crate) fn get_cfg_env(
     template_cfg: Option<CfgEnv>,
 ) -> CfgEnv {
     CfgEnv {
-        chain_id: U256::from(cfg.chain_id),
+        chain_id: revm::primitives::U256::from(cfg.chain_id),
         limit_contract_code_size: cfg.limit_contract_code_size,
         spec_id: get_spec_id(cfg.spec, block_env.number).into(),
         // disable_gas_refund: !cfg.gas_refunds, // option disabled for now, we could add if needed

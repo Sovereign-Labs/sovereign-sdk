@@ -1,12 +1,12 @@
+use sov_chain_state::TransitionHeight;
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
-use sov_modules_api::{Context, Spec};
-use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
+use sov_modules_api::{BlobReaderTrait, Context, DaSpec, Spec};
 use sov_state::WorkingSet;
 use tracing::info;
 
 use crate::BlobStorage;
 
-impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C> {
+impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
     type Context = C;
 
     fn get_blobs_for_this_slot<'a, I>(
@@ -17,11 +17,10 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C> {
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
     {
-        // TODO: Chain-state module: https://github.com/Sovereign-Labs/sovereign-sdk/pull/598/
-        let current_slot: u64 = self.get_current_slot_number(working_set);
+        let current_slot: TransitionHeight = self.get_current_slot_height(working_set);
         let past_deferred: Vec<Da::BlobTransaction> = current_slot
             .checked_sub(self.get_deferred_slots_count(working_set))
-            .map(|pull_from_slot| self.take_blobs_for_block_number(pull_from_slot, working_set))
+            .map(|pull_from_slot| self.take_blobs_for_slot_height(pull_from_slot, working_set))
             .unwrap_or_default();
         let preferred_sequencer = self.get_preferred_sequencer(working_set);
 
@@ -47,9 +46,6 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C> {
                 to_defer.push(blob);
             }
         }
-
-        // TODO: chain state module: https://github.com/Sovereign-Labs/sovereign-sdk/pull/598/
-        self.slot_number.set(&(current_slot + 1), working_set);
 
         if !to_defer.is_empty() {
             // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/655

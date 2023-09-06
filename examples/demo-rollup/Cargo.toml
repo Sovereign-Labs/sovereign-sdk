@@ -29,7 +29,6 @@ tokio = { workspace = true }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
 celestia = { path = "../../adapters/celestia", features = ["native"] }
-presence = { path = "../../adapters/avail" }
 demo-stf = { path = "../demo-stf", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-db = { path = "../../full-node/db/sov-db" }

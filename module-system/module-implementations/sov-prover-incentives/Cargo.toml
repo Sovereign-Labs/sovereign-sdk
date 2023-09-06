@@ -19,15 +19,15 @@ sov-prover-incentives = { version = "*", features = ["native"], path = "." }
 
 [dependencies]
 anyhow = { workspace = true }
-sov-bank = { path = "../sov-bank", version = "0.1" }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1" }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
+borsh = { workspace = true, features = ["rc"] }
+bincode = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
-borsh = { workspace = true, features = ["rc"] }
-bincode = { workspace = true }
+
+sov-bank = { path = "../sov-bank", version = "0.1" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-state = { path = "../../sov-state", version = "0.1" }
 
 
 [features]

@@ -42,6 +42,7 @@ pub fn gen_rocksdb_options(config: &RocksdbConfig, readonly: bool) -> Options {
     if !readonly {
         db_opts.create_if_missing(true);
         db_opts.create_missing_column_families(true);
+        db_opts.set_atomic_flush(true);
     }
 
     db_opts

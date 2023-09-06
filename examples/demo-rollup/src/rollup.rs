@@ -17,6 +17,7 @@ use risc0_adapter::host::Risc0Verifier;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
+use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::Zkvm;
 use sov_state::storage::Storage;
@@ -53,7 +54,10 @@ pub struct Rollup<Vm: Zkvm, Da: DaService + Clone> {
 pub async fn new_rollup_with_celestia_da(
     rollup_config_path: &str,
 ) -> Result<Rollup<Risc0Verifier, CelestiaService>, anyhow::Error> {
-    debug!("Starting demo rollup with config {}", rollup_config_path);
+    debug!(
+        "Starting demo celestia rollup with config {}",
+        rollup_config_path
+    );
     let rollup_config: RollupConfig<celestia::DaServiceConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 
@@ -102,6 +106,27 @@ pub async fn new_rollup_with_avail_da(
 
     let app = App::new(rollup_config.storage);
     let sequencer_da_address = AvailAddress::from_str(SEQUENCER_AVAIL_DA_ADDRESS)?;
+/// Creates MockDa based rollup.
+pub fn new_rollup_with_mock_da(
+    rollup_config_path: &str,
+) -> Result<Rollup<Risc0Verifier, MockDaService>, anyhow::Error> {
+    debug!("Starting mock rollup with config {}", rollup_config_path);
+
+    let rollup_config: RollupConfig<MockDaConfig> =
+        from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
+
+    new_rollup_with_mock_da_from_config(rollup_config)
+}
+
+/// Creates MockDa based rollup.
+pub fn new_rollup_with_mock_da_from_config(
+    rollup_config: RollupConfig<MockDaConfig>,
+) -> Result<Rollup<Risc0Verifier, MockDaService>, anyhow::Error> {
+    let ledger_db = initialize_ledger(&rollup_config.storage.path);
+    let sequencer_da_address = MockAddress::from([0u8; 32]);
+    let da_service = MockDaService::new(sequencer_da_address);
+
+    let app = App::new(rollup_config.storage);
     let genesis_config = get_genesis_config(sequencer_da_address);
 
     Ok(Rollup {

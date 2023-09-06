@@ -94,7 +94,7 @@ impl DB {
     }
 
     /// Open db in secondary mode. A secondary db is does not support writes, but can be dynamically caught up
-    /// to the primary instance by a manual call. See https://github.com/facebook/rocksdb/wiki/Read-only-and-Secondary-instances
+    /// to the primary instance by a manual call. See <https://github.com/facebook/rocksdb/wiki/Read-only-and-Secondary-instances>
     /// for more details.
     pub fn open_cf_as_secondary<P: AsRef<Path>>(
         opts: &rocksdb::Options,

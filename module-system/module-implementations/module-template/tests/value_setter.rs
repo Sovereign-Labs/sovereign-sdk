@@ -2,8 +2,7 @@ use module_template::{CallMessage, ExampleModule, ExampleModuleConfig, Response}
 #[cfg(feature = "native")]
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_context::ZkDefaultContext;
-use sov_modules_api::{Address, Context, Module};
-use sov_rollup_interface::stf::Event;
+use sov_modules_api::{Address, Context, Event, Module};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet, ZkStorage};
 
 #[test]

@@ -73,7 +73,7 @@ mod tests {
             [storage]
             path = "/tmp"
             [runner]
-            start_height = 1
+            start_height = 31337
             [runner.rpc_config]
             bind_host = "127.0.0.1"
             bind_port = 12345
@@ -85,7 +85,7 @@ mod tests {
             from_toml_path(config_file.path()).unwrap();
         let expected = RollupConfig {
             runner: RunnerConfig {
-                start_height: 1,
+                start_height: 31337,
                 rpc_config: RpcConfig {
                     bind_host: "127.0.0.1".to_string(),
                     bind_port: 12345,
