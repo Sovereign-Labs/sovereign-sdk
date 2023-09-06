@@ -71,7 +71,10 @@ where
 #[test]
 fn test_borsh_slice_encode_alike() {
     let codec = BorshCodec;
-    let slice = &[1, 2, 3];
+    let slice = [1, 2, 3];
     let vec = vec![1, 2, 3];
-    assert_eq!(codec.encode_like(slice), codec.encode_value(&vec));
+    assert_eq!(
+        <BorshCodec as EncodeLike<[i32], Vec<i32>>>::encode_like(&codec, &slice),
+        codec.encode_value(&vec)
+    );
 }
