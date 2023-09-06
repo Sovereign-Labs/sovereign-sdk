@@ -85,7 +85,7 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
         >,
     ) {
         #[cfg(feature = "experimental")]
-        self.evm.begin_slot_hook(working_set);
+        self.evm.begin_slot_hook(slot_data.hash(), working_set);
     }
 
     fn end_slot_hook(
