@@ -8,15 +8,15 @@ use crate::Evm;
 impl<C: sov_modules_api::Context> Evm<C> {
     pub fn begin_slot_hook(
         &self,
-        _da_root_hash: [u8; 32],
-        _working_set: &mut WorkingSet<C::Storage>,
+        da_root_hash: [u8; 32],
+        working_set: &mut WorkingSet<C::Storage>,
     ) {
-        let block_number: u64 = self.head_number.get(_working_set).unwrap();
+        let block_number: u64 = self.head_number.get(working_set).unwrap();
         let parent_block: reth_rpc_types::Block = self
             .blocks
-            .get(&block_number, &mut _working_set.accessory_state())
+            .get(&block_number, &mut working_set.accessory_state())
             .unwrap();
-        let cfg = self.cfg.get(_working_set).unwrap_or_default();
+        let cfg = self.cfg.get(working_set).unwrap_or_default();
         let new_pending_block = BlockEnv {
             number: block_number + 1,
             coinbase: cfg.coinbase,
@@ -32,7 +32,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 0u64,
             ])
             .to_le_bytes(),
-            prevrandao: Some(_da_root_hash),
+            prevrandao: Some(da_root_hash),
             basefee: {
                 let base_fee = reth_primitives::basefee::calculate_next_block_base_fee(
                     parent_block.header.gas_used.as_limbs()[0],
@@ -48,7 +48,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
             },
             gas_limit: cfg.block_gas_limit,
         };
-        self.pending_block.set(&new_pending_block, _working_set);
+        self.pending_block.set(&new_pending_block, working_set);
     }
 
     pub fn end_slot_hook(&self, _root_hash: [u8; 32], working_set: &mut WorkingSet<C::Storage>) {

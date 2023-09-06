@@ -61,6 +61,7 @@ mod experimental {
         pub coinbase: EthAddress,
         pub starting_base_fee: u64,
         pub block_gas_limit: u64,
+        pub genesis_timestamp: u64,
         pub block_timestamp_delta: u64,
     }
 
@@ -75,6 +76,7 @@ mod experimental {
                 starting_base_fee: reth_primitives::constants::MIN_PROTOCOL_BASE_FEE,
                 block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
                 block_timestamp_delta: reth_primitives::constants::SLOT_DURATION.as_secs(),
+                genesis_timestamp: 0,
             }
         }
     }
