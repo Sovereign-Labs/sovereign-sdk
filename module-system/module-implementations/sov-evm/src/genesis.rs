@@ -55,7 +55,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         self.cfg.set(&chain_cfg, working_set);
 
-        self.head_number.set(&0u64, working_set);
+        let genesis_block_number = 0u64;
+        self.head_number.set(&genesis_block_number, working_set);
 
         let header = reth_primitives::Header {
             parent_hash: KECCAK_EMPTY,
@@ -80,7 +81,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let header = header.seal_slow();
 
         self.blocks.set(
-            &0u64,
+            &genesis_block_number,
             &Block {
                 header: Header::from_primitive_with_hash(header),
                 total_difficulty: None,
