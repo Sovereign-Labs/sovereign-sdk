@@ -2,6 +2,9 @@ const {
     Contract, ContractFactory, utils, constants,
 } = require("ethers")
 
+const fs = require('fs');
+const { promisify } = require('util');
+
 const WETH9 = require("../WETH9.json")
 
 const factoryArtifact = require('@uniswap/v2-core/build/UniswapV2Factory.json')
@@ -70,12 +73,33 @@ async function main() {
     console.log('reservesA', reserves)
 
 
-    console.log('USDT_ADDRESS=', `'${usdt.address}'`)
-    console.log('USDC_ADDRESS=', `'${usdc.address}'`)
-    console.log('WETH_ADDRESS=', `'${weth.address}'`)
-    console.log('FACTORY_ADDRESS=', `'${factory.address}'`)
-    console.log('PAIR_ADDRESS=', `'${pairAddress}'`)
-    console.log('ROUTER_ADDRESS=', `'${router.address}'`)
+    let addresses = [
+      `USDT_ADDRESS=${usdt.address}`,
+      `USDC_ADDRESS=${usdc.address}`,
+      `WETH_ADDRESS=${weth.address}`,
+      `FACTORY_ADDRESS=${factory.address}`,
+      `PAIR_ADDRESS=${pairAddress}`,
+      `ROUTER_ADDRESS=${router.address}`,
+    ]
+
+
+    
+    console.log('addresses:', addresses)
+
+    const data = addresses.join('\n')
+    const writeFile = promisify(fs.writeFile);
+    const filePath = '.env';
+    
+    
+    return writeFile(filePath, data)
+        .then(() => {
+          console.log('Addresses recorded.');
+        })
+        .catch((error) => {
+          console.error('Error logging addresses:', error);
+          throw error;
+        });
+    
 }
 
 /*
