@@ -12,7 +12,7 @@ use sov_modules_api::{
     BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, SlotData, Spec, Zkvm,
 };
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
-use sov_state::{StateCheckpoint, Storage, WorkingSet};
+use sov_state::{StateCheckpoint, Storage};
 use tracing::info;
 pub use tx_verifier::RawTx;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
@@ -94,17 +94,23 @@ where
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn end_slot(&mut self) -> (jmt::RootHash, <<C as Spec>::Storage as Storage>::Witness) {
-        let (cache_log, witness) = self.checkpoint.take().unwrap().freeze();
+        let mut checkpoint = self.checkpoint.take().unwrap();
+        let (cache_log, witness) = checkpoint.freeze();
+
+        let mut working_set = checkpoint.to_revertable();
+
         let (root_hash, authenticated_node_batch) = self
             .current_storage
             .compute_state_update(cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
 
-        let mut working_set = WorkingSet::new(self.current_storage.clone());
         self.runtime.end_slot_hook(root_hash, &mut working_set);
 
+        let accessory_log = working_set.checkpoint().freeze_non_provable();
+
         self.current_storage
-            .commit(&authenticated_node_batch, &Default::default());
+            .commit(&authenticated_node_batch, &accessory_log);
+
         (jmt::RootHash(root_hash), witness)
     }
 }
