@@ -95,6 +95,9 @@ pub struct EvmChainCfg {
 
     /// Base fee for genesis block
     pub starting_base_fee: Bytes32,
+
+    /// Delta to add to parent block timestamp
+    pub block_timestamp_delta: u64,
 }
 
 impl Default for EvmChainCfg {
@@ -106,6 +109,7 @@ impl Default for EvmChainCfg {
             coinbase: [0u8; 20],
             block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
             starting_base_fee: reth_primitives::constants::MIN_PROTOCOL_BASE_FEE_U256.to_le_bytes(),
+            block_timestamp_delta: 1,
         }
     }
 }

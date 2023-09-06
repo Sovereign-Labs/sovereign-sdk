@@ -11,21 +11,30 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _da_root_hash: [u8; 32],
         _working_set: &mut WorkingSet<C::Storage>,
     ) {
-        let block_number = self.head_number.get(_working_set).unwrap_or_default();
+        let block_number: u64 = self.head_number.get(_working_set).unwrap();
+        let parent_block: reth_rpc_types::Block = self
+            .blocks
+            .get(&block_number, &mut _working_set.accessory_state())
+            .unwrap();
         let cfg = self.cfg.get(_working_set).unwrap_or_default();
         let new_pending_block = BlockEnv {
             number: block_number + 1,
             coinbase: cfg.coinbase,
-            timestamp: Default::default(), // TODO should use DA block timestamp or have some delta added every block
+
+            // TODO: simplify this conversion by doing something with Bytes32
+            // TODO simplify conversion fro U256 to u64
+            // Reth rpc types keep stuff as U256, even when actually only u64 makes sense - block_number, timespamp
+            timestamp: U256::from_limbs([
+                parent_block.header.timestamp.as_limbs()[0] + cfg.block_timestamp_delta,
+                0u64,
+                0u64,
+                0u64,
+            ])
+            .to_le_bytes(),
             prevrandao: Some(_da_root_hash),
             basefee: match block_number {
                 0 => cfg.starting_base_fee,
                 _ => {
-                    let parent_block: reth_rpc_types::Block = self
-                        .blocks
-                        .get(&block_number, &mut _working_set.accessory_state())
-                        .unwrap();
-
                     let base_fee = reth_primitives::basefee::calculate_next_block_base_fee(
                         parent_block.header.gas_used.as_limbs()[0],
                         cfg.block_gas_limit,
@@ -38,7 +47,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
                             .as_limbs()[0],
                     );
 
-                    // TODO: simplify this conversion by doing something with Bytes32
                     U256::from_limbs([base_fee, 0u64, 0u64, 0u64]).to_le_bytes()
                 }
             },

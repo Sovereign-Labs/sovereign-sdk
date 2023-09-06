@@ -61,6 +61,7 @@ mod experimental {
         pub coinbase: EthAddress,
         pub starting_base_fee: u64,
         pub block_gas_limit: u64,
+        pub block_timestamp_delta: u64,
     }
 
     impl Default for EvmConfig {
@@ -73,6 +74,7 @@ mod experimental {
                 coinbase: [0u8; 20],
                 starting_base_fee: reth_primitives::constants::MIN_PROTOCOL_BASE_FEE,
                 block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
+                block_timestamp_delta: reth_primitives::constants::SLOT_DURATION.as_secs(),
             }
         }
     }

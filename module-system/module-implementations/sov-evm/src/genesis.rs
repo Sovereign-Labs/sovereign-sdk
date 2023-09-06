@@ -50,6 +50,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
             block_gas_limit: config.block_gas_limit,
             starting_base_fee: U256::from_limbs([config.starting_base_fee, 0u64, 0u64, 0u64])
                 .to_le_bytes(),
+            block_timestamp_delta: config.block_timestamp_delta,
         };
 
         self.cfg.set(&chain_cfg, working_set);
