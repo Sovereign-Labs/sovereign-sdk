@@ -28,30 +28,30 @@ async function main() {
     await usdc.connect(owner).mint(trader.address, mintAmount)
 
 
-    const FactoryA = new ContractFactory(factoryArtifact.abi, factoryArtifact.bytecode, owner);
-    const factoryA = await FactoryA.deploy(owner.address)
+    const Factory = new ContractFactory(factoryArtifact.abi, factoryArtifact.bytecode, owner);
+    const factory = await Factory.deploy(owner.address)
 
-    const txA1 = await factoryA.createPair(usdt.address, usdc.address);
-    await txA1.wait()
+    const tx = await factory.createPair(usdt.address, usdc.address);
+    await tx.wait()
 
-    const pairAddressA = await factoryA.getPair(usdt.address, usdc.address)
-    const pairA = new Contract(pairAddressA, pairArtifact.abi, owner)
+    const pairAddress = await factory.getPair(usdt.address, usdc.address)
+    const pair = new Contract(pairAddress, pairArtifact.abi, owner)
 
-    const RouterA = new ContractFactory(routerArtifact.abi, routerArtifact.bytecode, owner);
-    const routerA = await RouterA.deploy(factoryA.address, weth.address)
+    const Router = new ContractFactory(routerArtifact.abi, routerArtifact.bytecode, owner);
+    const router = await Router.deploy(factory.address, weth.address)
     
 
-    const approvalUsdtOwnerA = await usdt.connect(owner).approve(routerA.address, constants.MaxUint256);
+    const approvalUsdtOwnerA = await usdt.connect(owner).approve(router.address, constants.MaxUint256);
     await approvalUsdtOwnerA.wait();
-    const approvalUsdcOwnerA = await usdc.connect(owner).approve(routerA.address, constants.MaxUint256);
+    const approvalUsdcOwnerA = await usdc.connect(owner).approve(router.address, constants.MaxUint256);
     await approvalUsdcOwnerA.wait();
-    const approvalUsdtTraderA = await usdt.connect(trader).approve(routerA.address, constants.MaxUint256);
+    const approvalUsdtTraderA = await usdt.connect(trader).approve(router.address, constants.MaxUint256);
     await approvalUsdtTraderA.wait();
-    const approvalUsdcTraderA = await usdc.connect(trader).approve(routerA.address, constants.MaxUint256);
+    const approvalUsdcTraderA = await usdc.connect(trader).approve(router.address, constants.MaxUint256);
     await approvalUsdcTraderA.wait();
     
 
-    const addLiquidityTxA = await routerA.connect(owner).addLiquidity(
+    const addLiquidityTx = await router.connect(owner).addLiquidity(
         usdt.address,
         usdc.address,
         utils.parseEther('100'),
@@ -62,20 +62,20 @@ async function main() {
         Math.floor(Date.now() / 1000 + (10 * 60)),
         { gasLimit: utils.hexlify(1_000_000)}
     );
-    addLiquidityTxA.wait();
+    addLiquidityTx.wait();
 
-    let reservesA
+    let reserves
 
-    reservesA = await pairA.getReserves()
-    console.log('reservesA', reservesA)
+    reserves = await pair.getReserves()
+    console.log('reservesA', reserves)
 
 
     console.log('USDT_ADDRESS=', `'${usdt.address}'`)
     console.log('USDC_ADDRESS=', `'${usdc.address}'`)
     console.log('WETH_ADDRESS=', `'${weth.address}'`)
-    console.log('FACTORY_A_ADDRESS=', `'${factoryA.address}'`)
-    console.log('PAIR_A_ADDRESS=', `'${pairAddressA}'`)
-    console.log('ROUTER_A_ADDRESS=', `'${routerA.address}'`)
+    console.log('FACTORY_ADDRESS=', `'${factory.address}'`)
+    console.log('PAIR_ADDRESS=', `'${pairAddress}'`)
+    console.log('ROUTER_ADDRESS=', `'${router.address}'`)
 }
 
 /*
