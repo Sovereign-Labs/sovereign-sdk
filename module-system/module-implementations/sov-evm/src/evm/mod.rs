@@ -86,6 +86,15 @@ pub struct EvmChainCfg {
 
     /// List of EVM hardforks by block number
     pub spec: Vec<(u64, SpecIdWrapper)>,
+
+    /// Coinbase where all the fees go
+    pub coinbase: EthAddress,
+
+    /// Gas limit for single block
+    pub block_gas_limit: u64,
+
+    /// Base fee for genesis block
+    pub starting_base_fee: Bytes32,
 }
 
 impl Default for EvmChainCfg {
@@ -94,6 +103,9 @@ impl Default for EvmChainCfg {
             chain_id: 1,
             limit_contract_code_size: None,
             spec: vec![(0, SpecIdWrapper::from(SpecId::LATEST))],
+            coinbase: [0u8; 20],
+            block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
+            starting_base_fee: reth_primitives::constants::MIN_PROTOCOL_BASE_FEE_U256.to_le_bytes(),
         }
     }
 }

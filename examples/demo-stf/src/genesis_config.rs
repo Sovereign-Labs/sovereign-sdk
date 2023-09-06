@@ -83,6 +83,7 @@ pub fn create_demo_genesis_config<C: Context, Da: DaSpec>(
             chain_id: 1,
             limit_contract_code_size: None,
             spec: vec![(0, SpecId::LATEST)].into_iter().collect(),
+            ..Default::default()
         },
     )
 }

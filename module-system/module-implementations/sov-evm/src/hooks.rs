@@ -1,6 +1,8 @@
+use reth_primitives::U256;
 use reth_rpc_types::Transaction;
 use sov_state::WorkingSet;
 
+use crate::evm::transaction::BlockEnv;
 use crate::Evm;
 
 impl<C: sov_modules_api::Context> Evm<C> {
@@ -9,6 +11,40 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _da_root_hash: [u8; 32],
         _working_set: &mut WorkingSet<C::Storage>,
     ) {
+        let block_number = self.head_number.get(_working_set).unwrap_or_default();
+        let cfg = self.cfg.get(_working_set).unwrap_or_default();
+        let new_pending_block = BlockEnv {
+            number: block_number + 1,
+            coinbase: cfg.coinbase,
+            timestamp: Default::default(), // TODO should use DA block timestamp or have some delta added every block
+            prevrandao: Some(_da_root_hash),
+            basefee: match block_number {
+                0 => cfg.starting_base_fee,
+                _ => {
+                    let parent_block: reth_rpc_types::Block = self
+                        .blocks
+                        .get(&block_number, &mut _working_set.accessory_state())
+                        .unwrap();
+
+                    let base_fee = reth_primitives::basefee::calculate_next_block_base_fee(
+                        parent_block.header.gas_used.as_limbs()[0],
+                        cfg.block_gas_limit,
+                        parent_block
+                            .header
+                            .base_fee_per_gas
+                            .unwrap_or_else(|| {
+                                reth_primitives::constants::MIN_PROTOCOL_BASE_FEE_U256
+                            })
+                            .as_limbs()[0],
+                    );
+
+                    // TODO: simplify this conversion by doing something with Bytes32
+                    U256::from_limbs([base_fee, 0u64, 0u64, 0u64]).to_le_bytes()
+                }
+            },
+            gas_limit: cfg.block_gas_limit,
+        };
+        self.pending_block.set(&new_pending_block, _working_set);
     }
 
     pub fn end_slot_hook(&self, _root_hash: [u8; 32], working_set: &mut WorkingSet<C::Storage>) {

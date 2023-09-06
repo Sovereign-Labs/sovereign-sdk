@@ -13,11 +13,11 @@ fn cfg_test() {
     };
 
     let cfg = EvmChainCfg {
-        chain_id: 1,
         limit_contract_code_size: Some(100),
         spec: vec![(0, SpecIdWrapper::new(SpecId::SHANGHAI))]
             .into_iter()
             .collect(),
+        ..Default::default()
     };
 
     let template_cfg = CfgEnv {

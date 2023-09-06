@@ -1,4 +1,5 @@
 use anyhow::Result;
+use reth_primitives::U256;
 use revm::primitives::SpecId;
 use sov_state::WorkingSet;
 
@@ -45,6 +46,10 @@ impl<C: sov_modules_api::Context> Evm<C> {
             chain_id: config.chain_id,
             limit_contract_code_size: config.limit_contract_code_size,
             spec,
+            coinbase: config.coinbase,
+            block_gas_limit: config.block_gas_limit,
+            starting_base_fee: U256::from_limbs([config.starting_base_fee, 0u64, 0u64, 0u64])
+                .to_le_bytes(),
         };
 
         self.cfg.set(&chain_cfg, working_set);

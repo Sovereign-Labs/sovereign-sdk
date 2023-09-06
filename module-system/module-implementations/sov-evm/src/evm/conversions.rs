@@ -49,7 +49,7 @@ impl From<BlockEnv> for ReVmBlockEnv {
             difficulty: U256::ZERO,
             prevrandao: block_env.prevrandao.map(|r| B256::from_slice(&r)),
             basefee: U256::from_le_bytes(block_env.basefee),
-            gas_limit: U256::from_le_bytes(block_env.gas_limit),
+            gas_limit: U256::from(block_env.gas_limit),
         }
     }
 }

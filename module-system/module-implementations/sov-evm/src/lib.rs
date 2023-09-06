@@ -58,6 +58,9 @@ mod experimental {
         pub chain_id: u64,
         pub limit_contract_code_size: Option<usize>,
         pub spec: HashMap<u64, SpecId>,
+        pub coinbase: EthAddress,
+        pub starting_base_fee: u64,
+        pub block_gas_limit: u64,
     }
 
     impl Default for EvmConfig {
@@ -67,6 +70,9 @@ mod experimental {
                 chain_id: 1,
                 limit_contract_code_size: None,
                 spec: vec![(0, SpecId::LATEST)].into_iter().collect(),
+                coinbase: [0u8; 20],
+                starting_base_fee: reth_primitives::constants::MIN_PROTOCOL_BASE_FEE,
+                block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
             }
         }
     }
@@ -85,7 +91,7 @@ mod experimental {
         pub(crate) cfg: sov_state::StateValue<EvmChainCfg>,
 
         #[state]
-        pub(crate) block_env: sov_state::StateValue<BlockEnv>,
+        pub(crate) pending_block: sov_state::StateValue<BlockEnv>,
 
         #[state]
         pub(crate) head_number: sov_state::StateValue<u64>,
@@ -94,9 +100,6 @@ mod experimental {
         // binary serialization formats.
         // 1. Implement custom types for Block, Transaction etc.. with borsh derived.
         // 2. Remove JsonCodec.
-        #[state]
-        pub(crate) current_block: sov_state::StateValue<reth_rpc_types::Block, JsonCodec>,
-
         #[state]
         pub(crate) blocks: sov_state::AccessoryStateMap<u64, reth_rpc_types::Block, JsonCodec>,
 

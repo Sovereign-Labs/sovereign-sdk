@@ -30,7 +30,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     ) -> Result<CallResponse> {
         let evm_tx_recovered: EvmTransactionSignedEcRecovered = tx.try_into()?;
 
-        let block_env = self.block_env.get(working_set).unwrap_or_default();
+        let block_env = self.pending_block.get(working_set).unwrap_or_default();
         let cfg = self.cfg.get(working_set).unwrap_or_default();
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
