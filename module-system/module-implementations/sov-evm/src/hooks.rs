@@ -33,21 +33,18 @@ impl<C: sov_modules_api::Context> Evm<C> {
             ])
             .to_le_bytes(),
             prevrandao: Some(_da_root_hash),
-            basefee: match block_number {
-                0 => cfg.starting_base_fee,
-                _ => {
-                    let base_fee = reth_primitives::basefee::calculate_next_block_base_fee(
-                        parent_block.header.gas_used.as_limbs()[0],
-                        cfg.block_gas_limit,
-                        parent_block
-                            .header
-                            .base_fee_per_gas
-                            .unwrap_or(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE_U256)
-                            .as_limbs()[0],
-                    );
+            basefee: {
+                let base_fee = reth_primitives::basefee::calculate_next_block_base_fee(
+                    parent_block.header.gas_used.as_limbs()[0],
+                    cfg.block_gas_limit,
+                    parent_block
+                        .header
+                        .base_fee_per_gas
+                        .unwrap_or(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE_U256)
+                        .as_limbs()[0],
+                );
 
-                    U256::from_limbs([base_fee, 0u64, 0u64, 0u64]).to_le_bytes()
-                }
+                U256::from_limbs([base_fee, 0u64, 0u64, 0u64]).to_le_bytes()
             },
             gas_limit: cfg.block_gas_limit,
         };
