@@ -1,9 +1,8 @@
-use std::borrow::Borrow;
 use std::hash::Hash;
 use std::marker::PhantomData;
 
 use super::StateMapError;
-use crate::codec::{BorshCodec, StateValueCodec};
+use crate::codec::{BorshCodec, EncodeLike, StateValueCodec};
 use crate::storage::StorageKey;
 use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
 
@@ -57,8 +56,8 @@ where
     /// map’s key type.
     pub fn set<Q, S: Storage>(&self, key: &Q, value: &V, working_set: &mut AccessoryWorkingSet<S>)
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
+        VC: EncodeLike<Q, K>,
+        Q: ?Sized,
     {
         working_set.set_value(self.prefix(), key, value, &self.value_codec)
     }
@@ -102,8 +101,8 @@ where
     /// ```
     pub fn get<Q, S: Storage>(&self, key: &Q, working_set: &mut AccessoryWorkingSet<S>) -> Option<V>
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
+        VC: EncodeLike<Q, K>,
+        Q: ?Sized,
     {
         working_set.get_value(self.prefix(), key, &self.value_codec)
     }
@@ -116,11 +115,14 @@ where
         working_set: &mut AccessoryWorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
+        VC: EncodeLike<Q, K>,
+        Q: ?Sized,
     {
         self.get(key, working_set).ok_or_else(|| {
-            StateMapError::MissingValue(self.prefix().clone(), StorageKey::new(self.prefix(), key))
+            StateMapError::MissingValue(
+                self.prefix().clone(),
+                StorageKey::new(self.prefix(), key, &self.value_codec),
+            )
         })
     }
 
@@ -132,8 +134,8 @@ where
         working_set: &mut AccessoryWorkingSet<S>,
     ) -> Option<V>
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
+        VC: EncodeLike<Q, K>,
+        Q: ?Sized,
     {
         working_set.remove_value(self.prefix(), key, &self.value_codec)
     }
@@ -148,11 +150,14 @@ where
         working_set: &mut AccessoryWorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
+        VC: EncodeLike<Q, K>,
+        Q: ?Sized,
     {
         self.remove(key, working_set).ok_or_else(|| {
-            StateMapError::MissingValue(self.prefix().clone(), StorageKey::new(self.prefix(), key))
+            StateMapError::MissingValue(
+                self.prefix().clone(),
+                StorageKey::new(self.prefix(), key, &self.value_codec),
+            )
         })
     }
 
@@ -162,10 +167,10 @@ where
     /// return the value beforing deletion.
     pub fn delete<Q, S: Storage>(&self, key: &Q, working_set: &mut AccessoryWorkingSet<S>)
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
+        VC: EncodeLike<Q, K>,
+        Q: ?Sized,
     {
-        working_set.delete_value(self.prefix(), key);
+        working_set.delete_value(self.prefix(), key, &self.value_codec);
     }
 }
 

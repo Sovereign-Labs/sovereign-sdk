@@ -5,6 +5,7 @@ mod borsh_codec;
 mod json_codec;
 
 pub use bcs_codec::BcsCodec;
+use borsh::BorshSerialize;
 pub use borsh_codec::BorshCodec;
 pub use json_codec::JsonCodec;
 
@@ -41,4 +42,36 @@ pub trait StateValueCodec<V> {
             })
             .unwrap()
     }
+}
+
+pub trait EncodeLike<Ref: ?Sized, Target> {
+    fn encode_like(&self, borrowed: &Ref) -> Vec<u8>;
+}
+
+// All items can be encoded like themselves
+impl<C, T> EncodeLike<T, T> for C
+where
+    C: StateValueCodec<T>,
+{
+    fn encode_like(&self, borrowed: &T) -> Vec<u8> {
+        self.encode_value(borrowed)
+    }
+}
+
+// In borsh, a slice is encoded the same way as a vector
+impl<T> EncodeLike<[T], Vec<T>> for BorshCodec
+where
+    T: BorshSerialize,
+{
+    fn encode_like(&self, borrowed: &[T]) -> Vec<u8> {
+        borrowed.try_to_vec().unwrap()
+    }
+}
+
+#[test]
+fn test_borsh_slice_encode_alike() {
+    let codec = BorshCodec;
+    let slice = &[1, 2, 3];
+    let vec = vec![1, 2, 3];
+    assert_eq!(codec.encode_like(slice), codec.encode_value(&vec));
 }

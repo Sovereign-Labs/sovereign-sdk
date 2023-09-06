@@ -1,11 +1,10 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
-use std::hash::Hash;
 
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 use sov_rollup_interface::stf::Event;
 
-use crate::codec::StateValueCodec;
+use crate::codec::{EncodeLike, StateValueCodec};
 use crate::internal_cache::{OrderedReadsAndWrites, StorageInternalCache};
 use crate::storage::{StorageKey, StorageValue};
 use crate::{Prefix, Storage};
@@ -310,12 +309,21 @@ pub(crate) trait StateReaderAndWriter {
 
     fn delete(&mut self, key: &StorageKey);
 
-    fn set_value<K, V, VC>(&mut self, prefix: &Prefix, storage_key: &K, value: &V, codec: &VC)
+    fn set_value<Q, K, V, VC>(&mut self, prefix: &Prefix, storage_key: &Q, value: &V, codec: &VC)
     where
-        K: Hash + Eq + ?Sized,
+        Q: ?Sized,
+        VC: EncodeLike<Q, K> + StateValueCodec<V>,
+    {
+        let storage_key = StorageKey::new(prefix, storage_key, codec);
+        let storage_value = StorageValue::new(value, codec);
+        self.set(&storage_key, storage_value);
+    }
+
+    fn set_singleton<V, VC>(&mut self, prefix: &Prefix, value: &V, codec: &VC)
+    where
         VC: StateValueCodec<V>,
     {
-        let storage_key = StorageKey::new(prefix, storage_key);
+        let storage_key = StorageKey::singleton(prefix);
         let storage_value = StorageValue::new(value, codec);
         self.set(&storage_key, storage_value);
     }
@@ -329,31 +337,60 @@ pub(crate) trait StateReaderAndWriter {
         Some(codec.decode_value_unwrap(storage_value.value()))
     }
 
-    fn get_value<K, V, VC>(&mut self, prefix: &Prefix, storage_key: &K, codec: &VC) -> Option<V>
+    fn get_value<Q, K, V, VC>(&mut self, prefix: &Prefix, storage_key: &Q, codec: &VC) -> Option<V>
     where
-        K: Hash + Eq + ?Sized,
-        VC: StateValueCodec<V>,
+        Q: ?Sized,
+        VC: EncodeLike<Q, K> + StateValueCodec<V>,
     {
-        let storage_key = StorageKey::new(prefix, storage_key);
+        let storage_key = StorageKey::new(prefix, storage_key, codec);
         self.get_decoded(&storage_key, codec)
     }
 
-    fn remove_value<K, V, VC>(&mut self, prefix: &Prefix, storage_key: &K, codec: &VC) -> Option<V>
+    fn get_singleton<V, VC>(&mut self, prefix: &Prefix, codec: &VC) -> Option<V>
     where
-        K: Hash + Eq + ?Sized,
         VC: StateValueCodec<V>,
     {
-        let storage_key = StorageKey::new(prefix, storage_key);
+        let storage_key = StorageKey::singleton(prefix);
+        self.get_decoded(&storage_key, codec)
+    }
+
+    fn remove_value<Q, K, V, VC>(
+        &mut self,
+        prefix: &Prefix,
+        storage_key: &Q,
+        codec: &VC,
+    ) -> Option<V>
+    where
+        Q: ?Sized,
+        VC: EncodeLike<Q, K> + StateValueCodec<V>,
+    {
+        let storage_key = StorageKey::new(prefix, storage_key, codec);
         let storage_value = self.get_decoded(&storage_key, codec)?;
         self.delete(&storage_key);
         Some(storage_value)
     }
 
-    fn delete_value<K>(&mut self, prefix: &Prefix, storage_key: &K)
+    fn remove_singleton<V, VC>(&mut self, prefix: &Prefix, codec: &VC) -> Option<V>
     where
-        K: Hash + Eq + ?Sized,
+        VC: StateValueCodec<V>,
     {
-        let storage_key = StorageKey::new(prefix, storage_key);
+        let storage_key = StorageKey::singleton(prefix);
+        let storage_value = self.get_decoded(&storage_key, codec)?;
+        self.delete(&storage_key);
+        Some(storage_value)
+    }
+
+    fn delete_value<Q, K, VC>(&mut self, prefix: &Prefix, storage_key: &Q, codec: &VC)
+    where
+        Q: ?Sized,
+        VC: EncodeLike<Q, K>,
+    {
+        let storage_key = StorageKey::new(prefix, storage_key, codec);
+        self.delete(&storage_key);
+    }
+
+    fn delete_singleton(&mut self, prefix: &Prefix) {
+        let storage_key = StorageKey::singleton(prefix);
         self.delete(&storage_key);
     }
 }

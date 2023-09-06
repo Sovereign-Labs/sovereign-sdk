@@ -454,6 +454,7 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-blob-storage",
+ "sov-chain-state",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-rollup-interface",
@@ -2021,12 +2022,21 @@ dependencies = [
  "bincode",
  "borsh",
  "hex",
+ "sov-chain-state",
  "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
  "tracing",
+]
+
+[[package]]
+name = "sov-chain-state"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "sov-modules-api",
+ "sov-state",
 ]
 
 [[package]]
@@ -2139,7 +2149,6 @@ dependencies = [
  "risc0-zkvm-platform",
  "sov-bank",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
  "zk-cycle-macros",
  "zk-cycle-utils",
@@ -2157,6 +2166,7 @@ dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
+ "serde_json",
  "sha2 0.10.6",
  "sov-first-read-last-write-cache",
  "sov-rollup-interface",
@@ -2171,7 +2181,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
  "thiserror",
 ]

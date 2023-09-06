@@ -801,6 +801,7 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-blob-storage",
+ "sov-chain-state",
  "sov-cli",
  "sov-modules-api",
  "sov-modules-stf-template",
@@ -3671,12 +3672,24 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "sov-chain-state",
  "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
  "tracing",
+]
+
+[[package]]
+name = "sov-chain-state"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "jsonrpsee 0.18.2",
+ "serde",
+ "serde_json",
+ "sov-modules-api",
+ "sov-state",
 ]
 
 [[package]]
@@ -3767,6 +3780,7 @@ dependencies = [
  "risc0-adapter",
  "serde",
  "serde_json",
+ "sov-cli",
  "sov-db",
  "sov-modules-api",
  "sov-modules-stf-template",
@@ -3893,7 +3907,6 @@ dependencies = [
  "serde_json",
  "sov-bank",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
 ]
 
@@ -3907,6 +3920,7 @@ dependencies = [
  "hex",
  "jmt",
  "serde",
+ "serde_json",
  "sha2 0.10.7",
  "sov-db",
  "sov-first-read-last-write-cache",
@@ -3948,7 +3962,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
  "thiserror",
 ]

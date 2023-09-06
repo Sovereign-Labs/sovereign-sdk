@@ -30,7 +30,7 @@ where
 
 impl<V, VC> AccessoryStateVec<V, VC>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize>,
 {
     /// Creates a new [`AccessoryStateVec`] with the given prefix and codec.
     pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
@@ -187,7 +187,7 @@ where
 
 impl<'a, 'ws, V, VC, S> Iterator for AccessoryStateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize>,
     S: Storage,
 {
     type Item = V;
@@ -204,7 +204,7 @@ where
 
 impl<'a, 'ws, V, VC, S> ExactSizeIterator for AccessoryStateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize>,
     S: Storage,
 {
     fn len(&self) -> usize {
@@ -214,7 +214,7 @@ where
 
 impl<'a, 'ws, V, VC, S> FusedIterator for AccessoryStateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize>,
     S: Storage,
 {
 }

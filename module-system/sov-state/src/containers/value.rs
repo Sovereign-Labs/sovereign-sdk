@@ -51,12 +51,12 @@ where
 {
     /// Sets a value in the StateValue.
     pub fn set<S: Storage>(&self, value: &V, working_set: &mut WorkingSet<S>) {
-        working_set.set_value(self.prefix(), &SingletonKey, value, &self.codec)
+        working_set.set_singleton(self.prefix(), value, &self.codec)
     }
 
     /// Gets a value from the StateValue or None if the value is absent.
     pub fn get<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
-        working_set.get_value(self.prefix(), &SingletonKey, &self.codec)
+        working_set.get_singleton(self.prefix(), &self.codec)
     }
 
     /// Gets a value from the StateValue or Error if the value is absent.
@@ -67,7 +67,7 @@ where
 
     /// Removes a value from the StateValue, returning the value (or None if the key is absent).
     pub fn remove<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
-        working_set.remove_value(self.prefix(), &SingletonKey, &self.codec)
+        working_set.remove_singleton(self.prefix(), &self.codec)
     }
 
     /// Removes a value and from the StateValue, returning the value (or Error if the key is absent).
@@ -78,10 +78,6 @@ where
 
     /// Deletes a value from the StateValue.
     pub fn delete<S: Storage>(&self, working_set: &mut WorkingSet<S>) {
-        working_set.delete_value(self.prefix(), &SingletonKey);
+        working_set.delete_singleton(self.prefix());
     }
 }
-
-// SingletonKey is very similar to the unit type `()` i.e. it has only one value.
-#[derive(Debug, PartialEq, Eq, Hash)]
-struct SingletonKey;

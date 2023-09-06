@@ -39,7 +39,7 @@ where
 
 impl<V, VC> StateVec<V, VC>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize>,
 {
     /// Creates a new [`StateVec`] with the given prefix and codec.
     pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
@@ -192,7 +192,7 @@ where
 
 impl<'a, 'ws, V, VC, S> Iterator for StateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize>,
     S: Storage,
 {
     type Item = V;
@@ -209,7 +209,7 @@ where
 
 impl<'a, 'ws, V, VC, S> ExactSizeIterator for StateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize>,
     S: Storage,
 {
     fn len(&self) -> usize {
@@ -219,7 +219,7 @@ where
 
 impl<'a, 'ws, V, VC, S> FusedIterator for StateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize>,
     S: Storage,
 {
 }
@@ -294,7 +294,7 @@ mod test {
         ws: &mut WorkingSet<S>,
     ) where
         S: Storage,
-        BorshCodec: StateValueCodec<T> + StateValueCodec<usize>,
+        BorshCodec: StateValueCodec<T>,
         T: Eq + Debug,
     {
         match action {
