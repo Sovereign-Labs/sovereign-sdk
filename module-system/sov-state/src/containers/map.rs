@@ -78,9 +78,8 @@ where
     ///
     /// # Examples
     ///
-    /// The key may be any borrowed form of the map’s key type. Note that
-    /// [`Hash`] and [`Eq`] on the borrowed form must match those for the key
-    /// type.
+    /// The key may be any item that implements [`EncodeLike`] the map's key type
+    /// using your chosen codec.
     ///
     /// ```
     /// use sov_state::{StateMap, Storage, WorkingSet};
@@ -95,7 +94,7 @@ where
     /// }
     /// ```
     ///
-    /// If the map's key type does not implement [`Borrow`] for your desired
+    /// If the map's key type does not implement [`EncodeLike`] for your desired
     /// target type, you'll have to convert the key to something else. An
     /// example of this would be "slicing" an array to use in [`Vec`]-keyed
     /// maps:
