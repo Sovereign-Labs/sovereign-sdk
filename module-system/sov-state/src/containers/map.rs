@@ -186,7 +186,7 @@ impl<'a, K, V, VC> StateMap<K, V, VC>
 where
     K: arbitrary::Arbitrary<'a> + Hash + Eq,
     V: arbitrary::Arbitrary<'a> + Hash + Eq,
-    VC: StateValueCodec<V> + Default,
+    VC: StateValueCodec<V> + StateValueCodec<K> + Default,
 {
     pub fn arbitrary_workset<S>(
         u: &mut arbitrary::Unstructured<'a>,
