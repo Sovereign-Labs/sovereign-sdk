@@ -6,7 +6,7 @@
 
 ### How to execute the demo:
 1. Install `anvil` see: https://github.com/foundry-rs/foundry
-2. Run `npm install` inside unioswap directory.
+2. Run `npm install` inside uniswap directory.
 3. Start `anvil` in another terminal.
 4. Deploy `uniswap-v2` contracts and add liquidity with:
 `npx hardhat run --network localhost scripts/01_deploy.js`
