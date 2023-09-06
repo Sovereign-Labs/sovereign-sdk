@@ -4,6 +4,7 @@ CONTAINER_NAME=avail-light
 IMAGE_NAME=avail-light
 TEST_PRIVATE_KEY_PATH=../test-data/keys/minter_private_key.json
 SOV_CLI_REL_PATH=../../target/debug/sov-cli
+# TODO: create-new-app-key should update APP_ID.
 APP_ID=7
 
 ifndef SERIALIZED_BLOB_PATH
@@ -19,19 +20,11 @@ SEED_PHRASE := $(shell cat seed-phrase.json | grep -o '"secretPhrase": *"[^"]*"'
 endif
 
 key-exists: 
-	@test -s seed-phrase.json || make create-new-key && make update-da-address
-	@make update-da-address
+	@test -s seed-phrase.json || echo "Error: Call make create-new-key and replace const SEQUENCER_AVAIL_DA_ADDRESS in const-rollup-config with publicKey from the created seed-phrase.json"
 
 create-new-key: check-container-running
 	@echo "Creating new key..."
 	@docker run -it --pull=always docker.io/parity/subkey:latest generate --output-type json > seed-phrase.json
-
-update-da-address: 
-ifeq ($(shell uname -s),Darwin)
-	@sed -i '' 's/^\(sequencer_da_address = \)"[^"]*"/\1"$(shell cat seed-phrase.json | grep -o '"publicKey": *"[^"]*"' | cut -d '"' -f 4 | cut -c3-)"/' rollup_config.toml
-else
-	@sed -i 's/^\(sequencer_da_address = \)"[^"]*"/\1"$(shell cat seed-phrase.json | grep -o '"publicKey": *"[^"]*"' | cut -d '"' -f 4 | cut -c3-)"/' rollup_config.toml
-endif
 
 create-new-app-key:
 	@cd ../avail-helper/ && cargo run --bin create_app_id -- --ws_uri wss://kate.avail.tools:443/ws --seed "$(SEED_PHRASE)"
@@ -79,7 +72,7 @@ clean: check-docker
 	echo 2
 	$(MAKE) clean-rollup-db
 
-submit-txn : check-container-running build-sov-cli
+submit-txn: check-container-running build-sov-cli
 ifndef SERIALIZED_BLOB_PATH
 	$(error SERIALIZED_BLOB_PATH is not defined)
 else ifeq ($(wildcard $(SERIALIZED_BLOB_PATH)),)
@@ -89,16 +82,22 @@ else
 endif
 
 build-sov-cli:
-	cd ../demo-stf && cargo build --bin sov-cli
+	cargo build --bin sov-cli
 
 test-generate-create-token-tx: check-container-running build-sov-cli
-	$(SOV_CLI_REL_PATH) generate-transaction-from-json ../test-data/keys/token_deployer_private_key.json Bank ../test-data/requests/create_token.json 0
+	$(SOV_CLI_REL_PATH) transactions import from-file bank --path ../test-data/requests/create_token.json
 
-test-build-blob-from-create-token: test-generate-create-token-tx
-	$(SOV_CLI_REL_PATH) make-batch ../test-data/requests/create_token.dat > ../test-data/requests/test_blob.dat
+set-rpc-url: build-sov-cli
+	$(SOV_CLI_REL_PATH) rpc set-url http://localhost:12345
 
-test-create-token: test-build-blob-from-create-token
-	$(MAKE) submit-txn SERIALIZED_BLOB_PATH=../test-data/requests/test_blob.dat
+import-keys: build-sov-cli
+	$(SOV_CLI_REL_PATH) keys import --nickname DANGER__DO_NOT_USE_WITH_REAL_MONEY --path ../test-data/keys/minter_private_key.json
+
+test-create-token: set-rpc-url test-generate-create-token-tx import-keys
+	$(SOV_CLI_REL_PATH) rpc submit-batch
+
+remove-insecure-keys: build-sov-cli
+	$(SOV_CLI_REL_PATH) keys remove by-address sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqwr57gc
 
 clean-rollup-db:
 	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' rollup_config.toml | tr -d '[:space:]"\n'))

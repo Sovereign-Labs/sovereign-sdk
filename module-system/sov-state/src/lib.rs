@@ -1,15 +1,25 @@
+pub mod codec;
 mod internal_cache;
 mod map;
+
 #[cfg(feature = "native")]
 mod prover_storage;
-mod scratchpad;
-pub mod storage;
+
 #[cfg(feature = "native")]
 mod tree_db;
+
+mod scratchpad;
+
+pub mod storage;
+
 mod utils;
 mod value;
+mod vec;
 mod witness;
+
 mod zk_storage;
+
+pub use zk_storage::ZkStorage;
 
 pub mod config;
 #[cfg(test)]
@@ -18,15 +28,16 @@ mod state_tests;
 use std::fmt::Display;
 use std::str;
 
-pub use map::StateMap;
+pub use map::{StateMap, StateMapError};
 #[cfg(feature = "native")]
 pub use prover_storage::{delete_storage, ProverStorage};
 pub use scratchpad::*;
 pub use sov_first_read_last_write_cache::cache::CacheLog;
+use sov_rollup_interface::digest::Digest;
 pub use storage::Storage;
 use utils::AlignedVec;
 pub use value::StateValue;
-pub use zk_storage::ZkStorage;
+pub use vec::StateVec;
 
 pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 
@@ -34,8 +45,8 @@ pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 // All the collection types in this crate are backed by the same storage instance, this means that insertions of the same key
 // to two different `StorageMaps` would collide with each other. We solve it by instantiating every collection type with a unique
 // prefix that is prepended to each key.
-
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 pub struct Prefix {
     prefix: AlignedVec,
 }
@@ -73,6 +84,19 @@ impl Prefix {
     pub fn is_empty(&self) -> bool {
         self.prefix.is_empty()
     }
+
+    pub fn extended(&self, bytes: &[u8]) -> Self {
+        let mut prefix = self.clone();
+        prefix.extend(bytes.iter().copied());
+        prefix
+    }
+}
+
+impl Extend<u8> for Prefix {
+    fn extend<T: IntoIterator<Item = u8>>(&mut self, iter: T) {
+        self.prefix
+            .extend(&AlignedVec::new(iter.into_iter().collect()))
+    }
 }
 
 /// A trait specifying the hash function and format of the witness used in
@@ -84,7 +108,7 @@ pub trait MerkleProofSpec {
     type Hasher: Digest<OutputSize = sha2::digest::typenum::U32>;
 }
 
-use sha2::{Digest, Sha256};
+use sha2::Sha256;
 
 #[derive(Clone)]
 pub struct DefaultStorageSpec;

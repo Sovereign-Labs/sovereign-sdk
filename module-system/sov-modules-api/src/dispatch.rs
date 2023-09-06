@@ -1,6 +1,6 @@
 use sov_state::WorkingSet;
 
-use crate::{CallResponse, Context, Error, Spec};
+use crate::{CallResponse, Context, Error, Module, Spec};
 
 /// Methods from this trait should be called only once during the rollup deployment.
 pub trait Genesis {
@@ -37,10 +37,18 @@ pub trait DispatchCall {
     fn module_address(&self, message: &Self::Decodable) -> &<Self::Context as Spec>::Address;
 }
 
+/// A trait that specifies how a runtime should encode the data for each module
+pub trait EncodeCall<M: Module> {
+    /// The encoding function
+    fn encode_call(data: M::CallMessage) -> Vec<u8>;
+}
+
 /// A trait that needs to be implemented for a *runtime* to be used with the CLI wallet
 #[cfg(feature = "native")]
 pub trait CliWallet: DispatchCall {
     /// The type that is used to represent this type in the CLI. Typically,
-    /// this type implements the clap::Subcommand trait.
-    type CliStringRepr: Into<<Self as DispatchCall>::Decodable>;
+    /// this type implements the clap::Subcommand trait. This type is generic to
+    /// allow for different representations of the same type in the interface; a
+    /// typical end-usage will impl traits only in the case where `CliStringRepr<T>: Into::RuntimeCall`
+    type CliStringRepr<T>;
 }

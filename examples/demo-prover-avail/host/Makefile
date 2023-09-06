@@ -19,19 +19,12 @@ SEED_PHRASE := $(shell cat seed-phrase.json | grep -o '"secretPhrase": *"[^"]*"'
 endif
 
 key-exists: 
-	@test -s seed-phrase.json || make create-new-key && make update-da-address
-	@make update-da-address
+	@test -s seed-phrase.json || echo "Error: Call make create-new-key and replace const SEQUENCER_AVAIL_DA_ADDRESS in const-rollup-config with publicKey from the created seed-phrase.json"
+
 
 create-new-key: check-container-running
 	@echo "Creating new key..."
 	@docker run -it --pull=always docker.io/parity/subkey:latest generate --output-type json > seed-phrase.json
-
-update-da-address: 
-ifeq ($(shell uname -s),Darwin)
-	@sed -i '' 's/^\(sequencer_da_address = \)"[^"]*"/\1"$(shell cat seed-phrase.json | grep -o '"publicKey": *"[^"]*"' | cut -d '"' -f 4 | cut -c3-)"/' rollup_config.toml
-else
-	@sed -i 's/^\(sequencer_da_address = \)"[^"]*"/\1"$(shell cat seed-phrase.json | grep -o '"publicKey": *"[^"]*"' | cut -d '"' -f 4 | cut -c3-)"/' rollup_config.toml
-endif
 
 create-new-app-key:
 	@cd ../../avail-helper/ && cargo run --bin create_app_id -- --ws_uri wss://kate.avail.tools:443/ws --seed "$(SEED_PHRASE)"
@@ -89,7 +82,7 @@ else
 endif
 
 build-sov-cli:
-	cd ../../demo-stf && cargo build --bin sov-cli
+	cd ../../demo-rollup && cargo build --bin sov-cli
 
 test-serialize-create-token: check-container-running build-sov-cli
 	$(SOV_CLI_REL_PATH) serialize-call ../../demo-stf/src/sov-cli/test_data/token_deployer_private_key.json Bank ../../demo-stf/src/sov-cli/test_data/create_token.json 0

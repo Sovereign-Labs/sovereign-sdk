@@ -13,7 +13,7 @@ use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
 use super::address::AvailAddress;
 
 #[derive(Serialize, Deserialize, Clone, PartialEq, Debug)]
-//pub struct AvailBlobTransaction(pub AppUncheckedExtrinsic);
+
 pub struct AvailBlobTransaction {
     blob: CountedBufReader<Bytes>,
     hash: [u8; 32],
@@ -42,8 +42,8 @@ impl BlobReaderTrait for AvailBlobTransaction {
     }
 }
 
-#[cfg(feature = "native")]
 impl AvailBlobTransaction {
+    #[cfg(feature = "native")]
     pub fn new(unchecked_extrinsic: &AppUncheckedExtrinsic) -> Self {
         let address = match &unchecked_extrinsic.signature {
             Some((subxt::utils::MultiAddress::Id(id), _, _)) => AvailAddress(id.clone().0),
@@ -57,9 +57,17 @@ impl AvailBlobTransaction {
         };
 
         AvailBlobTransaction {
-            hash: H256::from(sp_core::blake2_256(&unchecked_extrinsic.encode())).to_fixed_bytes(),
+            hash: sp_core_hashing::blake2_256(&unchecked_extrinsic.encode()),
             address,
             blob,
         }
+    }
+
+    pub fn combine_hash(&self, hash: [u8; 32]) -> [u8; 32] {
+        let mut combined_hashes: Vec<u8> = Vec::with_capacity(64);
+        combined_hashes.extend_from_slice(hash.as_ref());
+        combined_hashes.extend_from_slice(self.hash().as_ref());
+
+        sp_core_hashing::blake2_256(&combined_hashes)
     }
 }

@@ -3,20 +3,20 @@
 
 mod batch_builder;
 mod config;
-pub use config::RpcConfig;
-mod runner_config;
 use std::net::SocketAddr;
+
+pub use config::RpcConfig;
 mod ledger_rpc;
 pub use batch_builder::FiFoStrictBatchBuilder;
-pub use config::RollupConfig;
+pub use config::{from_toml_path, RollupConfig, RunnerConfig, StorageConfig};
 use jsonrpsee::RpcModule;
 pub use ledger_rpc::get_ledger_rpc;
-pub use runner_config::{from_toml_path, Config, StorageConfig};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
-use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::Zkvm;
+use tokio::sync::oneshot;
 use tracing::{debug, info};
 
 type StateRoot<ST, Vm, DA> = <ST as StateTransitionFunction<
@@ -30,51 +30,56 @@ type InitialState<ST, Vm, DA> = <ST as StateTransitionFunction<
 >>::InitialState;
 
 /// Combines `DaService` with `StateTransitionFunction` and "runs" the rollup.
-pub struct StateTransitionRunner<ST, DA, Vm>
+pub struct StateTransitionRunner<ST, Da, Vm>
 where
-    DA: DaService,
+    Da: DaService,
     Vm: Zkvm,
-    ST: StateTransitionFunction<Vm, <<DA as DaService>::Spec as DaSpec>::BlobTransaction>,
+    ST: StateTransitionFunction<
+        Vm,
+        <<Da as DaService>::Spec as DaSpec>::BlobTransaction,
+        Condition = <Da::Spec as DaSpec>::ValidityCondition,
+    >,
 {
     start_height: u64,
-    da_service: DA,
+    da_service: Da,
     app: ST,
     ledger_db: LedgerDB,
-    state_root: StateRoot<ST, Vm, DA>,
+    state_root: StateRoot<ST, Vm, Da>,
     listen_address: SocketAddr,
 }
 
-impl<ST, DA, Vm> StateTransitionRunner<ST, DA, Vm>
+impl<ST, Da, Vm> StateTransitionRunner<ST, Da, Vm>
 where
-    DA: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
+    Da: DaService<Error = anyhow::Error> + Clone + Send + Sync + 'static,
     Vm: Zkvm,
-    ST: StateTransitionFunction<Vm, <<DA as DaService>::Spec as DaSpec>::BlobTransaction>,
+    ST: StateTransitionFunction<
+        Vm,
+        <<Da as DaService>::Spec as DaSpec>::BlobTransaction,
+        Condition = <Da::Spec as DaSpec>::ValidityCondition,
+    >,
 {
     /// Creates a new `StateTransitionRunner` runner.
     pub fn new(
-        rollup_config: RollupConfig,
-        da_service: DA,
+        runner_config: RunnerConfig,
+        da_service: Da,
         ledger_db: LedgerDB,
         mut app: ST,
         should_init_chain: bool,
-        genesis_config: InitialState<ST, Vm, DA>,
+        genesis_config: InitialState<ST, Vm, Da>,
     ) -> Result<Self, anyhow::Error> {
-        let rpc_config = rollup_config.rpc_config;
+        let rpc_config = runner_config.rpc_config;
 
         let prev_state_root = {
             // Check if the rollup has previously been initialized
             if should_init_chain {
                 info!("No history detected. Initializing chain...");
-                app.init_chain(genesis_config);
+                let ret_hash = app.init_chain(genesis_config);
                 info!("Chain initialization is done.");
+                ret_hash
             } else {
                 debug!("Chain is already initialized. Skipping initialization.");
+                app.get_current_state_root()?
             }
-
-            let res = app.apply_slot(Default::default(), []);
-            // HACK: Tell the rollup that you're running an empty DA layer block so that it will return the latest state root.
-            // This will be removed shortly.
-            res.state_root
         };
 
         let listen_address = SocketAddr::new(rpc_config.bind_host.parse()?, rpc_config.bind_port);
@@ -82,7 +87,7 @@ where
         // Start the main rollup loop
         let item_numbers = ledger_db.get_next_items_numbers();
         let last_slot_processed_before_shutdown = item_numbers.slot_number - 1;
-        let start_height = rollup_config.start_height + last_slot_processed_before_shutdown;
+        let start_height = runner_config.start_height + last_slot_processed_before_shutdown;
 
         Ok(Self {
             start_height,
@@ -94,8 +99,12 @@ where
         })
     }
 
-    /// Starts an rpc server with provided rpc methods.
-    pub async fn start_rpc_server(&self, methods: RpcModule<()>) {
+    /// Starts a RPC server with provided rpc methods.
+    pub async fn start_rpc_server(
+        &self,
+        methods: RpcModule<()>,
+        channel: Option<oneshot::Sender<SocketAddr>>,
+    ) {
         let listen_address = self.listen_address;
         let _handle = tokio::spawn(async move {
             let server = jsonrpsee::server::ServerBuilder::default()
@@ -103,7 +112,12 @@ where
                 .await
                 .unwrap();
 
-            info!("Starting RPC server at {} ", server.local_addr().unwrap());
+            let bound_address = server.local_addr().unwrap();
+            if let Some(channel) = channel {
+                channel.send(bound_address).unwrap();
+            }
+            info!("Starting RPC server at {} ", &bound_address);
+
             let _server_handle = server.start(methods).unwrap();
             futures::future::pending::<()>().await;
         });
@@ -112,21 +126,30 @@ where
     /// Runs the rollup.
     pub async fn run(&mut self) -> Result<(), anyhow::Error> {
         for height in self.start_height.. {
-            info!("Requesting data for height {}", height,);
+            debug!("Requesting data for height {}", height,);
 
             let filtered_block = self.da_service.get_finalized_at(height).await?;
-
             let mut blobs = self.da_service.extract_relevant_txs(&filtered_block);
 
             info!(
-                "Extracted {} relevant blobs at height {}",
+                "Extracted {} relevant blobs at height {}: {:?}",
                 blobs.len(),
-                height
+                height,
+                blobs
+                    .iter()
+                    .map(|b| format!(
+                        "sequencer={} blob_hash=0x{}",
+                        b.sender(),
+                        hex::encode(b.hash())
+                    ))
+                    .collect::<Vec<_>>()
             );
 
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
 
-            let slot_result = self.app.apply_slot(Default::default(), &mut blobs);
+            let slot_result = self
+                .app
+                .apply_slot(Default::default(), &filtered_block, &mut blobs);
             for receipt in slot_result.batch_receipts {
                 data_to_commit.add_batch(receipt);
             }

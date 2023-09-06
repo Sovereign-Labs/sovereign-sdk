@@ -3,11 +3,12 @@ use std::io::Cursor;
 
 use anyhow::bail;
 use borsh::BorshDeserialize;
+use sov_modules_api::digest::Digest;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Context, DispatchCall, PublicKey};
+use sov_modules_api::{Context, DispatchCall, PublicKey, Spec};
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
 use sov_state::WorkingSet;
-use tracing::warn;
+use tracing::{info, warn};
 
 /// BatchBuilder that creates batches of transactions in the order they were submitted
 /// Only transactions that were successfully dispatched are included.
@@ -110,6 +111,11 @@ where
             // In order to fill batch as big as possible,
             // we only check if valid tx can fit in the batch.
             if current_batch_size + tx_len <= self.max_batch_size_bytes {
+                let tx_hash: [u8; 32] = <C as Spec>::Hasher::digest(&raw_tx[..]).into();
+                info!(
+                    "Tx with hash 0x{} has been included in the batch",
+                    hex::encode(tx_hash)
+                );
                 txs.push(raw_tx);
             } else {
                 self.mempool.push_front(raw_tx);
@@ -141,10 +147,10 @@ mod tests {
     use sov_modules_api::default_signature::DefaultPublicKey;
     use sov_modules_api::macros::DefaultRuntime;
     use sov_modules_api::transaction::Transaction;
-    use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec, PrivateKey};
+    use sov_modules_api::{Context, DispatchCall, EncodeCall, Genesis, MessageCodec, PrivateKey};
     use sov_rollup_interface::services::batch_builder::BatchBuilder;
     use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
-    use sov_value_setter::{CallMessage, ValueSetterConfig};
+    use sov_value_setter::{CallMessage, ValueSetter, ValueSetterConfig};
     use tempfile::TempDir;
 
     use super::*;
@@ -167,9 +173,9 @@ mod tests {
 
     fn generate_valid_tx(private_key: &DefaultPrivateKey, value: u32) -> Vec<u8> {
         let msg = CallMessage::SetValue(value);
-        let msg = TestRuntime::<C>::encode_value_setter_call(msg);
+        let msg = <TestRuntime<C> as EncodeCall<ValueSetter<DefaultContext>>>::encode_call(msg);
 
-        Transaction::new_signed_tx(private_key, msg, 1)
+        Transaction::<DefaultContext>::new_signed_tx(private_key, msg, 1)
             .try_to_vec()
             .unwrap()
     }
@@ -184,7 +190,7 @@ mod tests {
 
     fn generate_signed_tx_with_invalid_payload(private_key: &DefaultPrivateKey) -> Vec<u8> {
         let msg = generate_random_bytes();
-        Transaction::new_signed_tx(private_key, msg, 1)
+        Transaction::<DefaultContext>::new_signed_tx(private_key, msg, 1)
             .try_to_vec()
             .unwrap()
     }

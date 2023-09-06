@@ -6,6 +6,7 @@ use reth_rpc_types::state::StateOverride;
 use reth_rpc_types::{BlockOverrides, CallRequest, TransactionRequest};
 use revm::primitives::{CfgEnv, ExecutionResult};
 use sov_modules_api::macros::rpc_gen;
+use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_state::WorkingSet;
 use tracing::info;
 
@@ -61,8 +62,9 @@ impl<C: sov_modules_api::Context> Evm<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<Transaction>> {
         info!("evm module: eth_getTransactionByHash");
-        let evm_transaction = self.transactions.get(&hash.into(), working_set);
-        Ok(evm_transaction.map(|tx| tx.into()))
+        let evm_transaction = self.transactions.get(hash.as_fixed_bytes(), working_set);
+        let result = evm_transaction.map(Transaction::try_from).transpose();
+        result.map_err(|e| to_jsonrpsee_error_object(e, "ETH_RPC_ERROR"))
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
@@ -73,8 +75,9 @@ impl<C: sov_modules_api::Context> Evm<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<TransactionReceipt>> {
         info!("evm module: eth_getTransactionReceipt");
-        let receipt = self.receipts.get(&hash.into(), working_set);
-        Ok(receipt.map(|r| r.into()))
+
+        let receipt = self.receipts.get(&hash, working_set);
+        Ok(receipt)
     }
 
     //https://github.com/paradigmxyz/reth/blob/f577e147807a783438a3f16aad968b4396274483/crates/rpc/rpc/src/eth/api/transactions.rs#L502

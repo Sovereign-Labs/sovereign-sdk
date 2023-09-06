@@ -8,7 +8,8 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use crate::da::BlobReaderTrait;
-use crate::zk::Zkvm;
+use crate::services::da::SlotData;
+use crate::zk::{ValidityCondition, Zkvm};
 
 #[cfg(any(test, feature = "fuzzing"))]
 pub mod fuzzing;
@@ -42,6 +43,7 @@ mod sealed {
 /// and may be queried via RPC. Receipts are generic over a type `R` which the rollup can use to
 /// store additional data, such as the status code of the transaction or the amout of gas used.s
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// A receipt showing the result of a transaction
 pub struct TransactionReceipt<R> {
     /// The canonical hash of this transaction
     pub tx_hash: [u8; 32],
@@ -60,6 +62,7 @@ pub struct TransactionReceipt<R> {
 /// can use to store arbitrary typed data, like the gas used by the batch. They are also generic over a type `TxReceiptContents`,
 /// since they contain a vectors of [`TransactionReceipt`]s.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// A receipt giving the outcome of a batch of transactions
 pub struct BatchReceipt<BatchReceiptContents, TxReceiptContents> {
     /// The canonical hash of this batch
     pub batch_hash: [u8; 32],
@@ -99,6 +102,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
 
     /// The contents of a transaction receipt. This is the data that is persisted in the database
     type TxReceiptContents: Serialize + DeserializeOwned + Clone;
+
     /// The contents of a batch receipt. This is the data that is persisted in the database
     type BatchReceiptContents: Serialize + DeserializeOwned + Clone;
 
@@ -106,8 +110,12 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     /// or validated together with proof during verification
     type Witness: Default + Serialize;
 
-    /// Perform one-time initialization for the genesis block.
-    fn init_chain(&mut self, params: Self::InitialState);
+    /// The validity condition that must be verified outside of the Vm
+    type Condition: ValidityCondition;
+
+    /// Perform one-time initialization for the genesis block and returns the resulting root hash wrapped in a result.
+    /// If the init chain fails we panic.
+    fn init_chain(&mut self, params: Self::InitialState) -> Self::StateRoot;
 
     /// Called at each **DA-layer block** - whether or not that block contains any
     /// data relevant to the rollup.
@@ -116,13 +124,16 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
     ///
     /// Applies batches of transactions to the rollup,
     /// slashing the sequencer who proposed the blob on failure.
+    /// The blobs are contained into a slot whose data is contained within the `slot_data` parameter,
+    /// this parameter is mainly used within the begin_slot hook.
     /// The concrete blob type is defined by the DA layer implementation,
     /// which is why we use a generic here instead of an associated type.
     ///
     /// Commits state changes to the database
-    fn apply_slot<'a, I>(
+    fn apply_slot<'a, I, Data>(
         &mut self,
         witness: Self::Witness,
+        slot_data: &Data,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,
@@ -131,7 +142,12 @@ pub trait StateTransitionFunction<Vm: Zkvm, B: BlobReaderTrait> {
         Self::Witness,
     >
     where
-        I: IntoIterator<Item = &'a mut B>;
+        I: IntoIterator<Item = &'a mut B>,
+        Data: SlotData<Cond = Self::Condition>;
+
+    /// Gets the state root from the associated state. If not available (because the chain has not been initialized yet),
+    /// return None.
+    fn get_current_state_root(&self) -> anyhow::Result<Self::StateRoot>;
 }
 
 /// A key-value pair representing a change to the rollup state

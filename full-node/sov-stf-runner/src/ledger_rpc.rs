@@ -1,4 +1,5 @@
-use jsonrpsee::RpcModule;
+use futures::future::{select, Either};
+use jsonrpsee::{RpcModule, SubscriptionMessage};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_db::ledger_db::LedgerDB;
@@ -12,8 +13,8 @@ const LEDGER_RPC_ERROR: &str = "LEDGER_RPC_ERROR";
 use self::query_args::{extract_query_args, QueryArgs};
 
 /// Registers the following RPC methods
-/// - `ledger_head`
-///    Example Query: `curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"ledger_head","params":[],"id":1}' http://127.0.0.1:12345`
+/// - `ledger_getHead`
+///    Example Query: `curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"ledger_getHead","params":[],"id":1}' http://127.0.0.1:12345`
 /// - ledger_getSlots
 ///    Example Query: `curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"ledger_getSlots","params":[[1, 2], "Compact"],"id":1}' http://127.0.0.1:12345`
 /// - ledger_getBatches
@@ -56,6 +57,42 @@ fn register_ledger_rpc_methods<
         db.get_events(&ids)
             .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))
     })?;
+
+    rpc.register_subscription(
+        "ledger_subscribeSlots",
+        "ledger_slotProcessed",
+        "ledger_unsubscribeSlots",
+        |_, pending_subscription, db| async move {
+            // Register with the ledgerDB to receive callbacks
+            let mut rx = db
+                .subscribe_slots()
+                .map_err(|e| to_jsonrpsee_error_object(e, LEDGER_RPC_ERROR))?;
+
+            // Accept the subscription. This message is sent immediately
+            let subscription = pending_subscription.accept().await?;
+            let closed = subscription.closed();
+            futures::pin_mut!(closed);
+
+            // This loop continues running until the subscription ends.
+            loop {
+                let next_msg = rx.recv();
+                futures::pin_mut!(next_msg);
+                match select(closed, next_msg).await {
+                    // If the subscription closed, we're done
+                    Either::Left(_) => break Ok(()),
+                    // Otherwise, we need to send the message
+                    Either::Right((outcome, channel_closing_future)) => {
+                        let msg = SubscriptionMessage::from_json(&outcome?)?;
+                        // Sending only fails if the subscriber has canceled, so we can stop sending messages
+                        if subscription.send(msg).await.is_err() {
+                            break Ok(());
+                        }
+                        closed = channel_closing_future;
+                    }
+                }
+            }
+        },
+    )?;
 
     Ok(())
 }

@@ -16,7 +16,7 @@ harder to follow at first glance, so we recommend diving into the `demo-rollup` 
 
 ## Prerequisites
 
-Running this example require at least 96GB of RAM for x86 CPU architecture.
+Running this example requires at least 96GB of RAM for x86 CPU architecture.
 
 ## Getting Started
 

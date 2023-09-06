@@ -1,6 +1,4 @@
-use std::fmt::{Display, Formatter};
 use std::ops::Range;
-use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use base64::engine::general_purpose::STANDARD as B64_ENGINE;
@@ -11,7 +9,7 @@ use prost::bytes::Buf;
 use prost::Message;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlockHeaderTrait as BlockHeader, CountedBufReader};
-use sov_rollup_interface::AddressTrait;
+use sov_rollup_interface::services::da::SlotData;
 pub use tendermint::block::Header as TendermintHeader;
 use tendermint::block::Height;
 use tendermint::crypto::default::Sha256;
@@ -29,7 +27,7 @@ use crate::pfb::{BlobTx, MsgPayForBlobs, Tx};
 use crate::shares::{read_varint, BlobIterator, BlobRefIterator, NamespaceGroup};
 use crate::utils::BoxError;
 use crate::verifier::address::CelestiaAddress;
-use crate::verifier::{TmHash, PFB_NAMESPACE};
+use crate::verifier::{ChainValidityCondition, TmHash, PFB_NAMESPACE};
 
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct MarshalledDataAvailabilityHeader {
@@ -303,6 +301,30 @@ impl BlockHeader for CelestiaHeader {
     }
 }
 
+/// We implement [`SlotData`] for [`CelestiaHeader`] in a similar fashion as for [`FilteredCelestiaBlock`]
+impl SlotData for CelestiaHeader {
+    type BlockHeader = CelestiaHeader;
+    type Cond = ChainValidityCondition;
+
+    fn hash(&self) -> [u8; 32] {
+        match self.header.hash() {
+            tendermint::Hash::Sha256(h) => h,
+            tendermint::Hash::None => unreachable!("tendermint::Hash::None should not be possible"),
+        }
+    }
+
+    fn header(&self) -> &Self::BlockHeader {
+        self
+    }
+
+    fn validity_condition(&self) -> ChainValidityCondition {
+        ChainValidityCondition {
+            prev_hash: *self.header().prev_hash().inner(),
+            block_hash: <Self as SlotData>::hash(self),
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, PartialEq, Debug, Clone)]
 pub struct CelestiaVersion {
     pub block: u32,
@@ -322,56 +344,6 @@ impl AsRef<[u8]> for Sha2Hash {
         self.0.as_ref()
     }
 }
-
-#[derive(Deserialize, Serialize, PartialEq, Debug, Clone, Eq, Hash)]
-pub struct H160(#[serde(deserialize_with = "hex::deserialize")] pub [u8; 20]);
-
-impl AsRef<[u8]> for H160 {
-    fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
-    }
-}
-
-impl<'a> TryFrom<&'a [u8]> for H160 {
-    type Error = anyhow::Error;
-
-    fn try_from(value: &'a [u8]) -> Result<Self, Self::Error> {
-        if value.len() == 20 {
-            let mut addr = [0u8; 20];
-            addr.copy_from_slice(value);
-            return Ok(Self(addr));
-        }
-        anyhow::bail!("Adress is not exactly 20 bytes");
-    }
-}
-
-impl From<[u8; 32]> for H160 {
-    fn from(value: [u8; 32]) -> Self {
-        let mut addr = [0u8; 20];
-        addr.copy_from_slice(&value[12..]);
-        Self(addr)
-    }
-}
-
-impl FromStr for H160 {
-    type Err = hex::FromHexError;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // Remove the "0x" prefix, if it exists.
-        let s = s.strip_prefix("0x").unwrap_or(s);
-        let mut output = [0u8; 20];
-        hex::decode_to_slice(s, &mut output)?;
-        Ok(H160(output))
-    }
-}
-
-impl Display for H160 {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "0x{}", hex::encode(self.0))
-    }
-}
-
-impl AddressTrait for H160 {}
 
 pub fn parse_pfb_namespace(
     group: NamespaceGroup,

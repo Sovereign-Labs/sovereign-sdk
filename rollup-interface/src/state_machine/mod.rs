@@ -12,21 +12,26 @@ use serde::Serialize;
 #[cfg(feature = "mocks")]
 pub mod mocks;
 
-/// A marker trait for addresses.
-pub trait AddressTrait:
-    PartialEq
+pub mod optimistic;
+
+/// A marker trait for general addresses.
+pub trait BasicAddress:
+    Eq
+    + PartialEq
     + core::fmt::Debug
-    + Clone
-    + AsRef<[u8]>
-    + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
-    + Eq
-    + Serialize
-    + DeserializeOwned
-    + From<[u8; 32]>
+    + core::fmt::Display
     + Send
     + Sync
-    + core::fmt::Display
+    + Clone
     + std::hash::Hash
+    + AsRef<[u8]>
+    + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
+    + std::str::FromStr
+    + Serialize
+    + DeserializeOwned
     + 'static
 {
 }
+
+/// An address used inside rollup
+pub trait RollupAddress: BasicAddress + From<[u8; 32]> {}

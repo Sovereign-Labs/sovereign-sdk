@@ -1,3 +1,18 @@
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+**Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
+
+- [Remote setup](#remote-setup)
+  - [Set up Celestia](#set-up-celestia)
+  - [Submitting transactions](#submitting-transactions)
+  - [Install celestia-appd](#install-celestia-appd)
+  - [Create local keypair](#create-local-keypair)
+  - [Create bank transaction](#create-bank-transaction)
+  - [Submit blob to celestia](#submit-blob-to-celestia)
+  - [Verify the supply of the new token created](#verify-the-supply-of-the-new-token-created)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 ## Remote setup
 
 This readme covers the steps necessary to setup the sovereign-sdk to work with a remote DA network which includes
@@ -18,7 +33,7 @@ as of Mar 18, 2023. To get started, you'll need to sync a Celestia light node ru
 1. Initialize the node: `celestia light init --p2p.network arabica`
 1. Start the node with rpc enabled. Our default config uses port 11111: `celestia light start --core.ip https://limani.celestia-devops.dev --p2p.network arabica --gateway --rpc.port 11111`. If you want to use a different port, you can adjust the rollup's configuration in rollup_config.toml.
 1. Obtain a JWT for RPC access: `celestia light auth admin --p2p.network arabica`
-1. Copy the JWT and and store it in the `celestia_rpc_auth_token` field of the rollup's config file (`rollup_config.toml`). Be careful to paste the entire JWT - it may wrap across several lines in your terminal.
+1. Copy the JWT and store it in the `celestia_rpc_auth_token` field of the rollup's config file (`rollup_config.toml`). Be careful to paste the entire JWT - it may wrap across several lines in your terminal.
 1. Wait a few minutes for your Celestia node to sync. It needs to have synced to the rollup's configured `start_height `671431` before the demo can run properly.
 
 Once your Celestia node is up and running, simply `cargo +nightly run` to test out the prototype.

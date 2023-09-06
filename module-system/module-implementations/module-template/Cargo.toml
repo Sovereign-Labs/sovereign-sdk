@@ -13,21 +13,22 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
-sov-bank = { path = "../sov-bank", default-features = false }
-sov-modules-api = { path = "../../sov-modules-api", default-features = false, features = ["macros"] }
-sov-state = { path = "../../sov-state", default-features = false }
-sov-rollup-interface = { path = "../../../rollup-interface" }
+borsh = { workspace = true, features = ["rc"] }
+thiserror = { workspace = true }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
-thiserror = { workspace = true }
-borsh = { workspace = true, features = ["rc"] }
+
+sov-bank = { path = "../sov-bank" }
+sov-modules-api = { path = "../../sov-modules-api" }
+sov-state = { path = "../../sov-state" }
+sov-rollup-interface = { path = "../../../rollup-interface" }
+
 
 [dev-dependencies]
-sov-modules-api = { path = "../../sov-modules-api" }
 tempfile = { workspace = true }
+module-template = { path = ".", version = "*", features = ["native"] }
 
 [features]
-default = ["native"]
-serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-modules-api/native", "dep:schemars"]
+default = []
+native = ["serde", "serde_json", "schemars", "sov-modules-api/native"]

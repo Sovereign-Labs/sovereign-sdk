@@ -1,6 +1,9 @@
 // TODO: Rename this file to change the name of this method from METHOD_NAME
 
 #![no_main]
+
+use std::str::FromStr;
+
 use demo_stf::app::create_zk_app_template;
 use demo_stf::ArrayWitness;
 use risc0_adapter::guest::Risc0Guest;
@@ -9,8 +12,12 @@ use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::{StateTransition, ZkvmGuest};
+use sov_rollup_interface::da::BlockHeaderTrait;
+use const_rollup_config::{SEQUENCER_AVAIL_DA_ADDRESS};
 use presence::spec::{DaLayerSpec};
 use presence::spec::header::AvailHeader;
+use presence::spec::address::AvailAddress;
+use presence::spec::block::AvailBlock;
 use presence::verifier::Verifier;
 use presence::spec::transaction::AvailBlobTransaction;
 
@@ -40,14 +47,19 @@ pub fn main() {
     let mut blobs: Vec<AvailBlobTransaction> = guest.read_from_host();
     env::write(&"blobs have been read\n");
 
-    // Step 2: Verify tx list
-    let mut app = create_zk_app_template::<Risc0Guest, AvailBlobTransaction>(prev_state_root_hash);
+    let block: AvailBlock = AvailBlock {
+        header: header.clone(),
+        transactions: blobs.clone()
+    };
+
+    // Step 2: Apply blobs
+    let mut app = create_zk_app_template::<Risc0Guest, DaLayerSpec>(prev_state_root_hash);
 
     let witness: ArrayWitness = guest.read_from_host();
     env::write(&"Witness have been read\n");
 
     env::write(&"Applying slot...\n");
-    let result = app.apply_slot(witness, &mut blobs);
+    let result = app.apply_slot(witness, &block, &mut blobs);
 
     env::write(&"Slot has been applied\n");
 
@@ -58,10 +70,13 @@ pub fn main() {
     .expect("Transaction list must be correct");
     env::write(&"Relevant txs verified\n");
 
+    let rewarded_address = AvailAddress::from_str(SEQUENCER_AVAIL_DA_ADDRESS).unwrap();
     let output = StateTransition {
         initial_state_root: prev_state_root_hash,
         final_state_root: result.state_root.0,
         validity_condition,
+        rewarded_address: rewarded_address.as_ref().to_vec(),
+        slot_hash: header.hash().inner().clone(),
     };
     env::commit(&output);
     env::write(&"new state root committed\n");

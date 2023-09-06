@@ -17,7 +17,7 @@ resolver = "2"
 # Maintained by sovereign labs
 jmt = { workspace = true }
 sov-schema-db = { path = "../sov-schema-db", version = "0.1" }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1", features = ["native", "mocks"] }
 
 # External
 anyhow = { workspace = true }
@@ -26,10 +26,8 @@ borsh = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 rocksdb = { workspace = true }
 bincode = { workspace = true }
+tokio = { workspace = true }
 
 
 [dev-dependencies]
 tempfile = { workspace = true }
-
-[features]
-default = []

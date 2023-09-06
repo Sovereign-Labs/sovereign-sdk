@@ -11,13 +11,15 @@ readme = "README.md"
 resolver = "2"
 
 [dependencies]
+anyhow = { workspace = true }
 jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+sov-rollup-interface = { path = "../../rollup-interface" }
 
-sov-evm = { path = "../../module-system/module-implementations/sov-evm", default-features = false }
+sov-evm = { path = "../../module-system/module-implementations/sov-evm" }
 demo-stf = { path = "../../examples/demo-stf", features = ["native"] }
-sov-modules-api = { path = "../../module-system/sov-modules-api", default-features = false }
+sov-modules-api = { path = "../../module-system/sov-modules-api" }
 const-rollup-config = { path = "../../examples/const-rollup-config" }
-jupiter = { path = "../../adapters/celestia", features = ["native"] }
+celestia = { path = "../../adapters/celestia", features = ["native"] }
 
 borsh = { workspace = true }
 serde_json = { workspace = true }
@@ -33,7 +35,6 @@ tokio = { workspace = true }
 
 
 [features]
-default = ["native"]
+default = []
 experimental = ["demo-stf/experimental", "sov-evm/experimental"]
-
 native = ["demo-stf/native", "sov-evm/native"]

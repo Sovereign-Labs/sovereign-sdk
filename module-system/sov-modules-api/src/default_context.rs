@@ -1,7 +1,7 @@
 #[cfg(feature = "native")]
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
-use sov_rollup_interface::AddressTrait;
+use sov_rollup_interface::RollupAddress;
 #[cfg(feature = "native")]
 use sov_state::ProverStorage;
 use sov_state::{ArrayWitness, DefaultStorageSpec, ZkStorage};
@@ -12,6 +12,7 @@ use crate::default_signature::{DefaultPublicKey, DefaultSignature};
 use crate::{Address, Context, PublicKey, Spec};
 
 #[cfg(feature = "native")]
+#[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DefaultContext {
     pub sender: Address,
@@ -21,8 +22,8 @@ pub struct DefaultContext {
 impl Spec for DefaultContext {
     type Address = Address;
     type Storage = ProverStorage<DefaultStorageSpec>;
-    type PublicKey = DefaultPublicKey;
     type PrivateKey = DefaultPrivateKey;
+    type PublicKey = DefaultPublicKey;
     type Hasher = sha2::Sha256;
     type Signature = DefaultSignature;
     type Witness = ArrayWitness;
@@ -67,7 +68,7 @@ impl Context for ZkDefaultContext {
 }
 
 impl PublicKey for DefaultPublicKey {
-    fn to_address<A: AddressTrait>(&self) -> A {
+    fn to_address<A: RollupAddress>(&self) -> A {
         let pub_key_hash = {
             let mut hasher = <ZkDefaultContext as Spec>::Hasher::new();
             hasher.update(self.pub_key);

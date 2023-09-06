@@ -4,8 +4,7 @@ use sov_state::{ProverStorage, WorkingSet};
 mod helpers;
 
 use helpers::*;
-use sov_modules_api::Address;
-use sov_rollup_interface::mocks::TestBlob;
+use sov_rollup_interface::mocks::{MockAddress, MockBlob};
 use sov_sequencer_registry::{SequencerOutcome, SequencerRegistry};
 
 #[test]
@@ -21,9 +20,9 @@ fn begin_blob_hook_known_sequencer() {
     };
     assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
 
-    let mut test_blob = TestBlob::new(
+    let mut test_blob = MockBlob::new(
         Vec::new(),
-        Address::from(GENESIS_SEQUENCER_DA_ADDRESS),
+        MockAddress::from(GENESIS_SEQUENCER_DA_ADDRESS),
         [0_u8; 32],
     );
 
@@ -48,9 +47,9 @@ fn begin_blob_hook_unknown_sequencer() {
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
 
-    let mut test_blob = TestBlob::new(
+    let mut test_blob = MockBlob::new(
         Vec::new(),
-        Address::from(UNKNOWN_SEQUENCER_DA_ADDRESS),
+        MockAddress::from(UNKNOWN_SEQUENCER_DA_ADDRESS),
         [0_u8; 32],
     );
 
@@ -58,9 +57,12 @@ fn begin_blob_hook_unknown_sequencer() {
         .registry
         .begin_blob_hook(&mut test_blob, working_set);
     assert!(result.is_err());
-    let expected_message_part = "Value not found for prefix: \"sov_sequencer_registry/SequencerRegistry/allowed_sequencers/\"";
+    let expected_message = format!(
+        "sender {} is not allowed to submit blobs",
+        MockAddress::from(UNKNOWN_SEQUENCER_DA_ADDRESS)
+    );
     let actual_message = result.err().unwrap().to_string();
-    assert!(actual_message.contains(expected_message_part));
+    assert_eq!(expected_message, actual_message);
 }
 
 #[test]
@@ -75,9 +77,9 @@ fn end_blob_hook_success() {
     };
     assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
 
-    let mut test_blob = TestBlob::new(
+    let mut test_blob = MockBlob::new(
         Vec::new(),
-        Address::from(GENESIS_SEQUENCER_DA_ADDRESS),
+        MockAddress::from(GENESIS_SEQUENCER_DA_ADDRESS),
         [0_u8; 32],
     );
 
@@ -86,10 +88,12 @@ fn end_blob_hook_success() {
         .begin_blob_hook(&mut test_blob, working_set)
         .unwrap();
 
-    test_sequencer
-        .registry
-        .end_blob_hook(SequencerOutcome::Completed, working_set)
-        .unwrap();
+    <SequencerRegistry<C> as ApplyBlobHooks<MockBlob>>::end_blob_hook(
+        &test_sequencer.registry,
+        SequencerOutcome::Completed,
+        working_set,
+    )
+    .unwrap();
     let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
     assert_eq!(balance_after_genesis, resp.amount.unwrap());
     let resp = test_sequencer
@@ -111,9 +115,9 @@ fn end_blob_hook_slash() {
     };
     assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
 
-    let mut test_blob = TestBlob::new(
+    let mut test_blob = MockBlob::new(
         Vec::new(),
-        Address::from(GENESIS_SEQUENCER_DA_ADDRESS),
+        MockAddress::from(GENESIS_SEQUENCER_DA_ADDRESS),
         [0_u8; 32],
     );
 
@@ -125,10 +129,12 @@ fn end_blob_hook_slash() {
     let result = SequencerOutcome::Slashed {
         sequencer: GENESIS_SEQUENCER_DA_ADDRESS.to_vec(),
     };
-    test_sequencer
-        .registry
-        .end_blob_hook(result, working_set)
-        .unwrap();
+    <SequencerRegistry<C> as ApplyBlobHooks<MockBlob>>::end_blob_hook(
+        &test_sequencer.registry,
+        result,
+        working_set,
+    )
+    .unwrap();
 
     let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
     assert_eq!(balance_after_genesis, resp.amount.unwrap());
@@ -152,7 +158,7 @@ fn end_blob_hook_slash_preferred_sequencer() {
     let registry = SequencerRegistry::<C>::default();
     let mut sequencer_config = create_sequencer_config(seq_rollup_address, token_address);
 
-    sequencer_config.preferred_sequencer = Some(sequencer_config.seq_da_address.clone());
+    sequencer_config.is_preferred_sequencer = true;
 
     let mut test_sequencer = TestSequencer {
         bank,
@@ -170,9 +176,9 @@ fn end_blob_hook_slash_preferred_sequencer() {
     };
     assert_eq!(INITIAL_BALANCE - LOCKED_AMOUNT, balance_after_genesis);
 
-    let mut test_blob = TestBlob::new(
+    let mut test_blob = MockBlob::new(
         Vec::new(),
-        Address::from(GENESIS_SEQUENCER_DA_ADDRESS),
+        MockAddress::from(GENESIS_SEQUENCER_DA_ADDRESS),
         [0_u8; 32],
     );
 
@@ -184,10 +190,12 @@ fn end_blob_hook_slash_preferred_sequencer() {
     let result = SequencerOutcome::Slashed {
         sequencer: GENESIS_SEQUENCER_DA_ADDRESS.to_vec(),
     };
-    test_sequencer
-        .registry
-        .end_blob_hook(result, working_set)
-        .unwrap();
+    <SequencerRegistry<C> as ApplyBlobHooks<MockBlob>>::end_blob_hook(
+        &test_sequencer.registry,
+        result,
+        working_set,
+    )
+    .unwrap();
 
     let resp = test_sequencer.query_balance_via_bank(working_set).unwrap();
     assert_eq!(balance_after_genesis, resp.amount.unwrap());
@@ -210,9 +218,9 @@ fn end_blob_hook_slash_unknown_sequencer() {
     let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     test_sequencer.genesis(working_set);
 
-    let mut test_blob = TestBlob::new(
+    let mut test_blob = MockBlob::new(
         Vec::new(),
-        Address::from(GENESIS_SEQUENCER_DA_ADDRESS),
+        MockAddress::from(GENESIS_SEQUENCER_DA_ADDRESS),
         [0_u8; 32],
     );
 
@@ -230,10 +238,12 @@ fn end_blob_hook_slash_unknown_sequencer() {
     let result = SequencerOutcome::Slashed {
         sequencer: UNKNOWN_SEQUENCER_DA_ADDRESS.to_vec(),
     };
-    test_sequencer
-        .registry
-        .end_blob_hook(result, working_set)
-        .unwrap();
+    <SequencerRegistry<C> as ApplyBlobHooks<MockBlob>>::end_blob_hook(
+        &test_sequencer.registry,
+        result,
+        working_set,
+    )
+    .unwrap();
 
     let resp = test_sequencer
         .registry

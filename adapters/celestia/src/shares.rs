@@ -278,7 +278,13 @@ impl std::error::Error for ShareParsingError {}
 
 impl NamespaceGroup {
     pub fn from_b64(b64: &str) -> Result<Self, ShareParsingError> {
+        if b64.is_empty() {
+            error!("Empty input");
+            return Err(ShareParsingError::ErrWrongLength);
+        }
+
         let mut decoded = Vec::with_capacity((b64.len() + 3) / 4 * 3);
+
         // unsafe { decoded.set_len((b64.len() / 4 * 3)) }
         if let Err(err) = B64_ENGINE.decode_slice(b64, &mut decoded) {
             info!("Error decoding NamespaceGroup from base64: {}", err);

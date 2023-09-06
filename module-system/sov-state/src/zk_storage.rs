@@ -1,12 +1,18 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use jmt::storage::NodeBatch;
 use jmt::{JellyfishMerkleTree, KeyHash, Version};
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+use zk_cycle_macros::cycle_tracker;
 
 use crate::internal_cache::OrderedReadsAndWrites;
-use crate::storage::{StorageKey, StorageValue};
+use crate::storage::{StorageKey, StorageProof, StorageValue};
 use crate::witness::{TreeWitnessReader, Witness};
 use crate::{MerkleProofSpec, Storage};
+
+#[cfg(all(target_os = "zkvm", feature = "bench"))]
+extern crate risc0_zkvm;
 
 pub struct ZkStorage<S: MerkleProofSpec> {
     prev_state_root: [u8; 32],
@@ -33,22 +39,28 @@ impl<S: MerkleProofSpec> ZkStorage<S> {
 
 impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     type Witness = S::Witness;
-
     type RuntimeConfig = [u8; 32];
+    type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
+    type StateUpdate = NodeBatch;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Ok(Self::new(config))
     }
 
-    fn get(&self, _key: StorageKey, witness: &S::Witness) -> Option<StorageValue> {
+    fn get(&self, _key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
         witness.get_hint()
     }
 
-    fn validate_and_commit(
+    fn get_state_root(&self, witness: &Self::Witness) -> anyhow::Result<[u8; 32]> {
+        Ok(witness.get_hint())
+    }
+
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
+    fn compute_state_update(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<[u8; 32], anyhow::Error> {
+    ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error> {
         let latest_version: Version = witness.get_hint();
         let reader = TreeWitnessReader::new(witness);
 
@@ -84,14 +96,32 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         // because the TreeReader is trusted
         let jmt = JellyfishMerkleTree::<_, S::Hasher>::new(&reader);
 
-        let (new_root, _tree_update) = jmt
+        let (new_root, tree_update) = jmt
             .put_value_set(batch, next_version)
             .expect("JMT update must succeed");
-
-        Ok(new_root.0)
+        Ok((new_root.0, tree_update.node_batch))
     }
+
+    #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
+    fn commit(&self, _node_batch: &Self::StateUpdate) {}
 
     fn is_empty(&self) -> bool {
         unimplemented!("Needs simplification in JellyfishMerkleTree: https://github.com/Sovereign-Labs/sovereign-sdk/issues/362")
+    }
+
+    fn open_proof(
+        &self,
+        state_root: [u8; 32],
+        state_proof: StorageProof<Self::Proof>,
+    ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {
+        let StorageProof { key, value, proof } = state_proof;
+        let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
+
+        proof.verify(
+            jmt::RootHash(state_root),
+            key_hash,
+            value.as_ref().map(|v| v.value()),
+        )?;
+        Ok((key, value))
     }
 }

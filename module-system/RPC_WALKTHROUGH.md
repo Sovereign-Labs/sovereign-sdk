@@ -6,7 +6,7 @@ from scratch.
 
 There are 5 steps that need to be completed to enable RPC on the full node:
 
-1. Annotate you modules with `rpc_gen` and `rpc_method`.
+1. Annotate your modules with `rpc_gen` and `rpc_method`.
 2. Annotate your `native` `Runtime` with the `expose_rpc` macro.
 3. Import and call `get_rpc_methods` in your full node implementation.
 4. Configure and start your RPC server in your full node implementation.
@@ -49,7 +49,7 @@ This example code will generate an RPC module which can process the `bank_balanc
 
 Under the hood `rpc_gen` and `rpc_method` create two traits - one called <module_name>RpcImpl and one called <module_name>RpcServer.
 It's important to note that the \_RpcImpl and \_RpcServer traits do not need to be implemented - this is done automatically by the SDK.
-However, the do need to be imported to the file where the `expose_rpc` macro is called.
+However, they do need to be imported to the file where the `expose_rpc` macro is called.
 
 ### Step 2: Expose Your RPC Server
 

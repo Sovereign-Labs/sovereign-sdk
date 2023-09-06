@@ -19,19 +19,18 @@ jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], 
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
-
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1", default-features = false, features = ["macros"] }
-sov-state = { path = "../../sov-state", version = "0.1", default-features = false }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 thiserror = { workspace = true }
 hex = { workspace = true }
 
-[dev-dependencies]
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-state = { path = "../../sov-state", version = "0.1" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
+
+
+[dev-dependencies]
 tempfile = { workspace = true }
 
 [features]
-default = ["native"]
-serde = ["dep:serde", "dep:serde_json"]
-native = ["serde", "sov-state/native", "dep:jsonrpsee", "sov-modules-api/native", "dep:clap", "dep:schemars"]
+default = []
+native = ["serde", "serde_json", "jsonrpsee", "clap", "schemars", "sov-state/native", "sov-modules-api/native", ]
 cli = ["native"]

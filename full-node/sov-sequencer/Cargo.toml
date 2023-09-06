@@ -16,12 +16,10 @@ resolver = "2"
 anyhow = { workspace = true }
 borsh = { workspace = true }
 hex = { workspace = true }
-jsonrpsee = { workspace = true, features = ["http-client", "server"] }
+jsonrpsee = { workspace = true, features = ["client", "server",] }
 serde = { workspace = true, features = ["derive"] }
 tracing = { workspace = true }
-
 sov-rollup-interface = { path = "../../rollup-interface" }
-sov-modules-api = { path = "../../module-system/sov-modules-api" }
 
 [dev-dependencies]
 async-trait = { workspace = true }

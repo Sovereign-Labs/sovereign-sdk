@@ -114,17 +114,8 @@ const fn default_request_timeout_seconds() -> u64 {
     60
 }
 
-#[async_trait]
-impl DaService for CelestiaService {
-    type RuntimeConfig = DaServiceConfig;
-
-    type Spec = CelestiaSpec;
-
-    type FilteredBlock = FilteredCelestiaBlock;
-
-    type Error = BoxError;
-
-    async fn new(config: Self::RuntimeConfig, chain_params: RollupParams) -> Self {
+impl CelestiaService {
+    pub async fn new(config: DaServiceConfig, chain_params: RollupParams) -> Self {
         let client = {
             let mut headers = HeaderMap::new();
             headers.insert(
@@ -136,7 +127,7 @@ impl DaService for CelestiaService {
 
             jsonrpsee::http_client::HttpClientBuilder::default()
                 .set_headers(headers)
-                .max_request_body_size(config.max_celestia_response_body_size) // 100 MB
+                .max_request_size(config.max_celestia_response_body_size)
                 .request_timeout(std::time::Duration::from_secs(
                     config.celestia_rpc_timeout_seconds,
                 ))
@@ -146,6 +137,15 @@ impl DaService for CelestiaService {
 
         Self::with_client(client, chain_params.namespace)
     }
+}
+
+#[async_trait]
+impl DaService for CelestiaService {
+    type Spec = CelestiaSpec;
+
+    type FilteredBlock = FilteredCelestiaBlock;
+
+    type Error = BoxError;
 
     async fn get_finalized_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
         let client = self.client.clone();
@@ -153,7 +153,7 @@ impl DaService for CelestiaService {
 
         let _span = span!(Level::TRACE, "fetching finalized block", height = height);
         // Fetch the header and relevant shares via RPC
-        info!("Fetching header at height={}...", height);
+        debug!("Fetching header at height={}...", height);
         let header = client
             .request::<serde_json::Value, _>("header.GetByHeight", vec![height])
             .await?;
@@ -260,7 +260,7 @@ impl DaService for CelestiaService {
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
         // https://node-rpc-docs.celestia.org/
         let client = self.client.clone();
-        info!("Sending {} bytes of raw data to Celestia.", blob.len());
+        debug!("Sending {} bytes of raw data to Celestia.", blob.len());
         let fee: u64 = 2000;
         let namespace = self.rollup_namespace.0.to_vec();
         let blob = blob.to_vec();
@@ -304,7 +304,7 @@ struct CelestiaBasicResponse {
 }
 
 impl CelestiaBasicResponse {
-    /// We assume that absence of `code` indicates that request was successfull
+    /// We assume that absence of `code` indicates that request was successful
     pub fn is_success(&self) -> bool {
         self.error_code.is_none()
     }

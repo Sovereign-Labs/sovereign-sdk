@@ -1,11 +1,12 @@
 //! The da module defines traits used by the full node to interact with the DA layer.
-use std::fmt;
+use std::fmt::{self, Display};
 
 use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
 use crate::da::{BlockHeaderTrait, DaSpec};
+use crate::zk::ValidityCondition;
 
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer
 /// It is *not* part of the logic that is zk-proven.
@@ -13,24 +14,18 @@ use crate::da::{BlockHeaderTrait, DaSpec};
 /// The DaService has two responsibilities - fetching data from the DA layer, transforming the
 /// data into a representation that can be efficiently verified in circuit.
 #[async_trait]
-pub trait DaService {
-    /// A handle to the types used by the DA layer.
-    type RuntimeConfig: DeserializeOwned;
-
+pub trait DaService: Send + Sync + 'static {
     /// A handle to the types used by the DA layer.
     type Spec: DaSpec;
 
     /// A DA layer block, possibly excluding some irrelevant information.
-    type FilteredBlock: SlotData<BlockHeader = <Self::Spec as DaSpec>::BlockHeader>;
+    type FilteredBlock: SlotData<
+        BlockHeader = <Self::Spec as DaSpec>::BlockHeader,
+        Cond = <Self::Spec as DaSpec>::ValidityCondition,
+    >;
 
     /// The error type for fallible methods.
-    type Error: fmt::Debug + Send + Sync;
-
-    /// Create a new instance of the DaService
-    async fn new(
-        config: Self::RuntimeConfig,
-        chain_params: <Self::Spec as DaSpec>::ChainParams,
-    ) -> Self;
+    type Error: fmt::Debug + Send + Sync + Display;
 
     /// Retrieve the data for the given height, waiting for it to be
     /// finalized if necessary. The block, once returned, must not be reverted
@@ -100,8 +95,14 @@ pub trait SlotData:
     /// For these fields, we only ever store their *serialized* representation in memory or on disk. Only a few special
     /// fields like `data_root` are stored in decoded form in the `CelestiaHeader` struct.
     type BlockHeader: BlockHeaderTrait;
+
+    /// The validity condition associated with the slot data.
+    type Cond: ValidityCondition;
+
     /// The canonical hash of the DA layer block.
     fn hash(&self) -> [u8; 32];
     /// The header of the DA layer block.
     fn header(&self) -> &Self::BlockHeader;
+    /// Get the validity condition set associated with the slot
+    fn validity_condition(&self) -> Self::Cond;
 }

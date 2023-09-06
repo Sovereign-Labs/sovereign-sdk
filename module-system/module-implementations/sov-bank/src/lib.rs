@@ -1,28 +1,38 @@
+#![deny(missing_docs)]
+#![doc = include_str!("../README.md")]
 mod call;
 mod genesis;
 #[cfg(feature = "native")]
-mod query;
+pub mod query;
 mod token;
 mod utils;
 
+/// Specifies the call methods using in that module.
 pub use call::CallMessage;
-#[cfg(feature = "native")]
-pub use query::{BalanceResponse, BankRpcImpl, BankRpcServer, TotalSupplyResponse};
-use sov_modules_api::{Error, ModuleInfo};
+use sov_modules_api::{CallResponse, Error, ModuleInfo};
 use sov_state::WorkingSet;
 use token::Token;
+/// Specifies an interface to interact with tokens.
 pub use token::{Amount, Coins};
+/// Methods to get a token address.
 pub use utils::{get_genesis_token_address, get_token_address};
 
+/// [`TokenConfig`] specifies a configuration used when generating a token for the bank
+/// module.
 pub struct TokenConfig<C: sov_modules_api::Context> {
+    /// The name of the token.
     pub token_name: String,
+    /// A vector of tuples containing the initial addresses and balances (as u64)
     pub address_and_balances: Vec<(C::Address, u64)>,
+    /// The addresses that are authorized to mint the token.
     pub authorized_minters: Vec<C::Address>,
+    /// A salt used to encrypt the token address.
     pub salt: u64,
 }
 
 /// Initial configuration for sov-bank module.
 pub struct BankConfig<C: sov_modules_api::Context> {
+    /// A list of configurations for the initial tokens.
     pub tokens: Vec<TokenConfig<C>>,
 }
 
@@ -70,26 +80,34 @@ impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {
                 initial_balance,
                 minter_address,
                 authorized_minters,
-            } => Ok(self.create_token(
-                token_name,
-                salt,
-                initial_balance,
-                minter_address,
-                authorized_minters,
-                context,
-                working_set,
-            )?),
+            } => {
+                self.create_token(
+                    token_name,
+                    salt,
+                    initial_balance,
+                    minter_address,
+                    authorized_minters,
+                    context,
+                    working_set,
+                )?;
+                Ok(CallResponse::default())
+            }
 
             call::CallMessage::Transfer { to, coins } => {
                 Ok(self.transfer(to, coins, context, working_set)?)
             }
 
-            call::CallMessage::Burn { coins } => Ok(self.burn(coins, context, working_set)?),
+            call::CallMessage::Burn { coins } => {
+                Ok(self.burn_from_eoa(coins, context, working_set)?)
+            }
 
             call::CallMessage::Mint {
                 coins,
                 minter_address,
-            } => Ok(self.mint(coins, minter_address, context, working_set)?),
+            } => {
+                self.mint_from_eoa(&coins, &minter_address, context, working_set)?;
+                Ok(CallResponse::default())
+            }
 
             call::CallMessage::Freeze { token_address } => {
                 Ok(self.freeze(token_address, context, working_set)?)

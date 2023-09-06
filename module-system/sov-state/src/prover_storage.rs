@@ -3,13 +3,13 @@ use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::Arc;
 
-use jmt::storage::TreeWriter;
-use jmt::{JellyfishMerkleTree, KeyHash};
+use jmt::storage::{NodeBatch, TreeWriter};
+use jmt::{JellyfishMerkleTree, KeyHash, RootHash, Version};
 use sov_db::state_db::StateDB;
 
 use crate::config::Config;
 use crate::internal_cache::OrderedReadsAndWrites;
-use crate::storage::{StorageKey, StorageValue};
+use crate::storage::{NativeStorage, StorageKey, StorageProof, StorageValue};
 use crate::tree_db::TreeReadLogger;
 use crate::witness::Witness;
 use crate::{MerkleProofSpec, Storage};
@@ -41,37 +41,50 @@ impl<S: MerkleProofSpec> ProverStorage<S> {
         })
     }
 
-    fn read_value(&self, key: StorageKey) -> Option<StorageValue> {
+    fn read_value(&self, key: &StorageKey) -> Option<StorageValue> {
         match self
             .db
             .get_value_option_by_key(self.db.get_next_version(), key.as_ref())
         {
-            Ok(value) => value.map(StorageValue::new_from_bytes),
+            Ok(value) => value.map(Into::into),
             // It is ok to panic here, we assume the db is available and consistent.
             Err(e) => panic!("Unable to read value from db: {e}"),
         }
+    }
+
+    fn get_root_hash(&self, version: Version) -> Result<RootHash, anyhow::Error> {
+        let temp_merkle: JellyfishMerkleTree<'_, StateDB, S::Hasher> =
+            JellyfishMerkleTree::new(&self.db);
+        temp_merkle.get_root_hash(version)
     }
 }
 
 impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
     type Witness = S::Witness;
     type RuntimeConfig = Config;
+    type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
+    type StateUpdate = NodeBatch;
 
     fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
         Self::with_path(config.path.as_path())
     }
 
-    fn get(&self, key: StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
+    fn get(&self, key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
         let val = self.read_value(key);
         witness.add_hint(val.clone());
         val
     }
 
-    fn validate_and_commit(
+    fn get_state_root(&self, _witness: &Self::Witness) -> anyhow::Result<[u8; 32]> {
+        self.get_root_hash(self.db.get_next_version() - 1)
+            .map(|root| root.0)
+    }
+
+    fn compute_state_update(
         &self,
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
-    ) -> Result<[u8; 32], anyhow::Error> {
+    ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error> {
         let latest_version = self.db.get_next_version() - 1;
         witness.add_hint(latest_version);
 
@@ -127,16 +140,56 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
             .put_value_set(batch, next_version)
             .expect("JMT update must succeed");
 
+        Ok((new_root.0, tree_update.node_batch))
+    }
+
+    fn commit(&self, node_batch: &Self::StateUpdate) {
         self.db
-            .write_node_batch(&tree_update.node_batch)
+            .write_node_batch(node_batch)
             .expect("db write must succeed");
         self.db.inc_next_version();
-        Ok(new_root.0)
     }
 
     // Based on assumption `validate_and_commit` increments version.
     fn is_empty(&self) -> bool {
         self.db.get_next_version() <= 1
+    }
+
+    fn open_proof(
+        &self,
+        state_root: [u8; 32],
+        state_proof: StorageProof<Self::Proof>,
+    ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error> {
+        let StorageProof { key, value, proof } = state_proof;
+        let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
+
+        proof.verify(
+            jmt::RootHash(state_root),
+            key_hash,
+            value.as_ref().map(|v| v.value()),
+        )?;
+        Ok((key, value))
+    }
+}
+
+impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
+    fn get_with_proof(
+        &self,
+        key: StorageKey,
+        _witness: &Self::Witness,
+    ) -> StorageProof<Self::Proof> {
+        let merkle = JellyfishMerkleTree::<StateDB, S::Hasher>::new(&self.db);
+        let (val_opt, proof) = merkle
+            .get_with_proof(
+                KeyHash::with::<S::Hasher>(key.as_ref()),
+                self.db.get_next_version() - 1,
+            )
+            .unwrap();
+        StorageProof {
+            key,
+            value: val_opt.map(StorageValue::from),
+            proof,
+        }
     }
 }
 
@@ -197,7 +250,7 @@ mod test {
                     .validate_and_commit(cache, &witness)
                     .expect("storage is valid");
 
-                assert_eq!(test.value, prover_storage.get(test.key, &witness).unwrap());
+                assert_eq!(test.value, prover_storage.get(&test.key, &witness).unwrap());
                 assert_eq!(prover_storage.db.get_next_version(), test.version + 1)
             }
         }
@@ -208,7 +261,7 @@ mod test {
             for test in tests {
                 assert_eq!(
                     test.value,
-                    storage.get(test.key, &Default::default()).unwrap()
+                    storage.get(&test.key, &Default::default()).unwrap()
                 );
             }
         }
@@ -241,7 +294,10 @@ mod test {
         {
             let prover_storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
             assert!(!prover_storage.is_empty());
-            assert_eq!(value, prover_storage.get(key, &Default::default()).unwrap());
+            assert_eq!(
+                value,
+                prover_storage.get(&key, &Default::default()).unwrap()
+            );
         }
     }
 }

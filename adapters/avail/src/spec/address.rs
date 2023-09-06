@@ -1,14 +1,14 @@
 use core::fmt::{Display, Formatter};
+use std::str::FromStr;
 use std::hash::Hash;
 
 use primitive_types::H256;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::AddressTrait;
 
 #[derive(Serialize, Deserialize, Debug, PartialEq, Clone, Eq, Hash)]
 pub struct AvailAddress(pub [u8; 32]);
 
-impl AddressTrait for AvailAddress {}
+impl sov_rollup_interface::BasicAddress for AvailAddress {}
 
 impl Display for AvailAddress {
     fn fmt(&self, f: &mut Formatter) -> core::fmt::Result {
@@ -26,6 +26,17 @@ impl AsRef<[u8]> for AvailAddress {
 impl From<[u8; 32]> for AvailAddress {
     fn from(value: [u8; 32]) -> Self {
         Self(value)
+    }
+}
+
+impl FromStr for AvailAddress {
+    type Err = <H256 as FromStr>::Err;
+    
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let h_256 = H256::from_str(s)?;
+
+
+        Ok(Self(h_256.to_fixed_bytes()))
     }
 }
 

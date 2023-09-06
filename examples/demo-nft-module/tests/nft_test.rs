@@ -1,8 +1,6 @@
-use demo_nft_module::call::CallMessage;
-use demo_nft_module::query::OwnerResponse;
-use demo_nft_module::{NonFungibleToken, NonFungibleTokenConfig};
+use demo_nft_module::{CallMessage, NonFungibleToken, NonFungibleTokenConfig, OwnerResponse};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::test_utils::generate_address as gen_addr_generic;
+use sov_modules_api::utils::generate_address as gen_addr_generic;
 use sov_modules_api::{Address, Context, Module};
 use sov_rollup_interface::stf::Event;
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
@@ -21,7 +19,7 @@ fn genesis_and_mint() {
     let owner2 = generate_address("owner2");
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
         admin,
-        owners: vec![(0, owner1.clone())],
+        owners: vec![(0, owner1)],
     };
 
     let tmpdir = tempfile::tempdir().unwrap();
@@ -32,15 +30,15 @@ fn genesis_and_mint() {
     let genesis_result = nft.genesis(&config, &mut working_set);
     assert!(genesis_result.is_ok());
 
-    let query1: OwnerResponse<C> = nft.get_owner(0, &mut working_set);
+    let query1: OwnerResponse<C> = nft.get_owner(0, &mut working_set).unwrap();
     assert_eq!(query1.owner, Some(owner1));
 
-    let query2: OwnerResponse<C> = nft.get_owner(1, &mut working_set);
+    let query2: OwnerResponse<C> = nft.get_owner(1, &mut working_set).unwrap();
     assert!(query2.owner.is_none());
 
     // Mint, anybody can mint
     let mint_message = CallMessage::Mint { id: 1 };
-    let owner2_context = C::new(owner2.clone());
+    let owner2_context = C::new(owner2);
     nft.call(mint_message.clone(), &owner2_context, &mut working_set)
         .expect("Minting failed");
 
@@ -48,7 +46,7 @@ fn genesis_and_mint() {
         working_set.events()[0],
         Event::new("NFT mint", "A token with id 1 was minted")
     );
-    let query3: OwnerResponse<C> = nft.get_owner(1, &mut working_set);
+    let query3: OwnerResponse<C> = nft.get_owner(1, &mut working_set).unwrap();
     assert_eq!(query3.owner, Some(owner2));
 
     // Try to mint again same token, should fail
@@ -63,23 +61,20 @@ fn genesis_and_mint() {
 fn transfer() {
     // Preparation
     let admin = generate_address("admin");
-    let admin_context = C::new(admin.clone());
+    let admin_context = C::new(admin);
     let owner1 = generate_address("owner2");
-    let owner1_context = C::new(owner1.clone());
+    let owner1_context = C::new(owner1);
     let owner2 = generate_address("owner2");
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
-        admin: admin.clone(),
-        owners: vec![(0, admin.clone()), (1, owner1.clone()), (2, owner2.clone())],
+        admin,
+        owners: vec![(0, admin), (1, owner1), (2, owner2)],
     };
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let nft = NonFungibleToken::default();
     nft.genesis(&config, &mut working_set).unwrap();
 
-    let transfer_message = CallMessage::Transfer {
-        id: 1,
-        to: owner2.clone(),
-    };
+    let transfer_message = CallMessage::Transfer { id: 1, to: owner2 };
 
     // admin cannot transfer token of the owner1
     let transfer_attempt = nft.call(transfer_message.clone(), &admin_context, &mut working_set);
@@ -90,7 +85,7 @@ fn transfer() {
 
     let query_token_owner =
         |token_id: u64, working_set: &mut WorkingSet<Storage>| -> Option<Address> {
-            let query: OwnerResponse<C> = nft.get_owner(token_id, working_set);
+            let query: OwnerResponse<C> = nft.get_owner(token_id, working_set).unwrap();
             query.owner
         };
 
@@ -122,9 +117,9 @@ fn transfer() {
 fn burn() {
     // Preparation
     let admin = generate_address("admin");
-    let admin_context = C::new(admin.clone());
+    let admin_context = C::new(admin);
     let owner1 = generate_address("owner2");
-    let owner1_context = C::new(owner1.clone());
+    let owner1_context = C::new(owner1);
     let config: NonFungibleTokenConfig<C> = NonFungibleTokenConfig {
         admin,
         owners: vec![(0, owner1)],
@@ -153,7 +148,7 @@ fn burn() {
         working_set.events()[0],
         Event::new("NFT burn", "A token with id 0 was burned")
     );
-    let query: OwnerResponse<C> = nft.get_owner(0, &mut working_set);
+    let query: OwnerResponse<C> = nft.get_owner(0, &mut working_set).unwrap();
 
     assert!(query.owner.is_none());
 

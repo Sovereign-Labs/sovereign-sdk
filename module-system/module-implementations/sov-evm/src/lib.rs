@@ -4,18 +4,18 @@ pub mod call;
 pub mod evm;
 #[cfg(feature = "experimental")]
 pub mod genesis;
+#[cfg(feature = "experimental")]
+pub mod hooks;
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
 pub mod query;
-#[cfg(feature = "experimental")]
-mod receipt;
+#[cfg(feature = "smart_contracts")]
+pub mod smart_contracts;
 #[cfg(feature = "experimental")]
 #[cfg(test)]
 mod tests;
 #[cfg(feature = "experimental")]
 pub use experimental::{AccountData, Evm, EvmConfig, SpecIdWrapper};
-#[cfg(feature = "experimental")]
-pub use receipt::TransactionReceipt;
 #[cfg(feature = "experimental")]
 pub use revm::primitives::SpecId;
 
@@ -24,6 +24,7 @@ mod experimental {
     use std::collections::HashMap;
 
     use derive_more::{From, Into};
+    use ethers::types::TransactionReceipt;
     use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo};
     use sov_state::WorkingSet;
@@ -31,10 +32,8 @@ mod experimental {
     use super::evm::db::EvmDb;
     use super::evm::transaction::BlockEnv;
     use super::evm::{DbAccount, EthAddress};
-    use crate::evm::{Bytes32, EvmChainCfg, EvmTransaction};
-    use crate::TransactionReceipt;
-
-    #[derive(Clone)]
+    use crate::evm::{Bytes32, EvmChainCfg, RawEvmTransaction};
+    #[derive(Clone, Debug)]
     pub struct AccountData {
         pub address: EthAddress,
         pub balance: Bytes32,
@@ -53,7 +52,7 @@ mod experimental {
         }
     }
 
-    #[derive(Clone)]
+    #[derive(Clone, Debug)]
     pub struct EvmConfig {
         pub data: Vec<AccountData>,
         pub chain_id: u64,
@@ -89,10 +88,14 @@ mod experimental {
         pub(crate) block_env: sov_state::StateValue<BlockEnv>,
 
         #[state]
-        pub(crate) transactions: sov_state::StateMap<Bytes32, EvmTransaction>,
+        pub(crate) transactions: sov_state::StateMap<Bytes32, RawEvmTransaction>,
 
         #[state]
-        pub(crate) receipts: sov_state::StateMap<Bytes32, TransactionReceipt>,
+        pub(crate) receipts: sov_state::StateMap<
+            ethereum_types::H256,
+            TransactionReceipt,
+            sov_state::codec::BcsCodec,
+        >,
     }
 
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {

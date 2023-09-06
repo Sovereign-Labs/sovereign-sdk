@@ -7,6 +7,7 @@ license = { workspace = true }
 homepage = "sovereign.xyz"
 publish = false
 resolver = "2"
+default-run = "sov-demo-rollup"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -25,26 +26,26 @@ futures = "0.3"
 
 # Crates which only this package depends on 
 tokio = { workspace = true }
-tracing-subscriber = "0.3.17"
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
-jupiter = { path = "../../adapters/celestia" }
+celestia = { path = "../../adapters/celestia", features = ["native"] }
+presence = { path = "../../adapters/avail" }
 demo-stf = { path = "../demo-stf", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-db = { path = "../../full-node/db/sov-db" }
 sov-ethereum = { path = "../../full-node/sov-ethereum", optional = true }
 sov-sequencer = { path = "../../full-node/sov-sequencer" }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
-risc0-adapter = { path = "../../adapters/risc0" }
-sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template" }
-
-sov-bank = { path = "../../module-system/module-implementations/sov-bank", default-features = false }
-sov-election = { path = "../../module-system/module-implementations/examples/sov-election", default-features = false }
-sov-value-setter = { path = "../../module-system/module-implementations/examples/sov-value-setter", default-features = false }
+risc0-adapter = { path = "../../adapters/risc0", features = ["native"] }
+sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
+sov-cli = { path = "../../module-system/sov-cli" }
 
 [dev-dependencies]
+sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
+sov-bank = { path = "../../module-system/module-implementations/sov-bank", features = ["native"] }
 sha2 = { workspace = true }
 reqwest = "0.11"
 tendermint = "0.32"
@@ -56,7 +57,19 @@ prometheus = "0.11.0"
 prettytable-rs = "^0.10"
 criterion = "0.5.1"
 
+ethereum-types = "0.14.1"
+ethers-core = { workspace = true }
+ethers-contract = { workspace = true }
+ethers-middleware = { workspace = true }
+ethers-providers = { workspace = true }
+ethers-signers = { workspace = true }
+ethers = { workspace = true }
+revm = { workspace = true }
+
+sov-demo-rollup = { path = ".", features = ["experimental"] }
+
 [features]
+default = []
 experimental = ["sov-ethereum/experimental"]
 
 [[bench]]
@@ -66,3 +79,7 @@ harness = false
 [[bench]]
 name = "rollup_coarse_measure"
 harness = false
+
+[[bin]]
+name = "sov-cli"
+path = "src/sov-cli/main.rs"

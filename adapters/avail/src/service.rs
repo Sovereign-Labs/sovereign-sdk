@@ -3,11 +3,17 @@ use core::time::Duration;
 use anyhow::anyhow;
 use async_trait::async_trait;
 use avail_subxt::AvailConfig;
+use avail_subxt::api;
+use avail_subxt::primitives::AvailExtrinsicParams;
+use avail_subxt::api::runtime_types::sp_core::bounded::bounded_vec::BoundedVec;
 use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::services::da::DaService;
+use sp_keyring::sr25519::sr25519::{self, Pair};
+use sp_core::crypto::Pair as PairTrait;
 use subxt::OnlineClient;
+use subxt::tx::PairSigner;
 use tracing::info;
 
 use crate::avail::{Confidence, ExtrinsicsData};
@@ -16,10 +22,20 @@ use crate::spec::header::AvailHeader;
 use crate::spec::transaction::AvailBlobTransaction;
 use crate::spec::DaLayerSpec;
 
-#[derive(Debug, Clone)]
+/// Runtime configuration for the DA service
+#[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize)]
+pub struct DaServiceConfig {
+    pub light_client_url: String,
+    pub node_client_url: String,
+    //TODO: Safer strategy to load seed so it is not accidentally revealed.
+    pub seed: String,
+}
+
+#[derive(Clone)]
 pub struct DaProvider {
     pub node_client: OnlineClient<AvailConfig>,
     pub light_client_url: String,
+    signer: PairSigner<AvailConfig, Pair>,
 }
 
 impl DaProvider {
@@ -32,18 +48,23 @@ impl DaProvider {
         let light_client_url = self.light_client_url.clone();
         format!("{light_client_url}/v1/confidence/{block_num}")
     }
-}
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct RuntimeConfig {
-    light_client_url: String,
-    #[serde(skip)]
-    node_client: Option<OnlineClient<AvailConfig>>,
-}
+    pub async fn new(
+        config: DaServiceConfig,
+    ) -> Self {
+        let pair = Pair::from_string_with_seed(&config.seed, None).unwrap();
+        let signer = PairSigner::<AvailConfig, Pair>::new(pair.0.clone());
 
-impl PartialEq for RuntimeConfig {
-    fn eq(&self, other: &Self) -> bool {
-        self.light_client_url == other.light_client_url
+        let node_client = avail_subxt::build_client(config.node_client_url.to_string(), false)
+        .await
+        .unwrap();
+        let light_client_url = config.light_client_url;
+
+        DaProvider {
+            node_client,
+            light_client_url,
+            signer,
+        }
     }
 }
 
@@ -107,8 +128,6 @@ async fn wait_for_appdata(appdata_url: &str, block: u32) -> anyhow::Result<Extri
 
 #[async_trait]
 impl DaService for DaProvider {
-    type RuntimeConfig = RuntimeConfig;
-
     type Spec = DaLayerSpec;
 
     type FilteredBlock = AvailBlock;
@@ -132,11 +151,7 @@ impl DaService for DaProvider {
             .await?
             .unwrap();
 
-        info!("Hash: {:?}", hash);
-
         let header = node_client.rpc().header(Some(hash)).await?.unwrap();
-
-        info!("Header: {:?}", header);
 
         let header = AvailHeader::new(header, hash);
         let transactions = appdata
@@ -180,20 +195,20 @@ impl DaService for DaProvider {
         ((), ())
     }
 
-    async fn new(
-        config: Self::RuntimeConfig,
-        _chain_params: <Self::Spec as DaSpec>::ChainParams,
-    ) -> Self {
-        let node_client = config.node_client.unwrap();
-        let light_client_url = config.light_client_url;
+    async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
+        let data_transfer = api::tx()
+        .data_availability()
+        .submit_data(BoundedVec(blob.to_vec()));
+        
+        let extrinsic_params = AvailExtrinsicParams::new_with_app_id(7.into());
 
-        DaProvider {
-            node_client,
-            light_client_url,
-        }
-    }
+        let h = self.node_client
+        .tx()
+        .sign_and_submit_then_watch(&data_transfer, &self.signer, extrinsic_params)
+        .await?;
 
-    async fn send_transaction(&self, _blob: &[u8]) -> Result<(), Self::Error> {
-        unimplemented!("The avail light client does not currently support sending transactions");
+        println!("Transaction submitted: {:#?}", h.extrinsic_hash());
+
+        Ok(())
     }
 }

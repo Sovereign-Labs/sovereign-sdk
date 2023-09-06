@@ -4,28 +4,6 @@
 
 This crate contains an implementation of a `StateTransitionFunction` called `AppTemplate` that is specifically designed to work with the Module System. The `AppTemplate` relies on a set of traits that, when combined, define the logic for transitioning the rollup state.
 
-```rust ignore
-pub struct AppTemplate<C: Context, RT, Vm> {
-    pub current_storage: C::Storage,
-    pub runtime: RT,
-    pub (crate) working_set: Option<WorkingSet<C::Storage>>,
-    phantom_vm: PhantomData<Vm>,
-}
-
-impl<C: Context, RT, Vm> AppTemplate<C, RT, Vm>
-where
-    RT: DispatchCall<Context = C>
-        + Genesis<Context = C>
-        + TxHooks<Context = C>
-        + ApplyBlobHooks<Context = C>,
-{
-
-    pub fn new(storage: C::Storage, runtime: RT) -> Self {
-        ...
-    }
-  ...
-}
-```
 
 1. The `DispatchCall` trait is responsible for decoding serialized messages and forwarding them to the appropriate module.
 1. The `Genesis` trait handles the initialization process of the rollup. It sets up the initial state upon the rollup deployment.

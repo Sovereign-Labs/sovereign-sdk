@@ -34,10 +34,10 @@ fn test_registration_lifecycle() {
     let da_address = ANOTHER_SEQUENCER_DA_ADDRESS.to_vec();
 
     let sequencer_address = generate_address(ANOTHER_SEQUENCER_KEY);
-    let sender_context = C::new(sequencer_address.clone());
+    let sender_context = C::new(sequencer_address);
 
     let balance_before = test_sequencer
-        .query_balance(sequencer_address.clone(), working_set)
+        .query_balance(sequencer_address, working_set)
         .unwrap()
         .amount
         .unwrap();
@@ -57,7 +57,7 @@ fn test_registration_lifecycle() {
         .expect("Sequencer registration has failed");
 
     let balance_after_registration = test_sequencer
-        .query_balance(sequencer_address.clone(), working_set)
+        .query_balance(sequencer_address, working_set)
         .unwrap()
         .amount
         .unwrap();
@@ -68,7 +68,7 @@ fn test_registration_lifecycle() {
         .sequencer_address(da_address.clone(), working_set)
         .unwrap();
     assert_eq!(
-        Some(sequencer_address.clone()),
+        Some(sequencer_address),
         registry_response_after_registration.address
     );
 
@@ -104,7 +104,7 @@ fn test_registration_not_enough_funds() {
     let da_address = ANOTHER_SEQUENCER_DA_ADDRESS.to_vec();
 
     let sequencer_address = generate_address(LOW_FUND_KEY);
-    let sender_context = C::new(sequencer_address.clone());
+    let sender_context = C::new(sequencer_address);
 
     let register_message = CallMessage::Register { da_address };
     let response = test_sequencer
@@ -155,7 +155,7 @@ fn test_registration_second_time() {
     let da_address = GENESIS_SEQUENCER_DA_ADDRESS.to_vec();
 
     let sequencer_address = generate_address(GENESIS_SEQUENCER_KEY);
-    let sender_context = C::new(sequencer_address.clone());
+    let sender_context = C::new(sequencer_address);
 
     let register_message = CallMessage::Register { da_address };
     let response = test_sequencer
@@ -236,7 +236,7 @@ fn test_preferred_sequencer_returned_and_removed() {
     let registry = SequencerRegistry::<C>::default();
     let mut sequencer_config = create_sequencer_config(seq_rollup_address, token_address);
 
-    sequencer_config.preferred_sequencer = Some(sequencer_config.seq_da_address.clone());
+    sequencer_config.is_preferred_sequencer = true;
 
     let mut test_sequencer = TestSequencer {
         bank,
@@ -250,7 +250,7 @@ fn test_preferred_sequencer_returned_and_removed() {
     test_sequencer.genesis(working_set);
 
     assert_eq!(
-        test_sequencer.sequencer_config.preferred_sequencer,
+        Some(test_sequencer.sequencer_config.seq_da_address),
         test_sequencer.registry.get_preferred_sequencer(working_set)
     );
 
@@ -269,35 +269,4 @@ fn test_preferred_sequencer_returned_and_removed() {
         .registry
         .get_preferred_sequencer(working_set)
         .is_none());
-}
-
-#[test]
-fn test_preferred_sequencer_not_allowed_sequencers() {
-    let bank = sov_bank::Bank::<C>::default();
-    let (bank_config, seq_rollup_address) = create_bank_config();
-
-    let token_address = sov_bank::get_genesis_token_address::<C>(
-        &bank_config.tokens[0].token_name,
-        bank_config.tokens[0].salt,
-    );
-
-    let some_da_address = UNKNOWN_SEQUENCER_DA_ADDRESS.to_vec();
-
-    let registry = SequencerRegistry::<C>::default();
-    let mut sequencer_config = create_sequencer_config(seq_rollup_address, token_address);
-
-    sequencer_config.preferred_sequencer = Some(some_da_address);
-
-    let tmpdir = tempfile::tempdir().unwrap();
-    let working_set = &mut WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
-
-    bank.genesis(&bank_config, working_set).unwrap();
-    let genesis_result = registry.genesis(&sequencer_config, working_set);
-    assert!(genesis_result.is_err());
-
-    let message = genesis_result.err().unwrap().to_string();
-    assert_eq!(
-        "Preferred sequencer is not in list of allowed sequencers",
-        message
-    );
 }

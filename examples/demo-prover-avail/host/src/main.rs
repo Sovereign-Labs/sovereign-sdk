@@ -1,39 +1,46 @@
-mod config;
-
 use std::env;
+use std::str::FromStr;
 
 use anyhow::Context;
-use demo_stf::app::{App, DefaultPrivateKey, DefaultContext};
+use const_rollup_config::SEQUENCER_AVAIL_DA_ADDRESS;
+use demo_stf::app::{App, DefaultContext, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runtime::GenesisConfig;
 use methods::{ROLLUP_ELF, ROLLUP_ID};
+use presence::service::{DaProvider, DaServiceConfig};
+use presence::spec::transaction::AvailBlobTransaction;
+use presence::spec::address::AvailAddress;
+use presence::spec::DaLayerSpec;
 use risc0_adapter::host::{Risc0Host, Risc0Verifier};
-
 use sov_modules_api::PrivateKey;
-use sov_rollup_interface::services::da::DaService;
+use sov_rollup_interface::services::da::{DaService, SlotData};
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_rollup_interface::services::da::SlotData;
 use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::Storage;
-use sov_stf_runner::{from_toml_path};
+use sov_stf_runner::{from_toml_path, RollupConfig};
 use tracing::{info, Level};
-use presence::service::DaProvider as AvailDaProvider;
-use presence::spec::transaction::AvailBlobTransaction;
-use crate::config::Config;
 
-pub fn get_genesis_config(sequencer_da_address: &str) -> GenesisConfig<DefaultContext> {
+pub fn get_genesis_config(
+    sequencer_da_address: &AvailAddress,
+) -> GenesisConfig<DefaultContext, DaLayerSpec> {
     let sequencer_private_key = DefaultPrivateKey::generate();
+
     create_demo_genesis_config(
         100000000,
         sequencer_private_key.default_address(),
-        hex::decode(sequencer_da_address).unwrap(),
-        &sequencer_private_key,
+        sequencer_da_address.as_ref().to_vec(),
         &sequencer_private_key,
     )
 }
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    // If SKIP_PROVER is set, this means that we still compile and generate the riscV ELF
+    // We execute the code inside the riscV but we don't prove it. This saves a significant amount of time
+    // The primary benefit of doing this is to make sure we produce valid code that can run inside the
+    // riscV virtual machine. Since proving is something we offload entirely to risc0, ensuring that
+    // we produce valid riscV code and that it can execute is very useful.
+    let skip_prover = env::var("SKIP_PROVER").is_ok();
     // Initializing logging
     let subscriber = tracing_subscriber::fmt()
         .with_max_level(Level::INFO)
@@ -45,42 +52,28 @@ async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
         .nth(1)
         .unwrap_or_else(|| "rollup_config.toml".to_string());
-    let config: Config =
-        from_toml_path(&rollup_config_path).context("Failed to read rollup configuration")?;
+    let rollup_config: RollupConfig<DaServiceConfig> =
+        from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 
-    let node_client = presence::build_client(config.da.node_client_url.to_string(), false)
-        .await
-        .unwrap();
-    let light_client_url = config.da.light_client_url.to_string();
-    // Initialize the Avail service using the DaService interface
-    let da_service = AvailDaProvider {
-        node_client,
-        light_client_url,
-    };
+    let da_service = DaProvider::new(rollup_config.da.clone()).await;
 
-    let app: App<Risc0Verifier, AvailBlobTransaction> =
-    App::new(config.rollup_config.runner.storage.clone());
+    let mut app: App<Risc0Verifier, DaLayerSpec> = App::new(rollup_config.storage);
 
     let is_storage_empty = app.get_storage().is_empty();
-    let mut demo = app.stf;
+    
+    let sequencer_da_address = AvailAddress::from_str(SEQUENCER_AVAIL_DA_ADDRESS)?;
+    if is_storage_empty {
+        info!("Starting from empty storage, initialization chain");
+        app.stf
+            .init_chain(get_genesis_config(&sequencer_da_address));
+    }
 
-    let mut prev_state_root = {
-        // Check if the rollup has previously been initialized
-        if is_storage_empty {
-            info!("No history detected. Initializing chain...");
-            demo.init_chain(get_genesis_config(&config.sequencer_da_address));
-            info!("Chain initialization is done.");
-        } else {
-            info!("Chain is already initialized. Skipping initialization");
-        }
+    let mut prev_state_root = app
+        .get_storage()
+        .get_state_root(&Default::default())
+        .expect("The storage needs to have a state root");
 
-        let res = demo.apply_slot(Default::default(), []);
-        res.state_root.0
-    };
-
-    //TODO: Start from slot processed before shut down.
-
-    for height in config.rollup_config.start_height..=config.rollup_config.start_height + 30 {
+    for height in rollup_config.runner.start_height.. {
         let mut host = Risc0Host::new(ROLLUP_ELF);
         host.write_to_guest(prev_state_root);
 
@@ -92,8 +85,9 @@ async fn main() -> Result<(), anyhow::Error> {
         let filtered_block = da_service.get_finalized_at(height).await?;
         let header_hash = hex::encode(filtered_block.hash());
         host.write_to_guest(&filtered_block.header);
-        let (mut blob_txs, inclusion_proof, completeness_proof) =
-            da_service.extract_relevant_txs_with_proof(&filtered_block).await;
+        let (mut blob_txs, inclusion_proof, completeness_proof) = da_service
+            .extract_relevant_txs_with_proof(&filtered_block)
+            .await;
 
         info!(
             "Extracted {} relevant blobs at height {} header 0x{}",
@@ -106,14 +100,23 @@ async fn main() -> Result<(), anyhow::Error> {
         host.write_to_guest(&completeness_proof);
         host.write_to_guest(&blob_txs);
 
-        let result = demo.apply_slot(Default::default(), &mut blob_txs);
+        let result = app.stf.apply_slot(Default::default(), &filtered_block, &mut blob_txs);
 
         host.write_to_guest(&result.witness);
 
-        info!("Starting proving...");
-        let receipt = host.run().expect("Prover should run successfully");
-        info!("Start verifying..");
-        receipt.verify(ROLLUP_ID).expect("Receipt should be valid");
+        // Run the actual prover to generate a receipt that can then be verified
+        if !skip_prover {
+            info!("Starting proving...");
+            let receipt = host.run().expect("Prover should run successfully");
+            info!("Start verifying..");
+            receipt.verify(ROLLUP_ID).expect("Receipt should be valid");
+        } else {
+            // This runs the riscV code inside the VM without actually generating the proofs
+            // This is useful for testing if rollup code actually executes properly
+            let _receipt = host
+                .run_without_proving()
+                .expect("Prover should run successfully");
+        }
 
         prev_state_root = result.state_root.0;
         info!("Completed proving and verifying block {height}");

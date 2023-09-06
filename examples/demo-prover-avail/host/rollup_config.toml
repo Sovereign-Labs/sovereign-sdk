@@ -1,19 +1,18 @@
-# We define the rollup's genesis to occur at Avail block number `start_height`. The rollup will ignore
-# any Avail blocks before this height
-sequencer_da_address = "b4dc7fc57630d2a7be7f358cbefc1e52bd6d0f250d19647cf264ecf2d8764d7b"
-
-[rollup_config]
-start_height = 2
-
 [da]
 light_client_url = "http://127.0.0.1:8000"
 node_client_url = "wss://kate.avail.tools:443/ws"
+seed = "secret_seed"
 
-[rollup_config.runner.storage]
+[storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
 
-[rollup_config.rpc_config]
+# We define the rollup's genesis to occur at block number `start_height`. The rollup will ignore
+# any blocks before this height
+[runner]
+start_height = 1
+
+[runner.rpc_config]
 # the host and port to bind the rpc server for
 bind_host = "127.0.0.1"
 bind_port = 12345

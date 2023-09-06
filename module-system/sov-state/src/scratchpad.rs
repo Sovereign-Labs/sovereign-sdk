@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
+use std::hash::Hash;
 
-use borsh::{BorshDeserialize, BorshSerialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 use sov_rollup_interface::stf::Event;
 
+use crate::codec::StateValueCodec;
 use crate::internal_cache::{OrderedReadsAndWrites, StorageInternalCache};
 use crate::storage::{StorageKey, StorageValue};
 use crate::{Prefix, Storage};
@@ -51,6 +52,10 @@ impl<S: Storage> StateCheckpoint<S> {
         Self {
             delta: Delta::new(inner),
         }
+    }
+
+    pub fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
+        self.delta.get(key)
     }
 
     pub fn with_witness(inner: S, witness: S::Witness) -> Self {
@@ -125,76 +130,91 @@ impl<S: Storage> WorkingSet<S> {
         &self.events
     }
 
-    #[cfg(test)]
     pub fn backing(&self) -> &S {
         &self.delta.inner.inner
     }
 }
 
 impl<S: Storage> WorkingSet<S> {
-    pub(crate) fn set_value<K: BorshSerialize, V: BorshSerialize>(
+    pub(crate) fn set_value<K, V, VC>(
         &mut self,
         prefix: &Prefix,
         storage_key: &K,
         value: &V,
-    ) {
+        codec: &VC,
+    ) where
+        K: Hash + Eq + ?Sized,
+        VC: StateValueCodec<V>,
+    {
         let storage_key = StorageKey::new(prefix, storage_key);
-        let storage_value = StorageValue::new(value);
+        let storage_value = StorageValue::new(value, codec);
         self.set(storage_key, storage_value);
     }
 
-    pub(crate) fn get_value<K: BorshSerialize, V: BorshDeserialize>(
+    pub(crate) fn get_value<K, V, VC>(
         &mut self,
         prefix: &Prefix,
         storage_key: &K,
-    ) -> Option<V> {
+        codec: &VC,
+    ) -> Option<V>
+    where
+        K: Hash + Eq + ?Sized,
+        VC: StateValueCodec<V>,
+    {
         let storage_key = StorageKey::new(prefix, storage_key);
-        self.get_decoded(storage_key)
+        self.get_decoded(storage_key, codec)
     }
 
-    pub(crate) fn remove_value<K: BorshSerialize, V: BorshDeserialize>(
+    pub(crate) fn remove_value<K, V, VC>(
         &mut self,
         prefix: &Prefix,
         storage_key: &K,
-    ) -> Option<V> {
+        codec: &VC,
+    ) -> Option<V>
+    where
+        K: Hash + Eq + ?Sized,
+        VC: StateValueCodec<V>,
+    {
         let storage_key = StorageKey::new(prefix, storage_key);
-        let storage_value = self.get_decoded(storage_key.clone())?;
+        let storage_value = self.get_decoded(storage_key.clone(), codec)?;
         self.delete(storage_key);
         Some(storage_value)
     }
 
-    pub(crate) fn delete_value<K: BorshSerialize>(&mut self, prefix: &Prefix, storage_key: &K) {
+    pub(crate) fn delete_value<K>(&mut self, prefix: &Prefix, storage_key: &K)
+    where
+        K: Hash + Eq + ?Sized,
+    {
         let storage_key = StorageKey::new(prefix, storage_key);
         self.delete(storage_key);
     }
 
-    fn get_decoded<V: BorshDeserialize>(&mut self, storage_key: StorageKey) -> Option<V> {
+    fn get_decoded<V, VC>(&mut self, storage_key: StorageKey, codec: &VC) -> Option<V>
+    where
+        VC: StateValueCodec<V>,
+    {
         let storage_value = self.get(storage_key)?;
 
-        // It is ok to panic here. Deserialization problem means that something is terribly wrong.
-        Some(
-            V::deserialize_reader(&mut storage_value.value())
-                .unwrap_or_else(|e| panic!("Unable to deserialize storage value {e:?}")),
-        )
+        Some(codec.decode_value_unwrap(storage_value.value()))
     }
 }
 
 impl<S: Storage> RevertableDelta<S> {
     fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
-        let key = key.as_cache_key();
+        let key = key.to_cache_key();
         if let Some(value) = self.writes.get(&key) {
-            return value.clone().map(StorageValue::new_from_cache_value);
+            return value.clone().map(Into::into);
         }
-        self.inner.get(key.into())
+        self.inner.get(&key.into())
     }
 
     fn set(&mut self, key: StorageKey, value: StorageValue) {
         self.writes
-            .insert(key.as_cache_key(), Some(value.as_cache_value()));
+            .insert(key.to_cache_key(), Some(value.into_cache_value()));
     }
 
     fn delete(&mut self, key: StorageKey) {
-        self.writes.insert(key.as_cache_key(), None);
+        self.writes.insert(key.to_cache_key(), None);
     }
 }
 
@@ -204,9 +224,9 @@ impl<S: Storage> RevertableDelta<S> {
 
         for (k, v) in self.writes.into_iter() {
             if let Some(v) = v {
-                inner.set(k.into(), StorageValue::new_from_cache_value(v));
+                inner.set(&k.into(), v.into());
             } else {
-                inner.delete(k.into());
+                inner.delete(&k.into());
             }
         }
 
@@ -250,15 +270,15 @@ impl<S: Storage> Debug for Delta<S> {
 }
 
 impl<S: Storage> Delta<S> {
-    fn get(&mut self, key: StorageKey) -> Option<StorageValue> {
+    fn get(&mut self, key: &StorageKey) -> Option<StorageValue> {
         self.cache.get_or_fetch(key, &self.inner, &self.witness)
     }
 
-    fn set(&mut self, key: StorageKey, value: StorageValue) {
+    fn set(&mut self, key: &StorageKey, value: StorageValue) {
         self.cache.set(key, value)
     }
 
-    fn delete(&mut self, key: StorageKey) {
+    fn delete(&mut self, key: &StorageKey) {
         self.cache.delete(key)
     }
 }

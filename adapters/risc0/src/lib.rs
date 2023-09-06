@@ -6,6 +6,9 @@ pub mod guest;
 #[cfg(feature = "native")]
 pub mod host;
 
+#[cfg(feature = "bench")]
+pub mod metrics;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Risc0MethodId([u32; 8]);
 

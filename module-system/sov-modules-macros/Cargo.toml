@@ -20,15 +20,18 @@ name = "tests"
 path = "tests/all_tests.rs"
 
 [dev-dependencies]
-serde_json = "1"
-jsonrpsee = { workspace = true, features = ["macros", "http-client", "server"]}
+
+clap = { workspace = true }
+jsonrpsee = { workspace = true, features = ["macros", "http-client", "server"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
 trybuild = "1.0"
 
-sov-modules-api = { path = "../sov-modules-api", version = "0.1", default-features = false }
-sov-state = { path = "../sov-state", version = "0.1", default-features = false }
+sov-modules-api = { path = "../sov-modules-api", version = "0.1" }
+sov-state = { path = "../sov-state", version = "0.1" }
 sov-bank = { path = "../module-implementations/sov-bank", version = "0.1", features = ["native"] }
-serde = { workspace = true }
-clap = { workspace = true }
+sov-modules-macros = { path = ".", features = ["native"] }
 
 [dependencies]
 anyhow = { workspace = true }
@@ -41,4 +44,4 @@ syn = { version = "1.0", features = ["full"] }
 
 [features]
 default = []
-native = ["dep:jsonrpsee"]
+native = ["jsonrpsee"]

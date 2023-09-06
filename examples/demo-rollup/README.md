@@ -25,15 +25,13 @@ This is a demo full node running a simple Sovereign SDK rollup on [Celestia](htt
   - [How to Submit Transactions](#how-to-submit-transactions)
     - [1. Build `sov-cli`](#1-build-sov-cli)
     - [2. Generate the Transaction](#2-generate-the-transaction)
-    - [3. Bundle the Serialized Transaction](#3-bundle-the-serialized-transaction)
-    - [4. Submit the Transaction](#4-submit-the-transaction)
-    - [5. Verify the Token Supply](#5-verify-the-token-supply)
+    - [3. Submit the Transaction(s)](#3-submit-the-transactions)
+    - [4. Verify the Token Supply](#4-verify-the-token-supply)
   - [Makefile](#makefile)
   - [Remote setup](#remote-setup)
 - [How to Customize This Example](#how-to-customize-this-example)
   - [1. Initialize the DA Service](#1-initialize-the-da-service)
-  - [2. Initialize the State Transition Function](#2-initialize-the-state-transition-function)
-  - [3. Run the Main Loop](#3-run-the-main-loop)
+  - [2. Run the Main Loop](#2-run-the-main-loop)
 - [Disclaimer](#disclaimer)
 - [Interacting with your Node via RPC](#interacting-with-your-node-via-rpc)
   - [Key Concepts](#key-concepts)
@@ -67,41 +65,41 @@ understand how to build your own state transition function, check out at the doc
 
 2. Switch to the `examples/demo-rollup` directory (which is where this `README.md` is located!).
 
-   ```
-   $ cd examples/demo-rollup/
-   ```
+```shell
+$ cd examples/demo-rollup/
+```
 
 3. Spin up a local Celestia instance as your DA layer. We've built a small Makefile to simplify that process:
 
-   ```
-   $ make clean
-   $ make start   # Make sure to run `make stop` when you're done with this demo!
-   ```
+```sh
+$ make clean
+$ make start   # Make sure to run `make stop` when you're done with this demo!
+```
 
-   If interested, you can check out what the Makefile does [here](#Makefile).  
-   The above command will also modify some configuration files:
+If interested, you can check out what the Makefile does [here](#Makefile).  
+ The above command will also modify some configuration files:
 
-   ```
-   $ git status
-   ..
-   ..
-   	modified:   rollup_config.toml
-   ```
+```sh
+$ git status
+..
+..
+	modified:   rollup_config.toml
+```
 
 ### Start the Rollup Full Node
 
 Now run the demo-rollup full node, as shown below. You will see it consuming blocks from the Celestia node running inside Docker:
 
-```
+```sh
 # Make sure you're still in the examples/demo-rollup directory.
 $ cargo run
-2023-06-07T10:03:25.473920Z  INFO jupiter::da_service: Fetching header at height=1...
+2023-06-07T10:03:25.473920Z  INFO celestia::da_service: Fetching header at height=1...
 2023-06-07T10:03:25.496853Z  INFO sov_demo_rollup: Received 0 blobs
 2023-06-07T10:03:25.497700Z  INFO sov_demo_rollup: Requesting data for height 2 and prev_state_root 0xa96745d3184e54d098982daf44923d84c358800bd22c1864734ccb978027a670
-2023-06-07T10:03:25.497719Z  INFO jupiter::da_service: Fetching header at height=2...
+2023-06-07T10:03:25.497719Z  INFO celestia::da_service: Fetching header at height=2...
 2023-06-07T10:03:25.505412Z  INFO sov_demo_rollup: Received 0 blobs
 2023-06-07T10:03:25.505992Z  INFO sov_demo_rollup: Requesting data for height 3 and prev_state_root 0xa96745d3184e54d098982daf44923d84c358800bd22c1864734ccb978027a670
-2023-06-07T10:03:25.506003Z  INFO jupiter::da_service: Fetching header at height=3...
+2023-06-07T10:03:25.506003Z  INFO celestia::da_service: Fetching header at height=3...
 2023-06-07T10:03:25.511237Z  INFO sov_demo_rollup: Received 0 blobs
 2023-06-07T10:03:25.511815Z  INFO sov_demo_rollup: Requesting data for height 4 and prev_state_root 0xa96745d3184e54d098982daf44923d84c358800bd22c1864734ccb978027a670
 ```
@@ -112,14 +110,14 @@ Leave it running while you proceed with the rest of the demo.
 
 After switching to a new terminal tab, let's submit our first transaction by creating a token:
 
-```
+```sh
 $ make test-create-token
 ```
 
 ...wait a few seconds and you will see the transaction receipt in the output of the demo-rollup full node:
 
-```
-2023-07-12T15:04:52.291073Z  INFO jupiter::da_service: Fetching header at height=31...
+```sh
+2023-07-12T15:04:52.291073Z  INFO celestia::da_service: Fetching header at height=31...
 2023-07-12T15:05:02.304393Z  INFO sov_demo_rollup: Received 1 blobs at height 31
 2023-07-12T15:05:02.305257Z  INFO sov_demo_rollup: blob #0 at height 31 with blob_hash 0x4876c2258b57104356efa4630d3d9f901ccfda5dde426ba8aef81d4a3e357c79 has been applied with #1 transactions, sequencer outcome Rewarded(0)
 2023-07-12T15:05:02.305280Z  INFO sov_demo_rollup: tx #0 hash: 0x1e1892f77cf42c0abd2ca2acdd87eabb9aa65ec7497efea4ff9f5f33575f881a result Successful
@@ -134,7 +132,7 @@ The `make test-create-token` command above was useful to test if everything is r
 
 You'll need the `sov-cli` binary in order to create transactions. Build it with these commands:
 
-```console
+```sh
 $ cd ../demo-stf   # Assuming you're still in examples/demo-rollup/
 $ cargo build --bin sov-cli
 $ cd ../..   # Go back to the root of the repository
@@ -144,13 +142,10 @@ Main entry point for CLI
 Usage: sov-cli <COMMAND>
 
 Commands:
-  generate-transaction-from-json  Serialize a call to a module. This creates a .dat file containing the serialized transaction
-  submit-transaction              Submits transaction to sequencer
-  publish-batch                   Tells Sequencer to publish batch
-  make-batch                      Combine a list of files generated by GenerateTransaction into a blob for submission to Celestia
-  util                            Utility commands
-  generate-transaction            Generate a transaction from the command line
-  help                            Print this message or the help of the given subcommand(s)
+  transactions  Generate, sign, and send transactions
+  keys          View and manage keys associated with this wallet
+  rpc           Query the current state of the rollup and send transactions
+  help          Print this message or the help of the given subcommand(s)
 
 Options:
   -h, --help     Print help
@@ -160,10 +155,14 @@ Options:
 Each transaction that we want to submit is a member of the `CallMessage` enum defined as part of creating a module. For example, let's consider the `Bank` module's `CallMessage`:
 
 ```rust
+use sov_bank::CallMessage::Transfer;
+use sov_bank::Coins;
+use sov_bank::Amount;
+
 pub enum CallMessage<C: sov_modules_api::Context> {
     /// Creates a new token with the specified name and initial balance.
     CreateToken {
-        /// Random value use to create a unique token address.
+        /// Random value used to create a unique token address.
         salt: u64,
         /// The name of the new token.
         token_name: String,
@@ -180,19 +179,19 @@ pub enum CallMessage<C: sov_modules_api::Context> {
         /// The address to which the tokens will be transferred.
         to: C::Address,
         /// The amount of tokens to transfer.
-        coins: Coins<C>,
+        coins: Coins::<C>,
     },
 
     /// Burns a specified amount of tokens.
     Burn {
         /// The amount of tokens to burn.
-        coins: Coins<C>,
+        coins: Coins::<C>,
     },
 
     /// Mints a specified amount of tokens.
     Mint {
         /// The amount of tokens to mint.
-        coins: Coins<C>,
+        coins: Coins::<C>,
         /// Address to mint tokens to
         minter_address: C::Address,
     },
@@ -205,10 +204,12 @@ pub enum CallMessage<C: sov_modules_api::Context> {
 }
 ```
 
-In the above snippet, we can see that `CallMessage` in `Bank` support five different types of calls. The `sov-cli` has the ability to parse a JSON file that aligns with any of these calls and subsequently serialize them. The structure of the JSON file, which represents the call, closely mirrors that of the Enum member. Consider the `Transfer` message as an example:
+In the above snippet, we can see that `CallMessage` in `Bank` supports five different types of calls. The `sov-cli` has the ability to parse a JSON file that aligns with any of these calls and subsequently serialize them. The structure of the JSON file, which represents the call, closely mirrors that of the Enum member. Consider the `Transfer` message as an example:
 
 ```rust
-Transfer {
+use sov_bank::Coins;
+
+struct Transfer<C: sov_modules_api::Context>  {
     /// The address to which the tokens will be transferred.
     to: C::Address,
     /// The amount of tokens to transfer.
@@ -224,7 +225,7 @@ Here's an example of a JSON representing the above call:
     "to": "sov1zgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfqve8h6h",
     "coins": {
       "amount": 200,
-      "token_address": "sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"
+      "token_address": "sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"
     }
   }
 }
@@ -232,80 +233,68 @@ Here's an example of a JSON representing the above call:
 
 #### 2. Generate the Transaction
 
-The JSON above is the contents of the file `examples/test-data/requests/transfer.json`. We'll use this transaction as our example for the rest of the tutorial. In order to serialize the transaction JSON to submit to our local Celestia node, we need to perform 2 operations:
+The JSON above is the contents of the file `examples/test-data/requests/transfer.json`. We'll use this transaction as our example for the rest of the tutorial. In order to send the transaction, we need to perform 2 operations:
 
-- Serialize the JSON representation of the transaction.
-- Bundle serialized transaction files into a blob (since DA layers accept blobs which can contain multiple transactions).
+- Import the transaction data into the wallet
+- Sign and submit the transaction
 
 Note: we're able to make a `Transfer` call here because we already created the token as part of the sanity check above, using `make test-create-token`.
 
-To generate transactions you can use the `sov-cli generate-transaction-from-json` subcommand, as shown below:
+To generate transactions you can use the `transactions import from-file` subcommand, as shown below:
 
-```
-$ ./target/debug/sov-cli generate-transaction-from-json -h
-Serialize a call to a module. This creates a .dat file containing the serialized transaction
+```sh
+$ ./target/debug/sov-cli transactions import from-file -h
+Import a transaction from a JSON file at the provided path
 
-Usage: sov-cli generate-transaction-from-json <SENDER_PRIV_KEY_PATH> <MODULE_NAME> <CALL_DATA_PATH> <NONCE>
+Usage: sov-cli transactions import from-file <COMMAND>
 
-Arguments:
-  <SENDER_PRIV_KEY_PATH>  Path to the json file containing the private key of the sender
-  <MODULE_NAME>           Name of the module to generate the call. Modules defined in your Runtime are supported. (eg: Bank, Accounts)
-  <CALL_DATA_PATH>        Path to the json file containing the parameters for a module call
-  <NONCE>                 Nonce for the transaction
-```
+Commands:
+  bank                Generates a transaction for the `bank` module
+  sequencer-registry  Generates a transaction for the `sequencer_registry` module
+  election            Generates a transaction for the `election` module
+  value-setter        Generates a transaction for the `value_setter` module
+  accounts            Generates a transaction for the `accounts` module
+  help                Print this message or the help of the given subcommand(s)
 
-For our test, we'll use the test private key located at `examples/test-data/keys/minter_private_key.json`. This private key also corresponds to the address used in the `minter_address` field of the `create_token.json` file. This was the address that `make test-create-token` minted the new tokens to.
-
-Let's go ahead and serialize the transaction:
-
-```
-$ ./target/debug/sov-cli generate-transaction-from-json ./examples/test-data/keys/minter_private_key.json Bank ./examples/test-data/requests/transfer.json 0
+Options:
+  -h, --help  Print help
 ```
 
-Once the above command executes successfully, there will be a file named `./examples/test-data/requests/transfer.dat`:
+Let's go ahead and import the transaction into the wallet
 
-```
-$ cat ./examples/test-data/requests/transfer.dat
-5ef848746e8d2b9c27ee46210e185dc9f3b690d5cef42a13fb9c336bd40c798210bf7af613997f7af57c9681a242f5fe4121a1539ba4f5f32f14c49f978b990a7b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe64a0000000001fea6ac5b8751120fb62fff67b54d2eac66aef307c7dde1d394dea1e09e43dd44c800000000000000135d23aee8cb15c890831ff36db170157acaac31df9bba6cd40e7329e608eabd0000000000000000
-```
-
-The above is the hex representation of the serialized transaction.
-
-#### 3. Bundle the Serialized Transaction
-
-After serializing your transactions (just one in this case), you must bundle them into a blob. You can use the `sov-cli make-batch` subcommand:
-
-```
-$ ./target/debug/sov-cli make-batch -h
-Usage: sov-cli make-batch [PATH_LIST]...
-
-Arguments:
-  [PATH_LIST]...  List of serialized transactions
+```bash
+$ ./target/debug/sov-cli transactions import from-file bank --path ./examples/test-data/requests/transfer.json
+Adding the following transaction to batch:
+{
+  "bank": {
+    "Transfer": {
+      "to": "sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94",
+      "coins": {
+        "amount": 200,
+        "token_address": "sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"
+      }
+    }
+  }
+}
 ```
 
-Use the command below to store the serialized blob in `./examples/test-data/requests/tx_blob`:
+This output indicates that the wallet has saved the transaction details for later signing.
 
-```
-$ ./target/debug/sov-cli make-batch ./examples/test-data/requests/transfer.dat > ./examples/test-data/requests/tx_blob
-$ cat ./examples/test-data/requests/tx_blob
-01000000b60000005ef848746e8d2b9c27ee46210e185dc9f3b690d5cef42a13fb9c336bd40c798210bf7af613997f7af57c9681a242f5fe4121a1539ba4f5f32f14c49f978b990a7b758bf2e7670fafaf6bf0015ce0ff5aa802306fc7e3f45762853ffc37180fe64a0000000001fea6ac5b8751120fb62fff67b54d2eac66aef307c7dde1d394dea1e09e43dd44c800000000000000135d23aee8cb15c890831ff36db170157acaac31df9bba6cd40e7329e608eabd0000000000000000
-```
+#### 3. Submit the Transaction(s)
 
-#### 4. Submit the Transaction
+You now have a batch with a single transaction in your wallet. If you want to submit any more transactions as part of this
+batch, you can import them now. Finally, let's submit your transaction to the rollup.
 
-You now have a blob with one serialized transaction in `./examples/test-data/requests/tx_blob`. Switch back to the `examples/demo-rollup` directory and use the Makefile to submit it:
-
-```
-$ cd examples/demo-rollup
-$ SERIALIZED_BLOB_PATH=../test-data/requests/tx_blob make submit-txn
+```bash
+$ cargo run rpc submit-batch by-address sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqwr57gc
 ```
 
-Here the `make submit-txn` command locates the Docker container the Celestia instance is running in, and runs the Celestia-specific command to submit the transaction.
+This command will use your default private key
 
-#### 5. Verify the Token Supply
+#### 4. Verify the Token Supply
 
-```
-$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"],"id":1}' http://127.0.0.1:12345
+```bash
+$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"],"id":1}' http://127.0.0.1:12345
 {"jsonrpc":"2.0","result":{"amount":1000},"id":1}
 ```
 
@@ -374,17 +363,7 @@ a remote node. Whichever option you pick, simply place the URL and authenticatio
 in the `rollup_config.toml` file and it will be
 automatically picked up by the node implementation. For this tutorial, the Makefile below (which also helps start a local Celestia instance) handles this step for you.
 
-### 2. Initialize the State Transition Function
-
-The next step is to initialize your state transition function.
-
-```rust
-  let mut app: App<Risc0Verifier, jupiter::BlobWithSender> =
-        App::new(config);
-```
-
-
-### 3. Run the Main Loop
+### 2. Run the Main Loop
 
 The full node implements a simple loop for processing blocks. The workflow is:
 
@@ -422,7 +401,7 @@ Most queries for ledger information accept an optional `QueryMode` argument. The
 
 **Identifiers**
 
-There are a several ways to uniquely identify items in the Ledger DB.
+There are several ways to uniquely identify items in the Ledger DB.
 
 - By _number_. Each family of structs (`slots`, `blocks`, `transactions`, and `events`) is numbered in order starting from `1`. So, for example, the
   first transaction to appear on the DA layer will be numered `1` and might emit events `1`-`5`. Or, slot `17` might contain batches `41` - `44`.
@@ -433,7 +412,7 @@ There are a several ways to uniquely identify items in the Ledger DB.
 To request an item from the ledger DB, you can provide any identifier - and even mix and match different identifiers. We recommend using item number
 wherever possible, though, since resolving other identifiers may require additional database lookups.
 
-Some examples will make this clearer. Suppose that slot number `5` contaisn batches `9`, `10`, and `11`, that batch `10` contains
+Some examples will make this clearer. Suppose that slot number `5` contains batches `9`, `10`, and `11`, that batch `10` contains
 transactions `50`-`81`, and that transaction `52` emits event number `17`. If we want to fetch events number `17`, we can use any of the following queries:
 
 - `{"jsonrpc":"2.0","method":"ledger_getEvents","params":[[17]], ... }`

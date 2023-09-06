@@ -11,6 +11,7 @@ pub struct Header {
     pub number: u32,
     pub state_root: H256,
     pub extrinsics_root: H256,
+    pub data_root: H256,
 }
 
 use super::hash::AvailHash;
@@ -31,9 +32,14 @@ impl AvailHeader {
                 parent_hash: header.parent_hash,
                 number: header.number,
                 state_root: header.state_root,
+                data_root: header.data_root(),
                 extrinsics_root: header.extrinsics_root,
             },
         }
+    }
+
+    pub fn data_root(&self) -> AvailHash {
+        self.data_root().clone()
     }
 }
 

@@ -13,7 +13,9 @@ resolver = "2"
 
 [dependencies]
 anyhow = { workspace = true }
+arbitrary = { workspace = true, optional = true }
 borsh = { workspace = true }
+bcs = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
@@ -23,9 +25,14 @@ jmt = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
 
+zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
+risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
+risc0-zkvm-platform = { version = "0.16", optional = true }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 
 [features]
-default = ["native"]
+bench = ["zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
+default = []
 native = ["sov-db"]
