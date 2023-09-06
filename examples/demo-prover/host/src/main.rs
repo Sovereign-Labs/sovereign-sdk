@@ -117,12 +117,14 @@ async fn main() -> Result<(), anyhow::Error> {
         // The above proofs of correctness and completeness need to passed to the prover
         host.write_to_guest(&inclusion_proof);
         host.write_to_guest(&completeness_proof);
-        // The extracted blobs need to be passed to the prover
-        host.write_to_guest(&blobs);
-
+        
         let result = app
             .stf
             .apply_slot(Default::default(), &filtered_block, &mut blobs);
+
+        // The extracted blobs need to be passed to the prover after execution. 
+        // (Without executing, the host couldn't prune any data that turned out to be irrelevant to the guest)
+        host.write_to_guest(&blobs);
 
         // Witness contains the merkle paths to the state root so that the code inside the VM
         // can access state values (Witness can also contain other hints and proofs)
