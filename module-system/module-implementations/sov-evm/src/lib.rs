@@ -90,7 +90,10 @@ mod experimental {
         #[state]
         pub(crate) head_number: sov_state::StateValue<u64>,
 
-        // TODO: Everything below shouldn't be in the state trie
+        // TODO JsonCodec: This is a workaround for https://github.com/bincode-org/bincode/issues/245 which affects all
+        // binary serialization formats.
+        // 1. Implement custom types for Block, Transaction etc.. with borsh derived.
+        // 2. Remove JsonCodec.
         #[state]
         pub(crate) current_block: sov_state::StateValue<reth_rpc_types::Block, JsonCodec>,
 

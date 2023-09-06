@@ -77,7 +77,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         self.receipts
             .set(&hash.into(), &receipt, &mut working_set.accessory_state());
 
-        println!("execute_call END");
         Ok(CallResponse::default())
     }
 }
