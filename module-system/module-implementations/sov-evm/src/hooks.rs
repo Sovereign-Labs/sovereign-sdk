@@ -23,7 +23,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
             // TODO: simplify this conversion by doing something with Bytes32
             // TODO simplify conversion fro U256 to u64
-            // Reth rpc types keep stuff as U256, even when actually only u64 makes sense - block_number, timespamp
+            // Reth rpc types keep stuff as U256, even when actually only u64 makes sense:
+            // block_number, timespamp, gas_used, base_fee_per_gas
             timestamp: U256::from_limbs([
                 parent_block.header.timestamp.as_limbs()[0] + cfg.block_timestamp_delta,
                 0u64,
@@ -41,9 +42,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
                         parent_block
                             .header
                             .base_fee_per_gas
-                            .unwrap_or_else(|| {
-                                reth_primitives::constants::MIN_PROTOCOL_BASE_FEE_U256
-                            })
+                            .unwrap_or(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE_U256)
                             .as_limbs()[0],
                     );
 
