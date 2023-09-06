@@ -68,9 +68,6 @@ const main = async () => {
     await logBalance(trader)
 }
 
-/*
-npx hardhat run --network localhost scripts/02_simpleV2Swap.js
-*/
 
 main()
     .then(() => process.exit(0))

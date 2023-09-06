@@ -79,7 +79,6 @@ async function main() {
 }
 
 /*
-npx hardhat node
 npx hardhat run --network localhost scripts/01_deployContracts.js
 */
 
