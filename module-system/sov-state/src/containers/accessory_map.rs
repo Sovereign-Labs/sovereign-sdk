@@ -186,7 +186,9 @@ impl<'a, K, V, Codec> AccessoryStateMap<K, V, Codec>
 where
     K: arbitrary::Arbitrary<'a>,
     V: arbitrary::Arbitrary<'a>,
-    Codec: StateValueCodec<V> + StateValueCodec<K> + Default,
+    Codec: StateCodec + Default,
+    Codec::KeyCodec: StateKeyCodec<K>,
+    Codec::ValueCodec: StateValueCodec<V>,
 {
     pub fn arbitrary_workset<S>(
         u: &mut arbitrary::Unstructured<'a>,
