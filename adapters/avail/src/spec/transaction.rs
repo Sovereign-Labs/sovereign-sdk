@@ -6,7 +6,7 @@ use avail_subxt::{
 use bytes::Bytes;
 #[cfg(feature = "native")]
 use codec::Encode;
-use primitive_types::H256;
+
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
 
@@ -32,7 +32,7 @@ impl BlobReaderTrait for AvailBlobTransaction {
     }
 
     fn verified_data(&self) -> &[u8] {
-        &self.blob.accumulator()
+        self.blob.accumulator()
     }
 
     #[cfg(feature = "native")]

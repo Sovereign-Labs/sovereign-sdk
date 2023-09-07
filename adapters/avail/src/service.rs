@@ -7,10 +7,10 @@ use avail_subxt::api;
 use avail_subxt::primitives::AvailExtrinsicParams;
 use avail_subxt::api::runtime_types::sp_core::bounded::bounded_vec::BoundedVec;
 use reqwest::StatusCode;
-use serde::{Deserialize, Serialize};
+
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::services::da::DaService;
-use sp_keyring::sr25519::sr25519::{self, Pair};
+use sp_keyring::sr25519::sr25519::{Pair};
 use sp_core::crypto::Pair as PairTrait;
 use subxt::OnlineClient;
 use subxt::tx::PairSigner;

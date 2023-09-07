@@ -37,10 +37,6 @@ impl AvailHeader {
             },
         }
     }
-
-    pub fn data_root(&self) -> AvailHash {
-        self.data_root().clone()
-    }
 }
 
 impl BlockHeaderTrait for AvailHeader {
