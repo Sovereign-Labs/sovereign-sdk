@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use ethereum_types::H64;
 use reth_primitives::constants::{EMPTY_RECEIPTS, EMPTY_TRANSACTIONS, ETHEREUM_BLOCK_GAS_LIMIT};
 use reth_primitives::hex_literal::hex;
@@ -47,7 +45,7 @@ fn genesis_cfg() {
 #[should_panic(expected = "EVM spec must start from block 0")]
 fn genesis_cfg_missing_specs() {
     get_evm(Some(EvmConfig {
-        spec: HashMap::new(),
+        spec: vec![(5, SpecId::BERLIN)].into_iter().collect(),
         ..Default::default()
     }));
 }
@@ -121,7 +119,6 @@ pub(crate) fn get_evm(
         coinbase: [3u8; 20],
         limit_contract_code_size: Some(5000),
         starting_base_fee: 70,
-        ..Default::default()
     });
 
     evm.genesis(&config, &mut working_set).unwrap();
