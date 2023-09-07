@@ -29,6 +29,12 @@ impl CustomCodec {
 impl StateCodec for CustomCodec {
     type KeyCodec = Self;
     type ValueCodec = Self;
+    fn key_codec(&self) -> &Self::KeyCodec {
+        self
+    }
+    fn value_codec(&self) -> &Self::ValueCodec {
+        self
+    }
 }
 
 impl<K> StateKeyCodec<K> for CustomCodec {
