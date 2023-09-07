@@ -15,10 +15,11 @@ mod test_rpc;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Data layer
+    /// The data layer type.
     #[arg(long, default_value = "celestia")]
     da_layer: String,
 
+    /// The path to the rollup config.
     #[arg(long, default_value = "rollup_config.toml")]
     rollup_config_path: String,
 }
