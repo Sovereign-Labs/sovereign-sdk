@@ -153,13 +153,9 @@ where
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         let token_address = {
-            let mut hasher = <C::Hasher as Digest>::new();
-            hasher.update(coin.denom.to_string());
-            let denom_hash = hasher.finalize().to_vec();
-
             self.transfer_mod
                 .minted_tokens
-                .get(&denom_hash, &mut self.working_set.borrow_mut())
+                .get(&coin.denom.to_string(), &mut self.working_set.borrow_mut())
                 .ok_or(TokenTransferError::InvalidCoin {
                     coin: coin.to_string(),
                 })?
@@ -295,17 +291,14 @@ where
         account: &Self::AccountId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
+        let denom = coin.denom.to_string();
+
         // 1. if token address doesn't exist in `minted_tokens`, then create a new token and store in `minted_tokens`
         let token_address: C::Address = {
-            // TODO: Put this in a function
-            let mut hasher = <C::Hasher as Digest>::new();
-            hasher.update(coin.denom.to_string());
-            let denom_hash = hasher.finalize().to_vec();
-
             let maybe_token_address = self
                 .transfer_mod
                 .minted_tokens
-                .get(&denom_hash, &mut self.working_set.borrow_mut());
+                .get(&denom, &mut self.working_set.borrow_mut());
 
             match maybe_token_address {
                 Some(token_address) => token_address,
@@ -334,7 +327,7 @@ where
 
                     // Store the new address in `minted_tokens`
                     self.transfer_mod.minted_tokens.set(
-                        &denom_hash,
+                        &denom,
                         &new_token_addr,
                         &mut self.working_set.borrow_mut(),
                     );
@@ -374,13 +367,9 @@ where
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
         let token_address = {
-            let mut hasher = <C::Hasher as Digest>::new();
-            hasher.update(coin.denom.to_string());
-            let denom_hash = hasher.finalize().to_vec();
-
             self.transfer_mod
                 .minted_tokens
-                .get(&denom_hash, &mut self.working_set.borrow_mut())
+                .get(&coin.denom.to_string(), &mut self.working_set.borrow_mut())
                 .ok_or(TokenTransferError::InvalidCoin {
                     coin: coin.to_string(),
                 })?

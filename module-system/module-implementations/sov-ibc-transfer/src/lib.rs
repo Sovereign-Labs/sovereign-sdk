@@ -27,12 +27,9 @@ pub struct Transfer<C: sov_modules_api::Context> {
     #[module]
     pub(crate) bank: sov_bank::Bank<C>,
 
-    /// Keeps track of the address of each token we minted.
-    /// The index is the hash of the token denom (using the hasher `C::Hasher`).
-    /// Note: we use `Vec<u8>` instead of `Output<C::Hasher>` because `C::Hasher`
-    /// is not cloneable, and we currently need our module to be cloneable
+    /// Keeps track of the address of each token we minted by token denom.
     #[state]
-    pub(crate) minted_tokens: sov_state::StateMap<Vec<u8>, C::Address>,
+    pub(crate) minted_tokens: sov_state::StateMap<String, C::Address>,
 
     /// Keeps track of the address of each token we escrowed as a function of
     /// the (hash of) the token denom. We need this map because we have the

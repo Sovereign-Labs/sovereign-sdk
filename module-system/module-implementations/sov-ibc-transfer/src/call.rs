@@ -11,7 +11,6 @@ use ibc::core::ics24_host::identifier::{ChannelId, PortId};
 use ibc::core::timestamp::Timestamp;
 use ibc::core::ExecutionContext;
 use ibc::Signer;
-use sov_rollup_interface::digest::Digest;
 use sov_state::WorkingSet;
 
 use crate::context::EscrowExtraData;
@@ -106,11 +105,6 @@ where
         token_name: &str,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> bool {
-        // TODO: Put this in a function
-        let mut hasher = <C::Hasher as Digest>::new();
-        hasher.update(token_name);
-        let denom_hash = hasher.finalize().to_vec();
-
-        self.minted_tokens.get(&denom_hash, working_set).is_some()
+        self.minted_tokens.get(token_name, working_set).is_some()
     }
 }
