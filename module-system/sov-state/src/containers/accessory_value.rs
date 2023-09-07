@@ -8,7 +8,16 @@ use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
 
 /// Container for a single value stored as "accessory" state, outside of the
 /// JMT.
-#[derive(Debug, PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize)]
+#[derive(
+    Debug,
+    PartialEq,
+    Eq,
+    Clone,
+    BorshDeserialize,
+    BorshSerialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct AccessoryStateValue<V, VC = BorshCodec> {
     _phantom: PhantomData<V>,
     codec: VC,

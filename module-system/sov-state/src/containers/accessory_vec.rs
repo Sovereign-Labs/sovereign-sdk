@@ -6,14 +6,22 @@ use crate::{
     AccessoryStateMap, AccessoryStateValue, AccessoryWorkingSet, Prefix, StateVecError, Storage,
 };
 
-#[derive(Debug, Clone)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct AccessoryStateVec<V, VC = BorshCodec>
 where
     VC: StateValueCodec<V>,
 {
     _phantom: PhantomData<V>,
     prefix: Prefix,
-    len_value: AccessoryStateValue<usize>,
+    len_value: AccessoryStateValue<usize, VC>,
     elems: AccessoryStateMap<usize, V, VC>,
 }
 
@@ -30,7 +38,7 @@ where
 
 impl<V, VC> AccessoryStateVec<V, VC>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
 {
     /// Creates a new [`AccessoryStateVec`] with the given prefix and codec.
     pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
@@ -38,7 +46,8 @@ where
         // shouldn't be necessary, but it's best not to rely on implementation
         // details of `StateValue` and `StateMap` as they both have the right to
         // reserve the whole key space for themselves.
-        let len_value = AccessoryStateValue::<usize>::new(prefix.extended(b"l"));
+        let len_value =
+            AccessoryStateValue::<usize, VC>::with_codec(prefix.extended(b"l"), codec.clone());
         let elems = AccessoryStateMap::with_codec(prefix.extended(b"e"), codec);
         Self {
             _phantom: PhantomData,
@@ -187,7 +196,7 @@ where
 
 impl<'a, 'ws, V, VC, S> Iterator for AccessoryStateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
     S: Storage,
 {
     type Item = V;
@@ -204,7 +213,7 @@ where
 
 impl<'a, 'ws, V, VC, S> ExactSizeIterator for AccessoryStateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
     S: Storage,
 {
     fn len(&self) -> usize {
@@ -214,7 +223,7 @@ where
 
 impl<'a, 'ws, V, VC, S> FusedIterator for AccessoryStateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
     S: Storage,
 {
 }
