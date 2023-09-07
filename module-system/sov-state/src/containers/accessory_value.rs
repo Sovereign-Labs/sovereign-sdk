@@ -18,9 +18,9 @@ use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
     serde::Serialize,
     serde::Deserialize,
 )]
-pub struct AccessoryStateValue<V, VC = BorshCodec> {
+pub struct AccessoryStateValue<V, Codec = BorshCodec> {
     _phantom: PhantomData<V>,
-    codec: VC,
+    codec: Codec,
     prefix: Prefix,
 }
 
@@ -39,9 +39,9 @@ impl<V> AccessoryStateValue<V> {
     }
 }
 
-impl<V, VC> AccessoryStateValue<V, VC> {
+impl<V, Codec> AccessoryStateValue<V, Codec> {
     /// Creates a new [`AccessoryStateValue`] with the given prefix and codec.
-    pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
+    pub fn with_codec(prefix: Prefix, codec: Codec) -> Self {
         Self {
             _phantom: PhantomData,
             codec,
@@ -55,9 +55,9 @@ impl<V, VC> AccessoryStateValue<V, VC> {
     }
 }
 
-impl<V, VC> AccessoryStateValue<V, VC>
+impl<V, Codec> AccessoryStateValue<V, Codec>
 where
-    VC: StateValueCodec<V>,
+    Codec: StateValueCodec<V>,
 {
     /// Sets a value in the AccessoryStateValue.
     pub fn set<S: Storage>(&self, value: &V, working_set: &mut AccessoryWorkingSet<S>) {

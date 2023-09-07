@@ -56,9 +56,9 @@ impl Display for StorageKey {
 
 impl StorageKey {
     /// Creates a new StorageKey that combines a prefix and a key.
-    pub fn new<K, Q, VC>(prefix: &Prefix, key: &Q, codec: &VC) -> Self
+    pub fn new<K, Q, Codec>(prefix: &Prefix, key: &Q, codec: &Codec) -> Self
     where
-        VC: EncodeLike<Q, K>,
+        Codec: EncodeLike<Q, K>,
         Q: ?Sized,
     {
         let encoded_key = codec.encode_like(key);
@@ -108,9 +108,9 @@ impl From<Vec<u8>> for StorageValue {
 
 impl StorageValue {
     /// Create a new storage value by serializing the input with the given codec.
-    pub fn new<V, VC>(value: &V, codec: &VC) -> Self
+    pub fn new<V, Codec>(value: &V, codec: &Codec) -> Self
     where
-        VC: StateValueCodec<V>,
+        Codec: StateValueCodec<V>,
     {
         let encoded_value = codec.encode_value(value);
         Self {
@@ -222,15 +222,15 @@ pub trait Storage: Clone {
         proof: StorageProof<Self::Proof>,
     ) -> Result<(StorageKey, Option<StorageValue>), anyhow::Error>;
 
-    fn verify_proof<K, V, VC>(
+    fn verify_proof<K, V, Codec>(
         &self,
         state_root: [u8; 32],
         proof: StorageProof<Self::Proof>,
         expected_key: &K,
-        storage_map: &StateMap<K, V, VC>,
+        storage_map: &StateMap<K, V, Codec>,
     ) -> Result<Option<StorageValue>, anyhow::Error>
     where
-        VC: StateKeyCodec<K>,
+        Codec: StateKeyCodec<K>,
     {
         let (storage_key, storage_value) = self.open_proof(state_root, proof)?;
 
@@ -275,14 +275,14 @@ pub trait NativeStorage: Storage {
     fn get_with_proof(&self, key: StorageKey, witness: &Self::Witness)
         -> StorageProof<Self::Proof>;
 
-    fn get_with_proof_from_state_map<Q, K, V, VC>(
+    fn get_with_proof_from_state_map<Q, K, V, Codec>(
         &self,
         key: &Q,
-        state_map: &StateMap<K, V, VC>,
+        state_map: &StateMap<K, V, Codec>,
         witness: &Self::Witness,
     ) -> StorageProof<Self::Proof>
     where
-        VC: EncodeLike<Q, K>,
+        Codec: EncodeLike<Q, K>,
     {
         self.get_with_proof(
             StorageKey::new(state_map.prefix(), key, state_map.codec()),

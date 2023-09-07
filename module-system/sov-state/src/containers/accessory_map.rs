@@ -13,7 +13,7 @@ use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
 /// [`AccessoryStateMap`] is generic over:
 /// - a key type `K`;
 /// - a value type `V`;
-/// - a [`StateValueCodec`] `VC`.
+/// - a [`StateValueCodec`] `Codec`.
 #[derive(
     Debug,
     Clone,
@@ -23,9 +23,9 @@ use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
     serde::Serialize,
     serde::Deserialize,
 )]
-pub struct AccessoryStateMap<K, V, VC = BorshCodec> {
+pub struct AccessoryStateMap<K, V, Codec = BorshCodec> {
     _phantom: (PhantomData<K>, PhantomData<V>),
-    value_codec: VC,
+    value_codec: Codec,
     prefix: Prefix,
 }
 
@@ -37,9 +37,9 @@ impl<K, V> AccessoryStateMap<K, V> {
     }
 }
 
-impl<K, V, VC> AccessoryStateMap<K, V, VC> {
+impl<K, V, Codec> AccessoryStateMap<K, V, Codec> {
     /// Creates a new [`AccessoryStateMap`] with the given prefix and [`StateValueCodec`].
-    pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
+    pub fn with_codec(prefix: Prefix, codec: Codec) -> Self {
         Self {
             _phantom: (PhantomData, PhantomData),
             value_codec: codec,
@@ -53,10 +53,10 @@ impl<K, V, VC> AccessoryStateMap<K, V, VC> {
     }
 }
 
-impl<K, V, VC> AccessoryStateMap<K, V, VC>
+impl<K, V, Codec> AccessoryStateMap<K, V, Codec>
 where
     K: Hash + Eq,
-    VC: StateValueCodec<V>,
+    Codec: StateValueCodec<V>,
 {
     /// Inserts a key-value pair into the map.
     ///
@@ -64,7 +64,7 @@ where
     /// map’s key type.
     pub fn set<Q, S: Storage>(&self, key: &Q, value: &V, working_set: &mut AccessoryWorkingSet<S>)
     where
-        VC: EncodeLike<Q, K>,
+        Codec: EncodeLike<Q, K>,
         Q: ?Sized,
     {
         working_set.set_value(self.prefix(), key, value, &self.value_codec)
@@ -108,7 +108,7 @@ where
     /// ```
     pub fn get<Q, S: Storage>(&self, key: &Q, working_set: &mut AccessoryWorkingSet<S>) -> Option<V>
     where
-        VC: EncodeLike<Q, K>,
+        Codec: EncodeLike<Q, K>,
         Q: ?Sized,
     {
         working_set.get_value(self.prefix(), key, &self.value_codec)
@@ -122,7 +122,7 @@ where
         working_set: &mut AccessoryWorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
-        VC: EncodeLike<Q, K>,
+        Codec: EncodeLike<Q, K>,
         Q: ?Sized,
     {
         self.get(key, working_set).ok_or_else(|| {
@@ -141,7 +141,7 @@ where
         working_set: &mut AccessoryWorkingSet<S>,
     ) -> Option<V>
     where
-        VC: EncodeLike<Q, K>,
+        Codec: EncodeLike<Q, K>,
         Q: ?Sized,
     {
         working_set.remove_value(self.prefix(), key, &self.value_codec)
@@ -157,7 +157,7 @@ where
         working_set: &mut AccessoryWorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
-        VC: EncodeLike<Q, K>,
+        Codec: EncodeLike<Q, K>,
         Q: ?Sized,
     {
         self.remove(key, working_set).ok_or_else(|| {
@@ -174,7 +174,7 @@ where
     /// return the value beforing deletion.
     pub fn delete<Q, S: Storage>(&self, key: &Q, working_set: &mut AccessoryWorkingSet<S>)
     where
-        VC: EncodeLike<Q, K>,
+        Codec: EncodeLike<Q, K>,
         Q: ?Sized,
     {
         working_set.delete_value(self.prefix(), key, &self.value_codec);
@@ -182,11 +182,11 @@ where
 }
 
 #[cfg(feature = "arbitrary")]
-impl<'a, K, V, VC> AccessoryStateMap<K, V, VC>
+impl<'a, K, V, Codec> AccessoryStateMap<K, V, Codec>
 where
     K: arbitrary::Arbitrary<'a> + Hash + Eq,
     V: arbitrary::Arbitrary<'a> + Hash + Eq,
-    VC: StateValueCodec<V> + StateValueCodec<K> + Default,
+    Codec: StateValueCodec<V> + StateValueCodec<K> + Default,
 {
     pub fn arbitrary_workset<S>(
         u: &mut arbitrary::Unstructured<'a>,
@@ -199,7 +199,7 @@ where
 
         let prefix = Prefix::arbitrary(u)?;
         let len = u.arbitrary_len::<(K, V)>()?;
-        let codec = VC::default();
+        let codec = Codec::default();
         let map = Self::with_codec(prefix, codec);
 
         (0..len).try_fold(map, |map, _| {

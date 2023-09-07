@@ -309,60 +309,70 @@ pub(crate) trait StateReaderAndWriter {
 
     fn delete(&mut self, key: &StorageKey);
 
-    fn set_value<Q, K, V, VC>(&mut self, prefix: &Prefix, storage_key: &Q, value: &V, codec: &VC)
-    where
+    fn set_value<Q, K, V, Codec>(
+        &mut self,
+        prefix: &Prefix,
+        storage_key: &Q,
+        value: &V,
+        codec: &Codec,
+    ) where
         Q: ?Sized,
-        VC: EncodeLike<Q, K> + StateValueCodec<V>,
+        Codec: EncodeLike<Q, K> + StateValueCodec<V>,
     {
         let storage_key = StorageKey::new(prefix, storage_key, codec);
         let storage_value = StorageValue::new(value, codec);
         self.set(&storage_key, storage_value);
     }
 
-    fn set_singleton<V, VC>(&mut self, prefix: &Prefix, value: &V, codec: &VC)
+    fn set_singleton<V, Codec>(&mut self, prefix: &Prefix, value: &V, codec: &Codec)
     where
-        VC: StateValueCodec<V>,
+        Codec: StateValueCodec<V>,
     {
         let storage_key = StorageKey::singleton(prefix);
         let storage_value = StorageValue::new(value, codec);
         self.set(&storage_key, storage_value);
     }
 
-    fn get_decoded<V, VC>(&mut self, storage_key: &StorageKey, codec: &VC) -> Option<V>
+    fn get_decoded<V, Codec>(&mut self, storage_key: &StorageKey, codec: &Codec) -> Option<V>
     where
-        VC: StateValueCodec<V>,
+        Codec: StateValueCodec<V>,
     {
         let storage_value = self.get(storage_key)?;
 
         Some(codec.decode_value_unwrap(storage_value.value()))
     }
 
-    fn get_value<Q, K, V, VC>(&mut self, prefix: &Prefix, storage_key: &Q, codec: &VC) -> Option<V>
-    where
-        Q: ?Sized,
-        VC: EncodeLike<Q, K> + StateValueCodec<V>,
-    {
-        let storage_key = StorageKey::new(prefix, storage_key, codec);
-        self.get_decoded(&storage_key, codec)
-    }
-
-    fn get_singleton<V, VC>(&mut self, prefix: &Prefix, codec: &VC) -> Option<V>
-    where
-        VC: StateValueCodec<V>,
-    {
-        let storage_key = StorageKey::singleton(prefix);
-        self.get_decoded(&storage_key, codec)
-    }
-
-    fn remove_value<Q, K, V, VC>(
+    fn get_value<Q, K, V, Codec>(
         &mut self,
         prefix: &Prefix,
         storage_key: &Q,
-        codec: &VC,
+        codec: &Codec,
     ) -> Option<V>
     where
         Q: ?Sized,
-        VC: EncodeLike<Q, K> + StateValueCodec<V>,
+        Codec: EncodeLike<Q, K> + StateValueCodec<V>,
+    {
+        let storage_key = StorageKey::new(prefix, storage_key, codec);
+        self.get_decoded(&storage_key, codec)
+    }
+
+    fn get_singleton<V, Codec>(&mut self, prefix: &Prefix, codec: &Codec) -> Option<V>
+    where
+        Codec: StateValueCodec<V>,
+    {
+        let storage_key = StorageKey::singleton(prefix);
+        self.get_decoded(&storage_key, codec)
+    }
+
+    fn remove_value<Q, K, V, Codec>(
+        &mut self,
+        prefix: &Prefix,
+        storage_key: &Q,
+        codec: &Codec,
+    ) -> Option<V>
+    where
+        Q: ?Sized,
+        Codec: EncodeLike<Q, K> + StateValueCodec<V>,
     {
         let storage_key = StorageKey::new(prefix, storage_key, codec);
         let storage_value = self.get_decoded(&storage_key, codec)?;
@@ -370,9 +380,9 @@ pub(crate) trait StateReaderAndWriter {
         Some(storage_value)
     }
 
-    fn remove_singleton<V, VC>(&mut self, prefix: &Prefix, codec: &VC) -> Option<V>
+    fn remove_singleton<V, Codec>(&mut self, prefix: &Prefix, codec: &Codec) -> Option<V>
     where
-        VC: StateValueCodec<V>,
+        Codec: StateValueCodec<V>,
     {
         let storage_key = StorageKey::singleton(prefix);
         let storage_value = self.get_decoded(&storage_key, codec)?;
@@ -380,10 +390,10 @@ pub(crate) trait StateReaderAndWriter {
         Some(storage_value)
     }
 
-    fn delete_value<Q, K, VC>(&mut self, prefix: &Prefix, storage_key: &Q, codec: &VC)
+    fn delete_value<Q, K, Codec>(&mut self, prefix: &Prefix, storage_key: &Q, codec: &Codec)
     where
         Q: ?Sized,
-        VC: EncodeLike<Q, K>,
+        Codec: EncodeLike<Q, K>,
     {
         let storage_key = StorageKey::new(prefix, storage_key, codec);
         self.delete(&storage_key);

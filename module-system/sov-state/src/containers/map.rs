@@ -12,7 +12,7 @@ use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
 /// [`StateMap`] is generic over:
 /// - a key type `K`;
 /// - a value type `V`;
-/// - a [`StateValueCodec`] `VC`.
+/// - a [`StateValueCodec`] `Codec`.
 #[derive(
     Debug,
     Clone,
@@ -22,9 +22,9 @@ use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
     serde::Serialize,
     serde::Deserialize,
 )]
-pub struct StateMap<K, V, VC = BorshCodec> {
+pub struct StateMap<K, V, Codec = BorshCodec> {
     _phantom: (PhantomData<K>, PhantomData<V>),
-    value_codec: VC,
+    value_codec: Codec,
     prefix: Prefix,
 }
 
@@ -187,11 +187,11 @@ where
 }
 
 #[cfg(feature = "arbitrary")]
-impl<'a, K, V, VC> StateMap<K, V, VC>
+impl<'a, K, V, Codec> StateMap<K, V, Codec>
 where
     K: arbitrary::Arbitrary<'a> + Hash + Eq,
     V: arbitrary::Arbitrary<'a> + Hash + Eq,
-    VC: StateValueCodec<V> + StateValueCodec<K> + Default,
+    Codec: StateValueCodec<V> + StateValueCodec<K> + Default,
 {
     pub fn arbitrary_workset<S>(
         u: &mut arbitrary::Unstructured<'a>,
@@ -204,7 +204,7 @@ where
 
         let prefix = Prefix::arbitrary(u)?;
         let len = u.arbitrary_len::<(K, V)>()?;
-        let codec = VC::default();
+        let codec = Codec::default();
         let map = StateMap::with_codec(prefix, codec);
 
         (0..len).try_fold(map, |map, _| {

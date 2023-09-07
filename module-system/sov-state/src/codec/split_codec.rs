@@ -2,7 +2,7 @@
 
 use super::{StateKeyCodec, StateValueCodec};
 
-/// A [`StateValueCodec`] that uses [`serde_json`] for all values.
+/// A [`StateValueCodec`] that uses one pre-existing codec for keys and a different one values.
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct SplitCodec<KC, VC> {
     pub key_codec: KC,
