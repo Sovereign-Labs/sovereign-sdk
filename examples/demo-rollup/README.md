@@ -286,7 +286,7 @@ You now have a batch with a single transaction in your wallet. If you want to su
 batch, you can import them now. Finally, let's submit your transaction to the rollup.
 
 ```bash
-$ cargo run rpc submit-batch by-address sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqwr57gc
+$ ./target/debug/sov-cli rpc submit-batch by-address sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqwr57gc
 ```
 
 This command will use your default private key
