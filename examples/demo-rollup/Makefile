@@ -97,16 +97,16 @@ test-generate-create-token-tx: check-container-running build-sov-cli
 	$(SOV_CLI_REL_PATH) transactions import from-file bank --path ../test-data/requests/create_token.json
 
 set-rpc-url: build-sov-cli
-	$(SOV_CLI_REL_PATH) rpc set-url http://localhost:12345
+	$(SOV_CLI_REL_PATH) rpc set-url http://127.0.0.1:12345
 
 import-keys: build-sov-cli
-	$(SOV_CLI_REL_PATH) keys import --nickname DANGER__DO_NOT_USE_WITH_REAL_MONEY --path ../test-data/keys/minter_private_key.json
+	$(SOV_CLI_REL_PATH) keys import --nickname DANGER__DO_NOT_USE_WITH_REAL_MONEY --path ../test-data/keys/token_deployer_private_key.json
 
 test-create-token: set-rpc-url test-generate-create-token-tx import-keys
-	$(SOV_CLI_REL_PATH) rpc submit-batch
+	$(SOV_CLI_REL_PATH) rpc submit-batch by-nickname DANGER__DO_NOT_USE_WITH_REAL_MONEY
 
 remove-insecure-keys: build-sov-cli
-	$(SOV_CLI_REL_PATH) keys remove by-address sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqwr57gc
+	$(SOV_CLI_REL_PATH) keys remove by-address sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94
 
 clean-rollup-db:
 	$(eval path := ./$(shell awk -F'=' '/^path/ {print $$2}' rollup_config.toml | tr -d '[:space:]"\n'))

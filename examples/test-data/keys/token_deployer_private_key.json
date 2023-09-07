@@ -1,4 +1,6 @@
 {
-  "hex_priv_key": "75fbf8d98746c2692e502942b938c82379fd09ea9f5b60d4d39e87e1b42468fdf8ad2437a279e1c8932c07358c91dc4fe34864a98c6c25f298e2a0199c1509ff",
+  "private_key": {
+    "key_pair": [117, 251, 248, 217, 135, 70, 194, 105, 46, 80, 41, 66, 185, 56, 200, 35, 121, 253, 9, 234, 159, 91, 96, 212, 211, 158, 135, 225, 180, 36, 104, 253]
+  },
   "address": "sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94"
 }
