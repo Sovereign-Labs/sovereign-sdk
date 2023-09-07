@@ -89,6 +89,7 @@ fn impl_module_info(struct_def: &StructDef) -> Result<proc_macro2::TokenStream, 
 
     let fn_address = make_fn_address(&module_address.ident)?;
     let fn_dependencies = make_fn_dependencies(modules);
+    let fn_prefix = make_module_prefix_fn(ident);
 
     Ok(quote::quote! {
         impl #impl_generics ::std::default::Default for #ident #type_generics #where_clause{
@@ -104,6 +105,8 @@ fn impl_module_info(struct_def: &StructDef) -> Result<proc_macro2::TokenStream, 
 
         impl #impl_generics ::sov_modules_api::ModuleInfo for #ident #type_generics #where_clause{
             type Context = #generic_param;
+
+            #fn_prefix
 
             #fn_address
 
@@ -210,17 +213,36 @@ fn make_init_module(field: &ModuleField) -> Result<proc_macro2::TokenStream, syn
     })
 }
 
+fn make_module_prefix_fn(struct_ident: &Ident) -> proc_macro2::TokenStream {
+    let body = make_module_prefix_fn_body(struct_ident);
+    quote::quote! {
+        fn prefix(&self) -> sov_modules_api::Prefix {
+           #body
+        }
+    }
+}
+
+fn make_module_prefix_fn_body(struct_ident: &Ident) -> proc_macro2::TokenStream {
+    quote::quote! {
+        let module_path = module_path!();
+        sov_modules_api::Prefix::new_module(module_path, stringify!(#struct_ident))
+    }
+}
+
 fn make_init_address(
     field: &ModuleField,
     struct_ident: &Ident,
     generic_param: &Ident,
 ) -> Result<proc_macro2::TokenStream, syn::Error> {
     let field_ident = &field.ident;
+    let generate_prefix = make_module_prefix_fn_body(struct_ident);
 
     Ok(quote::quote! {
         use ::sov_modules_api::digest::Digest as _;
-        let module_path = module_path!();
-        let prefix = sov_modules_api::Prefix::new_module(module_path, stringify!(#struct_ident));
+        let prefix = {
+            #generate_prefix
+        };
+
         let #field_ident : <#generic_param as sov_modules_api::Spec>::Address =
             <#generic_param as ::sov_modules_api::Spec>::Address::try_from(&prefix.hash::<#generic_param>())
                 .unwrap_or_else(|e| panic!("ModuleInfo macro error, unable to create an Address for module: {}", e));

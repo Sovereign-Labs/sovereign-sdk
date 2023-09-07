@@ -48,6 +48,6 @@ prost-build = { version = "0.11" }
 
 [features]
 default = []
-native = ["dep:tokio", "dep:jsonrpsee", "dep:serde_json", "tendermint/default"]
+native = ["dep:tokio", "dep:jsonrpsee", "dep:serde_json", "tendermint/default", "sov-rollup-interface/native"]
 bench = ["zk-cycle-macros/bench", "risc0-zkvm", "risc0-zkvm-platform"]
 verifier = []
