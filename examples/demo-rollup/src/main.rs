@@ -14,20 +14,26 @@ use tracing_subscriber::{fmt, EnvFilter};
 #[cfg(test)]
 mod test_rpc;
 
-/// Main demo runner. Initialize a DA chain, and starts a demo-rollup using the config provided
-/// (or a default config if not provided). Then start checking the blocks sent to the DA layer in
-/// the main event loop.
+/// Main demo runner. Initializes a DA chain, and starts a demo-rollup using the provided.
+/// If you're trying to sign or submit transactions to the rollup, the `sov-cli` binary
+/// is the one you want. You can run it `cargo run --bin sov-cli`.
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// The data layer type.
     #[arg(long, default_value = "celestia")]
-    da_layer: String,
+    da_layer: SupportedDaLayer,
 
     /// The path to the rollup config.
     #[arg(long, default_value = "rollup_config.toml")]
     rollup_config_path: String,
+}
+
+#[derive(clap::ValueEnum, Clone, Debug)]
+enum SupportedDaLayer {
+    Celestia,
+    Mock,
 }
 
 #[tokio::main]
@@ -41,8 +47,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
     let rollup_config_path = args.rollup_config_path.as_str();
 
-    match args.da_layer.as_str() {
-        "mock" => {
+    match args.da_layer {
+        SupportedDaLayer::Mock => {
             let rollup = new_rollup_with_mock_da(
                 &GenesisPaths::from_dir("../test-data/genesis/integration-tests"),
                 rollup_config_path,
@@ -51,7 +57,7 @@ async fn main() -> Result<(), anyhow::Error> {
             .await?;
             rollup.run().await
         }
-        "celestia" => {
+        SupportedDaLayer::Celestia => {
             let rollup = new_rollup_with_celestia_da(
                 &GenesisPaths::from_dir("../test-data/genesis/demo-tests"),
                 rollup_config_path,
@@ -60,7 +66,6 @@ async fn main() -> Result<(), anyhow::Error> {
             .await?;
             rollup.run().await
         }
-        da => panic!("DA Layer not supported: {}", da),
     }
 }
 
