@@ -21,6 +21,7 @@ members = [
     "module-system/sov-cli",
     "module-system/sov-modules-stf-template",
     "module-system/sov-modules-macros",
+    "module-system/sov-modules-macro-rules",
     "module-system/sov-state",
     "module-system/sov-modules-api",
     "module-system/module-schemas",

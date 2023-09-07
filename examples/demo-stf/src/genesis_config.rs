@@ -55,8 +55,6 @@ pub fn create_demo_genesis_config<C: Context>(
 
 
     let nft_config = NonFungibleTokenConfig{
-        admin: sequencer_address,
-        owners: vec![]
     };
 
     #[cfg(feature = "experimental")]
