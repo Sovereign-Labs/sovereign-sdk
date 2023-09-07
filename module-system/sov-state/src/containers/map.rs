@@ -1,9 +1,8 @@
-use std::hash::Hash;
 use std::marker::PhantomData;
 
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, EncodeLike, StateValueCodec};
+use crate::codec::{BorshCodec, EncodeLike, StateKeyCodec, StateValueCodec};
 use crate::storage::StorageKey;
 use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
 
@@ -44,9 +43,9 @@ impl<K, V> StateMap<K, V> {
     }
 }
 
-impl<K, V, VC> StateMap<K, V, VC> {
+impl<K, V, Codec> StateMap<K, V, Codec> {
     /// Creates a new [`StateMap`] with the given prefix and [`StateValueCodec`].
-    pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
+    pub fn with_codec(prefix: Prefix, codec: Codec) -> Self {
         Self {
             _phantom: (PhantomData, PhantomData),
             value_codec: codec,
@@ -54,7 +53,7 @@ impl<K, V, VC> StateMap<K, V, VC> {
         }
     }
 
-    pub fn codec(&self) -> &VC {
+    pub fn codec(&self) -> &Codec {
         &self.value_codec
     }
 
@@ -64,10 +63,9 @@ impl<K, V, VC> StateMap<K, V, VC> {
     }
 }
 
-impl<K, V, VC> StateMap<K, V, VC>
+impl<K, V, Codec> StateMap<K, V, Codec>
 where
-    K: Hash + Eq,
-    VC: StateValueCodec<V>,
+    Codec: StateKeyCodec<K> + StateValueCodec<V>,
 {
     /// Inserts a key-value pair into the map.
     ///
@@ -75,8 +73,8 @@ where
     /// map’s key type.
     pub fn set<Q, S: Storage>(&self, key: &Q, value: &V, working_set: &mut WorkingSet<S>)
     where
-        VC: EncodeLike<Q, K>,
-        Q: Hash + Eq + ?Sized,
+        Codec: EncodeLike<Q, K>,
+        Q: ?Sized,
     {
         working_set.set_value(self.prefix(), key, value, &self.value_codec)
     }
@@ -119,7 +117,7 @@ where
     /// ```
     pub fn get<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Option<V>
     where
-        VC: EncodeLike<Q, K>,
+        Codec: EncodeLike<Q, K>,
         Q: ?Sized,
     {
         working_set.get_value(self.prefix(), key, &self.value_codec)
@@ -133,7 +131,7 @@ where
         working_set: &mut WorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
-        VC: EncodeLike<Q, K>,
+        Codec: EncodeLike<Q, K>,
         Q: ?Sized,
     {
         self.get(key, working_set).ok_or_else(|| {
@@ -148,7 +146,7 @@ where
     /// [`None`] if the key is absent).
     pub fn remove<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Option<V>
     where
-        VC: EncodeLike<Q, K>,
+        Codec: EncodeLike<Q, K>,
         Q: ?Sized,
     {
         working_set.remove_value(self.prefix(), key, &self.value_codec)
@@ -164,8 +162,8 @@ where
         working_set: &mut WorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
-        VC: EncodeLike<Q, K>,
-        Q: Hash + Eq + ?Sized,
+        Codec: EncodeLike<Q, K>,
+        Q: ?Sized,
     {
         self.remove(key, working_set).ok_or_else(|| {
             StateMapError::MissingValue(
@@ -181,7 +179,7 @@ where
     /// return the value beforing deletion.
     pub fn delete<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>)
     where
-        VC: EncodeLike<Q, K>,
+        Codec: EncodeLike<Q, K>,
         Q: ?Sized,
     {
         working_set.delete_value(self.prefix(), key, self.codec());

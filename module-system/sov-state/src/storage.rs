@@ -8,7 +8,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
-use crate::codec::{EncodeLike, StateValueCodec};
+use crate::codec::{EncodeLike, StateKeyCodec, StateValueCodec};
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::utils::AlignedVec;
 use crate::witness::Witness;
@@ -230,7 +230,7 @@ pub trait Storage: Clone {
         storage_map: &StateMap<K, V, VC>,
     ) -> Result<Option<StorageValue>, anyhow::Error>
     where
-        VC: StateValueCodec<K>,
+        VC: StateKeyCodec<K>,
     {
         let (storage_key, storage_value) = self.open_proof(state_root, proof)?;
 

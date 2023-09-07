@@ -3,6 +3,7 @@
 mod bcs_codec;
 mod borsh_codec;
 mod json_codec;
+mod split_codec;
 
 pub use bcs_codec::BcsCodec;
 use borsh::BorshSerialize;
@@ -44,6 +45,12 @@ pub trait StateValueCodec<V> {
     }
 }
 
+/// A trait for types that can serialize and deserialize keys for storage
+/// access.
+pub trait StateKeyCodec<K> {
+    fn encode_key(&self, key: &K) -> Vec<u8>;
+}
+
 pub trait EncodeLike<Ref: ?Sized, Target> {
     fn encode_like(&self, borrowed: &Ref) -> Vec<u8>;
 }
@@ -51,10 +58,10 @@ pub trait EncodeLike<Ref: ?Sized, Target> {
 // All items can be encoded like themselves
 impl<C, T> EncodeLike<T, T> for C
 where
-    C: StateValueCodec<T>,
+    C: StateKeyCodec<T>,
 {
     fn encode_like(&self, borrowed: &T) -> Vec<u8> {
-        self.encode_value(borrowed)
+        self.encode_key(borrowed)
     }
 }
 

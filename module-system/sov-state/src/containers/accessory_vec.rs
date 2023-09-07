@@ -1,7 +1,7 @@
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
 
-use crate::codec::{BorshCodec, StateValueCodec};
+use crate::codec::{BorshCodec, StateKeyCodec, StateValueCodec};
 use crate::{
     AccessoryStateMap, AccessoryStateValue, AccessoryWorkingSet, Prefix, StateVecError, Storage,
 };
@@ -38,7 +38,7 @@ where
 
 impl<V, VC> AccessoryStateVec<V, VC>
 where
-    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
+    VC: StateValueCodec<V> + StateKeyCodec<usize> + StateValueCodec<usize> + Clone,
 {
     /// Creates a new [`AccessoryStateVec`] with the given prefix and codec.
     pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
@@ -196,7 +196,7 @@ where
 
 impl<'a, 'ws, V, VC, S> Iterator for AccessoryStateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
+    VC: StateValueCodec<V> + StateKeyCodec<usize> + StateValueCodec<usize> + Clone,
     S: Storage,
 {
     type Item = V;
@@ -213,7 +213,7 @@ where
 
 impl<'a, 'ws, V, VC, S> ExactSizeIterator for AccessoryStateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
+    VC: StateValueCodec<V> + StateKeyCodec<usize> + StateValueCodec<usize> + Clone,
     S: Storage,
 {
     fn len(&self) -> usize {
@@ -223,7 +223,7 @@ where
 
 impl<'a, 'ws, V, VC, S> FusedIterator for AccessoryStateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
+    VC: StateValueCodec<V> + StateKeyCodec<usize> + StateValueCodec<usize> + Clone,
     S: Storage,
 {
 }
