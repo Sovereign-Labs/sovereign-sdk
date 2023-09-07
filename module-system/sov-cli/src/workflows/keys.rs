@@ -112,7 +112,9 @@ pub fn load_key<C: sov_modules_api::Context>(
     path: impl AsRef<Path>,
 ) -> Result<C::PrivateKey, anyhow::Error> {
     let data = std::fs::read_to_string(path)?;
-    let key_and_address: PrivateKeyAndAddress<C> = serde_json::from_str(&data)?;
+    let pk : C::PrivateKey = serde_json::from_str(&data)?;
+    let addr = pk.to_address();
+    let key_and_address  = PrivateKeyAndAddress::<C>{ private_key: pk, address: addr };
     Ok(key_and_address.private_key)
 }
 
