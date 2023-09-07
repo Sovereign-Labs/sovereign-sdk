@@ -6,14 +6,22 @@ use thiserror::Error;
 use crate::codec::{BorshCodec, StateValueCodec};
 use crate::{Prefix, StateMap, StateValue, Storage, WorkingSet};
 
-#[derive(Debug, Clone)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct StateVec<V, VC = BorshCodec>
 where
     VC: StateValueCodec<V>,
 {
     _phantom: PhantomData<V>,
     prefix: Prefix,
-    len_value: StateValue<usize>,
+    len_value: StateValue<usize, VC>,
     elems: StateMap<usize, V, VC>,
 }
 
@@ -39,7 +47,7 @@ where
 
 impl<V, VC> StateVec<V, VC>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
 {
     /// Creates a new [`StateVec`] with the given prefix and codec.
     pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
@@ -47,7 +55,7 @@ where
         // shouldn't be necessary, but it's best not to rely on implementation
         // details of `StateValue` and `StateMap` as they both have the right to
         // reserve the whole key space for themselves.
-        let len_value = StateValue::<usize>::new(prefix.extended(b"l"));
+        let len_value = StateValue::with_codec(prefix.extended(b"l"), codec.clone());
         let elems = StateMap::with_codec(prefix.extended(b"e"), codec);
         Self {
             _phantom: PhantomData,
@@ -192,7 +200,7 @@ where
 
 impl<'a, 'ws, V, VC, S> Iterator for StateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
     S: Storage,
 {
     type Item = V;
@@ -209,7 +217,7 @@ where
 
 impl<'a, 'ws, V, VC, S> ExactSizeIterator for StateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
     S: Storage,
 {
     fn len(&self) -> usize {
@@ -219,7 +227,7 @@ where
 
 impl<'a, 'ws, V, VC, S> FusedIterator for StateVecIter<'a, 'ws, V, VC, S>
 where
-    VC: StateValueCodec<V>,
+    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
     S: Storage,
 {
 }

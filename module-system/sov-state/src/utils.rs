@@ -2,7 +2,16 @@
 // This makes certain operations cheaper in zk-context (concatenation)
 // TODO: Currently the implementation defaults to `stc::vec::Vec` see:
 // https://github.com/Sovereign-Labs/sovereign-sdk/issues/47
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Eq, Clone)]
+#[derive(
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    Debug,
+    PartialEq,
+    Eq,
+    Clone,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct AlignedVec {
     inner: Vec<u8>,
 }
