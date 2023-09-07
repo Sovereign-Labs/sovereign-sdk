@@ -14,6 +14,7 @@ mod cli_parser;
 mod common;
 mod default_runtime;
 mod dispatch;
+mod manifest;
 mod module_call_json_schema;
 mod module_info;
 #[cfg(feature = "native")]
@@ -129,7 +130,7 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// }
 ///
 /// #[jsonrpsee::proc_macros::rpc(client, server, namespace ="myNamespace")]
-/// pub trait MyModuleRpc {
+/// pub trait MyModuleRpc<C: Context> {
 ///     #[method(name = "myMethod")]
 ///     fn my_method(&self, param: u32) ->RpcResult<u32>;
 ///
@@ -137,6 +138,12 @@ pub fn codec(input: TokenStream) -> TokenStream {
 ///     fn health(&self) -> RpcResult<()> {
 ///         Ok(())
 ///     }
+///
+///     #[method(name = "moduleAddress")]
+///     fn module_address(&self) -> ::jsonrpsee::core::RpcResult<String> {
+///        Ok(<MyModule<C> as ModuleInfo>::address(&<MyModule<C> as ::core::default::Default>::default()).to_string())
+///     }
+///         
 /// }
 /// ```
 ///

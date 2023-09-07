@@ -298,7 +298,7 @@ where
 
 /// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
 /// This allows developers to override only some of the methods in their implementation and safely ignore the others.
-pub trait Module {
+pub trait Module: Default {
     /// Execution context.
     type Context: Context;
 
@@ -347,6 +347,9 @@ pub trait ModuleInfo {
 
     /// Returns address of the module.
     fn address(&self) -> &<Self::Context as Spec>::Address;
+
+    /// Returns the prefix of the module.
+    fn prefix(&self) -> Prefix;
 
     /// Returns addresses of all the other modules this module is dependent on
     fn dependencies(&self) -> Vec<&<Self::Context as Spec>::Address>;
