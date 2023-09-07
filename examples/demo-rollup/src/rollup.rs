@@ -11,6 +11,7 @@ use demo_stf::app::DefaultPrivateKey;
 use demo_stf::app::{App, DefaultContext};
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
 use risc0_adapter::host::Risc0Verifier;
+#[cfg(feature = "experimental")]
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
@@ -130,9 +131,8 @@ pub fn new_rollup_with_mock_da_from_config(
 pub fn read_tx_signer_priv_key() -> Result<DefaultPrivateKey, anyhow::Error> {
     let data = std::fs::read_to_string(TX_SIGNER_PRIV_KEY_PATH).context("Unable to read file")?;
 
-    let key_and_address: PrivateKeyAndAddress<DefaultContext> = serde_json::from_str(&data).expect(
-        &format!("Unable to convert data {} to PrivateKeyAndAddress", &data),
-    );
+    let key_and_address: PrivateKeyAndAddress<DefaultContext> = serde_json::from_str(&data)
+        .unwrap_or_else(|_| panic!("Unable to convert data {} to PrivateKeyAndAddress", &data));
 
     Ok(key_and_address.private_key)
 }

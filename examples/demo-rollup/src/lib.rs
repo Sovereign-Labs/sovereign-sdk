@@ -43,9 +43,8 @@ pub fn get_genesis_config<Da: DaSpec>(
 ) -> GenesisConfig<DefaultContext, Da> {
     let data = std::fs::read_to_string("../test-data/keys/token_deployer_private_key.json")
         .expect("Unable to read file to string");
-    let key_and_address: PrivateKeyAndAddress<DefaultContext> = serde_json::from_str(&data).expect(
-        &format!("Unable to convert data {} to PrivateKeyAndAddress", &data),
-    );
+    let key_and_address: PrivateKeyAndAddress<DefaultContext> = serde_json::from_str(&data)
+        .unwrap_or_else(|_| panic!("Unable to convert data {} to PrivateKeyAndAddress", &data));
     assert!(
         key_and_address.is_matching_to_default(),
         "Inconsistent key data"
