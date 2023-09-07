@@ -3,11 +3,9 @@ use std::fmt::Debug;
 use std::rc::Rc;
 
 use anyhow::{bail, Result};
-use ibc::applications::transfer::msgs::transfer::MsgTransfer;
-use ibc::applications::transfer::send_transfer;
 use ibc::core::{dispatch, MsgEnvelope};
 use sov_ibc_transfer::call::SDKTokenTransfer;
-use sov_ibc_transfer::context::{EscrowExtraData, TransferContext};
+use sov_ibc_transfer::context::TransferContext;
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 use thiserror::Error;
@@ -68,13 +66,13 @@ impl<C: sov_modules_api::Context> IbcModule<C> {
         };
 
         let mut token_ctx =
-            TransferContext::new(self.transfer.clone(), context, shared_working_set);
+            TransferContext::new(self.transfer.clone(), context, shared_working_set.clone());
 
         self.transfer.transfer(
             sdk_token_transfer,
             &mut execution_context,
             &mut token_ctx,
-            working_set,
+            shared_working_set,
         )
     }
 }
