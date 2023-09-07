@@ -14,6 +14,7 @@ mod cli_parser;
 mod common;
 mod default_runtime;
 mod dispatch;
+mod manifest;
 mod module_call_json_schema;
 mod module_info;
 #[cfg(feature = "native")]
