@@ -263,7 +263,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         token_address: &C::Address,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Option<String> {
-        let token = self.tokens.get(&token_address, working_set);
+        let token = self.tokens.get(token_address, working_set);
         token.map(|token| token.name)
     }
 }
