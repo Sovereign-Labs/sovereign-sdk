@@ -30,7 +30,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
             prevrandao: Some(da_root_hash),
             basefee: {
                 let base_fee = reth_primitives::basefee::calculate_next_block_base_fee(
-                    parent_block.header.gas_used.as_limbs()[0],
+                    parent_block.header.gas_used.try_into().unwrap(),
                     cfg.block_gas_limit,
                     parent_block
                         .header
