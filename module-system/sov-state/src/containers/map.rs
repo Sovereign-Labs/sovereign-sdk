@@ -86,7 +86,7 @@ where
     ///
     /// # Examples
     ///
-    /// The key may be any item that implements [`EncodeLike`] the map's key type
+    /// The key may be any item that implements [`EncodeKeyLike`] the map's key type
     /// using your chosen codec.
     ///
     /// ```
@@ -102,7 +102,7 @@ where
     /// }
     /// ```
     ///
-    /// If the map's key type does not implement [`EncodeLike`] for your desired
+    /// If the map's key type does not implement [`EncodeKeyLike`] for your desired
     /// target type, you'll have to convert the key to something else. An
     /// example of this would be "slicing" an array to use in [`Vec`]-keyed
     /// maps:
