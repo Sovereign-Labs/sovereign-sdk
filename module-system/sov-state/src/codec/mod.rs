@@ -45,25 +45,38 @@ pub trait StateValueCodec<V> {
     }
 }
 
-/// A trait for types that can serialize and deserialize keys for storage
+/// A trait for types that can serialize keys for storage
 /// access.
 pub trait StateKeyCodec<K> {
     fn encode_key(&self, key: &K) -> Vec<u8>;
 }
 
+/// A trait for types that can serialize keys and values, as well
+/// as deserializing values for storage access.
 pub trait StateCodec {
+    /// The codec used to serialize keys
     type KeyCodec;
+    /// The codec used to serialize and deserialize values
     type ValueCodec;
 
+    /// Returns a reference to the type's key codec
     fn key_codec(&self) -> &Self::KeyCodec;
+    /// Returns a reference to the type's value codec
     fn value_codec(&self) -> &Self::ValueCodec;
 }
 
+/// A trait for codecs which know how to serialize a type `Ref` as if it were
+/// some other type `Target`.
+///
+/// A good example of this is [`BorshCodec`], which knows how to serialize a
+/// `[T;N]` as if it were a `Vec<T>` even though the two types have different
+/// encodings by default.
 pub trait EncodeKeyLike<Ref: ?Sized, Target> {
+    /// Encodes a reference to `Ref` as if it were a reference to `Target`.
     fn encode_key_like(&self, borrowed: &Ref) -> Vec<u8>;
 }
 
-// All items can be encoded like themselves
+// All items can be encoded like themselves by all codecs
 impl<C, T> EncodeKeyLike<T, T> for C
 where
     C: StateKeyCodec<T>,
