@@ -7859,6 +7859,7 @@ dependencies = [
  "hex",
  "jmt",
  "jsonrpsee 0.18.2",
+ "presence",
  "prettytable-rs",
  "prometheus 0.11.0",
  "proptest",

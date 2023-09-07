@@ -11,7 +11,7 @@ use demo_stf::runtime::GenesisConfig;
 #[cfg(feature = "experimental")]
 pub use rollup::read_tx_signer_priv_key;
 pub use rollup::{
-    new_rollup_with_celestia_da, new_rollup_with_mock_da, new_rollup_with_mock_da_from_config,
+    new_rollup_with_celestia_da, new_rollup_with_mock_da, new_rollup_with_mock_da_from_config, new_rollup_with_avail_da,
     Rollup,
 };
 use sov_cli::wallet_state::{HexPrivateAndAddress, PrivateKeyAndAddress};

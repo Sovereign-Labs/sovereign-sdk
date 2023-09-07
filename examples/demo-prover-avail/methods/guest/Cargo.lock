@@ -1936,9 +1936,8 @@ dependencies = [
  "bincode",
  "borsh",
  "hex",
+ "sov-chain-state",
  "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
  "tracing",
@@ -1951,8 +1950,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
  "sov-state",
 ]
 
@@ -2053,7 +2050,6 @@ dependencies = [
  "borsh",
  "sov-bank",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
 ]
 
@@ -2067,6 +2063,7 @@ dependencies = [
  "hex",
  "jmt",
  "serde",
+ "serde_json",
  "sha2",
  "sov-first-read-last-write-cache",
  "sov-rollup-interface",
@@ -2080,7 +2077,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
  "thiserror",
 ]

@@ -89,7 +89,7 @@ pub async fn new_rollup_with_celestia_da(
     })
 }
 
-/// Creates celestia based rollup.
+/// Creates avail based rollup.
 pub async fn new_rollup_with_avail_da(
     rollup_config_path: &str,
 ) -> Result<Rollup<Risc0Verifier, AvailService>, anyhow::Error> {
@@ -106,6 +106,22 @@ pub async fn new_rollup_with_avail_da(
 
     let app = App::new(rollup_config.storage);
     let sequencer_da_address = AvailAddress::from_str(SEQUENCER_AVAIL_DA_ADDRESS)?;
+    let genesis_config = get_genesis_config(sequencer_da_address);
+
+    Ok(Rollup {
+        app,
+        da_service,
+        ledger_db,
+        runner_config: rollup_config.runner,
+        genesis_config,
+        #[cfg(feature = "experimental")]
+        eth_rpc_config: EthRpcConfig {
+            min_blob_size: Some(1),
+            tx_signer_priv_key: read_tx_signer_priv_key()?,
+        },
+    })
+}
+
 /// Creates MockDa based rollup.
 pub fn new_rollup_with_mock_da(
     rollup_config_path: &str,

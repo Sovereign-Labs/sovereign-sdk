@@ -3519,7 +3519,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-rollup-interface",
+ "sp-core",
  "sp-core-hashing 10.0.0",
+ "sp-keyring",
  "subxt",
  "thiserror",
  "tokio",
@@ -4821,9 +4823,8 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "sov-chain-state",
  "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
  "tracing",
@@ -4839,8 +4840,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
  "sov-state",
 ]
 
@@ -5058,7 +5057,6 @@ dependencies = [
  "serde_json",
  "sov-bank",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
 ]
 
@@ -5072,6 +5070,7 @@ dependencies = [
  "hex",
  "jmt",
  "serde",
+ "serde_json",
  "sha2 0.10.6",
  "sov-db",
  "sov-first-read-last-write-cache",
@@ -5113,7 +5112,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
  "thiserror",
 ]
@@ -5267,6 +5265,18 @@ dependencies = [
  "sp-trie",
  "tracing",
  "tracing-core",
+]
+
+[[package]]
+name = "sp-keyring"
+version = "18.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc13a168cdc15e185db5cbe8644e3eaafa534e229593768b3044b60bea00fc8c"
+dependencies = [
+ "lazy_static",
+ "sp-core",
+ "sp-runtime",
+ "strum",
 ]
 
 [[package]]
@@ -5537,6 +5547,28 @@ dependencies = [
  "proc-macro-error",
  "proc-macro2",
  "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
+name = "strum"
+version = "0.24.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "063e6045c0e62079840579a7e47a355ae92f60eb74daaf156fb1e84ba164e63f"
+dependencies = [
+ "strum_macros",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.24.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e385be0d24f186b4ce2f9982191e7101bb737312ad61c1f2f984f34bcf85d59"
+dependencies = [
+ "heck 0.4.1",
+ "proc-macro2",
+ "quote",
+ "rustversion",
  "syn 1.0.109",
 ]
 
