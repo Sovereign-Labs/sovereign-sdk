@@ -6,7 +6,7 @@ use sov_state::WorkingSet;
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
 use crate::evm::transaction::{BlockEnv, EvmTransactionSignedEcRecovered};
-use crate::evm::{contract_address, EvmChainCfg, RawEvmTransaction};
+use crate::evm::{contract_address, EvmChainConfig, RawEvmTransaction};
 use crate::experimental::SpecIdWrapper;
 use crate::Evm;
 
@@ -86,7 +86,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 /// Copies context dependent values from template_cfg or default if not provided
 pub(crate) fn get_cfg_env(
     block_env: &BlockEnv,
-    cfg: EvmChainCfg,
+    cfg: EvmChainConfig,
     template_cfg: Option<CfgEnv>,
 ) -> CfgEnv {
     CfgEnv {

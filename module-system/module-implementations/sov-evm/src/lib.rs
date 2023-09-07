@@ -32,7 +32,7 @@ mod experimental {
     use super::evm::db::EvmDb;
     use super::evm::transaction::BlockEnv;
     use super::evm::{DbAccount, EthAddress};
-    use crate::evm::{Bytes32, EvmChainCfg};
+    use crate::evm::{Bytes32, EvmChainConfig};
     #[derive(Clone, Debug)]
     pub struct AccountData {
         pub address: EthAddress,
@@ -92,7 +92,7 @@ mod experimental {
         pub(crate) accounts: sov_state::StateMap<EthAddress, DbAccount>,
 
         #[state]
-        pub(crate) cfg: sov_state::StateValue<EvmChainCfg>,
+        pub(crate) cfg: sov_state::StateValue<EvmChainConfig>,
 
         #[state]
         pub(crate) pending_block: sov_state::StateValue<BlockEnv>,

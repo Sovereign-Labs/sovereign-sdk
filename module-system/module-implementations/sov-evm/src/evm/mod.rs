@@ -75,7 +75,7 @@ pub(crate) fn contract_address(result: ExecutionResult) -> Option<B160> {
 
 /// EVM Chain configuration
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
-pub struct EvmChainCfg {
+pub struct EvmChainConfig {
     /// Unique chain id
     /// Chains can be registered at <https://github.com/ethereum-lists/chains>.
     pub chain_id: u64,
@@ -97,9 +97,9 @@ pub struct EvmChainCfg {
     pub block_timestamp_delta: u64,
 }
 
-impl Default for EvmChainCfg {
-    fn default() -> EvmChainCfg {
-        EvmChainCfg {
+impl Default for EvmChainConfig {
+    fn default() -> EvmChainConfig {
+        EvmChainConfig {
             chain_id: 1,
             limit_contract_code_size: None,
             spec: vec![(0, SpecIdWrapper::from(SpecId::LATEST))],

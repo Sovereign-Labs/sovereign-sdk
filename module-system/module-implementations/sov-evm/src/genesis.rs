@@ -6,7 +6,7 @@ use revm::primitives::SpecId;
 use sov_state::WorkingSet;
 
 use crate::evm::db_init::InitEvmDb;
-use crate::evm::{AccountInfo, EvmChainCfg};
+use crate::evm::{AccountInfo, EvmChainConfig};
 use crate::experimental::SpecIdWrapper;
 use crate::Evm;
 
@@ -44,7 +44,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
             panic!("EVM spec must start from block 0");
         }
 
-        let chain_cfg = EvmChainCfg {
+        let chain_cfg = EvmChainConfig {
             chain_id: config.chain_id,
             limit_contract_code_size: config.limit_contract_code_size,
             spec,
@@ -59,10 +59,10 @@ impl<C: sov_modules_api::Context> Evm<C> {
         self.head_number.set(&genesis_block_number, working_set);
 
         let header = reth_primitives::Header {
-            parent_hash: KECCAK_EMPTY,
+            parent_hash: H256::default(),
             ommers_hash: EMPTY_OMMER_ROOT,
             beneficiary: config.coinbase.into(),
-            state_root: Default::default(), // TODO: Can we get state from working set now?
+            state_root: KECCAK_EMPTY, // TODO: Can we get state from working set now?
             transactions_root: EMPTY_TRANSACTIONS,
             receipts_root: EMPTY_RECEIPTS,
             withdrawals_root: None,
