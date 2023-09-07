@@ -189,8 +189,8 @@ where
 #[cfg(feature = "arbitrary")]
 impl<'a, K, V, Codec> StateMap<K, V, Codec>
 where
-    K: arbitrary::Arbitrary<'a> + Hash + Eq,
-    V: arbitrary::Arbitrary<'a> + Hash + Eq,
+    K: arbitrary::Arbitrary<'a>,
+    V: arbitrary::Arbitrary<'a>,
     Codec: StateValueCodec<V> + StateValueCodec<K> + Default,
 {
     pub fn arbitrary_workset<S>(
