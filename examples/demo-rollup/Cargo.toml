@@ -41,6 +41,7 @@ sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["n
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
 sov-cli = { path = "../../module-system/sov-cli" }
+clap = { workspace = true }
 
 [dev-dependencies]
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
@@ -50,7 +51,6 @@ reqwest = "0.11"
 tendermint = "0.32"
 tempfile = { workspace = true }
 proptest = { workspace = true }
-clap = { workspace = true }
 sov-rollup-interface = { path = "../../rollup-interface", features = ["fuzzing"] }
 prometheus = "0.11.0"
 prettytable-rs = "^0.10"

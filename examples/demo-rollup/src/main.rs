@@ -1,7 +1,7 @@
-use std::env;
 use std::str::FromStr;
 
-use sov_demo_rollup::new_rollup_with_celestia_da;
+use clap::Parser;
+use sov_demo_rollup::{new_rollup_with_celestia_da, new_rollup_with_mock_da};
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -12,6 +12,18 @@ mod test_rpc;
 /// (or a default config if not provided). Then start checking the blocks sent to the DA layer in
 /// the main event loop.
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// The data layer type.
+    #[arg(long, default_value = "celestia")]
+    da_layer: String,
+
+    /// The path to the rollup config.
+    #[arg(long, default_value = "rollup_config.toml")]
+    rollup_config_path: String,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     // Initializing logging
@@ -20,10 +32,18 @@ async fn main() -> Result<(), anyhow::Error> {
         .with(EnvFilter::from_str("info,sov_sequencer=warn").unwrap())
         .init();
 
-    let rollup_config_path = env::args()
-        .nth(1)
-        .unwrap_or_else(|| "rollup_config.toml".to_string());
+    let args = Args::parse();
+    let rollup_config_path = args.rollup_config_path.as_str();
 
-    let rollup = new_rollup_with_celestia_da(&rollup_config_path).await?;
-    rollup.run().await
+    match args.da_layer.as_str() {
+        "mock" => {
+            let rollup = new_rollup_with_mock_da(rollup_config_path)?;
+            rollup.run().await
+        }
+        "celestia" => {
+            let rollup = new_rollup_with_celestia_da(rollup_config_path).await?;
+            rollup.run().await
+        }
+        da => panic!("DA Layer not supported: {}", da),
+    }
 }
