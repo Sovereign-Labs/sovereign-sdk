@@ -24,7 +24,7 @@ fn initial_and_deployed_token() {
     let token_address = get_token_address::<C>(&token_name, sender_address.as_ref(), salt);
     let create_token_message = CallMessage::CreateToken::<C> {
         salt,
-        token_name,
+        token_name: token_name.clone(),
         initial_balance,
         minter_address,
         authorized_minters: vec![minter_address],
@@ -37,6 +37,11 @@ fn initial_and_deployed_token() {
 
     let sender_balance = bank.get_balance_of(sender_address, token_address, &mut working_set);
     assert!(sender_balance.is_none());
+
+    let observed_token_name = bank
+        .get_token_name(&token_address, &mut working_set)
+        .expect("Token is missing its name");
+    assert_eq!(&token_name, &observed_token_name);
 
     let minter_balance = bank.get_balance_of(minter_address, token_address, &mut working_set);
 
