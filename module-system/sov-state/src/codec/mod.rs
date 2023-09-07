@@ -58,7 +58,8 @@ where
     }
 }
 
-// In borsh, a slice is encoded the same way as a vector
+// In borsh, a slice is encoded the same way as a vector except in edge case where
+// T is zero-sized, in which case Vec<T> is not borsh encodable.
 impl<T> EncodeLike<[T], Vec<T>> for BorshCodec
 where
     T: BorshSerialize,
