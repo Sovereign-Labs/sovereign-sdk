@@ -14,7 +14,15 @@ use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
 /// - a key type `K`;
 /// - a value type `V`;
 /// - a [`StateValueCodec`] `VC`.
-#[derive(Debug, Clone, PartialEq, borsh::BorshDeserialize, borsh::BorshSerialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct StateMap<K, V, VC = BorshCodec> {
     _phantom: (PhantomData<K>, PhantomData<V>),
     value_codec: VC,

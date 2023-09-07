@@ -14,7 +14,15 @@ use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
 /// - a key type `K`;
 /// - a value type `V`;
 /// - a [`StateValueCodec`] `VC`.
-#[derive(Debug, Clone, PartialEq, borsh::BorshDeserialize, borsh::BorshSerialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct AccessoryStateMap<K, V, VC = BorshCodec> {
     _phantom: (PhantomData<K>, PhantomData<V>),
     value_codec: VC,
