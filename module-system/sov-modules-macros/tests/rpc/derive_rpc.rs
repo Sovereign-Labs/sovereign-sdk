@@ -107,5 +107,15 @@ fn main() {
         assert_eq!(result, ());
     }
 
+    {
+        let result =
+            <RpcStorage<ZkDefaultContext> as TestStructRpcServer<ZkDefaultContext>>::module_address(&r)
+                .unwrap();
+        assert_eq!(
+            result,
+            "sov1y34qkrqwffa3hmpdzvj0fqc0ahmlgrjf5ltfan9ugt82v5ej6lkshg9ypu"
+        );
+    }
+
     println!("All tests passed!");
 }
