@@ -242,13 +242,9 @@ where
         // ensure that escrow account has enough balance
         let escrow_balance: transfer::Amount = {
             let token_address = {
-                let mut hasher = <C::Hasher as Digest>::new();
-                hasher.update(coin.denom.to_string());
-                let denom_hash = hasher.finalize().to_vec();
-
                 self.transfer_mod
                     .escrowed_tokens
-                    .get(&denom_hash, &mut self.working_set.borrow_mut())
+                    .get(&coin.denom.to_string(), &mut self.working_set.borrow_mut())
                     .ok_or(TokenTransferError::InvalidCoin {
                         coin: coin.to_string(),
                     })?
@@ -406,17 +402,11 @@ where
     ) -> Result<(), TokenTransferError> {
         // 1. ensure that token exists in `self.escrowed_tokens` map, which is
         // necessary information when unescrowing tokens
-        {
-            let mut hasher = <C::Hasher as Digest>::new();
-            hasher.update(coin.denom.to_string());
-            let denom_hash = hasher.finalize().to_vec();
-
-            self.transfer_mod.escrowed_tokens.set(
-                &denom_hash,
-                &extra.token_address,
-                &mut self.working_set.borrow_mut(),
-            );
-        }
+        self.transfer_mod.escrowed_tokens.set(
+            &coin.denom.to_string(),
+            &extra.token_address,
+            &mut self.working_set.borrow_mut(),
+        );
 
         // 2. transfer coins to escrow account
         {
@@ -443,18 +433,13 @@ where
         to_account: &Self::AccountId,
         coin: &PrefixedCoin,
     ) -> Result<(), TokenTransferError> {
-        let token_address = {
-            let mut hasher = <C::Hasher as Digest>::new();
-            hasher.update(coin.denom.to_string());
-            let denom_hash = hasher.finalize().to_vec();
-
-            self.transfer_mod
-                .escrowed_tokens
-                .get(&denom_hash, &mut self.working_set.borrow_mut())
-                .ok_or(TokenTransferError::InvalidCoin {
-                    coin: coin.to_string(),
-                })?
-        };
+        let token_address = self
+            .transfer_mod
+            .escrowed_tokens
+            .get(&coin.denom.to_string(), &mut self.working_set.borrow_mut())
+            .ok_or(TokenTransferError::InvalidCoin {
+                coin: coin.to_string(),
+            })?;
 
         // transfer coins out of escrow account to `to_account`
         {
