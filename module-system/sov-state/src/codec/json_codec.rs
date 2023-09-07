@@ -1,6 +1,6 @@
 use serde_json;
 
-use super::StateKeyCodec;
+use super::{StateCodec, StateKeyCodec};
 use crate::codec::StateValueCodec;
 
 /// A [`StateValueCodec`] that uses [`serde_json`] for all values.
@@ -28,5 +28,18 @@ where
 
     fn try_decode_value(&self, bytes: &[u8]) -> Result<V, Self::Error> {
         serde_json::from_slice(bytes)
+    }
+}
+
+impl StateCodec for JsonCodec {
+    type KeyCodec = Self;
+    type ValueCodec = Self;
+
+    fn key_codec(&self) -> &Self::KeyCodec {
+        self
+    }
+
+    fn value_codec(&self) -> &Self::ValueCodec {
+        self
     }
 }

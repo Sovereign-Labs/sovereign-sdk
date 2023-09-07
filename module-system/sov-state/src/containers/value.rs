@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, StateValueCodec};
+use crate::codec::{BorshCodec, StateCodec, StateValueCodec};
 use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
 
 /// Container for a single value.
@@ -54,7 +54,8 @@ impl<V, Codec> StateValue<V, Codec> {
 
 impl<V, Codec> StateValue<V, Codec>
 where
-    Codec: StateValueCodec<V>,
+    Codec: StateCodec,
+    Codec::ValueCodec: StateValueCodec<V>,
 {
     /// Sets a value in the StateValue.
     pub fn set<S: Storage>(&self, value: &V, working_set: &mut WorkingSet<S>) {

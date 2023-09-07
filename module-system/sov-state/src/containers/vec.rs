@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, StateKeyCodec, StateValueCodec};
+use crate::codec::{BorshCodec, StateCodec, StateKeyCodec, StateValueCodec};
 use crate::{Prefix, StateMap, StateValue, Storage, WorkingSet};
 
 #[derive(
@@ -15,10 +15,7 @@ use crate::{Prefix, StateMap, StateValue, Storage, WorkingSet};
     serde::Serialize,
     serde::Deserialize,
 )]
-pub struct StateVec<V, Codec = BorshCodec>
-where
-    Codec: StateValueCodec<V>,
-{
+pub struct StateVec<V, Codec = BorshCodec> {
     _phantom: PhantomData<V>,
     prefix: Prefix,
     len_value: StateValue<usize, Codec>,
@@ -47,7 +44,9 @@ where
 
 impl<V, Codec> StateVec<V, Codec>
 where
-    Codec: StateValueCodec<V> + StateKeyCodec<usize> + StateValueCodec<usize> + Clone,
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
 {
     /// Creates a new [`StateVec`] with the given prefix and codec.
     pub fn with_codec(prefix: Prefix, codec: Codec) -> Self {
@@ -189,7 +188,9 @@ where
 /// See [`StateVec::iter`] for more details.
 pub struct StateVecIter<'a, 'ws, V, Codec, S>
 where
-    Codec: StateValueCodec<V>,
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
     S: Storage,
 {
     state_vec: &'a StateVec<V, Codec>,
@@ -200,7 +201,9 @@ where
 
 impl<'a, 'ws, V, Codec, S> Iterator for StateVecIter<'a, 'ws, V, Codec, S>
 where
-    Codec: StateValueCodec<V> + StateKeyCodec<usize> + StateValueCodec<usize> + Clone,
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
     S: Storage,
 {
     type Item = V;
@@ -217,7 +220,9 @@ where
 
 impl<'a, 'ws, V, Codec, S> ExactSizeIterator for StateVecIter<'a, 'ws, V, Codec, S>
 where
-    Codec: StateValueCodec<V> + StateKeyCodec<usize> + StateValueCodec<usize> + Clone,
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
     S: Storage,
 {
     fn len(&self) -> usize {
@@ -227,7 +232,9 @@ where
 
 impl<'a, 'ws, V, Codec, S> FusedIterator for StateVecIter<'a, 'ws, V, Codec, S>
 where
-    Codec: StateValueCodec<V> + StateKeyCodec<usize> + StateValueCodec<usize> + Clone,
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
     S: Storage,
 {
 }

@@ -1,4 +1,4 @@
-use super::StateKeyCodec;
+use super::{StateCodec, StateKeyCodec};
 use crate::codec::StateValueCodec;
 
 /// A [`StateValueCodec`] that uses [`borsh`] for all values.
@@ -26,5 +26,17 @@ where
 
     fn try_decode_value(&self, bytes: &[u8]) -> Result<V, Self::Error> {
         V::try_from_slice(bytes)
+    }
+}
+
+impl StateCodec for BorshCodec {
+    type KeyCodec = Self;
+    type ValueCodec = Self;
+    fn key_codec(&self) -> &Self::KeyCodec {
+        self
+    }
+
+    fn value_codec(&self) -> &Self::ValueCodec {
+        self
     }
 }

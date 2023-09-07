@@ -4,7 +4,7 @@ use std::fmt::Debug;
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 use sov_rollup_interface::stf::Event;
 
-use crate::codec::{EncodeLike, StateValueCodec};
+use crate::codec::{EncodeKeyLike, StateCodec, StateValueCodec};
 use crate::internal_cache::{OrderedReadsAndWrites, StorageInternalCache};
 use crate::storage::{StorageKey, StorageValue};
 use crate::{Prefix, Storage};
@@ -317,29 +317,37 @@ pub(crate) trait StateReaderAndWriter {
         codec: &Codec,
     ) where
         Q: ?Sized,
-        Codec: EncodeLike<Q, K> + StateValueCodec<V>,
+        Codec: StateCodec,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
+        Codec::ValueCodec: StateValueCodec<V>,
     {
-        let storage_key = StorageKey::new(prefix, storage_key, codec);
-        let storage_value = StorageValue::new(value, codec);
+        let storage_key = StorageKey::new(prefix, storage_key, codec.key_codec());
+        let storage_value = StorageValue::new(value, codec.value_codec());
         self.set(&storage_key, storage_value);
     }
 
     fn set_singleton<V, Codec>(&mut self, prefix: &Prefix, value: &V, codec: &Codec)
     where
-        Codec: StateValueCodec<V>,
+        Codec: StateCodec,
+        Codec::ValueCodec: StateValueCodec<V>,
     {
         let storage_key = StorageKey::singleton(prefix);
-        let storage_value = StorageValue::new(value, codec);
+        let storage_value = StorageValue::new(value, codec.value_codec());
         self.set(&storage_key, storage_value);
     }
 
     fn get_decoded<V, Codec>(&mut self, storage_key: &StorageKey, codec: &Codec) -> Option<V>
     where
-        Codec: StateValueCodec<V>,
+        Codec: StateCodec,
+        Codec::ValueCodec: StateValueCodec<V>,
     {
         let storage_value = self.get(storage_key)?;
 
-        Some(codec.decode_value_unwrap(storage_value.value()))
+        Some(
+            codec
+                .value_codec()
+                .decode_value_unwrap(storage_value.value()),
+        )
     }
 
     fn get_value<Q, K, V, Codec>(
@@ -350,15 +358,18 @@ pub(crate) trait StateReaderAndWriter {
     ) -> Option<V>
     where
         Q: ?Sized,
-        Codec: EncodeLike<Q, K> + StateValueCodec<V>,
+        Codec: StateCodec,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
+        Codec::ValueCodec: StateValueCodec<V>,
     {
-        let storage_key = StorageKey::new(prefix, storage_key, codec);
+        let storage_key = StorageKey::new(prefix, storage_key, codec.key_codec());
         self.get_decoded(&storage_key, codec)
     }
 
     fn get_singleton<V, Codec>(&mut self, prefix: &Prefix, codec: &Codec) -> Option<V>
     where
-        Codec: StateValueCodec<V>,
+        Codec: StateCodec,
+        Codec::ValueCodec: StateValueCodec<V>,
     {
         let storage_key = StorageKey::singleton(prefix);
         self.get_decoded(&storage_key, codec)
@@ -372,9 +383,11 @@ pub(crate) trait StateReaderAndWriter {
     ) -> Option<V>
     where
         Q: ?Sized,
-        Codec: EncodeLike<Q, K> + StateValueCodec<V>,
+        Codec: StateCodec,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
+        Codec::ValueCodec: StateValueCodec<V>,
     {
-        let storage_key = StorageKey::new(prefix, storage_key, codec);
+        let storage_key = StorageKey::new(prefix, storage_key, codec.key_codec());
         let storage_value = self.get_decoded(&storage_key, codec)?;
         self.delete(&storage_key);
         Some(storage_value)
@@ -382,7 +395,8 @@ pub(crate) trait StateReaderAndWriter {
 
     fn remove_singleton<V, Codec>(&mut self, prefix: &Prefix, codec: &Codec) -> Option<V>
     where
-        Codec: StateValueCodec<V>,
+        Codec: StateCodec,
+        Codec::ValueCodec: StateValueCodec<V>,
     {
         let storage_key = StorageKey::singleton(prefix);
         let storage_value = self.get_decoded(&storage_key, codec)?;
@@ -393,9 +407,10 @@ pub(crate) trait StateReaderAndWriter {
     fn delete_value<Q, K, Codec>(&mut self, prefix: &Prefix, storage_key: &Q, codec: &Codec)
     where
         Q: ?Sized,
-        Codec: EncodeLike<Q, K>,
+        Codec: StateCodec,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
     {
-        let storage_key = StorageKey::new(prefix, storage_key, codec);
+        let storage_key = StorageKey::new(prefix, storage_key, codec.key_codec());
         self.delete(&storage_key);
     }
 

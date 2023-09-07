@@ -51,27 +51,35 @@ pub trait StateKeyCodec<K> {
     fn encode_key(&self, key: &K) -> Vec<u8>;
 }
 
-pub trait EncodeLike<Ref: ?Sized, Target> {
-    fn encode_like(&self, borrowed: &Ref) -> Vec<u8>;
+pub trait StateCodec {
+    type KeyCodec;
+    type ValueCodec;
+
+    fn key_codec(&self) -> &Self::KeyCodec;
+    fn value_codec(&self) -> &Self::ValueCodec;
+}
+
+pub trait EncodeKeyLike<Ref: ?Sized, Target> {
+    fn encode_key_like(&self, borrowed: &Ref) -> Vec<u8>;
 }
 
 // All items can be encoded like themselves
-impl<C, T> EncodeLike<T, T> for C
+impl<C, T> EncodeKeyLike<T, T> for C
 where
     C: StateKeyCodec<T>,
 {
-    fn encode_like(&self, borrowed: &T) -> Vec<u8> {
+    fn encode_key_like(&self, borrowed: &T) -> Vec<u8> {
         self.encode_key(borrowed)
     }
 }
 
 // In borsh, a slice is encoded the same way as a vector except in edge case where
 // T is zero-sized, in which case Vec<T> is not borsh encodable.
-impl<T> EncodeLike<[T], Vec<T>> for BorshCodec
+impl<T> EncodeKeyLike<[T], Vec<T>> for BorshCodec
 where
     T: BorshSerialize,
 {
-    fn encode_like(&self, borrowed: &[T]) -> Vec<u8> {
+    fn encode_key_like(&self, borrowed: &[T]) -> Vec<u8> {
         borrowed.try_to_vec().unwrap()
     }
 }
@@ -82,7 +90,7 @@ fn test_borsh_slice_encode_alike() {
     let slice = [1, 2, 3];
     let vec = vec![1, 2, 3];
     assert_eq!(
-        <BorshCodec as EncodeLike<[i32], Vec<i32>>>::encode_like(&codec, &slice),
+        <BorshCodec as EncodeKeyLike<[i32], Vec<i32>>>::encode_key_like(&codec, &slice),
         codec.encode_value(&vec)
     );
 }

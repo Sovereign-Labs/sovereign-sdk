@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, StateValueCodec};
+use crate::codec::{BorshCodec, StateCodec, StateValueCodec};
 use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
 
 /// Container for a single value stored as "accessory" state, outside of the
@@ -57,7 +57,8 @@ impl<V, Codec> AccessoryStateValue<V, Codec> {
 
 impl<V, Codec> AccessoryStateValue<V, Codec>
 where
-    Codec: StateValueCodec<V>,
+    Codec: StateCodec,
+    Codec::ValueCodec: StateValueCodec<V>,
 {
     /// Sets a value in the AccessoryStateValue.
     pub fn set<S: Storage>(&self, value: &V, working_set: &mut AccessoryWorkingSet<S>) {

@@ -1,4 +1,4 @@
-use super::StateKeyCodec;
+use super::{StateCodec, StateKeyCodec};
 use crate::codec::StateValueCodec;
 
 /// A [`StateValueCodec`] that uses [`bcs`] for all keys and values.
@@ -26,5 +26,17 @@ where
 
     fn try_decode_value(&self, bytes: &[u8]) -> Result<V, Self::Error> {
         bcs::from_bytes(bytes)
+    }
+}
+
+impl StateCodec for BcsCodec {
+    type KeyCodec = Self;
+    type ValueCodec = Self;
+    fn key_codec(&self) -> &Self::KeyCodec {
+        self
+    }
+
+    fn value_codec(&self) -> &Self::ValueCodec {
+        self
     }
 }

@@ -8,7 +8,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
-use crate::codec::{EncodeLike, StateKeyCodec, StateValueCodec};
+use crate::codec::{EncodeKeyLike, StateKeyCodec, StateValueCodec};
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::utils::AlignedVec;
 use crate::witness::Witness;
@@ -56,12 +56,12 @@ impl Display for StorageKey {
 
 impl StorageKey {
     /// Creates a new StorageKey that combines a prefix and a key.
-    pub fn new<K, Q, Codec>(prefix: &Prefix, key: &Q, codec: &Codec) -> Self
+    pub fn new<K, Q, KC>(prefix: &Prefix, key: &Q, codec: &KC) -> Self
     where
-        Codec: EncodeLike<Q, K>,
+        KC: EncodeKeyLike<Q, K>,
         Q: ?Sized,
     {
-        let encoded_key = codec.encode_like(key);
+        let encoded_key = codec.encode_key_like(key);
         let encoded_key = AlignedVec::new(encoded_key);
 
         let full_key = Vec::<u8>::with_capacity(prefix.len() + encoded_key.len());
@@ -108,9 +108,9 @@ impl From<Vec<u8>> for StorageValue {
 
 impl StorageValue {
     /// Create a new storage value by serializing the input with the given codec.
-    pub fn new<V, Codec>(value: &V, codec: &Codec) -> Self
+    pub fn new<V, VC>(value: &V, codec: &VC) -> Self
     where
-        Codec: StateValueCodec<V>,
+        VC: StateValueCodec<V>,
     {
         let encoded_value = codec.encode_value(value);
         Self {
@@ -282,7 +282,7 @@ pub trait NativeStorage: Storage {
         witness: &Self::Witness,
     ) -> StorageProof<Self::Proof>
     where
-        Codec: EncodeLike<Q, K>,
+        Codec: EncodeKeyLike<Q, K>,
     {
         self.get_with_proof(
             StorageKey::new(state_map.prefix(), key, state_map.codec()),

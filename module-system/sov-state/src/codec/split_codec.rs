@@ -1,6 +1,6 @@
 //! This module defines a codec which delegates to one codec for keys and one codec for values.
 
-use super::{StateKeyCodec, StateValueCodec};
+use super::{StateCodec, StateKeyCodec, StateValueCodec};
 
 /// A [`StateValueCodec`] that uses one pre-existing codec for keys and a different one values.
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
@@ -30,5 +30,17 @@ where
 
     fn try_decode_value(&self, bytes: &[u8]) -> Result<V, Self::Error> {
         self.value_codec.try_decode_value(bytes)
+    }
+}
+
+impl<KC, VC> StateCodec for SplitCodec<KC, VC> {
+    type KeyCodec = KC;
+    type ValueCodec = VC;
+    fn key_codec(&self) -> &Self::KeyCodec {
+        &self.key_codec
+    }
+
+    fn value_codec(&self) -> &Self::ValueCodec {
+        &self.value_codec
     }
 }

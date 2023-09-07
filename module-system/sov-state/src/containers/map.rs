@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, EncodeLike, StateKeyCodec, StateValueCodec};
+use crate::codec::{BorshCodec, EncodeKeyLike, StateCodec, StateKeyCodec, StateValueCodec};
 use crate::storage::StorageKey;
 use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
 
@@ -24,7 +24,7 @@ use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
 )]
 pub struct StateMap<K, V, Codec = BorshCodec> {
     _phantom: (PhantomData<K>, PhantomData<V>),
-    value_codec: Codec,
+    codec: Codec,
     prefix: Prefix,
 }
 
@@ -48,13 +48,13 @@ impl<K, V, Codec> StateMap<K, V, Codec> {
     pub fn with_codec(prefix: Prefix, codec: Codec) -> Self {
         Self {
             _phantom: (PhantomData, PhantomData),
-            value_codec: codec,
+            codec,
             prefix,
         }
     }
 
     pub fn codec(&self) -> &Codec {
-        &self.value_codec
+        &self.codec
     }
 
     /// Returns the prefix used when this [`StateMap`] was created.
@@ -65,7 +65,9 @@ impl<K, V, Codec> StateMap<K, V, Codec> {
 
 impl<K, V, Codec> StateMap<K, V, Codec>
 where
-    Codec: StateKeyCodec<K> + StateValueCodec<V>,
+    Codec: StateCodec,
+    Codec::KeyCodec: StateKeyCodec<K>,
+    Codec::ValueCodec: StateValueCodec<V>,
 {
     /// Inserts a key-value pair into the map.
     ///
@@ -73,10 +75,10 @@ where
     /// map’s key type.
     pub fn set<Q, S: Storage>(&self, key: &Q, value: &V, working_set: &mut WorkingSet<S>)
     where
-        Codec: EncodeLike<Q, K>,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
         Q: ?Sized,
     {
-        working_set.set_value(self.prefix(), key, value, &self.value_codec)
+        working_set.set_value(self.prefix(), key, value, &self.codec)
     }
 
     /// Returns the value corresponding to the key, or [`None`] if the map
@@ -117,10 +119,12 @@ where
     /// ```
     pub fn get<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Option<V>
     where
-        Codec: EncodeLike<Q, K>,
+        Codec: StateCodec,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
+        Codec::ValueCodec: StateValueCodec<V>,
         Q: ?Sized,
     {
-        working_set.get_value(self.prefix(), key, &self.value_codec)
+        working_set.get_value(self.prefix(), key, &self.codec)
     }
 
     /// Returns the value corresponding to the key or [`StateMapError`] if key is absent in
@@ -131,13 +135,15 @@ where
         working_set: &mut WorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
-        Codec: EncodeLike<Q, K>,
+        Codec: StateCodec,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
+        Codec::ValueCodec: StateValueCodec<V>,
         Q: ?Sized,
     {
         self.get(key, working_set).ok_or_else(|| {
             StateMapError::MissingValue(
                 self.prefix().clone(),
-                StorageKey::new(self.prefix(), key, &self.value_codec),
+                StorageKey::new(self.prefix(), key, self.codec.key_codec()),
             )
         })
     }
@@ -146,10 +152,12 @@ where
     /// [`None`] if the key is absent).
     pub fn remove<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Option<V>
     where
-        Codec: EncodeLike<Q, K>,
+        Codec: StateCodec,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
+        Codec::ValueCodec: StateValueCodec<V>,
         Q: ?Sized,
     {
-        working_set.remove_value(self.prefix(), key, &self.value_codec)
+        working_set.remove_value(self.prefix(), key, &self.codec)
     }
 
     /// Removes a key from the map, returning the corresponding value (or
@@ -162,13 +170,15 @@ where
         working_set: &mut WorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
-        Codec: EncodeLike<Q, K>,
+        Codec: StateCodec,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
+        Codec::ValueCodec: StateValueCodec<V>,
         Q: ?Sized,
     {
         self.remove(key, working_set).ok_or_else(|| {
             StateMapError::MissingValue(
                 self.prefix().clone(),
-                StorageKey::new(self.prefix(), key, self.codec()),
+                StorageKey::new(self.prefix(), key, self.codec.key_codec()),
             )
         })
     }
@@ -179,10 +189,11 @@ where
     /// return the value beforing deletion.
     pub fn delete<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>)
     where
-        Codec: EncodeLike<Q, K>,
+        Codec: StateCodec,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
         Q: ?Sized,
     {
-        working_set.delete_value(self.prefix(), key, self.codec());
+        working_set.delete_value(self.prefix(), key, &self.codec);
     }
 }
 

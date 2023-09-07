@@ -1,8 +1,7 @@
-use std::hash::Hash;
 use std::marker::PhantomData;
 
 use super::StateMapError;
-use crate::codec::{BorshCodec, EncodeLike, StateValueCodec};
+use crate::codec::{BorshCodec, EncodeKeyLike, StateCodec, StateKeyCodec, StateValueCodec};
 use crate::storage::StorageKey;
 use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
 
@@ -25,7 +24,7 @@ use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
 )]
 pub struct AccessoryStateMap<K, V, Codec = BorshCodec> {
     _phantom: (PhantomData<K>, PhantomData<V>),
-    value_codec: Codec,
+    codec: Codec,
     prefix: Prefix,
 }
 
@@ -42,7 +41,7 @@ impl<K, V, Codec> AccessoryStateMap<K, V, Codec> {
     pub fn with_codec(prefix: Prefix, codec: Codec) -> Self {
         Self {
             _phantom: (PhantomData, PhantomData),
-            value_codec: codec,
+            codec,
             prefix,
         }
     }
@@ -55,8 +54,9 @@ impl<K, V, Codec> AccessoryStateMap<K, V, Codec> {
 
 impl<K, V, Codec> AccessoryStateMap<K, V, Codec>
 where
-    K: Hash + Eq,
-    Codec: StateValueCodec<V>,
+    Codec: StateCodec,
+    Codec::KeyCodec: StateKeyCodec<K>,
+    Codec::ValueCodec: StateValueCodec<V>,
 {
     /// Inserts a key-value pair into the map.
     ///
@@ -64,10 +64,10 @@ where
     /// map’s key type.
     pub fn set<Q, S: Storage>(&self, key: &Q, value: &V, working_set: &mut AccessoryWorkingSet<S>)
     where
-        Codec: EncodeLike<Q, K>,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
         Q: ?Sized,
     {
-        working_set.set_value(self.prefix(), key, value, &self.value_codec)
+        working_set.set_value(self.prefix(), key, value, &self.codec)
     }
 
     /// Returns the value corresponding to the key, or [`None`] if the map
@@ -108,10 +108,10 @@ where
     /// ```
     pub fn get<Q, S: Storage>(&self, key: &Q, working_set: &mut AccessoryWorkingSet<S>) -> Option<V>
     where
-        Codec: EncodeLike<Q, K>,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
         Q: ?Sized,
     {
-        working_set.get_value(self.prefix(), key, &self.value_codec)
+        working_set.get_value(self.prefix(), key, &self.codec)
     }
 
     /// Returns the value corresponding to the key or [`StateMapError`] if key is absent in
@@ -122,13 +122,13 @@ where
         working_set: &mut AccessoryWorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
-        Codec: EncodeLike<Q, K>,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
         Q: ?Sized,
     {
         self.get(key, working_set).ok_or_else(|| {
             StateMapError::MissingValue(
                 self.prefix().clone(),
-                StorageKey::new(self.prefix(), key, &self.value_codec),
+                StorageKey::new(self.prefix(), key, self.codec.key_codec()),
             )
         })
     }
@@ -141,10 +141,10 @@ where
         working_set: &mut AccessoryWorkingSet<S>,
     ) -> Option<V>
     where
-        Codec: EncodeLike<Q, K>,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
         Q: ?Sized,
     {
-        working_set.remove_value(self.prefix(), key, &self.value_codec)
+        working_set.remove_value(self.prefix(), key, &self.codec)
     }
 
     /// Removes a key from the map, returning the corresponding value (or
@@ -157,13 +157,13 @@ where
         working_set: &mut AccessoryWorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
-        Codec: EncodeLike<Q, K>,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
         Q: ?Sized,
     {
         self.remove(key, working_set).ok_or_else(|| {
             StateMapError::MissingValue(
                 self.prefix().clone(),
-                StorageKey::new(self.prefix(), key, &self.value_codec),
+                StorageKey::new(self.prefix(), key, self.codec.key_codec()),
             )
         })
     }
@@ -174,10 +174,10 @@ where
     /// return the value beforing deletion.
     pub fn delete<Q, S: Storage>(&self, key: &Q, working_set: &mut AccessoryWorkingSet<S>)
     where
-        Codec: EncodeLike<Q, K>,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
         Q: ?Sized,
     {
-        working_set.delete_value(self.prefix(), key, &self.value_codec);
+        working_set.delete_value(self.prefix(), key, &self.codec);
     }
 }
 
