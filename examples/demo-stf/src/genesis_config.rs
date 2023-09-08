@@ -1,5 +1,3 @@
-#[cfg(feature = "experimental")]
-use reth_primitives::Address;
 use sov_chain_state::ChainStateConfig;
 #[cfg(feature = "experimental")]
 use sov_evm::{AccountData, EvmConfig, SpecId};
@@ -56,7 +54,7 @@ pub fn create_demo_genesis_config<C: Context, Da: DaSpec>(
     };
 
     #[cfg(feature = "experimental")]
-    let genesis_evm_address = Address::from_slice(
+    let genesis_evm_address = reth_primitives::Address::from_slice(
         hex::decode("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
             .unwrap()
             .as_slice(),
