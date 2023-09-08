@@ -7,10 +7,10 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
-use celestia::types::{FilteredCelestiaBlock, NamespaceId};
-use celestia::verifier::address::CelestiaAddress;
-use celestia::verifier::{CelestiaSpec, RollupParams};
-use celestia::CelestiaService;
+use sov_celestia_adapter::types::{FilteredCelestiaBlock, NamespaceId};
+use sov_celestia_adapter::verifier::address::CelestiaAddress;
+use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
+use sov_celestia_adapter::CelestiaService;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;

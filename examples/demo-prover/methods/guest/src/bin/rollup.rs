@@ -4,16 +4,15 @@
 
 use std::str::FromStr;
 
-use celestia::types::NamespaceId;
-use celestia::verifier::address::CelestiaAddress;
-use celestia::verifier::{CelestiaSpec, CelestiaVerifier};
-use celestia::{BlobWithSender, CelestiaHeader};
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::create_zk_app_template;
 use demo_stf::ArrayWitness;
-
 use risc0_adapter::guest::Risc0Guest;
 use risc0_zkvm::guest::env;
+use sov_celestia_adapter::types::NamespaceId;
+use sov_celestia_adapter::verifier::address::CelestiaAddress;
+use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier};
+use sov_celestia_adapter::{BlobWithSender, CelestiaHeader};
 use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::services::da::SlotData;

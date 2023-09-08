@@ -2,15 +2,15 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 
 use anyhow::Context;
-use celestia::verifier::address::CelestiaAddress;
-use celestia::verifier::RollupParams;
-use celestia::CelestiaService;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 #[cfg(feature = "experimental")]
 use demo_stf::app::DefaultPrivateKey;
 use demo_stf::app::{App, DefaultContext};
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
 use risc0_adapter::host::Risc0Verifier;
+use sov_celestia_adapter::verifier::address::CelestiaAddress;
+use sov_celestia_adapter::verifier::RollupParams;
+use sov_celestia_adapter::CelestiaService;
 #[cfg(feature = "experimental")]
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
@@ -57,7 +57,7 @@ pub async fn new_rollup_with_celestia_da(
         "Starting demo celestia rollup with config {}",
         rollup_config_path
     );
-    let rollup_config: RollupConfig<celestia::DaServiceConfig> =
+    let rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 
     let ledger_db = initialize_ledger(&rollup_config.storage.path);
