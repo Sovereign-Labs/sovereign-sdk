@@ -35,8 +35,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
                     parent_block
                         .header
                         .base_fee_per_gas
-                        .unwrap_or(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE_U256)
-                        .as_limbs()[0],
+                        .map_or(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE, to_u64),
                 );
 
                 base_fee
