@@ -1,9 +1,9 @@
-use super::genesis_tests::get_evm;
+use super::genesis_tests::{get_evm, TEST_CONFIG};
 use crate::evm::transaction::BlockEnv;
 
 #[test]
 fn begin_slot_hook_creates_pending_block() {
-    let (evm, mut working_set) = get_evm(None);
+    let (evm, mut working_set) = get_evm(&*TEST_CONFIG);
     evm.begin_slot_hook([5u8; 32], &mut working_set);
     let pending_block = evm.pending_block.get(&mut working_set).unwrap();
     assert_eq!(
