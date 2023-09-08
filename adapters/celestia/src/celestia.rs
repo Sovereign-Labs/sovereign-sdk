@@ -301,7 +301,8 @@ impl BlockHeader for CelestiaHeader {
     }
 }
 
-/// We implement [`SlotData`] for [`CelestiaHeader`] in a similar fashion as for [`FilteredCelestiaBlock`]
+/// We implement [`SlotData`] for [`CelestiaHeader`] in a similar fashion as for
+/// [`FilteredCelestiaBlock`](crate::types::FilteredCelestiaBlock).
 impl SlotData for CelestiaHeader {
     type BlockHeader = CelestiaHeader;
     type Cond = ChainValidityCondition;

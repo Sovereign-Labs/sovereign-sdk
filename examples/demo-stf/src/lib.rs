@@ -7,4 +7,7 @@ pub mod runtime;
 #[cfg(test)]
 pub mod tests;
 
+#[cfg(feature = "native")]
+pub mod cli;
+
 pub use sov_state::ArrayWitness;

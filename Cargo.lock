@@ -1402,15 +1402,30 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "3.2.0"
+version = "4.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b9fdf9972b2bd6af2d913799d9ebc165ea4d2e65878e329d9c6b372c4491b61"
+checksum = "f711ade317dd348950a9910f81c5947e3d8907ebd2b83f76203ff1807e6a2bc2"
 dependencies = [
- "byteorder",
- "digest 0.9.0",
- "rand_core 0.5.1",
+ "cfg-if",
+ "cpufeatures",
+ "curve25519-dalek-derive",
+ "digest 0.10.7",
+ "fiat-crypto",
+ "platforms",
+ "rustc_version 0.4.0",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "curve25519-dalek-derive"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83fdaf97f4804dcebfa5862639bc9ce4121e82140bec2a987ac5140294865b5b"
+dependencies = [
+ "proc-macro2 1.0.66",
+ "quote 1.0.33",
+ "syn 2.0.28",
 ]
 
 [[package]]
@@ -1507,16 +1522,12 @@ dependencies = [
  "borsh",
  "demo-nft-module",
  "jsonrpsee",
- "postgres",
  "serde",
  "sov-data-generators",
  "sov-modules-api",
- "sov-modules-macro-rules",
- "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
  "tempfile",
- "tokio",
 ]
 
 [[package]]
@@ -1538,7 +1549,7 @@ dependencies = [
  "borsh",
  "clap",
  "const-rollup-config",
- "demo-nft-module",
+ "demo-stf",
  "hex",
  "jsonrpsee",
  "rand 0.8.5",
@@ -1547,6 +1558,7 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-blob-storage",
+ "sov-chain-state",
  "sov-cli",
  "sov-data-generators",
  "sov-evm",
@@ -1745,17 +1757,8 @@ dependencies = [
  "digest 0.10.7",
  "elliptic-curve",
  "rfc6979",
- "signature 2.1.0",
+ "signature",
  "spki",
-]
-
-[[package]]
-name = "ed25519"
-version = "1.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
-dependencies = [
- "signature 1.6.4",
 ]
 
 [[package]]
@@ -1765,7 +1768,8 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5fb04eee5d9d907f29e80ee6b0e78f7e2c82342c63e3580d8c4f69d9d5aad963"
 dependencies = [
  "pkcs8",
- "signature 2.1.0",
+ "serde",
+ "signature",
 ]
 
 [[package]]
@@ -1783,15 +1787,15 @@ dependencies = [
 
 [[package]]
 name = "ed25519-dalek"
-version = "1.0.1"
+version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
+checksum = "7277392b266383ef8396db7fdeb1e77b6c52fed775f5df15bb24f35b72156980"
 dependencies = [
  "curve25519-dalek",
- "ed25519 1.5.3",
- "rand 0.7.3",
+ "ed25519",
+ "rand_core 0.6.4",
  "serde",
- "sha2 0.9.9",
+ "sha2 0.10.7",
  "zeroize",
 ]
 
@@ -2274,12 +2278,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fallible-iterator"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
-
-[[package]]
 name = "fast-float"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2339,6 +2337,12 @@ dependencies = [
  "quote 1.0.33",
  "syn 1.0.109",
 ]
+
+[[package]]
+name = "fiat-crypto"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e825f6987101665dea6ec934c09ec6d721de7bc1bf92248e1d5810c8cd636b77"
 
 [[package]]
 name = "fixed-hash"
@@ -3177,7 +3181,6 @@ dependencies = [
  "sov-chain-state",
  "sov-data-generators",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-modules-stf-template",
  "sov-rollup-interface",
  "sov-schema-db",
@@ -3454,7 +3457,7 @@ dependencies = [
  "elliptic-curve",
  "once_cell",
  "sha2 0.10.7",
- "signature 2.1.0",
+ "signature",
 ]
 
 [[package]]
@@ -4405,6 +4408,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "platforms"
+version = "3.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4503fa043bf02cee09a9582e9554b4c6403b2ef55e4612e96561d294419429f8"
+
+[[package]]
 name = "plotters"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4462,49 +4471,6 @@ dependencies = [
  "cobs",
  "heapless",
  "serde",
-]
-
-[[package]]
-name = "postgres"
-version = "0.19.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7915b33ed60abc46040cbcaa25ffa1c7ec240668e0477c4f3070786f5916d451"
-dependencies = [
- "bytes",
- "fallible-iterator",
- "futures-util",
- "log",
- "tokio",
- "tokio-postgres",
-]
-
-[[package]]
-name = "postgres-protocol"
-version = "0.6.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "49b6c5ef183cd3ab4ba005f1ca64c21e8bd97ce4699cfea9e8d9a2c4958ca520"
-dependencies = [
- "base64 0.21.2",
- "byteorder",
- "bytes",
- "fallible-iterator",
- "hmac",
- "md-5",
- "memchr",
- "rand 0.8.5",
- "sha2 0.10.7",
- "stringprep",
-]
-
-[[package]]
-name = "postgres-types"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8d2234cdee9408b523530a9b6d2d6b373d1db34f6a8e51dc03ded1828d7fb67c"
-dependencies = [
- "bytes",
- "fallible-iterator",
- "postgres-protocol",
 ]
 
 [[package]]
@@ -6443,12 +6409,6 @@ dependencies = [
 
 [[package]]
 name = "signature"
-version = "1.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74233d3b3b2f6d4b006dc19dee745e73e2a6bfb6f93607cd3b02bd5b00797d7c"
-
-[[package]]
-name = "signature"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e1788eed21689f9cf370582dfc467ef36ed9c707f073528ddafa8d83e3b8500"
@@ -6556,6 +6516,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-accessory-state"
+version = "0.1.0"
+dependencies = [
+ "borsh",
+ "jsonrpsee",
+ "serde",
+ "sov-modules-api",
+ "sov-state",
+ "tempfile",
+]
+
+[[package]]
 name = "sov-accounts"
 version = "0.1.0"
 dependencies = [
@@ -6586,7 +6558,6 @@ dependencies = [
  "sov-bank",
  "sov-chain-state",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
  "tempfile",
@@ -6626,8 +6597,9 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-bank",
+ "sov-blob-storage",
+ "sov-chain-state",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
@@ -6648,7 +6620,6 @@ dependencies = [
  "sov-chain-state",
  "sov-data-generators",
  "sov-modules-api",
- "sov-modules-macros",
  "sov-modules-stf-template",
  "sov-rollup-interface",
  "sov-state",
@@ -6671,6 +6642,7 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-modules-api",
+ "sov-rollup-interface",
  "tempfile",
  "tokio",
 ]
@@ -6740,6 +6712,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.7",
  "sov-bank",
+ "sov-cli",
  "sov-db",
  "sov-demo-rollup",
  "sov-ethereum",
@@ -6761,6 +6734,7 @@ dependencies = [
 name = "sov-ethereum"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "borsh",
  "celestia",
  "const-rollup-config",
@@ -6793,6 +6767,7 @@ dependencies = [
  "ethers-signers",
  "hex",
  "jsonrpsee",
+ "lazy_static",
  "primitive-types",
  "reth-primitives",
  "reth-revm",
@@ -6848,13 +6823,15 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "jsonrpsee",
- "rand 0.7.3",
+ "rand 0.8.5",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "schemars",
  "serde",
  "serde_json",
  "sha2 0.10.7",
+ "sov-bank",
+ "sov-modules-api",
  "sov-modules-macros",
  "sov-rollup-interface",
  "sov-sequencer",
@@ -6862,10 +6839,6 @@ dependencies = [
  "thiserror",
  "zk-cycle-macros",
 ]
-
-[[package]]
-name = "sov-modules-macro-rules"
-version = "0.1.0"
 
 [[package]]
 name = "sov-modules-macros"
@@ -6886,6 +6859,7 @@ dependencies = [
  "sov-state",
  "syn 1.0.109",
  "tempfile",
+ "toml 0.7.6",
  "trybuild",
 ]
 
@@ -7011,6 +6985,7 @@ dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
+ "serde_json",
  "sha2 0.10.7",
  "sov-db",
  "sov-first-read-last-write-cache",
@@ -7061,7 +7036,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
  "tempfile",
  "thiserror",
@@ -7139,16 +7113,6 @@ dependencies = [
  "parking_lot 0.12.1",
  "phf_shared 0.10.0",
  "precomputed-hash",
-]
-
-[[package]]
-name = "stringprep"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "db3737bde7edce97102e0e2b15365bf7a20bfdb5f60f4f9e8d7004258a51a8da"
-dependencies = [
- "unicode-bidi",
- "unicode-normalization",
 ]
 
 [[package]]
@@ -7326,7 +7290,7 @@ checksum = "3f0a7d05cf78524782337f8edd55cbc578d159a16ad4affe2135c92f7dbac7f0"
 dependencies = [
  "bytes",
  "digest 0.10.7",
- "ed25519 2.2.1",
+ "ed25519",
  "ed25519-consensus",
  "flex-error",
  "futures",
@@ -7339,7 +7303,7 @@ dependencies = [
  "serde_json",
  "serde_repr",
  "sha2 0.10.7",
- "signature 2.1.0",
+ "signature",
  "subtle",
  "subtle-encoding",
  "tendermint-proto",
@@ -7533,32 +7497,6 @@ checksum = "bbae76ab933c85776efabc971569dd6119c580d8f5d448769dec1764bf796ef2"
 dependencies = [
  "native-tls",
  "tokio",
-]
-
-[[package]]
-name = "tokio-postgres"
-version = "0.7.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d340244b32d920260ae7448cb72b6e238bddc3d4f7603394e7dd46ed8e48f5b8"
-dependencies = [
- "async-trait",
- "byteorder",
- "bytes",
- "fallible-iterator",
- "futures-channel",
- "futures-util",
- "log",
- "parking_lot 0.12.1",
- "percent-encoding",
- "phf",
- "pin-project-lite",
- "postgres-protocol",
- "postgres-types",
- "rand 0.8.5",
- "socket2 0.5.3",
- "tokio",
- "tokio-util",
- "whoami",
 ]
 
 [[package]]
@@ -8144,16 +8082,6 @@ dependencies = [
  "either",
  "libc",
  "once_cell",
-]
-
-[[package]]
-name = "whoami"
-version = "1.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22fc3756b8a9133049b26c7f61ab35416c130e8c09b660f5b3958b446f52cc50"
-dependencies = [
- "wasm-bindgen",
- "web-sys",
 ]
 
 [[package]]

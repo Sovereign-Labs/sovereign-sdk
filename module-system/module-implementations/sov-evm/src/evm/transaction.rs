@@ -13,7 +13,7 @@ pub(crate) struct BlockEnv {
     pub(crate) prevrandao: Option<Bytes32>,
     /// basefee is added in EIP1559 London upgrade
     pub(crate) basefee: Bytes32,
-    pub(crate) gas_limit: Bytes32,
+    pub(crate) gas_limit: u64,
 }
 
 impl Default for BlockEnv {
@@ -24,7 +24,7 @@ impl Default for BlockEnv {
             timestamp: Default::default(),
             prevrandao: Some(Default::default()),
             basefee: Default::default(),
-            gas_limit: [u8::MAX; 32],
+            gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
         }
     }
 }
@@ -44,7 +44,7 @@ pub struct RawEvmTransaction {
 
 /// EC recovered evm transaction.
 pub struct EvmTransactionSignedEcRecovered {
-    tx: RethTransactionSignedEcRecovered,
+    pub(crate) tx: RethTransactionSignedEcRecovered,
 }
 
 impl EvmTransactionSignedEcRecovered {

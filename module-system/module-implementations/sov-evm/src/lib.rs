@@ -24,15 +24,15 @@ mod experimental {
     use std::collections::HashMap;
 
     use derive_more::{From, Into};
-    use ethers::types::TransactionReceipt;
     use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo};
+    use sov_state::codec::{BcsCodec, JsonCodec};
     use sov_state::WorkingSet;
 
     use super::evm::db::EvmDb;
     use super::evm::transaction::BlockEnv;
     use super::evm::{DbAccount, EthAddress};
-    use crate::evm::{Bytes32, EvmChainCfg, RawEvmTransaction};
+    use crate::evm::{Bytes32, EvmChainConfig};
     #[derive(Clone, Debug)]
     pub struct AccountData {
         pub address: EthAddress,
@@ -58,6 +58,11 @@ mod experimental {
         pub chain_id: u64,
         pub limit_contract_code_size: Option<usize>,
         pub spec: HashMap<u64, SpecId>,
+        pub coinbase: EthAddress,
+        pub starting_base_fee: u64,
+        pub block_gas_limit: u64,
+        pub genesis_timestamp: u64,
+        pub block_timestamp_delta: u64,
     }
 
     impl Default for EvmConfig {
@@ -67,6 +72,11 @@ mod experimental {
                 chain_id: 1,
                 limit_contract_code_size: None,
                 spec: vec![(0, SpecId::LATEST)].into_iter().collect(),
+                coinbase: [0u8; 20],
+                starting_base_fee: reth_primitives::constants::MIN_PROTOCOL_BASE_FEE,
+                block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
+                block_timestamp_delta: reth_primitives::constants::SLOT_DURATION.as_secs(),
+                genesis_timestamp: 0,
             }
         }
     }
@@ -82,20 +92,46 @@ mod experimental {
         pub(crate) accounts: sov_state::StateMap<EthAddress, DbAccount>,
 
         #[state]
-        pub(crate) cfg: sov_state::StateValue<EvmChainCfg>,
+        pub(crate) cfg: sov_state::StateValue<EvmChainConfig>,
 
         #[state]
-        pub(crate) block_env: sov_state::StateValue<BlockEnv>,
+        pub(crate) pending_block: sov_state::StateValue<BlockEnv>,
 
         #[state]
-        pub(crate) transactions: sov_state::StateMap<Bytes32, RawEvmTransaction>,
+        pub(crate) head_number: sov_state::StateValue<u64>,
+
+        // TODO JsonCodec: This is a workaround for https://github.com/bincode-org/bincode/issues/245 which affects all
+        // binary serialization formats.
+        // 1. Implement custom types for Block, Transaction etc.. with borsh derived.
+        // 2. Remove JsonCodec.
+        #[state]
+        pub(crate) blocks: sov_state::AccessoryStateMap<u64, reth_rpc_types::Block, JsonCodec>,
 
         #[state]
-        pub(crate) receipts: sov_state::StateMap<
-            ethereum_types::H256,
-            TransactionReceipt,
-            sov_state::codec::BcsCodec,
+        pub(crate) block_hashes:
+            sov_state::AccessoryStateMap<reth_primitives::H256, u64, JsonCodec>,
+
+        #[state]
+        pub(crate) pending_transactions:
+            sov_state::AccessoryStateVec<reth_rpc_types::Transaction, JsonCodec>,
+
+        #[state]
+        pub(crate) transactions: sov_state::AccessoryStateMap<
+            reth_primitives::H256,
+            reth_rpc_types::Transaction,
+            JsonCodec,
         >,
+
+        #[state]
+        pub(crate) receipts: sov_state::AccessoryStateMap<
+            reth_primitives::U256,
+            reth_rpc_types::TransactionReceipt,
+            JsonCodec,
+        >,
+
+        #[state]
+        pub(crate) code:
+            sov_state::AccessoryStateMap<reth_primitives::H256, reth_primitives::Bytes, BcsCodec>,
     }
 
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {

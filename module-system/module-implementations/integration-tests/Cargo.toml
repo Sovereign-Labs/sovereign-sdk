@@ -22,7 +22,6 @@ sov-rollup-interface = { path = "../../../rollup-interface" }
 sov-schema-db = { path = "../../../full-node/db/sov-schema-db" }
 sov-data-generators = { path = "../../utils/sov-data-generators" }
 sov-modules-stf-template = { path = "../../sov-modules-stf-template", features = ["native"] }
-sov-modules-macros = { path = "../../sov-modules-macros", features = ["native"] }
 
 sov-chain-state = { path = "../sov-chain-state", features = ["native"] }
 sov-value-setter = { path = "../examples/sov-value-setter", features = ["native"] }

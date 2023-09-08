@@ -10,6 +10,12 @@ mod dispatch;
 mod encode;
 mod error;
 pub mod hooks;
+
+#[cfg(feature = "macros")]
+mod reexport_macros;
+#[cfg(feature = "macros")]
+pub use reexport_macros::*;
+
 mod prefix;
 mod response;
 mod serde_address;
@@ -22,23 +28,6 @@ pub mod utils;
 #[cfg(feature = "macros")]
 extern crate sov_modules_macros;
 
-use digest::typenum::U32;
-use digest::Digest;
-#[cfg(feature = "native")]
-use serde::de::DeserializeOwned;
-#[cfg(feature = "macros")]
-pub use sov_modules_macros::{
-    DispatchCall, Genesis, MessageCodec, ModuleCallJsonSchema, ModuleInfo,
-};
-
-/// Procedural macros to assist with creating new modules.
-#[cfg(feature = "macros")]
-pub mod macros {
-    pub use sov_modules_macros::DefaultRuntime;
-    #[cfg(feature = "native")]
-    pub use sov_modules_macros::{expose_rpc, rpc_gen, CliWallet, CliWalletArg};
-}
-
 use core::fmt::{self, Debug, Display};
 use std::collections::{HashMap, HashSet};
 use std::hash::Hash;
@@ -47,18 +36,32 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use clap;
+use digest::typenum::U32;
+use digest::Digest;
 #[cfg(feature = "native")]
 pub use dispatch::CliWallet;
 pub use dispatch::{DispatchCall, EncodeCall, Genesis};
 pub use error::Error;
 pub use prefix::Prefix;
 pub use response::CallResponse;
+#[cfg(feature = "native")]
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
+pub use sov_rollup_interface::services::da::SlotData;
+pub use sov_rollup_interface::stf::Event;
+pub use sov_rollup_interface::zk::{
+    StateTransition, StoredCodeCommitment, ValidityCondition, ValidityConditionChecker, Zkvm,
+};
 pub use sov_rollup_interface::{digest, BasicAddress, RollupAddress};
 use sov_state::{Storage, Witness, WorkingSet};
 use thiserror::Error;
 
 pub use crate::bech32::AddressBech32;
+
+pub mod optimistic {
+    pub use sov_rollup_interface::optimistic::{Attestation, ProofOfBond};
+}
 
 impl AsRef<[u8]> for Address {
     fn as_ref(&self) -> &[u8] {
@@ -295,7 +298,7 @@ where
 
 /// All the methods have a default implementation that can't be invoked (because they take `NonInstantiable` parameter).
 /// This allows developers to override only some of the methods in their implementation and safely ignore the others.
-pub trait Module {
+pub trait Module: Default {
     /// Execution context.
     type Context: Context;
 
@@ -344,6 +347,9 @@ pub trait ModuleInfo {
 
     /// Returns address of the module.
     fn address(&self) -> &<Self::Context as Spec>::Address;
+
+    /// Returns the prefix of the module.
+    fn prefix(&self) -> Prefix;
 
     /// Returns addresses of all the other modules this module is dependent on
     fn dependencies(&self) -> Vec<&<Self::Context as Spec>::Address>;

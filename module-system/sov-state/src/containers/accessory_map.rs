@@ -2,43 +2,44 @@ use std::borrow::Borrow;
 use std::hash::Hash;
 use std::marker::PhantomData;
 
-use thiserror::Error;
-
+use super::StateMapError;
 use crate::codec::{BorshCodec, StateValueCodec};
 use crate::storage::StorageKey;
-use crate::{Prefix, Storage, WorkingSet};
+use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
 
-/// A container that maps keys to values.
+/// A container that maps keys to values stored as "accessory" state, outside of
+/// the JMT.
 ///
 /// # Type parameters
-/// [`StateMap`] is generic over:
+/// [`AccessoryStateMap`] is generic over:
 /// - a key type `K`;
 /// - a value type `V`;
 /// - a [`StateValueCodec`] `VC`.
-#[derive(Debug, Clone, PartialEq, borsh::BorshDeserialize, borsh::BorshSerialize)]
-pub struct StateMap<K, V, VC = BorshCodec> {
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+pub struct AccessoryStateMap<K, V, VC = BorshCodec> {
     _phantom: (PhantomData<K>, PhantomData<V>),
     value_codec: VC,
     prefix: Prefix,
 }
 
-/// Error type for the [`StateMap::get`] method.
-#[derive(Debug, Error)]
-pub enum StateMapError {
-    #[error("Value not found for prefix: {0} and: storage key {1}")]
-    MissingValue(Prefix, StorageKey),
-}
-
-impl<K, V> StateMap<K, V> {
-    /// Creates a new [`StateMap`] with the given prefix and the default
+impl<K, V> AccessoryStateMap<K, V> {
+    /// Creates a new [`AccessoryStateMap`] with the given prefix and the default
     /// [`StateValueCodec`] (i.e. [`BorshCodec`]).
     pub fn new(prefix: Prefix) -> Self {
         Self::with_codec(prefix, BorshCodec)
     }
 }
 
-impl<K, V, VC> StateMap<K, V, VC> {
-    /// Creates a new [`StateMap`] with the given prefix and [`StateValueCodec`].
+impl<K, V, VC> AccessoryStateMap<K, V, VC> {
+    /// Creates a new [`AccessoryStateMap`] with the given prefix and [`StateValueCodec`].
     pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
         Self {
             _phantom: (PhantomData, PhantomData),
@@ -47,22 +48,22 @@ impl<K, V, VC> StateMap<K, V, VC> {
         }
     }
 
-    /// Returns the prefix used when this [`StateMap`] was created.
+    /// Returns the prefix used when this [`AccessoryStateMap`] was created.
     pub fn prefix(&self) -> &Prefix {
         &self.prefix
     }
 }
 
-impl<K, V, VC> StateMap<K, V, VC>
+impl<K, V, VC> AccessoryStateMap<K, V, VC>
 where
     K: Hash + Eq,
     VC: StateValueCodec<V>,
 {
     /// Inserts a key-value pair into the map.
     ///
-    /// Much like [`StateMap::get`], the key may be any borrowed form of the
+    /// Much like [`AccessoryStateMap::get`], the key may be any borrowed form of the
     /// map’s key type.
-    pub fn set<Q, S: Storage>(&self, key: &Q, value: &V, working_set: &mut WorkingSet<S>)
+    pub fn set<Q, S: Storage>(&self, key: &Q, value: &V, working_set: &mut AccessoryWorkingSet<S>)
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -80,9 +81,9 @@ where
     /// type.
     ///
     /// ```
-    /// use sov_state::{StateMap, Storage, WorkingSet};
+    /// use sov_state::{AccessoryStateMap, Storage, AccessoryWorkingSet};
     ///
-    /// fn foo<S>(map: StateMap<Vec<u8>, u64>, key: &[u8], ws: &mut WorkingSet<S>) -> Option<u64>
+    /// fn foo<S>(map: AccessoryStateMap<Vec<u8>, u64>, key: &[u8], ws: &mut AccessoryWorkingSet<S>) -> Option<u64>
     /// where
     ///     S: Storage,
     /// {
@@ -98,16 +99,16 @@ where
     /// maps:
     ///
     /// ```
-    /// use sov_state::{StateMap, Storage, WorkingSet};
+    /// use sov_state::{AccessoryStateMap, Storage, AccessoryWorkingSet};
     ///
-    /// fn foo<S>(map: StateMap<Vec<u8>, u64>, key: [u8; 32], ws: &mut WorkingSet<S>) -> Option<u64>
+    /// fn foo<S>(map: AccessoryStateMap<Vec<u8>, u64>, key: [u8; 32], ws: &mut AccessoryWorkingSet<S>) -> Option<u64>
     /// where
     ///     S: Storage,
     /// {
     ///     map.get(&key[..], ws)
     /// }
     /// ```
-    pub fn get<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Option<V>
+    pub fn get<Q, S: Storage>(&self, key: &Q, working_set: &mut AccessoryWorkingSet<S>) -> Option<V>
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -120,7 +121,7 @@ where
     pub fn get_or_err<Q, S: Storage>(
         &self,
         key: &Q,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut AccessoryWorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
         K: Borrow<Q>,
@@ -133,7 +134,11 @@ where
 
     /// Removes a key from the map, returning the corresponding value (or
     /// [`None`] if the key is absent).
-    pub fn remove<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Option<V>
+    pub fn remove<Q, S: Storage>(
+        &self,
+        key: &Q,
+        working_set: &mut AccessoryWorkingSet<S>,
+    ) -> Option<V>
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -144,11 +149,11 @@ where
     /// Removes a key from the map, returning the corresponding value (or
     /// [`StateMapError`] if the key is absent).
     ///
-    /// Use [`StateMap::remove`] if you want an [`Option`] instead of a [`Result`].
+    /// Use [`AccessoryStateMap::remove`] if you want an [`Option`] instead of a [`Result`].
     pub fn remove_or_err<Q, S: Storage>(
         &self,
         key: &Q,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut AccessoryWorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
         K: Borrow<Q>,
@@ -161,9 +166,9 @@ where
 
     /// Deletes a key-value pair from the map.
     ///
-    /// This is equivalent to [`StateMap::remove`], but doesn't deserialize and
+    /// This is equivalent to [`AccessoryStateMap::remove`], but doesn't deserialize and
     /// return the value beforing deletion.
-    pub fn delete<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>)
+    pub fn delete<Q, S: Storage>(&self, key: &Q, working_set: &mut AccessoryWorkingSet<S>)
     where
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
@@ -173,7 +178,7 @@ where
 }
 
 #[cfg(feature = "arbitrary")]
-impl<'a, K, V, VC> StateMap<K, V, VC>
+impl<'a, K, V, VC> AccessoryStateMap<K, V, VC>
 where
     K: arbitrary::Arbitrary<'a> + Hash + Eq,
     V: arbitrary::Arbitrary<'a> + Hash + Eq,
@@ -181,7 +186,7 @@ where
 {
     pub fn arbitrary_workset<S>(
         u: &mut arbitrary::Unstructured<'a>,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut AccessoryWorkingSet<S>,
     ) -> arbitrary::Result<Self>
     where
         S: Storage,
@@ -191,7 +196,7 @@ where
         let prefix = Prefix::arbitrary(u)?;
         let len = u.arbitrary_len::<(K, V)>()?;
         let codec = VC::default();
-        let map = StateMap::with_codec(prefix, codec);
+        let map = AccessoryStateMap::with_codec(prefix, codec);
 
         (0..len).try_fold(map, |map, _| {
             let key = K::arbitrary(u)?;

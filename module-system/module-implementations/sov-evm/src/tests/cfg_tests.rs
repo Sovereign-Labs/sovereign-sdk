@@ -2,7 +2,7 @@ use revm::primitives::{CfgEnv, SpecId, U256};
 
 use crate::call::{get_cfg_env, get_spec_id};
 use crate::evm::transaction::BlockEnv;
-use crate::evm::EvmChainCfg;
+use crate::evm::EvmChainConfig;
 use crate::SpecIdWrapper;
 
 #[test]
@@ -12,12 +12,12 @@ fn cfg_test() {
         ..Default::default()
     };
 
-    let cfg = EvmChainCfg {
-        chain_id: 1,
+    let cfg = EvmChainConfig {
         limit_contract_code_size: Some(100),
         spec: vec![(0, SpecIdWrapper::new(SpecId::SHANGHAI))]
             .into_iter()
             .collect(),
+        ..Default::default()
     };
 
     let template_cfg = CfgEnv {

@@ -1,25 +1,29 @@
 //! This module defines the following tables:
 //!
+//!
 //! Slot Tables:
-//! - SlotNumber -> StoredSlot
-//! - SlotNumber -> Vec<BatchNumber>
+//! - `SlotNumber -> StoredSlot`
+//! - `SlotNumber -> Vec<BatchNumber>`
 //!
 //! Batch Tables:
-//! - BatchNumber -> StoredBatch
-//! - BatchHash -> BatchNumber
+//! - `BatchNumber -> StoredBatch`
+//! - `BatchHash -> BatchNumber`
 //!
 //! Tx Tables:
-//! - TxNumber -> (TxHash,Tx)
-//! - TxHash -> TxNumber
+//! - `TxNumber -> (TxHash,Tx)`
+//! - `TxHash -> TxNumber`
 //!
 //! Event Tables:
-//! - (EventKey, TxNumber) -> EventNumber
-//! - EventNumber -> (EventKey, EventValue)
+//! - `(EventKey, TxNumber) -> EventNumber`
+//! - `EventNumber -> (EventKey, EventValue)`
 //!
 //! JMT Tables:
-//! - KeyHash -> Key
-//! - (Key, Version) -> JmtValue
-//! - NodeKey -> Node
+//! - `KeyHash -> Key`
+//! - `(Key, Version) -> JmtValue`
+//! - `NodeKey -> Node`
+//!
+//! Module Accessory State Table:
+//! - `(ModuleAddress, Key) -> Value`
 
 use borsh::{maybestd, BorshDeserialize, BorshSerialize};
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
@@ -30,8 +34,8 @@ use sov_schema_db::schema::{KeyDecoder, KeyEncoder, ValueCodec};
 use sov_schema_db::{CodecError, SeekKeyEncoder};
 
 use super::types::{
-    BatchNumber, DbHash, EventNumber, JmtValue, SlotNumber, StateKey, StoredBatch, StoredSlot,
-    StoredTransaction, TxNumber,
+    AccessoryKey, AccessoryStateValue, BatchNumber, DbHash, EventNumber, JmtValue, SlotNumber,
+    StateKey, StoredBatch, StoredSlot, StoredTransaction, TxNumber,
 };
 
 /// A list of all tables used by the StateDB. These tables store rollup state - meaning
@@ -54,6 +58,11 @@ pub const LEDGER_TABLES: &[&str] = &[
     EventByKey::table_name(),
     EventByNumber::table_name(),
 ];
+
+/// A list of all tables used by the NativeDB. These tables store
+/// "accessory" state only accessible from a native execution context, to be
+/// used for JSON-RPC and other tooling.
+pub const NATIVE_TABLES: &[&str] = &[ModuleAccessoryState::table_name()];
 
 /// Macro to define a table that implements [`sov_schema_db::Schema`].
 /// KeyCodec<Schema> and ValueCodec<Schema> must be implemented separately.
@@ -208,6 +217,11 @@ define_table_with_seek_key_codec!(
 define_table_with_default_codec!(
     /// A "secondary index" for slot data by hash
     (SlotByHash) DbHash => SlotNumber
+);
+
+define_table_with_default_codec!(
+    /// Non-JMT state stored by a module for JSON-RPC use.
+    (ModuleAccessoryState) AccessoryKey => AccessoryStateValue
 );
 
 define_table_with_seek_key_codec!(

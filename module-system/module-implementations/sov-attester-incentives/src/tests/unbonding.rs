@@ -1,5 +1,5 @@
 use sov_modules_api::default_context::DefaultContext;
-use sov_rollup_interface::optimistic::Attestation;
+use sov_modules_api::optimistic::Attestation;
 use sov_state::{ProverStorage, WorkingSet};
 
 use crate::call::AttesterIncentiveErrors;
@@ -59,7 +59,7 @@ fn test_two_phase_unbonding() {
             initial_state_root: initial_transition.state_root,
             da_block_hash: [1; 32],
             post_state_root: transition_1.state_root,
-            proof_of_bond: sov_rollup_interface::optimistic::ProofOfBond {
+            proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
                 claimed_transition_num: INIT_HEIGHT + 1,
                 proof: initial_transition.state_proof,
             },

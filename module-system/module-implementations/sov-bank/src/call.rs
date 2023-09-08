@@ -97,7 +97,6 @@ impl<C: sov_modules_api::Context> Bank<C> {
     }
 
     /// Transfers the set of `coins` to the address specified by `to`.
-    /// Helper function that calls the [`transfer_from`] method from the bank module
     pub fn transfer(
         &self,
         to: C::Address,
@@ -108,9 +107,11 @@ impl<C: sov_modules_api::Context> Bank<C> {
         self.transfer_from(context.sender(), &to, coins, working_set)
     }
 
-    /// Burns the set of `coins`. If there is no token at the address specified in the
-    /// `Coins` structure, return an error.
-    /// Calls the [`Token::burn`] function and updates the total supply of tokens.
+    /// Burns the set of `coins`.
+    ///
+    /// If there is no token at the address specified in the
+    /// [`Coins`] structure, return an error; on success it updates the total
+    /// supply of tokens.
     pub fn burn(
         &self,
         coins: Coins<C>,
@@ -145,7 +146,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
     /// Mints the `coins`to the address `mint_to_address` using the externally owned account ("EOA") supplied by
     /// `context.sender()` as the authorizer.
     /// Returns an error if the token address doesn't exist or `context.sender()` is not authorized to mint tokens.
-    /// Calls the [`Token::mint`] function and update the `self.tokens` set to store the new balance.
+    ///
+    /// On success, it updates the `self.tokens` set to store the new balance.
     pub fn mint_from_eoa(
         &self,
         coins: &Coins<C>,
@@ -158,7 +160,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
 
     /// Mints the `coins` to the address `mint_to_address` if `authorizer` is an allowed minter.
     /// Returns an error if the token address doesn't exist or `context.sender()` is not authorized to mint tokens.
-    /// Calls the [`Token::mint`] function and update the `self.tokens` set to store the new minted address.
+    ///
+    /// On success, it updates the `self.tokens` set to store the new minted address.
     pub fn mint(
         &self,
         coins: &Coins<C>,
@@ -215,7 +218,8 @@ impl<C: sov_modules_api::Context> Bank<C> {
 
 impl<C: sov_modules_api::Context> Bank<C> {
     /// Transfers the set of `coins` from the address `from` to the address `to`.
-    /// Returns an error if the token address doesn't exist. Otherwise, call the [`Token::transfer`] function.
+    ///
+    /// Returns an error if the token address doesn't exist.
     pub fn transfer_from(
         &self,
         from: &C::Address,
@@ -239,7 +243,7 @@ impl<C: sov_modules_api::Context> Bank<C> {
         Ok(CallResponse::default())
     }
 
-    /// Helper function used by the rpc method [`balance_of`] to return the balance of the token stored at `token_address`
+    /// Helper function used by the rpc method [`balance_of`](Bank::balance_of) to return the balance of the token stored at `token_address`
     /// for the user having the address `user_address` from the underlying storage. If the token address doesn't exist, or
     /// if the user doesn't have tokens of that type, return `None`. Otherwise, wrap the resulting balance in `Some`.
     pub fn get_balance_of(
@@ -251,6 +255,16 @@ impl<C: sov_modules_api::Context> Bank<C> {
         self.tokens
             .get(&token_address, working_set)
             .and_then(|token| token.balances.get(&user_address, working_set))
+    }
+
+    /// Get the name of a token by address
+    pub fn get_token_name(
+        &self,
+        token_address: &C::Address,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Option<String> {
+        let token = self.tokens.get(token_address, working_set);
+        token.map(|token| token.name)
     }
 }
 

@@ -2,7 +2,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use nmt_rs::NamespaceId;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::da::{
-    self, BlobReaderTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, CountedBufReader, DaSpec,
+    self, BlobReaderTrait, BlockHashTrait as BlockHash, BlockHeaderTrait, DaSpec,
 };
 use sov_rollup_interface::digest::Digest;
 use sov_rollup_interface::zk::ValidityCondition;
@@ -18,7 +18,7 @@ use zk_cycle_macros::cycle_tracker;
 
 use self::address::CelestiaAddress;
 use crate::share_commit::recreate_commitment;
-use crate::shares::{read_varint, BlobIterator, NamespaceGroup, Share};
+use crate::shares::{read_varint, NamespaceGroup, Share};
 use crate::types::ValidationError;
 use crate::{pfb_from_iter, BlobWithSender, CelestiaHeader, DataAvailabilityHeader};
 
@@ -30,25 +30,28 @@ pub const PFB_NAMESPACE: NamespaceId = NamespaceId(hex_literal::hex!("0000000000
 pub const PARITY_SHARES_NAMESPACE: NamespaceId = NamespaceId(hex_literal::hex!("ffffffffffffffff"));
 
 impl BlobReaderTrait for BlobWithSender {
-    type Data = BlobIterator;
     type Address = CelestiaAddress;
 
     fn sender(&self) -> CelestiaAddress {
         self.sender.clone()
     }
 
-    // Creates a new BufWithCounter structure to read the data
-    fn data_mut(&mut self) -> &mut CountedBufReader<Self::Data> {
-        &mut self.blob
-    }
-
-    // Creates a new BufWithCounter structure to read the data
-    fn data(&self) -> &CountedBufReader<Self::Data> {
-        &self.blob
-    }
-
     fn hash(&self) -> [u8; 32] {
         self.hash
+    }
+
+    fn verified_data(&self) -> &[u8] {
+        self.blob.accumulator()
+    }
+
+    #[cfg(feature = "native")]
+    fn advance(&mut self, num_bytes: usize) -> &[u8] {
+        self.blob.advance(num_bytes);
+        self.verified_data()
+    }
+
+    fn total_len(&self) -> usize {
+        self.blob.total_len()
     }
 }
 
@@ -86,6 +89,7 @@ impl AsRef<TmHash> for tendermint::Hash {
 
 impl BlockHash for TmHash {}
 
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct CelestiaSpec;
 
 impl DaSpec for CelestiaSpec {
@@ -95,13 +99,15 @@ impl DaSpec for CelestiaSpec {
 
     type BlobTransaction = BlobWithSender;
 
+    type Address = CelestiaAddress;
+
+    type ValidityCondition = ChainValidityCondition;
+
     type InclusionMultiProof = Vec<EtxProof>;
 
     type CompletenessProof = Vec<RelevantRowProof>;
 
     type ChainParams = RollupParams;
-
-    type ValidityCondition = ChainValidityCondition;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -252,16 +258,14 @@ impl da::DaVerifier for CelestiaVerifier {
                 let mut blob_data = vec![0; blob_iter.remaining()];
                 blob_iter.copy_to_slice(blob_data.as_mut_slice());
 
-                let tx_data = tx.data().accumulator();
+                let tx_data = tx.verified_data();
 
-                match tx_data {
-                    da::Accumulator::Completed(tx_data) => {
-                        assert_eq!(blob_data, *tx_data);
-                    }
-                    // For now we bail and return, maybe want to change that behaviour in the future
-                    da::Accumulator::InProgress(_) => {
-                        return Err(ValidationError::IncompleteData);
-                    }
+                assert!(
+                    tx_data.len() <= blob_data.len(),
+                    "claimed data must not be larger smaller than blob data"
+                );
+                for (l, r) in tx_data.iter().zip(blob_data.iter()) {
+                    assert_eq!(l, r, "claimed data must match observed data");
                 }
 
                 // Link blob commitment to e-tx commitment

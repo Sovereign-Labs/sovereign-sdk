@@ -14,7 +14,8 @@ impl<'a> StructDef<'a> {
                 let ty = &field.ty;
 
                 quote::quote!(
-                    #name(<#ty as sov_modules_api::Module>::CallMessage),
+                    #[doc = "Module call message."]
+                    #name(<#ty as ::sov_modules_api::Module>::CallMessage),
                 )
             })
             .collect()
@@ -29,7 +30,7 @@ impl<'a> StructDef<'a> {
 
             quote::quote!(
                 #enum_ident::#name(message)=>{
-                    sov_modules_api::Module::call(&self.#name, message, context, working_set)
+                    ::sov_modules_api::Module::call(&self.#name, message, context, working_set)
                 },
             )
         });
@@ -40,7 +41,7 @@ impl<'a> StructDef<'a> {
 
             quote::quote!(
                 #enum_ident::#name(message)=>{
-                   <#ty as sov_modules_api::ModuleInfo>::address(&self.#name)
+                   <#ty as ::sov_modules_api::ModuleInfo>::address(&self.#name)
                 },
             )
         });
@@ -53,21 +54,21 @@ impl<'a> StructDef<'a> {
         let call_enum = self.enum_ident(CALL);
 
         quote::quote! {
-            impl #impl_generics sov_modules_api::DispatchCall for #ident #type_generics #where_clause {
+            impl #impl_generics ::sov_modules_api::DispatchCall for #ident #type_generics #where_clause {
                 type Context = #generic_param;
                 type Decodable = #call_enum #ty_generics;
 
-                fn decode_call(serialized_message: &[u8]) -> core::result::Result<Self::Decodable, std::io::Error> {
-                    let mut data = std::io::Cursor::new(serialized_message);
+                fn decode_call(serialized_message: &[u8]) -> ::core::result::Result<Self::Decodable, std::io::Error> {
+                    let mut data = ::std::io::Cursor::new(serialized_message);
                     <#call_enum #ty_generics as ::borsh::BorshDeserialize>::deserialize_reader(&mut data)
                 }
 
                 fn dispatch_call(
                     &self,
                     decodable: Self::Decodable,
-                    working_set: &mut sov_state::WorkingSet<<Self::Context as sov_modules_api::Spec>::Storage>,
+                    working_set: &mut ::sov_state::WorkingSet<<Self::Context as ::sov_modules_api::Spec>::Storage>,
                     context: &Self::Context,
-                ) -> core::result::Result<sov_modules_api::CallResponse, sov_modules_api::Error> {
+                ) -> ::core::result::Result<::sov_modules_api::CallResponse, ::sov_modules_api::Error> {
 
                     match decodable {
                         #(#match_legs)*
@@ -75,7 +76,7 @@ impl<'a> StructDef<'a> {
 
                 }
 
-                fn module_address(&self, decodable: &Self::Decodable) -> &<Self::Context as sov_modules_api::Spec>::Address {
+                fn module_address(&self, decodable: &Self::Decodable) -> &<Self::Context as ::sov_modules_api::Spec>::Address {
                     match decodable {
                         #(#match_legs_address)*
                     }

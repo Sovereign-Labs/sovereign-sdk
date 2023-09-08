@@ -1,13 +1,20 @@
 use std::marker::PhantomData;
 
-use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
 use crate::codec::{BorshCodec, StateValueCodec};
-use crate::{Prefix, Storage, WorkingSet};
+use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
 
 /// Container for a single value.
-#[derive(Debug, PartialEq, Eq, Clone, BorshDeserialize, BorshSerialize)]
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct StateValue<V, VC = BorshCodec> {
     _phantom: PhantomData<V>,
     codec: VC,

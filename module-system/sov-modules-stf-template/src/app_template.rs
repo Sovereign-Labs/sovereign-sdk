@@ -1,10 +1,8 @@
 use std::marker::PhantomData;
 
 use borsh::BorshDeserialize;
-use sov_modules_api::{Context, DispatchCall};
-use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader, DaSpec};
+use sov_modules_api::{BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall};
 use sov_rollup_interface::stf::{BatchReceipt, TransactionReceipt};
-use sov_rollup_interface::{BasicAddress, Buf};
 use sov_state::StateCheckpoint;
 use tracing::{debug, error};
 
@@ -14,9 +12,9 @@ use crate::{Batch, Runtime, SequencerOutcome, SlashingReason, TxEffect};
 type ApplyBatchResult<T, A> = Result<T, ApplyBatchError<A>>;
 
 #[allow(type_alias_bounds)]
-type ApplyBatch<DA: DaSpec> = ApplyBatchResult<
-    BatchReceipt<SequencerOutcome<<DA::BlobTransaction as BlobReaderTrait>::Address>, TxEffect>,
-    <DA::BlobTransaction as BlobReaderTrait>::Address,
+type ApplyBatch<Da: DaSpec> = ApplyBatchResult<
+    BatchReceipt<SequencerOutcome<<Da::BlobTransaction as BlobReaderTrait>::Address>, TxEffect>,
+    <Da::BlobTransaction as BlobReaderTrait>::Address,
 >;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use zk_cycle_macros::cycle_tracker;
@@ -24,19 +22,14 @@ use zk_cycle_macros::cycle_tracker;
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)
 /// that is specifically designed to work with the module-system.
-pub struct AppTemplate<
-    C: Context,
-    DA: DaSpec,
-    Vm,
-    RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
-> {
+pub struct AppTemplate<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>> {
     /// State storage used by the rollup.
     pub current_storage: C::Storage,
     /// The runtime includes all the modules that the rollup supports.
     pub runtime: RT,
     pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
     phantom_vm: PhantomData<Vm>,
-    phantom_da: PhantomData<DA>,
+    phantom_da: PhantomData<Da>,
 }
 
 pub(crate) enum ApplyBatchError<A: BasicAddress> {
@@ -74,11 +67,11 @@ impl<A: BasicAddress> From<ApplyBatchError<A>> for BatchReceipt<SequencerOutcome
     }
 }
 
-impl<C, Vm, DA, RT> AppTemplate<C, DA, Vm, RT>
+impl<C, Vm, Da, RT> AppTemplate<C, Da, Vm, RT>
 where
     C: Context,
-    DA: DaSpec,
-    RT: Runtime<C, DA::ValidityCondition, DA::BlobTransaction>,
+    Da: DaSpec,
+    RT: Runtime<C, Da>,
 {
     /// [`AppTemplate`] constructor.
     pub fn new(storage: C::Storage, runtime: RT) -> Self {
@@ -92,7 +85,7 @@ where
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
-    pub(crate) fn apply_blob(&mut self, blob: &mut DA::BlobTransaction) -> ApplyBatch<DA> {
+    pub(crate) fn apply_blob(&mut self, blob: &mut Da::BlobTransaction) -> ApplyBatch<Da> {
         debug!(
             "Applying batch from sequencer: 0x{}",
             hex::encode(blob.sender())
@@ -121,7 +114,7 @@ where
         // TODO: don't ignore these events: https://github.com/Sovereign-Labs/sovereign/issues/350
         let _ = batch_workspace.take_events();
 
-        let (txs, messages) = match self.pre_process_batch(blob.data_mut()) {
+        let (txs, messages) = match self.pre_process_batch(blob) {
             Ok((txs, messages)) => (txs, messages),
             Err(reason) => {
                 // Explicitly revert on slashing, even though nothing has changed in pre_process.
@@ -247,7 +240,7 @@ where
     // Do all stateless checks and data formatting, that can be results in sequencer slashing
     fn pre_process_batch(
         &self,
-        blob_data: &mut CountedBufReader<impl Buf>,
+        blob_data: &mut impl BlobReaderTrait,
     ) -> Result<
         (
             Vec<TransactionAndRawHash<C>>,
@@ -269,11 +262,14 @@ where
     // Attempt to deserialize batch, error results in sequencer slashing.
     fn deserialize_batch(
         &self,
-        blob_data: &mut CountedBufReader<impl Buf>,
+        blob_data: &mut impl BlobReaderTrait,
     ) -> Result<Batch, SlashingReason> {
-        match Batch::deserialize_reader(blob_data) {
+        match Batch::try_from_slice(data_for_deserialization(blob_data)) {
             Ok(batch) => Ok(batch),
             Err(e) => {
+                assert_eq!(blob_data.verified_data().len(), blob_data.total_len(), "Batch deserialization failed and some data was not provided. The prover might be malicious");
+                // If the deserialization fails, we need to make sure it's not because the prover was malicious and left
+                // out some relevant data! Make that check here. If the data is missing, panic.
                 error!(
                     "Unable to deserialize batch provided by the sequencer {}",
                     e
@@ -316,4 +312,14 @@ where
         }
         Ok(decoded_messages)
     }
+}
+
+#[cfg(feature = "native")]
+fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> &[u8] {
+    blob.full_data()
+}
+
+#[cfg(not(feature = "native"))]
+fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> &[u8] {
+    blob.verified_data()
 }

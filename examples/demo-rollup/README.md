@@ -61,7 +61,7 @@ understand how to build your own state transition function, check out at the doc
 
 ### Run a local DA layer instance
 
-1. Install Docker: https://www.docker.com.
+1. Install Docker: <https://www.docker.com>.
 
 2. Switch to the `examples/demo-rollup` directory (which is where this `README.md` is located!).
 
@@ -225,7 +225,7 @@ Here's an example of a JSON representing the above call:
     "to": "sov1zgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfqve8h6h",
     "coins": {
       "amount": 200,
-      "token_address": "sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"
+      "token_address": "sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"
     }
   }
 }
@@ -271,7 +271,7 @@ Adding the following transaction to batch:
       "to": "sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94",
       "coins": {
         "amount": 200,
-        "token_address": "sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"
+        "token_address": "sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"
       }
     }
   }
@@ -286,7 +286,7 @@ You now have a batch with a single transaction in your wallet. If you want to su
 batch, you can import them now. Finally, let's submit your transaction to the rollup.
 
 ```bash
-$ cargo run rpc submit-batch by-address sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqwr57gc
+$ ./target/debug/sov-cli rpc submit-batch by-address sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94
 ```
 
 This command will use your default private key
@@ -294,7 +294,7 @@ This command will use your default private key
 #### 4. Verify the Token Supply
 
 ```bash
-$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"],"id":1}' http://127.0.0.1:12345
+$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"],"id":1}' http://127.0.0.1:12345
 {"jsonrpc":"2.0","result":{"amount":1000},"id":1}
 ```
 
@@ -328,19 +328,12 @@ $ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method"
 - `make stop`:
   - Stops the Celestia Docker image, if running.
   - Deletes all contents of the demo-rollup database.
-- For submitting transactions, we use `make submit-txn SERIALIZED_BLOB_PATH=....`
-  - This makes use of `celestia-appd tx blob PayForBlobs` inside the docker container to submit the blob to the full node
-  - `--from ` is set to `sequencer-da-address` whose address has been updated at `examples/const-rollup-config/src/lib.rs`
-  - The namespace of celestia that the blob needs to be submitted to is obtained by using `sov-cli util print-namespace` which reads the namespace from `examples/const-rollup-config/src/lib.rs`
-  - The content of the blob is read directly from the file passed in via the command line using `SERIALIZED_BLOB_PATH`
-  - `BLOB_TXN_FEE` is set to `300utia` and would likely not need to be modified
 
 ### Remote setup
 
 > 🚧 This feature is under development! 🚧
 
-The above setup runs Celestia node locally to avoid any external network dependencies and to speed up development. The Sovereign SDK can also be configured to connect to the Celestia testnet using a Celestia light node running on your machine.
-At present, the remote setup is not functional because the Celestia testnet version that our Celestia adapter supports has been sunsetted. We are collaborating with the Celestia team to update the adapter.
+The above setup runs Celestia node locally to avoid any external network dependencies and to speed up development. Soon, the Sovereign SDK will also support connecting to the Celestia testnet using a Celestia light node running on your machine.
 
 ## How to Customize This Example
 

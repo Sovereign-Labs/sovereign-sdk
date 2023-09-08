@@ -75,9 +75,9 @@ pub(crate) fn contract_address(result: ExecutionResult) -> Option<B160> {
 
 /// EVM Chain configuration
 #[derive(Debug, Clone, PartialEq, BorshSerialize, BorshDeserialize)]
-pub struct EvmChainCfg {
+pub struct EvmChainConfig {
     /// Unique chain id
-    /// Chains can be registered at https://github.com/ethereum-lists/chains
+    /// Chains can be registered at <https://github.com/ethereum-lists/chains>.
     pub chain_id: u64,
 
     /// Limits size of contract code size
@@ -86,14 +86,26 @@ pub struct EvmChainCfg {
 
     /// List of EVM hardforks by block number
     pub spec: Vec<(u64, SpecIdWrapper)>,
+
+    /// Coinbase where all the fees go
+    pub coinbase: EthAddress,
+
+    /// Gas limit for single block
+    pub block_gas_limit: u64,
+
+    /// Delta to add to parent block timestamp
+    pub block_timestamp_delta: u64,
 }
 
-impl Default for EvmChainCfg {
-    fn default() -> EvmChainCfg {
-        EvmChainCfg {
+impl Default for EvmChainConfig {
+    fn default() -> EvmChainConfig {
+        EvmChainConfig {
             chain_id: 1,
             limit_contract_code_size: None,
             spec: vec![(0, SpecIdWrapper::from(SpecId::LATEST))],
+            coinbase: [0u8; 20],
+            block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
+            block_timestamp_delta: 1,
         }
     }
 }

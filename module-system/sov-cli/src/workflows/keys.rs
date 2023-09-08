@@ -5,7 +5,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_modules_api::{clap, PrivateKey, PublicKey, Spec};
 
-use crate::wallet_state::{KeyIdentifier, WalletState};
+use crate::wallet_state::{KeyIdentifier, PrivateKeyAndAddress, WalletState};
 
 #[derive(clap::Subcommand)]
 /// View and manage keys associated with this wallet
@@ -111,9 +111,9 @@ impl<C: sov_modules_api::Context> KeyWorkflow<C> {
 pub fn load_key<C: sov_modules_api::Context>(
     path: impl AsRef<Path>,
 ) -> Result<C::PrivateKey, anyhow::Error> {
-    let data = std::fs::read(path)?;
-    let key = serde_json::from_slice(data.as_slice())?;
-    Ok(key)
+    let data = std::fs::read_to_string(path)?;
+    let key_and_address: PrivateKeyAndAddress<C> = serde_json::from_str(&data)?;
+    Ok(key_and_address.private_key)
 }
 
 /// Generate a new key pair and save it to the wallet
@@ -123,15 +123,16 @@ pub fn generate_and_save_key<Tx, C: sov_modules_api::Context>(
     wallet_state: &mut WalletState<Tx, C>,
 ) -> Result<(), anyhow::Error> {
     let keys = <C as Spec>::PrivateKey::generate();
-    let public_key = keys.pub_key();
-    let address = keys.pub_key().to_address::<<C as Spec>::Address>();
+    let key_and_address = PrivateKeyAndAddress::<C>::from_key(keys);
+    let public_key = key_and_address.private_key.pub_key();
+    let address = key_and_address.address.clone();
     let key_path = app_dir.as_ref().join(format!("{}.json", address));
     println!(
         "Generated key pair with address: {}. Saving to {}",
         address,
         key_path.display()
     );
-    std::fs::write(&key_path, serde_json::to_string(&keys)?)?;
+    std::fs::write(&key_path, serde_json::to_string(&key_and_address)?)?;
     wallet_state
         .addresses
         .add(address, nickname, public_key, key_path);
