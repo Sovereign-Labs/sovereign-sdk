@@ -36,10 +36,7 @@ fn print_times(total: Duration, apply_block_time: Duration, blocks: u64, num_txn
     table.add_row(row!["Apply Block", format!("{:?}", apply_block_time)]);
     table.add_row(row![
         "Txns per sec (TPS)",
-        format!(
-            "{:?}",
-            ((blocks * num_txns) as f64) / (total.as_secs() as f64)
-        )
+        format!("{:?}", ((blocks * num_txns) as f64) / total.as_secs_f64())
     ]);
 
     // Print the table to stdout
@@ -61,11 +58,11 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let start_height: u64 = 0u64;
     let mut end_height: u64 = 10u64;
-    let mut num_txns = 10000;
+    let mut num_txns_per_block = 10000;
     let mut timer_output = true;
     let mut prometheus_output = false;
     if let Ok(val) = env::var("TXNS_PER_BLOCK") {
-        num_txns = val
+        num_txns_per_block = val
             .parse()
             .expect("TXNS_PER_BLOCK var should be a +ve number");
     }
@@ -158,7 +155,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let total = total.elapsed();
     if timer_output {
-        print_times(total, apply_block_time, end_height, num_txns);
+        print_times(total, apply_block_time, end_height, num_txns_per_block);
     }
     if prometheus_output {
         println!("{:#?}", registry.gather());
