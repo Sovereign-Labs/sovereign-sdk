@@ -32,7 +32,7 @@ fn create_messages(
     {
         let signed_tx = dev_signer
             .sign_default_transaction(
-                TransactionKind::Call(contract_addr.into()),
+                TransactionKind::Call(contract_addr),
                 hex::decode(hex::encode(&contract.set_call_data(set_arg))).unwrap(),
                 1,
             )

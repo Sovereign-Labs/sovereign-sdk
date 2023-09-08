@@ -84,10 +84,7 @@ pub mod experimental {
                 .ok_or(EthApiError::InvalidTransactionSignature)?;
 
             let mut nonces = self.nonces.lock().unwrap();
-            let nonce = *nonces
-                .entry(sender.into())
-                .and_modify(|n| *n += 1)
-                .or_insert(0);
+            let nonce = *nonces.entry(sender).and_modify(|n| *n += 1).or_insert(0);
 
             let tx = CallMessage { tx: raw_tx };
             let message = <Runtime<DefaultContext, Da::Spec> as EncodeCall<

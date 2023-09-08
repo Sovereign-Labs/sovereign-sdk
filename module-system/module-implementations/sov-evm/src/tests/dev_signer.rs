@@ -23,7 +23,7 @@ impl DevSigner {
         let addr = public_key_to_address(public_key);
         Self {
             secret_key,
-            address: addr.into(),
+            address: addr,
         }
     }
 
