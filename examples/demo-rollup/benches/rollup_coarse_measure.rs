@@ -1,22 +1,19 @@
 mod rng_xfers;
 use std::env;
 use std::path::PathBuf;
-use std::str::FromStr;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
-use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::app::App;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use prometheus::{Histogram, HistogramOpts, Registry};
-use rng_xfers::{RngDaService, RngDaSpec};
-use sov_celestia_adapter::verifier::address::CelestiaAddress;
+use rng_xfers::{RngDaService, RngDaSpec, SEQUENCER_DA_ADDRESS};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
 use sov_risc0_adapter::host::Risc0Verifier;
-use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash};
+use sov_rollup_interface::mocks::{MockAddress, MockBlock, MockBlockHeader, MockHash};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_stf_runner::{from_toml_path, RollupConfig};
@@ -26,12 +23,24 @@ use tempfile::TempDir;
 extern crate prettytable;
 
 use prettytable::Table;
+use sov_modules_stf_template::TxEffect;
 
-fn print_times(total: Duration, apply_block_time: Duration, blocks: u64, num_txns: u64) {
+fn print_times(
+    total: Duration,
+    apply_block_time: Duration,
+    blocks: u64,
+    num_txns: u64,
+    num_success_txns: u64,
+) {
     let mut table = Table::new();
 
     table.add_row(row!["Blocks", format!("{:?}", blocks)]);
     table.add_row(row!["Txns per Block", format!("{:?}", num_txns)]);
+    // subtract 1 because the first block contains only 1 txn which is the token create txn
+    table.add_row(row![
+        "Processed Txns (Success)",
+        format!("{:?}", num_success_txns - 1)
+    ]);
     table.add_row(row!["Total", format!("{:?}", total)]);
     table.add_row(row!["Apply Block", format!("{:?}", apply_block_time)]);
     table.add_row(row![
@@ -62,6 +71,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let start_height: u64 = 0u64;
     let mut end_height: u64 = 10u64;
     let mut num_txns = 10000;
+    let mut num_success_txns = 0u64;
     let mut timer_output = true;
     let mut prometheus_output = false;
     if let Ok(val) = env::var("TXNS_PER_BLOCK") {
@@ -97,7 +107,7 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let mut demo = demo_runner.stf;
     let sequencer_private_key = DefaultPrivateKey::generate();
-    let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
+    let sequencer_da_address = MockAddress::from(SEQUENCER_DA_ADDRESS);
     let demo_genesis_config = create_demo_genesis_config(
         100000000,
         sequencer_private_key.default_address(),
@@ -110,8 +120,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // data generation
     let mut blobs = vec![];
     let mut blocks = vec![];
-
-    for height in start_height..end_height {
+    for height in start_height..end_height + 1 {
         let num_bytes = height.to_le_bytes();
         let mut barray = [0u8; 32];
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
@@ -133,7 +142,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // rollup processing
     let total = Instant::now();
     let mut apply_block_time = Duration::new(0, 0);
-    for height in start_height..end_height {
+    for height in start_height..end_height + 1 {
         let filtered_block = &blocks[height as usize];
 
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
@@ -148,8 +157,12 @@ async fn main() -> Result<(), anyhow::Error> {
 
         apply_block_time += now.elapsed();
         h_apply_block.observe(now.elapsed().as_secs_f64());
-
         for receipt in apply_block_results.batch_receipts {
+            for t in &receipt.tx_receipts {
+                if t.receipt == TxEffect::Successful {
+                    num_success_txns += 1
+                }
+            }
             data_to_commit.add_batch(receipt);
         }
 
@@ -158,7 +171,13 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let total = total.elapsed();
     if timer_output {
-        print_times(total, apply_block_time, end_height, num_txns);
+        print_times(
+            total,
+            apply_block_time,
+            end_height,
+            num_txns,
+            num_success_txns,
+        );
     }
     if prometheus_output {
         println!("{:#?}", registry.gather());
