@@ -6725,6 +6725,7 @@ dependencies = [
  "jsonrpsee",
  "reth-primitives",
  "reth-rpc",
+ "reth-rpc-types",
  "serde_json",
  "sov-celestia-adapter",
  "sov-evm",
