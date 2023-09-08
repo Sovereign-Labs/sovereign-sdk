@@ -14,7 +14,9 @@ pub mod experimental {
     use ethers::types::{Bytes, H256};
     use jsonrpsee::types::ErrorObjectOwned;
     use jsonrpsee::RpcModule;
-    use reth_primitives::{Address, TransactionSignedNoHash as RethTransactionSignedNoHash};
+    use reth_primitives::{
+        Address as RethAddress, TransactionSignedNoHash as RethTransactionSignedNoHash,
+    };
     use reth_rpc::eth::error::EthApiError;
     use sov_evm::call::CallMessage;
     use sov_evm::evm::RlpEvmTransaction;
@@ -48,7 +50,7 @@ pub mod experimental {
     }
 
     pub struct Ethereum<Da: DaService> {
-        nonces: Mutex<HashMap<Address, u64>>,
+        nonces: Mutex<HashMap<RethAddress, u64>>,
         da_service: Da,
         batch_builder: Arc<Mutex<EthBatchBuilder>>,
         eth_rpc_config: EthRpcConfig,
@@ -56,7 +58,7 @@ pub mod experimental {
 
     impl<Da: DaService> Ethereum<Da> {
         fn new(
-            nonces: Mutex<HashMap<Address, u64>>,
+            nonces: Mutex<HashMap<RethAddress, u64>>,
             da_service: Da,
             batch_builder: Arc<Mutex<EthBatchBuilder>>,
             eth_rpc_config: EthRpcConfig,
@@ -168,6 +170,19 @@ pub mod experimental {
                 Ok::<_, ErrorObjectOwned>(tx_hash)
             },
         )?;
+
+        rpc.register_async_method("eth_accounts", |_parameters, _ethereum| async move {
+            #[allow(unreachable_code)]
+            Ok::<_, ErrorObjectOwned>(todo!())
+        })?;
+
+        rpc.register_async_method("eth_estimateGas", |parameters, _ethereum| async move {
+            let mut params = parameters.sequence();
+            let _data: reth_rpc_types::CallRequest = params.next()?;
+            let _block_number: Option<reth_primitives::BlockId> = params.optional_next()?;
+            #[allow(unreachable_code)]
+            Ok::<_, ErrorObjectOwned>(todo!())
+        })?;
 
         Ok(())
     }
