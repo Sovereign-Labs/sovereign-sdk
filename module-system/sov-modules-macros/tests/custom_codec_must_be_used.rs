@@ -2,7 +2,7 @@ use std::panic::catch_unwind;
 
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::{Context, ModuleInfo};
-use sov_state::codec::StateValueCodec;
+use sov_state::codec::{StateCodec, StateKeyCodec, StateValueCodec};
 use sov_state::{DefaultStorageSpec, ProverStorage, StateValue, WorkingSet};
 
 #[derive(ModuleInfo)]
@@ -23,6 +23,23 @@ struct CustomCodec;
 impl CustomCodec {
     fn new() -> Self {
         Self
+    }
+}
+
+impl StateCodec for CustomCodec {
+    type KeyCodec = Self;
+    type ValueCodec = Self;
+    fn key_codec(&self) -> &Self::KeyCodec {
+        self
+    }
+    fn value_codec(&self) -> &Self::ValueCodec {
+        self
+    }
+}
+
+impl<K> StateKeyCodec<K> for CustomCodec {
+    fn encode_key(&self, _key: &K) -> Vec<u8> {
+        unimplemented!()
     }
 }
 

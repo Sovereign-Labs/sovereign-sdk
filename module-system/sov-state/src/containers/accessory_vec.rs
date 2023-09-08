@@ -1,7 +1,7 @@
 use std::iter::FusedIterator;
 use std::marker::PhantomData;
 
-use crate::codec::{BorshCodec, StateValueCodec};
+use crate::codec::{BorshCodec, StateCodec, StateKeyCodec, StateValueCodec};
 use crate::{
     AccessoryStateMap, AccessoryStateValue, AccessoryWorkingSet, Prefix, StateVecError, Storage,
 };
@@ -15,19 +15,18 @@ use crate::{
     serde::Serialize,
     serde::Deserialize,
 )]
-pub struct AccessoryStateVec<V, VC = BorshCodec>
-where
-    VC: StateValueCodec<V>,
-{
+pub struct AccessoryStateVec<V, Codec = BorshCodec> {
     _phantom: PhantomData<V>,
     prefix: Prefix,
-    len_value: AccessoryStateValue<usize, VC>,
-    elems: AccessoryStateMap<usize, V, VC>,
+    len_value: AccessoryStateValue<usize, Codec>,
+    elems: AccessoryStateMap<usize, V, Codec>,
 }
 
 impl<V> AccessoryStateVec<V>
 where
-    BorshCodec: StateValueCodec<V>,
+    BorshCodec: StateCodec + Clone,
+    <BorshCodec as StateCodec>::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    <BorshCodec as StateCodec>::KeyCodec: StateKeyCodec<usize>,
 {
     /// Crates a new [`AccessoryStateVec`] with the given prefix and the default
     /// [`StateValueCodec`] (i.e. [`BorshCodec`]).
@@ -36,18 +35,20 @@ where
     }
 }
 
-impl<V, VC> AccessoryStateVec<V, VC>
+impl<V, Codec> AccessoryStateVec<V, Codec>
 where
-    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
 {
     /// Creates a new [`AccessoryStateVec`] with the given prefix and codec.
-    pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
+    pub fn with_codec(prefix: Prefix, codec: Codec) -> Self {
         // Differentiating the prefixes for the length and the elements
         // shouldn't be necessary, but it's best not to rely on implementation
         // details of `StateValue` and `StateMap` as they both have the right to
         // reserve the whole key space for themselves.
         let len_value =
-            AccessoryStateValue::<usize, VC>::with_codec(prefix.extended(b"l"), codec.clone());
+            AccessoryStateValue::<usize, Codec>::with_codec(prefix.extended(b"l"), codec.clone());
         let elems = AccessoryStateMap::with_codec(prefix.extended(b"e"), codec);
         Self {
             _phantom: PhantomData,
@@ -169,7 +170,7 @@ where
     pub fn iter<'a, 'ws, S: Storage>(
         &'a self,
         working_set: &'ws mut AccessoryWorkingSet<'ws, S>,
-    ) -> AccessoryStateVecIter<'a, 'ws, V, VC, S> {
+    ) -> AccessoryStateVecIter<'a, 'ws, V, Codec, S> {
         let len = self.len(working_set);
         AccessoryStateVecIter {
             state_vec: self,
@@ -183,20 +184,24 @@ where
 /// An [`Iterator`] over a [`AccessoryStateVec`]
 ///
 /// See [`AccessoryStateVec::iter`] for more details.
-pub struct AccessoryStateVecIter<'a, 'ws, V, VC, S>
+pub struct AccessoryStateVecIter<'a, 'ws, V, Codec, S>
 where
-    VC: StateValueCodec<V>,
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
     S: Storage,
 {
-    state_vec: &'a AccessoryStateVec<V, VC>,
+    state_vec: &'a AccessoryStateVec<V, Codec>,
     ws: &'ws mut AccessoryWorkingSet<'ws, S>,
     len: usize,
     next_i: usize,
 }
 
-impl<'a, 'ws, V, VC, S> Iterator for AccessoryStateVecIter<'a, 'ws, V, VC, S>
+impl<'a, 'ws, V, Codec, S> Iterator for AccessoryStateVecIter<'a, 'ws, V, Codec, S>
 where
-    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
     S: Storage,
 {
     type Item = V;
@@ -211,9 +216,11 @@ where
     }
 }
 
-impl<'a, 'ws, V, VC, S> ExactSizeIterator for AccessoryStateVecIter<'a, 'ws, V, VC, S>
+impl<'a, 'ws, V, Codec, S> ExactSizeIterator for AccessoryStateVecIter<'a, 'ws, V, Codec, S>
 where
-    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
     S: Storage,
 {
     fn len(&self) -> usize {
@@ -221,9 +228,11 @@ where
     }
 }
 
-impl<'a, 'ws, V, VC, S> FusedIterator for AccessoryStateVecIter<'a, 'ws, V, VC, S>
+impl<'a, 'ws, V, Codec, S> FusedIterator for AccessoryStateVecIter<'a, 'ws, V, Codec, S>
 where
-    VC: StateValueCodec<V> + StateValueCodec<usize> + Clone,
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
     S: Storage,
 {
 }
