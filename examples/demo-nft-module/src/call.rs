@@ -110,7 +110,7 @@ impl<C: Context> NonFungibleToken<C> {
                 c.metadata_url = metadata_url.to_string();
                 self.collections.set(&collection_address, &c, working_set);
                 track_collection(&collection_address.to_string(),
-                                 collection_name, &creator.to_string(), false, metadata_url, 0);
+                                 collection_name, &creator.to_string(), c.frozen, metadata_url, c.supply);
             }
         } else {
             bail!("Collection with name {} by sender {} does not exist",collection_name, creator.to_string());
@@ -133,6 +133,8 @@ impl<C: Context> NonFungibleToken<C> {
             } else {
                 c.frozen = true;
                 self.collections.set(&collection_address, &c, working_set);
+                track_collection(&collection_address.to_string(),
+                                 collection_name, &creator.to_string(), true, &c.metadata_url, c.supply);
             }
         } else {
             bail!("Collection with name {} by sender {} does not exist",collection_name, creator.to_string());
@@ -171,8 +173,17 @@ impl<C: Context> NonFungibleToken<C> {
                         metadata_url: metadata_url.to_string(),
                     };
                     self.nfts.set(&nft_identifier, &new_nft, working_set);
+                    track_nft(&collection_address.to_string(),
+                              nft_id,
+                              &mint_to_address.to_string(),
+                              frozen,
+                              metadata_url);
                     c.supply+=1;
                     self.collections.set(&collection_address, &c, working_set);
+                    track_collection(&collection_address.to_string(),
+                                     &c.name, &c.creator.to_string(),
+                                     c.frozen, &c.metadata_url, c.supply);
+
                 }
             }
         } else {
@@ -198,6 +209,11 @@ impl<C: Context> NonFungibleToken<C> {
                 if owner.as_ref() == n.owner.as_ref() {
                     n.owner = to.clone();
                     self.nfts.set(&nft_identifier, &n, working_set);
+                    track_nft(&collection_address.to_string(),
+                              nft_id,
+                              &to.to_string(),
+                              n.frozen,
+                              &n.metadata_url);
                 } else {
                     bail!("NFT id {} in Collection with address {} does not exist",nft_id, collection_address.to_string());
                 }
@@ -234,6 +250,11 @@ impl<C: Context> NonFungibleToken<C> {
                             n.metadata_url = murl;
                         }
                         self.nfts.set(&nft_identifier, &n, working_set);
+                        track_nft(&collection_address.to_string(),
+                                  n.id,
+                                  &n.owner.to_string(),
+                                  n.frozen,
+                                  &n.metadata_url);
                     } else {
                         bail!("NFT id {} in Collection with address {} is frozen",nft_id, collection_address.to_string());
                     }

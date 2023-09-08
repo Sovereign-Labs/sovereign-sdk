@@ -9,7 +9,6 @@ use std::str::FromStr;
 use serde::{Serialize, Deserialize};
 use sov_modules_api::{PublicKey, Spec};
 
-
 const COLLECTION_1: &str = "collection_1";
 const COLLECTION_2: &str = "collection_2";
 const COLLECTION_3: &str = "collection_3";
@@ -109,7 +108,7 @@ fn get_signing_address_pubkey() -> (String,String) {
 }
 
 fn mint_collection(collection_name: &str, signer_address: &[u8]) {
-    let c_addr = get_collection_address::<DefaultContext>(COLLECTION_1,signer_address);
+    let c_addr = get_collection_address::<DefaultContext>(collection_name,signer_address);
     let murl = get_collection_metadata_url(&c_addr.to_string());
     let c = CallMessage::<DefaultContext>::CreateCollection
     {
@@ -118,10 +117,22 @@ fn mint_collection(collection_name: &str, signer_address: &[u8]) {
     };
     let json_str = serde_json::to_string(&c).unwrap();
     run_sov_cli_import(&json_str);
+}
 
+fn mint_nft_to_collection(nft_id: u64, collection_name: &str, signer_address: &[u8], mint_to: <DefaultContext as Spec>::Address) {
+    let c_addr = get_collection_address::<DefaultContext>(COLLECTION_1,signer_address);
+    let nurl = get_nft_metadata_url(&c_addr.to_string(), nft_id);
+    let m = CallMessage::<DefaultContext>::MintNft {
+        collection_name: collection_name.to_string(),
+        metadata_url: nurl,
+        id: nft_id,
+        mint_to_address: mint_to,
+        frozen: false,
+    };
+    let json_str = serde_json::to_string(&m).unwrap();
+    run_sov_cli_import(&json_str);
 }
-fn mint_nfts(collection_address: &str, nft_id: u64) {
-}
+
 fn execute_transfer() {
 
 }
