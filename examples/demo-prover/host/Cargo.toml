@@ -26,7 +26,7 @@ sov-risc0-adapter = { path = "../../../adapters/risc0", features = ["native"] }
 const-rollup-config = { path = "../../const-rollup-config" }
 sov-modules-api = { path = "../../../module-system/sov-modules-api", features = ["native"] }
 sov-state = { path = "../../../module-system/sov-state", features = ["native"] }
-zk-cycle-macros = { path = "../../../utils/zk-cycle-macros", optional = true }
+sov-zk-cycle-macros = { path = "../../../utils/zk-cycle-macros", optional = true }
 sov-stf-runner = { path = "../../../full-node/sov-stf-runner" }
 
 methods = { path = "../methods" }
@@ -48,4 +48,4 @@ name = "prover_bench"
 harness = false
 
 [features]
-bench = ["sov-risc0-adapter/bench", "zk-cycle-macros/bench", "methods/bench"]
+bench = ["sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "methods/bench"]

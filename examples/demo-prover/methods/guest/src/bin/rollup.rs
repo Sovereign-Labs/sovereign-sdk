@@ -61,7 +61,7 @@ pub fn main() {
     env::write(&"Slot has been applied\n");
 
     // Step 3: Verify tx list
-    let verifier = CelestiaVerifier::new(celestia::verifier::RollupParams {
+    let verifier = CelestiaVerifier::new(sov_celestia_adapter::verifier::RollupParams {
         namespace: ROLLUP_NAMESPACE,
     });
 

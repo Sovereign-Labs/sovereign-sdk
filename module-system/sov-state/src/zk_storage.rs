@@ -4,7 +4,7 @@ use std::sync::Arc;
 use jmt::storage::NodeBatch;
 use jmt::{JellyfishMerkleTree, KeyHash, Version};
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_macros::cycle_tracker;
+use sov_zk_cycle_macros::cycle_tracker;
 
 use crate::internal_cache::OrderedReadsAndWrites;
 use crate::storage::{StorageKey, StorageProof, StorageValue};

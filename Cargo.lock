@@ -6580,13 +6580,13 @@ dependencies = [
  "serde_json",
  "sha2 0.10.7",
  "sov-rollup-interface",
+ "sov-zk-cycle-macros",
  "tendermint",
  "tendermint-proto",
  "thiserror",
  "tokio",
  "tracing",
  "wiremock",
- "zk-cycle-macros",
 ]
 
 [[package]]
@@ -6818,8 +6818,8 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-state",
+ "sov-zk-cycle-macros",
  "thiserror",
- "zk-cycle-macros",
 ]
 
 [[package]]
@@ -6859,10 +6859,10 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
+ "sov-zk-cycle-macros",
+ "sov-zk-cycle-utils",
  "thiserror",
  "tracing",
- "zk-cycle-macros",
- "zk-cycle-utils",
 ]
 
 [[package]]
@@ -6898,7 +6898,7 @@ dependencies = [
  "risc0-zkvm-platform",
  "serde",
  "sov-rollup-interface",
- "zk-cycle-utils",
+ "sov-zk-cycle-utils",
 ]
 
 [[package]]
@@ -6967,9 +6967,9 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
+ "sov-zk-cycle-macros",
+ "sov-zk-cycle-utils",
  "tempfile",
- "zk-cycle-macros",
- "zk-cycle-utils",
 ]
 
 [[package]]
@@ -6990,9 +6990,9 @@ dependencies = [
  "sov-db",
  "sov-first-read-last-write-cache",
  "sov-rollup-interface",
+ "sov-zk-cycle-macros",
  "tempfile",
  "thiserror",
- "zk-cycle-macros",
 ]
 
 [[package]]
@@ -7057,6 +7057,30 @@ dependencies = [
  "sov-state",
  "tempfile",
  "thiserror",
+]
+
+[[package]]
+name = "sov-zk-cycle-macros"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "proc-macro2 1.0.66",
+ "quote 1.0.33",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "sov-zk-cycle-macros",
+ "sov-zk-cycle-utils",
+ "syn 1.0.109",
+ "trybuild",
+]
+
+[[package]]
+name = "sov-zk-cycle-utils"
+version = "0.1.0"
+dependencies = [
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
 ]
 
 [[package]]
@@ -8383,30 +8407,6 @@ dependencies = [
  "sha1",
  "time",
  "zstd 0.11.2+zstd.1.5.2",
-]
-
-[[package]]
-name = "zk-cycle-macros"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "proc-macro2 1.0.66",
- "quote 1.0.33",
- "risc0-zkvm",
- "risc0-zkvm-platform",
- "syn 1.0.109",
- "trybuild",
- "zk-cycle-macros",
- "zk-cycle-utils",
-]
-
-[[package]]
-name = "zk-cycle-utils"
-version = "0.1.0"
-dependencies = [
- "risc0-zkvm",
- "risc0-zkvm-platform",
 ]
 
 [[package]]
