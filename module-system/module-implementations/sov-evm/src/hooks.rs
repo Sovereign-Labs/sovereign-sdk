@@ -21,11 +21,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let new_pending_block = BlockEnv {
             number: block_number + 1,
             coinbase: cfg.coinbase,
-
-            // TODO: simplify this conversion by doing something with Bytes32
-            // TODO simplify conversion fro U256 to u64
-            // Reth rpc types keep stuff as U256, even when actually only u64 makes sense:
-            // block_number, timespamp, gas_used, base_fee_per_gas
             timestamp: parent_block.header.timestamp + U256::from(cfg.block_timestamp_delta),
             prevrandao: Some(da_root_hash.into()),
             basefee: {
