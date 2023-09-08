@@ -17,7 +17,7 @@ type ApplyBatch<Da: DaSpec> = ApplyBatchResult<
     <Da::BlobTransaction as BlobReaderTrait>::Address,
 >;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_macros::cycle_tracker;
+use sov_zk_cycle_macros::cycle_tracker;
 
 /// An implementation of the
 /// [`StateTransitionFunction`](sov_rollup_interface::stf::StateTransitionFunction)

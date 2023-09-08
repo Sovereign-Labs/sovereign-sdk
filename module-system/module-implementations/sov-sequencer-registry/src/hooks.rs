@@ -2,9 +2,9 @@ use sov_modules_api::hooks::ApplyBlobHooks;
 use sov_modules_api::{BlobReaderTrait, Context};
 use sov_state::WorkingSet;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_macros::cycle_tracker;
+use sov_zk_cycle_macros::cycle_tracker;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_utils::print_cycle_count;
+use sov_zk_cycle_utils::print_cycle_count;
 
 use crate::{SequencerOutcome, SequencerRegistry};
 
