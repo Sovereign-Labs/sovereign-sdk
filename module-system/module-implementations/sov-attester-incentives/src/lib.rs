@@ -157,12 +157,14 @@ where
     P: BorshDeserialize + BorshSerialize,
     Da: DaSpec,
     Checker: ValidityConditionChecker<Da::ValidityCondition>,
+    Da::ValidityCondition: BorshSerialize + BorshDeserialize,
+    Da::SlotHash: BorshSerialize + BorshDeserialize,
 {
     type Context = C;
 
     type Config = AttesterIncentivesConfig<C, Vm, Da, Checker>;
 
-    type CallMessage = call::CallMessage<C>;
+    type CallMessage = call::CallMessage<C, Da>;
 
     fn genesis(
         &self,

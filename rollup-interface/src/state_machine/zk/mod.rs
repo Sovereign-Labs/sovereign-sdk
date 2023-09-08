@@ -13,6 +13,7 @@ use digest::Digest;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
+use crate::da::DaSpec;
 use crate::RollupAddress;
 
 /// A trait implemented by the prover ("host") of a zkVM program.
@@ -45,12 +46,16 @@ pub trait Zkvm {
     /// as a serialized array, it returns a state transition structure.
     /// TODO: specify a deserializer for the output
     fn verify_and_extract_output<
-        C: ValidityCondition,
         Add: RollupAddress + BorshDeserialize + BorshSerialize,
+        Da: DaSpec,
     >(
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<StateTransition<C, Add>, Self::Error> {
+    ) -> Result<StateTransition<Da, Add>, Self::Error>
+    where
+        Da::SlotHash: BorshDeserialize + BorshSerialize,
+        Da::ValidityCondition: BorshDeserialize + BorshSerialize,
+    {
         let mut output = Self::verify(serialized_proof, code_commitment)?;
         Ok(BorshDeserialize::deserialize_reader(&mut output)?)
     }
@@ -99,6 +104,7 @@ pub trait ValidityCondition:
     + PartialEq
     + Send
     + Sync
+    + Eq
 {
     /// The error type returned when two [`ValidityCondition`]s cannot be combined.
     type Error: Into<anyhow::Error>;
@@ -113,13 +119,13 @@ pub trait ValidityCondition:
 ///
 /// The period of time covered by a state transition proof may be a single slot, or a range of slots on the DA layer.
 #[derive(Clone, Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, PartialEq, Eq)]
-pub struct StateTransition<C, Address> {
+pub struct StateTransition<Da: DaSpec, Address> {
     /// The state of the rollup before the transition
     pub initial_state_root: [u8; 32],
     /// The state of the rollup after the transition
     pub final_state_root: [u8; 32],
     /// The slot hash of the state transition
-    pub slot_hash: [u8; 32],
+    pub slot_hash: Da::SlotHash,
 
     /// Rewarded address: the account that has produced the transition proof.
     pub rewarded_address: Address,
@@ -127,7 +133,7 @@ pub struct StateTransition<C, Address> {
     /// An additional validity condition for the state transition which needs
     /// to be checked outside of the zkVM circuit. This typically corresponds to
     /// some claim about the DA layer history, such as (X) is a valid block on the DA layer
-    pub validity_condition: C,
+    pub validity_condition: Da::ValidityCondition,
 }
 
 /// This trait expresses that a type can check a validity condition.

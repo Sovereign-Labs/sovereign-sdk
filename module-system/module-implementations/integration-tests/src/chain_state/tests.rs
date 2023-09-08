@@ -66,7 +66,12 @@ fn test_simple_value_setter_with_chain_state() {
 
     assert_eq!(new_height_storage, 0, "The initial height was not computed");
 
-    let result = app_template.apply_slot(Default::default(), &slot_data, &mut [blob.clone()]);
+    let result = app_template.apply_slot(
+        Default::default(),
+        &slot_data.header,
+        &slot_data.validity_cond,
+        &mut [blob.clone()],
+    );
 
     assert_eq!(1, result.batch_receipts.len());
     let apply_blob_outcome = result.batch_receipts[0].clone();
@@ -96,13 +101,13 @@ fn test_simple_value_setter_with_chain_state() {
     assert_eq!(new_height_storage, 1, "The new height did not update");
 
     // Check the tx in progress
-    let new_tx_in_progress: TransitionInProgress<MockValidityCond> = chain_state_ref
+    let new_tx_in_progress: TransitionInProgress<MockDaSpec> = chain_state_ref
         .get_in_progress_transition(&mut working_set)
         .unwrap();
 
     assert_eq!(
         new_tx_in_progress,
-        TransitionInProgress::<MockValidityCond>::new([10; 32], MockValidityCond::default()),
+        TransitionInProgress::<MockDaSpec>::new(MockHash([10; 32]), MockValidityCond::default()),
         "The new transition has not been correctly stored"
     );
 
@@ -119,7 +124,12 @@ fn test_simple_value_setter_with_chain_state() {
         blobs: Default::default(),
     };
 
-    let result = app_template.apply_slot(Default::default(), &new_slot_data, &mut [blob]);
+    let result = app_template.apply_slot(
+        Default::default(),
+        &new_slot_data.header,
+        &new_slot_data.validity_cond,
+        &mut [blob],
+    );
 
     assert_eq!(1, result.batch_receipts.len());
     let apply_blob_outcome = result.batch_receipts[0].clone();
@@ -143,24 +153,24 @@ fn test_simple_value_setter_with_chain_state() {
     assert_eq!(new_height_storage, 2, "The new height did not update");
 
     // Check the tx in progress
-    let new_tx_in_progress: TransitionInProgress<MockValidityCond> = chain_state_ref
+    let new_tx_in_progress: TransitionInProgress<MockDaSpec> = chain_state_ref
         .get_in_progress_transition(&mut working_set)
         .unwrap();
 
     assert_eq!(
         new_tx_in_progress,
-        TransitionInProgress::<MockValidityCond>::new([20; 32], MockValidityCond::default()),
+        TransitionInProgress::<MockDaSpec>::new([20; 32].into(), MockValidityCond::default()),
         "The new transition has not been correctly stored"
     );
 
-    let last_tx_stored: StateTransitionId<MockValidityCond> = chain_state_ref
+    let last_tx_stored: StateTransitionId<MockDaSpec> = chain_state_ref
         .get_historical_transitions(1, &mut working_set)
         .unwrap();
 
     assert_eq!(
         last_tx_stored,
         StateTransitionId::new(
-            [10; 32],
+            [10; 32].into(),
             new_root_hash.unwrap(),
             MockValidityCond::default()
         )

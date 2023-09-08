@@ -1,3 +1,4 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::{BlobReaderTrait, Context, DaSpec, Spec};
@@ -6,7 +7,11 @@ use tracing::info;
 
 use crate::BlobStorage;
 
-impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
+impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da>
+where
+    Da::ValidityCondition: BorshDeserialize + BorshSerialize,
+    Da::SlotHash: BorshDeserialize + BorshSerialize,
+{
     type Context = C;
 
     fn get_blobs_for_this_slot<'a, I>(

@@ -4,6 +4,7 @@
 mod capabilities;
 #[cfg(feature = "native")]
 mod query;
+use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use query::{BlobStorageRpcImpl, BlobStorageRpcServer, Response};
 use sov_chain_state::TransitionHeight;
@@ -36,7 +37,11 @@ pub struct BlobStorage<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec>
 }
 
 /// Non standard methods for blob storage
-impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> BlobStorage<C, Da> {
+impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> BlobStorage<C, Da>
+where
+    Da::ValidityCondition: BorshDeserialize + BorshSerialize,
+    Da::SlotHash: BorshDeserialize + BorshSerialize,
+{
     /// Store blobs for given block number, overwrite if already exists
     pub fn store_blobs(
         &self,

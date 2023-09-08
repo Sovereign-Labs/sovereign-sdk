@@ -1,3 +1,4 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use sov_state::WorkingSet;
 
 use crate::{ChainState, StateTransitionId, TransitionHeight};
@@ -6,6 +7,8 @@ impl<C, Da> ChainState<C, Da>
 where
     C: sov_modules_api::Context,
     Da: sov_modules_api::DaSpec,
+    Da::ValidityCondition: BorshSerialize + BorshDeserialize,
+    Da::SlotHash: BorshSerialize + BorshDeserialize,
 {
     /// Increment the current slot height
     pub(crate) fn increment_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) {
@@ -21,7 +24,7 @@ where
     pub(crate) fn store_state_transition(
         &self,
         height: TransitionHeight,
-        transition: StateTransitionId<Da::ValidityCondition>,
+        transition: StateTransitionId<Da>,
         working_set: &mut WorkingSet<C::Storage>,
     ) {
         self.historical_transitions

@@ -133,7 +133,11 @@ fn priority_sequencer_flow() {
         validity_cond: valid_condition,
         blobs: slot_1_blobs,
     };
-    chain_state.begin_slot_hook(&slot_1_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_1_data.header,
+        &slot_1_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_1_data.blobs,
@@ -166,7 +170,11 @@ fn priority_sequencer_flow() {
         validity_cond: valid_condition,
         blobs: slot_2_blobs,
     };
-    chain_state.begin_slot_hook(&slot_2_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_2_data.header,
+        &slot_2_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_2 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_2_data.blobs,
@@ -188,7 +196,11 @@ fn priority_sequencer_flow() {
         validity_cond: valid_condition,
         blobs: slot_3_blobs,
     };
-    chain_state.begin_slot_hook(&slot_3_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_3_data.header,
+        &slot_3_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_3 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_3_data.blobs,
@@ -209,7 +221,11 @@ fn priority_sequencer_flow() {
         validity_cond: valid_condition,
         blobs: Vec::new(),
     };
-    chain_state.begin_slot_hook(&slot_4_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_4_data.header,
+        &slot_4_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_4 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_4_data.blobs,
@@ -300,7 +316,11 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
         validity_cond: valid_condition,
         blobs: slot_1_blobs,
     };
-    chain_state.begin_slot_hook(&slot_1_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_1_data.header,
+        &slot_1_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_1_data.blobs,
@@ -319,7 +339,11 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
         validity_cond: valid_condition,
         blobs: Vec::new(),
     };
-    chain_state.begin_slot_hook(&slot_2_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_2_data.header,
+        &slot_2_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_2 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_2_data.blobs,
@@ -407,7 +431,11 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
         validity_cond: valid_condition,
         blobs: slot_1_blobs,
     };
-    chain_state.begin_slot_hook(&slot_1_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_1_data.header,
+        &slot_1_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_1_data.blobs,
@@ -428,7 +456,11 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
         validity_cond: valid_condition,
         blobs: Vec::new(),
     };
-    chain_state.begin_slot_hook(&slot_2_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_2_data.header,
+        &slot_2_data.validity_cond,
+        &mut working_set,
+    );
     let execute_in_slot_2: Vec<BlobRefOrOwned<'_, B>> =
         <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
             &blob_storage,
@@ -518,7 +550,11 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
         validity_cond: valid_condition,
         blobs: slot_1_blobs,
     };
-    chain_state.begin_slot_hook(&slot_1_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_1_data.header,
+        &slot_1_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_1_data.blobs,
@@ -554,7 +590,11 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
         validity_cond: valid_condition,
         blobs: slot_2_blobs,
     };
-    chain_state.begin_slot_hook(&slot_2_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_2_data.header,
+        &slot_2_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_2 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_2_data.blobs,
@@ -576,7 +616,11 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
         validity_cond: valid_condition,
         blobs: Vec::new(),
     };
-    chain_state.begin_slot_hook(&slot_3_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_3_data.header,
+        &slot_3_data.validity_cond,
+        &mut working_set,
+    );
     let execute_in_slot_3: Vec<BlobRefOrOwned<'_, B>> =
         <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
             &blob_storage,

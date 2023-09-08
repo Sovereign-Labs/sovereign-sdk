@@ -173,9 +173,11 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
             validity_cond: MockValidityCond { is_valid: true },
             blobs: Default::default(),
         };
-        module
-            .chain_state
-            .begin_slot_hook(&slot_data, &mut working_set);
+        module.chain_state.begin_slot_hook(
+            &slot_data.header,
+            &slot_data.validity_cond,
+            &mut working_set,
+        );
     }
 
     (ret_exec_vars, working_set)

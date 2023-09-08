@@ -86,7 +86,8 @@ fn rollup_bench(_bench: &mut Criterion) {
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
             let apply_block_result = demo.apply_slot(
                 Default::default(),
-                data_to_commit.slot_data(),
+                &filtered_block.header,
+                &filtered_block.validity_cond,
                 &mut blobs[height as usize],
             );
             for receipts in apply_block_result.batch_receipts {

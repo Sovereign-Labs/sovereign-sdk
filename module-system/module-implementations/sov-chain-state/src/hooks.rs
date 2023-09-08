@@ -1,16 +1,23 @@
+use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::hooks::SlotHooks;
-use sov_modules_api::{Context, SlotData, Spec};
+use sov_modules_api::{Context, Spec};
+use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_state::{Storage, WorkingSet};
 
 use super::ChainState;
 use crate::{StateTransitionId, TransitionInProgress};
 
-impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da> {
+impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da>
+where
+    Da::ValidityCondition: BorshSerialize + BorshDeserialize,
+    Da::SlotHash: BorshSerialize + BorshDeserialize,
+{
     type Context = C;
 
     fn begin_slot_hook(
         &self,
-        slot: &impl SlotData<Cond = Da::ValidityCondition>,
+        slot_header: &Da::BlockHeader,
+        validity_condition: &Da::ValidityCondition,
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     ) {
         if self.genesis_hash.get(working_set).is_none() {
@@ -24,7 +31,7 @@ impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da
                 working_set,
             )
         } else {
-            let transition: StateTransitionId<Da::ValidityCondition> = {
+            let transition: StateTransitionId<Da> = {
                 let last_transition_in_progress = self
                     .in_progress_transition
                     .get(working_set)
@@ -50,12 +57,11 @@ impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da
         }
 
         self.increment_slot_height(working_set);
-        let validity_condition = slot.validity_condition();
 
         self.in_progress_transition.set(
             &TransitionInProgress {
-                da_block_hash: slot.hash(),
-                validity_condition,
+                da_block_hash: slot_header.hash(),
+                validity_condition: validity_condition.clone(),
             },
             working_set,
         );

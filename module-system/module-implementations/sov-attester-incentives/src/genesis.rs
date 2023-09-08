@@ -14,6 +14,8 @@ where
     P: BorshDeserialize + BorshSerialize,
     Da: sov_modules_api::DaSpec,
     Checker: ValidityConditionChecker<Da::ValidityCondition>,
+    Da::ValidityCondition: BorshSerialize + BorshDeserialize,
+    Da::SlotHash: BorshSerialize + BorshDeserialize,
 {
     pub(crate) fn init_module(
         &self,

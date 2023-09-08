@@ -142,7 +142,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
         let apply_block_results = demo.apply_slot(
             Default::default(),
-            data_to_commit.slot_data(),
+            &filtered_block.header,
+            &filtered_block.validity_cond,
             &mut blobs[height as usize],
         );
 

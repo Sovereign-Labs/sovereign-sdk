@@ -20,6 +20,7 @@ jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], 
 
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
 sov-state = { path = "../../sov-state", version = "0.1" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 
 
 [dev-dependencies]

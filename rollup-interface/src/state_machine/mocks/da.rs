@@ -2,6 +2,7 @@ use std::fmt::Display;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
@@ -134,12 +135,28 @@ impl MockBlob {
 }
 
 /// A mock hash digest.
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    BorshDeserialize,
+    BorshSerialize,
+)]
 pub struct MockHash(pub [u8; 32]);
 
 impl AsRef<[u8]> for MockHash {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl From<[u8; 32]> for MockHash {
+    fn from(value: [u8; 32]) -> Self {
+        Self(value)
     }
 }
 
@@ -150,6 +167,14 @@ impl BlockHashTrait for MockHash {}
 pub struct MockBlockHeader {
     /// The hash of the previous block.
     pub prev_hash: MockHash,
+}
+
+impl Default for MockBlockHeader {
+    fn default() -> Self {
+        Self {
+            prev_hash: MockHash([0u8; 32]),
+        }
+    }
 }
 
 impl BlockHeaderTrait for MockBlockHeader {
@@ -211,7 +236,7 @@ impl SlotData for MockBlock {
 }
 
 /// A [`DaSpec`] suitable for testing.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq)]
 pub struct MockDaSpec;
 
 impl DaSpec for MockDaSpec {
