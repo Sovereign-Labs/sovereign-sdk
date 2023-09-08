@@ -36,10 +36,9 @@ fn print_times(
 
     table.add_row(row!["Blocks", format!("{:?}", blocks)]);
     table.add_row(row!["Txns per Block", format!("{:?}", num_txns)]);
-    // subtract 1 because the first block contains only 1 txn which is the token create txn
     table.add_row(row![
         "Processed Txns (Success)",
-        format!("{:?}", num_success_txns - 1)
+        format!("{:?}", num_success_txns)
     ]);
     table.add_row(row!["Total", format!("{:?}", total)]);
     table.add_row(row!["Apply Block", format!("{:?}", apply_block_time)]);
@@ -65,7 +64,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .register(Box::new(h_apply_block.clone()))
         .expect("Failed to register apply blob histogram");
 
-    let start_height: u64 = 0u64;
+    let start_height: u64 = 1u64;
     let mut end_height: u64 = 10u64;
     let mut num_success_txns = 0u64;
     let mut num_txns_per_block = 10000;
@@ -117,7 +116,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // data generation
     let mut blobs = vec![];
     let mut blocks = vec![];
-    for height in start_height..=end_height {
+    for height in 0..=end_height {
         let num_bytes = height.to_le_bytes();
         let mut barray = [0u8; 32];
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
@@ -136,7 +135,19 @@ async fn main() -> Result<(), anyhow::Error> {
         blobs.push(blob_txs);
     }
 
-    // rollup processing
+    // Setup. Block 0 has a single txn that creates the token. Exclude from timers
+    let filtered_block = &blocks[0usize];
+    let mut data_to_commit = SlotCommit::new(filtered_block.clone());
+    let apply_block_results = demo.apply_slot(
+        Default::default(),
+        data_to_commit.slot_data(),
+        &mut blobs[0usize],
+    );
+    data_to_commit.add_batch(apply_block_results.batch_receipts[0].clone());
+
+    ledger_db.commit_slot(data_to_commit).unwrap();
+
+    // Rollup processing. Block 1 -> end are the transfer txns. Timers start here
     let total = Instant::now();
     let mut apply_block_time = Duration::new(0, 0);
     for height in start_height..=end_height {
