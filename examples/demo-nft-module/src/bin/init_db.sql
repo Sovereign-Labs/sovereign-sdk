@@ -1,10 +1,10 @@
 -- Drop existing tables if they exist
 DROP TABLE IF EXISTS top_owners CASCADE;
-DROP TABLE IF EXISTS nft CASCADE;
-DROP TABLE IF EXISTS collection CASCADE;
+DROP TABLE IF EXISTS nfts CASCADE;
+DROP TABLE IF EXISTS collections CASCADE;
 
 -- Create collection table
-CREATE TABLE collection (
+CREATE TABLE collections (
                             collection_address TEXT PRIMARY KEY,
                             collection_name TEXT NOT NULL,
                             creator_address TEXT NOT NULL,
@@ -14,10 +14,10 @@ CREATE TABLE collection (
 );
 
 -- Create index on creator_address to quickly find collections by a creator
-CREATE INDEX idx_creator ON collection(creator_address);
+CREATE INDEX idx_creator ON collections(creator_address);
 
 -- Create nft table
-CREATE TABLE nft (
+CREATE TABLE nfts (
                      collection_address TEXT NOT NULL,
                      nft_id BIGINT NOT NULL,
                      metadata_url TEXT,
@@ -27,10 +27,10 @@ CREATE TABLE nft (
 );
 
 -- Create index on owner to quickly find NFTs owned by a particular address
-CREATE INDEX idx_nft_owner ON nft(owner);
+CREATE INDEX idx_nft_owner ON nfts(owner);
 
 -- Create index on collection_address to quickly find NFTs belonging to a particular collection
-CREATE INDEX idx_nft_collection ON nft(collection_address);
+CREATE INDEX idx_nft_collection ON nfts(collection_address);
 
 -- Create top_owners table
 CREATE TABLE top_owners (

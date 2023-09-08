@@ -24,9 +24,12 @@ fn get_nft_metadata_url(collection_address: &str, nft_id: u64) -> String {
     format!("{}/nft/{}/{}",DUMMY_URL,collection_address,nft_id)
 }
 
-fn run_sov_cli_import(json_str: &str) {
+fn run_sov_cli(args: &[&str]) {
+    let mut complete_args = vec!["run", "--bin", "sov-cli"];
+    complete_args.extend_from_slice(args);
+
     let output = Command::new("cargo")
-        .args(&["run", "--bin", "sov-cli", "transactions", "import", "from-string", "nft", "--json", json_str])
+        .args(&complete_args)
         .current_dir(Path::new("../.."))
         .output()
         .expect("Failed to execute command");
@@ -36,6 +39,26 @@ fn run_sov_cli_import(json_str: &str) {
 
     println!("stdout: {}", stdout);
     println!("stderr: {}", stderr);
+}
+
+fn run_sov_cli_import(json_str: &str) {
+    let specific_args = ["transactions", "import", "from-string", "nft", "--json", json_str];
+    run_sov_cli(&specific_args);
+}
+
+fn run_sov_cli_submit_batch() {
+    let specific_args = ["rpc", "submit-batch"];
+    run_sov_cli(&specific_args);
+}
+
+fn run_sov_cli_clean_batch() {
+    let specific_args = ["transactions", "clean"];
+    run_sov_cli(&specific_args);
+}
+
+fn run_sov_cli_generate_keys_if_missing() {
+    let specific_args = ["keys", "generate-if-missing"];
+    run_sov_cli(&specific_args);
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,7 +108,7 @@ fn get_signing_address_pubkey() -> (String,String) {
     parse_address_and_pub_key_from_json(&stdout).unwrap()
 }
 
-fn mint_collection(collection_name: &str, sender_address: &[u8]) {
+fn mint_collection(collection_name: &str, signer_address: &[u8]) {
     let c_addr = get_collection_address::<DefaultContext>(COLLECTION_1,signer_address);
     let murl = get_collection_metadata_url(&c_addr.to_string());
     let c = CallMessage::<DefaultContext>::CreateCollection
@@ -93,6 +116,9 @@ fn mint_collection(collection_name: &str, sender_address: &[u8]) {
         name: collection_name.to_string(),
         metadata_url: murl.to_string(),
     };
+    let json_str = serde_json::to_string(&c).unwrap();
+    run_sov_cli_import(&json_str);
+
 }
 fn mint_nfts(collection_address: &str, nft_id: u64) {
 }
@@ -101,13 +127,15 @@ fn execute_transfer() {
 }
 
 fn main() {
-    let (signer_address_str, signer_pub_key_str)= get_signing_address_pubkey();
+    let (_, signer_pub_key_str)= get_signing_address_pubkey();
     let signer_pub_key = DefaultPublicKey::from_str(&signer_pub_key_str).unwrap();
     let binding = signer_pub_key.to_address::<<DefaultContext as Spec>::Address>();
     let signer_address = binding.as_ref();
-    // let ca = get_collection_address::<DefaultContext>(COLLECTION_1,signer_address);
-    println!("{:?}",ca);
+
+    run_sov_cli_generate_keys_if_missing();
+    run_sov_cli_clean_batch();
     mint_collection(COLLECTION_1,signer_address);
     mint_collection(COLLECTION_2,signer_address);
     mint_collection(COLLECTION_3,signer_address);
+    run_sov_cli_submit_batch();
 }

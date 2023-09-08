@@ -89,6 +89,8 @@ impl<C: Context> NonFungibleToken<C> {
             metadata_url: metadata_url.to_string(),
         };
         self.collections.set(&collection_address, &c, working_set);
+        track_collection(&collection_address.to_string(),
+                         collection_name, &creator.to_string(), false, metadata_url, 0);
         Ok(CallResponse::default())
     }
 
@@ -107,6 +109,8 @@ impl<C: Context> NonFungibleToken<C> {
             } else {
                 c.metadata_url = metadata_url.to_string();
                 self.collections.set(&collection_address, &c, working_set);
+                track_collection(&collection_address.to_string(),
+                                 collection_name, &creator.to_string(), false, metadata_url, 0);
             }
         } else {
             bail!("Collection with name {} by sender {} does not exist",collection_name, creator.to_string());

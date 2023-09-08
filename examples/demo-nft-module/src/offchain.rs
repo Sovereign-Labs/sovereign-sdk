@@ -5,7 +5,7 @@ use postgres::{NoTls};
 #[cfg(feature = "offchain")]
 use std::env;
 
-// CREATE TABLE collections (
+// CREATE TABLE collection (
 //     collection_address TEXT PRIMARY KEY,
 //     collection_name TEXT NOT NULL,
 //     creator_address TEXT NOT NULL,
@@ -25,7 +25,7 @@ pub fn track_collection(collection_address: &str,
         if let Ok(conn_string) = std::env::var("POSTGRES_CONNECTION_STRING") {
             let mut client = postgres::Client::connect(&conn_string, NoTls).unwrap();
             client.execute(
-                "INSERT INTO collections (\
+                "INSERT INTO collection (\
                 collection_address, collection_name, creator_address,\
                 frozen, metadata_url, supply)\
                 VALUES ($1, $2, $3, $4, $5, $6)\
