@@ -117,7 +117,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // data generation
     let mut blobs = vec![];
     let mut blocks = vec![];
-    for height in start_height..end_height + 1 {
+    for height in start_height..=end_height {
         let num_bytes = height.to_le_bytes();
         let mut barray = [0u8; 32];
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
@@ -139,7 +139,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // rollup processing
     let total = Instant::now();
     let mut apply_block_time = Duration::new(0, 0);
-    for height in start_height..end_height + 1 {
+    for height in start_height..=end_height {
         let filtered_block = &blocks[height as usize];
 
         let mut data_to_commit = SlotCommit::new(filtered_block.clone());
@@ -168,7 +168,13 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let total = total.elapsed();
     if timer_output {
-        print_times(total, apply_block_time, end_height, num_txns_per_block,num_success_txns);
+        print_times(
+            total,
+            apply_block_time,
+            end_height,
+            num_txns_per_block,
+            num_success_txns,
+        );
     }
     if prometheus_output {
         println!("{:#?}", registry.gather());
