@@ -15,7 +15,7 @@ pub(crate) mod transaction;
 
 pub use conversions::prepare_call_env;
 use sov_state::codec::BcsCodec;
-pub use transaction::RawEvmTransaction;
+pub use transaction::RlpEvmTransaction;
 
 // Stores information about an EVM account
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone, Default)]
