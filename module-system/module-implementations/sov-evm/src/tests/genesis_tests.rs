@@ -75,7 +75,7 @@ fn genesis_cfg_missing_specs() {
 
 #[test]
 fn genesis_block() {
-    let (evm, mut working_set) = get_evm(&*TEST_CONFIG);
+    let (evm, mut working_set) = get_evm(&TEST_CONFIG);
 
     let block = evm
         .blocks
