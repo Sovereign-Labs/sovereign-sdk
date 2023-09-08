@@ -28,8 +28,8 @@ futures = "0.3"
 tokio = { workspace = true }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
-celestia = { path = "../../adapters/celestia", features = ["native"] }
 demo-stf = { path = "../demo-stf", features = ["native"] }
+sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-db = { path = "../../full-node/db/sov-db" }
 sov-ethereum = { path = "../../full-node/sov-ethereum", optional = true }

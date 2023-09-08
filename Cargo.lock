@@ -938,39 +938,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "celestia"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.21.2",
- "bech32 0.9.1",
- "borsh",
- "hex",
- "hex-literal 0.4.1",
- "jsonrpsee",
- "nmt-rs",
- "postcard",
- "proptest",
- "prost",
- "prost-build",
- "prost-types",
- "risc0-zkvm",
- "risc0-zkvm-platform",
- "serde",
- "serde_json",
- "sha2 0.10.7",
- "sov-rollup-interface",
- "tendermint",
- "tendermint-proto",
- "thiserror",
- "tokio",
- "tracing",
- "wiremock",
- "zk-cycle-macros",
-]
-
-[[package]]
 name = "cexpr"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6608,6 +6575,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-celestia-adapter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.21.2",
+ "bech32 0.9.1",
+ "borsh",
+ "hex",
+ "hex-literal 0.4.1",
+ "jsonrpsee",
+ "nmt-rs",
+ "postcard",
+ "proptest",
+ "prost",
+ "prost-build",
+ "prost-types",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "serde",
+ "serde_json",
+ "sha2 0.10.7",
+ "sov-rollup-interface",
+ "tendermint",
+ "tendermint-proto",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "wiremock",
+ "zk-cycle-macros",
+]
+
+[[package]]
 name = "sov-chain-state"
 version = "0.1.0"
 dependencies = [
@@ -6686,7 +6686,6 @@ dependencies = [
  "async-trait",
  "borsh",
  "bytes",
- "celestia",
  "clap",
  "const-rollup-config",
  "criterion",
@@ -6712,6 +6711,7 @@ dependencies = [
  "serde_json",
  "sha2 0.10.7",
  "sov-bank",
+ "sov-celestia-adapter",
  "sov-cli",
  "sov-db",
  "sov-demo-rollup",
@@ -6736,7 +6736,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
- "celestia",
  "const-rollup-config",
  "demo-stf",
  "ethers",
@@ -6744,6 +6743,7 @@ dependencies = [
  "reth-primitives",
  "reth-rpc",
  "serde_json",
+ "sov-celestia-adapter",
  "sov-evm",
  "sov-modules-api",
  "sov-rollup-interface",
@@ -7001,7 +7001,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
- "celestia",
  "futures",
  "hex",
  "jsonrpsee",
@@ -7010,6 +7009,7 @@ dependencies = [
  "serde_json",
  "sov-accounts",
  "sov-bank",
+ "sov-celestia-adapter",
  "sov-db",
  "sov-modules-api",
  "sov-modules-stf-template",

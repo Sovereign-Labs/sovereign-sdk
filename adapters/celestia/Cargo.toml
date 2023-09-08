@@ -1,5 +1,5 @@
 [package]
-name = "celestia"
+name = "sov-celestia-adapter"
 version = { workspace = true }
 edition = { workspace = true }
 license = { workspace = true }
