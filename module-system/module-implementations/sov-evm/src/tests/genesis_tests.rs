@@ -37,7 +37,7 @@ lazy_static! {
 
 #[test]
 fn genesis_data() {
-    get_evm(&*TEST_CONFIG);
+    get_evm(&TEST_CONFIG);
 
     // TODO: assert on account being the same - easier after unifying stored types!
     // let db_account = evm.accounts.get(&address, working_set).unwrap();
@@ -45,7 +45,7 @@ fn genesis_data() {
 
 #[test]
 fn genesis_cfg() {
-    let (evm, mut working_set) = get_evm(&*TEST_CONFIG);
+    let (evm, mut working_set) = get_evm(&TEST_CONFIG);
 
     let cfg = evm.cfg.get(&mut working_set).unwrap();
     assert_eq!(
