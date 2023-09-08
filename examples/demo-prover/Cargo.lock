@@ -2989,7 +2989,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "risc0-adapter"
+name = "sov-risc0-adapter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -3745,7 +3745,7 @@ dependencies = [
  "parking_lot 0.11.2",
  "prettytable-rs",
  "regex",
- "risc0-adapter",
+ "sov-risc0-adapter",
  "risc0-zkvm",
  "serde",
  "serde_json",
@@ -3777,7 +3777,7 @@ dependencies = [
  "hex",
  "jmt",
  "jsonrpsee 0.18.2",
- "risc0-adapter",
+ "sov-risc0-adapter",
  "serde",
  "serde_json",
  "sov-cli",

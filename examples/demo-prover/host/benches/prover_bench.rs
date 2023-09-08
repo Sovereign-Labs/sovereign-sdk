@@ -17,7 +17,7 @@ use demo_stf::genesis_config::create_demo_genesis_config;
 use log4rs::config::{Appender, Config, Root};
 use methods::ROLLUP_ELF;
 use regex::Regex;
-use risc0_adapter::host::Risc0Host;
+use sov_risc0_adapter::host::Risc0Host;
 use sov_modules_api::PrivateKey;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -90,7 +90,7 @@ fn get_config(rollup_trace: &str) -> Config {
 }
 
 #[cfg(feature = "bench")]
-use risc0_adapter::metrics::GLOBAL_HASHMAP;
+use sov_risc0_adapter::metrics::GLOBAL_HASHMAP;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);

@@ -7,7 +7,6 @@ use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::app::DefaultPrivateKey;
 use demo_stf::app::{App, DefaultContext};
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
-use risc0_adapter::host::Risc0Verifier;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::RollupParams;
 use sov_celestia_adapter::CelestiaService;
@@ -16,6 +15,7 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
+use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::Zkvm;

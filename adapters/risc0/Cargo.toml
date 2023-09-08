@@ -1,5 +1,5 @@
 [package]
-name = "risc0-adapter"
+name = "sov-risc0-adapter"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }

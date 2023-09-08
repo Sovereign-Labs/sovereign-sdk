@@ -5605,24 +5605,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "risc0-adapter"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bincode",
- "bytemuck",
- "once_cell",
- "parking_lot 0.12.1",
- "risc0-circuit-rv32im",
- "risc0-zkp",
- "risc0-zkvm",
- "risc0-zkvm-platform",
- "serde",
- "sov-rollup-interface",
- "zk-cycle-utils",
-]
-
-[[package]]
 name = "risc0-build-kernel"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6706,7 +6688,6 @@ dependencies = [
  "proptest",
  "reqwest",
  "revm",
- "risc0-adapter",
  "serde",
  "serde_json",
  "sha2 0.10.7",
@@ -6719,6 +6700,7 @@ dependencies = [
  "sov-evm",
  "sov-modules-api",
  "sov-modules-stf-template",
+ "sov-risc0-adapter",
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-state",
@@ -6899,6 +6881,24 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "tempfile",
+]
+
+[[package]]
+name = "sov-risc0-adapter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "bytemuck",
+ "once_cell",
+ "parking_lot 0.12.1",
+ "risc0-circuit-rv32im",
+ "risc0-zkp",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "serde",
+ "sov-rollup-interface",
+ "zk-cycle-utils",
 ]
 
 [[package]]

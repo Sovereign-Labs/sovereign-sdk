@@ -1650,7 +1650,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "risc0-adapter"
+name = "sov-risc0-adapter"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -2050,7 +2050,7 @@ dependencies = [
  "demo-stf",
  "directories",
  "downloader",
- "risc0-adapter",
+ "sov-risc0-adapter",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",

@@ -10,7 +10,7 @@ use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use methods::{ROLLUP_ELF, ROLLUP_ID};
-use risc0_adapter::host::{Risc0Host, Risc0Verifier};
+use sov_risc0_adapter::host::{Risc0Host, Risc0Verifier};
 use sov_modules_api::PrivateKey;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;

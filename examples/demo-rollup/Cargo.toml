@@ -35,7 +35,7 @@ sov-db = { path = "../../full-node/db/sov-db" }
 sov-ethereum = { path = "../../full-node/sov-ethereum", optional = true }
 sov-sequencer = { path = "../../full-node/sov-sequencer" }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
-risc0-adapter = { path = "../../adapters/risc0", features = ["native"] }
+sov-risc0-adapter = { path = "../../adapters/risc0", features = ["native"] }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }
