@@ -122,7 +122,7 @@ pub(crate) fn get_evm(
     let tmpdir = tempfile::tempdir().unwrap();
     let mut working_set = WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
     let evm = Evm::<C>::default();
-    evm.genesis(&config, &mut working_set).unwrap();
+    evm.genesis(config, &mut working_set).unwrap();
 
     (evm, working_set)
 }
