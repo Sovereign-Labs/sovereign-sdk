@@ -1553,6 +1553,7 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "rand 0.8.5",
+ "reth-primitives",
  "serde",
  "serde_json",
  "sov-accounts",

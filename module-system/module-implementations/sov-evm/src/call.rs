@@ -1,5 +1,5 @@
 use anyhow::Result;
-use revm::primitives::CfgEnv;
+use revm::primitives::{CfgEnv, SpecId};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
@@ -7,7 +7,6 @@ use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
 use crate::evm::transaction::{BlockEnv, EvmTransactionSignedEcRecovered};
 use crate::evm::{contract_address, EvmChainConfig, RawEvmTransaction};
-use crate::experimental::SpecIdWrapper;
 use crate::Evm;
 
 #[cfg_attr(
@@ -100,7 +99,7 @@ pub(crate) fn get_cfg_env(
 
 /// Get spec id for a given block number
 /// Returns the first spec id defined for block >= block_number
-pub(crate) fn get_spec_id(spec: Vec<(u64, SpecIdWrapper)>, block_number: u64) -> SpecIdWrapper {
+pub(crate) fn get_spec_id(spec: Vec<(u64, SpecId)>, block_number: u64) -> SpecId {
     match spec.binary_search_by(|&(k, _)| k.cmp(&block_number)) {
         Ok(index) => spec[index].1,
         Err(index) => {

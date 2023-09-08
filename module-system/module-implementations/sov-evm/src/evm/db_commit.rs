@@ -7,7 +7,7 @@ use super::DbAccount;
 impl<'a, C: sov_modules_api::Context> DatabaseCommit for EvmDb<'a, C> {
     fn commit(&mut self, changes: HashMap<B160, Account>) {
         for (address, account) in changes {
-            let address = address.0;
+            let address = address;
 
             // TODO figure out what to do when account is destroyed.
             // https://github.com/Sovereign-Labs/sovereign-sdk/issues/425
@@ -25,8 +25,7 @@ impl<'a, C: sov_modules_api::Context> DatabaseCommit for EvmDb<'a, C> {
             db_account.info = account.info.into();
 
             for (key, value) in account.storage.into_iter() {
-                let key = key.to_le_bytes();
-                let value = value.present_value().to_le_bytes();
+                let value = value.present_value();
                 db_account.storage.set(&key, &value, self.working_set);
             }
 

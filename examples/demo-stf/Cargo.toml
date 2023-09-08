@@ -38,6 +38,7 @@ sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner", optional = true }
 # Only enable the evm on "experimental" feature
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", optional = true }
+reth-primitives = {workspace = true, optional = true}
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface", features = ["mocks"] }

@@ -14,10 +14,10 @@ pub mod experimental {
     use ethers::types::{Bytes, H256};
     use jsonrpsee::types::ErrorObjectOwned;
     use jsonrpsee::RpcModule;
-    use reth_primitives::TransactionSignedNoHash as RethTransactionSignedNoHash;
+    use reth_primitives::{Address, TransactionSignedNoHash as RethTransactionSignedNoHash};
     use reth_rpc::eth::error::EthApiError;
     use sov_evm::call::CallMessage;
-    use sov_evm::evm::{EthAddress, RawEvmTransaction};
+    use sov_evm::evm::RawEvmTransaction;
     use sov_modules_api::transaction::Transaction;
     use sov_modules_api::utils::to_jsonrpsee_error_object;
     use sov_modules_api::EncodeCall;
@@ -48,7 +48,7 @@ pub mod experimental {
     }
 
     pub struct Ethereum<Da: DaService> {
-        nonces: Mutex<HashMap<EthAddress, u64>>,
+        nonces: Mutex<HashMap<Address, u64>>,
         da_service: Da,
         batch_builder: Arc<Mutex<EthBatchBuilder>>,
         eth_rpc_config: EthRpcConfig,
@@ -56,7 +56,7 @@ pub mod experimental {
 
     impl<Da: DaService> Ethereum<Da> {
         fn new(
-            nonces: Mutex<HashMap<EthAddress, u64>>,
+            nonces: Mutex<HashMap<Address, u64>>,
             da_service: Da,
             batch_builder: Arc<Mutex<EthBatchBuilder>>,
             eth_rpc_config: EthRpcConfig,

@@ -10,15 +10,15 @@ use sov_modules_api::Module;
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 // use crate::evm::db;
-use crate::{evm::EvmChainConfig, AccountData, Evm, EvmConfig, SpecIdWrapper};
+use crate::{evm::EvmChainConfig, AccountData, Evm, EvmConfig};
 type C = DefaultContext;
 
 lazy_static! {
     pub(crate) static ref TEST_CONFIG: EvmConfig = EvmConfig {
         data: vec![AccountData {
-            address: [1u8; 20],
-            balance: U256::from(1000000000).to_le_bytes(),
-            code_hash: KECCAK_EMPTY.to_fixed_bytes(),
+            address: Address::from([1u8; 20]),
+            balance: U256::from(1000000000),
+            code_hash: KECCAK_EMPTY,
             code: vec![],
             nonce: 0,
         }],
@@ -29,7 +29,7 @@ lazy_static! {
         block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
         block_timestamp_delta: 2,
         genesis_timestamp: 50,
-        coinbase: [3u8; 20],
+        coinbase: Address::from([3u8; 20]),
         limit_contract_code_size: Some(5000),
         starting_base_fee: 70,
     };
@@ -51,14 +51,11 @@ fn genesis_cfg() {
     assert_eq!(
         cfg,
         EvmChainConfig {
-            spec: vec![
-                (0, SpecIdWrapper(SpecId::BERLIN)),
-                (1, SpecIdWrapper(SpecId::LATEST))
-            ],
+            spec: vec![(0, SpecId::BERLIN), (1, SpecId::LATEST)],
             chain_id: 1000,
             block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
             block_timestamp_delta: 2,
-            coinbase: [3u8; 20],
+            coinbase: Address::from([3u8; 20]),
             limit_contract_code_size: Some(5000)
         }
     );

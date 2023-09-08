@@ -2,6 +2,7 @@ use reth_primitives::U256;
 use reth_rpc_types::Transaction;
 use sov_state::WorkingSet;
 
+use crate::evm::conversions::to_u64;
 use crate::evm::transaction::BlockEnv;
 use crate::Evm;
 
@@ -25,12 +26,11 @@ impl<C: sov_modules_api::Context> Evm<C> {
             // TODO simplify conversion fro U256 to u64
             // Reth rpc types keep stuff as U256, even when actually only u64 makes sense:
             // block_number, timespamp, gas_used, base_fee_per_gas
-            timestamp: (parent_block.header.timestamp + U256::from(cfg.block_timestamp_delta))
-                .to_le_bytes(),
-            prevrandao: Some(da_root_hash),
+            timestamp: parent_block.header.timestamp + U256::from(cfg.block_timestamp_delta),
+            prevrandao: Some(da_root_hash.into()),
             basefee: {
                 let base_fee = reth_primitives::basefee::calculate_next_block_base_fee(
-                    parent_block.header.gas_used.try_into().unwrap(),
+                    to_u64(parent_block.header.gas_used),
                     cfg.block_gas_limit,
                     parent_block
                         .header
@@ -39,7 +39,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
                         .as_limbs()[0],
                 );
 
-                U256::from_limbs([base_fee, 0u64, 0u64, 0u64]).to_le_bytes()
+                base_fee
             },
             gas_limit: cfg.block_gas_limit,
         };
