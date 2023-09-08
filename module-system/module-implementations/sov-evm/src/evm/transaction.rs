@@ -1,18 +1,16 @@
 use reth_primitives::{
-    TransactionSignedEcRecovered as RethTransactionSignedEcRecovered, H160, H256,
+    Address, TransactionSignedEcRecovered as RethTransactionSignedEcRecovered, H160, H256, U256,
 };
 
-use super::{Bytes32, EthAddress};
-
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
+#[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Clone)]
 pub(crate) struct BlockEnv {
     pub(crate) number: u64,
-    pub(crate) coinbase: EthAddress,
-    pub(crate) timestamp: Bytes32,
+    pub(crate) coinbase: Address,
+    pub(crate) timestamp: U256,
     /// Prevrandao is used after Paris (aka TheMerge) instead of the difficulty value.
-    pub(crate) prevrandao: Option<Bytes32>,
+    pub(crate) prevrandao: Option<H256>,
     /// basefee is added in EIP1559 London upgrade
-    pub(crate) basefee: Bytes32,
+    pub(crate) basefee: u64,
     pub(crate) gas_limit: u64,
 }
 
@@ -64,8 +62,8 @@ impl EvmTransactionSignedEcRecovered {
     }
 
     /// Receiver of the transaction.
-    pub fn to(&self) -> Option<EthAddress> {
-        self.tx.to().map(|to| to.into())
+    pub fn to(&self) -> Option<Address> {
+        self.tx.to()
     }
 }
 

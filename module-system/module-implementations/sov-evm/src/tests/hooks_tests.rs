@@ -1,3 +1,5 @@
+use reth_primitives::{Address, H256, U256};
+
 use super::genesis_tests::{get_evm, TEST_CONFIG};
 use crate::evm::transaction::BlockEnv;
 
@@ -10,18 +12,10 @@ fn begin_slot_hook_creates_pending_block() {
         pending_block,
         BlockEnv {
             number: 1,
-            coinbase: [3u8; 20],
-            timestamp: {
-                let mut a = [0u8; 32];
-                a[0] = 52;
-                a
-            },
-            prevrandao: Some([5u8; 32]),
-            basefee: {
-                let mut a = [0u8; 32];
-                a[0] = 62;
-                a
-            },
+            coinbase: Address::from([3u8; 20]),
+            timestamp: U256::from(52),
+            prevrandao: Some(H256::from([5u8; 32])),
+            basefee: 62,
             gas_limit: 30000000,
         }
     );

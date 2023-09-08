@@ -19,7 +19,7 @@ pub mod experimental {
     };
     use reth_rpc::eth::error::EthApiError;
     use sov_evm::call::CallMessage;
-    use sov_evm::evm::{EthAddress, RawEvmTransaction};
+    use sov_evm::evm::RawEvmTransaction;
     use sov_modules_api::transaction::Transaction;
     use sov_modules_api::utils::to_jsonrpsee_error_object;
     use sov_modules_api::EncodeCall;
@@ -50,7 +50,7 @@ pub mod experimental {
     }
 
     pub struct Ethereum<Da: DaService> {
-        nonces: Mutex<HashMap<EthAddress, u64>>,
+        nonces: Mutex<HashMap<RethAddress, u64>>,
         da_service: Da,
         batch_builder: Arc<Mutex<EthBatchBuilder>>,
         eth_rpc_config: EthRpcConfig,
@@ -58,7 +58,7 @@ pub mod experimental {
 
     impl<Da: DaService> Ethereum<Da> {
         fn new(
-            nonces: Mutex<HashMap<EthAddress, u64>>,
+            nonces: Mutex<HashMap<RethAddress, u64>>,
             da_service: Da,
             batch_builder: Arc<Mutex<EthBatchBuilder>>,
             eth_rpc_config: EthRpcConfig,
@@ -86,10 +86,7 @@ pub mod experimental {
                 .ok_or(EthApiError::InvalidTransactionSignature)?;
 
             let mut nonces = self.nonces.lock().unwrap();
-            let nonce = *nonces
-                .entry(sender.into())
-                .and_modify(|n| *n += 1)
-                .or_insert(0);
+            let nonce = *nonces.entry(sender).and_modify(|n| *n += 1).or_insert(0);
 
             let tx = CallMessage { tx: raw_tx };
             let message = <Runtime<DefaultContext, Da::Spec> as EncodeCall<

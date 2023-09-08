@@ -6,16 +6,16 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use anyhow::Context;
-use celestia::verifier::address::CelestiaAddress;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::app::App;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use prometheus::{Histogram, HistogramOpts, Registry};
-use risc0_adapter::host::Risc0Verifier;
 use rng_xfers::{RngDaService, RngDaSpec};
+use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
+use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -81,7 +81,7 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     let rollup_config_path = "benches/rollup_config.toml".to_string();
-    let mut rollup_config: RollupConfig<celestia::DaServiceConfig> =
+    let mut rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         from_toml_path(&rollup_config_path)
             .context("Failed to read rollup configuration")
             .unwrap();

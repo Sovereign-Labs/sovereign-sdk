@@ -1,5 +1,5 @@
 [package]
-name = "risc0-adapter"
+name = "sov-risc0-adapter"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
@@ -22,7 +22,7 @@ serde = { workspace = true }
 bytemuck = "1.13.1"
 once_cell = { version = "1.7.2", optional = true }
 parking_lot = { version = "0.12.1", optional = true }
-zk-cycle-utils = { path = "../../utils/zk-cycle-utils" }
+sov-zk-cycle-utils = { path = "../../utils/zk-cycle-utils" }
 sov-rollup-interface = { path = "../../rollup-interface" }
 
 [features]

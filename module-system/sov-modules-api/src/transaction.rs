@@ -1,5 +1,5 @@
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_macros::cycle_tracker;
+use sov_zk_cycle_macros::cycle_tracker;
 
 #[cfg(feature = "native")]
 use crate::PrivateKey;

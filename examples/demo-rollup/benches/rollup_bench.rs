@@ -8,11 +8,11 @@ use anyhow::Context;
 use criterion::{criterion_group, criterion_main, Criterion};
 use demo_stf::app::App;
 use demo_stf::genesis_config::create_demo_genesis_config;
-use risc0_adapter::host::Risc0Verifier;
 use rng_xfers::{RngDaService, RngDaSpec, SEQUENCER_DA_ADDRESS};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
+use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rollup_interface::mocks::{MockAddress, MockBlock, MockBlockHeader, MockHash};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -30,7 +30,7 @@ fn rollup_bench(_bench: &mut Criterion) {
         .sample_size(10)
         .measurement_time(Duration::from_secs(20));
     let rollup_config_path = "benches/rollup_config.toml".to_string();
-    let mut rollup_config: RollupConfig<celestia::DaServiceConfig> =
+    let mut rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         from_toml_path(&rollup_config_path)
             .context("Failed to read rollup configuration")
             .unwrap();

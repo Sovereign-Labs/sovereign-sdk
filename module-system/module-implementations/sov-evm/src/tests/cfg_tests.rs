@@ -3,7 +3,6 @@ use revm::primitives::{CfgEnv, SpecId, U256};
 use crate::call::{get_cfg_env, get_spec_id};
 use crate::evm::transaction::BlockEnv;
 use crate::evm::EvmChainConfig;
-use crate::SpecIdWrapper;
 
 #[test]
 fn cfg_test() {
@@ -14,9 +13,7 @@ fn cfg_test() {
 
     let cfg = EvmChainConfig {
         limit_contract_code_size: Some(100),
-        spec: vec![(0, SpecIdWrapper::new(SpecId::SHANGHAI))]
-            .into_iter()
-            .collect(),
+        spec: vec![(0, SpecId::SHANGHAI)].into_iter().collect(),
         ..Default::default()
     };
 
@@ -43,30 +40,15 @@ fn cfg_test() {
 #[test]
 fn spec_id_lookup() {
     let spec = vec![
-        (0, SpecIdWrapper::new(SpecId::CONSTANTINOPLE)),
-        (10, SpecIdWrapper::new(SpecId::BERLIN)),
-        (20, SpecIdWrapper::new(SpecId::LONDON)),
+        (0, SpecId::CONSTANTINOPLE),
+        (10, SpecId::BERLIN),
+        (20, SpecId::LONDON),
     ];
 
-    assert_eq!(
-        get_spec_id(spec.clone(), 0),
-        SpecIdWrapper::new(SpecId::CONSTANTINOPLE)
-    );
-    assert_eq!(
-        get_spec_id(spec.clone(), 5),
-        SpecIdWrapper::new(SpecId::CONSTANTINOPLE)
-    );
-    assert_eq!(
-        get_spec_id(spec.clone(), 10),
-        SpecIdWrapper::new(SpecId::BERLIN)
-    );
-    assert_eq!(
-        get_spec_id(spec.clone(), 15),
-        SpecIdWrapper::new(SpecId::BERLIN)
-    );
-    assert_eq!(
-        get_spec_id(spec.clone(), 20),
-        SpecIdWrapper::new(SpecId::LONDON)
-    );
-    assert_eq!(get_spec_id(spec, 25), SpecIdWrapper::new(SpecId::LONDON));
+    assert_eq!(get_spec_id(spec.clone(), 0), SpecId::CONSTANTINOPLE);
+    assert_eq!(get_spec_id(spec.clone(), 5), SpecId::CONSTANTINOPLE);
+    assert_eq!(get_spec_id(spec.clone(), 10), SpecId::BERLIN);
+    assert_eq!(get_spec_id(spec.clone(), 15), SpecId::BERLIN);
+    assert_eq!(get_spec_id(spec.clone(), 20), SpecId::LONDON);
+    assert_eq!(get_spec_id(spec, 25), SpecId::LONDON);
 }

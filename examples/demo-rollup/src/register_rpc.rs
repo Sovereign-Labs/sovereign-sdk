@@ -1,8 +1,8 @@
 //! Full-Node specific RPC methods.
 
 use anyhow::Context;
-use celestia::verifier::address::CelestiaAddress;
 use demo_stf::app::App;
+use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;

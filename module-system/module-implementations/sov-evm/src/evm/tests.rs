@@ -52,8 +52,8 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
     evm_db.insert_account_info(
         caller,
         AccountInfo {
-            balance: U256::from(1000000000).to_le_bytes(),
-            code_hash: KECCAK_EMPTY.to_fixed_bytes(),
+            balance: U256::from(1000000000),
+            code_hash: KECCAK_EMPTY,
             code: vec![],
             nonce: 1,
         },

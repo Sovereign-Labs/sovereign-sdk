@@ -4,13 +4,13 @@
 * Cargo.toml
 ```toml
 [dependencies]
-zk-cycle-macros = {path = "../../utils/zk-cycle-macros", optional=true}
+sov-zk-cycle-macros = {path = "../../utils/zk-cycle-macros", optional=true}
 risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional=true}
 risc0-zkvm-platform = { version = "0.16", optional=true}
-zk-cycle-utils = {path = "../../utils/zk-cycle-utils", optional=true}
+sov-zk-cycle-utils = {path = "../../utils/zk-cycle-utils", optional=true}
 
 [features]
-bench = ["zk-cycle-macros/bench","zk-cycle-utils", "risc0-zkvm","risc0-zkvm-platform"]
+bench = ["sov-zk-cycle-macros/bench","sov-zk-cycle-utils", "risc0-zkvm","risc0-zkvm-platform"]
 ```
 * The feature gating is needed because we don't want the cycle tracker scaffolding to be used unless the `bench` feature is enabled
 * If the `bench` feature is not enabled, the risc0 host will not be built with the necessary syscalls to support tracking cycles
@@ -19,7 +19,7 @@ bench = ["zk-cycle-macros/bench","zk-cycle-utils", "risc0-zkvm","risc0-zkvm-plat
 ```rust,ignore
 //
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
-use zk_cycle_macros::cycle_tracker;
+use sov_zk_cycle_macros::cycle_tracker;
 // 
 //
 #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
