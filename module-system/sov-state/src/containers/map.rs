@@ -1,10 +1,8 @@
-use std::borrow::Borrow;
-use std::hash::Hash;
 use std::marker::PhantomData;
 
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, StateValueCodec};
+use crate::codec::{BorshCodec, EncodeKeyLike, StateCodec, StateKeyCodec, StateValueCodec};
 use crate::storage::StorageKey;
 use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
 
@@ -14,7 +12,7 @@ use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
 /// [`StateMap`] is generic over:
 /// - a key type `K`;
 /// - a value type `V`;
-/// - a [`StateValueCodec`] `VC`.
+/// - a [`StateValueCodec`] `Codec`.
 #[derive(
     Debug,
     Clone,
@@ -24,9 +22,9 @@ use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
     serde::Serialize,
     serde::Deserialize,
 )]
-pub struct StateMap<K, V, VC = BorshCodec> {
+pub struct StateMap<K, V, Codec = BorshCodec> {
     _phantom: (PhantomData<K>, PhantomData<V>),
-    value_codec: VC,
+    codec: Codec,
     prefix: Prefix,
 }
 
@@ -45,14 +43,18 @@ impl<K, V> StateMap<K, V> {
     }
 }
 
-impl<K, V, VC> StateMap<K, V, VC> {
+impl<K, V, Codec> StateMap<K, V, Codec> {
     /// Creates a new [`StateMap`] with the given prefix and [`StateValueCodec`].
-    pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
+    pub fn with_codec(prefix: Prefix, codec: Codec) -> Self {
         Self {
             _phantom: (PhantomData, PhantomData),
-            value_codec: codec,
+            codec,
             prefix,
         }
+    }
+
+    pub fn codec(&self) -> &Codec {
+        &self.codec
     }
 
     /// Returns the prefix used when this [`StateMap`] was created.
@@ -61,10 +63,11 @@ impl<K, V, VC> StateMap<K, V, VC> {
     }
 }
 
-impl<K, V, VC> StateMap<K, V, VC>
+impl<K, V, Codec> StateMap<K, V, Codec>
 where
-    K: Hash + Eq,
-    VC: StateValueCodec<V>,
+    Codec: StateCodec,
+    Codec::KeyCodec: StateKeyCodec<K>,
+    Codec::ValueCodec: StateValueCodec<V>,
 {
     /// Inserts a key-value pair into the map.
     ///
@@ -72,10 +75,10 @@ where
     /// map’s key type.
     pub fn set<Q, S: Storage>(&self, key: &Q, value: &V, working_set: &mut WorkingSet<S>)
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
+        Q: ?Sized,
     {
-        working_set.set_value(self.prefix(), key, value, &self.value_codec)
+        working_set.set_value(self.prefix(), key, value, &self.codec)
     }
 
     /// Returns the value corresponding to the key, or [`None`] if the map
@@ -83,9 +86,8 @@ where
     ///
     /// # Examples
     ///
-    /// The key may be any borrowed form of the map’s key type. Note that
-    /// [`Hash`] and [`Eq`] on the borrowed form must match those for the key
-    /// type.
+    /// The key may be any item that implements [`EncodeKeyLike`] the map's key type
+    /// using your chosen codec.
     ///
     /// ```
     /// use sov_state::{StateMap, Storage, WorkingSet};
@@ -100,7 +102,7 @@ where
     /// }
     /// ```
     ///
-    /// If the map's key type does not implement [`Borrow`] for your desired
+    /// If the map's key type does not implement [`EncodeKeyLike`] for your desired
     /// target type, you'll have to convert the key to something else. An
     /// example of this would be "slicing" an array to use in [`Vec`]-keyed
     /// maps:
@@ -117,10 +119,12 @@ where
     /// ```
     pub fn get<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Option<V>
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
+        Codec: StateCodec,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
+        Codec::ValueCodec: StateValueCodec<V>,
+        Q: ?Sized,
     {
-        working_set.get_value(self.prefix(), key, &self.value_codec)
+        working_set.get_value(self.prefix(), key, &self.codec)
     }
 
     /// Returns the value corresponding to the key or [`StateMapError`] if key is absent in
@@ -131,11 +135,16 @@ where
         working_set: &mut WorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
+        Codec: StateCodec,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
+        Codec::ValueCodec: StateValueCodec<V>,
+        Q: ?Sized,
     {
         self.get(key, working_set).ok_or_else(|| {
-            StateMapError::MissingValue(self.prefix().clone(), StorageKey::new(self.prefix(), key))
+            StateMapError::MissingValue(
+                self.prefix().clone(),
+                StorageKey::new(self.prefix(), key, self.codec.key_codec()),
+            )
         })
     }
 
@@ -143,10 +152,12 @@ where
     /// [`None`] if the key is absent).
     pub fn remove<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>) -> Option<V>
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
+        Codec: StateCodec,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
+        Codec::ValueCodec: StateValueCodec<V>,
+        Q: ?Sized,
     {
-        working_set.remove_value(self.prefix(), key, &self.value_codec)
+        working_set.remove_value(self.prefix(), key, &self.codec)
     }
 
     /// Removes a key from the map, returning the corresponding value (or
@@ -159,11 +170,16 @@ where
         working_set: &mut WorkingSet<S>,
     ) -> Result<V, StateMapError>
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
+        Codec: StateCodec,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
+        Codec::ValueCodec: StateValueCodec<V>,
+        Q: ?Sized,
     {
         self.remove(key, working_set).ok_or_else(|| {
-            StateMapError::MissingValue(self.prefix().clone(), StorageKey::new(self.prefix(), key))
+            StateMapError::MissingValue(
+                self.prefix().clone(),
+                StorageKey::new(self.prefix(), key, self.codec.key_codec()),
+            )
         })
     }
 
@@ -173,19 +189,22 @@ where
     /// return the value beforing deletion.
     pub fn delete<Q, S: Storage>(&self, key: &Q, working_set: &mut WorkingSet<S>)
     where
-        K: Borrow<Q>,
-        Q: Hash + Eq + ?Sized,
+        Codec: StateCodec,
+        Codec::KeyCodec: EncodeKeyLike<Q, K>,
+        Q: ?Sized,
     {
-        working_set.delete_value(self.prefix(), key);
+        working_set.delete_value(self.prefix(), key, &self.codec);
     }
 }
 
 #[cfg(feature = "arbitrary")]
-impl<'a, K, V, VC> StateMap<K, V, VC>
+impl<'a, K, V, Codec> StateMap<K, V, Codec>
 where
-    K: arbitrary::Arbitrary<'a> + Hash + Eq,
-    V: arbitrary::Arbitrary<'a> + Hash + Eq,
-    VC: StateValueCodec<V> + Default,
+    K: arbitrary::Arbitrary<'a>,
+    V: arbitrary::Arbitrary<'a>,
+    Codec: StateCodec + Default,
+    Codec::KeyCodec: StateKeyCodec<K>,
+    Codec::ValueCodec: StateValueCodec<V>,
 {
     pub fn arbitrary_workset<S>(
         u: &mut arbitrary::Unstructured<'a>,
@@ -198,7 +217,7 @@ where
 
         let prefix = Prefix::arbitrary(u)?;
         let len = u.arbitrary_len::<(K, V)>()?;
-        let codec = VC::default();
+        let codec = Codec::default();
         let map = StateMap::with_codec(prefix, codec);
 
         (0..len).try_fold(map, |map, _| {
