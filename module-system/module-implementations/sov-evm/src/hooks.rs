@@ -1,14 +1,49 @@
+use reth_primitives::U256;
 use reth_rpc_types::Transaction;
 use sov_state::WorkingSet;
 
+use crate::evm::transaction::BlockEnv;
 use crate::Evm;
 
 impl<C: sov_modules_api::Context> Evm<C> {
     pub fn begin_slot_hook(
         &self,
-        _da_root_hash: [u8; 32],
-        _working_set: &mut WorkingSet<C::Storage>,
+        da_root_hash: [u8; 32],
+        working_set: &mut WorkingSet<C::Storage>,
     ) {
+        let block_number: u64 = self.head_number.get(working_set).unwrap();
+        let parent_block: reth_rpc_types::Block = self
+            .blocks
+            .get(&block_number, &mut working_set.accessory_state())
+            .expect("Head block should always be set");
+        let cfg = self.cfg.get(working_set).unwrap_or_default();
+        let new_pending_block = BlockEnv {
+            number: block_number + 1,
+            coinbase: cfg.coinbase,
+
+            // TODO: simplify this conversion by doing something with Bytes32
+            // TODO simplify conversion fro U256 to u64
+            // Reth rpc types keep stuff as U256, even when actually only u64 makes sense:
+            // block_number, timespamp, gas_used, base_fee_per_gas
+            timestamp: (parent_block.header.timestamp + U256::from(cfg.block_timestamp_delta))
+                .to_le_bytes(),
+            prevrandao: Some(da_root_hash),
+            basefee: {
+                let base_fee = reth_primitives::basefee::calculate_next_block_base_fee(
+                    parent_block.header.gas_used.try_into().unwrap(),
+                    cfg.block_gas_limit,
+                    parent_block
+                        .header
+                        .base_fee_per_gas
+                        .unwrap_or(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE_U256)
+                        .as_limbs()[0],
+                );
+
+                U256::from_limbs([base_fee, 0u64, 0u64, 0u64]).to_le_bytes()
+            },
+            gas_limit: cfg.block_gas_limit,
+        };
+        self.pending_block.set(&new_pending_block, working_set);
     }
 
     pub fn end_slot_hook(&self, _root_hash: [u8; 32], working_set: &mut WorkingSet<C::Storage>) {

@@ -66,7 +66,7 @@ impl DevSigner {
             input: RethBytes::from(data),
             nonce,
             chain_id: 1,
-            gas_limit: u64::MAX,
+            gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT / 2,
             ..Default::default()
         };
 

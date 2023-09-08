@@ -6767,6 +6767,7 @@ dependencies = [
  "ethers-signers",
  "hex",
  "jsonrpsee",
+ "lazy_static",
  "primitive-types",
  "reth-primitives",
  "reth-revm",
