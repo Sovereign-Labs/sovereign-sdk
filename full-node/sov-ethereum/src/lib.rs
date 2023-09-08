@@ -14,7 +14,9 @@ pub mod experimental {
     use ethers::types::{Bytes, H256};
     use jsonrpsee::types::ErrorObjectOwned;
     use jsonrpsee::RpcModule;
-    use reth_primitives::TransactionSignedNoHash as RethTransactionSignedNoHash;
+    use reth_primitives::{
+        Address as RethAddress, TransactionSignedNoHash as RethTransactionSignedNoHash,
+    };
     use reth_rpc::eth::error::EthApiError;
     use sov_evm::call::CallMessage;
     use sov_evm::evm::{EthAddress, RawEvmTransaction};
@@ -171,6 +173,16 @@ pub mod experimental {
                 Ok::<_, ErrorObjectOwned>(tx_hash)
             },
         )?;
+
+        rpc.register_async_method("eth_accounts", |_parameters, _ethereum| async move {
+            Ok::<_, ErrorObjectOwned>(vec![RethAddress::default()])
+        })?;
+
+        rpc.register_async_method("eth_estimateGas", |parameters, _ethereum| async move {
+            let data: reth_rpc_types::CallRequest = parameters.one().unwrap();
+            // block_number: Option<BlockId>,
+            Ok::<_, ErrorObjectOwned>(vec![RethAddress::default()])
+        })?;
 
         Ok(())
     }

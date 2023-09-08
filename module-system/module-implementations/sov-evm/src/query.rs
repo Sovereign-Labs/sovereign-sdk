@@ -170,6 +170,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         &self,
         _working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<reth_primitives::U256> {
-        unimplemented!("eth_blockNumber not implemented")
+        Ok(reth_primitives::U256::from(1))
     }
 }
