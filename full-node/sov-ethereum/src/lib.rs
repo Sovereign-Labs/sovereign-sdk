@@ -17,7 +17,7 @@ pub mod experimental {
     use reth_primitives::{Address, TransactionSignedNoHash as RethTransactionSignedNoHash};
     use reth_rpc::eth::error::EthApiError;
     use sov_evm::call::CallMessage;
-    use sov_evm::evm::RawEvmTransaction;
+    use sov_evm::evm::RlpEvmTransaction;
     use sov_modules_api::transaction::Transaction;
     use sov_modules_api::utils::to_jsonrpsee_error_object;
     use sov_modules_api::EncodeCall;
@@ -73,7 +73,7 @@ pub mod experimental {
     impl<Da: DaService> Ethereum<Da> {
         fn make_raw_tx(
             &self,
-            raw_tx: RawEvmTransaction,
+            raw_tx: RlpEvmTransaction,
         ) -> Result<(H256, Vec<u8>), jsonrpsee::core::Error> {
             let signed_transaction: RethTransactionSignedNoHash =
                 raw_tx.clone().try_into().map_err(EthApiError::from)?;
@@ -144,7 +144,7 @@ pub mod experimental {
             |parameters, ethereum| async move {
                 let data: Bytes = parameters.one().unwrap();
 
-                let raw_evm_tx = RawEvmTransaction { rlp: data.to_vec() };
+                let raw_evm_tx = RlpEvmTransaction { rlp: data.to_vec() };
 
                 let (tx_hash, raw_tx) = ethereum
                     .make_raw_tx(raw_evm_tx)

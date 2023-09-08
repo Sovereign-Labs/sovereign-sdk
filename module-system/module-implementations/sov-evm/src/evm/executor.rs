@@ -1,15 +1,17 @@
 use std::convert::Infallible;
 
+use reth_primitives::TransactionSignedEcRecovered;
 use reth_revm::tracing::{TracingInspector, TracingInspectorConfig};
 use revm::primitives::{CfgEnv, EVMError, Env, ExecutionResult, ResultAndState, TxEnv};
 use revm::{self, Database, DatabaseCommit};
 
-use super::transaction::{BlockEnv, EvmTransactionSignedEcRecovered};
+use super::conversions::create_tx_env;
+use super::transaction::BlockEnv;
 
 pub(crate) fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
     db: DB,
     block_env: BlockEnv,
-    tx: &EvmTransactionSignedEcRecovered,
+    tx: &TransactionSignedEcRecovered,
     config_env: CfgEnv,
 ) -> Result<ExecutionResult, EVMError<Infallible>> {
     let mut evm = revm::new();
@@ -17,7 +19,7 @@ pub(crate) fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
     let env = Env {
         block: block_env.into(),
         cfg: config_env,
-        tx: tx.into(),
+        tx: create_tx_env(tx),
     };
 
     evm.env = env;

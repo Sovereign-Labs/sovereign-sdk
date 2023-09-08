@@ -8,7 +8,7 @@ use reth_primitives::{
 use reth_rpc::eth::error::SignError;
 use secp256k1::{PublicKey, SecretKey};
 
-use crate::evm::RawEvmTransaction;
+use crate::evm::RlpEvmTransaction;
 
 /// ETH transactions signer used in tests.
 pub(crate) struct DevSigner {
@@ -61,7 +61,7 @@ impl DevSigner {
         to: TransactionKind,
         data: Vec<u8>,
         nonce: u64,
-    ) -> Result<RawEvmTransaction, SignError> {
+    ) -> Result<RlpEvmTransaction, SignError> {
         let reth_tx = RethTxEip1559 {
             to,
             input: RethBytes::from(data),
@@ -73,7 +73,7 @@ impl DevSigner {
 
         let signed = self.sign_transaction(reth_tx)?;
 
-        Ok(RawEvmTransaction {
+        Ok(RlpEvmTransaction {
             rlp: signed.envelope_encoded().to_vec(),
         })
     }
