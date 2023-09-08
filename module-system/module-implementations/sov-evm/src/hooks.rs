@@ -15,7 +15,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let parent_block: reth_rpc_types::Block = self
             .blocks
             .get(&block_number, &mut working_set.accessory_state())
-            .unwrap();
+            .expect("Head block should always be set");
         let cfg = self.cfg.get(working_set).unwrap_or_default();
         let new_pending_block = BlockEnv {
             number: block_number + 1,
