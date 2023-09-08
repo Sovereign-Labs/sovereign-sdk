@@ -1,7 +1,7 @@
 use crate::codec::StateValueCodec;
 
 /// A [`StateValueCodec`] that uses [`bcs`] for all keys and values.
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct BcsCodec;
 
 impl<V> StateValueCodec<V> for BcsCodec

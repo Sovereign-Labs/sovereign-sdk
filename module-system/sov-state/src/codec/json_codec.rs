@@ -3,7 +3,7 @@ use serde_json;
 use crate::codec::StateValueCodec;
 
 /// A [`StateValueCodec`] that uses [`serde_json`] for all values.
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct JsonCodec;
 
 impl<V> StateValueCodec<V> for JsonCodec
