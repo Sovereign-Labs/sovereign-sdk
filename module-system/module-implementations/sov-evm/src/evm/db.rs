@@ -38,12 +38,10 @@ impl<'a, C: sov_modules_api::Context> Database for EvmDb<'a, C> {
     }
 
     fn storage(&mut self, address: B160, index: U256) -> Result<U256, Self::Error> {
-        let storage_value = if let Some(acc) = self.accounts.get(&address, self.working_set) {
-            let storage_value = acc
-                .storage
+        let storage_value: U256 = if let Some(acc) = self.accounts.get(&address, self.working_set) {
+            acc.storage
                 .get(&index, self.working_set)
-                .unwrap_or_default();
-            storage_value
+                .unwrap_or_default()
         } else {
             U256::default()
         };

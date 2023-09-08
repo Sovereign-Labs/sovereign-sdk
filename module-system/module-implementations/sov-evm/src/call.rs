@@ -41,7 +41,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let result = executor::execute_tx(evm_db, block_env, &evm_tx_recovered, cfg_env).unwrap();
 
         let from = evm_tx_recovered.signer();
-        let to = evm_tx_recovered.to().map(|to| to.into());
+        let to = evm_tx_recovered.to();
         let transaction = reth_rpc_types::Transaction::from_recovered(evm_tx_recovered.tx);
 
         self.pending_transactions
@@ -91,7 +91,7 @@ pub(crate) fn get_cfg_env(
     CfgEnv {
         chain_id: revm::primitives::U256::from(cfg.chain_id),
         limit_contract_code_size: cfg.limit_contract_code_size,
-        spec_id: get_spec_id(cfg.spec, block_env.number).into(),
+        spec_id: get_spec_id(cfg.spec, block_env.number),
         // disable_gas_refund: !cfg.gas_refunds, // option disabled for now, we could add if needed
         ..template_cfg.unwrap_or_default()
     }

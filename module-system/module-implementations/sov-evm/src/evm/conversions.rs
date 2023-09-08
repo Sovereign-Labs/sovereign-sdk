@@ -10,7 +10,7 @@ use reth_rpc::eth::error::EthApiError;
 use reth_rpc_types::CallRequest;
 use revm::primitives::{
     AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, Bytecode, CreateScheme, TransactTo,
-    TxEnv, B256, U256,
+    TxEnv, U256,
 };
 use thiserror::Error;
 
@@ -23,7 +23,7 @@ impl From<AccountInfo> for ReVmAccountInfo {
             nonce: info.nonce,
             balance: info.balance,
             code: Some(Bytecode::new_raw(Bytes::from(info.code))),
-            code_hash: B256::from(info.code_hash),
+            code_hash: info.code_hash,
         }
     }
 }
@@ -47,7 +47,7 @@ impl From<BlockEnv> for ReVmBlockEnv {
             timestamp: block_env.timestamp,
             // TODO: handle difficulty
             difficulty: U256::ZERO,
-            prevrandao: block_env.prevrandao.map(|hash| hash),
+            prevrandao: block_env.prevrandao,
             basefee: U256::from(block_env.basefee),
             gas_limit: U256::from(block_env.gas_limit),
         }

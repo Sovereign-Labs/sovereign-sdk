@@ -60,7 +60,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let header = reth_primitives::Header {
             parent_hash: H256::default(),
             ommers_hash: EMPTY_OMMER_ROOT,
-            beneficiary: config.coinbase.into(),
+            beneficiary: config.coinbase,
             state_root: KECCAK_EMPTY, // TODO: Can we get state from working set now?
             transactions_root: EMPTY_TRANSACTIONS,
             receipts_root: EMPTY_RECEIPTS,

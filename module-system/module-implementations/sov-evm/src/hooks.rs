@@ -23,18 +23,14 @@ impl<C: sov_modules_api::Context> Evm<C> {
             coinbase: cfg.coinbase,
             timestamp: parent_block.header.timestamp + U256::from(cfg.block_timestamp_delta),
             prevrandao: Some(da_root_hash.into()),
-            basefee: {
-                let base_fee = reth_primitives::basefee::calculate_next_block_base_fee(
-                    to_u64(parent_block.header.gas_used),
-                    cfg.block_gas_limit,
-                    parent_block
-                        .header
-                        .base_fee_per_gas
-                        .map_or(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE, to_u64),
-                );
-
-                base_fee
-            },
+            basefee: reth_primitives::basefee::calculate_next_block_base_fee(
+                to_u64(parent_block.header.gas_used),
+                cfg.block_gas_limit,
+                parent_block
+                    .header
+                    .base_fee_per_gas
+                    .map_or(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE, to_u64),
+            ),
             gas_limit: cfg.block_gas_limit,
         };
         self.pending_block.set(&new_pending_block, working_set);

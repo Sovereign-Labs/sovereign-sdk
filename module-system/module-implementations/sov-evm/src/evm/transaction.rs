@@ -63,7 +63,7 @@ impl EvmTransactionSignedEcRecovered {
 
     /// Receiver of the transaction.
     pub fn to(&self) -> Option<Address> {
-        self.tx.to().map(|to| to.into())
+        self.tx.to()
     }
 }
 
