@@ -1,6 +1,4 @@
 use bytes::Bytes;
-use ethereum_types::U64;
-use ethers_core::types::{Bytes as EthBytes, OtherFields, Transaction};
 use reth_primitives::{
     Bytes as RethBytes, TransactionSigned, TransactionSignedEcRecovered, TransactionSignedNoHash,
 };
@@ -37,8 +35,8 @@ impl From<ReVmAccountInfo> for AccountInfo {
     }
 }
 
-impl From<BlockEnv> for ReVmBlockEnv {
-    fn from(block_env: BlockEnv) -> Self {
+impl From<&BlockEnv> for ReVmBlockEnv {
+    fn from(block_env: &BlockEnv) -> Self {
         Self {
             number: U256::from(block_env.number),
             coinbase: block_env.coinbase,
@@ -70,44 +68,6 @@ pub(crate) fn create_tx_env(tx: &TransactionSignedEcRecovered) -> TxEnv {
         nonce: Some(tx.nonce()),
         // TODO handle access list
         access_list: vec![],
-    }
-}
-
-impl TryFrom<RlpEvmTransaction> for Transaction {
-    type Error = RawEvmTxConversionError;
-    fn try_from(evm_tx: RlpEvmTransaction) -> Result<Self, Self::Error> {
-        let tx: TransactionSignedEcRecovered = evm_tx.try_into()?;
-
-        Ok(Self {
-            hash: tx.hash().into(),
-            nonce: tx.nonce().into(),
-
-            from: tx.signer().into(),
-            to: tx.to().map(|addr| addr.into()),
-            value: tx.value().into(),
-            gas_price: Some(tx.effective_gas_price(None).into()),
-
-            input: EthBytes::from(tx.input().to_vec()),
-            v: tx.signature().v(tx.chain_id()).into(),
-            r: tx.signature().r.into(),
-            s: tx.signature().s.into(),
-            transaction_type: Some(U64::from(tx.tx_type() as u8)),
-            // TODO handle access list
-            access_list: None,
-            max_priority_fee_per_gas: tx.max_priority_fee_per_gas().map(From::from),
-            max_fee_per_gas: Some(tx.max_fee_per_gas().into()),
-            chain_id: tx.chain_id().map(|id| id.into()),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
-            block_hash: Some([0; 32].into()),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
-            block_number: Some(1.into()),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
-            transaction_index: Some(1.into()),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
-            gas: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
-            other: OtherFields::default(),
-        })
     }
 }
 

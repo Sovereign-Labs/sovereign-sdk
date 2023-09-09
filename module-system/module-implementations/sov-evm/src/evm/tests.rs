@@ -71,8 +71,8 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
             gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
             ..Default::default()
         };
-        let result = executor::execute_tx(&mut evm_db, block_env, tx, CfgEnv::default()).unwrap();
-        contract_address(result).expect("Expected successful contract creation")
+        let result = executor::execute_tx(&mut evm_db, &block_env, tx, CfgEnv::default()).unwrap();
+        contract_address(&result).expect("Expected successful contract creation")
     };
 
     let set_arg = 21989;
@@ -89,7 +89,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
             .unwrap();
 
         let tx = &tx.try_into().unwrap();
-        executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
+        executor::execute_tx(&mut evm_db, &BlockEnv::default(), tx, CfgEnv::default()).unwrap();
     }
 
     let get_res = {
@@ -105,7 +105,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
 
         let tx = &tx.try_into().unwrap();
         let result =
-            executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
+            executor::execute_tx(&mut evm_db, &BlockEnv::default(), tx, CfgEnv::default()).unwrap();
 
         let out = output(result);
         ethereum_types::U256::from(out.as_ref())

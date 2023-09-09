@@ -1,5 +1,8 @@
 use anyhow::Result;
-use reth_primitives::TransactionSignedEcRecovered;
+use ethereum_types::U64;
+use reth_primitives::bloom::logs_bloom;
+use reth_primitives::{TransactionSignedEcRecovered, U128, U256};
+use reth_revm::into_reth_log;
 use revm::primitives::{CfgEnv, SpecId};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
@@ -8,6 +11,7 @@ use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
 use crate::evm::transaction::BlockEnv;
 use crate::evm::{contract_address, EvmChainConfig, RlpEvmTransaction};
+use crate::experimental::PendingTransaction;
 use crate::Evm;
 
 #[cfg_attr(
@@ -29,53 +33,93 @@ impl<C: sov_modules_api::Context> Evm<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let evm_tx_recovered: TransactionSignedEcRecovered = tx.try_into()?;
+        let block_env = self
+            .pending_block
+            .get(working_set)
+            .expect("Pending block must be set");
+        let effective_gas_price =
+            U128::from(evm_tx_recovered.effective_gas_price(Some(block_env.basefee)));
 
-        let block_env = self.pending_block.get(working_set).unwrap_or_default();
-        let cfg = self.cfg.get(working_set).unwrap_or_default();
+        let cfg = self.cfg.get(working_set).expect("Evm config must be set");
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
-        let hash = evm_tx_recovered.hash();
-
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
-
-        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
-        let result = executor::execute_tx(evm_db, block_env, &evm_tx_recovered, cfg_env).unwrap();
-
-        let from = evm_tx_recovered.signer();
-        let to = evm_tx_recovered.to();
+        let result = executor::execute_tx(evm_db, &block_env, &evm_tx_recovered, cfg_env);
         let transaction = reth_rpc_types::Transaction::from_recovered(evm_tx_recovered);
 
-        self.pending_transactions
-            .push(&transaction, &mut working_set.accessory_state());
+        let receipt = match result {
+            Ok(result) => {
+                let logs: Vec<_> = result.logs().into_iter().map(into_reth_log).collect();
+                let gas_used = U256::from(result.gas_used());
 
-        let receipt = reth_rpc_types::TransactionReceipt {
-            transaction_hash: hash.into(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            transaction_index: Some(reth_primitives::U256::from(0)),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            block_hash: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            block_number: Some(reth_primitives::U256::from(0)),
-            from,
-            to,
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            gas_used: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            cumulative_gas_used: Default::default(),
-            contract_address: contract_address(result),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            logs: Default::default(),
-            state_root: Some(reth_primitives::U256::from(0).into()),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            logs_bloom: Default::default(),
-            status_code: Some(1u64.into()),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-            effective_gas_price: Default::default(),
-            transaction_type: reth_primitives::U8::from(1),
+                reth_rpc_types::TransactionReceipt {
+                    transaction_hash: Some(transaction.hash),
+                    transaction_index: Some(U256::from(
+                        self.pending_transactions
+                            .len(&mut working_set.accessory_state()),
+                    )),
+                    block_number: Some(U256::from(block_env.number)),
+                    from: transaction.from,
+                    to: transaction.to,
+                    gas_used: Some(gas_used),
+                    // Potentially we can store this in block_env ?
+                    cumulative_gas_used: self
+                        .pending_transactions
+                        .iter(&mut working_set.accessory_state())
+                        .map(|tx| tx.receipt.gas_used.unwrap())
+                        .sum::<U256>()
+                        + gas_used,
+                    contract_address: contract_address(&result),
+                    status_code: if result.is_success() {
+                        Some(U64::from(1))
+                    } else {
+                        Some(U64::from(0))
+                    },
+                    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
+                    effective_gas_price: effective_gas_price,
+                    transaction_type: transaction
+                        .transaction_type
+                        .unwrap()
+                        .as_u64()
+                        .try_into()
+                        .unwrap(),
+                    logs_bloom: logs_bloom(logs.iter()),
+                    logs: {
+                        let mut log_index = 0;
+                        logs.into_iter()
+                            .map(|log| {
+                                let log = reth_rpc_types::Log {
+                                    address: log.address,
+                                    topics: log.topics,
+                                    data: log.data,
+                                    // TODO: Those are duplicated data - do we want to store them or calculate on the fly in requests?
+                                    // TODO: Maybe we should actually store the primitive types and calculate the rpc types on the fly?
+                                    block_hash: transaction.block_hash,
+                                    block_number: transaction.block_number,
+                                    transaction_hash: Some(transaction.hash),
+                                    transaction_index: transaction.transaction_index,
+                                    log_index: Some(U256::from(log_index)),
+                                    removed: false,
+                                };
+                                log_index += 1;
+                                log
+                            })
+                            .collect()
+                    },
+                    block_hash: Default::default(), // Will be filled in end_slot_hook
+                    state_root: None, // Pre https://eips.ethereum.org/EIPS/eip-658 (pre-byzantium) and won't be used
+                }
+            }
+            Err(_) => todo!(), // TODO Build failed transaction receipt
         };
 
-        self.receipts
-            .set(&hash.into(), &receipt, &mut working_set.accessory_state());
+        let pending_transaction = PendingTransaction {
+            transaction,
+            receipt,
+        };
+
+        self.pending_transactions
+            .push(&pending_transaction, &mut working_set.accessory_state());
 
         Ok(CallResponse::default())
     }

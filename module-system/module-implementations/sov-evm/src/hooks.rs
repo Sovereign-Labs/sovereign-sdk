@@ -1,9 +1,9 @@
 use reth_primitives::U256;
-use reth_rpc_types::Transaction;
 use sov_state::WorkingSet;
 
 use crate::evm::conversions::to_u64;
 use crate::evm::transaction::BlockEnv;
+use crate::experimental::PendingTransaction;
 use crate::Evm;
 
 impl<C: sov_modules_api::Context> Evm<C> {
@@ -39,25 +39,43 @@ impl<C: sov_modules_api::Context> Evm<C> {
     pub fn end_slot_hook(&self, _root_hash: [u8; 32], working_set: &mut WorkingSet<C::Storage>) {
         // TODO implement block creation logic.
 
-        let mut transactions: Vec<Transaction> = Vec::default();
+        let mut accessory_state = working_set.accessory_state();
+        let mut transactions: Vec<PendingTransaction> =
+            Vec::with_capacity(self.pending_transactions.len(&mut accessory_state));
 
-        while let Some(mut tx) = self
-            .pending_transactions
-            .pop(&mut working_set.accessory_state())
+        while let Some(PendingTransaction {
+            mut transaction,
+            mut receipt,
+        }) = self.pending_transactions.pop(&mut accessory_state)
         {
-            tx.block_hash = Some(reth_primitives::H256::default());
-            tx.block_number = Some(reth_primitives::U256::from(1));
-            tx.transaction_index = Some(reth_primitives::U256::from(1));
+            transaction.block_hash = Some(reth_primitives::H256::default());
+            receipt.block_hash = transaction.block_hash;
 
             // TODO fill all data that is set by: from_recovered_with_block_context
             // tx.gas_price
             // tx.max_fee_per_gas
-            transactions.push(tx);
+            transactions.push(PendingTransaction {
+                transaction,
+                receipt,
+            });
         }
 
-        for tx in transactions {
-            self.transactions
-                .set(&tx.hash, &tx, &mut working_set.accessory_state());
+        transactions.reverse();
+
+        for pending in transactions {
+            self.transactions.set(
+                &pending.transaction.hash,
+                &pending.transaction,
+                &mut accessory_state,
+            );
+
+            self.receipts.set(
+                &pending.transaction.hash,
+                &pending.receipt,
+                &mut accessory_state,
+            );
         }
+
+        self.pending_transactions.clear(&mut accessory_state);
     }
 }

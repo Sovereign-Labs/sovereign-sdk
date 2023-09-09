@@ -97,7 +97,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     #[rpc_method(name = "getTransactionReceipt")]
     pub fn get_transaction_receipt(
         &self,
-        hash: reth_primitives::U256,
+        hash: reth_primitives::H256,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<reth_rpc_types::TransactionReceipt>> {
         info!("evm module: eth_getTransactionReceipt");
@@ -145,7 +145,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
-        let result = executor::inspect(evm_db, block_env, tx_env, cfg_env).unwrap();
+        let result = executor::inspect(evm_db, &block_env, tx_env, cfg_env).unwrap();
         let output = match result.result {
             revm::primitives::ExecutionResult::Success { output, .. } => output,
             _ => todo!(),

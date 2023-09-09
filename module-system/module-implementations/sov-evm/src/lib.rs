@@ -64,6 +64,12 @@ mod experimental {
         pub block_timestamp_delta: u64,
     }
 
+    #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+    pub struct PendingTransaction {
+        pub transaction: reth_rpc_types::Transaction,
+        pub receipt: reth_rpc_types::TransactionReceipt,
+    }
+
     impl Default for EvmConfig {
         fn default() -> Self {
             Self {
@@ -112,7 +118,7 @@ mod experimental {
 
         #[state]
         pub(crate) pending_transactions:
-            sov_state::AccessoryStateVec<reth_rpc_types::Transaction, JsonCodec>,
+            sov_state::AccessoryStateVec<PendingTransaction, JsonCodec>,
 
         #[state]
         pub(crate) transactions: sov_state::AccessoryStateMap<
@@ -123,7 +129,7 @@ mod experimental {
 
         #[state]
         pub(crate) receipts: sov_state::AccessoryStateMap<
-            reth_primitives::U256,
+            reth_primitives::H256,
             reth_rpc_types::TransactionReceipt,
             JsonCodec,
         >,
