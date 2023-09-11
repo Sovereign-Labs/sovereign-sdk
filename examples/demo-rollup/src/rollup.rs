@@ -83,7 +83,8 @@ pub async fn new_rollup_with_celestia_da(
         #[cfg(feature = "experimental")]
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
-            tx_signer_priv_key: read_tx_signer_priv_key()?,
+            sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
+            eth_signers: read_eth_tx_signers(),
         },
     })
 }
@@ -120,7 +121,8 @@ pub fn new_rollup_with_mock_da_from_config(
         #[cfg(feature = "experimental")]
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
-            tx_signer_priv_key: read_tx_signer_priv_key()?,
+            sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
+            eth_signers: read_eth_tx_signers(),
         },
     })
 }
@@ -128,13 +130,18 @@ pub fn new_rollup_with_mock_da_from_config(
 #[cfg(feature = "experimental")]
 /// Ethereum RPC wraps EVM transaction in a rollup transaction.
 /// This function reads the private key of the rollup transaction signer.
-pub fn read_tx_signer_priv_key() -> Result<DefaultPrivateKey, anyhow::Error> {
+fn read_sov_tx_signer_priv_key() -> Result<DefaultPrivateKey, anyhow::Error> {
     let data = std::fs::read_to_string(TX_SIGNER_PRIV_KEY_PATH).context("Unable to read file")?;
 
     let key_and_address: PrivateKeyAndAddress<DefaultContext> = serde_json::from_str(&data)
         .unwrap_or_else(|_| panic!("Unable to convert data {} to PrivateKeyAndAddress", &data));
 
     Ok(key_and_address.private_key)
+}
+
+#[cfg(feature = "experimental")]
+fn read_eth_tx_signers() -> Vec<sov_ethereum::Signer> {
+    todo!()
 }
 
 impl<Vm: Zkvm, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> {

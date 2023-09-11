@@ -2,6 +2,8 @@
 mod batch_builder;
 #[cfg(feature = "experimental")]
 pub use experimental::{get_ethereum_rpc, Ethereum};
+#[cfg(feature = "experimental")]
+pub use sov_evm::sequencer::Signer;
 
 #[cfg(feature = "experimental")]
 pub mod experimental {
@@ -26,12 +28,14 @@ pub mod experimental {
     use sov_rollup_interface::services::da::DaService;
 
     use super::batch_builder::EthBatchBuilder;
+    use super::Signer;
 
     const ETH_RPC_ERROR: &str = "ETH_RPC_ERROR";
 
     pub struct EthRpcConfig {
         pub min_blob_size: Option<usize>,
-        pub tx_signer_priv_key: DefaultPrivateKey,
+        pub sov_tx_signer_priv_key: DefaultPrivateKey,
+        pub eth_signers: Vec<Signer>,
     }
 
     pub fn get_ethereum_rpc<Da: DaService>(
@@ -94,7 +98,7 @@ pub mod experimental {
             >>::encode_call(tx);
 
             let tx = Transaction::<DefaultContext>::new_signed_tx(
-                &self.eth_rpc_config.tx_signer_priv_key,
+                &self.eth_rpc_config.sov_tx_signer_priv_key,
                 message,
                 nonce,
             );

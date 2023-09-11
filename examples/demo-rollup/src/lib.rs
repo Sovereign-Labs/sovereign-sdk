@@ -7,8 +7,6 @@ mod rollup;
 use const_rollup_config::ROLLUP_NAMESPACE_RAW;
 use demo_stf::genesis_config::create_demo_genesis_config;
 use demo_stf::runtime::GenesisConfig;
-#[cfg(feature = "experimental")]
-pub use rollup::read_tx_signer_priv_key;
 pub use rollup::{
     new_rollup_with_celestia_da, new_rollup_with_mock_da, new_rollup_with_mock_da_from_config,
     Rollup,
