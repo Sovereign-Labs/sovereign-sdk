@@ -123,15 +123,16 @@ pub fn generate_and_save_key<Tx, C: sov_modules_api::Context>(
     wallet_state: &mut WalletState<Tx, C>,
 ) -> Result<(), anyhow::Error> {
     let keys = <C as Spec>::PrivateKey::generate();
-    let public_key = keys.pub_key();
-    let address = keys.pub_key().to_address::<<C as Spec>::Address>();
+    let key_and_address = PrivateKeyAndAddress::<C>::from_key(keys);
+    let public_key = key_and_address.private_key.pub_key();
+    let address = key_and_address.address.clone();
     let key_path = app_dir.as_ref().join(format!("{}.json", address));
     println!(
         "Generated key pair with address: {}. Saving to {}",
         address,
         key_path.display()
     );
-    std::fs::write(&key_path, serde_json::to_string(&keys)?)?;
+    std::fs::write(&key_path, serde_json::to_string(&key_and_address)?)?;
     wallet_state
         .addresses
         .add(address, nickname, public_key, key_path);

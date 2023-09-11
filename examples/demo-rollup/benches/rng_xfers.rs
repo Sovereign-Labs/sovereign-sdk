@@ -14,7 +14,7 @@ use sov_rollup_interface::mocks::{
 };
 use sov_rollup_interface::services::da::DaService;
 
-pub(crate) const SEQUENCER_DA_ADDRESS: [u8; 32] = [99; 32];
+pub const SEQUENCER_DA_ADDRESS: [u8; 32] = [99; 32];
 
 #[derive(Clone)]
 /// A simple DaService for a random number generator.

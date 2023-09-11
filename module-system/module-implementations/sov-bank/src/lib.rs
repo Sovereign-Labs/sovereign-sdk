@@ -5,7 +5,8 @@ mod genesis;
 #[cfg(feature = "native")]
 pub mod query;
 mod token;
-mod utils;
+/// Util functions for bank
+pub mod utils;
 
 /// Specifies the call methods using in that module.
 pub use call::CallMessage;

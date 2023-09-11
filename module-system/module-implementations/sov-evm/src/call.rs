@@ -1,13 +1,13 @@
 use anyhow::Result;
-use revm::primitives::CfgEnv;
+use reth_primitives::TransactionSignedEcRecovered;
+use revm::primitives::{CfgEnv, SpecId};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
-use crate::evm::transaction::{BlockEnv, EvmTransactionSignedEcRecovered};
-use crate::evm::{contract_address, EvmChainCfg, RawEvmTransaction};
-use crate::experimental::SpecIdWrapper;
+use crate::evm::transaction::BlockEnv;
+use crate::evm::{contract_address, EvmChainConfig, RlpEvmTransaction};
 use crate::Evm;
 
 #[cfg_attr(
@@ -18,19 +18,19 @@ use crate::Evm;
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct CallMessage {
-    pub tx: RawEvmTransaction,
+    pub tx: RlpEvmTransaction,
 }
 
 impl<C: sov_modules_api::Context> Evm<C> {
     pub(crate) fn execute_call(
         &self,
-        tx: RawEvmTransaction,
+        tx: RlpEvmTransaction,
         _context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let evm_tx_recovered: EvmTransactionSignedEcRecovered = tx.try_into()?;
+        let evm_tx_recovered: TransactionSignedEcRecovered = tx.try_into()?;
 
-        let block_env = self.block_env.get(working_set).unwrap_or_default();
+        let block_env = self.pending_block.get(working_set).unwrap_or_default();
         let cfg = self.cfg.get(working_set).unwrap_or_default();
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
@@ -42,8 +42,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let result = executor::execute_tx(evm_db, block_env, &evm_tx_recovered, cfg_env).unwrap();
 
         let from = evm_tx_recovered.signer();
-        let to = evm_tx_recovered.to().map(|to| to.into());
-        let transaction = reth_rpc_types::Transaction::from_recovered(evm_tx_recovered.tx);
+        let to = evm_tx_recovered.to();
+        let transaction = reth_rpc_types::Transaction::from_recovered(evm_tx_recovered);
 
         self.pending_transactions
             .push(&transaction, &mut working_set.accessory_state());
@@ -86,13 +86,13 @@ impl<C: sov_modules_api::Context> Evm<C> {
 /// Copies context dependent values from template_cfg or default if not provided
 pub(crate) fn get_cfg_env(
     block_env: &BlockEnv,
-    cfg: EvmChainCfg,
+    cfg: EvmChainConfig,
     template_cfg: Option<CfgEnv>,
 ) -> CfgEnv {
     CfgEnv {
         chain_id: revm::primitives::U256::from(cfg.chain_id),
         limit_contract_code_size: cfg.limit_contract_code_size,
-        spec_id: get_spec_id(cfg.spec, block_env.number).into(),
+        spec_id: get_spec_id(cfg.spec, block_env.number),
         // disable_gas_refund: !cfg.gas_refunds, // option disabled for now, we could add if needed
         ..template_cfg.unwrap_or_default()
     }
@@ -100,7 +100,7 @@ pub(crate) fn get_cfg_env(
 
 /// Get spec id for a given block number
 /// Returns the first spec id defined for block >= block_number
-pub(crate) fn get_spec_id(spec: Vec<(u64, SpecIdWrapper)>, block_number: u64) -> SpecIdWrapper {
+pub(crate) fn get_spec_id(spec: Vec<(u64, SpecId)>, block_number: u64) -> SpecId {
     match spec.binary_search_by(|&(k, _)| k.cmp(&block_number)) {
         Ok(index) => spec[index].1,
         Err(index) => {

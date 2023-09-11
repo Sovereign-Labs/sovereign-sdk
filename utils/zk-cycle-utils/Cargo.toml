@@ -1,5 +1,5 @@
 [package]
-name = "zk-cycle-utils"
+name = "sov-zk-cycle-utils"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }

@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use borsh::{BorshDeserialize, BorshSerialize};
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, StateValueCodec};
+use crate::codec::{BorshCodec, StateCodec, StateValueCodec};
 use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
 
 /// Container for a single value stored as "accessory" state, outside of the
@@ -18,9 +18,9 @@ use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
     serde::Serialize,
     serde::Deserialize,
 )]
-pub struct AccessoryStateValue<V, VC = BorshCodec> {
+pub struct AccessoryStateValue<V, Codec = BorshCodec> {
     _phantom: PhantomData<V>,
-    codec: VC,
+    codec: Codec,
     prefix: Prefix,
 }
 
@@ -39,9 +39,9 @@ impl<V> AccessoryStateValue<V> {
     }
 }
 
-impl<V, VC> AccessoryStateValue<V, VC> {
+impl<V, Codec> AccessoryStateValue<V, Codec> {
     /// Creates a new [`AccessoryStateValue`] with the given prefix and codec.
-    pub fn with_codec(prefix: Prefix, codec: VC) -> Self {
+    pub fn with_codec(prefix: Prefix, codec: Codec) -> Self {
         Self {
             _phantom: PhantomData,
             codec,
@@ -55,18 +55,19 @@ impl<V, VC> AccessoryStateValue<V, VC> {
     }
 }
 
-impl<V, VC> AccessoryStateValue<V, VC>
+impl<V, Codec> AccessoryStateValue<V, Codec>
 where
-    VC: StateValueCodec<V>,
+    Codec: StateCodec,
+    Codec::ValueCodec: StateValueCodec<V>,
 {
     /// Sets a value in the AccessoryStateValue.
     pub fn set<S: Storage>(&self, value: &V, working_set: &mut AccessoryWorkingSet<S>) {
-        working_set.set_value(self.prefix(), &SingletonKey, value, &self.codec)
+        working_set.set_singleton(self.prefix(), value, &self.codec)
     }
 
     /// Gets a value from the AccessoryStateValue or None if the value is absent.
     pub fn get<S: Storage>(&self, working_set: &mut AccessoryWorkingSet<S>) -> Option<V> {
-        working_set.get_value(self.prefix(), &SingletonKey, &self.codec)
+        working_set.get_singleton(self.prefix(), &self.codec)
     }
 
     /// Gets a value from the AccessoryStateValue or Error if the value is absent.
@@ -80,7 +81,7 @@ where
 
     /// Removes a value from the AccessoryStateValue, returning the value (or None if the key is absent).
     pub fn remove<S: Storage>(&self, working_set: &mut AccessoryWorkingSet<S>) -> Option<V> {
-        working_set.remove_value(self.prefix(), &SingletonKey, &self.codec)
+        working_set.remove_singleton(self.prefix(), &self.codec)
     }
 
     /// Removes a value and from the AccessoryStateValue, returning the value (or Error if the key is absent).
@@ -94,10 +95,6 @@ where
 
     /// Deletes a value from the AccessoryStateValue.
     pub fn delete<S: Storage>(&self, working_set: &mut AccessoryWorkingSet<S>) {
-        working_set.delete_value(self.prefix(), &SingletonKey);
+        working_set.delete_singleton(self.prefix());
     }
 }
-
-// SingletonKey is very similar to the unit type `()` i.e. it has only one value.
-#[derive(Debug, PartialEq, Eq, Hash)]
-struct SingletonKey;

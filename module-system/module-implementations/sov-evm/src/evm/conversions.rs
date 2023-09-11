@@ -2,28 +2,26 @@ use bytes::Bytes;
 use ethereum_types::U64;
 use ethers_core::types::{Bytes as EthBytes, OtherFields, Transaction};
 use reth_primitives::{
-    Bytes as RethBytes, TransactionSigned as RethTransactionSigned,
-    TransactionSignedEcRecovered as RethTransactionSignedEcRecovered,
-    TransactionSignedNoHash as RethTransactionSignedNoHash,
+    Bytes as RethBytes, TransactionSigned, TransactionSignedEcRecovered, TransactionSignedNoHash,
 };
 use reth_rpc::eth::error::EthApiError;
 use reth_rpc_types::CallRequest;
 use revm::primitives::{
     AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, Bytecode, CreateScheme, TransactTo,
-    TxEnv, B160, B256, U256,
+    TxEnv, U256,
 };
 use thiserror::Error;
 
-use super::transaction::{BlockEnv, EvmTransactionSignedEcRecovered, RawEvmTransaction};
+use super::transaction::{BlockEnv, RlpEvmTransaction};
 use super::AccountInfo;
 
 impl From<AccountInfo> for ReVmAccountInfo {
     fn from(info: AccountInfo) -> Self {
         Self {
             nonce: info.nonce,
-            balance: U256::from_le_bytes(info.balance),
+            balance: info.balance,
             code: Some(Bytecode::new_raw(Bytes::from(info.code))),
-            code_hash: B256::from(info.code_hash),
+            code_hash: info.code_hash,
         }
     }
 }
@@ -31,8 +29,8 @@ impl From<AccountInfo> for ReVmAccountInfo {
 impl From<ReVmAccountInfo> for AccountInfo {
     fn from(info: ReVmAccountInfo) -> Self {
         Self {
-            balance: info.balance.to_le_bytes(),
-            code_hash: info.code_hash.to_fixed_bytes(),
+            balance: info.balance,
+            code_hash: info.code_hash,
             code: info.code.unwrap_or_default().bytes().to_vec(),
             nonce: info.nonce,
         }
@@ -43,47 +41,42 @@ impl From<BlockEnv> for ReVmBlockEnv {
     fn from(block_env: BlockEnv) -> Self {
         Self {
             number: U256::from(block_env.number),
-            coinbase: B160::from_slice(&block_env.coinbase),
-            timestamp: U256::from_le_bytes(block_env.timestamp),
+            coinbase: block_env.coinbase,
+            timestamp: block_env.timestamp,
             // TODO: handle difficulty
             difficulty: U256::ZERO,
-            prevrandao: block_env.prevrandao.map(|r| B256::from_slice(&r)),
-            basefee: U256::from_le_bytes(block_env.basefee),
-            gas_limit: U256::from_le_bytes(block_env.gas_limit),
+            prevrandao: block_env.prevrandao,
+            basefee: U256::from(block_env.basefee),
+            gas_limit: U256::from(block_env.gas_limit),
         }
     }
 }
 
-impl From<&EvmTransactionSignedEcRecovered> for TxEnv {
-    fn from(tx: &EvmTransactionSignedEcRecovered) -> Self {
-        let tx: &RethTransactionSignedEcRecovered = tx.as_ref();
+pub(crate) fn create_tx_env(tx: &TransactionSignedEcRecovered) -> TxEnv {
+    let to = match tx.to() {
+        Some(addr) => TransactTo::Call(addr),
+        None => TransactTo::Create(CreateScheme::Create),
+    };
 
-        let to = match tx.to() {
-            Some(addr) => TransactTo::Call(addr),
-            None => TransactTo::Create(CreateScheme::Create),
-        };
-
-        Self {
-            caller: tx.signer(),
-            gas_limit: tx.gas_limit(),
-            gas_price: U256::from(tx.effective_gas_price(None)),
-            gas_priority_fee: tx.max_priority_fee_per_gas().map(U256::from),
-            transact_to: to,
-            value: U256::from(tx.value()),
-            data: Bytes::from(tx.input().to_vec()),
-            chain_id: tx.chain_id(),
-            nonce: Some(tx.nonce()),
-            // TODO handle access list
-            access_list: vec![],
-        }
+    TxEnv {
+        caller: tx.signer(),
+        gas_limit: tx.gas_limit(),
+        gas_price: U256::from(tx.effective_gas_price(None)),
+        gas_priority_fee: tx.max_priority_fee_per_gas().map(U256::from),
+        transact_to: to,
+        value: U256::from(tx.value()),
+        data: Bytes::from(tx.input().to_vec()),
+        chain_id: tx.chain_id(),
+        nonce: Some(tx.nonce()),
+        // TODO handle access list
+        access_list: vec![],
     }
 }
 
-impl TryFrom<RawEvmTransaction> for Transaction {
+impl TryFrom<RlpEvmTransaction> for Transaction {
     type Error = RawEvmTxConversionError;
-    fn try_from(evm_tx: RawEvmTransaction) -> Result<Self, Self::Error> {
-        let tx: EvmTransactionSignedEcRecovered = evm_tx.try_into()?;
-        let tx: &RethTransactionSignedEcRecovered = tx.as_ref();
+    fn try_from(evm_tx: RlpEvmTransaction) -> Result<Self, Self::Error> {
+        let tx: TransactionSignedEcRecovered = evm_tx.try_into()?;
 
         Ok(Self {
             hash: tx.hash().into(),
@@ -139,33 +132,33 @@ impl From<RawEvmTxConversionError> for EthApiError {
     }
 }
 
-impl TryFrom<RawEvmTransaction> for RethTransactionSignedNoHash {
+impl TryFrom<RlpEvmTransaction> for TransactionSignedNoHash {
     type Error = RawEvmTxConversionError;
 
-    fn try_from(data: RawEvmTransaction) -> Result<Self, Self::Error> {
+    fn try_from(data: RlpEvmTransaction) -> Result<Self, Self::Error> {
         let data = RethBytes::from(data.rlp);
         if data.is_empty() {
             return Err(RawEvmTxConversionError::EmptyRawTransactionData);
         }
 
-        let transaction = RethTransactionSigned::decode_enveloped(data)
+        let transaction = TransactionSigned::decode_enveloped(data)
             .map_err(|_| RawEvmTxConversionError::FailedToDecodeSignedTransaction)?;
 
         Ok(transaction.into())
     }
 }
 
-impl TryFrom<RawEvmTransaction> for EvmTransactionSignedEcRecovered {
+impl TryFrom<RlpEvmTransaction> for TransactionSignedEcRecovered {
     type Error = RawEvmTxConversionError;
 
-    fn try_from(evm_tx: RawEvmTransaction) -> Result<Self, Self::Error> {
-        let tx = RethTransactionSignedNoHash::try_from(evm_tx)?;
-        let tx: RethTransactionSigned = tx.into();
+    fn try_from(evm_tx: RlpEvmTransaction) -> Result<Self, Self::Error> {
+        let tx = TransactionSignedNoHash::try_from(evm_tx)?;
+        let tx: TransactionSigned = tx.into();
         let tx = tx
             .into_ecrecovered()
             .ok_or(RawEvmTxConversionError::FailedToDecodeSignedTransaction)?;
 
-        Ok(EvmTransactionSignedEcRecovered::new(tx))
+        Ok(tx)
     }
 }
 
@@ -193,4 +186,8 @@ pub fn prepare_call_env(request: CallRequest) -> TxEnv {
         // TODO handle access list
         access_list: Default::default(),
     }
+}
+
+pub fn to_u64(value: U256) -> u64 {
+    value.try_into().unwrap()
 }

@@ -7,7 +7,7 @@ use risc0_zkvm::{
 };
 use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
 #[cfg(feature = "bench")]
-use zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cycles};
+use sov_zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cycles};
 
 #[cfg(feature = "bench")]
 use crate::metrics::metrics_callback;

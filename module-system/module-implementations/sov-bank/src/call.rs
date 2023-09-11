@@ -256,6 +256,16 @@ impl<C: sov_modules_api::Context> Bank<C> {
             .get(&token_address, working_set)
             .and_then(|token| token.balances.get(&user_address, working_set))
     }
+
+    /// Get the name of a token by address
+    pub fn get_token_name(
+        &self,
+        token_address: &C::Address,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Option<String> {
+        let token = self.tokens.get(token_address, working_set);
+        token.map(|token| token.name)
+    }
 }
 
 /// Creates a new prefix from an already existing prefix `parent_prefix` and a `token_address`

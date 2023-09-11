@@ -11,15 +11,15 @@ anyhow = "1.0.68"
 risc0-zkvm = { version = "0.16", default-features = false, features = ["std"] }
 risc0-zkvm-platform = "0.16"
 borsh = { version = "0.10.3", features = ["bytes"] }
-celestia = { path = "../../../../adapters/celestia" }
 demo-stf = { path = "../../../demo-stf" }
-sov-rollup-interface = { path = "../../../../rollup-interface", default-features = false}
-risc0-adapter = { path = "../../../../adapters/risc0" }
+sov-rollup-interface = { path = "../../../../rollup-interface", default-features = false }
+sov-risc0-adapter = { path = "../../../../adapters/risc0" }
 const-rollup-config = { path = "../../../const-rollup-config" }
-sov-modules-stf-template = {path = "../../../../module-system/sov-modules-stf-template", optional=true}
-sov-state = {path = "../../../../module-system/sov-state", default-features = false, optional=true}
-sov-modules-api = {path = "../../../../module-system/sov-modules-api", default-features = false, optional=true}
-sov-sequencer-registry = {path = "../../../../module-system/module-implementations/sov-sequencer-registry", default-features = false, optional=true}
+sov-celestia-adapter = { path = "../../../../adapters/celestia" }
+sov-modules-stf-template = { path = "../../../../module-system/sov-modules-stf-template", optional = true }
+sov-state = { path = "../../../../module-system/sov-state", default-features = false, optional = true }
+sov-modules-api = { path = "../../../../module-system/sov-modules-api", default-features = false, optional = true }
+sov-sequencer-registry = { path = "../../../../module-system/module-implementations/sov-sequencer-registry", default-features = false, optional = true }
 
 [build-dependencies]
 directories = "5.0"
@@ -48,4 +48,10 @@ lto = true
 opt-level = 3
 
 [features]
-bench=["celestia/bench", "sov-modules-stf-template/bench", "sov-state/bench", "sov-modules-api/bench", "sov-sequencer-registry/bench"]
+bench = [
+	"sov-celestia-adapter/bench",
+	"sov-modules-stf-template/bench",
+	"sov-state/bench",
+	"sov-modules-api/bench",
+	"sov-sequencer-registry/bench",
+]

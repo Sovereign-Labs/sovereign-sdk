@@ -33,7 +33,7 @@ schemars = { workspace = true, optional = true, features = [] }
 ed25519-dalek = { version = "2.0.0", default-features = false }
 rand = { version = "0.8", optional = true }
 
-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
+sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
 risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
 risc0-zkvm-platform = { version = "0.16", optional = true }
 
@@ -43,7 +43,7 @@ sov-modules-api = { path = ".", features = ["native"] }
 sov-bank = { path = "../module-implementations/sov-bank", version = "0.1", features = ["native"] }
 
 [features]
-bench = ["zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
+bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
 default = ["macros"]
 native = ["serde_json", "rand", "hex", "schemars", "ed25519-dalek/default", "ed25519-dalek/serde", "ed25519-dalek/rand_core", "clap", "jsonrpsee", "macros", "sov-modules-macros/native", "sov-state/native", "sov-sequencer"]
 macros = ["sov-modules-macros"]

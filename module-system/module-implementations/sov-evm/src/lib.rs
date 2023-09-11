@@ -15,7 +15,7 @@ pub mod smart_contracts;
 #[cfg(test)]
 mod tests;
 #[cfg(feature = "experimental")]
-pub use experimental::{AccountData, Evm, EvmConfig, SpecIdWrapper};
+pub use experimental::{AccountData, Evm, EvmConfig};
 #[cfg(feature = "experimental")]
 pub use revm::primitives::SpecId;
 
@@ -23,7 +23,7 @@ pub use revm::primitives::SpecId;
 mod experimental {
     use std::collections::HashMap;
 
-    use derive_more::{From, Into};
+    use reth_primitives::{Address, H256};
     use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo};
     use sov_state::codec::{BcsCodec, JsonCodec};
@@ -31,24 +31,23 @@ mod experimental {
 
     use super::evm::db::EvmDb;
     use super::evm::transaction::BlockEnv;
-    use super::evm::{DbAccount, EthAddress};
-    use crate::evm::{Bytes32, EvmChainCfg};
+    use super::evm::{DbAccount, EvmChainConfig};
     #[derive(Clone, Debug)]
     pub struct AccountData {
-        pub address: EthAddress,
-        pub balance: Bytes32,
-        pub code_hash: Bytes32,
+        pub address: Address,
+        pub balance: U256,
+        pub code_hash: H256,
         pub code: Vec<u8>,
         pub nonce: u64,
     }
 
     impl AccountData {
-        pub fn empty_code() -> Bytes32 {
-            KECCAK_EMPTY.to_fixed_bytes()
+        pub fn empty_code() -> H256 {
+            KECCAK_EMPTY
         }
 
-        pub fn balance(balance: u64) -> Bytes32 {
-            U256::from(balance).to_le_bytes()
+        pub fn balance(balance: u64) -> U256 {
+            U256::from(balance)
         }
     }
 
@@ -58,6 +57,11 @@ mod experimental {
         pub chain_id: u64,
         pub limit_contract_code_size: Option<usize>,
         pub spec: HashMap<u64, SpecId>,
+        pub coinbase: Address,
+        pub starting_base_fee: u64,
+        pub block_gas_limit: u64,
+        pub genesis_timestamp: u64,
+        pub block_timestamp_delta: u64,
     }
 
     impl Default for EvmConfig {
@@ -67,6 +71,11 @@ mod experimental {
                 chain_id: 1,
                 limit_contract_code_size: None,
                 spec: vec![(0, SpecId::LATEST)].into_iter().collect(),
+                coinbase: Address::zero(),
+                starting_base_fee: reth_primitives::constants::MIN_PROTOCOL_BASE_FEE,
+                block_gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
+                block_timestamp_delta: reth_primitives::constants::SLOT_DURATION.as_secs(),
+                genesis_timestamp: 0,
             }
         }
     }
@@ -79,13 +88,13 @@ mod experimental {
         pub(crate) address: C::Address,
 
         #[state]
-        pub(crate) accounts: sov_state::StateMap<EthAddress, DbAccount>,
+        pub(crate) accounts: sov_state::StateMap<Address, DbAccount, BcsCodec>,
 
         #[state]
-        pub(crate) cfg: sov_state::StateValue<EvmChainCfg>,
+        pub(crate) cfg: sov_state::StateValue<EvmChainConfig, BcsCodec>,
 
         #[state]
-        pub(crate) block_env: sov_state::StateValue<BlockEnv>,
+        pub(crate) pending_block: sov_state::StateValue<BlockEnv, BcsCodec>,
 
         #[state]
         pub(crate) head_number: sov_state::StateValue<u64>,
@@ -94,9 +103,6 @@ mod experimental {
         // binary serialization formats.
         // 1. Implement custom types for Block, Transaction etc.. with borsh derived.
         // 2. Remove JsonCodec.
-        #[state]
-        pub(crate) current_block: sov_state::StateValue<reth_rpc_types::Block, JsonCodec>,
-
         #[state]
         pub(crate) blocks: sov_state::AccessoryStateMap<u64, reth_rpc_types::Block, JsonCodec>,
 
@@ -158,16 +164,6 @@ mod experimental {
             working_set: &'a mut WorkingSet<C::Storage>,
         ) -> EvmDb<'a, C> {
             EvmDb::new(self.accounts.clone(), working_set)
-        }
-    }
-
-    /// EVM SpecId and their activation block
-    #[derive(Debug, PartialEq, Clone, Copy, From, Into)]
-    pub struct SpecIdWrapper(pub SpecId);
-
-    impl SpecIdWrapper {
-        pub fn new(value: SpecId) -> Self {
-            SpecIdWrapper(value)
         }
     }
 }

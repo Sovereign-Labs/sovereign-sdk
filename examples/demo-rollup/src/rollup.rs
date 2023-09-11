@@ -2,18 +2,20 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 
 use anyhow::Context;
-use celestia::verifier::address::CelestiaAddress;
-use celestia::verifier::RollupParams;
-use celestia::CelestiaService;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 #[cfg(feature = "experimental")]
 use demo_stf::app::DefaultPrivateKey;
 use demo_stf::app::{App, DefaultContext};
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
-use risc0_adapter::host::Risc0Verifier;
+use sov_celestia_adapter::verifier::address::CelestiaAddress;
+use sov_celestia_adapter::verifier::RollupParams;
+use sov_celestia_adapter::CelestiaService;
+#[cfg(feature = "experimental")]
+use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
+use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::Zkvm;
@@ -55,7 +57,7 @@ pub async fn new_rollup_with_celestia_da(
         "Starting demo celestia rollup with config {}",
         rollup_config_path
     );
-    let rollup_config: RollupConfig<celestia::DaServiceConfig> =
+    let rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 
     let ledger_db = initialize_ledger(&rollup_config.storage.path);
@@ -129,14 +131,10 @@ pub fn new_rollup_with_mock_da_from_config(
 pub fn read_tx_signer_priv_key() -> Result<DefaultPrivateKey, anyhow::Error> {
     let data = std::fs::read_to_string(TX_SIGNER_PRIV_KEY_PATH).context("Unable to read file")?;
 
-    let hex_key: crate::HexPrivateAndAddress =
-        serde_json::from_str(&data).context("JSON does not have correct format.")?;
+    let key_and_address: PrivateKeyAndAddress<DefaultContext> = serde_json::from_str(&data)
+        .unwrap_or_else(|_| panic!("Unable to convert data {} to PrivateKeyAndAddress", &data));
 
-    let priv_key = sov_modules_api::default_signature::private_key::DefaultPrivateKey::from_hex(
-        &hex_key.hex_priv_key,
-    )?;
-
-    Ok(priv_key)
+    Ok(key_and_address.private_key)
 }
 
 impl<Vm: Zkvm, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> {

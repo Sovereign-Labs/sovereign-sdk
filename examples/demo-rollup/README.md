@@ -93,13 +93,13 @@ Now run the demo-rollup full node, as shown below. You will see it consuming blo
 ```sh
 # Make sure you're still in the examples/demo-rollup directory.
 $ cargo run
-2023-06-07T10:03:25.473920Z  INFO celestia::da_service: Fetching header at height=1...
+2023-06-07T10:03:25.473920Z  INFO sov_celestia_adapter::da_service: Fetching header at height=1...
 2023-06-07T10:03:25.496853Z  INFO sov_demo_rollup: Received 0 blobs
 2023-06-07T10:03:25.497700Z  INFO sov_demo_rollup: Requesting data for height 2 and prev_state_root 0xa96745d3184e54d098982daf44923d84c358800bd22c1864734ccb978027a670
-2023-06-07T10:03:25.497719Z  INFO celestia::da_service: Fetching header at height=2...
+2023-06-07T10:03:25.497719Z  INFO sov_celestia_adapter::da_service: Fetching header at height=2...
 2023-06-07T10:03:25.505412Z  INFO sov_demo_rollup: Received 0 blobs
 2023-06-07T10:03:25.505992Z  INFO sov_demo_rollup: Requesting data for height 3 and prev_state_root 0xa96745d3184e54d098982daf44923d84c358800bd22c1864734ccb978027a670
-2023-06-07T10:03:25.506003Z  INFO celestia::da_service: Fetching header at height=3...
+2023-06-07T10:03:25.506003Z  INFO sov_celestia_adapter::da_service: Fetching header at height=3...
 2023-06-07T10:03:25.511237Z  INFO sov_demo_rollup: Received 0 blobs
 2023-06-07T10:03:25.511815Z  INFO sov_demo_rollup: Requesting data for height 4 and prev_state_root 0xa96745d3184e54d098982daf44923d84c358800bd22c1864734ccb978027a670
 ```
@@ -117,7 +117,7 @@ $ make test-create-token
 ...wait a few seconds and you will see the transaction receipt in the output of the demo-rollup full node:
 
 ```sh
-2023-07-12T15:04:52.291073Z  INFO celestia::da_service: Fetching header at height=31...
+2023-07-12T15:04:52.291073Z  INFO sov_celestia_adapter::da_service: Fetching header at height=31...
 2023-07-12T15:05:02.304393Z  INFO sov_demo_rollup: Received 1 blobs at height 31
 2023-07-12T15:05:02.305257Z  INFO sov_demo_rollup: blob #0 at height 31 with blob_hash 0x4876c2258b57104356efa4630d3d9f901ccfda5dde426ba8aef81d4a3e357c79 has been applied with #1 transactions, sequencer outcome Rewarded(0)
 2023-07-12T15:05:02.305280Z  INFO sov_demo_rollup: tx #0 hash: 0x1e1892f77cf42c0abd2ca2acdd87eabb9aa65ec7497efea4ff9f5f33575f881a result Successful
@@ -225,7 +225,7 @@ Here's an example of a JSON representing the above call:
     "to": "sov1zgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfpyysjzgfqve8h6h",
     "coins": {
       "amount": 200,
-      "token_address": "sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"
+      "token_address": "sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"
     }
   }
 }
@@ -271,7 +271,7 @@ Adding the following transaction to batch:
       "to": "sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94",
       "coins": {
         "amount": 200,
-        "token_address": "sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"
+        "token_address": "sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"
       }
     }
   }
@@ -286,7 +286,7 @@ You now have a batch with a single transaction in your wallet. If you want to su
 batch, you can import them now. Finally, let's submit your transaction to the rollup.
 
 ```bash
-$ ./target/debug/sov-cli rpc submit-batch by-address sov15vspj48hpttzyvxu8kzq5klhvaczcpyxn6z6k0hwpwtzs4a6wkvqwr57gc
+$ ./target/debug/sov-cli rpc submit-batch by-address sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94
 ```
 
 This command will use your default private key
@@ -294,7 +294,7 @@ This command will use your default private key
 #### 4. Verify the Token Supply
 
 ```bash
-$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov16m8fxq0x5wc5aw75fx9rus2p7g2l22zf4re72c3m058g77cdjemsavg2ft"],"id":1}' http://127.0.0.1:12345
+$ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method":"bank_supplyOf","params":["sov1zdwj8thgev2u3yyrrlekmvtsz4av4tp3m7dm5mx5peejnesga27svq9m72"],"id":1}' http://127.0.0.1:12345
 {"jsonrpc":"2.0","result":{"amount":1000},"id":1}
 ```
 
@@ -302,8 +302,8 @@ $ curl -X POST -H "Content-Type: application/json" -d '{"jsonrpc":"2.0","method"
 
 `demo-rollup/Makefile` automates a number of things for convenience:
 
-- Pull a docker container that runs a single instance of a celestia full node for a local setup
-- The docker container is built with celestia 0.7.1 at present and is compatible with Jupiter (sovereign's celestia adapter)
+- Pull a docker container that runs a single instance of a Celestia full node for a local setup
+- The docker container is built with Celestia 0.7.1 at present and is compatible with Sovereign's Celestia adapter)
 - `make clean`:
   - Stops any running containers with the name `sov-celestia-local` and also removes them
   - Removes `demo-data` (or the configured path of the rollup database from rollup_config.toml)

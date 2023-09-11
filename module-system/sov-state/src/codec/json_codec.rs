@@ -1,10 +1,20 @@
 use serde_json;
 
+use super::{StateCodec, StateKeyCodec};
 use crate::codec::StateValueCodec;
 
 /// A [`StateValueCodec`] that uses [`serde_json`] for all values.
-#[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[derive(Debug, Default, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct JsonCodec;
+
+impl<K> StateKeyCodec<K> for JsonCodec
+where
+    K: serde::Serialize,
+{
+    fn encode_key(&self, key: &K) -> Vec<u8> {
+        serde_json::to_vec(key).expect("Failed to serialize value")
+    }
+}
 
 impl<V> StateValueCodec<V> for JsonCodec
 where
@@ -18,5 +28,18 @@ where
 
     fn try_decode_value(&self, bytes: &[u8]) -> Result<V, Self::Error> {
         serde_json::from_slice(bytes)
+    }
+}
+
+impl StateCodec for JsonCodec {
+    type KeyCodec = Self;
+    type ValueCodec = Self;
+
+    fn key_codec(&self) -> &Self::KeyCodec {
+        self
+    }
+
+    fn value_codec(&self) -> &Self::ValueCodec {
+        self
     }
 }

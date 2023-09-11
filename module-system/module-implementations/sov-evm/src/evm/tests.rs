@@ -52,8 +52,8 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
     evm_db.insert_account_info(
         caller,
         AccountInfo {
-            balance: U256::from(1000000000).to_le_bytes(),
-            code_hash: KECCAK_EMPTY.to_fixed_bytes(),
+            balance: U256::from(1000000000),
+            code_hash: KECCAK_EMPTY,
             code: vec![],
             nonce: 1,
         },
@@ -67,8 +67,11 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
             .unwrap();
 
         let tx = &tx.try_into().unwrap();
-        let result =
-            executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
+        let block_env = BlockEnv {
+            gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
+            ..Default::default()
+        };
+        let result = executor::execute_tx(&mut evm_db, block_env, tx, CfgEnv::default()).unwrap();
         contract_address(result).expect("Expected successful contract creation")
     };
 
