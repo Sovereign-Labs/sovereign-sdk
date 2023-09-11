@@ -49,10 +49,6 @@ pub trait Zkvm {
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<StateTransition<Da, Add>, Self::Error>;
-    //{
-    //     let mut output = Self::verify(serialized_proof, code_commitment)?;
-    //     Ok(BorshDeserialize::deserialize_reader(&mut output)?)
-    // }
 }
 
 /// A trait which is accessible from within a zkVM program.
