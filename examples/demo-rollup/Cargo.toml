@@ -28,14 +28,14 @@ futures = "0.3"
 tokio = { workspace = true }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
-celestia = { path = "../../adapters/celestia", features = ["native"] }
 demo-stf = { path = "../demo-stf", features = ["native"] }
+sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"] }
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-db = { path = "../../full-node/db/sov-db" }
 sov-ethereum = { path = "../../full-node/sov-ethereum", optional = true }
 sov-sequencer = { path = "../../full-node/sov-sequencer" }
 sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
-risc0-adapter = { path = "../../adapters/risc0", features = ["native"] }
+sov-risc0-adapter = { path = "../../adapters/risc0", features = ["native"] }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
 sov-state = { path = "../../module-system/sov-state", features = ["native"] }

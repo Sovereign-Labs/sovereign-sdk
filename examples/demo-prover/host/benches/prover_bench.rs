@@ -7,18 +7,18 @@ use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
-use celestia::types::{FilteredCelestiaBlock, NamespaceId};
-use celestia::verifier::address::CelestiaAddress;
-use celestia::verifier::{CelestiaSpec, RollupParams};
-use celestia::CelestiaService;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
 use demo_stf::app::{App, DefaultPrivateKey};
 use demo_stf::genesis_config::create_demo_genesis_config;
 use log4rs::config::{Appender, Config, Root};
 use methods::ROLLUP_ELF;
 use regex::Regex;
-use risc0_adapter::host::Risc0Host;
+use sov_celestia_adapter::types::{FilteredCelestiaBlock, NamespaceId};
+use sov_celestia_adapter::verifier::address::CelestiaAddress;
+use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
+use sov_celestia_adapter::CelestiaService;
 use sov_modules_api::PrivateKey;
+use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::ZkvmHost;
@@ -90,7 +90,7 @@ fn get_config(rollup_trace: &str) -> Config {
 }
 
 #[cfg(feature = "bench")]
-use risc0_adapter::metrics::GLOBAL_HASHMAP;
+use sov_risc0_adapter::metrics::GLOBAL_HASHMAP;
 
 // The rollup stores its data in the namespace b"sov-test" on Celestia
 const ROLLUP_NAMESPACE: NamespaceId = NamespaceId(ROLLUP_NAMESPACE_RAW);
@@ -146,7 +146,7 @@ async fn main() -> Result<(), anyhow::Error> {
     }
 
     let rollup_config_path = "benches/rollup_config.toml".to_string();
-    let mut rollup_config: RollupConfig<celestia::DaServiceConfig> =
+    let mut rollup_config: RollupConfig<sov_celestia_adapter::DaServiceConfig> =
         from_toml_path(&rollup_config_path)
             .context("Failed to read rollup configuration")
             .unwrap();

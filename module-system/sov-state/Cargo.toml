@@ -26,7 +26,7 @@ jmt = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
 
-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
+sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
 risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
 risc0-zkvm-platform = { version = "0.16", optional = true }
 
@@ -34,6 +34,6 @@ risc0-zkvm-platform = { version = "0.16", optional = true }
 tempfile = { workspace = true }
 
 [features]
-bench = ["zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
+bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
 default = []
 native = ["sov-db"]

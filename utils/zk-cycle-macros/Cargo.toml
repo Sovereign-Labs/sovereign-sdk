@@ -1,5 +1,5 @@
 [package]
-name = "zk-cycle-macros"
+name = "sov-zk-cycle-macros"
 description = "cycle counting utils"
 authors = { workspace = true }
 edition = { workspace = true }
@@ -28,10 +28,10 @@ borsh = { workspace = true }
 
 [dev-dependencies]
 trybuild = "1.0"
-zk-cycle-macros = {path = "../../utils/zk-cycle-macros"}
-risc0-zkvm = { version = "0.16", default-features = false, features = ["std"]}
-risc0-zkvm-platform = { version = "0.16"}
-zk-cycle-utils = {path = "../../utils/zk-cycle-utils"}
+sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros" }
+sov-zk-cycle-utils = { path = "../../utils/zk-cycle-utils" }
+risc0-zkvm = { version = "0.16", default-features = false, features = ["std"] }
+risc0-zkvm-platform = { version = "0.16" }
 
 [features]
-bench=[]
+bench = []

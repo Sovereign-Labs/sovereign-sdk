@@ -938,39 +938,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "celestia"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.21.2",
- "bech32 0.9.1",
- "borsh",
- "hex",
- "hex-literal 0.4.1",
- "jsonrpsee",
- "nmt-rs",
- "postcard",
- "proptest",
- "prost",
- "prost-build",
- "prost-types",
- "risc0-zkvm",
- "risc0-zkvm-platform",
- "serde",
- "serde_json",
- "sha2 0.10.7",
- "sov-rollup-interface",
- "tendermint",
- "tendermint-proto",
- "thiserror",
- "tokio",
- "tracing",
- "wiremock",
- "zk-cycle-macros",
-]
-
-[[package]]
 name = "cexpr"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1558,6 +1525,7 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "rand 0.8.5",
+ "reth-primitives",
  "serde",
  "serde_json",
  "sov-accounts",
@@ -5698,24 +5666,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "risc0-adapter"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bincode",
- "bytemuck",
- "once_cell",
- "parking_lot 0.12.1",
- "risc0-circuit-rv32im",
- "risc0-zkp",
- "risc0-zkvm",
- "risc0-zkvm-platform",
- "serde",
- "sov-rollup-interface",
- "zk-cycle-utils",
-]
-
-[[package]]
 name = "risc0-build-kernel"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6668,6 +6618,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-celestia-adapter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.21.2",
+ "bech32 0.9.1",
+ "borsh",
+ "hex",
+ "hex-literal 0.4.1",
+ "jsonrpsee",
+ "nmt-rs",
+ "postcard",
+ "proptest",
+ "prost",
+ "prost-build",
+ "prost-types",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "serde",
+ "serde_json",
+ "sha2 0.10.7",
+ "sov-rollup-interface",
+ "sov-zk-cycle-macros",
+ "tendermint",
+ "tendermint-proto",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "wiremock",
+]
+
+[[package]]
 name = "sov-chain-state"
 version = "0.1.0"
 dependencies = [
@@ -6746,7 +6729,6 @@ dependencies = [
  "async-trait",
  "borsh",
  "bytes",
- "celestia",
  "clap",
  "const-rollup-config",
  "criterion",
@@ -6767,11 +6749,11 @@ dependencies = [
  "proptest",
  "reqwest",
  "revm",
- "risc0-adapter",
  "serde",
  "serde_json",
  "sha2 0.10.7",
  "sov-bank",
+ "sov-celestia-adapter",
  "sov-cli",
  "sov-db",
  "sov-demo-rollup",
@@ -6779,6 +6761,7 @@ dependencies = [
  "sov-evm",
  "sov-modules-api",
  "sov-modules-stf-template",
+ "sov-risc0-adapter",
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-state",
@@ -6796,14 +6779,15 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
- "celestia",
  "const-rollup-config",
  "demo-stf",
  "ethers",
  "jsonrpsee",
  "reth-primitives",
  "reth-rpc",
+ "reth-rpc-types",
  "serde_json",
+ "sov-celestia-adapter",
  "sov-evm",
  "sov-modules-api",
  "sov-rollup-interface",
@@ -6896,8 +6880,8 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sequencer",
  "sov-state",
+ "sov-zk-cycle-macros",
  "thiserror",
- "zk-cycle-macros",
 ]
 
 [[package]]
@@ -6941,10 +6925,10 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
+ "sov-zk-cycle-macros",
+ "sov-zk-cycle-utils",
  "thiserror",
  "tracing",
- "zk-cycle-macros",
- "zk-cycle-utils",
 ]
 
 [[package]]
@@ -6963,6 +6947,24 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "tempfile",
+]
+
+[[package]]
+name = "sov-risc0-adapter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "bytemuck",
+ "once_cell",
+ "parking_lot 0.12.1",
+ "risc0-circuit-rv32im",
+ "risc0-zkp",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "serde",
+ "sov-rollup-interface",
+ "sov-zk-cycle-utils",
 ]
 
 [[package]]
@@ -7031,9 +7033,9 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
+ "sov-zk-cycle-macros",
+ "sov-zk-cycle-utils",
  "tempfile",
- "zk-cycle-macros",
- "zk-cycle-utils",
 ]
 
 [[package]]
@@ -7054,9 +7056,9 @@ dependencies = [
  "sov-db",
  "sov-first-read-last-write-cache",
  "sov-rollup-interface",
+ "sov-zk-cycle-macros",
  "tempfile",
  "thiserror",
- "zk-cycle-macros",
 ]
 
 [[package]]
@@ -7065,7 +7067,6 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
- "celestia",
  "futures",
  "hex",
  "jsonrpsee",
@@ -7074,6 +7075,7 @@ dependencies = [
  "serde_json",
  "sov-accounts",
  "sov-bank",
+ "sov-celestia-adapter",
  "sov-db",
  "sov-modules-api",
  "sov-modules-stf-template",
@@ -7121,6 +7123,30 @@ dependencies = [
  "sov-state",
  "tempfile",
  "thiserror",
+]
+
+[[package]]
+name = "sov-zk-cycle-macros"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "proc-macro2 1.0.66",
+ "quote 1.0.33",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "sov-zk-cycle-macros",
+ "sov-zk-cycle-utils",
+ "syn 1.0.109",
+ "trybuild",
+]
+
+[[package]]
+name = "sov-zk-cycle-utils"
+version = "0.1.0"
+dependencies = [
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
 ]
 
 [[package]]
@@ -8494,30 +8520,6 @@ dependencies = [
  "sha1",
  "time",
  "zstd 0.11.2+zstd.1.5.2",
-]
-
-[[package]]
-name = "zk-cycle-macros"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "proc-macro2 1.0.66",
- "quote 1.0.33",
- "risc0-zkvm",
- "risc0-zkvm-platform",
- "syn 1.0.109",
- "trybuild",
- "zk-cycle-macros",
- "zk-cycle-utils",
-]
-
-[[package]]
-name = "zk-cycle-utils"
-version = "0.1.0"
-dependencies = [
- "risc0-zkvm",
- "risc0-zkvm-platform",
 ]
 
 [[package]]

@@ -19,12 +19,13 @@ sov-evm = { path = "../../module-system/module-implementations/sov-evm" }
 demo-stf = { path = "../../examples/demo-stf", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api" }
 const-rollup-config = { path = "../../examples/const-rollup-config" }
-celestia = { path = "../../adapters/celestia", features = ["native"] }
+sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"] }
 
 borsh = { workspace = true }
 serde_json = { workspace = true }
 
 reth-primitives = { workspace = true }
+reth-rpc-types = { workspace = true }
 reth-rpc = { workspace = true }
 
 ethers = { workspace = true }

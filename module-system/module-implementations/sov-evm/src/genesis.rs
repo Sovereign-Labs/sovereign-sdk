@@ -7,7 +7,6 @@ use sov_state::WorkingSet;
 
 use crate::evm::db_init::InitEvmDb;
 use crate::evm::{AccountInfo, EvmChainConfig};
-use crate::experimental::SpecIdWrapper;
 use crate::Evm;
 
 impl<C: sov_modules_api::Context> Evm<C> {
@@ -33,14 +32,14 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let mut spec = config
             .spec
             .iter()
-            .map(|(k, v)| (*k, SpecIdWrapper::new(*v)))
+            .map(|(k, v)| (*k, *v))
             .collect::<Vec<_>>();
 
         spec.sort_by(|a, b| a.0.cmp(&b.0));
 
         if spec.is_empty() {
-            spec.push((0, SpecIdWrapper::from(SpecId::LATEST)));
-        } else if spec[0].0 != 0 {
+            spec.push((0, SpecId::LATEST));
+        } else if spec[0].0 != 0u64 {
             panic!("EVM spec must start from block 0");
         }
 
@@ -61,7 +60,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let header = reth_primitives::Header {
             parent_hash: H256::default(),
             ommers_hash: EMPTY_OMMER_ROOT,
-            beneficiary: config.coinbase.into(),
+            beneficiary: config.coinbase,
             state_root: KECCAK_EMPTY, // TODO: Can we get state from working set now?
             transactions_root: EMPTY_TRANSACTIONS,
             receipts_root: EMPTY_RECEIPTS,

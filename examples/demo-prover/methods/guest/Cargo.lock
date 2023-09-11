@@ -285,33 +285,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "celestia"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-trait",
- "base64 0.21.2",
- "bech32",
- "borsh",
- "hex",
- "hex-literal",
- "nmt-rs",
- "prost",
- "prost-build",
- "prost-types",
- "risc0-zkvm",
- "risc0-zkvm-platform",
- "serde",
- "sha2 0.10.6",
- "sov-rollup-interface",
- "tendermint",
- "tendermint-proto",
- "thiserror",
- "tracing",
- "zk-cycle-macros",
-]
-
-[[package]]
 name = "cfg-if"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -466,6 +439,7 @@ dependencies = [
  "sov-accounts",
  "sov-bank",
  "sov-blob-storage",
+ "sov-chain-state",
  "sov-modules-api",
  "sov-modules-stf-template",
  "sov-rollup-interface",
@@ -631,6 +605,12 @@ checksum = "071a31f4ee85403370b58aca746f01041ede6f0da2730960ad001edc2b71b394"
 dependencies = [
  "cfg-if",
 ]
+
+[[package]]
+name = "equivalent"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5443807d6dff69373d433ab9ef5378ad8df50ca6298caf15de6e52e24aaf54d5"
 
 [[package]]
 name = "erased-serde"
@@ -868,7 +848,7 @@ dependencies = [
  "futures-sink",
  "futures-util",
  "http",
- "indexmap",
+ "indexmap 1.9.3",
  "slab",
  "tokio",
  "tokio-util",
@@ -889,6 +869,12 @@ checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
 dependencies = [
  "ahash",
 ]
+
+[[package]]
+name = "hashbrown"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2c6201b9ff9fd90a5a3bac2e56a830d0caa509576f0e503818ee82c181b3437a"
 
 [[package]]
 name = "heck"
@@ -1038,6 +1024,16 @@ checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
 dependencies = [
  "autocfg",
  "hashbrown 0.12.3",
+]
+
+[[package]]
+name = "indexmap"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d5477fe2230a79769d8dc68e0eabf5437907c0457a5614a9e8dddb67f65eb65d"
+dependencies = [
+ "equivalent",
+ "hashbrown 0.14.0",
 ]
 
 [[package]]
@@ -1392,7 +1388,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4dd7d28ee937e54fe3080c91faa1c3a46c06de6252988a7f4592ba2310ef22a4"
 dependencies = [
  "fixedbitset",
- "indexmap",
+ "indexmap 1.9.3",
 ]
 
 [[package]]
@@ -1451,7 +1447,7 @@ version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d6ea3c4595b96363c13943497db34af4460fb474a95c43f4446ad341b8c9785"
 dependencies = [
- "toml",
+ "toml 0.5.11",
 ]
 
 [[package]]
@@ -1658,20 +1654,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd124222d17ad93a644ed9d011a40f4fb64aa54275c08cc216524a9ea82fb09f"
 dependencies = [
  "digest 0.10.7",
-]
-
-[[package]]
-name = "risc0-adapter"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "bincode",
- "bytemuck",
- "risc0-zkvm",
- "risc0-zkvm-platform",
- "serde",
- "sov-rollup-interface",
- "zk-cycle-utils",
 ]
 
 [[package]]
@@ -1911,6 +1893,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_spanned"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96426c9936fd7a0124915f9185ea1d20aa9445cc9821142f0a73bc9207a2e186"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "serde_urlencoded"
 version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2033,12 +2024,21 @@ dependencies = [
  "bincode",
  "borsh",
  "hex",
+ "sov-chain-state",
  "sov-modules-api",
- "sov-modules-macros",
- "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
  "tracing",
+]
+
+[[package]]
+name = "sov-chain-state"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "sov-modules-api",
+ "sov-state",
 ]
 
 [[package]]
@@ -2047,20 +2047,20 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "borsh",
- "celestia",
  "const-rollup-config",
  "demo-stf",
  "directories",
  "downloader",
- "risc0-adapter",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
  "serde_json",
  "sha2 0.10.6",
  "sha3",
+ "sov-celestia-adapter",
  "sov-modules-api",
  "sov-modules-stf-template",
+ "sov-risc0-adapter",
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
@@ -2091,8 +2091,8 @@ dependencies = [
  "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
+ "sov-zk-cycle-macros",
  "thiserror",
- "zk-cycle-macros",
 ]
 
 [[package]]
@@ -2105,6 +2105,7 @@ dependencies = [
  "quote",
  "schemars",
  "syn 1.0.109",
+ "toml 0.7.7",
 ]
 
 [[package]]
@@ -2121,10 +2122,24 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
+ "sov-zk-cycle-macros",
  "thiserror",
  "tracing",
- "zk-cycle-macros",
- "zk-cycle-utils",
+ "sov-zk-cycle-utils",
+]
+
+[[package]]
+name = "sov-risc0-adapter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "bincode",
+ "bytemuck",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "serde",
+ "sov-rollup-interface",
+ "sov-zk-cycle-utils",
 ]
 
 [[package]]
@@ -2151,10 +2166,9 @@ dependencies = [
  "risc0-zkvm-platform",
  "sov-bank",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
- "zk-cycle-macros",
- "zk-cycle-utils",
+ "sov-zk-cycle-macros",
+ "sov-zk-cycle-utils",
 ]
 
 [[package]]
@@ -2169,11 +2183,12 @@ dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
+ "serde_json",
  "sha2 0.10.6",
  "sov-first-read-last-write-cache",
  "sov-rollup-interface",
+ "sov-zk-cycle-macros",
  "thiserror",
- "zk-cycle-macros",
 ]
 
 [[package]]
@@ -2183,9 +2198,19 @@ dependencies = [
  "anyhow",
  "borsh",
  "sov-modules-api",
- "sov-rollup-interface",
  "sov-state",
  "thiserror",
+]
+
+[[package]]
+name = "sov-zk-cycle-macros"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -2410,6 +2435,40 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f4f7f0dd8d50a853a531c426359045b1998f04219d88799810762cd4ad314234"
 dependencies = [
  "serde",
+]
+
+[[package]]
+name = "toml"
+version = "0.7.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de0a3ab2091e52d7299a39d098e200114a972df0a7724add02a273aa9aada592"
+dependencies = [
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
+ "toml_edit",
+]
+
+[[package]]
+name = "toml_datetime"
+version = "0.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7cda73e2f1397b1262d6dfdcef8aafae14d1de7748d66822d3bfeeb6d03e5e4b"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "toml_edit"
+version = "0.19.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
+dependencies = [
+ "indexmap 2.0.0",
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
+ "winnow",
 ]
 
 [[package]]
@@ -2721,6 +2780,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1a515f5799fe4961cb532f983ce2b23082366b898e52ffbce459c86f67c8378a"
 
 [[package]]
+name = "winnow"
+version = "0.5.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7c2e3184b9c4e92ad5167ca73039d0c42476302ab603e2fec4487511f38ccefc"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "winreg"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2770,18 +2838,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "zk-cycle-macros"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "borsh",
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
-
-[[package]]
-name = "zk-cycle-utils"
+name = "sov-zk-cycle-utils"
 version = "0.1.0"
 dependencies = [
  "risc0-zkvm",

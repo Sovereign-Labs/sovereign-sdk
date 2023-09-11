@@ -14,7 +14,7 @@ tempfile = "3"
 rand = "0.8"
 
 # Sovereign-maintained dependencies.
-celestia = { path = "../adapters/celestia" }
+sov-celestia-adapter = { path = "../adapters/celestia" }
 sov-modules-api = { path = "../module-system/sov-modules-api", features = ["arbitrary", "native"] }
 sov-accounts = { path = "../module-system/module-implementations/sov-accounts", features = ["arbitrary", "native"] }
 sov-bank = { path = "../module-system/module-implementations/sov-bank", features = ["native"] }
