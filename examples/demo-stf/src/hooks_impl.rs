@@ -2,9 +2,9 @@ use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, Spec};
 use sov_modules_stf_template::SequencerOutcome;
-use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 #[cfg(feature = "experimental")]
 use sov_rollup_interface::da::BlockHeaderTrait;
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_sequencer_registry::SequencerRegistry;
 use sov_state::WorkingSet;
 use tracing::info;
