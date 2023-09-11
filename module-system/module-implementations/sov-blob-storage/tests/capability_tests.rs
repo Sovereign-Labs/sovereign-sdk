@@ -7,7 +7,7 @@ use sov_modules_api::digest::Digest;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::{Address, BlobReaderTrait, Context, Module, Spec};
 use sov_rollup_interface::mocks::{
-    MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockValidityCond,
+    MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaSpec, MockValidityCond,
 };
 use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
 use sov_state::{ProverStorage, Storage, WorkingSet};

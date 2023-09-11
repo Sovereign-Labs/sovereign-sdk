@@ -16,7 +16,7 @@ use rng_xfers::{RngDaService, RngDaSpec};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
-use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockHash};
+use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_stf_runner::{from_toml_path, RollupConfig};
