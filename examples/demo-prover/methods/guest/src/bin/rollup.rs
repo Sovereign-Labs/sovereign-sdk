@@ -54,7 +54,7 @@ pub fn main() {
     });
 
     let validity_condition = verifier
-        .verify_relevant_tx_list::<NoOpHasher>(&header, &blobs, inclusion_proof, completeness_proof)
+        .verify_relevant_tx_list(&header, &blobs, inclusion_proof, completeness_proof)
         .expect("Transaction list must be correct");
     env::write(&"Relevant txs verified\n");
 
