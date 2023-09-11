@@ -48,7 +48,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
     mut evm_db: DB,
 ) {
     let dev_signer = DevSigner::new_random();
-    let caller = dev_signer.address;
+    let caller = dev_signer.address();
     evm_db.insert_account_info(
         caller,
         AccountInfo {

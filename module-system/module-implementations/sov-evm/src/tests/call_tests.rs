@@ -57,7 +57,7 @@ fn evm_test() {
     let sender_context = C::new(sender_addr);
 
     let dev_signer: DevSigner = DevSigner::new_random();
-    let caller = dev_signer.address;
+    let caller = dev_signer.address();
 
     let evm = Evm::<C>::default();
 

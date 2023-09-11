@@ -10,6 +10,8 @@ pub mod hooks;
 #[cfg(feature = "experimental")]
 pub mod query;
 #[cfg(feature = "smart_contracts")]
+pub mod sequencer;
+#[cfg(feature = "smart_contracts")]
 pub mod smart_contracts;
 #[cfg(feature = "experimental")]
 #[cfg(test)]
