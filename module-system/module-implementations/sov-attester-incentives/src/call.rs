@@ -53,7 +53,7 @@ impl<Da: DaSpec, StorageProof: Serialize + DeserializeOwned> BorshDeserialize
     }
 
     fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
-        bcs::from_bytes(*buf)
+        bcs::from_bytes(buf)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
     }
 }

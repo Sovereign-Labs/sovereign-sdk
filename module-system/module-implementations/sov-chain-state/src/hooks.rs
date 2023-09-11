@@ -1,4 +1,3 @@
-use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::{Context, Spec};
 use sov_rollup_interface::da::BlockHeaderTrait;
@@ -57,7 +56,7 @@ impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da
         self.in_progress_transition.set(
             &TransitionInProgress {
                 da_block_hash: slot_header.hash(),
-                validity_condition: validity_condition.clone(),
+                validity_condition: *validity_condition,
             },
             working_set,
         );

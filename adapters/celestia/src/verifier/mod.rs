@@ -89,9 +89,9 @@ impl AsRef<TmHash> for tendermint::Hash {
 
 impl BlockHash for TmHash {}
 
-impl Into<[u8; 32]> for TmHash {
-    fn into(self) -> [u8; 32] {
-        *self.inner()
+impl From<TmHash> for [u8; 32] {
+    fn from(val: TmHash) -> Self {
+        *val.inner()
     }
 }
 

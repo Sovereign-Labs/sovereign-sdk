@@ -82,8 +82,8 @@ impl Zkvm for MockZkvm {
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
     ) -> Result<crate::zk::StateTransition<Da, Add>, Self::Error> {
-        let mut output = Self::verify(serialized_proof, code_commitment)?;
-        Ok(bincode::deserialize(&mut output)?)
+        let output = Self::verify(serialized_proof, code_commitment)?;
+        Ok(bincode::deserialize(output)?)
     }
 }
 

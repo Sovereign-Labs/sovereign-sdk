@@ -1,4 +1,3 @@
-use borsh::{BorshDeserialize, BorshSerialize};
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::{BlobReaderTrait, Context, DaSpec, Spec};

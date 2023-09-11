@@ -4,7 +4,7 @@
 mod capabilities;
 #[cfg(feature = "native")]
 mod query;
-use borsh::{BorshDeserialize, BorshSerialize};
+
 #[cfg(feature = "native")]
 pub use query::{BlobStorageRpcImpl, BlobStorageRpcServer, Response};
 use sov_chain_state::TransitionHeight;

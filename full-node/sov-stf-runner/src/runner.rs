@@ -128,7 +128,7 @@ where
 
             let slot_result = self.app.apply_slot(
                 Default::default(),
-                &filtered_block.header(),
+                filtered_block.header(),
                 &filtered_block.validity_condition(),
                 &mut blobs,
             );
