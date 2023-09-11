@@ -77,7 +77,11 @@ pub async fn new_rollup_with_celestia_da(
 
     #[cfg(feature = "experimental")]
     let eth_signer = read_eth_tx_signers();
-    let genesis_config = get_genesis_config(sequencer_da_address, eth_signer.signers());
+    let genesis_config = get_genesis_config(
+        sequencer_da_address,
+        #[cfg(feature = "experimental")]
+        eth_signer.signers(),
+    );
 
     Ok(Rollup {
         app,
@@ -117,7 +121,11 @@ pub fn new_rollup_with_mock_da_from_config(
     #[cfg(feature = "experimental")]
     let eth_signer = read_eth_tx_signers();
     let app = App::new(rollup_config.storage);
-    let genesis_config = get_genesis_config(sequencer_da_address, eth_signer.signers());
+    let genesis_config = get_genesis_config(
+        sequencer_da_address,
+        #[cfg(feature = "experimental")]
+        eth_signer.signers(),
+    );
 
     Ok(Rollup {
         app,
