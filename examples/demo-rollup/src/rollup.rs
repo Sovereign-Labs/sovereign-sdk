@@ -7,6 +7,8 @@ use const_rollup_config::SEQUENCER_DA_ADDRESS;
 use demo_stf::app::DefaultPrivateKey;
 use demo_stf::app::{App, DefaultContext};
 use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
+#[cfg(feature = "experimental")]
+use secp256k1::SecretKey;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::RollupParams;
 use sov_celestia_adapter::CelestiaService;
@@ -72,7 +74,10 @@ pub async fn new_rollup_with_celestia_da(
 
     let app = App::new(rollup_config.storage);
     let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS)?;
-    let genesis_config = get_genesis_config(sequencer_da_address);
+
+    #[cfg(feature = "experimental")]
+    let eth_signer = read_eth_tx_signers();
+    let genesis_config = get_genesis_config(sequencer_da_address, eth_signer.signers());
 
     Ok(Rollup {
         app,
@@ -84,7 +89,7 @@ pub async fn new_rollup_with_celestia_da(
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
-            eth_signers: read_eth_tx_signers(),
+            eth_signer,
         },
     })
 }
@@ -110,9 +115,9 @@ pub fn new_rollup_with_mock_da_from_config(
     let da_service = MockDaService::new(sequencer_da_address);
 
     #[cfg(feature = "experimental")]
-    let eth_signers = read_eth_tx_signers();
+    let eth_signer = read_eth_tx_signers();
     let app = App::new(rollup_config.storage);
-    let genesis_config = get_genesis_config(sequencer_da_address);
+    let genesis_config = get_genesis_config(sequencer_da_address, eth_signer.signers());
 
     Ok(Rollup {
         app,
@@ -124,7 +129,7 @@ pub fn new_rollup_with_mock_da_from_config(
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
-            eth_signers,
+            eth_signer,
         },
     })
 }
@@ -142,11 +147,11 @@ fn read_sov_tx_signer_priv_key() -> Result<DefaultPrivateKey, anyhow::Error> {
 }
 
 #[cfg(feature = "experimental")]
-fn read_eth_tx_signers() -> Vec<sov_ethereum::Signer> {
-    vec![sov_ethereum::Signer::from_str(
+fn read_eth_tx_signers() -> sov_ethereum::DevSigner {
+    sov_ethereum::DevSigner::new(vec![SecretKey::from_str(
         "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
     )
-    .unwrap()]
+    .unwrap()])
 }
 
 impl<Vm: Zkvm, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> {

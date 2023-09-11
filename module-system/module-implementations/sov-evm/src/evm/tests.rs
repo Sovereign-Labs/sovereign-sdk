@@ -12,7 +12,7 @@ use super::executor;
 use crate::evm::transaction::BlockEnv;
 use crate::evm::{contract_address, AccountInfo};
 use crate::smart_contracts::SimpleStorageContract;
-use crate::tests::dev_signer::DevSigner;
+use crate::tests::dev_signer::TestSigner;
 use crate::Evm;
 type C = sov_modules_api::default_context::DefaultContext;
 
@@ -47,7 +47,7 @@ fn simple_contract_execution_in_memory_state() {
 fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit + InitEvmDb>(
     mut evm_db: DB,
 ) {
-    let dev_signer = DevSigner::new_random();
+    let dev_signer = TestSigner::new_random();
     let caller = dev_signer.address();
     evm_db.insert_account_info(
         caller,

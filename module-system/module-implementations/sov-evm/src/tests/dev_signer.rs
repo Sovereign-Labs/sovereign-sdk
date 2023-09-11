@@ -5,21 +5,25 @@ use reth_primitives::{
     TxEip1559 as RethTxEip1559,
 };
 use reth_rpc::eth::error::SignError;
-use secp256k1::SecretKey;
+use secp256k1::{PublicKey, SecretKey};
 
 use crate::evm::RlpEvmTransaction;
-use crate::sequencer::Signer;
+use crate::sequencer::DevSigner;
 
 /// ETH transactions signer used in tests.
-pub(crate) struct DevSigner {
-    signer: Signer,
+pub(crate) struct TestSigner {
+    signer: DevSigner,
+    address: Address,
 }
 
-impl DevSigner {
+impl TestSigner {
     /// Creates a new signer.
     pub(crate) fn new(secret_key: SecretKey) -> Self {
+        let public_key = PublicKey::from_secret_key(secp256k1::SECP256K1, &secret_key);
+        let address = reth_primitives::public_key_to_address(public_key);
         Self {
-            signer: Signer::new(secret_key),
+            signer: DevSigner::new(vec![secret_key]),
+            address,
         }
     }
 
@@ -32,7 +36,7 @@ impl DevSigner {
 
     /// Address of the transaction signer.
     pub(crate) fn address(&self) -> Address {
-        self.signer.address
+        self.address
     }
 
     /// Signs default Eip1559 transaction with to, data and nonce overridden.
@@ -52,7 +56,7 @@ impl DevSigner {
         };
 
         let reth_tx = RethTransaction::Eip1559(reth_tx);
-        let signed = self.signer.sign_transaction(reth_tx)?;
+        let signed = self.signer.sign_transaction(reth_tx, self.address)?;
 
         Ok(RlpEvmTransaction {
             rlp: signed.envelope_encoded().to_vec(),
