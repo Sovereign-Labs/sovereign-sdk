@@ -1,11 +1,11 @@
 use anyhow::Result;
 use reth_primitives::constants::{EMPTY_RECEIPTS, EMPTY_TRANSACTIONS};
 use reth_primitives::{Bloom, Bytes, EMPTY_OMMER_ROOT, H256, KECCAK_EMPTY, U256};
-use reth_rpc_types::{Block, BlockTransactions, Header};
 use revm::primitives::SpecId;
 use sov_state::WorkingSet;
 
 use crate::evm::db_init::InitEvmDb;
+use crate::evm::transaction::Block;
 use crate::evm::{AccountInfo, EvmChainConfig};
 use crate::Evm;
 
@@ -79,17 +79,17 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         let header = header.seal_slow();
 
-        self.blocks.set(
-            &genesis_block_number,
+        let mut accessory_state = working_set.accessory_state();
+
+        self.block_hashes
+            .set(&header.hash, &genesis_block_number, &mut accessory_state);
+
+        self.blocks.push(
             &Block {
-                header: Header::from_primitive_with_hash(header),
-                total_difficulty: None,
-                uncles: vec![],
-                transactions: BlockTransactions::Hashes(vec![]),
-                size: None,
-                withdrawals: None,
+                header,
+                transactions: 0u64..0u64,
             },
-            &mut working_set.accessory_state(),
+            &mut accessory_state,
         );
 
         Ok(())

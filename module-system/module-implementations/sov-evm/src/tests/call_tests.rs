@@ -83,11 +83,15 @@ fn evm_test() {
             .as_slice(),
     );
 
+    evm.begin_slot_hook([5u8; 32], working_set);
+
     let set_arg = 999;
 
     for tx in create_messages(contract_addr, set_arg, dev_signer) {
         evm.call(tx, &sender_context, working_set).unwrap();
     }
+
+    evm.end_slot_hook([5u8; 32], working_set);
 
     let db_account = evm.accounts.get(&contract_addr, working_set).unwrap();
     let storage_value = db_account.storage.get(&U256::ZERO, working_set).unwrap();

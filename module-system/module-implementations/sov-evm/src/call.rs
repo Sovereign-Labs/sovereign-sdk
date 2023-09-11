@@ -1,7 +1,5 @@
 use anyhow::Result;
-use ethereum_types::U64;
-use reth_primitives::bloom::logs_bloom;
-use reth_primitives::{TransactionSignedEcRecovered, U128, U256};
+use reth_primitives::TransactionSignedEcRecovered;
 use reth_revm::into_reth_log;
 use revm::primitives::{CfgEnv, SpecId};
 use sov_modules_api::CallResponse;
@@ -9,16 +7,15 @@ use sov_state::WorkingSet;
 
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
-use crate::evm::transaction::BlockEnv;
-use crate::evm::{contract_address, EvmChainConfig, RlpEvmTransaction};
+use crate::evm::transaction::{BlockEnv, Receipt, TransactionSignedAndRecovered};
+use crate::evm::{EvmChainConfig, RlpEvmTransaction};
 use crate::experimental::PendingTransaction;
 use crate::Evm;
 
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
-    derive(serde::Deserialize),
-    derive(schemars::JsonSchema)
+    derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 pub struct CallMessage {
@@ -37,84 +34,66 @@ impl<C: sov_modules_api::Context> Evm<C> {
             .pending_block
             .get(working_set)
             .expect("Pending block must be set");
-        let effective_gas_price =
-            U128::from(evm_tx_recovered.effective_gas_price(Some(block_env.basefee)));
 
         let cfg = self.cfg.get(working_set).expect("Evm config must be set");
         let cfg_env = get_cfg_env(&block_env, cfg, None);
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
         let result = executor::execute_tx(evm_db, &block_env, &evm_tx_recovered, cfg_env);
-        let transaction = reth_rpc_types::Transaction::from_recovered(evm_tx_recovered);
 
         let receipt = match result {
             Ok(result) => {
                 let logs: Vec<_> = result.logs().into_iter().map(into_reth_log).collect();
-                let gas_used = U256::from(result.gas_used());
 
-                reth_rpc_types::TransactionReceipt {
-                    transaction_hash: Some(transaction.hash),
-                    transaction_index: Some(U256::from(
+                let mut accessory_state = working_set.accessory_state();
+                let tx_count = self.pending_transactions.len(&mut accessory_state);
+
+                let previous_transaction: Option<PendingTransaction> = if tx_count == 0 {
+                    None
+                } else {
+                    Some(
                         self.pending_transactions
-                            .len(&mut working_set.accessory_state()),
-                    )),
-                    block_number: Some(U256::from(block_env.number)),
-                    from: transaction.from,
-                    to: transaction.to,
-                    gas_used: Some(gas_used),
-                    // Potentially we can store this in block_env ?
-                    cumulative_gas_used: self
-                        .pending_transactions
-                        .iter(&mut working_set.accessory_state())
-                        .map(|tx| tx.receipt.gas_used.unwrap())
-                        .sum::<U256>()
-                        + gas_used,
-                    contract_address: contract_address(&result),
-                    status_code: if result.is_success() {
-                        Some(U64::from(1))
-                    } else {
-                        Some(U64::from(0))
+                            .get(tx_count - 1, &mut accessory_state)
+                            .expect("Pending transaction must be set"),
+                    )
+                };
+
+                Receipt {
+                    receipt: reth_primitives::Receipt {
+                        tx_type: evm_tx_recovered.tx_type(),
+                        success: result.is_success(),
+                        cumulative_gas_used: match &previous_transaction {
+                            Some(tx) => tx.receipt.receipt.cumulative_gas_used + result.gas_used(),
+                            None => 0u64,
+                        },
+                        logs,
                     },
-                    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/504
-                    effective_gas_price: effective_gas_price,
-                    transaction_type: transaction
-                        .transaction_type
-                        .unwrap()
-                        .as_u64()
-                        .try_into()
-                        .unwrap(),
-                    logs_bloom: logs_bloom(logs.iter()),
-                    logs: {
-                        let mut log_index = 0;
-                        logs.into_iter()
-                            .map(|log| {
-                                let log = reth_rpc_types::Log {
-                                    address: log.address,
-                                    topics: log.topics,
-                                    data: log.data,
-                                    // TODO: Those are duplicated data - do we want to store them or calculate on the fly in requests?
-                                    // TODO: Maybe we should actually store the primitive types and calculate the rpc types on the fly?
-                                    block_hash: transaction.block_hash,
-                                    block_number: transaction.block_number,
-                                    transaction_hash: Some(transaction.hash),
-                                    transaction_index: transaction.transaction_index,
-                                    log_index: Some(U256::from(log_index)),
-                                    removed: false,
-                                };
-                                log_index += 1;
-                                log
-                            })
-                            .collect()
+                    gas_used: result.gas_used(),
+                    log_index_start: match &previous_transaction {
+                        Some(tx) => {
+                            tx.receipt.log_index_start + tx.receipt.receipt.logs.len() as u64
+                        }
+                        None => 0u64,
                     },
-                    block_hash: Default::default(), // Will be filled in end_slot_hook
-                    state_root: None, // Pre https://eips.ethereum.org/EIPS/eip-658 (pre-byzantium) and won't be used
                 }
             }
-            Err(_) => todo!(), // TODO Build failed transaction receipt
+            Err(err) => todo!(
+                "{}",
+                match err {
+                    revm::primitives::EVMError::Transaction(error) =>
+                        serde_json::to_string(&error).unwrap(),
+                    revm::primitives::EVMError::PrevrandaoNotSet => "PrevrandaoNotSet".to_string(),
+                    revm::primitives::EVMError::Database(_) => "DB".to_string(),
+                }
+            ),
         };
 
         let pending_transaction = PendingTransaction {
-            transaction,
+            transaction: TransactionSignedAndRecovered {
+                signer: evm_tx_recovered.signer(),
+                signed_transaction: evm_tx_recovered.into(),
+                block_number: block_env.number,
+            },
             receipt,
         };
 

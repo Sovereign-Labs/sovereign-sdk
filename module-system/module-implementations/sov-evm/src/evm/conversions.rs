@@ -10,7 +10,7 @@ use revm::primitives::{
 };
 use thiserror::Error;
 
-use super::transaction::{BlockEnv, RlpEvmTransaction};
+use super::transaction::{BlockEnv, RlpEvmTransaction, TransactionSignedAndRecovered};
 use super::AccountInfo;
 
 impl From<AccountInfo> for ReVmAccountInfo {
@@ -40,7 +40,7 @@ impl From<&BlockEnv> for ReVmBlockEnv {
         Self {
             number: U256::from(block_env.number),
             coinbase: block_env.coinbase,
-            timestamp: block_env.timestamp,
+            timestamp: U256::from(block_env.timestamp),
             // TODO: handle difficulty
             difficulty: U256::ZERO,
             prevrandao: block_env.prevrandao,
@@ -122,6 +122,15 @@ impl TryFrom<RlpEvmTransaction> for TransactionSignedEcRecovered {
     }
 }
 
+impl From<TransactionSignedAndRecovered> for TransactionSignedEcRecovered {
+    fn from(value: TransactionSignedAndRecovered) -> Self {
+        TransactionSignedEcRecovered::from_signed_transaction(
+            value.signed_transaction,
+            value.signer,
+        )
+    }
+}
+
 // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/576
 // https://github.com/paradigmxyz/reth/blob/d8677b4146f77c7c82d659c59b79b38caca78778/crates/rpc/rpc/src/eth/revm_utils.rs#L201
 pub fn prepare_call_env(request: CallRequest) -> TxEnv {
@@ -146,8 +155,4 @@ pub fn prepare_call_env(request: CallRequest) -> TxEnv {
         // TODO handle access list
         access_list: Default::default(),
     }
-}
-
-pub fn to_u64(value: U256) -> u64 {
-    value.try_into().unwrap()
 }

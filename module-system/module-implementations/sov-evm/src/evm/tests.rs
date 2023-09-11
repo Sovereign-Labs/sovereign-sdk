@@ -2,6 +2,7 @@ use std::convert::Infallible;
 
 use reth_primitives::TransactionKind;
 use revm::db::CacheDB;
+use revm::precompile::B160;
 use revm::primitives::{CfgEnv, ExecutionResult, Output, KECCAK_EMPTY, U256};
 use revm::{Database, DatabaseCommit};
 use sov_state::{ProverStorage, WorkingSet};
@@ -10,7 +11,7 @@ use super::db::EvmDb;
 use super::db_init::InitEvmDb;
 use super::executor;
 use crate::evm::transaction::BlockEnv;
-use crate::evm::{contract_address, AccountInfo};
+use crate::evm::AccountInfo;
 use crate::smart_contracts::SimpleStorageContract;
 use crate::tests::dev_signer::DevSigner;
 use crate::Evm;
@@ -61,7 +62,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
 
     let contract = SimpleStorageContract::default();
 
-    let contract_address = {
+    let contract_address: B160 = {
         let tx = dev_signer
             .sign_default_transaction(TransactionKind::Create, contract.byte_code().to_vec(), 1)
             .unwrap();
@@ -82,7 +83,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
 
         let tx = dev_signer
             .sign_default_transaction(
-                TransactionKind::Call(contract_address.as_fixed_bytes().into()),
+                TransactionKind::Call(contract_address.into()),
                 hex::decode(hex::encode(&call_data)).unwrap(),
                 2,
             )
@@ -97,7 +98,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
 
         let tx = dev_signer
             .sign_default_transaction(
-                TransactionKind::Call(contract_address.as_fixed_bytes().into()),
+                TransactionKind::Call(contract_address.into()),
                 hex::decode(hex::encode(&call_data)).unwrap(),
                 3,
             )
@@ -112,4 +113,14 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
     };
 
     assert_eq!(set_arg, get_res.as_u32())
+}
+
+fn contract_address(result: &ExecutionResult) -> Option<B160> {
+    match result {
+        ExecutionResult::Success {
+            output: Output::Create(_, Some(addr)),
+            ..
+        } => Some(**addr),
+        _ => None,
+    }
 }
