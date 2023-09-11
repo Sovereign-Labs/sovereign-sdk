@@ -18,8 +18,13 @@ use crate::RollupAddress;
 
 /// A trait implemented by the prover ("host") of a zkVM program.
 pub trait ZkvmHost: Zkvm {
+    /// The associated guest type
+    type Guest: ZkvmGuest;
     /// Give the guest a piece of advice non-deterministically
-    fn write_to_guest<T: Serialize>(&self, item: T);
+    fn add_hint<T: Serialize>(&self, item: T);
+
+    /// Simulate running the guest using the provided hints
+    fn simulate_with_hints(&mut self) -> Self::Guest;
 }
 
 /// A Zk proof system capable of proving and verifying arbitrary Rust code
@@ -50,6 +55,15 @@ pub trait Zkvm {
         code_commitment: &Self::CodeCommitment,
     ) -> Result<StateTransition<Da, Add>, Self::Error>;
 }
+
+// /// A trait which is implemented by the proof system itself.
+// #[cfg(feature = "native")]
+// pub trait ProofSystem {
+//     /// The host type which is used by this proof system
+//     type Host: ZkvmHost;
+//     /// The guest type
+//     type Guest: ZkvmGuest;
+// }
 
 /// A trait which is accessible from within a zkVM program.
 pub trait ZkvmGuest: Zkvm {

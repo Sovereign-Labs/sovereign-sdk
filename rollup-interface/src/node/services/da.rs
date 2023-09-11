@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-use crate::da::{BlockHeaderTrait, DaSpec};
+use crate::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use crate::zk::ValidityCondition;
 
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer
@@ -17,6 +17,9 @@ use crate::zk::ValidityCondition;
 pub trait DaService: Send + Sync + 'static {
     /// A handle to the types used by the DA layer.
     type Spec: DaSpec;
+
+    /// The verifier for this DA layer.
+    type Verifier: DaVerifier<Spec = Self::Spec>;
 
     /// A DA layer block, possibly excluding some irrelevant information.
     type FilteredBlock: SlotData<
