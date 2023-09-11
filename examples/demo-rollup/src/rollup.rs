@@ -109,6 +109,8 @@ pub fn new_rollup_with_mock_da_from_config(
     let sequencer_da_address = MockAddress::from([0u8; 32]);
     let da_service = MockDaService::new(sequencer_da_address);
 
+    #[cfg(feature = "experimental")]
+    let eth_signers = read_eth_tx_signers();
     let app = App::new(rollup_config.storage);
     let genesis_config = get_genesis_config(sequencer_da_address);
 
@@ -122,7 +124,7 @@ pub fn new_rollup_with_mock_da_from_config(
         eth_rpc_config: EthRpcConfig {
             min_blob_size: Some(1),
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
-            eth_signers: read_eth_tx_signers(),
+            eth_signers,
         },
     })
 }
@@ -145,15 +147,6 @@ fn read_eth_tx_signers() -> Vec<sov_ethereum::Signer> {
         "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
     )
     .unwrap()]
-    /*
-    let key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
-        .parse::<LocalWallet>()
-        .unwrap()
-        .with_chain_id(chain_id);
-
-
-
-    let from_addr = Address::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();*/
 }
 
 impl<Vm: Zkvm, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> {
