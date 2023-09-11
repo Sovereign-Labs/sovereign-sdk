@@ -10,7 +10,7 @@ use crate::zk::StateTransition;
 #[derive(
     Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Default,
 )]
-pub struct ProofOfBond<StateProof: BorshSerialize> {
+pub struct ProofOfBond<StateProof> {
     /// The transition number for which the proof of bond applies
     pub claimed_transition_num: u64,
     /// The actual state proof that the attester was bonded
@@ -21,7 +21,7 @@ pub struct ProofOfBond<StateProof: BorshSerialize> {
 #[derive(
     Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Default,
 )]
-pub struct Attestation<Da: DaSpec, StateProof: BorshSerialize> {
+pub struct Attestation<Da: DaSpec, StateProof> {
     /// The alleged state root before applying the contents of the da block
     pub initial_state_root: [u8; 32],
     /// The hash of the block in which the transition occurred

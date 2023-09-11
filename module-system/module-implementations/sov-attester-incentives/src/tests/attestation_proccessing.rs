@@ -50,7 +50,8 @@ fn test_process_valid_attestation() {
                 claimed_transition_num: INIT_HEIGHT + 1,
                 proof: initial_transition.state_proof,
             },
-        };
+        }
+        .into();
 
         module
             .process_attestation(&context, attestation, &mut working_set)
@@ -70,7 +71,7 @@ fn test_process_valid_attestation() {
         };
 
         module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, attestation.into(), &mut working_set)
             .expect("An invalid proof is an error");
     }
 
@@ -144,7 +145,7 @@ fn test_burn_on_invalid_attestation() {
         };
 
         let attestation_error = module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, attestation.into(), &mut working_set)
             .unwrap_err();
 
         assert_eq!(
@@ -179,7 +180,7 @@ fn test_burn_on_invalid_attestation() {
         };
 
         module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, attestation.into(), &mut working_set)
             .expect("An invalid proof is an error");
     }
 
@@ -196,7 +197,7 @@ fn test_burn_on_invalid_attestation() {
         };
 
         let attestation_error = module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, attestation.into(), &mut working_set)
             .unwrap_err();
 
         assert_eq!(
@@ -249,7 +250,7 @@ fn test_burn_on_invalid_attestation() {
         };
 
         let attestation_error = module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, attestation.into(), &mut working_set)
             .unwrap_err();
 
         assert_eq!(

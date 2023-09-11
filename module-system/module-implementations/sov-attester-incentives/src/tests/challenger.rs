@@ -76,8 +76,7 @@ fn test_valid_challenge() {
         let commitment = module
             .commitment_to_allowed_challenge_method
             .get(&mut working_set)
-            .expect("Should be set at genesis")
-            .commitment;
+            .expect("Should be set at genesis");
 
         let proof = &MockProof {
             program_id: commitment,
@@ -209,8 +208,7 @@ fn test_invalid_challenge() {
     let commitment = module
         .commitment_to_allowed_challenge_method
         .get(&mut working_set)
-        .expect("Should be set at genesis")
-        .commitment;
+        .expect("Should be set at genesis");
 
     {
         // A valid proof

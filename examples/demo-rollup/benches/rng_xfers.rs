@@ -92,7 +92,7 @@ impl Default for RngDaService {
 }
 
 /// A simple DaSpec for a random number generator.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq, Debug, Clone, Default)]
 pub struct RngDaSpec;
 
 impl DaSpec for RngDaSpec {

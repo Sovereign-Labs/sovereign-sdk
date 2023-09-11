@@ -20,6 +20,7 @@ tempfile = { workspace = true }
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
+bcs = { workspace = true }
 jmt = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true, optional = true }

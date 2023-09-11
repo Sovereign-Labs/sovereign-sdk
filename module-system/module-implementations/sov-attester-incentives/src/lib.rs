@@ -19,10 +19,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use call::Role;
 use sov_bank::Amount;
 use sov_chain_state::TransitionHeight;
-use sov_modules_api::{
-    Context, DaSpec, Error, ModuleInfo, StoredCodeCommitment, ValidityConditionChecker, Zkvm,
-};
-use sov_state::{Storage, WorkingSet};
+use sov_modules_api::{Context, DaSpec, Error, ModuleInfo, ValidityConditionChecker, Zkvm};
+use sov_state::codec::BcsCodec;
+use sov_state::WorkingSet;
 
 /// Configuration of the attester incentives module
 pub struct AttesterIncentivesConfig<C, Vm, Da, Checker>
@@ -99,7 +98,7 @@ where
 
     /// The code commitment to be used for verifying proofs
     #[state]
-    pub commitment_to_allowed_challenge_method: sov_state::StateValue<StoredCodeCommitment<Vm>>,
+    pub commitment_to_allowed_challenge_method: sov_state::StateValue<Vm::CodeCommitment, BcsCodec>,
 
     /// Constant validity condition checker for the module.
     #[state]
@@ -149,16 +148,12 @@ where
     pub(crate) chain_state: sov_chain_state::ChainState<C, Da>,
 }
 
-impl<C, Vm, S, P, Da, Checker> sov_modules_api::Module for AttesterIncentives<C, Vm, Da, Checker>
+impl<C, Vm, Da, Checker> sov_modules_api::Module for AttesterIncentives<C, Vm, Da, Checker>
 where
-    C: sov_modules_api::Context<Storage = S>,
+    C: sov_modules_api::Context,
     Vm: Zkvm,
-    S: Storage<Proof = P>,
-    P: BorshDeserialize + BorshSerialize,
     Da: DaSpec,
     Checker: ValidityConditionChecker<Da::ValidityCondition>,
-    Da::ValidityCondition: BorshSerialize + BorshDeserialize,
-    Da::SlotHash: BorshSerialize + BorshDeserialize,
 {
     type Context = C;
 

@@ -7,11 +7,7 @@ use tracing::info;
 
 use crate::BlobStorage;
 
-impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da>
-where
-    Da::ValidityCondition: BorshDeserialize + BorshSerialize,
-    Da::SlotHash: BorshDeserialize + BorshSerialize,
-{
+impl<C: Context, Da: DaSpec> BlobSelector<Da> for BlobStorage<C, Da> {
     type Context = C;
 
     fn get_blobs_for_this_slot<'a, I>(

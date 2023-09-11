@@ -16,13 +16,15 @@ pub mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use query::{ChainStateRpcImpl, ChainStateRpcServer};
+use serde::{Deserialize, Serialize};
 use sov_modules_api::{DaSpec, Error, ModuleInfo, ValidityConditionChecker};
+use sov_state::codec::BcsCodec;
 use sov_state::WorkingSet;
 
 /// Type alias that contains the height of a given transition
 pub type TransitionHeight = u64;
 
-#[derive(BorshDeserialize, BorshSerialize, Clone, Debug, PartialEq, Eq)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 /// Structure that contains the information needed to represent a single state transition.
 pub struct StateTransitionId<Da: DaSpec> {
     da_block_hash: Da::SlotHash,
@@ -77,7 +79,7 @@ impl<Da: DaSpec> StateTransitionId<Da> {
     }
 }
 
-#[derive(BorshDeserialize, BorshSerialize, Debug, PartialEq, Eq, Clone)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
 /// Represents a transition in progress for the rollup.
 pub struct TransitionInProgress<Da: DaSpec> {
     da_block_hash: Da::SlotHash,
@@ -114,11 +116,11 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
     /// is stored during transition i+1. This is mainly due to the fact that this structure depends on the
     /// rollup's root hash which is only stored once the transition has completed.
     #[state]
-    historical_transitions: sov_state::StateMap<TransitionHeight, StateTransitionId<Da>>,
+    historical_transitions: sov_state::StateMap<TransitionHeight, StateTransitionId<Da>, BcsCodec>,
 
     /// The transition that is currently processed
     #[state]
-    in_progress_transition: sov_state::StateValue<TransitionInProgress<Da>>,
+    in_progress_transition: sov_state::StateValue<TransitionInProgress<Da>, BcsCodec>,
 
     /// The genesis root hash.
     /// Set after the first transaction of the rollup is executed, using the `begin_slot` hook.
@@ -136,11 +138,7 @@ pub struct ChainStateConfig {
     pub initial_slot_height: TransitionHeight,
 }
 
-impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da>
-where
-    Da::ValidityCondition: BorshSerialize + BorshDeserialize,
-    Da::SlotHash: BorshSerialize + BorshDeserialize,
-{
+impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {
     /// Returns transition height in the current slot
     pub fn get_slot_height(&self, working_set: &mut WorkingSet<C::Storage>) -> TransitionHeight {
         self.slot_height

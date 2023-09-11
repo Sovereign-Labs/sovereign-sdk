@@ -62,7 +62,7 @@ fn test_transition_invariant() {
         };
 
         let err = module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, attestation.into(), &mut working_set)
             .unwrap_err();
 
         assert_eq!(
@@ -136,11 +136,11 @@ fn test_transition_invariant() {
         );
 
         module
-            .process_attestation(&context, old_attestation, &mut working_set)
+            .process_attestation(&context, old_attestation.into(), &mut working_set)
             .expect("Should succeed");
 
         module
-            .process_attestation(&context, new_attestation, &mut working_set)
+            .process_attestation(&context, new_attestation.into(), &mut working_set)
             .expect("Should succeed");
     }
 
@@ -177,7 +177,7 @@ fn test_transition_invariant() {
     );
 
     let err = module
-        .process_attestation(&context, old_attestation, &mut working_set)
+        .process_attestation(&context, old_attestation.into(), &mut working_set)
         .unwrap_err();
 
     assert_eq!(
@@ -207,7 +207,7 @@ fn test_transition_invariant() {
     );
 
     let err = module
-        .process_attestation(&context, attestation, &mut working_set)
+        .process_attestation(&context, attestation.into(), &mut working_set)
         .unwrap_err();
 
     assert_eq!(

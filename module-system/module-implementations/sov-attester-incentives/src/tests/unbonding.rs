@@ -66,7 +66,7 @@ fn test_two_phase_unbonding() {
         };
 
         let err = module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, attestation.into(), &mut working_set)
             .unwrap_err();
 
         assert_eq!(

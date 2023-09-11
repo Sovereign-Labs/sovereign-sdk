@@ -2,6 +2,8 @@ use core::result::Result::Ok;
 use std::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use sov_bank::{Amount, Coins};
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::optimistic::Attestation;
@@ -11,6 +13,50 @@ use sov_state::{Storage, WorkingSet};
 use thiserror::Error;
 
 use crate::{AttesterIncentives, UnbondingInfo};
+
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+/// A wrapper for attestations which implements `borsh` serialization. This is necessary since
+/// Attestations are treated as `CallMessage`s, and we only support borsh encoding for transactions.
+pub struct WrappedAttestation<Da: DaSpec, StorageProof> {
+    #[serde(
+        bound = "Da::SlotHash: Serialize + DeserializeOwned, StorageProof: Serialize + DeserializeOwned"
+    )]
+    /// The inner attestation
+    pub inner: Attestation<Da, StorageProof>,
+}
+
+impl<Da: DaSpec, StorageProof> From<Attestation<Da, StorageProof>>
+    for WrappedAttestation<Da, StorageProof>
+{
+    fn from(value: Attestation<Da, StorageProof>) -> Self {
+        Self { inner: value }
+    }
+}
+
+impl<Da: DaSpec, StorageProof: Serialize> BorshSerialize for WrappedAttestation<Da, StorageProof> {
+    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        // TODO: Implement bcs `to_writer`
+        let value = bcs::to_bytes(&self.inner).map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::Other, "Failed to serialize attestation")
+        })?;
+        writer.write_all(&value)?;
+        Ok(())
+    }
+}
+
+impl<Da: DaSpec, StorageProof: Serialize + DeserializeOwned> BorshDeserialize
+    for WrappedAttestation<Da, StorageProof>
+{
+    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+        bcs::from_reader(reader)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+    }
+
+    fn deserialize(buf: &mut &[u8]) -> std::io::Result<Self> {
+        bcs::from_bytes(*buf)
+            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))
+    }
+}
 
 /// This enumeration represents the available call messages for interacting with the `AttesterIncentives` module.
 #[derive(BorshDeserialize, BorshSerialize, Debug)]
@@ -26,7 +72,9 @@ pub enum CallMessage<C: sov_modules_api::Context, Da: DaSpec> {
     /// Unbonds a challenger
     UnbondChallenger,
     /// Processes an attestation.
-    ProcessAttestation(Attestation<Da, StorageProof<<<C as Spec>::Storage as Storage>::Proof>>),
+    ProcessAttestation(
+        WrappedAttestation<Da, StorageProof<<<C as Spec>::Storage as Storage>::Proof>>,
+    ),
     /// Processes a challenge. The challenge is encoded as a [`Vec<u8>`]. The second parameter is the transition number
     ProcessChallenge(Vec<u8>, TransitionHeight),
 }
@@ -118,8 +166,6 @@ where
     Vm: sov_modules_api::Zkvm,
     Da: sov_modules_api::DaSpec,
     Checker: ValidityConditionChecker<Da::ValidityCondition>,
-    Da::SlotHash: BorshDeserialize + BorshSerialize,
-    Da::ValidityCondition: BorshDeserialize + BorshSerialize,
 {
     /// This returns the address of the reward token supply
     pub fn get_reward_token_supply_address(
@@ -542,9 +588,10 @@ where
     pub(crate) fn process_attestation(
         &self,
         context: &C,
-        attestation: Attestation<Da, StorageProof<<C::Storage as Storage>::Proof>>,
+        attestation: WrappedAttestation<Da, StorageProof<<C::Storage as Storage>::Proof>>,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> anyhow::Result<CallResponse, AttesterIncentiveErrors> {
+        let attestation = attestation.inner;
         // We first need to check that the attester is still in the bonding set
         if self
             .bonded_attesters
@@ -709,8 +756,7 @@ where
         let code_commitment = self
             .commitment_to_allowed_challenge_method
             .get(working_set)
-            .expect("Should be set at genesis")
-            .commitment;
+            .expect("Should be set at genesis");
 
         // Find the faulty attestation pool and get the associated reward
         let attestation_reward: u64 = self

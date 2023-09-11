@@ -37,11 +37,7 @@ pub struct BlobStorage<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec>
 }
 
 /// Non standard methods for blob storage
-impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> BlobStorage<C, Da>
-where
-    Da::ValidityCondition: BorshDeserialize + BorshSerialize,
-    Da::SlotHash: BorshDeserialize + BorshSerialize,
-{
+impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> BlobStorage<C, Da> {
     /// Store blobs for given block number, overwrite if already exists
     pub fn store_blobs(
         &self,

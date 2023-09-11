@@ -7,11 +7,7 @@ use sov_state::{Storage, WorkingSet};
 use super::ChainState;
 use crate::{StateTransitionId, TransitionInProgress};
 
-impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da>
-where
-    Da::ValidityCondition: BorshSerialize + BorshDeserialize,
-    Da::SlotHash: BorshSerialize + BorshDeserialize,
-{
+impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da> {
     type Context = C;
 
     fn begin_slot_hook(

@@ -1,4 +1,3 @@
-use borsh::{BorshDeserialize, BorshSerialize};
 use sov_chain_state::{ChainState, ChainStateConfig};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
@@ -60,11 +59,7 @@ impl<C: Context, Da: DaSpec> ApplyBlobHooks<Da::BlobTransaction> for TestRuntime
     }
 }
 
-impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da>
-where
-    Da::SlotHash: BorshDeserialize + BorshSerialize,
-    Da::ValidityCondition: BorshDeserialize + BorshSerialize,
-{
+impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
     type Context = C;
 
     fn begin_slot_hook(
@@ -104,12 +99,7 @@ where
     }
 }
 
-impl<C: Context, Da: DaSpec> Runtime<C, Da> for TestRuntime<C, Da>
-where
-    Da::SlotHash: BorshDeserialize + BorshSerialize,
-    Da::ValidityCondition: BorshDeserialize + BorshSerialize,
-{
-}
+impl<C: Context, Da: DaSpec> Runtime<C, Da> for TestRuntime<C, Da> {}
 
 pub(crate) fn create_demo_genesis_config<C: Context, Da: DaSpec>(
     admin: <C as Spec>::Address,
@@ -126,8 +116,6 @@ pub(crate) fn get_working_set<C: Context, Da: DaSpec>(
     app_template: &AppTemplate<C, Da, MockZkvm, TestRuntime<C, Da>>,
 ) -> sov_state::WorkingSet<<C as Spec>::Storage>
 where
-    Da::SlotHash: BorshDeserialize + BorshSerialize,
-    Da::ValidityCondition: BorshDeserialize + BorshSerialize,
 {
     sov_state::WorkingSet::new(app_template.current_storage.clone())
 }

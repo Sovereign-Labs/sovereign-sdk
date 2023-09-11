@@ -160,6 +160,12 @@ impl From<[u8; 32]> for MockHash {
     }
 }
 
+impl From<MockHash> for [u8; 32] {
+    fn from(value: MockHash) -> Self {
+        value.0
+    }
+}
+
 impl BlockHashTrait for MockHash {}
 
 /// A mock block header used for testing.

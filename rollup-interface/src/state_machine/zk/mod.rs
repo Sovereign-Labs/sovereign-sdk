@@ -45,43 +45,14 @@ pub trait Zkvm {
     /// Same as [`verify`](Zkvm::verify), except that instead of returning the output
     /// as a serialized array, it returns a state transition structure.
     /// TODO: specify a deserializer for the output
-    fn verify_and_extract_output<
-        Add: RollupAddress + BorshDeserialize + BorshSerialize,
-        Da: DaSpec,
-    >(
+    fn verify_and_extract_output<Add: RollupAddress, Da: DaSpec>(
         serialized_proof: &[u8],
         code_commitment: &Self::CodeCommitment,
-    ) -> Result<StateTransition<Da, Add>, Self::Error>
-    where
-        Da::SlotHash: BorshDeserialize + BorshSerialize,
-        Da::ValidityCondition: BorshDeserialize + BorshSerialize,
-    {
-        let mut output = Self::verify(serialized_proof, code_commitment)?;
-        Ok(BorshDeserialize::deserialize_reader(&mut output)?)
-    }
-}
-
-/// A wrapper around a code commitment which implements borsh serialization
-#[derive(Clone, Debug)]
-pub struct StoredCodeCommitment<Vm: Zkvm> {
-    /// The inner field of the wrapper that contains the code commitment.
-    pub commitment: Vm::CodeCommitment,
-}
-
-impl<Vm: Zkvm> BorshSerialize for StoredCodeCommitment<Vm> {
-    fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
-        bincode::serialize_into(writer, &self.commitment)
-            .expect("Serialization to vec is infallible");
-        Ok(())
-    }
-}
-
-impl<Vm: Zkvm> BorshDeserialize for StoredCodeCommitment<Vm> {
-    fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
-        let commitment: Vm::CodeCommitment = bincode::deserialize_from(reader)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-        Ok(Self { commitment })
-    }
+    ) -> Result<StateTransition<Da, Add>, Self::Error>;
+    //{
+    //     let mut output = Self::verify(serialized_proof, code_commitment)?;
+    //     Ok(BorshDeserialize::deserialize_reader(&mut output)?)
+    // }
 }
 
 /// A trait which is accessible from within a zkVM program.
