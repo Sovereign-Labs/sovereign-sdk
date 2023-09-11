@@ -165,9 +165,9 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
 
         // Then process the first transaction. Only sets the genesis hash and a transition in progress.
         let slot_data = MockBlock {
-            curr_hash: [i + 1; 32],
             header: MockBlockHeader {
-                prev_hash: MockHash([i; 32]),
+                prev_hash: [i; 32].into(),
+                hash: [i + 1; 32].into(),
             },
             height: INIT_HEIGHT + u64::from(i + 1),
             validity_cond: MockValidityCond { is_valid: true },

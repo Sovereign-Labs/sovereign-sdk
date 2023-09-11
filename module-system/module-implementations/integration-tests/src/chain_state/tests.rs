@@ -46,9 +46,9 @@ fn test_simple_value_setter_with_chain_state() {
     );
 
     let slot_data: MockBlock = MockBlock {
-        curr_hash: [10; 32],
         header: MockBlockHeader {
-            prev_hash: MockHash([0; 32]),
+            prev_hash: [0; 32].into(),
+            hash: [10; 32].into(),
         },
         height: 0,
         validity_cond: MockValidityCond::default(),
@@ -115,9 +115,9 @@ fn test_simple_value_setter_with_chain_state() {
 
     // We apply a new transaction with the same values
     let new_slot_data: MockBlock = MockBlock {
-        curr_hash: [20; 32],
         header: MockBlockHeader {
-            prev_hash: MockHash([10; 32]),
+            prev_hash: [10; 32].into(),
+            hash: [20; 32].into(),
         },
         height: 1,
         validity_cond: MockValidityCond::default(),

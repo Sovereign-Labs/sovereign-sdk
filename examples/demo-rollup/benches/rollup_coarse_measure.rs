@@ -116,9 +116,9 @@ async fn main() -> Result<(), anyhow::Error> {
         let mut barray = [0u8; 32];
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
         let filtered_block = MockBlock {
-            curr_hash: barray,
             header: MockBlockHeader {
-                prev_hash: MockHash([0u8; 32]),
+                prev_hash: [0u8; 32].into(),
+                hash: barray.into(),
             },
             height,
             validity_cond: Default::default(),

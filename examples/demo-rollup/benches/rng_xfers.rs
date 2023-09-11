@@ -118,9 +118,9 @@ impl DaService for RngDaService {
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
 
         let block = MockBlock {
-            curr_hash: barray,
             header: MockBlockHeader {
-                prev_hash: MockHash([0u8; 32]),
+                hash: barray.into(),
+                prev_hash: [0u8; 32].into(),
             },
             height,
             validity_cond: MockValidityCond { is_valid: true },
