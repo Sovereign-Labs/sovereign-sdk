@@ -117,12 +117,15 @@ async fn main() -> Result<(), anyhow::Error> {
         // The above proofs of correctness and completeness need to passed to the prover
         host.write_to_guest(&inclusion_proof);
         host.write_to_guest(&completeness_proof);
-        
-        let result = app
-            .stf
-            .apply_slot(Default::default(), filtered_block.header(), &filtered_block.validity_condition(), &mut blobs);
 
-        // The extracted blobs need to be passed to the prover after execution. 
+        let result = app.stf.apply_slot(
+            Default::default(),
+            filtered_block.header(),
+            &filtered_block.validity_condition(),
+            &mut blobs,
+        );
+
+        // The extracted blobs need to be passed to the prover after execution.
         // (Without executing, the host couldn't prune any data that turned out to be irrelevant to the guest)
         host.write_to_guest(&blobs);
 
