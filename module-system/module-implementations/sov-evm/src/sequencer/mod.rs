@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use reth_primitives::{sign_message, Address, Transaction, TransactionSigned, H256};
 use reth_rpc::eth::error::SignError;
 use secp256k1::{PublicKey, SecretKey};
@@ -36,5 +38,14 @@ impl Signer {
             transaction,
             signature,
         ))
+    }
+}
+
+impl FromStr for Signer {
+    type Err = secp256k1::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let sk = SecretKey::from_str(s)?;
+        Ok(Signer::new(sk))
     }
 }

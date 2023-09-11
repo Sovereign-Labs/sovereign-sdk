@@ -141,7 +141,19 @@ fn read_sov_tx_signer_priv_key() -> Result<DefaultPrivateKey, anyhow::Error> {
 
 #[cfg(feature = "experimental")]
 fn read_eth_tx_signers() -> Vec<sov_ethereum::Signer> {
-    todo!()
+    vec![sov_ethereum::Signer::from_str(
+        "ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+    )
+    .unwrap()]
+    /*
+    let key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+        .parse::<LocalWallet>()
+        .unwrap()
+        .with_chain_id(chain_id);
+
+
+
+    let from_addr = Address::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();*/
 }
 
 impl<Vm: Zkvm, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> {

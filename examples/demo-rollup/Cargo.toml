@@ -27,6 +27,7 @@ futures = "0.3"
 # Crates which only this package depends on 
 tokio = { workspace = true }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
+reth-primitives = { workspace = true, optional = true }
 
 demo-stf = { path = "../demo-stf", features = ["native"] }
 sov-celestia-adapter = { path = "../../adapters/celestia", features = ["native"] }
@@ -42,6 +43,7 @@ sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
 sov-cli = { path = "../../module-system/sov-cli" }
 clap = { workspace = true }
+
 
 [dev-dependencies]
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
@@ -69,7 +71,7 @@ sov-demo-rollup = { path = ".", features = ["experimental"] }
 
 [features]
 default = []
-experimental = ["sov-ethereum/experimental"]
+experimental = ["sov-ethereum/experimental", "reth-primitives"]
 
 [[bench]]
 name = "rollup_bench"

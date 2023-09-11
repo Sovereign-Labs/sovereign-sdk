@@ -39,19 +39,38 @@ pub fn initialize_ledger(path: impl AsRef<std::path::Path>) -> LedgerDB {
 pub fn get_genesis_config<Da: DaSpec>(
     sequencer_da_address: <<Da as DaSpec>::BlobTransaction as BlobReaderTrait>::Address,
 ) -> GenesisConfig<DefaultContext, Da> {
-    let data = std::fs::read_to_string("../test-data/keys/token_deployer_private_key.json")
-        .expect("Unable to read file to string");
-    let key_and_address: PrivateKeyAndAddress<DefaultContext> = serde_json::from_str(&data)
-        .unwrap_or_else(|_| panic!("Unable to convert data {} to PrivateKeyAndAddress", &data));
+    let token_deployer_data =
+        std::fs::read_to_string("../test-data/keys/token_deployer_private_key.json")
+            .expect("Unable to read file to string");
+
+    let token_deployer: PrivateKeyAndAddress<DefaultContext> =
+        serde_json::from_str(&token_deployer_data).unwrap_or_else(|_| {
+            panic!(
+                "Unable to convert data {} to PrivateKeyAndAddress",
+                &token_deployer_data
+            )
+        });
+
     assert!(
-        key_and_address.is_matching_to_default(),
+        token_deployer.is_matching_to_default(),
         "Inconsistent key data"
     );
 
     create_demo_genesis_config(
         100000000,
-        key_and_address.address,
+        token_deployer.address,
         sequencer_da_address.as_ref().to_vec(),
-        &key_and_address.private_key,
+        &token_deployer.private_key,
+        #[cfg(feature = "experimental")]
+        read_eth_account_data(),
     )
+}
+
+#[cfg(feature = "experimental")]
+fn read_eth_account_data() -> Vec<reth_primitives::Address> {
+    let addr = reth_primitives::Address::from_slice(
+        &hex::decode("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap(),
+    );
+
+    vec![addr]
 }

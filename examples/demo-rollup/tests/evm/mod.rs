@@ -184,6 +184,7 @@ async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std:
         .with_chain_id(chain_id);
 
     let contract = SimpleStorageContract::default();
+
     let from_addr = Address::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
 
     let test_client = TestClient::new(chain_id, key, from_addr, contract, rpc_address).await;
