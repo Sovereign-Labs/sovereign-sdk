@@ -140,7 +140,8 @@ async fn main() -> Result<(), anyhow::Error> {
     let mut data_to_commit = SlotCommit::new(filtered_block.clone());
     let apply_block_results = demo.apply_slot(
         Default::default(),
-        data_to_commit.slot_data(),
+        filtered_block.header,
+        filtered_block.validity_cond,
         &mut blobs[0usize],
     );
     data_to_commit.add_batch(apply_block_results.batch_receipts[0].clone());

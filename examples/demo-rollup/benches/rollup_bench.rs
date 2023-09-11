@@ -12,6 +12,7 @@ use rng_xfers::{RngDaService, RngDaSpec, SEQUENCER_DA_ADDRESS};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
+use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rollup_interface::mocks::{MockAddress, MockBlock, MockBlockHeader};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
