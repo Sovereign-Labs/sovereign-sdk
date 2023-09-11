@@ -3,13 +3,15 @@ use sov_bank::{BankConfig, TokenConfig};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Address, Genesis, Spec, ValidityConditionChecker};
+use sov_modules_api::{
+    Address, Genesis, ProverStorage, Spec, Storage, StorageProof, ValidityConditionChecker,
+    WorkingSet,
+};
 use sov_rollup_interface::mocks::{
     MockBlock, MockBlockHeader, MockCodeCommitment, MockDaSpec, MockHash, MockValidityCond,
     MockValidityCondChecker, MockZkvm,
 };
-use sov_state::storage::StorageProof;
-use sov_state::{DefaultStorageSpec, ProverStorage, Storage, WorkingSet};
+use sov_state::DefaultStorageSpec;
 
 use crate::AttesterIncentives;
 

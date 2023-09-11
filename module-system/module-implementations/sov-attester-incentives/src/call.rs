@@ -5,9 +5,10 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::{Amount, Coins};
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::optimistic::Attestation;
-use sov_modules_api::{CallResponse, Spec, StateTransition, ValidityConditionChecker};
-use sov_state::storage::StorageProof;
-use sov_state::{Storage, WorkingSet};
+use sov_modules_api::{
+    CallResponse, Spec, StateTransition, Storage, StorageProof, ValidityConditionChecker,
+    WorkingSet,
+};
 use thiserror::Error;
 
 use crate::{AttesterIncentives, UnbondingInfo};

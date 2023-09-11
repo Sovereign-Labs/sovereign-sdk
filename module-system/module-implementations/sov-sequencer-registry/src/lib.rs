@@ -19,8 +19,7 @@ pub use query::{
     SequencerAddressResponse, SequencerRegistryRpcClient, SequencerRegistryRpcImpl,
     SequencerRegistryRpcServer,
 };
-use sov_modules_api::{CallResponse, Error, ModuleInfo, Spec};
-use sov_state::{StateMap, StateValue, WorkingSet};
+use sov_modules_api::{CallResponse, Error, ModuleInfo, Spec, StateMap, StateValue, WorkingSet};
 
 /// A type alias for DA addresses.
 ///

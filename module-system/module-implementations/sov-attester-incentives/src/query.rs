@@ -1,8 +1,8 @@
 //! Defines the query methods for the attester incentives module
 use serde::{Deserialize, Serialize};
-use sov_modules_api::{Spec, ValidityConditionChecker};
-use sov_state::storage::{NativeStorage, StorageProof};
-use sov_state::{Storage, WorkingSet};
+use sov_modules_api::{
+    NativeStorage, Spec, Storage, StorageProof, ValidityConditionChecker, WorkingSet,
+};
 
 use super::AttesterIncentives;
 use crate::call::Role;

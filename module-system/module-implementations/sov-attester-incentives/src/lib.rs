@@ -20,9 +20,9 @@ use call::Role;
 use sov_bank::Amount;
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::{
-    Context, DaSpec, Error, ModuleInfo, StoredCodeCommitment, ValidityConditionChecker, Zkvm,
+    Context, DaSpec, Error, ModuleInfo, Storage, StoredCodeCommitment, ValidityConditionChecker,
+    WorkingSet, Zkvm,
 };
-use sov_state::{Storage, WorkingSet};
 
 /// Configuration of the attester incentives module
 pub struct AttesterIncentivesConfig<C, Vm, Da, Checker>
@@ -85,60 +85,61 @@ where
     /// that an attested state transition won't be challenged. Measured in
     /// number of slots.
     #[state]
-    pub rollup_finality_period: sov_state::StateValue<TransitionHeight>,
+    pub rollup_finality_period: sov_modules_api::StateValue<TransitionHeight>,
 
     /// The address of the token used for bonding provers
     #[state]
-    pub bonding_token_address: sov_state::StateValue<C::Address>,
+    pub bonding_token_address: sov_modules_api::StateValue<C::Address>,
 
     /// The address of the account holding the reward token supply
     /// TODO: maybe mint the token before transferring it? The mint method is private in bank
     /// so we need a reward address that contains the supply.
     #[state]
-    pub reward_token_supply_address: sov_state::StateValue<C::Address>,
+    pub reward_token_supply_address: sov_modules_api::StateValue<C::Address>,
 
     /// The code commitment to be used for verifying proofs
     #[state]
-    pub commitment_to_allowed_challenge_method: sov_state::StateValue<StoredCodeCommitment<Vm>>,
+    pub commitment_to_allowed_challenge_method:
+        sov_modules_api::StateValue<StoredCodeCommitment<Vm>>,
 
     /// Constant validity condition checker for the module.
     #[state]
-    pub validity_cond_checker: sov_state::StateValue<Checker>,
+    pub validity_cond_checker: sov_modules_api::StateValue<Checker>,
 
     /// The set of bonded attesters and their bonded amount.
     #[state]
-    pub bonded_attesters: sov_state::StateMap<C::Address, Amount>,
+    pub bonded_attesters: sov_modules_api::StateMap<C::Address, Amount>,
 
     /// The set of unbonding attesters, and the unbonding information (ie the
     /// height of the chain where they started the unbonding and their associated bond).
     #[state]
-    pub unbonding_attesters: sov_state::StateMap<C::Address, UnbondingInfo>,
+    pub unbonding_attesters: sov_modules_api::StateMap<C::Address, UnbondingInfo>,
 
     /// The current maximum attestation height
     #[state]
-    pub maximum_attested_height: sov_state::StateValue<TransitionHeight>,
+    pub maximum_attested_height: sov_modules_api::StateValue<TransitionHeight>,
 
     /// Challengers now challenge a transition and not a specific attestation
     /// Mapping from a transition number to the associated reward value.
     /// This mapping is populated when the attestations are processed by the rollup
     #[state]
-    pub bad_transition_pool: sov_state::StateMap<TransitionHeight, Amount>,
+    pub bad_transition_pool: sov_modules_api::StateMap<TransitionHeight, Amount>,
 
     /// The set of bonded challengers and their bonded amount.
     #[state]
-    pub bonded_challengers: sov_state::StateMap<C::Address, Amount>,
+    pub bonded_challengers: sov_modules_api::StateMap<C::Address, Amount>,
 
     /// The minimum bond for an attester to be eligble
     #[state]
-    pub minimum_attester_bond: sov_state::StateValue<Amount>,
+    pub minimum_attester_bond: sov_modules_api::StateValue<Amount>,
 
     /// The minimum bond for an attester to be eligble
     #[state]
-    pub minimum_challenger_bond: sov_state::StateValue<Amount>,
+    pub minimum_challenger_bond: sov_modules_api::StateValue<Amount>,
 
     /// The height of the most recent block which light clients know to be finalized
     #[state]
-    pub light_client_finalized_height: sov_state::StateValue<TransitionHeight>,
+    pub light_client_finalized_height: sov_modules_api::StateValue<TransitionHeight>,
 
     /// Reference to the Bank module.
     #[module]

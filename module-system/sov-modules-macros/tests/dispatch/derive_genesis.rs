@@ -4,8 +4,7 @@ use modules::third_test_module::{self, ModuleThreeStorable};
 use modules::{first_test_module, second_test_module};
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::DefaultRuntime;
-use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec};
-use sov_state::ZkStorage;
+use sov_modules_api::{Context, DispatchCall, Genesis, MessageCodec, ZkStorage};
 
 // Debugging hint: To expand the macro in tests run: `cargo expand --test tests`
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
@@ -23,7 +22,7 @@ where
 fn main() {
     type C = ZkDefaultContext;
     let storage = ZkStorage::new([1u8; 32]);
-    let mut working_set = &mut sov_state::WorkingSet::new(storage);
+    let mut working_set = &mut sov_modules_api::WorkingSet::new(storage);
     let runtime = &mut Runtime::<C, u32>::default();
     let config = GenesisConfig::new((), (), ());
     runtime.genesis(&config, working_set).unwrap();

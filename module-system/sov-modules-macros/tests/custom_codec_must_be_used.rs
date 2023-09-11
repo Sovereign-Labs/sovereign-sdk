@@ -1,9 +1,9 @@
 use std::panic::catch_unwind;
 
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Context, ModuleInfo};
+use sov_modules_api::{Context, ModuleInfo, ProverStorage, StateValue, WorkingSet};
 use sov_state::codec::{StateCodec, StateKeyCodec, StateValueCodec};
-use sov_state::{DefaultStorageSpec, ProverStorage, StateValue, WorkingSet};
+use sov_state::DefaultStorageSpec;
 
 #[derive(ModuleInfo)]
 struct TestModule<C>

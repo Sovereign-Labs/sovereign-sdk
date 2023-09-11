@@ -1,8 +1,7 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::digest::Digest;
-use sov_modules_api::{Address, Module, Spec};
+use sov_modules_api::{Address, Module, ProverStorage, Spec, WorkingSet};
 use sov_rollup_interface::mocks::{MockCodeCommitment, MockProof, MockZkvm};
-use sov_state::{ProverStorage, WorkingSet};
 
 use crate::ProverIncentives;
 

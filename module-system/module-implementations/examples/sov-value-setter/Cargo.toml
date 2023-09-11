@@ -18,7 +18,6 @@ tempfile = { workspace = true }
 [dependencies]
 anyhow = { workspace = true }
 sov-modules-api = { path = "../../../sov-modules-api" }
-sov-state = { path = "../../../sov-state" }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
@@ -29,4 +28,4 @@ clap = { workspace = true, optional = true }
 
 [features]
 default = []
-native = ["serde", "serde_json", "jsonrpsee", "schemars", "clap", "sov-modules-api/native", "sov-state/native"]
+native = ["serde", "serde_json", "jsonrpsee", "schemars", "clap", "sov-modules-api/native"]

@@ -1,10 +1,10 @@
 use borsh::BorshSerialize;
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::{ProverStorage, WorkingSet};
 use sov_rollup_interface::mocks::{
     MockCodeCommitment, MockDaSpec, MockProof, MockValidityCond, MockValidityCondChecker,
 };
 use sov_rollup_interface::zk::StateTransition;
-use sov_state::{ProverStorage, WorkingSet};
 
 use crate::call::{AttesterIncentiveErrors, SlashingReason};
 use crate::tests::helpers::{

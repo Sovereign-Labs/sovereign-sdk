@@ -1,6 +1,5 @@
 use sov_modules_api::hooks::SlotHooks;
-use sov_modules_api::{Context, SlotData, Spec};
-use sov_state::{Storage, WorkingSet};
+use sov_modules_api::{Context, SlotData, Spec, Storage, WorkingSet};
 
 use super::ChainState;
 use crate::{StateTransitionId, TransitionInProgress};

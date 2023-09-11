@@ -1,10 +1,9 @@
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Context, Spec};
+use sov_modules_api::{Context, Spec, WorkingSet};
 use sov_modules_stf_template::SequencerOutcome;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_sequencer_registry::SequencerRegistry;
-use sov_state::WorkingSet;
 use tracing::info;
 
 use crate::runtime::Runtime;
@@ -80,7 +79,7 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
     fn begin_slot_hook(
         &self,
         #[allow(unused_variables)] slot_data: &impl sov_rollup_interface::services::da::SlotData,
-        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
+        #[allow(unused_variables)] working_set: &mut sov_modules_api::WorkingSet<
             <Self::Context as Spec>::Storage,
         >,
     ) {
@@ -91,7 +90,7 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
     fn end_slot_hook(
         &self,
         #[allow(unused_variables)] root_hash: [u8; 32],
-        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
+        #[allow(unused_variables)] working_set: &mut sov_modules_api::WorkingSet<
             <Self::Context as Spec>::Storage,
         >,
     ) {

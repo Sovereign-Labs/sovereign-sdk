@@ -2,12 +2,12 @@ use sov_chain_state::{StateTransitionId, TransitionInProgress};
 use sov_data_generators::value_setter_data::ValueSetterMessages;
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch, MessageGenerator};
 use sov_modules_api::default_context::DefaultContext;
+use sov_modules_api::{ProverStorage, Storage};
 use sov_modules_stf_template::{AppTemplate, SequencerOutcome};
 use sov_rollup_interface::mocks::{
     MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockValidityCond, MockZkvm,
 };
 use sov_rollup_interface::stf::StateTransitionFunction;
-use sov_state::{ProverStorage, Storage};
 
 use crate::chain_state::helpers::{create_demo_genesis_config, get_working_set, TestRuntime};
 

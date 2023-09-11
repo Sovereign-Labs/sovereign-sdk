@@ -7,12 +7,10 @@ use hex;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
+use sov_state::codec::{EncodeKeyLike, StateKeyCodec, StateValueCodec};
+use sov_state::{AlignedVec, Prefix, Witness};
 
-use crate::codec::{EncodeKeyLike, StateKeyCodec, StateValueCodec};
-use crate::internal_cache::OrderedReadsAndWrites;
-use crate::utils::AlignedVec;
-use crate::witness::Witness;
-use crate::{Prefix, StateMap};
+use super::{OrderedReadsAndWrites, StateMap};
 
 // `Key` type for the `Storage`
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize, BorshDeserialize, BorshSerialize)]

@@ -15,9 +15,11 @@ resolver = "2"
 jsonrpsee = { workspace = true, optional = true }
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
+sov-db = { path = "../../full-node/db/sov-db", version = "0.1", optional = true }
 sov-state = { path = "../sov-state", version = "0.1" }
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
 sov-modules-macros = { path = "../sov-modules-macros", version = "0.1", optional = true }
+sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-cache", version = "0.1" }
 sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
 serde = { workspace = true }
 borsh = { workspace = true }
@@ -25,8 +27,9 @@ thiserror = { workspace = true }
 sha2 = { workspace = true }
 bech32 = { workspace = true }
 derive_more = { workspace = true }
+jmt = { workspace = true }
 serde_json = { workspace = true, optional = true }
-hex = { workspace = true, optional = true }
+hex = { workspace = true }
 clap = { workspace = true, optional = true }
 schemars = { workspace = true, optional = true, features = [] }
 
@@ -41,9 +44,11 @@ risc0-zkvm-platform = { version = "0.16", optional = true }
 bincode = { workspace = true }
 sov-modules-api = { path = ".", features = ["native"] }
 sov-bank = { path = "../module-implementations/sov-bank", version = "0.1", features = ["native"] }
+tempfile = { workspace = true }
 
 [features]
+arbitrary = ["dep:arbitrary", "sov-state/arbitrary"]
 bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
 default = ["macros"]
-native = ["serde_json", "rand", "hex", "schemars", "ed25519-dalek/default", "ed25519-dalek/serde", "ed25519-dalek/rand_core", "clap", "jsonrpsee", "macros", "sov-modules-macros/native", "sov-state/native", "sov-sequencer"]
+native = ["serde_json", "rand", "schemars", "ed25519-dalek/default", "ed25519-dalek/serde", "ed25519-dalek/rand_core", "clap", "jsonrpsee", "macros", "sov-db", "sov-modules-macros/native", "sov-state/native", "sov-sequencer"]
 macros = ["sov-modules-macros"]

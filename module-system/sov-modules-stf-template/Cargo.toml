@@ -21,7 +21,6 @@ jmt = { workspace = true }
 hex = { workspace = true }
 
 sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
-sov-state = { path = "../sov-state", version = "0.1" }
 sov-modules-api = { path = "../sov-modules-api", version = "0.1" }
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
 sov-zk-cycle-utils = { path = "../../utils/zk-cycle-utils", optional = true }
@@ -31,4 +30,4 @@ risc0-zkvm-platform = { version = "0.16", optional = true }
 [features]
 bench = ["sov-zk-cycle-macros/bench", "sov-zk-cycle-utils", "risc0-zkvm", "risc0-zkvm-platform"]
 default = []
-native = ["sov-state/native", "sov-modules-api/native"]
+native = ["sov-modules-api/native"]

@@ -5,12 +5,13 @@ use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::digest::Digest;
 use sov_modules_api::hooks::SlotHooks;
-use sov_modules_api::{Address, BlobReaderTrait, Context, Module, Spec};
+use sov_modules_api::{
+    Address, BlobReaderTrait, Context, Module, ProverStorage, Spec, Storage, WorkingSet,
+};
 use sov_rollup_interface::mocks::{
     MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockValidityCond,
 };
 use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
-use sov_state::{ProverStorage, Storage, WorkingSet};
 
 type C = DefaultContext;
 type B = MockBlob;

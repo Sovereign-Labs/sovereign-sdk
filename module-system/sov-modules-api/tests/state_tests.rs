@@ -1,7 +1,8 @@
 use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_state::*;
+use sov_modules_api::*;
+use sov_state::{ArrayWitness, DefaultStorageSpec, Prefix};
 
 enum Operation {
     Merge,

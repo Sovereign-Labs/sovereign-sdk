@@ -7,13 +7,13 @@ use jmt::storage::{NodeBatch, TreeWriter};
 use jmt::{JellyfishMerkleTree, KeyHash, RootHash, Version};
 use sov_db::native_db::NativeDB;
 use sov_db::state_db::StateDB;
+use sov_state::config::Config;
+use sov_state::{MerkleProofSpec, Witness};
 
-use crate::config::Config;
-use crate::internal_cache::OrderedReadsAndWrites;
-use crate::storage::{NativeStorage, StorageKey, StorageProof, StorageValue};
-use crate::tree_db::TreeReadLogger;
-use crate::witness::Witness;
-use crate::{MerkleProofSpec, Storage};
+use super::{
+    NativeStorage, OrderedReadsAndWrites, Storage, StorageKey, StorageProof, StorageValue,
+    TreeReadLogger,
+};
 
 pub struct ProverStorage<S: MerkleProofSpec> {
     db: StateDB,
@@ -223,9 +223,10 @@ pub fn delete_storage(path: impl AsRef<Path>) {
 #[cfg(test)]
 mod test {
     use jmt::Version;
+    use sov_state::DefaultStorageSpec;
 
     use super::*;
-    use crate::{DefaultStorageSpec, StateReaderAndWriter, WorkingSet};
+    use crate::{StateReaderAndWriter, WorkingSet};
 
     #[derive(Clone)]
     struct TestCase {

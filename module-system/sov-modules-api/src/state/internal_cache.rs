@@ -1,8 +1,7 @@
 use sov_first_read_last_write_cache::cache::{self, CacheLog, ValueExists};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
-use crate::storage::{StorageKey, StorageValue};
-use crate::Storage;
+use super::{Storage, StorageKey, StorageValue};
 
 /// Caches reads and writes for a (key, value) pair. On the first read the value is fetched
 /// from an external source represented by the `ValueReader` trait. On following reads,

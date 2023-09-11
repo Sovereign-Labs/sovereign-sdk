@@ -1,6 +1,5 @@
 use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
-use sov_modules_api::{Address, Context, Event, Module};
-use sov_state::{ProverStorage, WorkingSet, ZkStorage};
+use sov_modules_api::{Address, Context, Event, Module, ProverStorage, WorkingSet, ZkStorage};
 
 use super::ValueSetter;
 use crate::{call, query, ValueSetterConfig};

@@ -9,10 +9,10 @@ pub use batch::Batch;
 use sov_modules_api::capabilities::BlobSelector;
 use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::{
-    BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, SlotData, Spec, Zkvm,
+    BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, SlotData, Spec,
+    StateCheckpoint, Storage, Zkvm,
 };
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
-use sov_state::{StateCheckpoint, Storage};
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
 use tracing::info;

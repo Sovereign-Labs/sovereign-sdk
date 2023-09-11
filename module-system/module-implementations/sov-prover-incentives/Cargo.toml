@@ -27,9 +27,7 @@ serde_json = { workspace = true, optional = true }
 
 sov-bank = { path = "../sov-bank", version = "0.1" }
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1" }
-
 
 [features]
 default = []
-native = ["serde", "serde_json", "schemars", "sov-state/native", "sov-modules-api/native"]
+native = ["serde", "serde_json", "schemars", "sov-modules-api/native"]

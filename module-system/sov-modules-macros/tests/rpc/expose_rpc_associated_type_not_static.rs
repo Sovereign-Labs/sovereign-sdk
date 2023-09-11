@@ -3,9 +3,8 @@ use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::{expose_rpc, rpc_gen, DefaultRuntime};
 use sov_modules_api::{
     Address, CallResponse, Context, DispatchCall, EncodeCall, Error, Genesis, MessageCodec, Module,
-    ModuleInfo,
+    ModuleInfo, StateValue, WorkingSet, ZkStorage
 };
-use sov_state::{StateValue, WorkingSet, ZkStorage};
 
 pub trait TestSpec {
     type Data: Data;

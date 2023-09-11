@@ -10,8 +10,7 @@ mod tests;
 pub mod query;
 
 pub use call::CallMessage;
-use sov_modules_api::{Error, ModuleInfo};
-use sov_state::WorkingSet;
+use sov_modules_api::{Error, ModuleInfo, WorkingSet};
 
 /// Initial configuration for sov-value-setter module.
 pub struct ValueSetterConfig<C: sov_modules_api::Context> {
@@ -32,11 +31,11 @@ pub struct ValueSetter<C: sov_modules_api::Context> {
 
     /// Some value kept in the state.
     #[state]
-    pub value: sov_state::StateValue<u32>,
+    pub value: sov_modules_api::StateValue<u32>,
 
     /// Holds the address of the admin user who is allowed to update the value.
     #[state]
-    pub admin: sov_state::StateValue<C::Address>,
+    pub admin: sov_modules_api::StateValue<C::Address>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for ValueSetter<C> {

@@ -1,6 +1,5 @@
 use anyhow::{bail, Result};
-use sov_modules_api::{CallResponse, Context};
-use sov_state::WorkingSet;
+use sov_modules_api::{CallResponse, Context, WorkingSet};
 
 use crate::NonFungibleToken;
 

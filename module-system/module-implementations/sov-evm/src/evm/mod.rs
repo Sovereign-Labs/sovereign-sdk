@@ -2,7 +2,8 @@ use reth_primitives::{Address, H256, U256};
 use revm::primitives::specification::SpecId;
 use revm::primitives::{ExecutionResult, Output, B160};
 use serde::{Deserialize, Serialize};
-use sov_state::{Prefix, StateMap};
+use sov_modules_api::StateMap;
+use sov_state::Prefix;
 
 pub(crate) mod conversions;
 pub(crate) mod db;

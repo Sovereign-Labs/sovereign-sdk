@@ -3590,7 +3590,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-state",
  "thiserror",
 ]
 
@@ -3627,7 +3626,6 @@ dependencies = [
  "sov-chain-state",
  "sov-modules-api",
  "sov-sequencer-registry",
- "sov-state",
  "tracing",
 ]
 
@@ -3671,7 +3669,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-state",
 ]
 
 [[package]]
@@ -3761,6 +3758,7 @@ dependencies = [
  "jsonrpsee 0.18.2",
  "serde",
  "serde_json",
+ "sov-celestia-adapter",
  "sov-cli",
  "sov-db",
  "sov-modules-api",
@@ -3768,7 +3766,6 @@ dependencies = [
  "sov-risc0-adapter",
  "sov-rollup-interface",
  "sov-sequencer",
- "sov-state",
  "sov-stf-runner",
  "tokio",
  "tracing",
@@ -3793,12 +3790,15 @@ dependencies = [
  "derive_more",
  "ed25519-dalek",
  "hex",
+ "jmt",
  "jsonrpsee 0.18.2",
  "rand",
  "schemars",
  "serde",
  "serde_json",
  "sha2 0.10.7",
+ "sov-db",
+ "sov-first-read-last-write-cache",
  "sov-modules-macros",
  "sov-rollup-interface",
  "sov-sequencer",
@@ -3831,7 +3831,6 @@ dependencies = [
  "serde",
  "sov-modules-api",
  "sov-rollup-interface",
- "sov-state",
  "thiserror",
  "tracing",
 ]
@@ -3908,7 +3907,6 @@ dependencies = [
  "serde_json",
  "sov-bank",
  "sov-modules-api",
- "sov-state",
 ]
 
 [[package]]
@@ -3963,7 +3961,6 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
- "sov-state",
  "thiserror",
 ]
 
@@ -3976,6 +3973,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "sov-zk-cycle-utils"
+version = "0.1.0"
+dependencies = [
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
 ]
 
 [[package]]
@@ -4882,14 +4887,6 @@ dependencies = [
  "sha1",
  "time 0.3.23",
  "zstd",
-]
-
-[[package]]
-name = "sov-zk-cycle-utils"
-version = "0.1.0"
-dependencies = [
- "risc0-zkvm",
- "risc0-zkvm-platform",
 ]
 
 [[package]]

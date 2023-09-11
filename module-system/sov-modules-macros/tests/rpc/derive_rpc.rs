@@ -1,8 +1,7 @@
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::{Context, ModuleInfo};
-use sov_state::{WorkingSet, ZkStorage};
+use sov_modules_api::{Context, ModuleInfo, WorkingSet, ZkStorage};
 
 #[derive(ModuleInfo)]
 pub struct TestStruct<C: ::sov_modules_api::Context> {
@@ -54,8 +53,8 @@ struct RpcStorage<C: Context> {
 impl TestStructRpcImpl<ZkDefaultContext> for RpcStorage<ZkDefaultContext> {
     fn get_working_set(
         &self,
-    ) -> ::sov_state::WorkingSet<<ZkDefaultContext as ::sov_modules_api::Spec>::Storage> {
-        ::sov_state::WorkingSet::new(self.storage.clone())
+    ) -> ::sov_modules_api::WorkingSet<<ZkDefaultContext as ::sov_modules_api::Spec>::Storage> {
+        ::sov_modules_api::WorkingSet::new(self.storage.clone())
     }
 }
 

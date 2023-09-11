@@ -1987,7 +1987,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "sov-modules-api",
- "sov-state",
  "thiserror",
 ]
 
@@ -2015,7 +2014,33 @@ dependencies = [
  "sov-chain-state",
  "sov-modules-api",
  "sov-sequencer-registry",
- "sov-state",
+ "tracing",
+]
+
+[[package]]
+name = "sov-celestia-adapter"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.21.2",
+ "bech32",
+ "borsh",
+ "hex",
+ "hex-literal",
+ "nmt-rs",
+ "prost",
+ "prost-build",
+ "prost-types",
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
+ "serde",
+ "sha2 0.10.6",
+ "sov-rollup-interface",
+ "sov-zk-cycle-macros",
+ "tendermint",
+ "tendermint-proto",
+ "thiserror",
  "tracing",
 ]
 
@@ -2026,7 +2051,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "sov-modules-api",
- "sov-state",
 ]
 
 [[package]]
@@ -2072,10 +2096,13 @@ dependencies = [
  "borsh",
  "derive_more",
  "ed25519-dalek",
+ "hex",
+ "jmt",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
  "sha2 0.10.6",
+ "sov-first-read-last-write-cache",
  "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
@@ -2109,11 +2136,10 @@ dependencies = [
  "serde",
  "sov-modules-api",
  "sov-rollup-interface",
- "sov-state",
  "sov-zk-cycle-macros",
+ "sov-zk-cycle-utils",
  "thiserror",
  "tracing",
- "sov-zk-cycle-utils",
 ]
 
 [[package]]
@@ -2154,7 +2180,6 @@ dependencies = [
  "risc0-zkvm-platform",
  "sov-bank",
  "sov-modules-api",
- "sov-state",
  "sov-zk-cycle-macros",
  "sov-zk-cycle-utils",
 ]
@@ -2186,7 +2211,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "sov-modules-api",
- "sov-state",
  "thiserror",
 ]
 
@@ -2199,6 +2223,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "sov-zk-cycle-utils"
+version = "0.1.0"
+dependencies = [
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
 ]
 
 [[package]]
@@ -2823,14 +2855,6 @@ dependencies = [
  "sha1",
  "time",
  "zstd",
-]
-
-[[package]]
-name = "sov-zk-cycle-utils"
-version = "0.1.0"
-dependencies = [
- "risc0-zkvm",
- "risc0-zkvm-platform",
 ]
 
 [[package]]

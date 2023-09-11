@@ -1,6 +1,6 @@
 use reth_primitives::U256;
 use reth_rpc_types::Transaction;
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 use crate::evm::conversions::to_u64;
 use crate::evm::transaction::BlockEnv;

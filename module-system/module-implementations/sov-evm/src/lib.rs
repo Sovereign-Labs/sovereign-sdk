@@ -25,9 +25,8 @@ mod experimental {
 
     use reth_primitives::{Address, H256};
     use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
-    use sov_modules_api::{Error, ModuleInfo};
+    use sov_modules_api::{Error, ModuleInfo, WorkingSet};
     use sov_state::codec::{BcsCodec, JsonCodec};
-    use sov_state::WorkingSet;
 
     use super::evm::db::EvmDb;
     use super::evm::transaction::BlockEnv;
@@ -88,49 +87,53 @@ mod experimental {
         pub(crate) address: C::Address,
 
         #[state]
-        pub(crate) accounts: sov_state::StateMap<Address, DbAccount, BcsCodec>,
+        pub(crate) accounts: sov_modules_api::StateMap<Address, DbAccount, BcsCodec>,
 
         #[state]
-        pub(crate) cfg: sov_state::StateValue<EvmChainConfig, BcsCodec>,
+        pub(crate) cfg: sov_modules_api::StateValue<EvmChainConfig, BcsCodec>,
 
         #[state]
-        pub(crate) pending_block: sov_state::StateValue<BlockEnv, BcsCodec>,
+        pub(crate) pending_block: sov_modules_api::StateValue<BlockEnv, BcsCodec>,
 
         #[state]
-        pub(crate) head_number: sov_state::StateValue<u64>,
+        pub(crate) head_number: sov_modules_api::StateValue<u64>,
 
         // TODO JsonCodec: This is a workaround for https://github.com/bincode-org/bincode/issues/245 which affects all
         // binary serialization formats.
         // 1. Implement custom types for Block, Transaction etc.. with borsh derived.
         // 2. Remove JsonCodec.
         #[state]
-        pub(crate) blocks: sov_state::AccessoryStateMap<u64, reth_rpc_types::Block, JsonCodec>,
+        pub(crate) blocks:
+            sov_modules_api::AccessoryStateMap<u64, reth_rpc_types::Block, JsonCodec>,
 
         #[state]
         pub(crate) block_hashes:
-            sov_state::AccessoryStateMap<reth_primitives::H256, u64, JsonCodec>,
+            sov_modules_api::AccessoryStateMap<reth_primitives::H256, u64, JsonCodec>,
 
         #[state]
         pub(crate) pending_transactions:
-            sov_state::AccessoryStateVec<reth_rpc_types::Transaction, JsonCodec>,
+            sov_modules_api::AccessoryStateVec<reth_rpc_types::Transaction, JsonCodec>,
 
         #[state]
-        pub(crate) transactions: sov_state::AccessoryStateMap<
+        pub(crate) transactions: sov_modules_api::AccessoryStateMap<
             reth_primitives::H256,
             reth_rpc_types::Transaction,
             JsonCodec,
         >,
 
         #[state]
-        pub(crate) receipts: sov_state::AccessoryStateMap<
+        pub(crate) receipts: sov_modules_api::AccessoryStateMap<
             reth_primitives::U256,
             reth_rpc_types::TransactionReceipt,
             JsonCodec,
         >,
 
         #[state]
-        pub(crate) code:
-            sov_state::AccessoryStateMap<reth_primitives::H256, reth_primitives::Bytes, BcsCodec>,
+        pub(crate) code: sov_modules_api::AccessoryStateMap<
+            reth_primitives::H256,
+            reth_primitives::Bytes,
+            BcsCodec,
+        >,
     }
 
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {

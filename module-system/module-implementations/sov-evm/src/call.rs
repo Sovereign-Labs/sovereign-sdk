@@ -1,13 +1,11 @@
 use anyhow::Result;
 use reth_primitives::TransactionSignedEcRecovered;
 use revm::primitives::{CfgEnv, SpecId};
-use sov_modules_api::CallResponse;
-use sov_state::WorkingSet;
+use sov_modules_api::{CallResponse, WorkingSet};
 
 use crate::evm::db::EvmDb;
-use crate::evm::executor::{self};
 use crate::evm::transaction::BlockEnv;
-use crate::evm::{contract_address, EvmChainConfig, RlpEvmTransaction};
+use crate::evm::{contract_address, executor, EvmChainConfig, RlpEvmTransaction};
 use crate::Evm;
 
 #[cfg_attr(

@@ -5,9 +5,8 @@ use anyhow::bail;
 use borsh::BorshDeserialize;
 use sov_modules_api::digest::Digest;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Context, DispatchCall, PublicKey, Spec};
+use sov_modules_api::{Context, DispatchCall, PublicKey, Spec, WorkingSet};
 use sov_rollup_interface::services::batch_builder::BatchBuilder;
-use sov_state::WorkingSet;
 use tracing::{info, warn};
 
 /// BatchBuilder that creates batches of transactions in the order they were submitted
@@ -147,9 +146,12 @@ mod tests {
     use sov_modules_api::default_signature::DefaultPublicKey;
     use sov_modules_api::macros::DefaultRuntime;
     use sov_modules_api::transaction::Transaction;
-    use sov_modules_api::{Context, DispatchCall, EncodeCall, Genesis, MessageCodec, PrivateKey};
+    use sov_modules_api::{
+        Context, DispatchCall, EncodeCall, Genesis, MessageCodec, PrivateKey, ProverStorage,
+        Storage,
+    };
     use sov_rollup_interface::services::batch_builder::BatchBuilder;
-    use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
+    use sov_state::DefaultStorageSpec;
     use sov_value_setter::{CallMessage, ValueSetter, ValueSetterConfig};
     use tempfile::TempDir;
 

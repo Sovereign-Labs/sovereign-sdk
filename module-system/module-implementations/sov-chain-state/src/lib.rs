@@ -16,8 +16,7 @@ pub mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use query::{ChainStateRpcImpl, ChainStateRpcServer};
-use sov_modules_api::{Error, ModuleInfo, ValidityCondition, ValidityConditionChecker};
-use sov_state::WorkingSet;
+use sov_modules_api::{Error, ModuleInfo, ValidityCondition, ValidityConditionChecker, WorkingSet};
 
 /// Type alias that contains the height of a given transition
 pub type TransitionHeight = u64;
@@ -106,7 +105,7 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
 
     /// The current block height
     #[state]
-    slot_height: sov_state::StateValue<TransitionHeight>,
+    slot_height: sov_modules_api::StateValue<TransitionHeight>,
 
     /// A record of all previous state transitions which are available to the VM.
     /// Currently, this includes *all* historical state transitions, but that may change in the future.
@@ -115,20 +114,21 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
     /// rollup's root hash which is only stored once the transition has completed.
     #[state]
     historical_transitions:
-        sov_state::StateMap<TransitionHeight, StateTransitionId<Da::ValidityCondition>>,
+        sov_modules_api::StateMap<TransitionHeight, StateTransitionId<Da::ValidityCondition>>,
 
     /// The transition that is currently processed
     #[state]
-    in_progress_transition: sov_state::StateValue<TransitionInProgress<Da::ValidityCondition>>,
+    in_progress_transition:
+        sov_modules_api::StateValue<TransitionInProgress<Da::ValidityCondition>>,
 
     /// The genesis root hash.
     /// Set after the first transaction of the rollup is executed, using the `begin_slot` hook.
     #[state]
-    genesis_hash: sov_state::StateValue<[u8; 32]>,
+    genesis_hash: sov_modules_api::StateValue<[u8; 32]>,
 
     /// The height of genesis
     #[state]
-    genesis_height: sov_state::StateValue<TransitionHeight>,
+    genesis_height: sov_modules_api::StateValue<TransitionHeight>,
 }
 
 /// Initial configuration of the chain state

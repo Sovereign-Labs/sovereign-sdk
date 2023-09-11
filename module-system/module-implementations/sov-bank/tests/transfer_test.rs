@@ -6,8 +6,8 @@ use sov_bank::{
     get_genesis_token_address, get_token_address, Bank, BankConfig, CallMessage, Coins,
 };
 use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Address, Context, Error, Module};
-use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_modules_api::{Address, Context, Error, Module, ProverStorage, WorkingSet};
+use sov_state::DefaultStorageSpec;
 
 pub type Storage = ProverStorage<DefaultStorageSpec>;
 

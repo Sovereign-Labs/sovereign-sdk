@@ -3,11 +3,10 @@ use std::fmt::Debug;
 
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 use sov_rollup_interface::stf::Event;
+use sov_state::codec::{EncodeKeyLike, StateCodec, StateValueCodec};
+use sov_state::Prefix;
 
-use crate::codec::{EncodeKeyLike, StateCodec, StateValueCodec};
-use crate::internal_cache::{OrderedReadsAndWrites, StorageInternalCache};
-use crate::storage::{StorageKey, StorageValue};
-use crate::{Prefix, Storage};
+use super::{OrderedReadsAndWrites, Storage, StorageInternalCache, StorageKey, StorageValue};
 
 /// A working set accumulates reads and writes on top of the underlying DB,
 /// automating witness creation.

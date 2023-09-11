@@ -1,9 +1,9 @@
 use demo_nft_module::{CallMessage, NonFungibleToken, NonFungibleTokenConfig, OwnerResponse};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address as gen_addr_generic;
-use sov_modules_api::{Address, Context, Module};
+use sov_modules_api::{Address, Context, Module, ProverStorage, WorkingSet};
 use sov_rollup_interface::stf::Event;
-use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
+use sov_state::DefaultStorageSpec;
 
 pub type C = DefaultContext;
 pub type Storage = ProverStorage<DefaultStorageSpec>;
