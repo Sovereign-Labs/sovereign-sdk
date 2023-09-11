@@ -1,6 +1,7 @@
+use reth_primitives::{Bloom, Bytes, U256};
 use sov_state::WorkingSet;
 
-use crate::evm::transaction::BlockEnv;
+use crate::evm::transaction::{Block, BlockEnv};
 use crate::experimental::PendingTransaction;
 use crate::Evm;
 
@@ -10,78 +11,114 @@ impl<C: sov_modules_api::Context> Evm<C> {
         da_root_hash: [u8; 32],
         working_set: &mut WorkingSet<C::Storage>,
     ) {
-        let block_number: u64 = self.head_number.get(working_set).unwrap();
         let parent_block = self
-            .blocks
-            .get(block_number as usize, &mut working_set.accessory_state())
-            .expect("Head block should always be set")
-            .header;
+            .head
+            .get(working_set)
+            .expect("Head block should always be set");
         let cfg = self.cfg.get(working_set).unwrap_or_default();
         let new_pending_block = BlockEnv {
-            number: block_number + 1,
+            number: parent_block.header.number + 1,
             coinbase: cfg.coinbase,
-            timestamp: parent_block.timestamp + cfg.block_timestamp_delta,
-            prevrandao: Some(da_root_hash.into()),
+            timestamp: parent_block.header.timestamp + cfg.block_timestamp_delta,
+            prevrandao: da_root_hash.into(),
             basefee: reth_primitives::basefee::calculate_next_block_base_fee(
-                parent_block.gas_used,
+                parent_block.header.gas_used,
                 cfg.block_gas_limit,
                 parent_block
+                    .header
                     .base_fee_per_gas
                     .unwrap_or(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE),
             ),
             gas_limit: cfg.block_gas_limit,
         };
         self.pending_block.set(&new_pending_block, working_set);
+
+        // println!("new_pending_block: {:?}", new_pending_block);
+        // self.pending_transactions.clear(working_set); ?
     }
 
-    pub fn end_slot_hook(&self, _root_hash: [u8; 32], working_set: &mut WorkingSet<C::Storage>) {
-        // TODO implement block creation logic.
+    pub fn end_slot_hook(&self, root_hash: [u8; 32], working_set: &mut WorkingSet<C::Storage>) {
+        let pending_block = self
+            .pending_block
+            .get(working_set)
+            .expect("Pending block should always be sets");
 
-        // let _pending_block = self
-        //     .pending_block
-        //     .get(working_set)
-        //     .expect("Pending block should always be set");
+        let parent_block = self
+            .head
+            .get(working_set)
+            .expect("Head block should always be set");
+
+        let pending_transactions: Vec<PendingTransaction> =
+            self.pending_transactions.iter(working_set).collect();
+
+        self.pending_transactions.clear(working_set);
 
         let mut accessory_state = working_set.accessory_state();
-        let mut transactions: Vec<PendingTransaction> =
-            Vec::with_capacity(self.pending_transactions.len(&mut accessory_state));
-
-        while let Some(PendingTransaction {
-            transaction,
-            receipt,
-        }) = self.pending_transactions.pop(&mut accessory_state)
-        {
-            // TODO fill all data that is set by: from_recovered_with_block_context
-            // tx.gas_price
-            // tx.max_fee_per_gas
-            transactions.push(PendingTransaction {
-                transaction,
-                receipt,
-            });
-        }
-
-        transactions.reverse();
-
-        let start_tx_index = self.transactions.len(&mut accessory_state);
+        let start_tx_index = self.transactions.len(&mut accessory_state) as u64;
         let mut tx_index = start_tx_index;
 
         for PendingTransaction {
             transaction,
             receipt,
-        } in transactions
+        } in &pending_transactions
         {
-            self.transactions.push(&transaction, &mut accessory_state);
-            self.receipts.push(&receipt, &mut accessory_state);
+            self.transactions.push(transaction, &mut accessory_state);
+            self.receipts.push(receipt, &mut accessory_state);
 
             self.transaction_hashes.set(
                 &transaction.signed_transaction.hash,
-                &(tx_index as u64),
+                &tx_index,
                 &mut accessory_state,
             );
 
-            tx_index += 1;
+            tx_index += 1
         }
 
-        self.pending_transactions.clear(&mut accessory_state);
+        let gas_used = pending_transactions
+            .last()
+            .map_or(0u64, |tx| tx.receipt.receipt.cumulative_gas_used);
+
+        let transactions: Vec<&reth_primitives::TransactionSigned> = pending_transactions
+            .iter()
+            .map(|tx| &tx.transaction.signed_transaction)
+            .collect();
+
+        let receipts: Vec<reth_primitives::ReceiptWithBloom> = pending_transactions
+            .iter()
+            .map(|tx| tx.receipt.receipt.clone().with_bloom())
+            .collect();
+
+        let header = reth_primitives::Header {
+            parent_hash: parent_block.header.hash,
+            timestamp: pending_block.timestamp,
+            number: pending_block.number,
+            ommers_hash: reth_primitives::constants::EMPTY_OMMER_ROOT,
+            beneficiary: parent_block.header.beneficiary,
+            state_root: root_hash.into(),
+            transactions_root: reth_primitives::proofs::calculate_transaction_root(
+                transactions.as_slice(),
+            ),
+            receipts_root: reth_primitives::proofs::calculate_receipt_root(receipts.as_slice()),
+            withdrawals_root: None,
+            logs_bloom: receipts
+                .iter()
+                .fold(Bloom::zero(), |bloom, r| bloom | r.bloom),
+            difficulty: U256::ZERO,
+            gas_limit: pending_block.gas_limit,
+            gas_used,
+            mix_hash: pending_block.prevrandao,
+            nonce: 0,
+            base_fee_per_gas: parent_block.header.next_block_base_fee(),
+            extra_data: Bytes::default(),
+        };
+
+        let block = Block {
+            header: header.seal_slow(),
+            transactions: start_tx_index..tx_index - 1,
+        };
+
+        self.blocks.push(&block, &mut accessory_state);
+        self.head.set(&block, working_set); // ?
+        self.pending_transactions.clear(working_set); // ?
     }
 }

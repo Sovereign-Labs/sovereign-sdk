@@ -8,7 +8,7 @@ pub(crate) struct BlockEnv {
     pub(crate) coinbase: Address,
     pub(crate) timestamp: u64,
     /// Prevrandao is used after Paris (aka TheMerge) instead of the difficulty value.
-    pub(crate) prevrandao: Option<H256>,
+    pub(crate) prevrandao: H256,
     /// basefee is added in EIP1559 London upgrade
     pub(crate) basefee: u64,
     pub(crate) gas_limit: u64,
@@ -20,7 +20,7 @@ impl Default for BlockEnv {
             number: Default::default(),
             coinbase: Default::default(),
             timestamp: Default::default(),
-            prevrandao: Some(Default::default()),
+            prevrandao: Default::default(),
             basefee: Default::default(),
             gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
         }
@@ -45,13 +45,13 @@ pub struct RlpEvmTransaction {
     derive(serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Clone)]
-pub struct TransactionSignedAndRecovered {
+pub(crate) struct TransactionSignedAndRecovered {
     /// Signer of the transaction
-    pub signer: Address,
+    pub(crate) signer: Address,
     /// Signed transaction
-    pub signed_transaction: TransactionSigned,
+    pub(crate) signed_transaction: TransactionSigned,
     /// Block the transaction was added to
-    pub block_number: u64,
+    pub(crate) block_number: u64,
 }
 
 #[cfg_attr(
@@ -60,12 +60,12 @@ pub struct TransactionSignedAndRecovered {
     derive(serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Clone)]
-pub struct Block {
+pub(crate) struct Block {
     /// Block header.
-    pub header: SealedHeader,
+    pub(crate) header: SealedHeader,
 
     /// Transactions in this block.
-    pub transactions: Range<u64>,
+    pub(crate) transactions: Range<u64>,
 }
 
 #[cfg_attr(
@@ -74,8 +74,8 @@ pub struct Block {
     derive(serde::Deserialize)
 )]
 #[derive(Debug, PartialEq, Clone)]
-pub struct Receipt {
-    pub receipt: reth_primitives::Receipt,
-    pub gas_used: u64,
-    pub log_index_start: u64,
+pub(crate) struct Receipt {
+    pub(crate) receipt: reth_primitives::Receipt,
+    pub(crate) gas_used: u64,
+    pub(crate) log_index_start: u64,
 }

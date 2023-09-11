@@ -14,7 +14,7 @@ fn begin_slot_hook_creates_pending_block() {
             number: 1,
             coinbase: Address::from([3u8; 20]),
             timestamp: 52,
-            prevrandao: Some(H256::from([5u8; 32])),
+            prevrandao: H256::from([5u8; 32]),
             basefee: 62,
             gas_limit: 30000000,
         }

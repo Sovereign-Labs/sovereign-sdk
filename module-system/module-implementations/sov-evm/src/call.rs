@@ -44,32 +44,19 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let receipt = match result {
             Ok(result) => {
                 let logs: Vec<_> = result.logs().into_iter().map(into_reth_log).collect();
-
-                let mut accessory_state = working_set.accessory_state();
-                let tx_count = self.pending_transactions.len(&mut accessory_state);
-
-                let previous_transaction: Option<PendingTransaction> = if tx_count == 0 {
-                    None
-                } else {
-                    Some(
-                        self.pending_transactions
-                            .get(tx_count - 1, &mut accessory_state)
-                            .expect("Pending transaction must be set"),
-                    )
-                };
+                let previous_transaction = self.pending_transactions.last(working_set);
 
                 Receipt {
                     receipt: reth_primitives::Receipt {
                         tx_type: evm_tx_recovered.tx_type(),
                         success: result.is_success(),
-                        cumulative_gas_used: match &previous_transaction {
-                            Some(tx) => tx.receipt.receipt.cumulative_gas_used + result.gas_used(),
-                            None => 0u64,
-                        },
+                        cumulative_gas_used: previous_transaction.as_ref().map_or(0u64, |tx| {
+                            tx.receipt.receipt.cumulative_gas_used + result.gas_used()
+                        }),
                         logs,
                     },
                     gas_used: result.gas_used(),
-                    log_index_start: match &previous_transaction {
+                    log_index_start: match previous_transaction {
                         Some(tx) => {
                             tx.receipt.log_index_start + tx.receipt.receipt.logs.len() as u64
                         }
@@ -98,7 +85,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         };
 
         self.pending_transactions
-            .push(&pending_transaction, &mut working_set.accessory_state());
+            .push(&pending_transaction, working_set);
 
         Ok(CallResponse::default())
     }

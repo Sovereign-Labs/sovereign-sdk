@@ -66,9 +66,9 @@ mod experimental {
     }
 
     #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
-    pub struct PendingTransaction {
-        pub transaction: TransactionSignedAndRecovered,
-        pub receipt: Receipt,
+    pub(crate) struct PendingTransaction {
+        pub(crate) transaction: TransactionSignedAndRecovered,
+        pub(crate) receipt: Receipt,
     }
 
     impl Default for EvmConfig {
@@ -104,10 +104,10 @@ mod experimental {
         pub(crate) pending_block: sov_state::StateValue<BlockEnv, BcsCodec>,
 
         #[state]
-        pub(crate) pending_transactions: sov_state::AccessoryStateVec<PendingTransaction, BcsCodec>,
+        pub(crate) pending_transactions: sov_state::StateVec<PendingTransaction, BcsCodec>,
 
         #[state]
-        pub(crate) head_number: sov_state::StateValue<u64>,
+        pub(crate) head: sov_state::StateValue<Block, BcsCodec>,
 
         #[state]
         pub(crate) blocks: sov_state::AccessoryStateVec<Block, BcsCodec>,

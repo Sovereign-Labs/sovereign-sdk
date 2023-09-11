@@ -55,7 +55,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         self.cfg.set(&chain_cfg, working_set);
 
         let genesis_block_number = 0u64;
-        self.head_number.set(&genesis_block_number, working_set);
 
         let header = reth_primitives::Header {
             parent_hash: H256::default(),
@@ -84,13 +83,13 @@ impl<C: sov_modules_api::Context> Evm<C> {
         self.block_hashes
             .set(&header.hash, &genesis_block_number, &mut accessory_state);
 
-        self.blocks.push(
-            &Block {
-                header,
-                transactions: 0u64..0u64,
-            },
-            &mut accessory_state,
-        );
+        let block = Block {
+            header,
+            transactions: 0u64..0u64,
+        };
+
+        self.blocks.push(&block, &mut accessory_state);
+        self.head.set(&block, working_set);
 
         Ok(())
     }

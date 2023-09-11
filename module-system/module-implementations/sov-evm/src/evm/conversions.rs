@@ -41,9 +41,8 @@ impl From<&BlockEnv> for ReVmBlockEnv {
             number: U256::from(block_env.number),
             coinbase: block_env.coinbase,
             timestamp: U256::from(block_env.timestamp),
-            // TODO: handle difficulty
             difficulty: U256::ZERO,
-            prevrandao: block_env.prevrandao,
+            prevrandao: Some(block_env.prevrandao),
             basefee: U256::from(block_env.basefee),
             gas_limit: U256::from(block_env.gas_limit),
         }

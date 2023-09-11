@@ -95,26 +95,25 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         let tx_number = self.transaction_hashes.get(&hash, &mut accessory_state);
 
-        let transaction = tx_number
-            .map(|number| {
-                self.transactions
-                    .get(number as usize, &mut accessory_state)
-                    .expect("Transaction with known hash must be set")
-            })
-            .map(|tx| {
-                let block = self
-                    .blocks
-                    .get(tx.block_number as usize, &mut accessory_state)
-                    .expect("Block number for known transaction must be set");
+        let transaction = tx_number.map(|number| {
+            let tx = self
+                .transactions
+                .get(number as usize, &mut accessory_state)
+                .expect("Transaction with known hash must be set");
 
-                reth_rpc_types::Transaction::from_recovered_with_block_context(
-                    tx.into(),
-                    block.header.hash,
-                    block.header.number,
-                    block.header.base_fee_per_gas,
-                    U256::from(tx_number.unwrap() - block.transactions.start),
-                )
-            });
+            let block = self
+                .blocks
+                .get(tx.block_number as usize, &mut accessory_state)
+                .expect("Block number for known transaction must be set");
+
+            reth_rpc_types::Transaction::from_recovered_with_block_context(
+                tx.into(),
+                block.header.hash,
+                block.header.number,
+                block.header.base_fee_per_gas,
+                U256::from(tx_number.unwrap() - block.transactions.start),
+            )
+        });
 
         Ok(transaction)
     }
@@ -132,25 +131,23 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         let tx_number = self.transaction_hashes.get(&hash, &mut accessory_state);
 
-        let receipt = tx_number
-            .map(|number| {
-                self.transactions
-                    .get(number as usize, &mut accessory_state)
-                    .expect("Transaction with known hash must be set")
-            })
-            .map(|tx| {
-                let block = self
-                    .blocks
-                    .get(tx.block_number as usize, &mut accessory_state)
-                    .expect("Block number for known transaction must be set");
+        let receipt = tx_number.map(|number| {
+            let tx = self
+                .transactions
+                .get(number as usize, &mut accessory_state)
+                .expect("Transaction with known hash must be set");
+            let block = self
+                .blocks
+                .get(tx.block_number as usize, &mut accessory_state)
+                .expect("Block number for known transaction must be set");
 
-                let receipt = self
-                    .receipts
-                    .get(tx_number.unwrap() as usize, &mut accessory_state)
-                    .expect("Receipt for known transaction must be set");
+            let receipt = self
+                .receipts
+                .get(tx_number.unwrap() as usize, &mut accessory_state)
+                .expect("Receipt for known transaction must be set");
 
-                build_rpc_receipt(block, tx, tx_number.unwrap(), receipt)
-            });
+            build_rpc_receipt(block, tx, tx_number.unwrap(), receipt)
+        });
 
         Ok(receipt)
     }

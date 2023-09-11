@@ -179,6 +179,16 @@ where
             next_i: 0,
         }
     }
+
+    pub fn last<S: Storage>(&self, working_set: &mut AccessoryWorkingSet<S>) -> Option<V> {
+        let len = self.len(working_set);
+
+        if len == 0usize {
+            None
+        } else {
+            self.elems.get(&(len - 1), working_set)
+        }
+    }
 }
 
 /// An [`Iterator`] over a [`AccessoryStateVec`]
