@@ -1,7 +1,7 @@
 use anyhow::Result;
 use reth_primitives::TransactionSignedEcRecovered;
 use reth_revm::into_reth_log;
-use revm::primitives::{CfgEnv, SpecId};
+use revm::primitives::{CfgEnv, EVMError, SpecId};
 use sov_modules_api::CallResponse;
 use sov_state::WorkingSet;
 
@@ -40,39 +40,47 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
         let result = executor::execute_tx(evm_db, &block_env, &evm_tx_recovered, cfg_env);
+        let previous_transaction = self.pending_transactions.last(working_set);
+        let previous_transaction_cumulative_gas_used = previous_transaction
+            .as_ref()
+            .map_or(0u64, |tx| tx.receipt.receipt.cumulative_gas_used);
+        let log_index_start = previous_transaction.as_ref().map_or(0u64, |tx| {
+            tx.receipt.log_index_start + tx.receipt.receipt.logs.len() as u64
+        });
 
         let receipt = match result {
             Ok(result) => {
                 let logs: Vec<_> = result.logs().into_iter().map(into_reth_log).collect();
-                let previous_transaction = self.pending_transactions.last(working_set);
+                let gas_used = result.gas_used();
 
                 Receipt {
                     receipt: reth_primitives::Receipt {
                         tx_type: evm_tx_recovered.tx_type(),
                         success: result.is_success(),
-                        cumulative_gas_used: previous_transaction.as_ref().map_or(0u64, |tx| {
-                            tx.receipt.receipt.cumulative_gas_used + result.gas_used()
-                        }),
+                        cumulative_gas_used: previous_transaction_cumulative_gas_used + gas_used,
                         logs,
                     },
-                    gas_used: result.gas_used(),
-                    log_index_start: match previous_transaction {
-                        Some(tx) => {
-                            tx.receipt.log_index_start + tx.receipt.receipt.logs.len() as u64
-                        }
-                        None => 0u64,
-                    },
+                    gas_used,
+                    log_index_start,
+                    error: None,
                 }
             }
-            Err(err) => todo!(
-                "{}",
-                match err {
-                    revm::primitives::EVMError::Transaction(error) =>
-                        serde_json::to_string(&error).unwrap(),
-                    revm::primitives::EVMError::PrevrandaoNotSet => "PrevrandaoNotSet".to_string(),
-                    revm::primitives::EVMError::Database(_) => "DB".to_string(),
-                }
-            ),
+            Err(err) => Receipt {
+                receipt: reth_primitives::Receipt {
+                    tx_type: evm_tx_recovered.tx_type(),
+                    success: false,
+                    cumulative_gas_used: previous_transaction_cumulative_gas_used,
+                    logs: vec![],
+                },
+                // TODO: Do we want failed transactions to use all gas?
+                gas_used: 0,
+                log_index_start: log_index_start,
+                error: Some(match err {
+                    EVMError::Transaction(err) => EVMError::Transaction(err),
+                    EVMError::PrevrandaoNotSet => EVMError::PrevrandaoNotSet,
+                    EVMError::Database(_) => EVMError::Database(0u8),
+                }),
+            },
         };
 
         let pending_transaction = PendingTransaction {

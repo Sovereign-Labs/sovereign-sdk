@@ -1,6 +1,7 @@
 use std::ops::Range;
 
 use reth_primitives::{Address, SealedHeader, TransactionSigned, H256};
+use revm::primitives::EVMError;
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Clone)]
 pub(crate) struct BlockEnv {
@@ -78,4 +79,5 @@ pub(crate) struct Receipt {
     pub(crate) receipt: reth_primitives::Receipt,
     pub(crate) gas_used: u64,
     pub(crate) log_index_start: u64,
+    pub(crate) error: Option<EVMError<u8>>,
 }
