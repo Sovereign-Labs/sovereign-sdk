@@ -56,15 +56,6 @@ pub trait Zkvm {
     ) -> Result<StateTransition<Da, Add>, Self::Error>;
 }
 
-// /// A trait which is implemented by the proof system itself.
-// #[cfg(feature = "native")]
-// pub trait ProofSystem {
-//     /// The host type which is used by this proof system
-//     type Host: ZkvmHost;
-//     /// The guest type
-//     type Guest: ZkvmGuest;
-// }
-
 /// A trait which is accessible from within a zkVM program.
 pub trait ZkvmGuest: Zkvm {
     /// Obtain "advice" non-deterministically from the host

@@ -57,8 +57,11 @@ where
         ledger_db: LedgerDB,
         mut app: ST,
         should_init_chain: bool,
-        #[allow(clippy::type_complexity)] genesis_config: InitialState<ST, Vm, Da::Spec>,
-        verifier: Option<(Vm, StateTransitionVerifier<V, Da::Verifier, Vm::Guest>)>,
+        genesis_config: InitialState<ST, Vm, Da::Spec>,
+        #[allow(clippy::type_complexity)] verifier: Option<(
+            Vm,
+            StateTransitionVerifier<V, Da::Verifier, Vm::Guest>,
+        )>,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
 
