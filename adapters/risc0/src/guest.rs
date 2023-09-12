@@ -69,6 +69,8 @@ impl WordRead for Hints {
 pub struct Risc0Guest {
     #[cfg(not(target_os = "zkvm"))]
     hints: std::sync::Mutex<Hints>,
+    #[cfg(not(target_os = "zkvm"))]
+    commits: std::sync::Mutex<Vec<u32>>,
 }
 
 impl Risc0Guest {
@@ -76,6 +78,8 @@ impl Risc0Guest {
         Self {
             #[cfg(not(target_os = "zkvm"))]
             hints: std::sync::Mutex::new(Hints::new()),
+            #[cfg(not(target_os = "zkvm"))]
+            commits: Default::default(),
         }
     }
 
@@ -83,6 +87,7 @@ impl Risc0Guest {
     pub fn with_hints(hints: Vec<u32>) -> Self {
         Self {
             hints: std::sync::Mutex::new(Hints::with_hints(hints)),
+            commits: Default::default(),
         }
     }
 }
@@ -95,8 +100,10 @@ impl ZkvmGuest for Risc0Guest {
         T::deserialize(&mut Deserializer::new(&mut hints)).unwrap()
     }
 
-    fn commit<T: serde::Serialize>(&self, _item: &T) {
-        todo!()
+    fn commit<T: serde::Serialize>(&self, item: &T) {
+        self.commits.lock().unwrap().extend_from_slice(
+            &risc0_zkvm::serde::to_vec(item).expect("Serialization to vec is infallible"),
+        );
     }
 }
 

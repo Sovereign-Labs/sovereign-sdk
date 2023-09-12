@@ -50,8 +50,7 @@ impl<Vm: Zkvm, Da: DaSpec> App<Vm, Da> {
 }
 
 pub fn create_zk_app_template<Vm: Zkvm, Da: DaSpec>(
-    runtime_config: [u8; 32],
 ) -> AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>> {
-    let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
+    let storage = ZkStorage::new();
     AppTemplate::new(storage, Runtime::default())
 }

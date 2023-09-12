@@ -95,7 +95,7 @@ pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
         (
             p,
             AppVerifier::new(
-                create_zk_app_template([0u8; 32]),
+                create_zk_app_template(),
                 CelestiaVerifier {
                     rollup_namespace: ROLLUP_NAMESPACE,
                 },
@@ -146,7 +146,7 @@ pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
     let verifier = prover.map(|p| {
         (
             p,
-            AppVerifier::new(create_zk_app_template([0u8; 32]), Default::default()),
+            AppVerifier::new(create_zk_app_template(), Default::default()),
         )
     });
     Ok(Rollup {

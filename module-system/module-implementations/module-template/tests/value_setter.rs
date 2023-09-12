@@ -28,7 +28,7 @@ fn test_value_setter() {
     {
         let config = ExampleModuleConfig {};
         let zk_context = ZkDefaultContext::new(admin);
-        let mut zk_working_set = WorkingSet::with_witness(ZkStorage::new([0u8; 32]), witness);
+        let mut zk_working_set = WorkingSet::with_witness(ZkStorage::new(), witness);
         test_value_setter_helper(zk_context, &config, &mut zk_working_set);
     }
 }
