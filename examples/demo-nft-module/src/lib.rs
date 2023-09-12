@@ -10,7 +10,6 @@ mod query;
 pub use query::{NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer, CollectionResponse};
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
 use sov_state::WorkingSet;
-mod offchain;
 /// Utility functions.
 pub mod utils;
 
