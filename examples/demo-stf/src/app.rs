@@ -9,9 +9,9 @@ use sov_modules_stf_template::AppTemplate;
 pub use sov_modules_stf_template::Batch;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::Zkvm;
+use sov_state::ZkStorage;
 #[cfg(feature = "native")]
-use sov_state::ProverStorage;
-use sov_state::{Storage, ZkStorage};
+use sov_state::{ProverStorage, Storage};
 #[cfg(feature = "native")]
 use sov_stf_runner::FiFoStrictBatchBuilder;
 #[cfg(feature = "native")]
@@ -50,8 +50,7 @@ impl<Vm: Zkvm, Da: DaSpec> App<Vm, Da> {
 }
 
 pub fn create_zk_app_template<Vm: Zkvm, Da: DaSpec>(
-    runtime_config: [u8; 32],
 ) -> AppTemplate<ZkDefaultContext, Da, Vm, Runtime<ZkDefaultContext, Da>> {
-    let storage = ZkStorage::with_config(runtime_config).expect("Failed to open zk storage");
+    let storage = ZkStorage::new();
     AppTemplate::new(storage, Runtime::default())
 }

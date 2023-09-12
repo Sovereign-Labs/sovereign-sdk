@@ -1,29 +1,29 @@
 use ethers_core::rand::rngs::StdRng;
 use ethers_core::rand::SeedableRng;
 use reth_primitives::{
-    public_key_to_address, sign_message, Address, Bytes as RethBytes,
-    Transaction as RethTransaction, TransactionKind, TransactionSigned, TxEip1559 as RethTxEip1559,
-    H256,
+    Address, Bytes as RethBytes, Transaction as RethTransaction, TransactionKind,
+    TxEip1559 as RethTxEip1559,
 };
 use reth_rpc::eth::error::SignError;
 use secp256k1::{PublicKey, SecretKey};
 
 use crate::evm::RlpEvmTransaction;
+use crate::signer::DevSigner;
 
 /// ETH transactions signer used in tests.
-pub(crate) struct DevSigner {
-    secret_key: SecretKey,
-    pub(crate) address: Address,
+pub(crate) struct TestSigner {
+    signer: DevSigner,
+    address: Address,
 }
 
-impl DevSigner {
+impl TestSigner {
     /// Creates a new signer.
     pub(crate) fn new(secret_key: SecretKey) -> Self {
         let public_key = PublicKey::from_secret_key(secp256k1::SECP256K1, &secret_key);
-        let addr = public_key_to_address(public_key);
+        let address = reth_primitives::public_key_to_address(public_key);
         Self {
-            secret_key,
-            address: addr,
+            signer: DevSigner::new(vec![secret_key]),
+            address,
         }
     }
 
@@ -34,25 +34,9 @@ impl DevSigner {
         Self::new(secret_key)
     }
 
-    /// Signs Eip1559 transaction.
-    pub(crate) fn sign_transaction(
-        &self,
-        transaction: RethTxEip1559,
-    ) -> Result<TransactionSigned, SignError> {
-        let transaction = RethTransaction::Eip1559(transaction);
-
-        let tx_signature_hash = transaction.signature_hash();
-
-        let signature = sign_message(
-            H256::from_slice(self.secret_key.as_ref()),
-            tx_signature_hash,
-        )
-        .map_err(|_| SignError::CouldNotSign)?;
-
-        Ok(TransactionSigned::from_transaction_and_signature(
-            transaction,
-            signature,
-        ))
+    /// Address of the transaction signer.
+    pub(crate) fn address(&self) -> Address {
+        self.address
     }
 
     /// Signs default Eip1559 transaction with to, data and nonce overridden.
@@ -72,7 +56,8 @@ impl DevSigner {
             ..Default::default()
         };
 
-        let signed = self.sign_transaction(reth_tx)?;
+        let reth_tx = RethTransaction::Eip1559(reth_tx);
+        let signed = self.signer.sign_transaction(reth_tx, self.address)?;
 
         Ok(RlpEvmTransaction {
             rlp: signed.envelope_encoded().to_vec(),

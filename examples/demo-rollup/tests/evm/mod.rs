@@ -13,6 +13,7 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use jsonrpsee::rpc_params;
 use sov_evm::smart_contracts::SimpleStorageContract;
+use sov_risc0_adapter::host::Risc0Host;
 
 use super::test_helpers::start_rollup;
 
@@ -184,6 +185,7 @@ async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std:
         .with_chain_id(chain_id);
 
     let contract = SimpleStorageContract::default();
+
     let from_addr = Address::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
 
     let test_client = TestClient::new(chain_id, key, from_addr, contract, rpc_address).await;
@@ -195,7 +197,8 @@ async fn evm_tx_tests() -> Result<(), anyhow::Error> {
     let (port_tx, port_rx) = tokio::sync::oneshot::channel();
 
     let rollup_task = tokio::spawn(async {
-        start_rollup(port_tx).await;
+        // Don't provide a prover since the EVM is not currently provable
+        start_rollup::<Risc0Host<'static>>(port_tx, None).await;
     });
 
     // Wait for rollup task to start:

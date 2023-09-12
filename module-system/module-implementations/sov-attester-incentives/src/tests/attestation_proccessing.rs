@@ -44,13 +44,14 @@ fn test_process_valid_attestation() {
     {
         let attestation = Attestation {
             initial_state_root: initial_transition.state_root,
-            da_block_hash: [1; 32],
+            da_block_hash: [1; 32].into(),
             post_state_root: transition_1.state_root,
             proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
                 claimed_transition_num: INIT_HEIGHT + 1,
                 proof: initial_transition.state_proof,
             },
-        };
+        }
+        .into();
 
         module
             .process_attestation(&context, attestation, &mut working_set)
@@ -61,7 +62,7 @@ fn test_process_valid_attestation() {
     {
         let attestation = Attestation {
             initial_state_root: transition_1.state_root,
-            da_block_hash: [2; 32],
+            da_block_hash: [2; 32].into(),
             post_state_root: transition_2.state_root,
             proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
                 claimed_transition_num: INIT_HEIGHT + 2,
@@ -70,7 +71,7 @@ fn test_process_valid_attestation() {
         };
 
         module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, attestation.into(), &mut working_set)
             .expect("An invalid proof is an error");
     }
 
@@ -135,7 +136,7 @@ fn test_burn_on_invalid_attestation() {
     {
         let attestation = Attestation {
             initial_state_root: initial_transition.state_root,
-            da_block_hash: [1; 32],
+            da_block_hash: [1; 32].into(),
             post_state_root: transition_1.state_root,
             proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
                 claimed_transition_num: INIT_HEIGHT + 1,
@@ -144,7 +145,7 @@ fn test_burn_on_invalid_attestation() {
         };
 
         let attestation_error = module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, attestation.into(), &mut working_set)
             .unwrap_err();
 
         assert_eq!(
@@ -170,7 +171,7 @@ fn test_burn_on_invalid_attestation() {
     {
         let attestation = Attestation {
             initial_state_root: initial_transition.state_root,
-            da_block_hash: [1; 32],
+            da_block_hash: [1; 32].into(),
             post_state_root: transition_1.state_root,
             proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
                 claimed_transition_num: INIT_HEIGHT + 1,
@@ -179,7 +180,7 @@ fn test_burn_on_invalid_attestation() {
         };
 
         module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, attestation.into(), &mut working_set)
             .expect("An invalid proof is an error");
     }
 
@@ -187,7 +188,7 @@ fn test_burn_on_invalid_attestation() {
     {
         let attestation = Attestation {
             initial_state_root: initial_transition.state_root,
-            da_block_hash: [2; 32],
+            da_block_hash: [2; 32].into(),
             post_state_root: transition_2.state_root,
             proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
                 claimed_transition_num: INIT_HEIGHT + 2,
@@ -196,7 +197,7 @@ fn test_burn_on_invalid_attestation() {
         };
 
         let attestation_error = module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, attestation.into(), &mut working_set)
             .unwrap_err();
 
         assert_eq!(
@@ -240,7 +241,7 @@ fn test_burn_on_invalid_attestation() {
     {
         let attestation = Attestation {
             initial_state_root: transition_1.state_root,
-            da_block_hash: [2; 32],
+            da_block_hash: [2; 32].into(),
             post_state_root: transition_1.state_root,
             proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
                 claimed_transition_num: INIT_HEIGHT + 2,
@@ -249,7 +250,7 @@ fn test_burn_on_invalid_attestation() {
         };
 
         let attestation_error = module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, attestation.into(), &mut working_set)
             .unwrap_err();
 
         assert_eq!(

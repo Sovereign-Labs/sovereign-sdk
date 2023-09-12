@@ -20,9 +20,10 @@ tempfile = { workspace = true }
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
+bcs = { workspace = true }
 jmt = { workspace = true }
 thiserror = { workspace = true }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 
 sov-bank = { path = "../sov-bank", version = "0.1" }
@@ -34,7 +35,6 @@ sov-state = { path = "../../sov-state", version = "0.1" }
 [features]
 default = []
 native = [
-    "serde",
     "serde_json",
     "sov-modules-api/native",
     "sov-bank/native",

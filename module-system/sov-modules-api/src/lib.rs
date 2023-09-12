@@ -51,7 +51,7 @@ pub use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 pub use sov_rollup_interface::services::da::SlotData;
 pub use sov_rollup_interface::stf::Event;
 pub use sov_rollup_interface::zk::{
-    StateTransition, StoredCodeCommitment, ValidityCondition, ValidityConditionChecker, Zkvm,
+    StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
 };
 pub use sov_rollup_interface::{digest, BasicAddress, RollupAddress};
 use sov_state::{Storage, Witness, WorkingSet};

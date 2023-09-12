@@ -474,9 +474,8 @@ dependencies = [
 
 [[package]]
 name = "bcs"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bd3ffe8b19a604421a5d461d4a70346223e535903fbc3067138bddbebddcf77"
+version = "0.1.4"
+source = "git+https://github.com/preston-evans98/bcs.git?rev=e4f1861#e4f1861509a996408baa540cda1f88c290214ce1"
 dependencies = [
  "serde",
  "thiserror",
@@ -6500,6 +6499,7 @@ name = "sov-attester-incentives"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bcs",
  "borsh",
  "jmt",
  "serde",
@@ -6688,7 +6688,9 @@ dependencies = [
  "prometheus 0.11.0",
  "proptest",
  "reqwest",
+ "reth-primitives",
  "revm",
+ "secp256k1",
  "serde",
  "serde_json",
  "sha2 0.10.7",
@@ -6696,7 +6698,6 @@ dependencies = [
  "sov-celestia-adapter",
  "sov-cli",
  "sov-db",
- "sov-demo-rollup",
  "sov-ethereum",
  "sov-evm",
  "sov-modules-api",
