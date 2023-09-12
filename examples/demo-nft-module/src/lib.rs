@@ -18,12 +18,12 @@ feature = "native",
 derive(serde::Serialize),
 derive(serde::Deserialize),
 derive(schemars::JsonSchema),
-schemars(bound = "C::Address: ::schemars::JsonSchema"),
+schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "UserAddress"),
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize,Clone, Debug, PartialEq, Eq, Hash)]
 /// A newtype that represents an owner address
 /// (creator of collection, owner of an nft)
-pub struct UserAddress<C: Context>(C::Address);
+pub struct UserAddress<C: Context>(C::Address) where C::Address: serde::Serialize;
 
 #[cfg(all(feature = "native"))]
 #[derive(
@@ -32,13 +32,13 @@ pub struct UserAddress<C: Context>(C::Address);
     schemars::JsonSchema,
     borsh::BorshDeserialize,
     borsh::BorshSerialize,
-    schemars(bound = "C::Address: ::schemars::JsonSchema"),
     Clone,
     Debug,
     PartialEq,
     Eq,
     Hash
 )]
+#[cfg_attr(feature = "native",schemars(bound = "C::Address: ::schemars::JsonSchema",rename = "CollectionAddress"))]
 /// Collection address is an address derived deterministically using
 /// the collection name and the address of the creator (UserAddress)
 pub struct CollectionAddress<C: Context>(pub C::Address);
