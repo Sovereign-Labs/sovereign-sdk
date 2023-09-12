@@ -5,8 +5,7 @@ use reth_primitives::{
 use reth_rpc::eth::error::EthApiError;
 use reth_rpc_types::CallRequest;
 use revm::primitives::{
-    AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, Bytecode, CreateScheme, TransactTo,
-    TxEnv, U256,
+    AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, CreateScheme, TransactTo, TxEnv, U256,
 };
 use thiserror::Error;
 

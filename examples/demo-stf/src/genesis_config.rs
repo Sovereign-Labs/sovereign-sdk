@@ -1,3 +1,4 @@
+use reth_primitives::Bytes;
 use sov_chain_state::ChainStateConfig;
 #[cfg(feature = "experimental")]
 use sov_evm::{AccountData, EvmConfig, SpecId};
@@ -78,7 +79,7 @@ pub fn create_demo_genesis_config<C: Context, Da: DaSpec>(
                 address: genesis_evm_address,
                 balance: AccountData::balance(u64::MAX),
                 code_hash: AccountData::empty_code(),
-                code: vec![],
+                code: Bytes::default(),
                 nonce: 0,
             }],
             chain_id: 1,

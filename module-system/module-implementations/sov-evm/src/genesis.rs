@@ -27,7 +27,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 },
             );
 
-            if (acc.code.len() > 0) {
+            if acc.code.len() > 0 {
                 evm_db.insert_code(acc.code_hash, acc.code.clone());
             }
         }

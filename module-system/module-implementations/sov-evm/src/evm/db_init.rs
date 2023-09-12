@@ -1,7 +1,7 @@
 use reth_primitives::Bytes;
 #[cfg(test)]
 use revm::db::{CacheDB, EmptyDB};
-use revm::primitives::{Address, Bytecode, B256};
+use revm::primitives::{Address, B256};
 
 use super::db::EvmDb;
 use super::{AccountInfo, DbAccount};
@@ -33,6 +33,6 @@ impl InitEvmDb for CacheDB<EmptyDB> {
 
     fn insert_code(&mut self, code_hash: B256, code: Bytes) {
         self.contracts
-            .insert(code_hash, Bytecode::new_raw(code.into()));
+            .insert(code_hash, revm::primitives::Bytecode::new_raw(code.into()));
     }
 }
