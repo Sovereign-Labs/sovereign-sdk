@@ -90,13 +90,12 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
 
     fn end_slot_hook(
         &self,
-        #[allow(unused_variables)] root_hash: [u8; 32],
         #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
             <Self::Context as Spec>::Storage,
         >,
     ) {
         #[cfg(feature = "experimental")]
-        self.evm.end_slot_hook(root_hash, working_set);
+        self.evm.end_slot_hook(working_set);
     }
 
     fn finalize_slot_hook(

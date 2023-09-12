@@ -9,7 +9,7 @@ use tracing::info;
 
 use crate::call::get_cfg_env;
 use crate::evm::db::EvmDb;
-use crate::evm::transaction::{Block, Receipt, TransactionSignedAndRecovered};
+use crate::evm::transaction::{Receipt, SealedBlock, TransactionSignedAndRecovered};
 use crate::evm::{executor, prepare_call_env};
 use crate::Evm;
 
@@ -222,7 +222,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
 // modified from: https://github.com/paradigmxyz/reth/blob/cc576bc8690a3e16e6e5bf1cbbbfdd029e85e3d4/crates/rpc/rpc/src/eth/api/transactions.rs#L849
 pub(crate) fn build_rpc_receipt(
-    block: Block,
+    block: SealedBlock,
     tx: TransactionSignedAndRecovered,
     tx_number: u64,
     receipt: Receipt,

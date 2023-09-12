@@ -76,20 +76,23 @@ impl<C: sov_modules_api::Context> Evm<C> {
             extra_data: Bytes::default(),
         };
 
-        let header = header.seal_slow();
-
-        let mut accessory_state = working_set.accessory_state();
-
-        self.block_hashes
-            .set(&header.hash, &genesis_block_number, &mut accessory_state);
-
         let block = Block {
             header,
             transactions: 0u64..0u64,
         };
 
-        self.blocks.push(&block, &mut accessory_state);
         self.head.set(&block, working_set);
+
+        let sealead_block = block.seal();
+
+        let mut accessory_state = working_set.accessory_state();
+
+        self.block_hashes.set(
+            &sealead_block.header.hash,
+            &genesis_block_number,
+            &mut accessory_state,
+        );
+        self.blocks.push(&sealead_block, &mut accessory_state);
 
         Ok(())
     }

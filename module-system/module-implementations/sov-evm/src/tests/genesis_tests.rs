@@ -7,7 +7,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Module;
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
-use crate::evm::transaction::Block;
+use crate::evm::transaction::SealedBlock;
 // use crate::evm::db;
 use crate::{evm::EvmChainConfig, AccountData, Evm, EvmConfig};
 type C = DefaultContext;
@@ -80,7 +80,7 @@ fn genesis_block() {
 
     assert_eq!(
         block,
-        Block {
+        SealedBlock {
             header: SealedHeader {
                 header: Header {
                     parent_hash: H256::default(),

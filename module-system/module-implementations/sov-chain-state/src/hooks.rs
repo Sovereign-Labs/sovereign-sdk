@@ -61,12 +61,7 @@ impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da
         );
     }
 
-    fn end_slot_hook(
-        &self,
-        _root_hash: [u8; 32],
-        _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    ) {
-    }
+    fn end_slot_hook(&self, _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>) {}
 
     fn finalize_slot_hook(
         &self,

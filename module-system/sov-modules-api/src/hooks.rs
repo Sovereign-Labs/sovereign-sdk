@@ -62,12 +62,7 @@ pub trait SlotHooks<Da: DaSpec> {
         working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
     );
 
-    fn end_slot_hook(
-        &self,
-        //TODO remove
-        root_hash: [u8; 32],
-        working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>,
-    );
+    fn end_slot_hook(&self, working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>);
 
     fn finalize_slot_hook(
         &self,

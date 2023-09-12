@@ -74,7 +74,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 },
                 // TODO: Do we want failed transactions to use all gas?
                 gas_used: 0,
-                log_index_start: log_index_start,
+                log_index_start,
                 error: Some(match err {
                     EVMError::Transaction(err) => EVMError::Transaction(err),
                     EVMError::PrevrandaoNotSet => EVMError::PrevrandaoNotSet,

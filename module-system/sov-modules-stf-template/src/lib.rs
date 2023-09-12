@@ -98,7 +98,7 @@ where
 
         // Run end end_slot_hook
         let mut working_set = checkpoint.to_revertable();
-        self.runtime.end_slot_hook([0; 32], &mut working_set);
+        self.runtime.end_slot_hook(&mut working_set);
         // Save checkpoint
         let mut checkpoint = working_set.checkpoint();
 

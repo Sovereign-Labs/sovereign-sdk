@@ -32,7 +32,7 @@ mod experimental {
     use super::evm::db::EvmDb;
     use super::evm::transaction::BlockEnv;
     use super::evm::{DbAccount, EvmChainConfig};
-    use crate::evm::transaction::{Block, Receipt, TransactionSignedAndRecovered};
+    use crate::evm::transaction::{Block, Receipt, SealedBlock, TransactionSignedAndRecovered};
     #[derive(Clone, Debug)]
     pub struct AccountData {
         pub address: Address,
@@ -110,7 +110,10 @@ mod experimental {
         pub(crate) head: sov_state::StateValue<Block, BcsCodec>,
 
         #[state]
-        pub(crate) blocks: sov_state::AccessoryStateVec<Block, BcsCodec>,
+        pub(crate) pending_head: sov_state::AccessoryStateValue<Block, BcsCodec>,
+
+        #[state]
+        pub(crate) blocks: sov_state::AccessoryStateVec<SealedBlock, BcsCodec>,
 
         #[state]
         pub(crate) block_hashes: sov_state::AccessoryStateMap<reth_primitives::H256, u64, BcsCodec>,

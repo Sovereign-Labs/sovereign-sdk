@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use reth_primitives::{Address, SealedHeader, TransactionSigned, H256};
+use reth_primitives::{Address, Header, SealedHeader, TransactionSigned, H256};
 use revm::primitives::EVMError;
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Clone)]
@@ -62,6 +62,29 @@ pub(crate) struct TransactionSignedAndRecovered {
 )]
 #[derive(Debug, PartialEq, Clone)]
 pub(crate) struct Block {
+    /// Block header.
+    pub(crate) header: Header,
+
+    /// Transactions in this block.
+    pub(crate) transactions: Range<u64>,
+}
+
+impl Block {
+    pub(crate) fn seal(self) -> SealedBlock {
+        SealedBlock {
+            header: self.header.seal_slow(),
+            transactions: self.transactions,
+        }
+    }
+}
+
+#[cfg_attr(
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
+)]
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) struct SealedBlock {
     /// Block header.
     pub(crate) header: SealedHeader,
 
