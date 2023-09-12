@@ -1,7 +1,9 @@
+#[cfg(not(target_os = "zkvm"))]
 use std::ops::DerefMut;
 
 #[cfg(target_os = "zkvm")]
 use risc0_zkvm::guest::env;
+#[cfg(not(target_os = "zkvm"))]
 use risc0_zkvm::serde::{Deserializer, WordRead};
 use sov_rollup_interface::zk::{Zkvm, ZkvmGuest};
 
