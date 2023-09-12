@@ -19,19 +19,92 @@ feature = "native",
 derive(serde::Serialize),
 derive(serde::Deserialize)
 )]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize,Clone, Debug, PartialEq, Eq, Hash)]
+/// A newtype that represents an owner address
+/// (creator of collection, owner of an nft)
+pub struct UserAddress<C: Context>(C::Address);
+
+#[cfg_attr(
+feature = "native",
+derive(serde::Serialize),
+derive(serde::Deserialize)
+)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize,Clone, Debug, PartialEq, Eq, Hash)]
+/// Collection address is an address derived deterministically using
+/// the collection name and the address of the creator (UserAddress)
+pub struct CollectionAddress<C: Context>(pub C::Address);
+
+impl<C: Context> ToString for UserAddress<C>
+    where
+        C::Address: ToString,
+{
+    fn to_string(&self) -> String {
+        self.0.to_string()
+    }
+}
+
+impl<C: Context> ToString for CollectionAddress<C>
+    where
+        C::Address: ToString,
+{
+    fn to_string(&self) -> String {
+        self.0.to_string()
+    }
+}
+
+impl<C: Context> AsRef<[u8]> for UserAddress<C>
+    where
+        C::Address: AsRef<[u8]>,
+{
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+impl<C: Context> AsRef<[u8]> for CollectionAddress<C>
+    where
+        C::Address: AsRef<[u8]>,
+{
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
+/// tokenId for the NFT that's unique within the scope of the collection
+pub type TokenId = u64;
+
+#[cfg_attr(
+feature = "native",
+derive(serde::Serialize),
+derive(serde::Deserialize)
+)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize,Clone, Debug, PartialEq, Eq, Hash)]
+/// A simple wrapper struct to mark an NFT identifier as a combination of
+/// a token id (u64) and a collection address
+pub struct NftIdentifier<C: Context>(pub TokenId, pub CollectionAddress<C>);
+
+#[cfg_attr(
+feature = "native",
+derive(serde::Serialize),
+derive(serde::Deserialize)
+)]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 /// Defines an nft collection
 pub struct Collection<C: Context> {
     /// name of the collection
     pub name: String,
-    /// collection address
-    pub creator: C::Address,
-    /// frozen or not
+    /// Address of the collection creator
+    /// This is the only address that can mint new NFTs for the collection
+    pub creator: UserAddress<C>,
+    /// If a collection is frozen, then new NFTs
+    /// cannot be minted and the supply is frozen
     pub frozen: bool,
-    /// supply
+    /// Supply of the collection. This is dynamic and changes
+    /// with the number of NFTs created. It stops changing
+    /// when frozen is set to true.
     pub supply: u64,
-    /// collection metadata
-    pub metadata_url: String,
+    /// collection metadata stored at this url
+    pub collection_uri: String,
 }
 
 #[cfg_attr(
@@ -43,15 +116,15 @@ derive(serde::Deserialize)
 /// Defines an nft
 pub struct Nft<C: Context> {
     /// name of the collection
-    pub id: u64,
+    pub token_id: TokenId,
     /// creator of the nft collection
-    pub collection_address: C::Address,
+    pub collection_address: CollectionAddress<C>,
     /// owner of nft
-    pub owner: C::Address,
+    pub owner: UserAddress<C>,
     /// frozen or not
     pub frozen: bool,
     /// supply
-    pub metadata_url: String,
+    pub token_uri: String,
 }
 
 #[derive(ModuleInfo, Clone)]
@@ -64,11 +137,11 @@ pub struct NonFungibleToken<C: Context> {
 
     #[state]
     /// Mapping of tokens to their owners
-    collections: sov_state::StateMap<C::Address, Collection<C>>,
+    collections: sov_state::StateMap<CollectionAddress<C>, Collection<C>>,
 
     #[state]
     /// Mapping of tokens to their owners
-    nfts: sov_state::StateMap<(u64, C::Address), Nft<C>>,
+    nfts: sov_state::StateMap<NftIdentifier<C>, Nft<C>>,
 }
 
 /// Config for the NonFungibleToken module.
@@ -99,22 +172,22 @@ impl<C: Context> Module for NonFungibleToken<C> {
     ) -> Result<CallResponse, Error> {
         let call_result = match msg {
             CallMessage::CreateCollection {
-                name, metadata_url
-            } => self.create_collection(&name, &metadata_url, context, working_set),
+                name, collection_uri
+            } => self.create_collection(&name, &collection_uri, context, working_set),
             CallMessage::FreezeCollection {
                 collection_name
             } => self.freeze_collection(&collection_name, context, working_set),
             CallMessage::MintNft {
-                collection_name, metadata_url, id,mint_to_address, frozen
-            } => self.mint_nft(id, &collection_name, &metadata_url, &mint_to_address, frozen, context, working_set),
-            CallMessage::UpdateCollection { name, metadata_url } => {
-                self.update_collection(&name, &metadata_url,context, working_set)
+                collection_name, token_uri, token_id,owner, frozen
+            } => self.mint_nft(token_id, &collection_name, &token_uri, &owner, frozen, context, working_set),
+            CallMessage::UpdateCollection { name, collection_uri } => {
+                self.update_collection(&name, &collection_uri,context, working_set)
             },
-            CallMessage::TransferNft { collection_address, id, to } => {
-                self.transfer_nft(id, &collection_address, &to, context, working_set)
+            CallMessage::TransferNft { collection_address, token_id, to } => {
+                self.transfer_nft(token_id, &collection_address, &to, context, working_set)
             },
-            CallMessage::UpdateNft {collection_address, id, metadata_url, frozen } => {
-                self.update_nft(&collection_address, id, metadata_url, frozen, context, working_set)
+            CallMessage::UpdateNft {collection_address, token_id, token_uri, frozen } => {
+                self.update_nft(&collection_address, token_id, token_uri, frozen, context, working_set)
             },
 
         };

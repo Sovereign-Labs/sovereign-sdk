@@ -1,8 +1,7 @@
 use anyhow::{bail, Result};
 use sov_modules_api::{CallResponse, Context};
 use sov_state::WorkingSet;
-use crate::{Collection, Nft, NonFungibleToken};
-use crate::offchain::{track_collection, track_nft, update_top_owners};
+use crate::{Collection, Nft, NonFungibleToken, UserAddress, CollectionAddress, TokenId, NftIdentifier};
 use crate::utils::get_collection_address;
 
 #[cfg_attr(
@@ -18,16 +17,17 @@ pub enum CallMessage<C: Context> {
         /// Name of the collection
         name: String,
         /// meta data url for collection
-        metadata_url: String,
+        collection_uri: String,
     },
     /// update collection metadata
     UpdateCollection {
         /// Name of the collection
         name: String,
         /// meta data url for collection
-        metadata_url: String,
+        collection_uri: String,
     },
-    /// freeze a collection
+    /// Freeze a collection that is unfrozen.
+    /// This prevents new NFTs from being minted.
     FreezeCollection {
         /// collection name
         collection_name: String,
@@ -37,34 +37,35 @@ pub enum CallMessage<C: Context> {
         /// Name of the collection
         collection_name: String,
         /// Meta data url for collection
-        metadata_url: String,
-        /// nft id
-        id: u64,
-        /// mint_to address
-        mint_to_address: C::Address,
-        /// is nft frozen after mint
+        token_uri: String,
+        /// nft id. a unique identifier for each NFT
+        token_id: TokenId,
+        /// Address that the NFT should be minted to
+        owner: UserAddress<C>,
+        /// A frozen nft cannot have its metadata_url modified or be unfrozen
+        /// Setting this to true makes the nft immutable
         frozen: bool,
     },
     /// Update nft metadata url or frozen status
     UpdateNft {
         /// Name of the collection
-        collection_address: C::Address,
+        collection_address: CollectionAddress<C>,
         /// nft id
-        id: u64,
+        token_id: TokenId,
         /// Meta data url for collection
-        metadata_url: Option<String>,
+        token_uri: Option<String>,
         /// Frozen status
         frozen: Option<bool>,
 
     },
-    /// freeze an nft
+    /// Transfer an NFT from an owned address to another address
     TransferNft {
-        /// collection name
-        collection_address: C::Address,
-        /// nft id
-        id: u64,
-        /// nft id
-        to: C::Address,
+        /// Collection Address
+        collection_address: CollectionAddress<C>,
+        /// NFT id of the owned token to be transferred
+        token_id: u64,
+        /// Target address of the user to transfer the NFT to
+        to: UserAddress<C>,
     },
 }
 
@@ -83,21 +84,19 @@ impl<C: Context> NonFungibleToken<C> {
         }
         let c = Collection::<C> {
             name: collection_name.to_string(),
-            creator: creator.clone(),
+            creator: UserAddress(creator.clone()),
             frozen: false,
             supply: 0,
-            metadata_url: metadata_url.to_string(),
+            collection_uri: metadata_url.to_string(),
         };
         self.collections.set(&collection_address, &c, working_set);
-        track_collection(&collection_address.to_string(),
-                         collection_name, &creator.to_string(), false, metadata_url, 0);
         Ok(CallResponse::default())
     }
 
     pub(crate) fn update_collection(
         &self,
         collection_name: &str,
-        metadata_url: &str,
+        collection_uri: &str,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
@@ -107,10 +106,8 @@ impl<C: Context> NonFungibleToken<C> {
             if c.frozen == true {
                 bail!("Collection with name {} by sender {} is frozen and cannot be updated",collection_name, creator.to_string());
             } else {
-                c.metadata_url = metadata_url.to_string();
+                c.collection_uri = collection_uri.to_string();
                 self.collections.set(&collection_address, &c, working_set);
-                track_collection(&collection_address.to_string(),
-                                 collection_name, &creator.to_string(), c.frozen, metadata_url, c.supply);
             }
         } else {
             bail!("Collection with name {} by sender {} does not exist",collection_name, creator.to_string());
@@ -133,23 +130,19 @@ impl<C: Context> NonFungibleToken<C> {
             } else {
                 c.frozen = true;
                 self.collections.set(&collection_address, &c, working_set);
-                track_collection(&collection_address.to_string(),
-                                 collection_name, &creator.to_string(), true, &c.metadata_url, c.supply);
             }
         } else {
             bail!("Collection with name {} by sender {} does not exist",collection_name, creator.to_string());
         }
-
-
         Ok(CallResponse::default())
     }
 
     pub(crate) fn mint_nft(
         &self,
-        nft_id: u64,
+        token_id: u64,
         collection_name: &str,
-        metadata_url: &str,
-        mint_to_address: &C::Address,
+        collection_uri: &str,
+        mint_to_address: &UserAddress<C>,
         frozen: bool,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
@@ -158,32 +151,23 @@ impl<C: Context> NonFungibleToken<C> {
         let collection_address = get_collection_address::<C>(collection_name, creator.as_ref());
 
         if let Some(mut c) = self.collections.get(&collection_address, working_set) {
-            let nft_identifier = (nft_id,collection_address.clone());
+            let nft_identifier = NftIdentifier(token_id,collection_address.clone());
             if c.frozen == true {
                 bail!("Collection with name {} by sender {} is already frozen",collection_name, creator.to_string())
             } else {
                 if let Some(_) = self.nfts.get(&nft_identifier,working_set) {
-                    bail!("NFT id {} in Collection with name {}, creator {} already exists",nft_id, collection_name, creator.to_string());
+                    bail!("NFT id {} in Collection with name {}, creator {} already exists",token_id, collection_name, creator.to_string());
                 } else {
                     let new_nft = Nft{
-                        id: nft_id,
+                        token_id,
                         collection_address: collection_address.clone(),
                         owner: mint_to_address.clone(),
                         frozen,
-                        metadata_url: metadata_url.to_string(),
+                        token_uri: collection_uri.to_string(),
                     };
                     self.nfts.set(&nft_identifier, &new_nft, working_set);
-                    track_nft(&collection_address.to_string(),
-                              nft_id,
-                              &mint_to_address.to_string(),
-                              frozen,
-                              metadata_url);
                     c.supply+=1;
                     self.collections.set(&collection_address, &c, working_set);
-                    track_collection(&collection_address.to_string(),
-                                     &c.name, &c.creator.to_string(),
-                                     c.frozen, &c.metadata_url, c.supply);
-
                 }
             }
         } else {
@@ -196,24 +180,19 @@ impl<C: Context> NonFungibleToken<C> {
     pub(crate) fn transfer_nft(
         &self,
         nft_id: u64,
-        collection_address: &C::Address,
-        to: &C::Address,
+        collection_address: &CollectionAddress<C>,
+        to: &UserAddress<C>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
         let owner = context.sender();
 
         if self.collections.get(collection_address, working_set).is_some() {
-            let nft_identifier = (nft_id, collection_address.clone());
+            let nft_identifier = NftIdentifier(nft_id, collection_address.clone());
             if let Some(mut n) = self.nfts.get(&nft_identifier,working_set) {
                 if owner.as_ref() == n.owner.as_ref() {
                     n.owner = to.clone();
                     self.nfts.set(&nft_identifier, &n, working_set);
-                    track_nft(&collection_address.to_string(),
-                              nft_id,
-                              &to.to_string(),
-                              n.frozen,
-                              &n.metadata_url);
                 } else {
                     bail!("NFT id {} in Collection with address {} does not exist",nft_id, collection_address.to_string());
                 }
@@ -229,9 +208,9 @@ impl<C: Context> NonFungibleToken<C> {
 
     pub(crate) fn update_nft(
         &self,
-        collection_address: &C::Address,
-        nft_id: u64,
-        metadata_url: Option<String>,
+        collection_address: &CollectionAddress<C>,
+        token_id: u64,
+        token_uri: Option<String>,
         frozen: Option<bool>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
@@ -239,27 +218,22 @@ impl<C: Context> NonFungibleToken<C> {
         let creator = context.sender();
 
         if let Some(c) = self.collections.get(collection_address, working_set) {
-            let nft_identifier = (nft_id,collection_address.clone());
+            let nft_identifier = NftIdentifier(token_id,collection_address.clone());
             if c.creator.as_ref() == creator.as_ref() {
                 if let Some(mut n) = self.nfts.get(&nft_identifier,working_set) {
                     if n.frozen == false {
                         if Some(true) == frozen {
                             n.frozen = true;
                         }
-                        if let Some(murl) = metadata_url {
-                            n.metadata_url = murl;
+                        if let Some(murl) = token_uri {
+                            n.token_uri = murl;
                         }
                         self.nfts.set(&nft_identifier, &n, working_set);
-                        track_nft(&collection_address.to_string(),
-                                  n.id,
-                                  &n.owner.to_string(),
-                                  n.frozen,
-                                  &n.metadata_url);
                     } else {
-                        bail!("NFT id {} in Collection with address {} is frozen",nft_id, collection_address.to_string());
+                        bail!("NFT id {} in Collection with address {} is frozen",token_id, collection_address.to_string());
                     }
                 } else {
-                    bail!("NFT id {} in Collection with address {} does not exist",nft_id, collection_address.to_string());
+                    bail!("NFT id {} in Collection with address {} does not exist",token_id, collection_address.to_string());
                 }
             } else {
                 bail!("Nfts in collection name:{} collection_address:{} cannot be frozen by {} .collection owner is {}",
