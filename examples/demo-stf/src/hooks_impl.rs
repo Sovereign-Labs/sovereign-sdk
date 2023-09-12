@@ -4,7 +4,7 @@ use sov_modules_api::{Context, Spec};
 use sov_modules_stf_template::SequencerOutcome;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_sequencer_registry::SequencerRegistry;
-use sov_state::WorkingSet;
+use sov_state::{AccessoryWorkingSet, WorkingSet};
 use tracing::info;
 
 use crate::runtime::Runtime;
@@ -97,5 +97,17 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
     ) {
         #[cfg(feature = "experimental")]
         self.evm.end_slot_hook(root_hash, working_set);
+    }
+
+    fn finalize_slot_hook(
+        &self,
+        #[allow(unused_variables)] root_hash: [u8; 32],
+        #[allow(unused_variables)] accesorry_working_set: &mut AccessoryWorkingSet<
+            <Self::Context as Spec>::Storage,
+        >,
+    ) {
+        #[cfg(feature = "experimental")]
+        self.evm
+            .finalize_slot_hook(root_hash, accesorry_working_set);
     }
 }

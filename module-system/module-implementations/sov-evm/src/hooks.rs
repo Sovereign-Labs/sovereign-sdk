@@ -1,5 +1,5 @@
 use reth_primitives::{Bloom, Bytes, U256};
-use sov_state::WorkingSet;
+use sov_state::{AccessoryWorkingSet, WorkingSet};
 
 use crate::evm::transaction::{Block, BlockEnv};
 use crate::experimental::PendingTransaction;
@@ -120,5 +120,12 @@ impl<C: sov_modules_api::Context> Evm<C> {
         self.blocks.push(&block, &mut accessory_state);
         self.head.set(&block, working_set); // ?
         self.pending_transactions.clear(working_set); // ?
+    }
+
+    pub fn finalize_slot_hook(
+        &self,
+        _root_hash: [u8; 32],
+        _accesorry_working_set: &mut AccessoryWorkingSet<C::Storage>,
+    ) {
     }
 }
