@@ -168,8 +168,8 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
             header: MockBlockHeader {
                 prev_hash: [i; 32].into(),
                 hash: [i + 1; 32].into(),
+                height: INIT_HEIGHT + u64::from(i + 1),
             },
-            height: INIT_HEIGHT + u64::from(i + 1),
             validity_cond: MockValidityCond { is_valid: true },
             blobs: Default::default(),
         };

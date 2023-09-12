@@ -45,8 +45,8 @@ fn test_simple_chain_state() {
         header: MockBlockHeader {
             prev_hash: [0; 32].into(),
             hash: [1; 32].into(),
+            height: INIT_HEIGHT,
         },
-        height: INIT_HEIGHT,
         validity_cond: MockValidityCond { is_valid: true },
         blobs: Default::default(),
     };
@@ -99,8 +99,8 @@ fn test_simple_chain_state() {
         header: MockBlockHeader {
             prev_hash: [1; 32].into(),
             hash: [2; 32].into(),
+            height: INIT_HEIGHT,
         },
-        height: INIT_HEIGHT,
         validity_cond: MockValidityCond { is_valid: false },
         blobs: Default::default(),
     };

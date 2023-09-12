@@ -6,10 +6,14 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
-use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
+use crate::da::{
+    BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec, Time,
+};
 use crate::mocks::MockValidityCond;
 use crate::services::da::{DaService, SlotData};
 use crate::{BasicAddress, RollupAddress};
+
+const JAN_1_2024: u64 = 1704067200;
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
 #[derive(
@@ -174,6 +178,8 @@ pub struct MockBlockHeader {
     pub prev_hash: MockHash,
     /// The hash of this block.
     pub hash: MockHash,
+    /// The height of this block
+    pub height: u64,
 }
 
 impl Default for MockBlockHeader {
@@ -181,6 +187,7 @@ impl Default for MockBlockHeader {
         Self {
             prev_hash: MockHash([0u8; 32]),
             hash: MockHash([1u8; 32]),
+            height: 0,
         }
     }
 }
@@ -195,6 +202,16 @@ impl BlockHeaderTrait for MockBlockHeader {
     fn hash(&self) -> Self::Hash {
         self.hash
     }
+
+    fn height(&self) -> u64 {
+        self.height
+    }
+
+    fn time(&self) -> Option<crate::da::Time> {
+        Some(Time {
+            secs: JAN_1_2024 + self.height * 15,
+        })
+    }
 }
 
 /// A mock block type used for testing.
@@ -202,8 +219,6 @@ impl BlockHeaderTrait for MockBlockHeader {
 pub struct MockBlock {
     /// The header of this block.
     pub header: MockBlockHeader,
-    /// The height of this block
-    pub height: u64,
     /// Validity condition
     pub validity_cond: MockValidityCond,
     /// Blobs
@@ -216,8 +231,8 @@ impl Default for MockBlock {
             header: MockBlockHeader {
                 prev_hash: [0; 32].into(),
                 hash: [1; 32].into(),
+                height: 0,
             },
-            height: 0,
             validity_cond: Default::default(),
             blobs: Default::default(),
         }

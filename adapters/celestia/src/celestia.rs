@@ -299,6 +299,14 @@ impl BlockHeader for CelestiaHeader {
     fn hash(&self) -> Self::Hash {
         TmHash(self.header.hash())
     }
+
+    fn height(&self) -> u64 {
+        todo!()
+    }
+
+    fn time(&self) -> Option<sov_rollup_interface::da::Time> {
+        todo!()
+    }
 }
 
 /// We implement [`SlotData`] for [`CelestiaHeader`] in a similar fashion as for
