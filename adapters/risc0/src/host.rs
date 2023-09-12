@@ -20,6 +20,7 @@ pub struct Risc0Host<'a> {
 }
 
 #[cfg(not(feature = "bench"))]
+#[inline(always)]
 fn add_benchmarking_callbacks(env: ExecutorEnvBuilder<'_>) -> ExecutorEnvBuilder<'_> {
     env
 }
