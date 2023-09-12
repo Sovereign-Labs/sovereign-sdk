@@ -13,12 +13,16 @@ publish = false
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 serde = { workspace = true, optional = true }
+schemars =  { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
 sov-modules-api = { path = "../../module-system/sov-modules-api" }
 sov-modules-macros = {path = "../../module-system/sov-modules-macros"}
 sov-modules-macro-rules = {path = "../../module-system/sov-modules-macro-rules"}
 sov-state = { path = "../../module-system/sov-state" }
-jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
+
+
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface" }
@@ -29,5 +33,5 @@ demo-nft-module = { version = "*", features = ["native"], path = "." }
 [features]
 default = []
 serde = ["dep:serde"]
-native = ["serde", "sov-state/native", "sov-modules-api/native", "jsonrpsee"]
+native = ["serde", "serde_json", "jsonrpsee", "schemars", "sov-state/native", "sov-modules-api/native", ]
 test = ["native"]

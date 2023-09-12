@@ -17,22 +17,39 @@ pub mod utils;
 #[cfg_attr(
 feature = "native",
 derive(serde::Serialize),
-derive(serde::Deserialize)
+derive(serde::Deserialize),
+derive(schemars::JsonSchema),
+schemars(bound = "C::Address: ::schemars::JsonSchema"),
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize,Clone, Debug, PartialEq, Eq, Hash)]
 /// A newtype that represents an owner address
 /// (creator of collection, owner of an nft)
 pub struct UserAddress<C: Context>(C::Address);
 
-#[cfg_attr(
-feature = "native",
-derive(serde::Serialize),
-derive(serde::Deserialize)
+#[cfg(all(feature = "native"))]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    schemars::JsonSchema,
+    borsh::BorshDeserialize,
+    borsh::BorshSerialize,
+    schemars(bound = "C::Address: ::schemars::JsonSchema"),
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Hash
 )]
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize,Clone, Debug, PartialEq, Eq, Hash)]
 /// Collection address is an address derived deterministically using
 /// the collection name and the address of the creator (UserAddress)
 pub struct CollectionAddress<C: Context>(pub C::Address);
+
+#[cfg(not(feature = "native"))]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Clone, Debug, PartialEq, Eq, Hash)]
+/// Collection address is an address derived deterministically using
+/// the collection name and the address of the creator (UserAddress)
+pub struct CollectionAddress<C: Context>(pub C::Address);
+
 
 impl<C: Context> ToString for UserAddress<C>
     where
@@ -86,7 +103,7 @@ pub struct NftIdentifier<C: Context>(pub TokenId, pub CollectionAddress<C>);
 #[cfg_attr(
 feature = "native",
 derive(serde::Serialize),
-derive(serde::Deserialize)
+derive(serde::Deserialize),
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 /// Defines an nft collection
@@ -129,7 +146,7 @@ pub struct Nft<C: Context> {
     /// A URI pointing to the offchain metadata
     pub token_uri: String,
 }
-
+#[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo, Clone)]
 /// Module for non-fungible tokens (NFT).
 /// Each token is represented by a unique ID.

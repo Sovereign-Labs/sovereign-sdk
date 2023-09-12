@@ -7,7 +7,9 @@ use crate::utils::get_collection_address;
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
-    derive(serde::Deserialize)
+    derive(serde::Deserialize),
+    derive(schemars::JsonSchema),
+    schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "CallMessage")
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 /// A transaction handled by the NFT module. Mints, Transfers, or Burns an NFT by id

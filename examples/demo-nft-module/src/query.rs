@@ -4,28 +4,28 @@ use sov_modules_api::Context;
 use sov_state::WorkingSet;
 use crate::utils::get_collection_address;
 
-use crate::NonFungibleToken;
+use crate::{NonFungibleToken, CollectionAddress, UserAddress};
 
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 /// Response for `getCollection` method
-pub struct CollectionResponse<C: Context> {
+pub struct CollectionResponse<C: Context> where C::Address: serde::Serialize {
     /// Collection name
     pub name: String,
-    /// creator
-    pub creator: C::Address,
+    /// Creator Address
+    pub creator: UserAddress<C>,
     /// frozen or not
     pub frozen: bool,
     /// supply
     pub supply: u64,
-    /// metadata url
-    pub metadata_url: String
+    /// Collection metadata uri
+    pub collection_uri: String
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize)]
 /// Response for `getCollectionAddress` method
 pub struct CollectionAddressResponse<C: Context> {
-    pub collection_address: C::Address
+    pub collection_address: CollectionAddress<C>
 }
 
 #[rpc_gen(client, server, namespace = "nft")]
@@ -38,7 +38,7 @@ impl<C: Context> NonFungibleToken<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<CollectionResponse<C>> {
         let c = self.collections
-            .get(&collection_address, working_set).unwrap();
+            .get(&CollectionAddress(collection_address), working_set).unwrap();
 
         Ok(
             CollectionResponse {
@@ -46,14 +46,14 @@ impl<C: Context> NonFungibleToken<C> {
                 creator: c.creator.clone(),
                 frozen: c.frozen,
                 supply: c.supply,
-                metadata_url: c.metadata_url.to_string(),
+                collection_uri: c.collection_uri.to_string(),
             })
     }
     #[rpc_method(name = "getCollectionAddress")]
     /// Get the collection address
     pub fn get_collection_address(
         &self,
-        creator: C::Address,
+        creator: UserAddress<C>,
         collection_name: String,
         _working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<CollectionAddressResponse<C>> {
