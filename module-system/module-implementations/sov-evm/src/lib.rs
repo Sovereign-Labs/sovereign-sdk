@@ -9,6 +9,8 @@ pub mod hooks;
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
 pub mod query;
+#[cfg(feature = "experimental")]
+pub mod signer;
 #[cfg(feature = "smart_contracts")]
 pub mod smart_contracts;
 #[cfg(feature = "experimental")]

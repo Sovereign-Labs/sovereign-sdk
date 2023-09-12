@@ -3761,6 +3761,7 @@ dependencies = [
  "jsonrpsee 0.18.2",
  "serde",
  "serde_json",
+ "sov-celestia-adapter",
  "sov-cli",
  "sov-db",
  "sov-modules-api",
@@ -3976,6 +3977,14 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 1.0.109",
+]
+
+[[package]]
+name = "sov-zk-cycle-utils"
+version = "0.1.0"
+dependencies = [
+ "risc0-zkvm",
+ "risc0-zkvm-platform",
 ]
 
 [[package]]
@@ -4882,14 +4891,6 @@ dependencies = [
  "sha1",
  "time 0.3.23",
  "zstd",
-]
-
-[[package]]
-name = "sov-zk-cycle-utils"
-version = "0.1.0"
-dependencies = [
- "risc0-zkvm",
- "risc0-zkvm-platform",
 ]
 
 [[package]]
