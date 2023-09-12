@@ -57,6 +57,7 @@ pub fn get_genesis_config<Da: DaSpec>(
         "Inconsistent key data"
     );
 
+    // TODO: #840
     create_demo_genesis_config(
         100000000,
         token_deployer.address,

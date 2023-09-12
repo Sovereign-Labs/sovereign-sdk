@@ -8,7 +8,7 @@ use reth_rpc::eth::error::SignError;
 use secp256k1::{PublicKey, SecretKey};
 
 use crate::evm::RlpEvmTransaction;
-use crate::sequencer::DevSigner;
+use crate::signer::DevSigner;
 
 /// ETH transactions signer used in tests.
 pub(crate) struct TestSigner {

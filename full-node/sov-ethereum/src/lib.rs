@@ -3,7 +3,7 @@ mod batch_builder;
 #[cfg(feature = "experimental")]
 pub use experimental::{get_ethereum_rpc, Ethereum};
 #[cfg(feature = "experimental")]
-pub use sov_evm::sequencer::DevSigner;
+pub use sov_evm::signer::DevSigner;
 
 #[cfg(feature = "experimental")]
 pub mod experimental {
@@ -35,6 +35,7 @@ pub mod experimental {
     pub struct EthRpcConfig {
         pub min_blob_size: Option<usize>,
         pub sov_tx_signer_priv_key: DefaultPrivateKey,
+        //TODO #839
         pub eth_signer: DevSigner,
     }
 

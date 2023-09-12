@@ -154,6 +154,7 @@ fn read_sov_tx_signer_priv_key() -> Result<DefaultPrivateKey, anyhow::Error> {
     Ok(key_and_address.private_key)
 }
 
+// TODO: #840
 #[cfg(feature = "experimental")]
 fn read_eth_tx_signers() -> sov_ethereum::DevSigner {
     sov_ethereum::DevSigner::new(vec![SecretKey::from_str(

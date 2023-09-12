@@ -71,6 +71,7 @@ pub fn create_demo_genesis_config<C: Context, Da: DaSpec>(
     )
 }
 
+// TODO: #840
 #[cfg(feature = "experimental")]
 fn get_evm_config(genesis_addresses: Vec<reth_primitives::Address>) -> EvmConfig {
     let data = genesis_addresses
