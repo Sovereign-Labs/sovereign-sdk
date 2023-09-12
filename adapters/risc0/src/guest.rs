@@ -19,6 +19,7 @@ impl ZkvmGuest for Risc0Guest {
 }
 
 #[cfg(not(target_os = "zkvm"))]
+#[derive(Default)]
 struct Hints {
     values: Vec<u32>,
     position: usize,
@@ -26,13 +27,6 @@ struct Hints {
 
 #[cfg(not(target_os = "zkvm"))]
 impl Hints {
-    pub fn new() -> Self {
-        Hints {
-            values: Vec::new(),
-            position: 0,
-        }
-    }
-
     pub fn with_hints(hints: Vec<u32>) -> Self {
         Hints {
             values: hints,
@@ -66,6 +60,7 @@ impl WordRead for Hints {
     }
 }
 
+#[derive(Default)]
 pub struct Risc0Guest {
     #[cfg(not(target_os = "zkvm"))]
     hints: std::sync::Mutex<Hints>,
@@ -75,12 +70,7 @@ pub struct Risc0Guest {
 
 impl Risc0Guest {
     pub fn new() -> Self {
-        Self {
-            #[cfg(not(target_os = "zkvm"))]
-            hints: std::sync::Mutex::new(Hints::new()),
-            #[cfg(not(target_os = "zkvm"))]
-            commits: Default::default(),
-        }
+        Self::default()
     }
 
     #[cfg(not(target_os = "zkvm"))]

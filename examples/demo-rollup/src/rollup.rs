@@ -51,6 +51,7 @@ pub struct Rollup<Vm: ZkvmHost, Da: DaService + Clone> {
     /// Configuration for the Ethereum RPC.
     pub eth_rpc_config: EthRpcConfig,
     /// Verifier for the rollup.
+    #[allow(clippy::type_complexity)]
     pub verifier: Option<(Vm, AppVerifier<Da::Verifier, Vm::Guest>)>,
 }
 

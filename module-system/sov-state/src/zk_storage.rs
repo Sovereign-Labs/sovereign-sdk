@@ -14,6 +14,7 @@ use crate::{MerkleProofSpec, Storage};
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 extern crate risc0_zkvm;
 
+#[derive(Default)]
 pub struct ZkStorage<S: MerkleProofSpec> {
     _phantom_hasher: PhantomData<S::Hasher>,
 }
