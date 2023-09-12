@@ -5,7 +5,7 @@ use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Address, Genesis, Spec, ValidityConditionChecker};
 use sov_rollup_interface::mocks::{
-    MockBlock, MockBlockHeader, MockCodeCommitment, MockDaSpec, MockHash, MockValidityCond,
+    MockBlock, MockBlockHeader, MockCodeCommitment, MockDaSpec, MockValidityCond,
     MockValidityCondChecker, MockZkvm,
 };
 use sov_state::storage::StorageProof;
@@ -165,17 +165,19 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
 
         // Then process the first transaction. Only sets the genesis hash and a transition in progress.
         let slot_data = MockBlock {
-            curr_hash: [i + 1; 32],
             header: MockBlockHeader {
-                prev_hash: MockHash([i; 32]),
+                prev_hash: [i; 32].into(),
+                hash: [i + 1; 32].into(),
             },
             height: INIT_HEIGHT + u64::from(i + 1),
             validity_cond: MockValidityCond { is_valid: true },
             blobs: Default::default(),
         };
-        module
-            .chain_state
-            .begin_slot_hook(&slot_data, &mut working_set);
+        module.chain_state.begin_slot_hook(
+            &slot_data.header,
+            &slot_data.validity_cond,
+            &mut working_set,
+        );
     }
 
     (ret_exec_vars, working_set)

@@ -7,7 +7,7 @@ use sov_modules_api::digest::Digest;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::{Address, BlobReaderTrait, Context, Module, Spec};
 use sov_rollup_interface::mocks::{
-    MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaSpec, MockHash, MockValidityCond,
+    MockAddress, MockBlob, MockBlock, MockBlockHeader, MockDaSpec, MockValidityCond,
 };
 use sov_sequencer_registry::{SequencerConfig, SequencerRegistry};
 use sov_state::{ProverStorage, Storage, WorkingSet};
@@ -125,15 +125,19 @@ fn priority_sequencer_flow() {
 
     // Slot 1: 3rd blob is from preferred sequencer, only it should be executed
     let mut slot_1_data = MockBlock {
-        curr_hash: [1; 32],
         header: MockBlockHeader {
-            prev_hash: MockHash([0; 32]),
+            prev_hash: [0; 32].into(),
+            hash: [1; 32].into(),
         },
         height: 1,
         validity_cond: valid_condition,
         blobs: slot_1_blobs,
     };
-    chain_state.begin_slot_hook(&slot_1_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_1_data.header,
+        &slot_1_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_1_data.blobs,
@@ -158,15 +162,19 @@ fn priority_sequencer_flow() {
 
     // Slot 2: 5th blob is from preferred sequencer + 2nd and 3rd that were deferred previously
     let mut slot_2_data = MockBlock {
-        curr_hash: [2; 32],
         header: MockBlockHeader {
-            prev_hash: MockHash(slot_1_data.curr_hash),
+            prev_hash: slot_1_data.header.hash,
+            hash: [2; 32].into(),
         },
         height: 2,
         validity_cond: valid_condition,
         blobs: slot_2_blobs,
     };
-    chain_state.begin_slot_hook(&slot_2_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_2_data.header,
+        &slot_2_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_2 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_2_data.blobs,
@@ -180,15 +188,19 @@ fn priority_sequencer_flow() {
 
     // Slot 3: no blobs from preferred sequencer, so deferred executed first and then current
     let mut slot_3_data = MockBlock {
-        curr_hash: [3; 32],
         header: MockBlockHeader {
-            prev_hash: MockHash(slot_2_data.curr_hash),
+            prev_hash: slot_2_data.header.hash,
+            hash: [3; 32].into(),
         },
         height: 3,
         validity_cond: valid_condition,
         blobs: slot_3_blobs,
     };
-    chain_state.begin_slot_hook(&slot_3_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_3_data.header,
+        &slot_3_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_3 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_3_data.blobs,
@@ -201,15 +213,19 @@ fn priority_sequencer_flow() {
 
     // Slot 4: no blobs at all
     let mut slot_4_data = MockBlock {
-        curr_hash: [4; 32],
         header: MockBlockHeader {
-            prev_hash: MockHash(slot_3_data.curr_hash),
+            prev_hash: slot_3_data.header.hash,
+            hash: [4; 32].into(),
         },
         height: 4,
         validity_cond: valid_condition,
         blobs: Vec::new(),
     };
-    chain_state.begin_slot_hook(&slot_4_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_4_data.header,
+        &slot_4_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_4 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_4_data.blobs,
@@ -292,15 +308,19 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
     let slot_1_blobs = vec![blob_1.clone(), blob_2, blob_3.clone()];
 
     let mut slot_1_data = MockBlock {
-        curr_hash: [1; 32],
         header: MockBlockHeader {
-            prev_hash: MockHash([0; 32]),
+            prev_hash: [0; 32].into(),
+            hash: [1; 32].into(),
         },
         height: 1,
         validity_cond: valid_condition,
         blobs: slot_1_blobs,
     };
-    chain_state.begin_slot_hook(&slot_1_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_1_data.header,
+        &slot_1_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_1_data.blobs,
@@ -311,15 +331,19 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
     blobs_are_equal(blob_3, execute_in_slot_1.remove(0), "slot 1");
 
     let mut slot_2_data = MockBlock {
-        curr_hash: [2; 32],
         header: MockBlockHeader {
-            prev_hash: MockHash(slot_1_data.curr_hash),
+            prev_hash: slot_1_data.header.hash,
+            hash: [2; 32].into(),
         },
         height: 2,
         validity_cond: valid_condition,
         blobs: Vec::new(),
     };
-    chain_state.begin_slot_hook(&slot_2_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_2_data.header,
+        &slot_2_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_2 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_2_data.blobs,
@@ -399,15 +423,19 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
     let slot_1_blobs = vec![blob_1.clone(), blob_2.clone(), blob_3.clone()];
 
     let mut slot_1_data = MockBlock {
-        curr_hash: [1; 32],
         header: MockBlockHeader {
-            prev_hash: MockHash([0; 32]),
+            prev_hash: [0; 32].into(),
+            hash: [1; 32].into(),
         },
         height: 1,
         validity_cond: valid_condition,
         blobs: slot_1_blobs,
     };
-    chain_state.begin_slot_hook(&slot_1_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_1_data.header,
+        &slot_1_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_1_data.blobs,
@@ -420,15 +448,19 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
     blobs_are_equal(blob_3, execute_in_slot_1.remove(0), "slot 1");
 
     let mut slot_2_data = MockBlock {
-        curr_hash: [2; 32],
         header: MockBlockHeader {
-            prev_hash: MockHash(slot_1_data.curr_hash),
+            prev_hash: slot_1_data.header.hash,
+            hash: [2; 32].into(),
         },
         height: 2,
         validity_cond: valid_condition,
         blobs: Vec::new(),
     };
-    chain_state.begin_slot_hook(&slot_2_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_2_data.header,
+        &slot_2_data.validity_cond,
+        &mut working_set,
+    );
     let execute_in_slot_2: Vec<BlobRefOrOwned<'_, B>> =
         <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
             &blob_storage,
@@ -510,15 +542,19 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
     let slot_2_blobs = vec![blob_4.clone(), blob_5.clone()];
 
     let mut slot_1_data = MockBlock {
-        curr_hash: [1; 32],
         header: MockBlockHeader {
-            prev_hash: MockHash([0; 32]),
+            prev_hash: [0; 32].into(),
+            hash: [1; 32].into(),
         },
         height: 1,
         validity_cond: valid_condition,
         blobs: slot_1_blobs,
     };
-    chain_state.begin_slot_hook(&slot_1_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_1_data.header,
+        &slot_1_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_1 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_1_data.blobs,
@@ -546,15 +582,19 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
         .is_none());
 
     let mut slot_2_data = MockBlock {
-        curr_hash: [2; 32],
         header: MockBlockHeader {
-            prev_hash: MockHash(slot_1_data.curr_hash),
+            prev_hash: slot_1_data.header.hash,
+            hash: [2; 32].into(),
         },
         height: 2,
         validity_cond: valid_condition,
         blobs: slot_2_blobs,
     };
-    chain_state.begin_slot_hook(&slot_2_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_2_data.header,
+        &slot_2_data.validity_cond,
+        &mut working_set,
+    );
     let mut execute_in_slot_2 = <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
         &blob_storage,
         &mut slot_2_data.blobs,
@@ -568,15 +608,19 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
     blobs_are_equal(blob_5, execute_in_slot_2.remove(0), "slot 2");
 
     let mut slot_3_data = MockBlock {
-        curr_hash: [3; 32],
         header: MockBlockHeader {
-            prev_hash: MockHash(slot_2_data.curr_hash),
+            prev_hash: slot_2_data.header.hash,
+            hash: [3; 32].into(),
         },
         height: 3,
         validity_cond: valid_condition,
         blobs: Vec::new(),
     };
-    chain_state.begin_slot_hook(&slot_3_data, &mut working_set);
+    chain_state.begin_slot_hook(
+        &slot_3_data.header,
+        &slot_3_data.validity_cond,
+        &mut working_set,
+    );
     let execute_in_slot_3: Vec<BlobRefOrOwned<'_, B>> =
         <BlobStorage<C, Da> as BlobSelector<Da>>::get_blobs_for_this_slot(
             &blob_storage,

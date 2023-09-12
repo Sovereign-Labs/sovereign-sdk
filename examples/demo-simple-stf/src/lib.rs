@@ -3,8 +3,7 @@
 use std::marker::PhantomData;
 
 use sha2::Digest;
-use sov_rollup_interface::da::BlobReaderTrait;
-use sov_rollup_interface::services::da::SlotData;
+use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_rollup_interface::stf::{BatchReceipt, SlotResult, StateTransitionFunction};
 use sov_rollup_interface::zk::{ValidityCondition, Zkvm};
 
@@ -25,7 +24,7 @@ pub enum ApplySlotResult {
     Success,
 }
 
-impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunction<Vm, B>
+impl<Vm: Zkvm, Cond: ValidityCondition, Da: DaSpec> StateTransitionFunction<Vm, Da>
     for CheckHashPreimageStf<Cond>
 {
     // Since our rollup is stateless, we don't need to consider the StateRoot.
@@ -51,10 +50,11 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
         // Do nothing
     }
 
-    fn apply_slot<'a, I, Data>(
+    fn apply_slot<'a, I>(
         &mut self,
         _witness: Self::Witness,
-        _slot_data: &Data,
+        _slot_header: &Da::BlockHeader,
+        _validity_condition: &Da::ValidityCondition,
         blobs: I,
     ) -> SlotResult<
         Self::StateRoot,
@@ -63,8 +63,7 @@ impl<Vm: Zkvm, Cond: ValidityCondition, B: BlobReaderTrait> StateTransitionFunct
         Self::Witness,
     >
     where
-        I: IntoIterator<Item = &'a mut B>,
-        Data: SlotData,
+        I: IntoIterator<Item = &'a mut Da::BlobTransaction>,
     {
         let mut receipts = vec![];
         for blob in blobs {

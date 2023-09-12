@@ -125,8 +125,7 @@ impl<C: sov_modules_api::Context, Vm: sov_modules_api::Zkvm> ProverIncentives<C,
         anyhow::ensure!(old_balance >= minimum_bond, "Prover is not bonded");
         let code_commitment = self
             .commitment_of_allowed_verifier_method
-            .get_or_err(working_set)?
-            .commitment;
+            .get_or_err(working_set)?;
 
         // Lock the prover's bond amount.
         self.bonded_provers

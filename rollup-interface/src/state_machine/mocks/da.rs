@@ -2,9 +2,9 @@ use std::fmt::Display;
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use sha2::Digest;
 
 use crate::da::{BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec};
 use crate::mocks::MockValidityCond;
@@ -134,12 +134,34 @@ impl MockBlob {
 }
 
 /// A mock hash digest.
-#[derive(Clone, Copy, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Debug,
+    PartialEq,
+    Eq,
+    serde::Serialize,
+    serde::Deserialize,
+    BorshDeserialize,
+    BorshSerialize,
+)]
 pub struct MockHash(pub [u8; 32]);
 
 impl AsRef<[u8]> for MockHash {
     fn as_ref(&self) -> &[u8] {
         &self.0
+    }
+}
+
+impl From<[u8; 32]> for MockHash {
+    fn from(value: [u8; 32]) -> Self {
+        Self(value)
+    }
+}
+
+impl From<MockHash> for [u8; 32] {
+    fn from(value: MockHash) -> Self {
+        value.0
     }
 }
 
@@ -150,6 +172,17 @@ impl BlockHashTrait for MockHash {}
 pub struct MockBlockHeader {
     /// The hash of the previous block.
     pub prev_hash: MockHash,
+    /// The hash of this block.
+    pub hash: MockHash,
+}
+
+impl Default for MockBlockHeader {
+    fn default() -> Self {
+        Self {
+            prev_hash: MockHash([0u8; 32]),
+            hash: MockHash([1u8; 32]),
+        }
+    }
 }
 
 impl BlockHeaderTrait for MockBlockHeader {
@@ -160,15 +193,13 @@ impl BlockHeaderTrait for MockBlockHeader {
     }
 
     fn hash(&self) -> Self::Hash {
-        MockHash(sha2::Sha256::digest(self.prev_hash.0).into())
+        self.hash
     }
 }
 
 /// A mock block type used for testing.
 #[derive(Serialize, Deserialize, PartialEq, core::fmt::Debug, Clone)]
 pub struct MockBlock {
-    /// The hash of this block.
-    pub curr_hash: [u8; 32],
     /// The header of this block.
     pub header: MockBlockHeader,
     /// The height of this block
@@ -182,9 +213,9 @@ pub struct MockBlock {
 impl Default for MockBlock {
     fn default() -> Self {
         Self {
-            curr_hash: [0; 32],
             header: MockBlockHeader {
-                prev_hash: MockHash([0; 32]),
+                prev_hash: [0; 32].into(),
+                hash: [1; 32].into(),
             },
             height: 0,
             validity_cond: Default::default(),
@@ -198,7 +229,7 @@ impl SlotData for MockBlock {
     type Cond = MockValidityCond;
 
     fn hash(&self) -> [u8; 32] {
-        self.curr_hash
+        self.header.hash.0
     }
 
     fn header(&self) -> &Self::BlockHeader {
@@ -211,7 +242,7 @@ impl SlotData for MockBlock {
 }
 
 /// A [`DaSpec`] suitable for testing.
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq)]
 pub struct MockDaSpec;
 
 impl DaSpec for MockDaSpec {

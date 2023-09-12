@@ -57,7 +57,7 @@ fn test_two_phase_unbonding() {
     {
         let attestation = Attestation {
             initial_state_root: initial_transition.state_root,
-            da_block_hash: [1; 32],
+            da_block_hash: [1; 32].into(),
             post_state_root: transition_1.state_root,
             proof_of_bond: sov_modules_api::optimistic::ProofOfBond {
                 claimed_transition_num: INIT_HEIGHT + 1,
@@ -66,7 +66,7 @@ fn test_two_phase_unbonding() {
         };
 
         let err = module
-            .process_attestation(&context, attestation, &mut working_set)
+            .process_attestation(&context, attestation.into(), &mut working_set)
             .unwrap_err();
 
         assert_eq!(

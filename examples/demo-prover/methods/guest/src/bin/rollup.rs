@@ -14,8 +14,7 @@ use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier};
 use sov_celestia_adapter::{BlobWithSender, CelestiaHeader};
 use sov_risc0_adapter::guest::Risc0Guest;
 use sov_rollup_interface::crypto::NoOpHasher;
-use sov_rollup_interface::da::{DaSpec, DaVerifier};
-use sov_rollup_interface::services::da::SlotData;
+use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::{StateTransition, ZkvmGuest};
 
@@ -49,18 +48,7 @@ pub fn main() {
     let mut blobs: Vec<BlobWithSender> = guest.read_from_host();
     env::write(&"blobs have been read\n");
 
-    // Step 2: Apply blobs
-    let mut app = create_zk_app_template::<Risc0Guest, CelestiaSpec>(prev_state_root_hash);
-
-    let witness: ArrayWitness = guest.read_from_host();
-    env::write(&"Witness have been read\n");
-
-    env::write(&"Applying slot...\n");
-    let result = app.apply_slot(witness, &header, &mut blobs);
-
-    env::write(&"Slot has been applied\n");
-
-    // Step 3: Verify tx list
+    // Step 2: Verify tx list
     let verifier = CelestiaVerifier::new(sov_celestia_adapter::verifier::RollupParams {
         namespace: ROLLUP_NAMESPACE,
     });
@@ -70,9 +58,20 @@ pub fn main() {
         .expect("Transaction list must be correct");
     env::write(&"Relevant txs verified\n");
 
+    // Step 3: Apply blobs
+    let mut app = create_zk_app_template::<Risc0Guest, CelestiaSpec>(prev_state_root_hash);
+
+    let witness: ArrayWitness = guest.read_from_host();
+    env::write(&"Witness have been read\n");
+
+    env::write(&"Applying slot...\n");
+    let result = app.apply_slot(witness, &header, &validity_condition, &mut blobs);
+
+    env::write(&"Slot has been applied\n");
+
     // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/647
     let rewarded_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
-    let output = StateTransition {
+    let output = StateTransition::<CelestiaSpec, _> {
         initial_state_root: prev_state_root_hash,
         final_state_root: result.state_root.0,
         validity_condition,

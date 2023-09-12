@@ -9,7 +9,16 @@ use crate::zk::{ValidityCondition, ValidityConditionChecker};
 
 /// A trivial test validity condition structure that only contains a boolean
 #[derive(
-    Debug, BorshDeserialize, BorshSerialize, Serialize, Deserialize, PartialEq, Clone, Copy, Default,
+    Debug,
+    BorshDeserialize,
+    BorshSerialize,
+    Serialize,
+    Deserialize,
+    PartialEq,
+    Clone,
+    Copy,
+    Default,
+    Eq,
 )]
 pub struct MockValidityCond {
     /// The associated validity condition field. If it is true, the validity condition is verified
