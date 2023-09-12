@@ -51,7 +51,6 @@ rand = "0.8"
 
 [features]
 default = []
-offchain = ["demo-nft-module/offchain"]
 experimental = ["sov-evm/experimental", "reth-primitives"]
 native = [
     "sov-bank/native",
