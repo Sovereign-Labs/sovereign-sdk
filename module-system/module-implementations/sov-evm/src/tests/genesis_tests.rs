@@ -18,7 +18,7 @@ lazy_static! {
             address: Address::from([1u8; 20]),
             balance: U256::from(1000000000),
             code_hash: KECCAK_EMPTY,
-            code: vec![],
+            code: Bytes::default(),
             nonce: 0,
         }],
         spec: vec![(0, SpecId::BERLIN), (1, SpecId::LATEST)]

@@ -29,7 +29,10 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
+        // We can't create receipts for transactions we can't even decode as we don't know their hash
+        // But should we create receipts for transactions that are incorrectly signed?
         let evm_tx_recovered: TransactionSignedEcRecovered = tx.try_into()?;
+
         let block_env = self
             .pending_block
             .get(working_set)

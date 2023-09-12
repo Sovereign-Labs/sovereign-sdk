@@ -1,6 +1,6 @@
 use std::convert::Infallible;
 
-use reth_primitives::Address;
+use reth_primitives::{Address, Bytes, H256};
 use revm::primitives::{AccountInfo as ReVmAccountInfo, Bytecode, B160, B256, U256};
 use revm::Database;
 use sov_state::codec::BcsCodec;
@@ -10,16 +10,19 @@ use super::DbAccount;
 
 pub(crate) struct EvmDb<'a, C: sov_modules_api::Context> {
     pub(crate) accounts: sov_state::StateMap<Address, DbAccount, BcsCodec>,
+    pub(crate) code: sov_state::StateMap<H256, Bytes, BcsCodec>,
     pub(crate) working_set: &'a mut WorkingSet<C::Storage>,
 }
 
 impl<'a, C: sov_modules_api::Context> EvmDb<'a, C> {
     pub(crate) fn new(
         accounts: sov_state::StateMap<Address, DbAccount, BcsCodec>,
+        code: sov_state::StateMap<H256, Bytes, BcsCodec>,
         working_set: &'a mut WorkingSet<C::Storage>,
     ) -> Self {
         Self {
             accounts,
+            code,
             working_set,
         }
     }

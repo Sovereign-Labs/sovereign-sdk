@@ -23,7 +23,7 @@ pub use revm::primitives::SpecId;
 mod experimental {
     use std::collections::HashMap;
 
-    use reth_primitives::{Address, H256};
+    use reth_primitives::{Address, Bytes, H256};
     use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo};
     use sov_state::codec::BcsCodec;
@@ -38,7 +38,7 @@ mod experimental {
         pub address: Address,
         pub balance: U256,
         pub code_hash: H256,
-        pub code: Vec<u8>,
+        pub code: Bytes,
         pub nonce: u64,
     }
 
@@ -98,6 +98,10 @@ mod experimental {
         pub(crate) accounts: sov_state::StateMap<Address, DbAccount, BcsCodec>,
 
         #[state]
+        pub(crate) code:
+            sov_state::StateMap<reth_primitives::H256, reth_primitives::Bytes, BcsCodec>,
+
+        #[state]
         pub(crate) cfg: sov_state::StateValue<EvmChainConfig, BcsCodec>,
 
         #[state]
@@ -125,10 +129,6 @@ mod experimental {
 
         #[state]
         pub(crate) receipts: sov_state::AccessoryStateVec<Receipt, BcsCodec>,
-
-        #[state]
-        pub(crate) code:
-            sov_state::AccessoryStateMap<reth_primitives::H256, reth_primitives::Bytes, BcsCodec>,
     }
 
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {
@@ -161,7 +161,7 @@ mod experimental {
             &self,
             working_set: &'a mut WorkingSet<C::Storage>,
         ) -> EvmDb<'a, C> {
-            EvmDb::new(self.accounts.clone(), working_set)
+            EvmDb::new(self.accounts.clone(), self.code.clone(), working_set)
         }
     }
 }
