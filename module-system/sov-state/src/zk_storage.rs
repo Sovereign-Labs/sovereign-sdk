@@ -14,6 +14,7 @@ use crate::{MerkleProofSpec, Storage};
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 extern crate risc0_zkvm;
 
+/// A [`Storage`] implementation designed to be used inside the zkVM.
 #[derive(Default)]
 pub struct ZkStorage<S: MerkleProofSpec> {
     _phantom_hasher: PhantomData<S::Hasher>,
@@ -28,6 +29,7 @@ impl<S: MerkleProofSpec> Clone for ZkStorage<S> {
 }
 
 impl<S: MerkleProofSpec> ZkStorage<S> {
+    /// Creates a new [`ZkStorage`] instance. Identical to [`Default::default`].
     pub fn new() -> Self {
         Self {
             _phantom_hasher: Default::default(),

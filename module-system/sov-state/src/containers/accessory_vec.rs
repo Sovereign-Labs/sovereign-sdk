@@ -6,6 +6,8 @@ use crate::{
     AccessoryStateMap, AccessoryStateValue, AccessoryWorkingSet, Prefix, StateVecError, Storage,
 };
 
+/// A variant of [`StateVec`](crate::StateVec) that stores its elements as
+/// "accessory" state, instead of in the JMT.
 #[derive(
     Debug,
     Clone,
@@ -139,6 +141,7 @@ where
         Some(elem)
     }
 
+    /// Removes all values from this [`AccessoryStateVec`].
     pub fn clear<S: Storage>(&self, working_set: &mut AccessoryWorkingSet<S>) {
         let len = self.len_value.remove(working_set).unwrap_or_default();
 
