@@ -51,6 +51,7 @@ where
     Root: Clone,
 {
     /// Creates a new `StateTransitionRunner` runner.
+    #[allow(clippy::type_complexity)]
     pub fn new(
         runner_config: RunnerConfig,
         da_service: Da,
@@ -58,10 +59,7 @@ where
         mut app: ST,
         should_init_chain: bool,
         genesis_config: InitialState<ST, Vm, Da::Spec>,
-        #[allow(clippy::type_complexity)] verifier: Option<(
-            Vm,
-            StateTransitionVerifier<V, Da::Verifier, Vm::Guest>,
-        )>,
+        verifier: Option<(Vm, StateTransitionVerifier<V, Da::Verifier, Vm::Guest>)>,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
 
