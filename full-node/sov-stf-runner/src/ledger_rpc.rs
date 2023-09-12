@@ -7,7 +7,6 @@ use sov_modules_api::utils::to_jsonrpsee_error_object;
 use sov_rollup_interface::rpc::{
     BatchIdentifier, EventIdentifier, LedgerRpcProvider, SlotIdentifier, TxIdentifier,
 };
-
 const LEDGER_RPC_ERROR: &str = "LEDGER_RPC_ERROR";
 
 use self::query_args::{extract_query_args, QueryArgs};

@@ -202,9 +202,8 @@ checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
 
 [[package]]
 name = "bcs"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bd3ffe8b19a604421a5d461d4a70346223e535903fbc3067138bddbebddcf77"
+version = "0.1.4"
+source = "git+https://github.com/preston-evans98/bcs.git?rev=e4f1861#e4f1861509a996408baa540cda1f88c290214ce1"
 dependencies = [
  "serde",
  "thiserror",
@@ -3671,6 +3670,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
+ "sov-rollup-interface",
  "sov-state",
 ]
 

@@ -10,7 +10,7 @@ use sov_celestia_adapter::types::NamespaceId;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
 use sov_celestia_adapter::{CelestiaService, DaServiceConfig};
-use sov_modules_api::PrivateKey;
+use sov_modules_api::{PrivateKey, SlotData};
 use sov_risc0_adapter::host::{Risc0Host, Risc0Verifier};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -117,12 +117,17 @@ async fn main() -> Result<(), anyhow::Error> {
         // The above proofs of correctness and completeness need to passed to the prover
         host.write_to_guest(&inclusion_proof);
         host.write_to_guest(&completeness_proof);
-        // The extracted blobs need to be passed to the prover
-        host.write_to_guest(&blobs);
 
-        let result = app
-            .stf
-            .apply_slot(Default::default(), &filtered_block, &mut blobs);
+        let result = app.stf.apply_slot(
+            Default::default(),
+            filtered_block.header(),
+            &filtered_block.validity_condition(),
+            &mut blobs,
+        );
+
+        // The extracted blobs need to be passed to the prover after execution.
+        // (Without executing, the host couldn't prune any data that turned out to be irrelevant to the guest)
+        host.write_to_guest(&blobs);
 
         // Witness contains the merkle paths to the state root so that the code inside the VM
         // can access state values (Witness can also contain other hints and proofs)

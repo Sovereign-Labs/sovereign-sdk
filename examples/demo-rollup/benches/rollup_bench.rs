@@ -13,7 +13,7 @@ use sov_db::ledger_db::{LedgerDB, SlotCommit};
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::PrivateKey;
 use sov_risc0_adapter::host::Risc0Verifier;
-use sov_rollup_interface::mocks::{MockAddress, MockBlock, MockBlockHeader, MockHash};
+use sov_rollup_interface::mocks::{MockAddress, MockBlock, MockBlockHeader};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_stf_runner::{from_toml_path, RollupConfig};
@@ -66,9 +66,9 @@ fn rollup_bench(_bench: &mut Criterion) {
         let mut barray = [0u8; 32];
         barray[..num_bytes.len()].copy_from_slice(&num_bytes);
         let filtered_block = MockBlock {
-            curr_hash: barray,
             header: MockBlockHeader {
-                prev_hash: MockHash([0u8; 32]),
+                hash: barray.into(),
+                prev_hash: [0u8; 32].into(),
             },
             height,
             validity_cond: Default::default(),
@@ -88,7 +88,8 @@ fn rollup_bench(_bench: &mut Criterion) {
             let mut data_to_commit = SlotCommit::new(filtered_block.clone());
             let apply_block_result = demo.apply_slot(
                 Default::default(),
-                data_to_commit.slot_data(),
+                &filtered_block.header,
+                &filtered_block.validity_cond,
                 &mut blobs[height as usize],
             );
             for receipts in apply_block_result.batch_receipts {

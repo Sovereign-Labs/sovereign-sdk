@@ -2,6 +2,8 @@ use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Context, Spec};
 use sov_modules_stf_template::SequencerOutcome;
+#[cfg(feature = "experimental")]
+use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_sequencer_registry::SequencerRegistry;
 use sov_state::WorkingSet;
@@ -79,13 +81,15 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
 
     fn begin_slot_hook(
         &self,
-        #[allow(unused_variables)] slot_data: &impl sov_rollup_interface::services::da::SlotData,
+        #[allow(unused_variables)] slot_header: &Da::BlockHeader,
+        #[allow(unused_variables)] validity_condition: &Da::ValidityCondition,
         #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
             <Self::Context as Spec>::Storage,
         >,
     ) {
         #[cfg(feature = "experimental")]
-        self.evm.begin_slot_hook(slot_data.hash(), working_set);
+        self.evm
+            .begin_slot_hook(slot_header.hash().into(), working_set);
     }
 
     fn end_slot_hook(
