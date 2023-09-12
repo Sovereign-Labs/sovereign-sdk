@@ -56,7 +56,6 @@ pub enum CallMessage<C: Context> {
         token_uri: Option<String>,
         /// Frozen status
         frozen: Option<bool>,
-
     },
     /// Transfer an NFT from an owned address to another address
     TransferNft {

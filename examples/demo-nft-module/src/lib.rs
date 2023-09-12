@@ -91,7 +91,9 @@ derive(serde::Deserialize)
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 /// Defines an nft collection
 pub struct Collection<C: Context> {
-    /// name of the collection
+    /// Name of the collection
+    /// The name has to be unique in the scope of a creator. A single creator address cannot have
+    /// duplicate collection names
     pub name: String,
     /// Address of the collection creator
     /// This is the only address that can mint new NFTs for the collection
@@ -115,15 +117,16 @@ derive(serde::Deserialize)
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 /// Defines an nft
 pub struct Nft<C: Context> {
-    /// name of the collection
+    /// A token id that uniquely identifies an NFT within the scope of a (collection name, creator)
     pub token_id: TokenId,
-    /// creator of the nft collection
+    /// A collection address that uniquely identifies a collection - derived from (collection name, creator)
     pub collection_address: CollectionAddress<C>,
-    /// owner of nft
+    /// Owner address of a specific token_id within a collection
     pub owner: UserAddress<C>,
-    /// frozen or not
+    /// A frozen NFT cannot have its data altered and is immutable
+    /// Cannot be unfrozen. token_uri cannot be modified
     pub frozen: bool,
-    /// supply
+    /// A URI pointing to the offchain metadata
     pub token_uri: String,
 }
 
