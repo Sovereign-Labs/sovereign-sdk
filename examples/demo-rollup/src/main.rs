@@ -2,6 +2,7 @@ use std::str::FromStr;
 
 use clap::Parser;
 use sov_demo_rollup::{new_rollup_with_celestia_da, new_rollup_with_mock_da};
+use sov_risc0_adapter::host::Risc0Host;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
@@ -37,11 +38,12 @@ async fn main() -> Result<(), anyhow::Error> {
 
     match args.da_layer.as_str() {
         "mock" => {
-            let rollup = new_rollup_with_mock_da(rollup_config_path)?;
+            let rollup = new_rollup_with_mock_da::<Risc0Host<'static>>(rollup_config_path, None)?;
             rollup.run().await
         }
         "celestia" => {
-            let rollup = new_rollup_with_celestia_da(rollup_config_path).await?;
+            let rollup =
+                new_rollup_with_celestia_da::<Risc0Host<'static>>(rollup_config_path, None).await?;
             rollup.run().await
         }
         da => panic!("DA Layer not supported: {}", da),

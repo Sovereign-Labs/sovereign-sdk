@@ -13,7 +13,6 @@ use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::{CelestiaSpec, CelestiaVerifier};
 use sov_celestia_adapter::{BlobWithSender, CelestiaHeader};
 use sov_risc0_adapter::guest::Risc0Guest;
-use sov_rollup_interface::crypto::NoOpHasher;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, DaVerifier};
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::zk::{StateTransition, ZkvmGuest};
@@ -32,7 +31,7 @@ risc0_zkvm::guest::entry!(main);
 //  6. Output (Da hash, start_root, end_root, event_root)
 pub fn main() {
     env::write(&"Start guest\n");
-    let guest = Risc0Guest;
+    let guest = Risc0Guest{};
 
     #[cfg(feature = "bench")]
     let start_cycles = env::get_cycle_count();
@@ -54,12 +53,12 @@ pub fn main() {
     });
 
     let validity_condition = verifier
-        .verify_relevant_tx_list::<NoOpHasher>(&header, &blobs, inclusion_proof, completeness_proof)
+        .verify_relevant_tx_list(&header, &blobs, inclusion_proof, completeness_proof)
         .expect("Transaction list must be correct");
     env::write(&"Relevant txs verified\n");
 
     // Step 3: Apply blobs
-    let mut app = create_zk_app_template::<Risc0Guest, CelestiaSpec>(prev_state_root_hash);
+    let mut app = create_zk_app_template::<Risc0Guest, CelestiaSpec>();
 
     let witness: ArrayWitness = guest.read_from_host();
     env::write(&"Witness have been read\n");

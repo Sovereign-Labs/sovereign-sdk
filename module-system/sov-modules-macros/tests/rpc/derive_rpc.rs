@@ -60,7 +60,7 @@ impl TestStructRpcImpl<ZkDefaultContext> for RpcStorage<ZkDefaultContext> {
 }
 
 fn main() {
-    let storage = ZkStorage::new([1u8; 32]);
+    let storage = ZkStorage::new();
     let r: RpcStorage<ZkDefaultContext> = RpcStorage {
         storage: storage.clone(),
     };

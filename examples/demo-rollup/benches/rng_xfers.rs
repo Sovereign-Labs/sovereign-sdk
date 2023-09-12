@@ -8,7 +8,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{Address, AddressBech32, EncodeCall, PrivateKey, PublicKey, Spec};
-use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::da::{DaSpec, DaVerifier};
 use sov_rollup_interface::mocks::{
     MockAddress, MockBlob, MockBlock, MockBlockHeader, MockHash, MockValidityCond,
 };
@@ -109,6 +109,7 @@ impl DaSpec for RngDaSpec {
 #[async_trait]
 impl DaService for RngDaService {
     type Spec = RngDaSpec;
+    type Verifier = RngDaVerifier;
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
 
@@ -172,5 +173,26 @@ impl DaService for RngDaService {
 
     async fn send_transaction(&self, _blob: &[u8]) -> Result<(), Self::Error> {
         unimplemented!()
+    }
+}
+
+pub struct RngDaVerifier;
+impl DaVerifier for RngDaVerifier {
+    type Spec = RngDaSpec;
+
+    type Error = anyhow::Error;
+
+    fn new(_params: <Self::Spec as DaSpec>::ChainParams) -> Self {
+        Self
+    }
+
+    fn verify_relevant_tx_list(
+        &self,
+        _block_header: &<Self::Spec as DaSpec>::BlockHeader,
+        _txs: &[<Self::Spec as DaSpec>::BlobTransaction],
+        _inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
+        _completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
+    ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error> {
+        Ok(MockValidityCond { is_valid: true })
     }
 }

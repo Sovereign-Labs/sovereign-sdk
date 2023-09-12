@@ -5,7 +5,6 @@ use std::cmp::min;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Buf;
-use digest::Digest;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -61,7 +60,7 @@ pub trait DaVerifier {
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self;
 
     /// Verify a claimed set of transactions against a block header.
-    fn verify_relevant_tx_list<H: Digest>(
+    fn verify_relevant_tx_list(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
@@ -185,7 +184,7 @@ pub trait BlockHashTrait:
 }
 
 /// A block header, typically used in the context of an underlying DA blockchain.
-pub trait BlockHeaderTrait: PartialEq + Debug + Clone {
+pub trait BlockHeaderTrait: PartialEq + Debug + Clone + Serialize + DeserializeOwned {
     /// Each block header must have a unique canonical hash.
     type Hash: Clone;
     /// Each block header must contain the hash of the previous block.

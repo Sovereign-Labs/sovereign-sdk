@@ -24,7 +24,7 @@ fn main() {
     type RT = Runtime<ZkDefaultContext, u32>;
     let runtime = &mut RT::default();
 
-    let storage = ZkStorage::new([1u8; 32]);
+    let storage = ZkStorage::new();
     let mut working_set = &mut sov_state::WorkingSet::new(storage);
     let config = GenesisConfig::new((), (), ());
     runtime.genesis(&config, working_set).unwrap();

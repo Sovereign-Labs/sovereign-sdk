@@ -3,11 +3,12 @@ use std::sync::Mutex;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use jmt::storage::TreeReader;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 // TODO: Refactor witness trait so it only require Serialize / Deserialize
 //   https://github.com/Sovereign-Labs/sovereign-sdk/issues/263
-pub trait Witness: Default + Serialize {
+pub trait Witness: Default + Serialize + DeserializeOwned {
     fn add_hint<T: BorshSerialize>(&self, hint: T);
     fn get_hint<T: BorshDeserialize>(&self) -> T;
     fn merge(&self, rhs: &Self);

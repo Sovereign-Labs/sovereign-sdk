@@ -92,7 +92,7 @@ async fn main() -> Result<(), anyhow::Error> {
         // prev_state_root is the root after applying the block at height-1
         // This is necessary since we're proving that the current state root for the current height is
         // result of applying the block against state with root prev_state_root
-        host.write_to_guest(prev_state_root);
+        host.add_hint(prev_state_root);
         info!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
@@ -100,7 +100,7 @@ async fn main() -> Result<(), anyhow::Error> {
         );
         let filtered_block = da_service.get_finalized_at(height).await?;
         let header_hash = hex::encode(filtered_block.header.header.hash());
-        host.write_to_guest(&filtered_block.header);
+        host.add_hint(&filtered_block.header);
         // When we get a block from DA, we also need to provide proofs of completeness and correctness
         // https://github.com/Sovereign-Labs/sovereign-sdk/blob/nightly/rollup-interface/specs/interfaces/da.md#type-inclusionmultiproof
         let (mut blobs, inclusion_proof, completeness_proof) = da_service
@@ -115,8 +115,8 @@ async fn main() -> Result<(), anyhow::Error> {
         );
 
         // The above proofs of correctness and completeness need to passed to the prover
-        host.write_to_guest(&inclusion_proof);
-        host.write_to_guest(&completeness_proof);
+        host.add_hint(&inclusion_proof);
+        host.add_hint(&completeness_proof);
 
         let result = app.stf.apply_slot(
             Default::default(),
@@ -127,11 +127,11 @@ async fn main() -> Result<(), anyhow::Error> {
 
         // The extracted blobs need to be passed to the prover after execution.
         // (Without executing, the host couldn't prune any data that turned out to be irrelevant to the guest)
-        host.write_to_guest(&blobs);
+        host.add_hint(&blobs);
 
         // Witness contains the merkle paths to the state root so that the code inside the VM
         // can access state values (Witness can also contain other hints and proofs)
-        host.write_to_guest(&result.witness);
+        host.add_hint(&result.witness);
 
         // Run the actual prover to generate a receipt that can then be verified
         if !skip_prover {

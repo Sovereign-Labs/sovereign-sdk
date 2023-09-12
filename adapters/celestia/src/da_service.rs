@@ -18,7 +18,7 @@ use crate::types::{ExtendedDataSquare, FilteredCelestiaBlock, Row, RpcNamespaced
 use crate::utils::BoxError;
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::proofs::{CompletenessProof, CorrectnessProof};
-use crate::verifier::{CelestiaSpec, RollupParams, PFB_NAMESPACE};
+use crate::verifier::{CelestiaSpec, CelestiaVerifier, RollupParams, PFB_NAMESPACE};
 use crate::{
     parse_pfb_namespace, BlobWithSender, CelestiaHeader, CelestiaHeaderResponse,
     DataAvailabilityHeader,
@@ -142,6 +142,8 @@ impl CelestiaService {
 #[async_trait]
 impl DaService for CelestiaService {
     type Spec = CelestiaSpec;
+
+    type Verifier = CelestiaVerifier;
 
     type FilteredBlock = FilteredCelestiaBlock;
 

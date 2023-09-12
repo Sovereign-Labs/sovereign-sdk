@@ -5,23 +5,26 @@ use anyhow::Context;
 use const_rollup_config::SEQUENCER_DA_ADDRESS;
 #[cfg(feature = "experimental")]
 use demo_stf::app::DefaultPrivateKey;
-use demo_stf::app::{App, DefaultContext};
-use demo_stf::runtime::{get_rpc_methods, GenesisConfig};
+use demo_stf::app::{create_zk_app_template, App, DefaultContext};
+use demo_stf::runtime::{get_rpc_methods, GenesisConfig, Runtime};
 #[cfg(feature = "experimental")]
 use secp256k1::SecretKey;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
-use sov_celestia_adapter::verifier::RollupParams;
+use sov_celestia_adapter::verifier::{CelestiaVerifier, RollupParams};
 use sov_celestia_adapter::CelestiaService;
 #[cfg(feature = "experimental")]
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
-use sov_risc0_adapter::host::Risc0Verifier;
+use sov_modules_api::default_context::ZkDefaultContext;
+use sov_modules_stf_template::AppTemplate;
+use sov_rollup_interface::da::DaVerifier;
 use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
 use sov_rollup_interface::services::da::DaService;
-use sov_rollup_interface::zk::Zkvm;
+use sov_rollup_interface::zk::ZkvmHost;
 use sov_state::storage::Storage;
+use sov_stf_runner::verifier::StateTransitionVerifier;
 use sov_stf_runner::{from_toml_path, RollupConfig, RunnerConfig, StateTransitionRunner};
 use tokio::sync::oneshot;
 use tracing::debug;
@@ -35,7 +38,7 @@ use crate::{get_genesis_config, initialize_ledger, ROLLUP_NAMESPACE};
 const TX_SIGNER_PRIV_KEY_PATH: &str = "../test-data/keys/tx_signer_private_key.json";
 
 /// Dependencies needed to run the rollup.
-pub struct Rollup<Vm: Zkvm, Da: DaService + Clone> {
+pub struct Rollup<Vm: ZkvmHost, Da: DaService + Clone> {
     /// Implementation of the STF.
     pub app: App<Vm, Da::Spec>,
     /// Data availability service.
@@ -49,12 +52,28 @@ pub struct Rollup<Vm: Zkvm, Da: DaService + Clone> {
     #[cfg(feature = "experimental")]
     /// Configuration for the Ethereum RPC.
     pub eth_rpc_config: EthRpcConfig,
+    /// Verifier for the rollup.
+    #[allow(clippy::type_complexity)]
+    pub verifier: Option<(Vm, AppVerifier<Da::Verifier, Vm::Guest>)>,
 }
 
+/// A verifier for the demo rollup
+pub type AppVerifier<DA, Zk> = StateTransitionVerifier<
+    AppTemplate<
+        ZkDefaultContext,
+        <DA as DaVerifier>::Spec,
+        Zk,
+        Runtime<ZkDefaultContext, <DA as DaVerifier>::Spec>,
+    >,
+    DA,
+    Zk,
+>;
+
 /// Creates celestia based rollup.
-pub async fn new_rollup_with_celestia_da(
+pub async fn new_rollup_with_celestia_da<Vm: ZkvmHost>(
     rollup_config_path: &str,
-) -> Result<Rollup<Risc0Verifier, CelestiaService>, anyhow::Error> {
+    prover: Option<Vm>,
+) -> Result<Rollup<Vm, CelestiaService>, anyhow::Error> {
     debug!(
         "Starting demo celestia rollup with config {}",
         rollup_config_path
@@ -82,6 +101,17 @@ pub async fn new_rollup_with_celestia_da(
         #[cfg(feature = "experimental")]
         eth_signer.signers(),
     );
+    let verifier = prover.map(|p| {
+        (
+            p,
+            AppVerifier::new(
+                create_zk_app_template(),
+                CelestiaVerifier {
+                    rollup_namespace: ROLLUP_NAMESPACE,
+                },
+            ),
+        )
+    });
 
     Ok(Rollup {
         app,
@@ -95,25 +125,28 @@ pub async fn new_rollup_with_celestia_da(
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
             eth_signer,
         },
+        verifier,
     })
 }
 
 /// Creates MockDa based rollup.
-pub fn new_rollup_with_mock_da(
+pub fn new_rollup_with_mock_da<Vm: ZkvmHost>(
     rollup_config_path: &str,
-) -> Result<Rollup<Risc0Verifier, MockDaService>, anyhow::Error> {
+    prover: Option<Vm>,
+) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
     debug!("Starting mock rollup with config {}", rollup_config_path);
 
     let rollup_config: RollupConfig<MockDaConfig> =
         from_toml_path(rollup_config_path).context("Failed to read rollup configuration")?;
 
-    new_rollup_with_mock_da_from_config(rollup_config)
+    new_rollup_with_mock_da_from_config(rollup_config, prover)
 }
 
 /// Creates MockDa based rollup.
-pub fn new_rollup_with_mock_da_from_config(
+pub fn new_rollup_with_mock_da_from_config<Vm: ZkvmHost>(
     rollup_config: RollupConfig<MockDaConfig>,
-) -> Result<Rollup<Risc0Verifier, MockDaService>, anyhow::Error> {
+    prover: Option<Vm>,
+) -> Result<Rollup<Vm, MockDaService>, anyhow::Error> {
     let ledger_db = initialize_ledger(&rollup_config.storage.path);
     let sequencer_da_address = MockAddress::from([0u8; 32]);
     let da_service = MockDaService::new(sequencer_da_address);
@@ -127,6 +160,12 @@ pub fn new_rollup_with_mock_da_from_config(
         eth_signer.signers(),
     );
 
+    let verifier = prover.map(|p| {
+        (
+            p,
+            AppVerifier::new(create_zk_app_template(), Default::default()),
+        )
+    });
     Ok(Rollup {
         app,
         da_service,
@@ -139,6 +178,8 @@ pub fn new_rollup_with_mock_da_from_config(
             sov_tx_signer_priv_key: read_sov_tx_signer_priv_key()?,
             eth_signer,
         },
+        // TODO: add verifier
+        verifier,
     })
 }
 
@@ -163,7 +204,7 @@ fn read_eth_tx_signers() -> sov_ethereum::DevSigner {
     .unwrap()])
 }
 
-impl<Vm: Zkvm, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> {
+impl<Vm: ZkvmHost, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> {
     /// Runs the rollup.
     pub async fn run(self) -> Result<(), anyhow::Error> {
         self.run_and_report_rpc_port(None).await
@@ -194,6 +235,7 @@ impl<Vm: Zkvm, Da: DaService<Error = anyhow::Error> + Clone> Rollup<Vm, Da> {
             self.app.stf,
             storage.is_empty(),
             self.genesis_config,
+            self.verifier,
         )?;
 
         runner.start_rpc_server(methods, channel).await;
