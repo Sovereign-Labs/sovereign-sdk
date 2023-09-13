@@ -270,11 +270,7 @@ fn mints_and_transfers() {
 
     // calling with the old context first (which is the creator)
     // but the creator is not the owner, so it should fail
-    let transfer_response = nft.call(
-        transfer_nft_message,
-        &creator_context,
-        &mut working_set,
-    );
+    let transfer_response = nft.call(transfer_nft_message, &creator_context, &mut working_set);
     if let Err(err) = transfer_response {
         match err {
             sov_modules_api::Error::ModuleError(anyhow_err) => {
@@ -302,11 +298,7 @@ fn mints_and_transfers() {
         to: UserAddress(target_address),
     };
 
-    let transfer_response = nft.call(
-        transfer_nft_message,
-        &owner_context,
-        &mut working_set,
-    );
+    let transfer_response = nft.call(transfer_nft_message, &owner_context, &mut working_set);
     if let Err(err) = transfer_response {
         match err {
             sov_modules_api::Error::ModuleError(anyhow_err) => {
@@ -331,11 +323,7 @@ fn mints_and_transfers() {
         token_id,
         to: UserAddress(target_address),
     };
-    let transfer_response = nft.call(
-        transfer_nft_message,
-        &owner_context,
-        &mut working_set,
-    );
+    let transfer_response = nft.call(transfer_nft_message, &owner_context, &mut working_set);
     assert!(transfer_response.is_ok());
 
     let actual_nft = nft
@@ -363,11 +351,7 @@ fn mints_and_transfers() {
         token_uri: Some(new_token_uri.to_string()),
         frozen: None,
     };
-    let update_response = nft.call(
-        update_nft_message,
-        &creator_context,
-        &mut working_set,
-    );
+    let update_response = nft.call(update_nft_message, &creator_context, &mut working_set);
     assert!(update_response.is_ok());
 
     let actual_nft = nft
@@ -391,11 +375,7 @@ fn mints_and_transfers() {
         token_uri: None,
         frozen: Some(true),
     };
-    let update_response = nft.call(
-        update_nft_message,
-        &creator_context,
-        &mut working_set,
-    );
+    let update_response = nft.call(update_nft_message, &creator_context, &mut working_set);
     assert!(update_response.is_ok());
 
     let actual_nft = nft
@@ -420,11 +400,7 @@ fn mints_and_transfers() {
         token_uri: Some(new_token_uri_fail.to_string()),
         frozen: None,
     };
-    let update_response = nft.call(
-        update_nft_message,
-        &creator_context,
-        &mut working_set,
-    );
+    let update_response = nft.call(update_nft_message, &creator_context, &mut working_set);
     if let Err(err) = update_response {
         match err {
             sov_modules_api::Error::ModuleError(anyhow_err) => {
@@ -458,11 +434,7 @@ fn mints_and_transfers() {
         token_id,
         to: UserAddress(target_address),
     };
-    let transfer_response = nft.call(
-        transfer_nft_message,
-        &owner_context,
-        &mut working_set,
-    );
+    let transfer_response = nft.call(transfer_nft_message, &owner_context, &mut working_set);
     assert!(transfer_response.is_ok());
 
     let actual_nft = nft
