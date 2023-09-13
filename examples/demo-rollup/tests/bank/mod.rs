@@ -54,7 +54,7 @@ async fn send_test_create_token_tx(rpc_address: SocketAddr) -> Result<(), anyhow
     // Wait until the rollup has processed the next slot
     let _ = slot_processed_subscription.next().await;
 
-    let balance_response = sov_bank::query::BankRpcClient::<DefaultContext>::balance_of(
+    let balance_response = sov_bank::BankRpcClient::<DefaultContext>::balance_of(
         client.http(),
         user_address,
         token_address,

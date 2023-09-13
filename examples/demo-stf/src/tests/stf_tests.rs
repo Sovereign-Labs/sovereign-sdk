@@ -65,10 +65,7 @@ pub mod test {
                 .bank
                 .supply_of(get_default_token_address(), &mut working_set)
                 .unwrap();
-            assert_eq!(
-                resp,
-                sov_bank::query::TotalSupplyResponse { amount: Some(1000) }
-            );
+            assert_eq!(resp, sov_bank::TotalSupplyResponse { amount: Some(1000) });
 
             let resp = runtime.value_setter.query_value(&mut working_set).unwrap();
 
@@ -119,10 +116,7 @@ pub mod test {
             .bank
             .supply_of(get_default_token_address(), &mut working_set)
             .unwrap();
-        assert_eq!(
-            resp,
-            sov_bank::query::TotalSupplyResponse { amount: Some(1000) }
-        );
+        assert_eq!(resp, sov_bank::TotalSupplyResponse { amount: Some(1000) });
 
         let resp = runtime.value_setter.query_value(&mut working_set).unwrap();
 
@@ -174,10 +168,7 @@ pub mod test {
                 .bank
                 .supply_of(get_default_token_address(), &mut working_set)
                 .unwrap();
-            assert_eq!(
-                resp,
-                sov_bank::query::TotalSupplyResponse { amount: Some(1000) }
-            );
+            assert_eq!(resp, sov_bank::TotalSupplyResponse { amount: Some(1000) });
 
             let resp = runtime.value_setter.query_value(&mut working_set).unwrap();
 

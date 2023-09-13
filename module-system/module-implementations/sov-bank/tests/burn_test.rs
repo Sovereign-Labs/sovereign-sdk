@@ -1,7 +1,7 @@
 use helpers::{generate_address, C};
-use sov_bank::query::TotalSupplyResponse;
 use sov_bank::{
     get_genesis_token_address, get_token_address, Bank, BankConfig, CallMessage, Coins,
+    TotalSupplyResponse,
 };
 use sov_modules_api::{Address, Context, Error, Module};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};

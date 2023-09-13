@@ -9,7 +9,7 @@ use jsonrpsee::http_client::HttpClientBuilder;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_accounts::query::AccountsRpcClient;
-use sov_bank::query::{BalanceResponse, BankRpcClient};
+use sov_bank::{BalanceResponse, BankRpcClient};
 use sov_modules_api::clap;
 use sov_modules_api::transaction::Transaction;
 

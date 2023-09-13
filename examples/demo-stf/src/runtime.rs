@@ -1,7 +1,7 @@
 #[cfg(feature = "native")]
 use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
-use sov_bank::query::{BankRpcImpl, BankRpcServer};
+use sov_bank::{BankRpcImpl, BankRpcServer};
 #[cfg(feature = "native")]
 use sov_blob_storage::{BlobStorageRpcImpl, BlobStorageRpcServer};
 #[cfg(feature = "native")]
@@ -25,7 +25,7 @@ use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
 #[cfg(feature = "native")]
 pub mod query {
     pub use sov_accounts::query as accounts;
-    pub use sov_bank::query as bank;
+    pub use sov_bank as bank;
     pub use sov_chain_state::query as chain_state;
     pub use sov_sequencer_registry::query as sequencer_registry;
     pub use sov_value_setter::query as value_setter;
