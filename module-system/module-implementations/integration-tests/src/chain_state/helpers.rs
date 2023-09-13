@@ -7,7 +7,7 @@ use sov_modules_api::{
     BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, MessageCodec, PublicKey, Spec,
 };
 use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
-use sov_rollup_interface::da::Time;
+
 use sov_rollup_interface::mocks::MockZkvm;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
@@ -108,7 +108,7 @@ pub(crate) fn create_demo_genesis_config<C: Context, Da: DaSpec>(
     let value_setter_config = ValueSetterConfig { admin };
     let chain_state_config = ChainStateConfig {
         initial_slot_height: 0,
-        current_time: Time { secs: 0 },
+        current_time: Default::default(),
     };
     GenesisConfig::new(value_setter_config, chain_state_config)
 }

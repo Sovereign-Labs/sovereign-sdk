@@ -7,6 +7,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Buf;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 use crate::zk::ValidityCondition;
 use crate::BasicAddress;
@@ -213,12 +214,14 @@ pub struct Time {
 
 #[derive(Debug, Error)]
 #[error("Only intervals less than one second may be represented as nanoseconds")]
+/// An error that occurs when trying to create a `NanoSeconds` representing more than one second
 pub struct ErrTooManyNanos;
 
 /// A number of nanoseconds
 pub struct NanoSeconds(u32);
 
 impl NanoSeconds {
+    /// Try to turn a u32 into a `NanoSeconds`. Only values less than one second are valid.
     pub fn new(nanos: u32) -> Result<Self, ErrTooManyNanos> {
         if nanos < NANOS_PER_SECOND {
             Ok(NanoSeconds(nanos))
@@ -230,11 +233,13 @@ impl NanoSeconds {
 
 const NANOS_PER_SECOND: u32 = 1_000_000_000;
 
-
 impl Time {
     /// The time since the unix epoch
     pub const fn new(secs: i64, nanos: NanoSeconds) -> Self {
-        Time { secs, nanos }
+        Time {
+            secs,
+            nanos: nanos.0,
+        }
     }
 
     /// Create a time from the specified number of whole seconds.
@@ -243,19 +248,18 @@ impl Time {
     }
 
     /// Returns the number of whole seconds since the epoch
-    /// 
-    /// The returned value does not include the fractional (nanosecond) part of the duration, 
+    ///
+    /// The returned value does not include the fractional (nanosecond) part of the duration,
     /// which can be obtained using [`subsec_nanos`].
     pub fn secs(&self) -> i64 {
         self.secs
     }
-    
+
     /// Returns the fractional part of this [`Time`], in nanoseconds.
-    /// 
-    /// This method does not return the length of the time when represented by nanoseconds. 
+    ///
+    /// This method does not return the length of the time when represented by nanoseconds.
     /// The returned number always represents a fractional portion of a second (i.e., it is less than one billion).
     pub fn subsec_nanos(&self) -> u32 {
         self.nanos
     }
-
 }

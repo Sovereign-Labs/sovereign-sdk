@@ -13,7 +13,7 @@ use crate::mocks::MockValidityCond;
 use crate::services::da::{DaService, SlotData};
 use crate::{BasicAddress, RollupAddress};
 
-const JAN_1_2023: u64 = 1672531200;
+const JAN_1_2023: i64 = 1672531200;
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
 #[derive(
@@ -208,9 +208,7 @@ impl BlockHeaderTrait for MockBlockHeader {
     }
 
     fn time(&self) -> crate::da::Time {
-        Time {
-            secs: JAN_1_2023 + self.height * 15,
-        }
+        Time::from_secs(JAN_1_2023 + (self.height as i64) * 15)
     }
 }
 
