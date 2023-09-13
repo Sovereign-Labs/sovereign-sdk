@@ -26,7 +26,6 @@ serde_json = { workspace = true }
 
 reth-primitives = { workspace = true }
 reth-rpc-types = { workspace = true }
-reth-rpc = { workspace = true }
 
 ethers = { workspace = true }
 
@@ -36,6 +35,6 @@ tokio = { workspace = true }
 
 
 [features]
-default = []
+default = ["experimental"]
 experimental = ["demo-stf/experimental", "sov-evm/experimental"]
 native = ["demo-stf/native", "sov-evm/native"]

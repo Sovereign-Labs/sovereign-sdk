@@ -6,7 +6,7 @@ use reth_primitives::{
 };
 
 use super::genesis_tests::{get_evm, TEST_CONFIG};
-use crate::evm::transaction::{Block, BlockEnv, Receipt, TransactionSignedAndRecovered};
+use crate::evm::primitive_types::{Block, BlockEnv, Receipt, TransactionSignedAndRecovered};
 use crate::experimental::PendingTransaction;
 use crate::tests::genesis_tests::{BENEFICIARY, GENESIS_HASH};
 

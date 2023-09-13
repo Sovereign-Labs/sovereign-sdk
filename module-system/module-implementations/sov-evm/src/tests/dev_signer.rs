@@ -4,7 +4,7 @@ use reth_primitives::{
     Address, Bytes as RethBytes, Transaction as RethTransaction, TransactionKind,
     TxEip1559 as RethTxEip1559,
 };
-use reth_rpc::eth::error::SignError;
+use crate::signer::SignError;
 use secp256k1::{PublicKey, SecretKey};
 
 use crate::evm::RlpEvmTransaction;
