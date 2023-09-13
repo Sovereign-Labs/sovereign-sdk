@@ -84,8 +84,7 @@ impl Prefix {
         }
     }
 
-    /// Returns a reference to the internal [`AlignedVec`] used by this prefix.
-    pub fn as_aligned_vec(&self) -> &AlignedVec {
+    pub(crate) fn as_aligned_vec(&self) -> &AlignedVec {
         &self.prefix
     }
 
