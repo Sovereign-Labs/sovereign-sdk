@@ -26,65 +26,46 @@ adaptive gas pricing depending on prover throughput.
 - **Arguments**
 
 | Name   | Type          | Description                             |
-|--------|---------------|-----------------------------------------|
+| ------ | ------------- | --------------------------------------- |
 | params | INITIAL_STATE | The initial state to set for the rollup |
 
-### Begin Slot
+### Apply Slot
 
 - **Usage:**
 
-  - Called exactly once for each slot (DA layer block), prior to processing any of the batches included in that slot.
+  - Called exactly once for each slot (DA layer block) to allow the rollup to process the data from that slot.
     This method is invoked whether or not the slot contains any data relevant to the rollup.
 
 - **Arguments**
 
-| Name    | Type    | Description                                                                                                                                                                                                                     |
-|---------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| witness | WITNESS | The witness to be used to process this slot. In prover mode, the witness argument is an empty struct which is populated with "hints" for the ZKVM during execution. In ZK mode, the argument is the pre-populated set of hints. |
-
-### Apply Blob
-
-- **Usage:**
-
-  - This method is called once for each blob sent by the DA layer. It should attempt
-    to interpret each as a message for the rollup and apply any resulting state
-    transitions.
-    It accepts an optional "misbehavior proof" to allow short-circuiting
-    in case the block is invalid. (An example misbehavior proof would be a merkle-proof to a transaction
-    with an invalid signature).
-
-- **Arguments**
-
-| Name        | Type                       | Description                                                                                                  |
-| ----------- | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| blob        | BLOB_TRANSACTION           | A struct containing the blob's data and the address of the sender                                            |
-| misbehavior | optional MISBEHAVIOR_PROOF | Gives the rollup a hint that misbehavior has occurred, allowing the state-transition to be "short-circuited" |
+| Name               | Type               | Description                                                                                                                                                                                                                                                                                                                        |
+| ------------------ | ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| witness            | WITNESS            | The witness to be used to process this slot. In prover mode, the witness argument is an empty struct which is populated with "hints" for the ZKVM during execution. In ZK mode, the argument is the pre-populated set of hints.                                                                                                    |
+| slot_header        | BLOCK_HEADER       | The header of the block on the DA layer                                                                                                                                                                                                                                                                                            |
+| validity_condition | VALIDITY_CONDITION | Data for any extra checks which must be made by light clients before accepting the state transition from this slot. For example, if the DA layer uses a verkle tree which is too expensive to open in-circuit, this might contain a merkle root of the observed slot data - which light clients would need to check "out-of-band". |
+| blobs              | BLOB_TRANSACTIONS  | An iterator over the blobs included in this slot                                                                                                                                                                                                                                                                                   |
 
 - **Response**
 
-| Name    | Type          | Description                                                                                                                                                |
-| ------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| receipt | BATCH_RECEIPT | A receipt indicating whether the blob was applied succesfully. Contains an array of `TX_RECEIPT`s, indicating the result of each transaction from the blob |
+| Name   | Type        | Description                                                                                  |
+| ------ | ----------- | -------------------------------------------------------------------------------------------- |
+| result | SLOT_RESULT | The new state root, receipts, and witness resulting from the application of this slot's data |
 
-### End Slot
+### Get Current State Root
 
 - **Usage:**
 
-  - Called at the end of each slot, after all batches and proofs have been delivered.
-    The rollup may use this call to persist any changes made during the course
-    of the slot. The Sovereign SDK guarantees that no batch in the slot will be reverted after this call is made
-    unless the underlying DA layer experiences a reorg.
+  - Gets the current state root from the frollup
 
 - **Arguments**
 
-None
+  - None
 
 - **Response**
 
-| Name       | Type       | Description                                                                                                                                                 |
-| ---------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| state root | STATE_root | A commitment to the rollup's state after this batch has been applied                                                                                        |
-| witness    | WITNESS    | In prover mode, return the accumulated "hints" which the ZKVM will need to verify the state transition efficiently. In ZK mode, this return value is unused |
+| Name       | Type                | Description                   |
+| ---------- | ------------------- | ----------------------------- |
+| state_root | optional STATE_ROOT | The current rollup state root |
 
 ## Structs
 
@@ -100,17 +81,20 @@ None
 A rollup-defined type which is opaque to the rest of the SDK. Specifies the genesis
 state of a particular instance of the state transition function.
 
-### Misbehavior Proof
-
-An STF-defined type pointing out some malfeasance by the sequencer. For example, this type could simply contain an index
-into the array of transactions, pointing out one which had an invalid signature.
-
 ### Event
 
 | Name  | Type  | Description                                        |
 | ----- | ----- | -------------------------------------------------- |
 | key   | bytes | The key used to index this event                   |
 | value | bytes | The value to be returned when the index is queried |
+
+### SlotResult
+
+| Name           | Type           | Description                                                                                                                                                             |
+| -------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| state_root     | STATE_ROOT     | The current state root of the rollup, calculated after applying the state transition function to the data from this slot.                                               |
+| batch_receipts | BATCH_RECEIPTs | A list of receipt indicating whether each blob was applied succesfully. Each receipt an array of `TX_RECEIPT`s, indicating the result of each transaction from the blob |
+| witness        | WITNESS        | The witness generated from this execution of the state transition function                                                                                              |
 
 ### BatchReceipt
 
