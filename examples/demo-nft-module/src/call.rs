@@ -195,7 +195,12 @@ impl<C: Context> NonFungibleToken<C> {
                     n.owner = to.clone();
                     self.nfts.set(&nft_identifier, &n, working_set);
                 } else {
-                    bail!("NFT id {} in Collection with address {} does not exist",nft_id, collection_address.to_string());
+                    bail!("Transfer sent with owner {}, NFT id {} in Collection with address {} is owned by {}",
+                        owner,
+                        nft_id,
+                        collection_address.to_string(),
+                        n.owner.to_string()
+                    );
                 }
             } else {
                 bail!("NFT id {} in Collection with address {} does not exist",nft_id, collection_address.to_string());
