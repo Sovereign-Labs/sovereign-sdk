@@ -223,6 +223,16 @@ impl<C: sov_modules_api::Context> Evm<C> {
     ) -> RpcResult<reth_primitives::U256> {
         unimplemented!("eth_blockNumber not implemented")
     }
+
+    #[rpc_method(name = "estimateGas")]
+    pub fn eth_estimate_gas(
+        &self,
+        _data: reth_rpc_types::CallRequest,
+        _block_number: Option<reth_primitives::BlockId>,
+        _working_set: &mut WorkingSet<C::Storage>,
+    ) -> RpcResult<reth_primitives::U256> {
+        unimplemented!("eth_sendTransaction not implemented")
+    }
 }
 
 // modified from: https://github.com/paradigmxyz/reth/blob/cc576bc8690a3e16e6e5bf1cbbbfdd029e85e3d4/crates/rpc/rpc/src/eth/api/transactions.rs#L849
