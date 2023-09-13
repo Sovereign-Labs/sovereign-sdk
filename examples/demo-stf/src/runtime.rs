@@ -90,7 +90,6 @@ pub struct Runtime<C: Context, Da: DaSpec> {
 
 #[cfg(feature = "experimental")]
 #[cfg_attr(feature = "native", derive(CliWallet), expose_rpc)]
-#[allow(clippy::too_many_arguments)]
 #[derive(Genesis, DispatchCall, MessageCodec, DefaultRuntime)]
 #[serialization(borsh::BorshDeserialize, borsh::BorshSerialize)]
 #[cfg_attr(

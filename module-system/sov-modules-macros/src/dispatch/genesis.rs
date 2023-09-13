@@ -107,6 +107,7 @@ impl GenesisMacro {
 
             impl #impl_generics GenesisConfig #type_generics #where_clause {
                 #[doc = "GenesisConfig constructor."]
+                #[allow(clippy::too_many_arguments)]
                 pub fn new(#(#fields)*) -> Self {
                     Self {
                         #(#field_names),*
