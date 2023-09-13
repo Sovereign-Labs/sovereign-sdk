@@ -13,8 +13,6 @@ macro_rules! define_offchain_function {
     };
 }
 
-
-
 #[macro_export]
 macro_rules! offchain_function {
     ($func_name:ident, $($arg:expr),*) => {

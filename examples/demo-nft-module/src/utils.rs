@@ -1,4 +1,5 @@
 use sov_modules_api::digest::Digest;
+
 use crate::CollectionAddress;
 
 /// Derives token address from `collection_name`, `sender`

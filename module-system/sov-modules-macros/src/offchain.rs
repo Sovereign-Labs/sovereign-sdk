@@ -1,6 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{ItemFn};
+use syn::ItemFn;
 
 pub fn offchain_generator(function: ItemFn) -> Result<TokenStream, syn::Error> {
     let visibility = &function.vis;
@@ -28,5 +28,4 @@ pub fn offchain_generator(function: ItemFn) -> Result<TokenStream, syn::Error> {
     };
 
     Ok(output.into())
-
 }

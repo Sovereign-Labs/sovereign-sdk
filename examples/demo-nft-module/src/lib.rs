@@ -7,22 +7,21 @@ mod genesis;
 #[cfg(feature = "native")]
 mod query;
 #[cfg(feature = "native")]
-pub use query::{NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer, CollectionResponse};
-
+pub use query::{CollectionResponse, NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer};
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
 use sov_state::WorkingSet;
 /// Utility functions.
 pub mod utils;
 
 #[cfg_attr(
-feature = "native",
-derive(serde::Serialize),
-derive(serde::Deserialize),
-derive(schemars::JsonSchema),
-schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "UserAddress"),
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize),
+    derive(schemars::JsonSchema),
+    schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "UserAddress")
 )]
 #[cfg_attr(feature = "native", serde(transparent))]
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize,Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Clone, Debug, PartialEq, Eq, Hash)]
 /// A newtype that represents an owner address
 /// (creator of collection, owner of an nft)
 pub struct UserAddress<C: Context>(pub C::Address);
@@ -38,10 +37,16 @@ pub struct UserAddress<C: Context>(pub C::Address);
     Debug,
     PartialEq,
     Eq,
-    Hash
+    Hash,
 )]
 #[cfg_attr(feature = "native", serde(transparent))]
-#[cfg_attr(feature = "native",schemars(bound = "C::Address: ::schemars::JsonSchema",rename = "CollectionAddress"))]
+#[cfg_attr(
+    feature = "native",
+    schemars(
+        bound = "C::Address: ::schemars::JsonSchema",
+        rename = "CollectionAddress"
+    )
+)]
 /// Collection address is an address derived deterministically using
 /// the collection name and the address of the creator (UserAddress)
 pub struct CollectionAddress<C: Context>(pub C::Address);
@@ -52,10 +57,9 @@ pub struct CollectionAddress<C: Context>(pub C::Address);
 /// the collection name and the address of the creator (UserAddress)
 pub struct CollectionAddress<C: Context>(pub C::Address);
 
-
 impl<C: Context> ToString for UserAddress<C>
-    where
-        C::Address: ToString,
+where
+    C::Address: ToString,
 {
     fn to_string(&self) -> String {
         self.0.to_string()
@@ -63,8 +67,8 @@ impl<C: Context> ToString for UserAddress<C>
 }
 
 impl<C: Context> ToString for CollectionAddress<C>
-    where
-        C::Address: ToString,
+where
+    C::Address: ToString,
 {
     fn to_string(&self) -> String {
         self.0.to_string()
@@ -72,8 +76,8 @@ impl<C: Context> ToString for CollectionAddress<C>
 }
 
 impl<C: Context> AsRef<[u8]> for UserAddress<C>
-    where
-        C::Address: AsRef<[u8]>,
+where
+    C::Address: AsRef<[u8]>,
 {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
@@ -81,8 +85,8 @@ impl<C: Context> AsRef<[u8]> for UserAddress<C>
 }
 
 impl<C: Context> AsRef<[u8]> for CollectionAddress<C>
-    where
-        C::Address: AsRef<[u8]>,
+where
+    C::Address: AsRef<[u8]>,
 {
     fn as_ref(&self) -> &[u8] {
         self.0.as_ref()
@@ -93,19 +97,19 @@ impl<C: Context> AsRef<[u8]> for CollectionAddress<C>
 pub type TokenId = u64;
 
 #[cfg_attr(
-feature = "native",
-derive(serde::Serialize),
-derive(serde::Deserialize)
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
 )]
-#[derive(borsh::BorshDeserialize, borsh::BorshSerialize,Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Clone, Debug, PartialEq, Eq, Hash)]
 /// A simple wrapper struct to mark an NFT identifier as a combination of
 /// a token id (u64) and a collection address
 pub struct NftIdentifier<C: Context>(pub TokenId, pub CollectionAddress<C>);
 
 #[cfg_attr(
-feature = "native",
-derive(serde::Serialize),
-derive(serde::Deserialize),
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 /// Defines an nft collection
@@ -129,9 +133,9 @@ pub struct Collection<C: Context> {
 }
 
 #[cfg_attr(
-feature = "native",
-derive(serde::Serialize),
-derive(serde::Deserialize)
+    feature = "native",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
 )]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize, Debug, PartialEq, Clone)]
 /// Defines an nft
@@ -168,8 +172,7 @@ pub struct NonFungibleToken<C: Context> {
 
 /// Config for the NonFungibleToken module.
 /// Sets admin and existing owners.
-pub struct NonFungibleTokenConfig {
-}
+pub struct NonFungibleTokenConfig {}
 
 impl<C: Context> Module for NonFungibleToken<C> {
     type Context = C;
@@ -194,24 +197,49 @@ impl<C: Context> Module for NonFungibleToken<C> {
     ) -> Result<CallResponse, Error> {
         let call_result = match msg {
             CallMessage::CreateCollection {
-                name, collection_uri
+                name,
+                collection_uri,
             } => self.create_collection(&name, &collection_uri, context, working_set),
-            CallMessage::FreezeCollection {
-                collection_name
-            } => self.freeze_collection(&collection_name, context, working_set),
+            CallMessage::FreezeCollection { collection_name } => {
+                self.freeze_collection(&collection_name, context, working_set)
+            }
             CallMessage::MintNft {
-                collection_name, token_uri, token_id,owner, frozen
-            } => self.mint_nft(token_id, &collection_name, &token_uri, &owner, frozen, context, working_set),
-            CallMessage::UpdateCollection { name, collection_uri } => {
-                self.update_collection(&name, &collection_uri,context, working_set)
-            },
-            CallMessage::TransferNft { collection_address, token_id, to } => {
-                self.transfer_nft(token_id, &collection_address, &to, context, working_set)
-            },
-            CallMessage::UpdateNft {collection_address, token_id, token_uri, frozen } => {
-                self.update_nft(&collection_address, token_id, token_uri, frozen, context, working_set)
-            },
-
+                collection_name,
+                token_uri,
+                token_id,
+                owner,
+                frozen,
+            } => self.mint_nft(
+                token_id,
+                &collection_name,
+                &token_uri,
+                &owner,
+                frozen,
+                context,
+                working_set,
+            ),
+            CallMessage::UpdateCollection {
+                name,
+                collection_uri,
+            } => self.update_collection(&name, &collection_uri, context, working_set),
+            CallMessage::TransferNft {
+                collection_address,
+                token_id,
+                to,
+            } => self.transfer_nft(token_id, &collection_address, &to, context, working_set),
+            CallMessage::UpdateNft {
+                collection_address,
+                token_id,
+                token_uri,
+                frozen,
+            } => self.update_nft(
+                &collection_address,
+                token_id,
+                token_uri,
+                frozen,
+                context,
+                working_set,
+            ),
         };
         Ok(call_result?)
     }

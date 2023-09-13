@@ -1,3 +1,4 @@
+use demo_nft_module::NonFungibleTokenConfig;
 use sov_chain_state::ChainStateConfig;
 #[cfg(feature = "experimental")]
 use sov_evm::{AccountData, EvmConfig, SpecId};
@@ -8,7 +9,6 @@ use sov_modules_api::{Context, PrivateKey, PublicKey};
 use sov_rollup_interface::da::DaSpec;
 pub use sov_state::config::Config as StorageConfig;
 use sov_value_setter::ValueSetterConfig;
-use demo_nft_module::NonFungibleTokenConfig;
 
 /// Creates config for a rollup with some default settings, the config is used in demos and tests.
 use crate::runtime::GenesisConfig;
@@ -54,10 +54,7 @@ pub fn create_demo_genesis_config<C: Context, Da: DaSpec>(
         admin: value_setter_admin_private_key.pub_key().to_address(),
     };
 
-
-
-    let nft_config = NonFungibleTokenConfig{
-    };
+    let nft_config = NonFungibleTokenConfig {};
 
     #[cfg(feature = "experimental")]
     let genesis_evm_address = reth_primitives::Address::from_slice(
@@ -92,7 +89,7 @@ pub fn create_demo_genesis_config<C: Context, Da: DaSpec>(
             spec: vec![(0, SpecId::LATEST)].into_iter().collect(),
             ..Default::default()
         },
-        nft_config
+        nft_config,
     )
 }
 

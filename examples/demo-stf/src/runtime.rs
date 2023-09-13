@@ -1,4 +1,6 @@
 #[cfg(feature = "native")]
+use demo_nft_module::{NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer};
+#[cfg(feature = "native")]
 use sov_accounts::query::{AccountsRpcImpl, AccountsRpcServer};
 #[cfg(feature = "native")]
 use sov_bank::query::{BankRpcImpl, BankRpcServer};
@@ -21,8 +23,6 @@ use sov_rollup_interface::da::DaSpec;
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 #[cfg(feature = "native")]
 use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
-#[cfg(feature = "native")]
-use demo_nft_module::{NonFungibleTokenRpcImpl,NonFungibleTokenRpcServer};
 
 #[cfg(feature = "native")]
 pub mod query {
@@ -85,7 +85,7 @@ pub struct Runtime<C: Context, Da: DaSpec> {
     pub chain_state: sov_chain_state::ChainState<C, Da>,
     pub value_setter: sov_value_setter::ValueSetter<C>,
     pub accounts: sov_accounts::Accounts<C>,
-    pub nft: demo_nft_module::NonFungibleToken<C>
+    pub nft: demo_nft_module::NonFungibleToken<C>,
 }
 
 #[cfg(feature = "experimental")]
@@ -107,7 +107,7 @@ pub struct Runtime<C: Context, Da: DaSpec> {
     pub accounts: sov_accounts::Accounts<C>,
     #[cfg_attr(feature = "native", cli_skip)]
     pub evm: sov_evm::Evm<C>,
-    pub nft: demo_nft_module::NonFungibleToken<C>
+    pub nft: demo_nft_module::NonFungibleToken<C>,
 }
 
 impl<C, Da> sov_modules_stf_template::Runtime<C, Da> for Runtime<C, Da>

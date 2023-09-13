@@ -17,9 +17,9 @@ mod dispatch;
 mod manifest;
 mod module_call_json_schema;
 mod module_info;
+mod offchain;
 #[cfg(feature = "native")]
 mod rpc;
-mod offchain;
 
 #[cfg(feature = "native")]
 use cli_parser::{derive_cli_wallet_arg, CliParserMacro};
@@ -28,12 +28,11 @@ use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
 use module_call_json_schema::derive_module_call_json_schema;
+use offchain::offchain_generator;
 use proc_macro::TokenStream;
 #[cfg(feature = "native")]
 use rpc::ExposeRpcMacro;
-use syn::parse_macro_input;
-use syn::ItemFn;
-use offchain::offchain_generator;
+use syn::{parse_macro_input, ItemFn};
 
 #[proc_macro_derive(ModuleInfo, attributes(state, module, address))]
 pub fn module_info(input: TokenStream) -> TokenStream {
