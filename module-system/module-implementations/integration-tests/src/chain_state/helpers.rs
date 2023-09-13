@@ -7,7 +7,6 @@ use sov_modules_api::{
     BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, MessageCodec, PublicKey, Spec,
 };
 use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
-
 use sov_rollup_interface::mocks::MockZkvm;
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
