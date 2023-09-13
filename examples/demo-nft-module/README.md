@@ -27,6 +27,9 @@ A `Collection` represents a group of NFTs and has the following attributes:
 - `collection_uri`: A URI pointing to off-chain metadata for the collection. The structure of the metadata is developer-defined.
 
 ```rust
+use sov_modules_api::Context;
+pub struct UserAddress<C: Context>(C::Address);
+
 pub struct Collection<C: Context> {
     pub name: String,
     pub creator: UserAddress<C>,
@@ -47,6 +50,12 @@ An `NFT` is a non-fungible token that has the following attributes:
 - `token_uri`: A URI pointing to off-chain metadata for the NFT.
 
 ```rust
+use sov_modules_api::Context;
+
+pub struct UserAddress<C: Context>(C::Address);
+pub struct CollectionAddress<C: Context>(C::Address);
+pub type TokenId = u64;
+
 pub struct Nft<C: Context> {
     pub token_id: TokenId,
     pub collection_address: CollectionAddress<C>,
@@ -85,6 +94,12 @@ Updates the metadata URL or frozen status of an existing NFT.
 Transfers ownership of an NFT to another address.
 
 ```rust
+use sov_modules_api::Context;
+
+pub struct UserAddress<C: Context>(C::Address);
+pub struct CollectionAddress<C: Context>(C::Address);
+pub type TokenId = u64;
+
 pub enum CallMessage<C: Context> {
     CreateCollection { name: String, collection_uri: String },
     UpdateCollection { name: String, collection_uri: String },

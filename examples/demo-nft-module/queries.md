@@ -1,2 +1,2 @@
-curl -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"nft_getCollectionAddress","params":["sov1264hmyes8t8pyz99ne064nnp42gycjsk9czstcyfm33najewss9skeaenp","Test collection"],"id":1}' http://127.0.0.1:12345
 curl -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"nft_getCollection","params":["sov1ukf63m99c00w73482yjuek2d9fgxkfz0vnsxsgcynwwppjxvmwfqpleu0n"],"id":1}' http://127.0.0.1:12345
+curl -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"nft_getCollectionAddress","params":["sov1264hmyes8t8pyz99ne064nnp42gycjsk9czstcyfm33najewss9skeaenp","Test collection"],"id":1}' http://127.0.0.1:12345

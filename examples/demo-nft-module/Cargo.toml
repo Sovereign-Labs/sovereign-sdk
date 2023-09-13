@@ -22,8 +22,6 @@ sov-modules-macros = {path = "../../module-system/sov-modules-macros"}
 sov-modules-macro-rules = {path = "../../module-system/sov-modules-macro-rules"}
 sov-state = { path = "../../module-system/sov-state" }
 
-
-
 [dev-dependencies]
 sov-rollup-interface = { path = "../../rollup-interface" }
 sov-data-generators = { path = "../../module-system/utils/sov-data-generators" }

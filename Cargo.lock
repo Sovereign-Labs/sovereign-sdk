@@ -6373,6 +6373,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "simple-nft-module"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "jsonrpsee",
+ "serde",
+ "simple-nft-module",
+ "sov-data-generators",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "sov-state",
+ "tempfile",
+]
+
+[[package]]
 name = "simple_asn1"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

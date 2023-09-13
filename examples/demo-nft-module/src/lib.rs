@@ -8,6 +8,7 @@ mod genesis;
 mod query;
 #[cfg(feature = "native")]
 pub use query::{NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer, CollectionResponse};
+
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
 use sov_state::WorkingSet;
 /// Utility functions.
@@ -20,10 +21,11 @@ derive(serde::Deserialize),
 derive(schemars::JsonSchema),
 schemars(bound = "C::Address: ::schemars::JsonSchema", rename = "UserAddress"),
 )]
+#[cfg_attr(feature = "native", serde(transparent))]
 #[derive(borsh::BorshDeserialize, borsh::BorshSerialize,Clone, Debug, PartialEq, Eq, Hash)]
 /// A newtype that represents an owner address
 /// (creator of collection, owner of an nft)
-pub struct UserAddress<C: Context>(C::Address) where C::Address: serde::Serialize;
+pub struct UserAddress<C: Context>(pub C::Address);
 
 #[cfg(all(feature = "native"))]
 #[derive(
@@ -38,6 +40,7 @@ pub struct UserAddress<C: Context>(C::Address) where C::Address: serde::Serializ
     Eq,
     Hash
 )]
+#[cfg_attr(feature = "native", serde(transparent))]
 #[cfg_attr(feature = "native",schemars(bound = "C::Address: ::schemars::JsonSchema",rename = "CollectionAddress"))]
 /// Collection address is an address derived deterministically using
 /// the collection name and the address of the creator (UserAddress)
