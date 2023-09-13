@@ -104,7 +104,7 @@ fn mints_and_transfers() {
                 let expected_message = format!(
                     "Collection with name {} by sender {} does not exist",
                     ne_collection_name,
-                    creator_address.to_string()
+                    creator_address
                 );
                 assert_eq!(err_message, expected_message);
             }
@@ -157,7 +157,7 @@ fn mints_and_transfers() {
                 let expected_message = format!(
                     "Collection with name {} by sender {} does not exist",
                     ne_collection_name,
-                    creator_address.to_string()
+                    creator_address
                 );
                 assert_eq!(err_message, expected_message);
             }
@@ -206,7 +206,7 @@ fn mints_and_transfers() {
                 let expected_message = format!(
                     "Collection with name {} by sender {} is frozen and cannot be updated",
                     collection_name,
-                    creator_address.to_string()
+                    creator_address
                 );
                 assert_eq!(err_message, expected_message);
             }
@@ -245,7 +245,7 @@ fn mints_and_transfers() {
                 let expected_message = format!(
                     "Collection with name {} by sender {} is already frozen",
                     collection_name,
-                    creator_address.to_string()
+                    creator_address
                 );
                 assert_eq!(err_message, expected_message);
             }
