@@ -3,8 +3,8 @@ use sov_bank::query::TotalSupplyResponse;
 use sov_bank::{get_token_address, Bank, BankConfig, CallMessage, Coins};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Address, Context, Error, Module, ProverStorage, WorkingSet};
-use sov_state::DefaultStorageSpec;
+use sov_modules_api::{Address, Context, Error, Module, WorkingSet};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 mod helpers;
 

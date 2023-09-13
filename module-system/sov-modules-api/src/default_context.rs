@@ -2,14 +2,14 @@
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
 use sov_rollup_interface::RollupAddress;
-use sov_state::{ArrayWitness, DefaultStorageSpec};
+#[cfg(feature = "native")]
+use sov_state::ProverStorage;
+use sov_state::{ArrayWitness, DefaultStorageSpec, ZkStorage};
 
 #[cfg(feature = "native")]
 use crate::default_signature::private_key::DefaultPrivateKey;
 use crate::default_signature::{DefaultPublicKey, DefaultSignature};
-#[cfg(feature = "native")]
-use crate::ProverStorage;
-use crate::{Address, Context, PublicKey, Spec, ZkStorage};
+use crate::{Address, Context, PublicKey, Spec};
 
 #[cfg(feature = "native")]
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]

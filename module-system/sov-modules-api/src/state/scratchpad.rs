@@ -4,9 +4,8 @@ use std::fmt::Debug;
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 use sov_rollup_interface::stf::Event;
 use sov_state::codec::{EncodeKeyLike, StateCodec, StateValueCodec};
-use sov_state::Prefix;
-
-use super::{OrderedReadsAndWrites, Storage, StorageInternalCache, StorageKey, StorageValue};
+use sov_state::storage::{Storage, StorageKey, StorageValue};
+use sov_state::{OrderedReadsAndWrites, Prefix, StorageInternalCache};
 
 /// A working set accumulates reads and writes on top of the underlying DB,
 /// automating witness creation.

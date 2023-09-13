@@ -1,8 +1,7 @@
 //! Defines the query methods for the attester incentives module
 use serde::{Deserialize, Serialize};
-use sov_modules_api::{
-    NativeStorage, Spec, Storage, StorageProof, ValidityConditionChecker, WorkingSet,
-};
+use sov_modules_api::{Spec, ValidityConditionChecker, WorkingSet};
+use sov_state::storage::{NativeStorage, Storage, StorageProof};
 
 use super::AttesterIncentives;
 use crate::call::Role;
@@ -57,9 +56,9 @@ where
     where
         C::Storage: NativeStorage,
     {
-        working_set.backing().get_with_proof_from_state_map(
+        self.bonded_attesters.get_with_proof_from_state_map(
+            working_set.backing(),
             &address,
-            &self.bonded_attesters,
             witness,
         )
     }

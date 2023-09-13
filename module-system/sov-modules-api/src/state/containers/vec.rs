@@ -2,10 +2,10 @@ use std::iter::FusedIterator;
 use std::marker::PhantomData;
 
 use sov_state::codec::{BorshCodec, StateCodec, StateKeyCodec, StateValueCodec};
-use sov_state::Prefix;
+use sov_state::{Prefix, Storage};
 use thiserror::Error;
 
-use crate::state::{StateMap, StateValue, Storage, WorkingSet};
+use crate::state::{StateMap, StateValue, WorkingSet};
 
 #[derive(
     Debug,
@@ -244,10 +244,9 @@ where
 mod test {
     use std::fmt::Debug;
 
-    use sov_state::DefaultStorageSpec;
+    use sov_state::{DefaultStorageSpec, ProverStorage};
 
     use super::*;
-    use crate::ProverStorage;
 
     enum TestCaseAction<T> {
         Push(T),

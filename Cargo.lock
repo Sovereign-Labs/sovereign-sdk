@@ -6466,6 +6466,7 @@ dependencies = [
  "jsonrpsee",
  "serde",
  "sov-modules-api",
+ "sov-state",
  "tempfile",
 ]
 
@@ -6482,6 +6483,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
+ "sov-state",
  "tempfile",
  "thiserror",
 ]
@@ -6543,6 +6545,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-sequencer-registry",
+ "sov-state",
  "tempfile",
  "tracing",
 ]
@@ -6694,6 +6697,7 @@ dependencies = [
  "sov-risc0-adapter",
  "sov-rollup-interface",
  "sov-sequencer",
+ "sov-state",
  "sov-stf-runner",
  "tempfile",
  "tendermint",
@@ -6853,6 +6857,7 @@ dependencies = [
  "serde",
  "sov-modules-api",
  "sov-rollup-interface",
+ "sov-state",
  "sov-zk-cycle-macros",
  "sov-zk-cycle-utils",
  "thiserror",
@@ -6873,6 +6878,7 @@ dependencies = [
  "sov-modules-api",
  "sov-prover-incentives",
  "sov-rollup-interface",
+ "sov-state",
  "tempfile",
 ]
 
@@ -6959,6 +6965,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-sequencer-registry",
+ "sov-state",
  "sov-zk-cycle-macros",
  "sov-zk-cycle-utils",
  "tempfile",
@@ -7028,6 +7035,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sov-modules-api",
+ "sov-state",
  "tempfile",
  "thiserror",
 ]
@@ -7045,6 +7053,7 @@ dependencies = [
  "serde_json",
  "sov-modules-api",
  "sov-rollup-interface",
+ "sov-state",
  "tempfile",
  "thiserror",
 ]

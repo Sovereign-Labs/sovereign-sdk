@@ -1,5 +1,6 @@
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Address, Context, Module, ProverStorage, WorkingSet};
+use sov_modules_api::{Address, Context, Module, WorkingSet};
+use sov_state::ProverStorage;
 use sov_vec_setter::{CallMessage, VecSetter, VecSetterConfig};
 
 // rustfmt doesn't like long lines, but it's easier to read in this case.

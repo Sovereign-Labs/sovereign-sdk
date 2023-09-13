@@ -1,9 +1,9 @@
 use std::path::Path;
 
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::ProverStorage;
 use sov_modules_stf_template::AppTemplate;
 use sov_rollup_interface::mocks::MockDaSpec;
+use sov_state::ProverStorage;
 
 use crate::runtime::Runtime;
 

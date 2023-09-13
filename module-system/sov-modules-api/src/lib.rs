@@ -57,7 +57,7 @@ pub use sov_rollup_interface::zk::{
     StateTransition, StoredCodeCommitment, ValidityCondition, ValidityConditionChecker, Zkvm,
 };
 pub use sov_rollup_interface::{digest, BasicAddress, RollupAddress};
-use sov_state::Witness;
+use sov_state::{Storage, Witness};
 use thiserror::Error;
 
 pub use crate::bech32::AddressBech32;

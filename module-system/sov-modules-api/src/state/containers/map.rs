@@ -1,10 +1,12 @@
 use std::marker::PhantomData;
 
+use anyhow::ensure;
 use sov_state::codec::{BorshCodec, EncodeKeyLike, StateCodec, StateKeyCodec, StateValueCodec};
+use sov_state::storage::{NativeStorage, Storage, StorageKey, StorageProof, StorageValue};
 use sov_state::Prefix;
 use thiserror::Error;
 
-use crate::state::{StateReaderAndWriter, Storage, StorageKey, WorkingSet};
+use crate::state::{StateReaderAndWriter, WorkingSet};
 
 /// A container that maps keys to values.
 ///
@@ -194,6 +196,48 @@ where
         Q: ?Sized,
     {
         working_set.delete_value(self.prefix(), key, &self.codec);
+    }
+}
+
+impl<K, V, Codec> StateMap<K, V, Codec>
+where
+    Codec: StateKeyCodec<K>,
+{
+    /// Verifies the provided proof, returning its underlying storage value, if present.
+    pub fn verify_proof<S>(
+        &self,
+        storage: &S,
+        state_root: [u8; 32],
+        proof: StorageProof<S::Proof>,
+        expected_key: &K,
+    ) -> Result<Option<StorageValue>, anyhow::Error>
+    where
+        S: Storage,
+    {
+        let (storage_key, storage_value) = storage.open_proof(state_root, proof)?;
+
+        // We have to check that the storage key is the same as the external key
+        ensure!(
+            storage_key == StorageKey::new(self.prefix(), expected_key, self.codec()),
+            "The storage key from the proof doesn't match the expected storage key."
+        );
+
+        Ok(storage_value)
+    }
+}
+
+impl<K, V, Codec> StateMap<K, V, Codec> {
+    pub fn get_with_proof_from_state_map<Q, S>(
+        &self,
+        storage: &S,
+        key: &Q,
+        witness: &S::Witness,
+    ) -> StorageProof<S::Proof>
+    where
+        Codec: EncodeKeyLike<Q, K>,
+        S: NativeStorage,
+    {
+        storage.get_with_proof(StorageKey::new(self.prefix(), key, self.codec()), witness)
     }
 }
 

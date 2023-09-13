@@ -6,8 +6,8 @@ use reth_primitives::{Address, Bloom, Bytes, EMPTY_OMMER_ROOT, H256};
 use reth_rpc_types::{Block, BlockTransactions, Header};
 use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Module, ProverStorage, WorkingSet};
-use sov_state::DefaultStorageSpec;
+use sov_modules_api::{Module, WorkingSet};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 // use crate::evm::db;
 use crate::{evm::EvmChainConfig, AccountData, Evm, EvmConfig};

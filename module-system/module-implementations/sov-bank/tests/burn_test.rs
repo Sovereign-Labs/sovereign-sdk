@@ -3,8 +3,8 @@ use sov_bank::query::TotalSupplyResponse;
 use sov_bank::{
     get_genesis_token_address, get_token_address, Bank, BankConfig, CallMessage, Coins,
 };
-use sov_modules_api::{Address, Context, Error, Module, ProverStorage, WorkingSet};
-use sov_state::DefaultStorageSpec;
+use sov_modules_api::{Address, Context, Error, Module, WorkingSet};
+use sov_state::{DefaultStorageSpec, ProverStorage};
 
 use crate::helpers::create_bank_config_with_token;
 

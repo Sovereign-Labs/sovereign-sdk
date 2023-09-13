@@ -20,9 +20,10 @@ use call::Role;
 use sov_bank::Amount;
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::{
-    Context, DaSpec, Error, ModuleInfo, Storage, StoredCodeCommitment, ValidityConditionChecker,
-    WorkingSet, Zkvm,
+    Context, DaSpec, Error, ModuleInfo, StoredCodeCommitment, ValidityConditionChecker, WorkingSet,
+    Zkvm,
 };
+use sov_state::Storage;
 
 /// Configuration of the attester incentives module
 pub struct AttesterIncentivesConfig<C, Vm, Da, Checker>

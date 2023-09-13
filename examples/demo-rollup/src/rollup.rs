@@ -15,11 +15,11 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_db::ledger_db::LedgerDB;
 #[cfg(feature = "experimental")]
 use sov_ethereum::experimental::EthRpcConfig;
-use sov_modules_api::Storage;
 use sov_risc0_adapter::host::Risc0Verifier;
 use sov_rollup_interface::mocks::{MockAddress, MockDaConfig, MockDaService};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::zk::Zkvm;
+use sov_state::storage::Storage;
 use sov_stf_runner::{from_toml_path, RollupConfig, RunnerConfig, StateTransitionRunner};
 use tokio::sync::oneshot;
 use tracing::debug;

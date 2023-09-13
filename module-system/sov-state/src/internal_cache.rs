@@ -1,7 +1,7 @@
 use sov_first_read_last_write_cache::cache::{self, CacheLog, ValueExists};
 use sov_first_read_last_write_cache::{CacheKey, CacheValue};
 
-use super::{Storage, StorageKey, StorageValue};
+use crate::storage::{Storage, StorageKey, StorageValue};
 
 /// Caches reads and writes for a (key, value) pair. On the first read the value is fetched
 /// from an external source represented by the `ValueReader` trait. On following reads,
@@ -40,7 +40,7 @@ impl From<StorageInternalCache> for CacheLog {
 
 impl StorageInternalCache {
     /// Gets a value from the cache or reads it from the provided `ValueReader`.
-    pub(crate) fn get_or_fetch<S: Storage>(
+    pub fn get_or_fetch<S: Storage>(
         &mut self,
         key: &StorageKey,
         value_reader: &S,
@@ -67,13 +67,13 @@ impl StorageInternalCache {
         self.get_value_from_cache(&cache_key)
     }
 
-    pub(crate) fn set(&mut self, key: &StorageKey, value: StorageValue) {
+    pub fn set(&mut self, key: &StorageKey, value: StorageValue) {
         let cache_key = key.to_cache_key();
         let cache_value = value.into_cache_value();
         self.tx_cache.add_write(cache_key, Some(cache_value));
     }
 
-    pub(crate) fn delete(&mut self, key: &StorageKey) {
+    pub fn delete(&mut self, key: &StorageKey) {
         let cache_key = key.to_cache_key();
         self.tx_cache.add_write(cache_key, None);
     }

@@ -1,7 +1,22 @@
 pub mod codec;
+pub mod storage;
 
+#[cfg(feature = "native")]
+mod prover_storage;
+
+#[cfg(feature = "native")]
+mod tree_db;
+
+mod internal_cache;
 mod utils;
 mod witness;
+mod zk_storage;
+
+pub use internal_cache::{OrderedReadsAndWrites, StorageInternalCache};
+#[cfg(feature = "native")]
+pub use prover_storage::ProverStorage;
+pub use storage::Storage;
+pub use zk_storage::ZkStorage;
 
 pub mod config;
 

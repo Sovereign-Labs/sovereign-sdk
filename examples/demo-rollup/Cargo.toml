@@ -38,6 +38,7 @@ sov-stf-runner = { path = "../../full-node/sov-stf-runner" }
 sov-risc0-adapter = { path = "../../adapters/risc0", features = ["native"] }
 sov-modules-stf-template = { path = "../../module-system/sov-modules-stf-template", features = ["native"] }
 sov-modules-api = { path = "../../module-system/sov-modules-api", features = ["native"] }
+sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
 sov-cli = { path = "../../module-system/sov-cli" }
 clap = { workspace = true }

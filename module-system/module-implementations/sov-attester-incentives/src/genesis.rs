@@ -1,6 +1,7 @@
 use anyhow::Result;
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::{Storage, ValidityConditionChecker, WorkingSet};
+use sov_modules_api::{ValidityConditionChecker, WorkingSet};
+use sov_state::Storage;
 
 use crate::call::Role;
 use crate::AttesterIncentives;

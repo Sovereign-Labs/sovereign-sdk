@@ -2,7 +2,8 @@ use borsh::BorshSerialize;
 use jmt::storage::TreeReader;
 use jmt::OwnedValue;
 use sov_db::state_db::StateDB;
-use sov_state::Witness;
+
+use crate::witness::Witness;
 
 pub struct TreeReadLogger<'a, W> {
     state_db: StateDB,

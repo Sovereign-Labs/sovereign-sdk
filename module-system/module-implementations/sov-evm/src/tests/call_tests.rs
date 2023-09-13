@@ -2,7 +2,8 @@ use reth_primitives::{Address, TransactionKind};
 use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::{Context, Module, PrivateKey, ProverStorage, Spec, WorkingSet};
+use sov_modules_api::{Context, Module, PrivateKey, Spec, WorkingSet};
+use sov_state::ProverStorage;
 
 use crate::call::CallMessage;
 use crate::smart_contracts::SimpleStorageContract;

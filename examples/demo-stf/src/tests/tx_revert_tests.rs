@@ -3,11 +3,12 @@ use sov_data_generators::bank_data::{get_default_private_key, get_default_token_
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::{PrivateKey, ProverStorage, WorkingSet};
+use sov_modules_api::{PrivateKey, WorkingSet};
 use sov_modules_stf_template::{Batch, SequencerOutcome, SlashingReason, TxEffect};
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::mocks::{MockBlock, MockDaSpec};
 use sov_rollup_interface::stf::StateTransitionFunction;
+use sov_state::ProverStorage;
 
 use super::create_new_demo;
 use crate::genesis_config::{create_demo_config, DEMO_SEQUENCER_DA_ADDRESS, LOCKED_AMOUNT};

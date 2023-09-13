@@ -1,7 +1,8 @@
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::default_context::ZkDefaultContext;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::{Context, ModuleInfo, WorkingSet, ZkStorage};
+use sov_modules_api::{Context, ModuleInfo, WorkingSet};
+use sov_state::ZkStorage;
 
 #[derive(ModuleInfo)]
 pub struct TestStruct<C: ::sov_modules_api::Context> {

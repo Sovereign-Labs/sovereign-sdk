@@ -1,9 +1,10 @@
 use std::marker::PhantomData;
 
 use sov_state::codec::{BorshCodec, EncodeKeyLike, StateCodec, StateKeyCodec, StateValueCodec};
+use sov_state::storage::{Storage, StorageKey};
 use sov_state::Prefix;
 
-use crate::state::{AccessoryWorkingSet, StateMapError, StateReaderAndWriter, Storage, StorageKey};
+use crate::state::{AccessoryWorkingSet, StateMapError, StateReaderAndWriter};
 
 /// A container that maps keys to values stored as "accessory" state, outside of
 /// the JMT.
@@ -79,7 +80,8 @@ where
     /// using your chosen codec.
     ///
     /// ```
-    /// use sov_modules_api::{AccessoryStateMap, Storage, AccessoryWorkingSet};
+    /// use sov_modules_api::{AccessoryStateMap, AccessoryWorkingSet};
+    /// use sov_state::Storage;
     ///
     /// fn foo<S>(map: AccessoryStateMap<Vec<u8>, u64>, key: &[u8], ws: &mut AccessoryWorkingSet<S>) -> Option<u64>
     /// where
@@ -97,7 +99,8 @@ where
     /// maps:
     ///
     /// ```
-    /// use sov_modules_api::{AccessoryStateMap, Storage, AccessoryWorkingSet};
+    /// use sov_modules_api::{AccessoryStateMap, AccessoryWorkingSet};
+    /// use sov_state::Storage;
     ///
     /// fn foo<S>(map: AccessoryStateMap<Vec<u8>, u64>, key: [u8; 32], ws: &mut AccessoryWorkingSet<S>) -> Option<u64>
     /// where

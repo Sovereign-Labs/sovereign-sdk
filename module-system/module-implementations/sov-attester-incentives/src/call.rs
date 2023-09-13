@@ -5,10 +5,8 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sov_bank::{Amount, Coins};
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::optimistic::Attestation;
-use sov_modules_api::{
-    CallResponse, Spec, StateTransition, Storage, StorageProof, ValidityConditionChecker,
-    WorkingSet,
-};
+use sov_modules_api::{CallResponse, Spec, StateTransition, ValidityConditionChecker, WorkingSet};
+use sov_state::storage::{Storage, StorageProof};
 use thiserror::Error;
 
 use crate::{AttesterIncentives, UnbondingInfo};
@@ -410,13 +408,13 @@ where
         };
 
         // This proof checks that the attester was bonded at the given transition num
-        let bond_opt = working_set
-            .backing()
+        let bond_opt = self
+            .bonded_attesters
             .verify_proof(
+                working_set.backing(),
                 bonding_root,
                 attestation.proof_of_bond.proof.clone(),
                 context.sender(),
-                &self.bonded_attesters,
             )
             .map_err(|_err| AttesterIncentiveErrors::InvalidBondingProof)?;
 

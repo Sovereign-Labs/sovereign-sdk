@@ -1,5 +1,6 @@
 use sov_modules_api::hooks::ApplyBlobHooks;
-use sov_modules_api::{ProverStorage, WorkingSet};
+use sov_modules_api::WorkingSet;
+use sov_state::ProverStorage;
 
 mod helpers;
 
