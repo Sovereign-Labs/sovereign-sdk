@@ -310,10 +310,10 @@ impl BlockHeader for CelestiaHeader {
         let protobuf_time = tendermint::time::Time::decode(self.header.time.as_slice())
             .expect("Timestamp must be valid");
 
-        let time = Time {
+        
+        Time {
             secs: protobuf_time.unix_timestamp() as u64,
-        };
-        time
+        }
     }
 }
 

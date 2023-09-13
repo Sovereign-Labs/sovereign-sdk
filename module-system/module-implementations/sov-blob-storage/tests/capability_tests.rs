@@ -75,6 +75,7 @@ fn priority_sequencer_flow() {
     let initial_slot_height = 0;
     let chain_state_config = ChainStateConfig {
         initial_slot_height,
+        current_time: Default::default(),
     };
     let valid_condition = MockValidityCond { is_valid: true };
 
@@ -270,6 +271,7 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
     let initial_slot_height = 0;
     let chain_state_config = ChainStateConfig {
         initial_slot_height,
+        current_time: Default::default(),
     };
 
     let bank = sov_bank::Bank::<C>::default();
@@ -385,6 +387,7 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
     let initial_slot_height = 0;
     let chain_state_config = ChainStateConfig {
         initial_slot_height,
+        current_time: Default::default(),
     };
 
     let bank = sov_bank::Bank::<C>::default();
@@ -501,6 +504,7 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
     let initial_slot_height = 0;
     let chain_state_config = ChainStateConfig {
         initial_slot_height,
+        current_time: Default::default(),
     };
     let valid_condition = MockValidityCond { is_valid: true };
 

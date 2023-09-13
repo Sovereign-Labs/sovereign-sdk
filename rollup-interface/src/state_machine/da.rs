@@ -201,6 +201,9 @@ pub trait BlockHeaderTrait: PartialEq + Debug + Clone + Serialize + DeserializeO
     fn time(&self) -> Time;
 }
 
+#[derive(
+    Serialize, Deserialize, Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize, Default,
+)]
 /// A timestamp, represented as seconds since the unix epoch
 pub struct Time {
     /// The number of seconds since the unix epoch

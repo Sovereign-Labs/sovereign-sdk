@@ -2,6 +2,7 @@ use sov_chain_state::{ChainState, ChainStateConfig, StateTransitionId, Transitio
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::Genesis;
+use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::mocks::{MockBlock, MockBlockHeader, MockDaSpec, MockValidityCond};
 use sov_state::{ProverStorage, Storage, WorkingSet};
 
@@ -22,6 +23,7 @@ fn test_simple_chain_state() {
     let chain_state = ChainState::<DefaultContext, MockDaSpec>::default();
     let config = ChainStateConfig {
         initial_slot_height: INIT_HEIGHT,
+        current_time: Default::default(),
     };
 
     // Genesis, initialize and then commit the state
@@ -38,6 +40,11 @@ fn test_simple_chain_state() {
     assert_eq!(
         initial_height, INIT_HEIGHT,
         "The initial height was not computed"
+    );
+    assert_eq!(
+        chain_state.get_time(&mut working_set),
+        Default::default(),
+        "The time was not initialized to default value"
     );
 
     // Then simulate a transaction execution: call the begin_slot hook on a mock slot_data.
@@ -62,6 +69,11 @@ fn test_simple_chain_state() {
     let init_root_hash = storage.get_state_root(&Default::default()).unwrap();
 
     assert_eq!(stored_root, init_root_hash, "Genesis hashes don't match");
+    assert_eq!(
+        chain_state.get_time(&mut working_set),
+        slot_data.header.time(),
+        "The time was not updated in the hook"
+    );
 
     // Check that the slot height has been updated
     let new_height_storage = chain_state.get_slot_height(&mut working_set);
@@ -118,6 +130,11 @@ fn test_simple_chain_state() {
         INIT_HEIGHT + 2,
         "The new height did not update"
     );
+    assert_eq!(
+        chain_state.get_time(&mut working_set),
+        new_slot_data.header.time(),
+        "The time was not updated in the hook"
+    );
 
     // Check the transition in progress
     let new_tx_in_progress: TransitionInProgress<MockDaSpec> = chain_state
@@ -145,5 +162,11 @@ fn test_simple_chain_state() {
             new_root_hash.unwrap(),
             MockValidityCond { is_valid: true }
         )
+    );
+
+    assert_ne!(
+        chain_state.get_time(&mut working_set),
+        Default::default(),
+        "The time must be updated"
     );
 }

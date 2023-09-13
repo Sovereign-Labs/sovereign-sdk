@@ -95,6 +95,7 @@ pub(crate) fn setup(
     // Initialize chain state
     let chain_state_config = sov_chain_state::ChainStateConfig {
         initial_slot_height: INIT_HEIGHT,
+        current_time: Default::default(),
     };
 
     let chain_state = sov_chain_state::ChainState::<C, MockDaSpec>::default();
