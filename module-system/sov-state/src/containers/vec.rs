@@ -257,12 +257,12 @@ where
     S: Storage,
 {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let elem = self.state_vec.get(self.len - 1, self.ws);
-        if elem.is_some() {
-            self.len -= 1;
+        if self.len == 0 {
+            return None;
         }
 
-        elem
+        self.len -= 1;
+        self.state_vec.get(self.len, self.ws)
     }
 }
 
@@ -276,10 +276,12 @@ mod test {
     enum TestCaseAction<T> {
         Push(T),
         Pop(T),
+        Last(T),
         Set(usize, T),
         SetAll(Vec<T>),
         CheckLen(usize),
         CheckContents(Vec<T>),
+        CheckContentsReverse(Vec<T>),
         CheckGet(usize, Option<T>),
         Clear,
     }
@@ -313,6 +315,8 @@ mod test {
             TestCaseAction::CheckGet(0, None),
             TestCaseAction::SetAll(vec![1, 2, 3]),
             TestCaseAction::CheckContents(vec![1, 2, 3]),
+            TestCaseAction::CheckContentsReverse(vec![3, 2, 1]),
+            TestCaseAction::Last(3),
         ]
     }
 
@@ -367,6 +371,14 @@ mod test {
             }
             TestCaseAction::Clear => {
                 state_vec.clear(ws);
+            }
+            TestCaseAction::Last(expected) => {
+                let actual = state_vec.last(ws);
+                assert_eq!(actual, Some(expected));
+            }
+            TestCaseAction::CheckContentsReverse(expected) => {
+                let contents: Vec<T> = state_vec.iter(ws).rev().collect();
+                assert_eq!(expected, contents);
             }
         }
     }
