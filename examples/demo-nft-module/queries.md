@@ -1,2 +1,3 @@
-curl -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"nft_getCollection","params":["sov1ukf63m99c00w73482yjuek2d9fgxkfz0vnsxsgcynwwppjxvmwfqpleu0n"],"id":1}' http://127.0.0.1:12345
-curl -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"nft_getCollectionAddress","params":["sov1264hmyes8t8pyz99ne064nnp42gycjsk9czstcyfm33najewss9skeaenp","Test collection"],"id":1}' http://127.0.0.1:12345
+curl -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"nft_getCollectionAddress","params":["sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94","Test Collection"],"id":1}' http://127.0.0.1:12345
+curl -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"nft_getCollection","params":["sov1j2e3dh76nmuw4gctrqduh0wzqdny8c62z36r2q3883rknw3ky3vsk9g02a"],"id":1}' http://127.0.0.1:12345
+curl -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"nft_getNft","params":["sov1j2e3dh76nmuw4gctrqduh0wzqdny8c62z36r2q3883rknw3ky3vsk9g02a", 42],"id":1}' http://127.0.0.1:12345
