@@ -26,7 +26,7 @@ fn begin_slot_hook_creates_pending_block() {
             coinbase: *BENEFICIARY,
             timestamp: TEST_CONFIG.genesis_timestamp + TEST_CONFIG.block_timestamp_delta,
             prevrandao: *DA_ROOT_HASH,
-            basefee: TEST_CONFIG.starting_base_fee,
+            basefee: 62u64,
             gas_limit: TEST_CONFIG.block_gas_limit,
         }
     );
