@@ -1,12 +1,15 @@
 use std::net::SocketAddr;
 
 use sov_demo_rollup::new_rollup_with_mock_da_from_config;
-#[cfg(feature = "experimental")]
 use sov_rollup_interface::mocks::MockDaConfig;
+use sov_rollup_interface::zk::ZkvmHost;
 use sov_stf_runner::{RollupConfig, RpcConfig, RunnerConfig, StorageConfig};
 use tokio::sync::oneshot;
 
-pub async fn start_rollup(rpc_reporting_channel: oneshot::Sender<SocketAddr>) {
+pub async fn start_rollup<Vm: ZkvmHost>(
+    rpc_reporting_channel: oneshot::Sender<SocketAddr>,
+    prover: Option<Vm>,
+) {
     let temp_dir = tempfile::tempdir().unwrap();
     let temp_path = temp_dir.path();
 
@@ -24,7 +27,7 @@ pub async fn start_rollup(rpc_reporting_channel: oneshot::Sender<SocketAddr>) {
         da: MockDaConfig {},
     };
     let rollup =
-        new_rollup_with_mock_da_from_config(rollup_config).expect("Rollup config is valid");
+        new_rollup_with_mock_da_from_config(rollup_config, prover).expect("Rollup config is valid");
     rollup
         .run_and_report_rpc_port(Some(rpc_reporting_channel))
         .await

@@ -68,7 +68,7 @@ borsh = { version = "0.10.3", features = ["rc", "bytes"] }
 # TODO: Consider replacing this serialization format
 #     https://github.com/Sovereign-Labs/sovereign-sdk/issues/283
 bincode = "1.3.3"
-bcs = "0.1.5"
+bcs = { git = "https://github.com/preston-evans98/bcs.git", rev = "e4f1861" } 
 byteorder = "1.4.3"
 bytes = "1.2.1"
 hex = "0.4.3"

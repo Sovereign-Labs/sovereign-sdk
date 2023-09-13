@@ -14,12 +14,13 @@ resolver = "2"
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
-serde = { workspace = true, optional = true }
+serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
 sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
 sov-state = { path = "../../sov-state", version = "0.1" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1" }
 
 
 [dev-dependencies]
@@ -34,4 +35,4 @@ sov-rollup-interface = { path = "../../../rollup-interface", features = ["mocks"
 
 [features]
 default = []
-native = ["serde", "serde_json", "jsonrpsee", "sov-state/native", "sov-modules-api/native"]
+native = ["serde_json", "jsonrpsee", "sov-state/native", "sov-modules-api/native"]

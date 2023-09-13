@@ -65,7 +65,7 @@ native = [
     "sov-rollup-interface/mocks",
     "sov-modules-stf-template/native",
     "sov-sequencer",
-    "sov-stf-runner",
+    "sov-stf-runner/native",
     "clap",
     "serde_json",
     "jsonrpsee",

@@ -77,6 +77,14 @@ impl Zkvm for MockZkvm {
         anyhow::ensure!(proof.is_valid, "Proof is not valid");
         Ok(proof.log)
     }
+
+    fn verify_and_extract_output<Add: crate::RollupAddress, Da: crate::da::DaSpec>(
+        serialized_proof: &[u8],
+        code_commitment: &Self::CodeCommitment,
+    ) -> Result<crate::zk::StateTransition<Da, Add>, Self::Error> {
+        let output = Self::verify(serialized_proof, code_commitment)?;
+        Ok(bincode::deserialize(output)?)
+    }
 }
 
 #[test]
