@@ -48,7 +48,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         self.pending_transactions.clear(working_set);
 
-        let start_tx_index = parent_block.transactions.end + 1;
+        let start_tx_index = parent_block.transactions.end;
 
         let gas_used = pending_transactions
             .last()

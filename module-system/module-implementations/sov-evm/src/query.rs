@@ -99,7 +99,15 @@ impl<C: sov_modules_api::Context> Evm<C> {
             let tx = self
                 .transactions
                 .get(number as usize, &mut accessory_state)
-                .expect("Transaction with known hash must be set");
+                .expect(
+                    format!(
+                        "Transaction with known hash {} and number {} must be set in all {} transaction",
+                        hash,
+                        number,
+                        self.transactions.len(&mut accessory_state)
+                    )
+                    .as_str(),
+                );
 
             let block = self
                 .blocks

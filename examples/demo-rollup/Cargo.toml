@@ -69,7 +69,7 @@ revm = { workspace = true }
 
 
 [features]
-default = []
+default = ["experimental"]
 experimental = ["sov-ethereum/experimental", "reth-primitives", "secp256k1"]
 
 [[bench]]
