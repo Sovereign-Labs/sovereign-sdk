@@ -7,7 +7,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Module;
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
-use crate::evm::transaction::SealedBlock;
+use crate::evm::transaction::{Block, SealedBlock};
 // use crate::evm::db;
 use crate::{evm::EvmChainConfig, AccountData, Evm, EvmConfig};
 type C = DefaultContext;
@@ -32,6 +32,14 @@ lazy_static! {
         limit_contract_code_size: Some(5000),
         starting_base_fee: 70,
     };
+}
+
+pub(crate) const GENESIS_HASH: H256 = H256(hex!(
+    "d57423e4375c45bc114cd137146aab671dbd3f6304f05b31bdd416301b4a99f0"
+));
+
+lazy_static! {
+    pub(crate) static ref BENEFICIARY: Address = Address::from([3u8; 20]);
 }
 
 #[test]
@@ -72,11 +80,18 @@ fn genesis_cfg_missing_specs() {
 #[test]
 fn genesis_block() {
     let (evm, mut working_set) = get_evm(&TEST_CONFIG);
+    let mut accessory_state = working_set.accessory_state();
 
+    let block_number = evm
+        .block_hashes
+        .get(&GENESIS_HASH, &mut accessory_state)
+        .unwrap();
     let block = evm
         .blocks
-        .get(0usize, &mut working_set.accessory_state())
+        .get(block_number as usize, &mut accessory_state)
         .unwrap();
+
+    assert_eq!(block_number, 0);
 
     assert_eq!(
         block,
@@ -98,12 +113,43 @@ fn genesis_block() {
                     nonce: 0,
                     base_fee_per_gas: Some(70),
                     ommers_hash: EMPTY_OMMER_ROOT,
-                    beneficiary: Address::from([3u8; 20]),
+                    beneficiary: *BENEFICIARY,
                     withdrawals_root: None
                 },
-                hash: H256(hex!(
-                    "d57423e4375c45bc114cd137146aab671dbd3f6304f05b31bdd416301b4a99f0"
-                ))
+                hash: GENESIS_HASH
+            },
+            transactions: (0u64..0u64),
+        }
+    );
+}
+
+#[test]
+fn genesis_head() {
+    let (evm, mut working_set) = get_evm(&TEST_CONFIG);
+
+    let head = evm.head.get(&mut working_set).unwrap();
+
+    assert_eq!(
+        head,
+        Block {
+            header: Header {
+                parent_hash: H256::default(),
+                state_root: KECCAK_EMPTY,
+                transactions_root: EMPTY_TRANSACTIONS,
+                receipts_root: EMPTY_RECEIPTS,
+                logs_bloom: Bloom::default(),
+                difficulty: U256::ZERO,
+                number: 0,
+                gas_limit: ETHEREUM_BLOCK_GAS_LIMIT,
+                gas_used: 0,
+                timestamp: 50,
+                extra_data: Bytes::default(),
+                mix_hash: H256::default(),
+                nonce: 0,
+                base_fee_per_gas: Some(70),
+                ommers_hash: EMPTY_OMMER_ROOT,
+                beneficiary: *BENEFICIARY,
+                withdrawals_root: None
             },
             transactions: (0u64..0u64),
         }
