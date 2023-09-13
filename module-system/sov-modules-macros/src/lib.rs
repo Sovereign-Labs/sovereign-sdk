@@ -17,7 +17,6 @@ mod dispatch;
 mod manifest;
 mod module_call_json_schema;
 mod module_info;
-mod offchain;
 #[cfg(feature = "native")]
 mod rpc;
 
@@ -28,11 +27,10 @@ use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
 use dispatch::message_codec::MessageCodec;
 use module_call_json_schema::derive_module_call_json_schema;
-use offchain::offchain_generator;
 use proc_macro::TokenStream;
 #[cfg(feature = "native")]
 use rpc::ExposeRpcMacro;
-use syn::{parse_macro_input, ItemFn};
+use syn::parse_macro_input;
 
 #[proc_macro_derive(ModuleInfo, attributes(state, module, address))]
 pub fn module_info(input: TokenStream) -> TokenStream {
@@ -198,15 +196,4 @@ pub fn cli_parser(input: TokenStream) -> TokenStream {
 pub fn custom_enum_clap(input: TokenStream) -> TokenStream {
     let input: syn::DeriveInput = parse_macro_input!(input);
     handle_macro_error(derive_cli_wallet_arg(input))
-}
-
-/// placeholder
-#[proc_macro_attribute]
-pub fn offchain(_attr: TokenStream, item: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(item as ItemFn);
-
-    match offchain_generator(input) {
-        Ok(ok) => ok,
-        Err(err) => err.to_compile_error().into(),
-    }
 }
