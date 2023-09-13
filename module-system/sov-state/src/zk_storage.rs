@@ -14,24 +14,22 @@ use crate::{MerkleProofSpec, Storage};
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 extern crate risc0_zkvm;
 
+#[derive(Default)]
 pub struct ZkStorage<S: MerkleProofSpec> {
-    prev_state_root: [u8; 32],
     _phantom_hasher: PhantomData<S::Hasher>,
 }
 
 impl<S: MerkleProofSpec> Clone for ZkStorage<S> {
     fn clone(&self) -> Self {
         Self {
-            prev_state_root: self.prev_state_root,
             _phantom_hasher: Default::default(),
         }
     }
 }
 
 impl<S: MerkleProofSpec> ZkStorage<S> {
-    pub fn new(prev_state_root: [u8; 32]) -> Self {
+    pub fn new() -> Self {
         Self {
-            prev_state_root,
             _phantom_hasher: Default::default(),
         }
     }
@@ -39,12 +37,12 @@ impl<S: MerkleProofSpec> ZkStorage<S> {
 
 impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
     type Witness = S::Witness;
-    type RuntimeConfig = [u8; 32];
+    type RuntimeConfig = ();
     type Proof = jmt::proof::SparseMerkleProof<S::Hasher>;
     type StateUpdate = NodeBatch;
 
-    fn with_config(config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
-        Ok(Self::new(config))
+    fn with_config(_config: Self::RuntimeConfig) -> Result<Self, anyhow::Error> {
+        Ok(Self::new())
     }
 
     fn get(&self, _key: &StorageKey, witness: &Self::Witness) -> Option<StorageValue> {
@@ -61,6 +59,7 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
         state_accesses: OrderedReadsAndWrites,
         witness: &Self::Witness,
     ) -> Result<([u8; 32], Self::StateUpdate), anyhow::Error> {
+        let prev_state_root = witness.get_hint();
         let latest_version: Version = witness.get_hint();
         let reader = TreeWitnessReader::new(witness);
 
@@ -71,11 +70,11 @@ impl<S: MerkleProofSpec> Storage for ZkStorage<S> {
             let proof: jmt::proof::SparseMerkleProof<S::Hasher> = witness.get_hint();
             match read_value {
                 Some(val) => proof.verify_existence(
-                    jmt::RootHash(self.prev_state_root),
+                    jmt::RootHash(prev_state_root),
                     key_hash,
                     val.value.as_ref(),
                 )?,
-                None => proof.verify_nonexistence(jmt::RootHash(self.prev_state_root), key_hash)?,
+                None => proof.verify_nonexistence(jmt::RootHash(prev_state_root), key_hash)?,
             }
         }
 

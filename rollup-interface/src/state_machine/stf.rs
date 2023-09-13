@@ -95,7 +95,7 @@ pub struct SlotResult<S, B, T, W> {
 ///  - blob: Non serialised batch or anything else that can be posted on DA layer, like attestation or proof.
 pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
     /// Root hash of state merkle tree
-    type StateRoot;
+    type StateRoot: Serialize + DeserializeOwned + Clone;
     /// The initial state of the rollup.
     type InitialState;
 
@@ -107,7 +107,7 @@ pub trait StateTransitionFunction<Vm: Zkvm, Da: DaSpec> {
 
     /// Witness is a data that is produced during actual batch execution
     /// or validated together with proof during verification
-    type Witness: Default + Serialize;
+    type Witness: Default + Serialize + DeserializeOwned;
 
     /// The validity condition that must be verified outside of the Vm
     type Condition: ValidityCondition;

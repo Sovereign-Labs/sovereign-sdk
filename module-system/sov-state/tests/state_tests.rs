@@ -8,8 +8,6 @@ enum Operation {
     Finalize,
 }
 
-const EMPTY_ROOT: [u8; 32] = *b"SPARSE_MERKLE_PLACEHOLDER_HASH__";
-
 impl Operation {
     fn execute<S: Storage>(&self, working_set: WorkingSet<S>) -> StateCheckpoint<S> {
         match self {
@@ -193,7 +191,7 @@ fn test_witness_roundtrip() {
     };
 
     {
-        let storage = ZkStorage::<DefaultStorageSpec>::new(EMPTY_ROOT);
+        let storage = ZkStorage::<DefaultStorageSpec>::new();
         let mut working_set = WorkingSet::with_witness(storage.clone(), witness);
         state_value.set(&11, &mut working_set);
         let _ = state_value.get(&mut working_set);

@@ -7,7 +7,7 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
 use crate::da::{
-    BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec, Time,
+    BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec, DaVerifier, Time
 };
 use crate::mocks::MockValidityCond;
 use crate::services::da::{DaService, SlotData};
@@ -296,6 +296,7 @@ impl MockDaService {
 
 #[async_trait]
 impl DaService for MockDaService {
+    type Verifier = MockDaVerifier;
     type Spec = MockDaSpec;
     type FilteredBlock = MockBlock;
     type Error = anyhow::Error;
@@ -332,7 +333,7 @@ impl DaService for MockDaService {
         <Self::Spec as DaSpec>::InclusionMultiProof,
         <Self::Spec as DaSpec>::CompletenessProof,
     ) {
-        todo!()
+        ([0u8; 32], ())
     }
 
     async fn send_transaction(&self, blob: &[u8]) -> Result<(), Self::Error> {
@@ -344,3 +345,27 @@ impl DaService for MockDaService {
 /// The configuration for mock da
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize)]
 pub struct MockDaConfig {}
+
+#[derive(Clone, Default)]
+/// DaVerifier used in tests.
+pub struct MockDaVerifier {}
+
+impl DaVerifier for MockDaVerifier {
+    type Spec = MockDaSpec;
+
+    type Error = anyhow::Error;
+
+    fn new(_params: <Self::Spec as DaSpec>::ChainParams) -> Self {
+        Self {}
+    }
+
+    fn verify_relevant_tx_list(
+        &self,
+        _block_header: &<Self::Spec as DaSpec>::BlockHeader,
+        _txs: &[<Self::Spec as DaSpec>::BlobTransaction],
+        _inclusion_proof: <Self::Spec as DaSpec>::InclusionMultiProof,
+        _completeness_proof: <Self::Spec as DaSpec>::CompletenessProof,
+    ) -> Result<<Self::Spec as DaSpec>::ValidityCondition, Self::Error> {
+        Ok(MockValidityCond { is_valid: true })
+    }
+}

@@ -13,6 +13,7 @@ use jsonrpsee::core::client::ClientT;
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
 use jsonrpsee::rpc_params;
 use sov_evm::smart_contracts::SimpleStorageContract;
+use sov_risc0_adapter::host::Risc0Host;
 
 use super::test_helpers::start_rollup;
 
@@ -128,6 +129,13 @@ impl TestClient {
         Ok(ethereum_types::U256::from(resp_array))
     }
 
+    async fn eth_accounts(&self) -> Vec<Address> {
+        self.http_client
+            .request("eth_accounts", rpc_params![])
+            .await
+            .unwrap()
+    }
+
     async fn execute(self) -> Result<(), Box<dyn std::error::Error>> {
         let contract_address = {
             let deploy_contract_req = self.deploy_contract().await?;
@@ -188,6 +196,10 @@ async fn send_tx_test_to_eth(rpc_address: SocketAddr) -> Result<(), Box<dyn std:
     let from_addr = Address::from_str("0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266").unwrap();
 
     let test_client = TestClient::new(chain_id, key, from_addr, contract, rpc_address).await;
+
+    let etc_accounts = test_client.eth_accounts().await;
+    assert_eq!(vec![from_addr], etc_accounts);
+
     test_client.execute().await
 }
 
@@ -196,7 +208,8 @@ async fn evm_tx_tests() -> Result<(), anyhow::Error> {
     let (port_tx, port_rx) = tokio::sync::oneshot::channel();
 
     let rollup_task = tokio::spawn(async {
-        start_rollup(port_tx).await;
+        // Don't provide a prover since the EVM is not currently provable
+        start_rollup::<Risc0Host<'static>>(port_tx, None).await;
     });
 
     // Wait for rollup task to start:

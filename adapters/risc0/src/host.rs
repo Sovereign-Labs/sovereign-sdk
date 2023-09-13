@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::sync::Mutex;
 
 use risc0_zkvm::receipt::Receipt;
 use risc0_zkvm::serde::to_vec;
@@ -9,38 +9,37 @@ use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
 #[cfg(feature = "bench")]
 use sov_zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cycles};
 
+use crate::guest::Risc0Guest;
 #[cfg(feature = "bench")]
 use crate::metrics::metrics_callback;
 use crate::Risc0MethodId;
 
 pub struct Risc0Host<'a> {
-    env: RefCell<ExecutorEnvBuilder<'a>>,
+    env: Mutex<Vec<u32>>,
     elf: &'a [u8],
 }
 
+#[cfg(not(feature = "bench"))]
+#[inline(always)]
+fn add_benchmarking_callbacks(env: ExecutorEnvBuilder<'_>) -> ExecutorEnvBuilder<'_> {
+    env
+}
+
+#[cfg(feature = "bench")]
+fn add_benchmarking_callbacks(mut env: ExecutorEnvBuilder<'_>) -> ExecutorEnvBuilder<'_> {
+    let metrics_syscall_name = get_syscall_name();
+    env.io_callback(metrics_syscall_name, metrics_callback);
+
+    let cycles_syscall_name = get_syscall_name_cycles();
+    env.io_callback(cycles_syscall_name, cycle_count_callback);
+
+    env
+}
+
 impl<'a> Risc0Host<'a> {
-    #[cfg(not(feature = "bench"))]
     pub fn new(elf: &'a [u8]) -> Self {
-        let default_env = ExecutorEnvBuilder::default();
-
         Self {
-            env: RefCell::new(default_env),
-            elf,
-        }
-    }
-
-    #[cfg(feature = "bench")]
-    pub fn new(elf: &'a [u8]) -> Self {
-        let mut default_env = ExecutorEnvBuilder::default();
-
-        let metrics_syscall_name = get_syscall_name();
-        default_env.io_callback(metrics_syscall_name, metrics_callback);
-
-        let cycles_syscall_name = get_syscall_name_cycles();
-        default_env.io_callback(cycles_syscall_name, cycle_count_callback);
-
-        Self {
-            env: RefCell::new(default_env),
+            env: Default::default(),
             elf,
         }
     }
@@ -48,11 +47,13 @@ impl<'a> Risc0Host<'a> {
     /// Run a computation in the zkvm without generating a receipt.
     /// This creates the "Session" trace without invoking the heavy cryptographic machinery.
     pub fn run_without_proving(&mut self) -> anyhow::Result<Session> {
-        let env = self.env.borrow_mut().build()?;
+        let env = add_benchmarking_callbacks(ExecutorEnvBuilder::default())
+            .add_input(&self.env.lock().unwrap())
+            .build()
+            .unwrap();
         let mut executor = LocalExecutor::from_elf(env, self.elf)?;
         executor.run()
     }
-
     /// Run a computation in the zkvm and generate a receipt.
     pub fn run(&mut self) -> anyhow::Result<SessionReceipt> {
         let session = self.run_without_proving()?;
@@ -61,13 +62,19 @@ impl<'a> Risc0Host<'a> {
 }
 
 impl<'a> ZkvmHost for Risc0Host<'a> {
-    fn write_to_guest<T: serde::Serialize>(&self, item: T) {
+    fn add_hint<T: serde::Serialize>(&self, item: T) {
         let serialized = to_vec(&item).expect("Serialization to vec is infallible");
-        self.env.borrow_mut().add_input(&serialized);
+        self.env.lock().unwrap().extend_from_slice(&serialized[..]);
+    }
+
+    type Guest = Risc0Guest;
+
+    fn simulate_with_hints(&mut self) -> Self::Guest {
+        Risc0Guest::with_hints(std::mem::take(&mut self.env.lock().unwrap()))
     }
 }
 
-impl<'prover> Zkvm for Risc0Host<'prover> {
+impl<'host> Zkvm for Risc0Host<'host> {
     type CodeCommitment = Risc0MethodId;
 
     type Error = anyhow::Error;
