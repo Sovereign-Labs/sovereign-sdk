@@ -1493,7 +1493,6 @@ dependencies = [
  "serde_json",
  "sov-data-generators",
  "sov-modules-api",
- "sov-modules-macro-rules",
  "sov-modules-macros",
  "sov-rollup-interface",
  "sov-state",
@@ -6845,10 +6844,6 @@ dependencies = [
  "sov-zk-cycle-macros",
  "thiserror",
 ]
-
-[[package]]
-name = "sov-modules-macro-rules"
-version = "0.1.0"
 
 [[package]]
 name = "sov-modules-macros"

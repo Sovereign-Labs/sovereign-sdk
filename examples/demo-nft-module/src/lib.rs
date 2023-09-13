@@ -26,7 +26,7 @@ pub mod utils;
 /// (creator of collection, owner of an nft)
 pub struct UserAddress<C: Context>(pub C::Address);
 
-#[cfg(all(feature = "native"))]
+#[cfg(feature = "native")]
 #[derive(
     serde::Serialize,
     serde::Deserialize,

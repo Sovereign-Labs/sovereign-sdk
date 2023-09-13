@@ -115,7 +115,7 @@ impl<C: Context> NonFungibleToken<C> {
         let creator = context.sender();
         let collection_address = get_collection_address::<C>(collection_name, creator.as_ref());
         if let Some(mut c) = self.collections.get(&collection_address, working_set) {
-            if c.frozen == true {
+            if c.frozen {
                 bail!(
                     "Collection with name {} by sender {} is frozen and cannot be updated",
                     collection_name,
@@ -145,7 +145,7 @@ impl<C: Context> NonFungibleToken<C> {
         let collection_address = get_collection_address::<C>(collection_name, creator.as_ref());
 
         if let Some(mut c) = self.collections.get(&collection_address, working_set) {
-            if c.frozen == true {
+            if c.frozen {
                 bail!(
                     "Collection with name {} by sender {} is already frozen",
                     collection_name,
@@ -165,6 +165,7 @@ impl<C: Context> NonFungibleToken<C> {
         Ok(CallResponse::default())
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn mint_nft(
         &self,
         token_id: u64,
@@ -180,32 +181,30 @@ impl<C: Context> NonFungibleToken<C> {
 
         if let Some(mut c) = self.collections.get(&collection_address, working_set) {
             let nft_identifier = NftIdentifier(token_id, collection_address.clone());
-            if c.frozen == true {
+            if c.frozen {
                 bail!(
                     "Collection with name {} by sender {} is already frozen",
                     collection_name,
                     creator.to_string()
                 )
+            } else if self.nfts.get(&nft_identifier, working_set).is_some() {
+                bail!(
+                    "NFT id {} in Collection with name {}, creator {} already exists",
+                    token_id,
+                    collection_name,
+                    creator.to_string()
+                );
             } else {
-                if let Some(_) = self.nfts.get(&nft_identifier, working_set) {
-                    bail!(
-                        "NFT id {} in Collection with name {}, creator {} already exists",
-                        token_id,
-                        collection_name,
-                        creator.to_string()
-                    );
-                } else {
-                    let new_nft = Nft {
-                        token_id,
-                        collection_address: collection_address.clone(),
-                        owner: mint_to_address.clone(),
-                        frozen,
-                        token_uri: collection_uri.to_string(),
-                    };
-                    self.nfts.set(&nft_identifier, &new_nft, working_set);
-                    c.supply += 1;
-                    self.collections.set(&collection_address, &c, working_set);
-                }
+                let new_nft = Nft {
+                    token_id,
+                    collection_address: collection_address.clone(),
+                    owner: mint_to_address.clone(),
+                    frozen,
+                    token_uri: collection_uri.to_string(),
+                };
+                self.nfts.set(&nft_identifier, &new_nft, working_set);
+                c.supply += 1;
+                self.collections.set(&collection_address, &c, working_set);
             }
         } else {
             bail!(
@@ -278,7 +277,7 @@ impl<C: Context> NonFungibleToken<C> {
             let nft_identifier = NftIdentifier(token_id, collection_address.clone());
             if c.creator.as_ref() == creator.as_ref() {
                 if let Some(mut n) = self.nfts.get(&nft_identifier, working_set) {
-                    if n.frozen == false {
+                    if !n.frozen {
                         if Some(true) == frozen {
                             n.frozen = true;
                         }

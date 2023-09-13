@@ -73,7 +73,7 @@ impl<C: Context> NonFungibleToken<C> {
             creator: c.creator.clone(),
             frozen: c.frozen,
             supply: c.supply,
-            collection_uri: c.collection_uri.to_string(),
+            collection_uri: c.collection_uri,
         })
     }
     #[rpc_method(name = "getCollectionAddress")]
