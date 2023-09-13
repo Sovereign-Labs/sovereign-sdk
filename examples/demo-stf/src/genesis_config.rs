@@ -42,7 +42,7 @@ pub fn create_demo_genesis_config<C: Context, Da: DaSpec>(
     );
 
     let sequencer_registry_config = sov_sequencer_registry::SequencerConfig {
-        seq_rollup_address: sequencer_address.clone(),
+        seq_rollup_address: sequencer_address,
         seq_da_address: sequencer_da_address,
         coins_to_lock: sov_bank::Coins {
             amount: LOCKED_AMOUNT,
