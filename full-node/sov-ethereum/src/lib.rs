@@ -176,17 +176,8 @@ pub mod experimental {
             },
         )?;
 
-        rpc.register_async_method("eth_accounts", |_parameters, _ethereum| async move {
-            #[allow(unreachable_code)]
-            Ok::<_, ErrorObjectOwned>(todo!())
-        })?;
-
-        rpc.register_async_method("eth_estimateGas", |parameters, _ethereum| async move {
-            let mut params = parameters.sequence();
-            let _data: reth_rpc_types::CallRequest = params.next()?;
-            let _block_number: Option<reth_primitives::BlockId> = params.optional_next()?;
-            #[allow(unreachable_code)]
-            Ok::<_, ErrorObjectOwned>(todo!())
+        rpc.register_async_method("eth_accounts", |_parameters, ethereum| async move {
+            Ok::<_, ErrorObjectOwned>(ethereum.eth_rpc_config.eth_signer.signers())
         })?;
 
         Ok(())
