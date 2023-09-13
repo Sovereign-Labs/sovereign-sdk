@@ -7,13 +7,13 @@ use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 
 use crate::da::{
-    BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec, DaVerifier, Time
+    BlobReaderTrait, BlockHashTrait, BlockHeaderTrait, CountedBufReader, DaSpec, DaVerifier, Time,
 };
 use crate::mocks::MockValidityCond;
 use crate::services::da::{DaService, SlotData};
 use crate::{BasicAddress, RollupAddress};
 
-const JAN_1_2024: u64 = 1704067200;
+const JAN_1_2023: u64 = 1672531200;
 
 /// A mock address type used for testing. Internally, this type is standard 32 byte array.
 #[derive(
@@ -207,10 +207,10 @@ impl BlockHeaderTrait for MockBlockHeader {
         self.height
     }
 
-    fn time(&self) -> Option<crate::da::Time> {
-        Some(Time {
-            secs: JAN_1_2024 + self.height * 15,
-        })
+    fn time(&self) -> crate::da::Time {
+        Time {
+            secs: JAN_1_2023 + self.height * 15,
+        }
     }
 }
 

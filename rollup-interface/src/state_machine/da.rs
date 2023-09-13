@@ -198,11 +198,11 @@ pub trait BlockHeaderTrait: PartialEq + Debug + Clone + Serialize + DeserializeO
     fn height(&self) -> u64;
 
     /// The timestamp of the block
-    fn time(&self) -> Option<Time>;
+    fn time(&self) -> Time;
 }
 
 /// A timestamp, represented as seconds since the unix epoch
 pub struct Time {
     /// The number of seconds since the unix epoch
-    pub secs: u64
+    pub secs: u64,
 }
