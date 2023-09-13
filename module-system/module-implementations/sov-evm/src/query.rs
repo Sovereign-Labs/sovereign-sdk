@@ -99,20 +99,17 @@ impl<C: sov_modules_api::Context> Evm<C> {
             let tx = self
                 .transactions
                 .get(number as usize, &mut accessory_state)
-                .expect(
-                    format!(
-                        "Transaction with known hash {} and number {} must be set in all {} transaction",
-                        hash,
-                        number,
-                        self.transactions.len(&mut accessory_state)
-                    )
-                    .as_str(),
-                );
+                .unwrap_or_else(|| panic!("Transaction with known hash {} and number {} must be set in all {} transaction",                
+                hash,
+                number,
+                self.transactions.len(&mut accessory_state)));
 
             let block = self
                 .blocks
                 .get(tx.block_number as usize, &mut accessory_state)
-                .expect("Block number for known transaction must be set");
+                .unwrap_or_else(|| panic!("Block with number {} for known transaction {} must be set",
+                    tx.block_number,
+                    tx.signed_transaction.hash));
 
             reth_rpc_types::Transaction::from_recovered_with_block_context(
                 tx.into(),
