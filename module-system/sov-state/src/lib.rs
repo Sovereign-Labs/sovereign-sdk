@@ -42,18 +42,11 @@ use utils::AlignedVec;
 pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 
 /// A prefix prepended to each key before insertion and retrieval from the storage.
-/// All the collection types in this crate are backed by the same storage instance, this means that insertions of the same key
-/// to two different `StorageMaps` would collide with each other. We solve it by instantiating every collection type with a unique
-/// prefix that is prepended to each key.
 ///
-/// # Examples
-///
-/// ```
-/// use sov_state::Prefix;
-///
-/// let prefix = Prefix::new(b"test".to_vec());
-/// assert_eq!(prefix.len(), "4");
-/// ```
+/// When interfacing with state containers like [`StateMap`] or [`StateVec`],
+/// you will usually use the same [`WorkingSet`] instance to access them, as
+/// required by the module API. This also means that you might get key
+/// collisions, so it becomes necessary to prepend a prefix to each key.
 #[derive(
     borsh::BorshDeserialize,
     borsh::BorshSerialize,

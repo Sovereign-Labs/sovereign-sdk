@@ -7,16 +7,6 @@ use crate::codec::{BorshCodec, StateCodec, StateKeyCodec, StateValueCodec};
 use crate::{Prefix, StateMap, StateValue, Storage, WorkingSet};
 
 /// A growable array of values stored as JMT-backed state.
-///
-/// # An Example
-///
-/// ```
-/// use sov_state::StateVec;
-///
-/// let mut state_vec = StateVec::<u32>::new(b"test".to_vec());
-///
-/// assert_eq!(state_vec.len(), 0);
-/// ```
 #[derive(
     Debug,
     Clone,
