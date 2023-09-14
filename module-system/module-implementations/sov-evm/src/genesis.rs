@@ -5,7 +5,7 @@ use revm::primitives::SpecId;
 use sov_state::WorkingSet;
 
 use crate::evm::db_init::InitEvmDb;
-use crate::evm::transaction::Block;
+use crate::evm::primitive_types::Block;
 use crate::evm::{AccountInfo, EvmChainConfig};
 use crate::Evm;
 

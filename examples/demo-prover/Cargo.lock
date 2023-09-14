@@ -202,8 +202,9 @@ checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
 
 [[package]]
 name = "bcs"
-version = "0.1.4"
-source = "git+https://github.com/preston-evans98/bcs.git?rev=e4f1861#e4f1861509a996408baa540cda1f88c290214ce1"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bd3ffe8b19a604421a5d461d4a70346223e535903fbc3067138bddbebddcf77"
 dependencies = [
  "serde",
  "thiserror",
@@ -582,7 +583,7 @@ checksum = "795bc6e66a8e340f075fcf6227e417a2dc976b92b91f3cdc778bb858778b6747"
 
 [[package]]
 name = "const-rollup-config"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "constant_time_eq"
@@ -757,7 +758,7 @@ dependencies = [
 
 [[package]]
 name = "demo-stf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -781,7 +782,7 @@ dependencies = [
  "sov-stf-runner",
  "sov-value-setter",
  "tokio",
- "toml 0.7.6",
+ "toml 0.8.0",
  "tracing",
 ]
 
@@ -2173,7 +2174,7 @@ dependencies = [
 
 [[package]]
 name = "methods"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "risc0-build",
 ]
@@ -2661,7 +2662,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f4c021e1093a56626774e81216a4ce732a735e5bad4868a03f3ed65ca0c3919"
 dependencies = [
  "once_cell",
- "toml_edit",
+ "toml_edit 0.19.14",
 ]
 
 [[package]]
@@ -3555,7 +3556,7 @@ dependencies = [
 
 [[package]]
 name = "sov-accounts"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3571,7 +3572,7 @@ dependencies = [
 
 [[package]]
 name = "sov-bank"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3589,7 +3590,7 @@ dependencies = [
 
 [[package]]
 name = "sov-blob-storage"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3608,7 +3609,7 @@ dependencies = [
 
 [[package]]
 name = "sov-celestia-adapter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3638,7 +3639,7 @@ dependencies = [
 
 [[package]]
 name = "sov-chain-state"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3652,7 +3653,7 @@ dependencies = [
 
 [[package]]
 name = "sov-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3669,7 +3670,7 @@ dependencies = [
 
 [[package]]
 name = "sov-db"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3685,7 +3686,7 @@ dependencies = [
 
 [[package]]
 name = "sov-demo-prover-host"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3721,14 +3722,14 @@ dependencies = [
 
 [[package]]
 name = "sov-first-read-last-write-cache"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "sov-modules-api"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bech32",
@@ -3752,7 +3753,7 @@ dependencies = [
 
 [[package]]
 name = "sov-modules-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3761,12 +3762,12 @@ dependencies = [
  "quote",
  "schemars",
  "syn 1.0.109",
- "toml 0.7.6",
+ "toml 0.8.0",
 ]
 
 [[package]]
 name = "sov-modules-stf-template"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3782,7 +3783,7 @@ dependencies = [
 
 [[package]]
 name = "sov-risc0-adapter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3800,7 +3801,7 @@ dependencies = [
 
 [[package]]
 name = "sov-rollup-interface"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3811,12 +3812,13 @@ dependencies = [
  "hex",
  "serde",
  "sha2 0.10.7",
+ "thiserror",
  "tokio",
 ]
 
 [[package]]
 name = "sov-schema-db"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "once_cell",
@@ -3828,7 +3830,7 @@ dependencies = [
 
 [[package]]
 name = "sov-sequencer"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3841,7 +3843,7 @@ dependencies = [
 
 [[package]]
 name = "sov-sequencer-registry"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3857,7 +3859,7 @@ dependencies = [
 
 [[package]]
 name = "sov-state"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bcs",
@@ -3875,7 +3877,7 @@ dependencies = [
 
 [[package]]
 name = "sov-stf-runner"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3890,14 +3892,14 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "tokio",
- "toml 0.7.6",
+ "toml 0.8.0",
  "tracing",
  "tracing-subscriber",
 ]
 
 [[package]]
 name = "sov-value-setter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3913,7 +3915,7 @@ dependencies = [
 
 [[package]]
 name = "sov-zk-cycle-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3924,7 +3926,7 @@ dependencies = [
 
 [[package]]
 name = "sov-zk-cycle-utils"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
@@ -4274,14 +4276,14 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.7.6"
+version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c17e963a819c331dcacd7ab957d80bc2b9a9c1e71c804826d2f283dd65306542"
+checksum = "c226a7bba6d859b63c92c4b4fe69c5b6b72d0cb897dbc8e6012298e6154cb56e"
 dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "toml_edit",
+ "toml_edit 0.20.0",
 ]
 
 [[package]]
@@ -4298,6 +4300,17 @@ name = "toml_edit"
 version = "0.19.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8123f27e969974a3dfba720fdb560be359f57b44302d280ba72e76a74480e8a"
+dependencies = [
+ "indexmap 2.0.0",
+ "toml_datetime",
+ "winnow",
+]
+
+[[package]]
+name = "toml_edit"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ff63e60a958cefbb518ae1fd6566af80d9d4be430a33f3723dfc47d1d411d95"
 dependencies = [
  "indexmap 2.0.0",
  "serde",

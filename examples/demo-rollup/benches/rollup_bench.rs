@@ -69,8 +69,8 @@ fn rollup_bench(_bench: &mut Criterion) {
             header: MockBlockHeader {
                 hash: barray.into(),
                 prev_hash: [0u8; 32].into(),
+                height,
             },
-            height,
             validity_cond: Default::default(),
             blobs: Default::default(),
         };

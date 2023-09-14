@@ -14,24 +14,24 @@ resolver = "2"
 
 [dev-dependencies]
 sov-sequencer-registry = { path = ".", features = ["native"] }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1", features = ["mocks"] }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.2", features = ["mocks"] }
 tempfile = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, optional = true }
-sov-bank = { path = "../sov-bank", version = "0.1" }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1" }
+sov-bank = { path = "../sov-bank", version = "0.2" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
+sov-state = { path = "../../sov-state", version = "0.2" }
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["rc"] }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
-sov-zk-cycle-macros = { path = "../../../utils/zk-cycle-macros", optional = true }
+sov-zk-cycle-macros = { path = "../../../utils/zk-cycle-macros", version = "0.2", optional = true }
 risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
 risc0-zkvm-platform = { version = "0.16", optional = true }
-sov-zk-cycle-utils = { path = "../../../utils/zk-cycle-utils", optional = true }
+sov-zk-cycle-utils = { path = "../../../utils/zk-cycle-utils", version = "0.2", optional = true }
 
 [features]
 bench = ["sov-zk-cycle-macros/bench", "risc0-zkvm", "risc0-zkvm-platform", "sov-zk-cycle-utils"]
