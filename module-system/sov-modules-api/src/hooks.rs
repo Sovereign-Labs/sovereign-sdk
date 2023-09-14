@@ -63,6 +63,10 @@ pub trait SlotHooks<Da: DaSpec> {
     );
 
     fn end_slot_hook(&self, working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>);
+}
+
+pub trait FinalizeSlotHook<Da: DaSpec> {
+    type Context: Context;
 
     fn finalize_slot_hook(
         &self,
