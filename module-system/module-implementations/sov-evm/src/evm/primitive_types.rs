@@ -1,7 +1,9 @@
 use std::ops::Range;
 
+use jsonrpsee::types::ErrorObject;
 use reth_primitives::{Address, Header, SealedHeader, TransactionSigned, H256};
 use revm::primitives::EVMError;
+use thiserror::Error;
 
 #[derive(serde::Deserialize, serde::Serialize, Debug, PartialEq, Clone)]
 pub(crate) struct BlockEnv {
@@ -103,4 +105,24 @@ pub(crate) struct Receipt {
     pub(crate) gas_used: u64,
     pub(crate) log_index_start: u64,
     pub(crate) error: Option<EVMError<u8>>,
+}
+
+#[derive(Error, Debug)]
+pub enum RawEvmTxConversionError {
+    #[error("Empty raw transaction data")]
+    EmptyRawTransactionData,
+    #[error("Failed to decode signed transaction")]
+    FailedToDecodeSignedTransaction,
+    #[error("Failed to recover signer")]
+    FailedToRecoverSigner,
+}
+
+impl From<RawEvmTxConversionError> for jsonrpsee::core::Error {
+    fn from(error: RawEvmTxConversionError) -> Self {
+        jsonrpsee::core::Error::Call(ErrorObject::owned::<&[u8]>(
+            jsonrpsee::types::error::INVALID_PARAMS_CODE,
+            error.to_string(),
+            None,
+        ))
+    }
 }
