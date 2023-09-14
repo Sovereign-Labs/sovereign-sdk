@@ -52,6 +52,7 @@ impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da
         }
 
         self.increment_slot_height(working_set);
+        self.time.set(&slot_header.time(), working_set);
 
         self.in_progress_transition.set(
             &TransitionInProgress {

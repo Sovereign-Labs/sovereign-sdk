@@ -57,6 +57,7 @@ pub fn create_demo_genesis_config<C: Context, Da: DaSpec>(
     let chain_state_config = ChainStateConfig {
         // TODO: Put actual value
         initial_slot_height: 0,
+        current_time: Default::default(),
     };
 
     GenesisConfig::new(

@@ -45,7 +45,7 @@ exclude = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 authors = ["Sovereign Labs <info@sovereign.xyz>"]
@@ -66,7 +66,7 @@ borsh = { version = "0.10.3", features = ["rc", "bytes"] }
 # TODO: Consider replacing this serialization format
 #     https://github.com/Sovereign-Labs/sovereign-sdk/issues/283
 bincode = "1.3.3"
-bcs = { git = "https://github.com/preston-evans98/bcs.git", rev = "e4f1861" } 
+bcs = "0.1.5"
 byteorder = "1.4.3"
 bytes = "1.2.1"
 hex = "0.4.3"
@@ -87,7 +87,7 @@ tracing = "0.1.37"
 bech32 = "0.9.1"
 derive_more = "0.99.11"
 clap = { version = "4.2.7", features = ["derive"] }
-toml = "0.7.3"
+toml = "0.8.0"
 jsonrpsee = { version = "0.18.2", features = ["jsonrpsee-types"] }
 schemars = { version = "0.8.12", features = ["derive"] }
 tempfile = "3.5"

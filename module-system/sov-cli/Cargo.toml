@@ -17,9 +17,9 @@ path = "src/lib.rs"
 
 
 [dependencies]
-sov-modules-api = { path = "../sov-modules-api", version = "0.1", features = ["native"] }
-sov-bank = { path = "../module-implementations/sov-bank", version = "0.1", features = ["native"] }
-sov-accounts = { path = "../module-implementations/sov-accounts", version = "0.1", features = ["native"] }
+sov-modules-api = { path = "../sov-modules-api", version = "0.2", features = ["native"] }
+sov-bank = { path = "../module-implementations/sov-bank", version = "0.2", features = ["native"] }
+sov-accounts = { path = "../module-implementations/sov-accounts", version = "0.2", features = ["native"] }
 directories = "5.0.1"
 anyhow = { workspace = true }
 hex = { workspace = true, features = ["serde"] }

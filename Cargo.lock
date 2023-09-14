@@ -467,6 +467,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bcs"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bd3ffe8b19a604421a5d461d4a70346223e535903fbc3067138bddbebddcf77"
+dependencies = [
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "bech32"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1136,7 +1146,7 @@ checksum = "795bc6e66a8e340f075fcf6227e417a2dc976b92b91f3cdc778bb858778b6747"
 
 [[package]]
 name = "const-rollup-config"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "constant_time_eq"
@@ -1467,7 +1477,7 @@ checksum = "eaa37046cc0f6c3cc6090fbdbf73ef0b8ef4cfcc37f6befc0020f63e8cf121e1"
 
 [[package]]
 name = "demo-nft-module"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -1483,7 +1493,7 @@ dependencies = [
 
 [[package]]
 name = "demo-simple-stf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "hex",
@@ -1494,7 +1504,7 @@ dependencies = [
 
 [[package]]
 name = "demo-stf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -1524,7 +1534,7 @@ dependencies = [
  "sov-value-setter",
  "tempfile",
  "tokio",
- "toml 0.7.6",
+ "toml 0.8.0",
  "tracing",
 ]
 
@@ -2034,7 +2044,7 @@ dependencies = [
  "serde",
  "serde_json",
  "syn 2.0.28",
- "toml 0.7.6",
+ "toml 0.7.8",
  "walkdir",
 ]
 
@@ -3107,7 +3117,7 @@ dependencies = [
 
 [[package]]
 name = "integration-tests"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3667,7 +3677,7 @@ dependencies = [
 
 [[package]]
 name = "module-template"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -4459,7 +4469,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7f4c021e1093a56626774e81216a4ce732a735e5bad4868a03f3ed65ca0c3919"
 dependencies = [
  "once_cell",
- "toml_edit",
+ "toml_edit 0.19.15",
 ]
 
 [[package]]
@@ -6181,7 +6191,7 @@ dependencies = [
 
 [[package]]
 name = "sov-accessory-state"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "borsh",
  "jsonrpsee",
@@ -6193,7 +6203,7 @@ dependencies = [
 
 [[package]]
 name = "sov-accounts"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -6211,10 +6221,10 @@ dependencies = [
 
 [[package]]
 name = "sov-attester-incentives"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
- "bcs",
+ "bcs 0.1.4",
  "borsh",
  "jmt",
  "serde",
@@ -6231,7 +6241,7 @@ dependencies = [
 
 [[package]]
 name = "sov-bank"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -6250,7 +6260,7 @@ dependencies = [
 
 [[package]]
 name = "sov-blob-storage"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -6274,7 +6284,7 @@ dependencies = [
 
 [[package]]
 name = "sov-celestia-adapter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6307,7 +6317,7 @@ dependencies = [
 
 [[package]]
 name = "sov-chain-state"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -6327,7 +6337,7 @@ dependencies = [
 
 [[package]]
 name = "sov-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -6347,7 +6357,7 @@ dependencies = [
 
 [[package]]
 name = "sov-data-generators"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "borsh",
  "proptest",
@@ -6361,7 +6371,7 @@ dependencies = [
 
 [[package]]
 name = "sov-db"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -6378,7 +6388,7 @@ dependencies = [
 
 [[package]]
 name = "sov-demo-rollup"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6432,7 +6442,7 @@ dependencies = [
 
 [[package]]
 name = "sov-ethereum"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -6452,7 +6462,7 @@ dependencies = [
 
 [[package]]
 name = "sov-evm"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -6487,7 +6497,7 @@ dependencies = [
 
 [[package]]
 name = "sov-first-read-last-write-cache"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "proptest",
  "thiserror",
@@ -6495,7 +6505,7 @@ dependencies = [
 
 [[package]]
 name = "sov-module-schemas"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "sov-accounts",
  "sov-bank",
@@ -6509,7 +6519,7 @@ dependencies = [
 
 [[package]]
 name = "sov-modules-api"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arbitrary",
@@ -6540,7 +6550,7 @@ dependencies = [
 
 [[package]]
 name = "sov-modules-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -6557,13 +6567,13 @@ dependencies = [
  "sov-state",
  "syn 1.0.109",
  "tempfile",
- "toml 0.7.6",
+ "toml 0.8.0",
  "trybuild",
 ]
 
 [[package]]
 name = "sov-modules-stf-template"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -6583,7 +6593,7 @@ dependencies = [
 
 [[package]]
 name = "sov-prover-incentives"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -6601,7 +6611,7 @@ dependencies = [
 
 [[package]]
 name = "sov-risc0-adapter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -6619,7 +6629,7 @@ dependencies = [
 
 [[package]]
 name = "sov-rollup-interface"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6633,12 +6643,13 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.7",
+ "thiserror",
  "tokio",
 ]
 
 [[package]]
 name = "sov-schema-db"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "byteorder",
@@ -6652,7 +6663,7 @@ dependencies = [
 
 [[package]]
 name = "sov-sequencer"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -6667,7 +6678,7 @@ dependencies = [
 
 [[package]]
 name = "sov-sequencer-registry"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -6690,11 +6701,11 @@ dependencies = [
 
 [[package]]
 name = "sov-state"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "arbitrary",
- "bcs",
+ "bcs 0.1.5",
  "borsh",
  "hex",
  "jmt",
@@ -6713,7 +6724,7 @@ dependencies = [
 
 [[package]]
 name = "sov-stf-runner"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -6735,14 +6746,14 @@ dependencies = [
  "sov-value-setter",
  "tempfile",
  "tokio",
- "toml 0.7.6",
+ "toml 0.8.0",
  "tracing",
  "tracing-subscriber",
 ]
 
 [[package]]
 name = "sov-value-setter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -6759,7 +6770,7 @@ dependencies = [
 
 [[package]]
 name = "sov-vec-setter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -6777,7 +6788,7 @@ dependencies = [
 
 [[package]]
 name = "sov-zk-cycle-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -6793,7 +6804,7 @@ dependencies = [
 
 [[package]]
 name = "sov-zk-cycle-utils"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
@@ -7302,14 +7313,26 @@ dependencies = [
 
 [[package]]
 name = "toml"
-version = "0.7.6"
+version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c17e963a819c331dcacd7ab957d80bc2b9a9c1e71c804826d2f283dd65306542"
+checksum = "dd79e69d3b627db300ff956027cc6c3798cef26d22526befdfcd12feeb6d2257"
 dependencies = [
  "serde",
  "serde_spanned",
  "toml_datetime",
- "toml_edit",
+ "toml_edit 0.19.15",
+]
+
+[[package]]
+name = "toml"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c226a7bba6d859b63c92c4b4fe69c5b6b72d0cb897dbc8e6012298e6154cb56e"
+dependencies = [
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
+ "toml_edit 0.20.0",
 ]
 
 [[package]]
@@ -7323,9 +7346,22 @@ dependencies = [
 
 [[package]]
 name = "toml_edit"
-version = "0.19.14"
+version = "0.19.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f8123f27e969974a3dfba720fdb560be359f57b44302d280ba72e76a74480e8a"
+checksum = "1b5bb770da30e5cbfde35a2d7b9b8a2c4b8ef89548a7a6aeab5c9a576e3e7421"
+dependencies = [
+ "indexmap 2.0.0",
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
+ "winnow",
+]
+
+[[package]]
+name = "toml_edit"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8ff63e60a958cefbb518ae1fd6566af80d9d4be430a33f3723dfc47d1d411d95"
 dependencies = [
  "indexmap 2.0.0",
  "serde",
