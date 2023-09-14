@@ -1,3 +1,4 @@
+use anyhow::Context;
 use risc0_zkvm::Bytes;
 use std::collections::HashMap;
 
@@ -22,9 +23,7 @@ pub fn deserialize_custom(serialized: Bytes) -> Result<(String, u64), anyhow::Er
     let null_pos = serialized
         .iter()
         .position(|&b| b == 0)
-        .ok_or(anyhow::anyhow!(
-            "Could not find separator in provided bytes"
-        ))?;
+        .context("Could not find separator in provided bytes")?;
     let (string_bytes, size_bytes_with_null) = serialized.split_at(null_pos);
     let size_bytes = &size_bytes_with_null[1..]; // Skip the null terminator
     let string = String::from_utf8(string_bytes.to_vec())?;
