@@ -32,9 +32,8 @@ mod experimental {
     use sov_state::WorkingSet;
 
     use super::evm::db::EvmDb;
-    use super::evm::primitive_types::BlockEnv;
     use super::evm::{DbAccount, EvmChainConfig};
-    use crate::evm::primitive_types::{Block, Receipt, SealedBlock, TransactionSignedAndRecovered};
+    use crate::evm::primitive_types::{Block, BlockEnv, Receipt, SealedBlock, TransactionSignedAndRecovered};
     #[derive(Clone, Debug)]
     pub struct AccountData {
         pub address: Address,
