@@ -27,9 +27,9 @@ serde_json = { workspace = true }
 tempfile = { workspace = true }
 trybuild = "1.0"
 
-sov-modules-api = { path = "../sov-modules-api", version = "0.2" }
-sov-state = { path = "../sov-state", version = "0.2" }
-sov-bank = { path = "../module-implementations/sov-bank", version = "0.2", features = ["native"] }
+sov-modules-api = { path = "../sov-modules-api" }
+sov-state = { path = "../sov-state" }
+sov-bank = { path = "../module-implementations/sov-bank", features = ["native"] }
 sov-modules-macros = { path = ".", features = ["native"] }
 
 [dependencies]
