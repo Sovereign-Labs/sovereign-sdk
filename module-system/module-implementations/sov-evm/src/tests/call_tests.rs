@@ -7,14 +7,14 @@ use sov_state::ProverStorage;
 
 use crate::call::CallMessage;
 use crate::smart_contracts::SimpleStorageContract;
-use crate::tests::dev_signer::DevSigner;
+use crate::tests::dev_signer::TestSigner;
 use crate::{AccountData, Evm, EvmConfig};
 type C = DefaultContext;
 
 fn create_messages(
     contract_addr: Address,
     set_arg: u32,
-    dev_signer: DevSigner,
+    dev_signer: TestSigner,
 ) -> Vec<CallMessage> {
     let mut transactions = Vec::default();
     let contract = SimpleStorageContract::default();
@@ -56,8 +56,8 @@ fn evm_test() {
     let sender_addr = sender.to_address::<<C as Spec>::Address>();
     let sender_context = C::new(sender_addr);
 
-    let dev_signer: DevSigner = DevSigner::new_random();
-    let caller = dev_signer.address;
+    let dev_signer: TestSigner = TestSigner::new_random();
+    let caller = dev_signer.address();
 
     let evm = Evm::<C>::default();
 

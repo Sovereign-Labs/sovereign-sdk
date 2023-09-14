@@ -201,7 +201,7 @@ async fn main() -> Result<(), anyhow::Error> {
     for height in 2..(bincoded_blocks.len() as u64) {
         num_blocks += 1;
         let mut host = Risc0Host::new(ROLLUP_ELF);
-        host.write_to_guest(prev_state_root);
+        host.add_hint(prev_state_root);
         println!(
             "Requesting data for height {} and prev_state_root 0x{}",
             height,
@@ -209,14 +209,14 @@ async fn main() -> Result<(), anyhow::Error> {
         );
         let filtered_block = &bincoded_blocks[height as usize];
         let _header_hash = hex::encode(filtered_block.header.header.hash());
-        host.write_to_guest(&filtered_block.header);
+        host.add_hint(&filtered_block.header);
         let (mut blob_txs, inclusion_proof, completeness_proof) = da_service
             .extract_relevant_txs_with_proof(&filtered_block)
             .await;
 
-        host.write_to_guest(&inclusion_proof);
-        host.write_to_guest(&completeness_proof);
-        host.write_to_guest(&blob_txs);
+        host.add_hint(&inclusion_proof);
+        host.add_hint(&completeness_proof);
+        host.add_hint(&blob_txs);
 
         if !blob_txs.is_empty() {
             num_blobs += blob_txs.len();
@@ -232,7 +232,7 @@ async fn main() -> Result<(), anyhow::Error> {
         }
         // println!("{:?}",result.batch_receipts);
 
-        host.write_to_guest(&result.witness);
+        host.add_hint(&result.witness);
 
         println!("Skipping prover at block {height} to capture cycle counts\n");
         let _receipt = host

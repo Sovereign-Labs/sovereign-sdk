@@ -111,7 +111,7 @@ impl TestSpec for ActualSpec {
 fn main() {
     type C = ZkDefaultContext;
     type RT = Runtime<C, ActualSpec>;
-    let storage = ZkStorage::new([1u8; 32]);
+    let storage = ZkStorage::new();
     let working_set = &mut WorkingSet::new(storage);
     let runtime = &mut Runtime::<C, ActualSpec>::default();
     let config = GenesisConfig::new(22);

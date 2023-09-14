@@ -89,7 +89,13 @@ impl AsRef<TmHash> for tendermint::Hash {
 
 impl BlockHash for TmHash {}
 
-#[derive(serde::Serialize, serde::Deserialize)]
+impl From<TmHash> for [u8; 32] {
+    fn from(val: TmHash) -> Self {
+        *val.inner()
+    }
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Debug, PartialEq, Eq)]
 pub struct CelestiaSpec;
 
 impl DaSpec for CelestiaSpec {
@@ -160,7 +166,7 @@ impl da::DaVerifier for CelestiaVerifier {
     }
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
-    fn verify_relevant_tx_list<H: Digest>(
+    fn verify_relevant_tx_list(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],

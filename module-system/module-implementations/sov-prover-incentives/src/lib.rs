@@ -14,7 +14,8 @@ pub use call::CallMessage;
 /// The response type used by RPC queries.
 #[cfg(feature = "native")]
 pub use query::Response;
-use sov_modules_api::{Context, Error, ModuleInfo, StoredCodeCommitment, WorkingSet, Zkvm};
+use sov_modules_api::{Context, Error, ModuleInfo, WorkingSet, Zkvm};
+use sov_state::codec::BcsCodec;
 
 /// Configuration of the prover incentives module. Specifies the
 /// address of the bonding token, the minimum bond, the commitment to
@@ -49,7 +50,7 @@ pub struct ProverIncentives<C: Context, Vm: Zkvm> {
     /// The code commitment to be used for verifying proofs
     #[state]
     pub commitment_of_allowed_verifier_method:
-        sov_modules_api::StateValue<StoredCodeCommitment<Vm>>,
+        sov_modules_api::StateValue<Vm::CodeCommitment, BcsCodec>,
 
     /// The set of registered provers and their bonded amount.
     #[state]

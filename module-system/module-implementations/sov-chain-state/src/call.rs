@@ -21,7 +21,7 @@ where
     pub(crate) fn store_state_transition(
         &self,
         height: TransitionHeight,
-        transition: StateTransitionId<Da::ValidityCondition>,
+        transition: StateTransitionId<Da>,
         working_set: &mut WorkingSet<C::Storage>,
     ) {
         self.historical_transitions

@@ -30,12 +30,8 @@ where
         self.minimum_challenger_bond
             .set(&config.minimum_challenger_bond, working_set);
 
-        self.commitment_to_allowed_challenge_method.set(
-            &crate::StoredCodeCommitment {
-                commitment: config.commitment_to_allowed_challenge_method.clone(),
-            },
-            working_set,
-        );
+        self.commitment_to_allowed_challenge_method
+            .set(&config.commitment_to_allowed_challenge_method, working_set);
 
         self.rollup_finality_period
             .set(&config.rollup_finality_period, working_set);

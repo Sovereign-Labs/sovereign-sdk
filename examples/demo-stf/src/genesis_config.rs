@@ -22,6 +22,7 @@ pub fn create_demo_genesis_config<C: Context, Da: DaSpec>(
     sequencer_address: C::Address,
     sequencer_da_address: Vec<u8>,
     value_setter_admin_private_key: &DefaultPrivateKey,
+    #[cfg(feature = "experimental")] evm_genesis_addresses: Vec<reth_primitives::Address>,
 ) -> GenesisConfig<C, Da> {
     let token_config: sov_bank::TokenConfig<C> = sov_bank::TokenConfig {
         token_name: DEMO_TOKEN_NAME.to_owned(),
@@ -53,13 +54,6 @@ pub fn create_demo_genesis_config<C: Context, Da: DaSpec>(
         admin: value_setter_admin_private_key.pub_key().to_address(),
     };
 
-    #[cfg(feature = "experimental")]
-    let genesis_evm_address = reth_primitives::Address::from_slice(
-        hex::decode("f39Fd6e51aad88F6F4ce6aB8827279cffFb92266")
-            .unwrap()
-            .as_slice(),
-    );
-
     let chain_state_config = ChainStateConfig {
         // TODO: Put actual value
         initial_slot_height: 0,
@@ -73,20 +67,31 @@ pub fn create_demo_genesis_config<C: Context, Da: DaSpec>(
         value_setter_config,
         sov_accounts::AccountConfig { pub_keys: vec![] },
         #[cfg(feature = "experimental")]
-        EvmConfig {
-            data: vec![AccountData {
-                address: genesis_evm_address,
-                balance: AccountData::balance(u64::MAX),
-                code_hash: AccountData::empty_code(),
-                code: vec![],
-                nonce: 0,
-            }],
-            chain_id: 1,
-            limit_contract_code_size: None,
-            spec: vec![(0, SpecId::LATEST)].into_iter().collect(),
-            ..Default::default()
-        },
+        get_evm_config(evm_genesis_addresses),
     )
+}
+
+// TODO: #840
+#[cfg(feature = "experimental")]
+fn get_evm_config(genesis_addresses: Vec<reth_primitives::Address>) -> EvmConfig {
+    let data = genesis_addresses
+        .into_iter()
+        .map(|address| AccountData {
+            address,
+            balance: AccountData::balance(u64::MAX),
+            code_hash: AccountData::empty_code(),
+            code: vec![],
+            nonce: 0,
+        })
+        .collect();
+
+    EvmConfig {
+        data,
+        chain_id: 1,
+        limit_contract_code_size: None,
+        spec: vec![(0, SpecId::LATEST)].into_iter().collect(),
+        ..Default::default()
+    }
 }
 
 pub fn create_demo_config<Da: DaSpec>(
@@ -98,5 +103,7 @@ pub fn create_demo_config<Da: DaSpec>(
         generate_address::<DefaultContext>(DEMO_SEQ_PUB_KEY_STR),
         DEMO_SEQUENCER_DA_ADDRESS.to_vec(),
         value_setter_admin_private_key,
+        #[cfg(feature = "experimental")]
+        Vec::default(),
     )
 }

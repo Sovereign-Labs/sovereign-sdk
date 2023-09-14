@@ -22,10 +22,11 @@ tracing = { workspace = true }
 hex = { workspace = true }
 bytes = { workspace = true }
 jmt = { workspace = true }
+secp256k1 = { workspace = true, optional = true }
 futures = "0.3"
 
-# Crates which only this package depends on 
 tokio = { workspace = true }
+reth-primitives = { workspace = true, optional = true }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }
 
 demo-stf = { path = "../demo-stf", features = ["native"] }
@@ -42,6 +43,7 @@ sov-state = { path = "../../module-system/sov-state", features = ["native"] }
 const-rollup-config = { path = "../const-rollup-config" }
 sov-cli = { path = "../../module-system/sov-cli" }
 clap = { workspace = true }
+
 
 [dev-dependencies]
 sov-evm = { path = "../../module-system/module-implementations/sov-evm", features = ["smart_contracts"] }
@@ -65,11 +67,10 @@ ethers-signers = { workspace = true }
 ethers = { workspace = true }
 revm = { workspace = true }
 
-sov-demo-rollup = { path = ".", features = ["experimental"] }
 
 [features]
 default = []
-experimental = ["sov-ethereum/experimental"]
+experimental = ["sov-ethereum/experimental", "reth-primitives", "secp256k1"]
 
 [[bench]]
 name = "rollup_bench"

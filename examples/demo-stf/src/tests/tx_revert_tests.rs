@@ -43,7 +43,12 @@ fn test_tx_revert() {
         let mut blobs = [blob];
         let data = MockBlock::default();
 
-        let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
+        let apply_block_result = demo.apply_slot(
+            Default::default(),
+            &data.header,
+            &data.validity_cond,
+            &mut blobs,
+        );
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
@@ -108,7 +113,12 @@ fn test_nonce_incremented_on_revert() {
         let mut blobs = [blob];
         let data = MockBlock::default();
 
-        let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
+        let apply_block_result = demo.apply_slot(
+            Default::default(),
+            &data.header,
+            &data.validity_cond,
+            &mut blobs,
+        );
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
@@ -172,7 +182,12 @@ fn test_tx_bad_sig() {
         let mut blobs = [blob];
 
         let data = MockBlock::default();
-        let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
+        let apply_block_result = demo.apply_slot(
+            Default::default(),
+            &data.header,
+            &data.validity_cond,
+            &mut blobs,
+        );
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();
@@ -211,7 +226,12 @@ fn test_tx_bad_nonce() {
         let mut blobs = [blob];
 
         let data = MockBlock::default();
-        let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
+        let apply_block_result = demo.apply_slot(
+            Default::default(),
+            &data.header,
+            &data.validity_cond,
+            &mut blobs,
+        );
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let tx_receipts = apply_block_result.batch_receipts[0].tx_receipts.clone();
@@ -272,7 +292,12 @@ fn test_tx_bad_serialization() {
         let mut blobs = [blob];
 
         let data = MockBlock::default();
-        let apply_block_result = demo.apply_slot(Default::default(), &data, &mut blobs);
+        let apply_block_result = demo.apply_slot(
+            Default::default(),
+            &data.header,
+            &data.validity_cond,
+            &mut blobs,
+        );
 
         assert_eq!(1, apply_block_result.batch_receipts.len());
         let apply_blob_outcome = apply_block_result.batch_receipts[0].clone();

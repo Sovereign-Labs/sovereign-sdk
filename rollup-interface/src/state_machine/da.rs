@@ -5,7 +5,6 @@ use std::cmp::min;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use bytes::Buf;
-use digest::Digest;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
@@ -13,7 +12,7 @@ use crate::zk::ValidityCondition;
 use crate::BasicAddress;
 
 /// A specification for the types used by a DA layer.
-pub trait DaSpec: 'static {
+pub trait DaSpec: 'static + Debug + PartialEq + Eq {
     /// The hash of a DA layer block
     type SlotHash: BlockHashTrait;
 
@@ -61,7 +60,7 @@ pub trait DaVerifier {
     fn new(params: <Self::Spec as DaSpec>::ChainParams) -> Self;
 
     /// Verify a claimed set of transactions against a block header.
-    fn verify_relevant_tx_list<H: Digest>(
+    fn verify_relevant_tx_list(
         &self,
         block_header: &<Self::Spec as DaSpec>::BlockHeader,
         txs: &[<Self::Spec as DaSpec>::BlobTransaction],
@@ -179,10 +178,13 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
 }
 
 /// Trait with collection of trait bounds for a block hash.
-pub trait BlockHashTrait: Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync {}
+pub trait BlockHashTrait:
+    Serialize + DeserializeOwned + PartialEq + Debug + Send + Sync + Clone + Eq + Into<[u8; 32]>
+{
+}
 
 /// A block header, typically used in the context of an underlying DA blockchain.
-pub trait BlockHeaderTrait: PartialEq + Debug + Clone {
+pub trait BlockHeaderTrait: PartialEq + Debug + Clone + Serialize + DeserializeOwned {
     /// Each block header must have a unique canonical hash.
     type Hash: Clone;
     /// Each block header must contain the hash of the previous block.
