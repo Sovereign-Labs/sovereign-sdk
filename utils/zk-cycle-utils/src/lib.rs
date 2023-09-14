@@ -15,7 +15,7 @@ pub fn cycle_count_callback(input: risc0_zkvm::Bytes) -> risc0_zkvm::Result<risc
     } else {
         println!("NONE");
     }
-    Ok(Bytes::new())
+    Ok(risc0_zkvm::Bytes::new())
 }
 
 pub fn get_syscall_name_cycles() -> SyscallName {
