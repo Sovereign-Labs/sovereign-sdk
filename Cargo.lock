@@ -467,6 +467,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "bcs"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4bd3ffe8b19a604421a5d461d4a70346223e535903fbc3067138bddbebddcf77"
+dependencies = [
+ "serde",
+ "thiserror",
+]
+
+[[package]]
 name = "bech32"
 version = "0.7.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6214,7 +6224,7 @@ name = "sov-attester-incentives"
 version = "0.2.0"
 dependencies = [
  "anyhow",
- "bcs",
+ "bcs 0.1.4",
  "borsh",
  "jmt",
  "serde",
@@ -6693,7 +6703,7 @@ version = "0.2.0"
 dependencies = [
  "anyhow",
  "arbitrary",
- "bcs",
+ "bcs 0.1.5",
  "borsh",
  "hex",
  "jmt",

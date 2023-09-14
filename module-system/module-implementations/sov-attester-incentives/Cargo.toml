@@ -20,7 +20,7 @@ tempfile = { workspace = true }
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
-bcs = { workspace = true }
+bcs = { git = "https://github.com/preston-evans98/bcs.git", rev = "e4f1861" }
 jmt = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
