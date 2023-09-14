@@ -22,14 +22,6 @@ use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServe
 #[cfg(feature = "native")]
 use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
-#[cfg(feature = "native")]
-pub mod query {
-    pub use {
-        sov_accounts as accounts, sov_bank as bank, sov_chain_state as chain_state,
-        sov_sequencer_registry as sequencer_registry, sov_value_setter as value_setter,
-    };
-}
-
 /// The Rollup entrypoint.
 ///
 /// On a high level, the rollup node receives serialized call messages from the DA layer and executes them as atomic transactions.
