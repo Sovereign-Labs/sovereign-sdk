@@ -78,12 +78,10 @@ async fn bank_tx_tests() -> Result<(), anyhow::Error> {
     // Wait for rollup task to start:
     let port = port_rx.await.unwrap();
 
-    // If the rollup throws an error, stop trying to send the transaction and return it
+    // If the rollup throws an error, return it and stop trying to send the transaction
     tokio::select! {
-        err = rollup_task =>  {
-            err?;
-        },
-        res = send_test_create_token_tx(port) =>{res?},
+        err = rollup_task => err?,
+        res = send_test_create_token_tx(port) => res?,
     };
     Ok(())
 }

@@ -1,6 +1,5 @@
 use reth_primitives::{Address, H256, U256};
 use revm::primitives::specification::SpecId;
-use revm::primitives::{ExecutionResult, Output, B160};
 use serde::{Deserialize, Serialize};
 use sov_state::{Prefix, StateMap};
 
@@ -56,16 +55,6 @@ impl DbAccount {
         let mut prefix = parent_prefix.as_aligned_vec().clone().into_inner();
         prefix.extend_from_slice(&address.0);
         Prefix::new(prefix)
-    }
-}
-
-pub(crate) fn contract_address(result: ExecutionResult) -> Option<B160> {
-    match result {
-        ExecutionResult::Success {
-            output: Output::Create(_, Some(addr)),
-            ..
-        } => Some(addr),
-        _ => None,
     }
 }
 

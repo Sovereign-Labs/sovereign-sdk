@@ -74,8 +74,16 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
 
     fn end_slot_hook(
         &self,
-        _root_hash: [u8; 32],
         _working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
+    ) {
+    }
+
+    fn finalize_slot_hook(
+        &self,
+        _root_hash: [u8; 32],
+        _accesorry_working_set: &mut sov_state::AccessoryWorkingSet<
+            <Self::Context as Spec>::Storage,
+        >,
     ) {
     }
 }

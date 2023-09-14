@@ -15,7 +15,6 @@ const pairArtifact = require('@uniswap/v2-periphery/build/IUniswapV2Pair.json')
 async function main() {
     const [owner, trader] = await ethers.getSigners()
 
-
     const Usdt = await ethers.getContractFactory('Tether', owner);
     const usdt = await Usdt.deploy();
     const Usdc = await ethers.getContractFactory('UsdCoin', owner);

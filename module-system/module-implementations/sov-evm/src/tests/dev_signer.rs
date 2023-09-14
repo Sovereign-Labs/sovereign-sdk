@@ -51,7 +51,8 @@ impl TestSigner {
             input: RethBytes::from(data),
             nonce,
             chain_id: 1,
-            gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT / 2,
+            gas_limit: 1_000_000u64,
+            max_fee_per_gas: u128::from(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE * 2),
             ..Default::default()
         };
 
