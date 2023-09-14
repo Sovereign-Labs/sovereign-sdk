@@ -14,4 +14,4 @@ autotests = false
 
 [dependencies]
 risc0-zkvm = { version = "0.16", default-features = false, features = ['std'] }
-risc0-zkvm-platform = { version = "0.16" }
+risc0-zkvm-platform = { version = "0.18" }

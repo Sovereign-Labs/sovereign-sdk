@@ -5380,7 +5380,7 @@ dependencies = [
  "risc0-core",
  "risc0-sys",
  "risc0-zkp",
- "risc0-zkvm-platform",
+ "risc0-zkvm-platform 0.16.1",
  "tracing",
 ]
 
@@ -5439,7 +5439,7 @@ dependencies = [
  "rayon",
  "risc0-core",
  "risc0-sys",
- "risc0-zkvm-platform",
+ "risc0-zkvm-platform 0.16.1",
  "serde",
  "sha2 0.10.7",
  "thiserror",
@@ -5473,7 +5473,7 @@ dependencies = [
  "risc0-circuit-rv32im",
  "risc0-core",
  "risc0-zkp",
- "risc0-zkvm-platform",
+ "risc0-zkvm-platform 0.16.1",
  "rrs-lib",
  "serde",
  "sha2 0.10.7",
@@ -5487,6 +5487,12 @@ name = "risc0-zkvm-platform"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d1eb3a36be5ce51246929fec77c3ed0b4afe62070286706527dde143a91e5a02"
+
+[[package]]
+name = "risc0-zkvm-platform"
+version = "0.18.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8524b46783b58b00e9b2a4712e837093c975b23cf25bfaf99e1cf69e9011bf6b"
 
 [[package]]
 name = "rlp"
@@ -6301,7 +6307,7 @@ dependencies = [
  "prost-build",
  "prost-types",
  "risc0-zkvm",
- "risc0-zkvm-platform",
+ "risc0-zkvm-platform 0.18.0",
  "serde",
  "serde_json",
  "sha2 0.10.7",
@@ -6532,7 +6538,7 @@ dependencies = [
  "jsonrpsee",
  "rand 0.8.5",
  "risc0-zkvm",
- "risc0-zkvm-platform",
+ "risc0-zkvm-platform 0.18.0",
  "schemars",
  "serde",
  "serde_json",
@@ -6579,7 +6585,7 @@ dependencies = [
  "hex",
  "jmt",
  "risc0-zkvm",
- "risc0-zkvm-platform",
+ "risc0-zkvm-platform 0.18.0",
  "serde",
  "sov-modules-api",
  "sov-rollup-interface",
@@ -6620,7 +6626,7 @@ dependencies = [
  "risc0-circuit-rv32im",
  "risc0-zkp",
  "risc0-zkvm",
- "risc0-zkvm-platform",
+ "risc0-zkvm-platform 0.18.0",
  "serde",
  "sov-rollup-interface",
  "sov-zk-cycle-utils",
@@ -6684,7 +6690,7 @@ dependencies = [
  "clap",
  "jsonrpsee",
  "risc0-zkvm",
- "risc0-zkvm-platform",
+ "risc0-zkvm-platform 0.18.0",
  "schemars",
  "serde",
  "serde_json",
@@ -6709,7 +6715,7 @@ dependencies = [
  "hex",
  "jmt",
  "risc0-zkvm",
- "risc0-zkvm-platform",
+ "risc0-zkvm-platform 0.18.0",
  "serde",
  "serde_json",
  "sha2 0.10.7",
@@ -6794,7 +6800,7 @@ dependencies = [
  "proc-macro2 1.0.66",
  "quote 1.0.33",
  "risc0-zkvm",
- "risc0-zkvm-platform",
+ "risc0-zkvm-platform 0.18.0",
  "sov-zk-cycle-macros",
  "sov-zk-cycle-utils",
  "syn 1.0.109",
@@ -6806,7 +6812,7 @@ name = "sov-zk-cycle-utils"
 version = "0.2.0"
 dependencies = [
  "risc0-zkvm",
- "risc0-zkvm-platform",
+ "risc0-zkvm-platform 0.18.0",
 ]
 
 [[package]]
