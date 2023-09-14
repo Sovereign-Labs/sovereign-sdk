@@ -1,6 +1,7 @@
 [package]
 name = "sov-sequencer"
 authors = { workspace = true }
+description = "A simple implementation of a sequencer for Sovereign SDK rollups"
 edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
