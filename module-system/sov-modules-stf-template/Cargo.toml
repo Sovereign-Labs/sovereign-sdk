@@ -25,8 +25,8 @@ sov-state = { path = "../sov-state", version = "0.2" }
 sov-modules-api = { path = "../sov-modules-api", version = "0.2" }
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.2", optional = true }
 sov-zk-cycle-utils = { path = "../../utils/zk-cycle-utils", version = "0.2", optional = true }
-risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
-risc0-zkvm-platform = { version = "0.16", optional = true }
+risc0-zkvm = { workspace = true, default-features = false, features = ["std"], optional = true }
+risc0-zkvm-platform = { workspace = true, optional = true }
 
 [features]
 bench = ["sov-zk-cycle-macros/bench", "sov-zk-cycle-utils", "risc0-zkvm", "risc0-zkvm-platform"]
