@@ -307,7 +307,7 @@ checksum = "28c122c3980598d243d63d9a704629a2d748d101f278052ff068be5a4423ab6f"
 
 [[package]]
 name = "const-rollup-config"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "constant_time_eq"
@@ -416,7 +416,7 @@ dependencies = [
 
 [[package]]
 name = "demo-stf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -1981,7 +1981,7 @@ dependencies = [
 
 [[package]]
 name = "sov-accounts"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -1992,7 +1992,7 @@ dependencies = [
 
 [[package]]
 name = "sov-bank"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -2005,7 +2005,7 @@ dependencies = [
 
 [[package]]
 name = "sov-blob-storage"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -2020,7 +2020,7 @@ dependencies = [
 
 [[package]]
 name = "sov-celestia-adapter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2047,7 +2047,7 @@ dependencies = [
 
 [[package]]
 name = "sov-chain-state"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -2059,7 +2059,7 @@ dependencies = [
 
 [[package]]
 name = "sov-demo-prover-guest"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -2086,14 +2086,14 @@ dependencies = [
 
 [[package]]
 name = "sov-first-read-last-write-cache"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "sov-modules-api"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bech32",
@@ -2113,7 +2113,7 @@ dependencies = [
 
 [[package]]
 name = "sov-modules-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -2126,7 +2126,7 @@ dependencies = [
 
 [[package]]
 name = "sov-modules-stf-template"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -2146,7 +2146,7 @@ dependencies = [
 
 [[package]]
 name = "sov-risc0-adapter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -2160,7 +2160,7 @@ dependencies = [
 
 [[package]]
 name = "sov-rollup-interface"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -2174,7 +2174,7 @@ dependencies = [
 
 [[package]]
 name = "sov-sequencer-registry"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -2189,7 +2189,7 @@ dependencies = [
 
 [[package]]
 name = "sov-state"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bcs",
@@ -2209,7 +2209,7 @@ dependencies = [
 
 [[package]]
 name = "sov-value-setter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -2220,7 +2220,7 @@ dependencies = [
 
 [[package]]
 name = "sov-zk-cycle-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -2231,7 +2231,7 @@ dependencies = [
 
 [[package]]
 name = "sov-zk-cycle-utils"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",

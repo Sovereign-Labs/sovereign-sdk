@@ -15,9 +15,9 @@ resolver = "2"
 jsonrpsee = { workspace = true, optional = true }
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
-sov-state = { path = "../sov-state", version = "0.1" }
-sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
-sov-modules-macros = { path = "../sov-modules-macros", version = "0.1", optional = true }
+sov-state = { path = "../sov-state", version = "0.2" }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
+sov-modules-macros = { path = "../sov-modules-macros", version = "0.2", optional = true }
 sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
 serde = { workspace = true }
 borsh = { workspace = true }
@@ -40,7 +40,7 @@ risc0-zkvm-platform = { version = "0.16", optional = true }
 [dev-dependencies]
 bincode = { workspace = true }
 sov-modules-api = { path = ".", features = ["native"] }
-sov-bank = { path = "../module-implementations/sov-bank", version = "0.1", features = ["native"] }
+sov-bank = { path = "../module-implementations/sov-bank", version = "0.2", features = ["native"] }
 
 [features]
 bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]

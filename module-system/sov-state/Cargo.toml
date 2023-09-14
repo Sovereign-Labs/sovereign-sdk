@@ -19,9 +19,9 @@ bcs = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 thiserror = { workspace = true }
-sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
-sov-db = { path = "../../full-node/db/sov-db", version = "0.1", optional = true }
-sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-cache", version = "0.1" }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
+sov-db = { path = "../../full-node/db/sov-db", version = "0.2", optional = true }
+sov-first-read-last-write-cache = { path = "../utils/sov-first-read-last-write-cache", version = "0.2" }
 jmt = { workspace = true }
 hex = { workspace = true }
 sha2 = { workspace = true }
