@@ -70,7 +70,7 @@ revm = { workspace = true }
 
 [features]
 default = []
-experimental = ["sov-ethereum/experimental", "reth-primitives", "secp256k1"]
+experimental = ["sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental"]
 
 [[bench]]
 name = "rollup_bench"
