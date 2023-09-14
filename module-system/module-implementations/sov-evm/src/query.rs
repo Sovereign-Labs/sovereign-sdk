@@ -1,10 +1,15 @@
+use ethereum_types::U64;
 use jsonrpsee::core::RpcResult;
+use reth_primitives::contract::create_address;
+use reth_primitives::TransactionKind::{Call, Create};
+use reth_primitives::{TransactionSignedEcRecovered, U128, U256};
 use sov_modules_api::macros::rpc_gen;
 use sov_state::WorkingSet;
 use tracing::info;
 
 use crate::call::get_cfg_env;
 use crate::evm::db::EvmDb;
+use crate::evm::transaction::{Receipt, SealedBlock, TransactionSignedAndRecovered};
 use crate::evm::{executor, prepare_call_env};
 use crate::Evm;
 
@@ -86,23 +91,69 @@ impl<C: sov_modules_api::Context> Evm<C> {
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<reth_rpc_types::Transaction>> {
         info!("evm module: eth_getTransactionByHash");
-        //let evm_transaction = self.transactions.get(&hash, working_set);
-        let evm_transaction = self
-            .transactions
-            .get(&hash, &mut working_set.accessory_state());
-        Ok(evm_transaction)
+        let mut accessory_state = working_set.accessory_state();
+
+        let tx_number = self.transaction_hashes.get(&hash, &mut accessory_state);
+
+        let transaction = tx_number.map(|number| {
+            let tx = self
+                .transactions
+                .get(number as usize, &mut accessory_state)
+                .unwrap_or_else(|| panic!("Transaction with known hash {} and number {} must be set in all {} transaction",                
+                hash,
+                number,
+                self.transactions.len(&mut accessory_state)));
+
+            let block = self
+                .blocks
+                .get(tx.block_number as usize, &mut accessory_state)
+                .unwrap_or_else(|| panic!("Block with number {} for known transaction {} must be set",
+                    tx.block_number,
+                    tx.signed_transaction.hash));
+
+            reth_rpc_types::Transaction::from_recovered_with_block_context(
+                tx.into(),
+                block.header.hash,
+                block.header.number,
+                block.header.base_fee_per_gas,
+                U256::from(tx_number.unwrap() - block.transactions.start),
+            )
+        });
+
+        Ok(transaction)
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "getTransactionReceipt")]
     pub fn get_transaction_receipt(
         &self,
-        hash: reth_primitives::U256,
+        hash: reth_primitives::H256,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<reth_rpc_types::TransactionReceipt>> {
         info!("evm module: eth_getTransactionReceipt");
 
-        let receipt = self.receipts.get(&hash, &mut working_set.accessory_state());
+        let mut accessory_state = working_set.accessory_state();
+
+        let tx_number = self.transaction_hashes.get(&hash, &mut accessory_state);
+
+        let receipt = tx_number.map(|number| {
+            let tx = self
+                .transactions
+                .get(number as usize, &mut accessory_state)
+                .expect("Transaction with known hash must be set");
+            let block = self
+                .blocks
+                .get(tx.block_number as usize, &mut accessory_state)
+                .expect("Block number for known transaction must be set");
+
+            let receipt = self
+                .receipts
+                .get(tx_number.unwrap() as usize, &mut accessory_state)
+                .expect("Receipt for known transaction must be set");
+
+            build_rpc_receipt(block, tx, tx_number.unwrap(), receipt)
+        });
+
         Ok(receipt)
     }
 
@@ -145,7 +196,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         let evm_db: EvmDb<'_, C> = self.get_db(working_set);
 
         // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
-        let result = executor::inspect(evm_db, block_env, tx_env, cfg_env).unwrap();
+        let result = executor::inspect(evm_db, &block_env, tx_env, cfg_env).unwrap();
         let output = match result.result {
             revm::primitives::ExecutionResult::Success { output, .. } => output,
             _ => todo!(),
@@ -181,5 +232,67 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<reth_primitives::U256> {
         unimplemented!("eth_sendTransaction not implemented")
+    }
+}
+
+// modified from: https://github.com/paradigmxyz/reth/blob/cc576bc8690a3e16e6e5bf1cbbbfdd029e85e3d4/crates/rpc/rpc/src/eth/api/transactions.rs#L849
+pub(crate) fn build_rpc_receipt(
+    block: SealedBlock,
+    tx: TransactionSignedAndRecovered,
+    tx_number: u64,
+    receipt: Receipt,
+) -> reth_rpc_types::TransactionReceipt {
+    let transaction: TransactionSignedEcRecovered = tx.into();
+    let transaction_kind = transaction.kind();
+
+    let transaction_hash = Some(transaction.hash);
+    let transaction_index = Some(U256::from(tx_number - block.transactions.start));
+    let block_hash = Some(block.header.hash);
+    let block_number = Some(U256::from(block.header.number));
+
+    reth_rpc_types::TransactionReceipt {
+        transaction_hash,
+        transaction_index,
+        block_hash,
+        block_number,
+        from: transaction.signer(),
+        to: match transaction_kind {
+            Create => None,
+            Call(addr) => Some(*addr),
+        },
+        cumulative_gas_used: U256::from(receipt.receipt.cumulative_gas_used),
+        gas_used: Some(U256::from(receipt.gas_used)),
+        contract_address: match transaction_kind {
+            Create => Some(create_address(transaction.signer(), transaction.nonce())),
+            Call(_) => None,
+        },
+        effective_gas_price: U128::from(
+            transaction.effective_gas_price(block.header.base_fee_per_gas),
+        ),
+        transaction_type: transaction.tx_type().into(),
+        logs_bloom: receipt.receipt.bloom_slow(),
+        status_code: if receipt.receipt.success {
+            Some(U64::from(1))
+        } else {
+            Some(U64::from(0))
+        },
+        state_root: None, // Pre https://eips.ethereum.org/EIPS/eip-658 (pre-byzantium) and won't be used
+        logs: receipt
+            .receipt
+            .logs
+            .into_iter()
+            .enumerate()
+            .map(|(idx, log)| reth_rpc_types::Log {
+                address: log.address,
+                topics: log.topics,
+                data: log.data,
+                block_hash,
+                block_number,
+                transaction_hash,
+                transaction_index,
+                log_index: Some(U256::from(receipt.log_index_start + idx as u64)),
+                removed: false,
+            })
+            .collect(),
     }
 }
