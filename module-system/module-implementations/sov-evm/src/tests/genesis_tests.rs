@@ -7,7 +7,7 @@ use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::Module;
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
-use crate::evm::transaction::{Block, SealedBlock};
+use crate::evm::primitive_types::{Block, SealedBlock};
 // use crate::evm::db;
 use crate::{evm::EvmChainConfig, AccountData, Evm, EvmConfig};
 type C = DefaultContext;

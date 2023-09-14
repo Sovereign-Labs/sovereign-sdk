@@ -1,7 +1,7 @@
 use reth_primitives::{Bloom, Bytes, U256};
 use sov_state::{AccessoryWorkingSet, WorkingSet};
 
-use crate::evm::transaction::{Block, BlockEnv};
+use crate::evm::primitive_types::{Block, BlockEnv};
 use crate::experimental::PendingTransaction;
 use crate::Evm;
 
