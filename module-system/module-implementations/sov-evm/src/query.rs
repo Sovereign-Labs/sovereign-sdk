@@ -178,10 +178,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
     #[rpc_method(name = "call")]
     pub fn get_call(
         &self,
-        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/501
         request: reth_rpc_types::CallRequest,
         _block_number: Option<reth_primitives::BlockId>,
-        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/501
         _state_overrides: Option<reth_rpc_types::state::StateOverride>,
         _block_overrides: Option<Box<reth_rpc_types::BlockOverrides>>,
         working_set: &mut WorkingSet<C::Storage>,
@@ -208,7 +206,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
     #[rpc_method(name = "sendTransaction")]
     pub fn send_transaction(
         &self,
-        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/501
         _request: reth_rpc_types::TransactionRequest,
         _working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<reth_primitives::U256> {
