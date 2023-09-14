@@ -21,6 +21,7 @@ The `demo-nft-module` is a plug-and-play module designed to simplify the process
       - [Create Collection](#create-collection)
       - [Mint NFT](#mint-nft)
       - [Transfer NFT](#transfer-nft)
+  - [Queries](#queries)
 
 ## Core Concepts
 
@@ -95,7 +96,7 @@ Mints a new NFT into a specific collection.
 
 ### UpdateNft
 
-Updates the metadata URL or frozen status of an existing NFT.
+Updates the metadata URL or frozen status of an existing NFT. Uses collection name since it's scoped to a creator
 
 ### TransferNft
 
@@ -113,7 +114,7 @@ pub enum CallMessage<C: Context> {
     UpdateCollection { name: String, collection_uri: String },
     FreezeCollection { collection_name: String },
     MintNft { collection_name: String, token_uri: String, token_id: TokenId, owner: UserAddress<C>, frozen: bool },
-    UpdateNft { collection_address: CollectionAddress<C>, token_id: TokenId, token_uri: Option<String>, frozen: Option<bool> },
+    UpdateNft { collection_name: String, token_id: TokenId, token_uri: Option<String>, frozen: Option<bool> },
     TransferNft { collection_address: CollectionAddress<C>, token_id: u64, to: UserAddress<C> },
 }
 ```
@@ -227,6 +228,20 @@ This should show that the owner of the NFT has changed.
 
 You can perform other calls in a similar manner using the above commands as a reference, by providing the necessary JSON files and using the appropriate keys to submit the transactions.
 
+### Queries
 
+There are 3 simple endpoints for queries to the RPC which can be customized.
+* `nft_getCollectionAddress`: This does not query state but is simply used to deterministically derive the collection address from a creator address and a collection name. It can also be run locally, but the RPC method is provided for convenience
+```bash
+curl -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"nft_getCollectionAddress","params":["sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94","Test Collection"],"id":1}' http://127.0.0.1:12345
+```
+* `nft_getCollection`: Takes a collection address and returns the collection details.
+```bash
+curl -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"nft_getCollection","params":["sov1j2e3dh76nmuw4gctrqduh0wzqdny8c62z36r2q3883rknw3ky3vsk9g02a"],"id":1}' http://127.0.0.1:12345
+```
+* `nft_getNft`: Takes the tokenId and collection address that the NFT belongs to and returns the NFT details
+```bash
+curl -X POST -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"nft_getNft","params":["sov1j2e3dh76nmuw4gctrqduh0wzqdny8c62z36r2q3883rknw3ky3vsk9g02a", 42],"id":1}' http://127.0.0.1:12345
+```
 
 

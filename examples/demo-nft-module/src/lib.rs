@@ -132,6 +132,19 @@ pub struct Collection<C: Context> {
     pub collection_uri: String,
 }
 
+impl<C: Context> Collection<C> {
+    fn exit_if_frozen(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            !self.frozen,
+            format!(
+                "Collection with name: {} , creator: {} is frozen",
+                self.name, self.creator.0
+            )
+        );
+        Ok(())
+    }
+}
+
 #[cfg_attr(
     feature = "native",
     derive(serde::Serialize),
@@ -152,6 +165,32 @@ pub struct Nft<C: Context> {
     /// A URI pointing to the offchain metadata
     pub token_uri: String,
 }
+
+impl<C: Context> Nft<C> {
+    fn exit_if_frozen(&self) -> anyhow::Result<()> {
+        anyhow::ensure!(
+            !self.frozen,
+            format!(
+                "NFT with token id {} in collection address {} is frozen",
+                self.token_id, self.collection_address.0
+            )
+        );
+        Ok(())
+    }
+
+    fn exit_if_not_owned(&self, context: &C) -> anyhow::Result<()> {
+        let owner_address = UserAddress(context.sender().clone());
+        anyhow::ensure!(
+            owner_address == self.owner,
+            format!(
+                "user: {} does not own nft: {} from collection address: {} , owner is: {}",
+                owner_address.0, self.token_id, self.collection_address.0, self.owner.0
+            )
+        );
+        Ok(())
+    }
+}
+
 #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
 #[derive(ModuleInfo, Clone)]
 /// Module for non-fungible tokens (NFT).
@@ -228,12 +267,12 @@ impl<C: Context> Module for NonFungibleToken<C> {
                 to,
             } => self.transfer_nft(token_id, &collection_address, &to, context, working_set),
             CallMessage::UpdateNft {
-                collection_address,
+                collection_name,
                 token_id,
                 token_uri,
                 frozen,
             } => self.update_nft(
-                &collection_address,
+                &collection_name,
                 token_id,
                 token_uri,
                 frozen,

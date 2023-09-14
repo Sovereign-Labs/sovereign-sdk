@@ -102,7 +102,7 @@ fn mints_and_transfers() {
             sov_modules_api::Error::ModuleError(anyhow_err) => {
                 let err_message = anyhow_err.to_string();
                 let expected_message = format!(
-                    "Collection with name {} by sender {} does not exist",
+                    "Collection with name: {} does not exist for creator {}",
                     ne_collection_name, creator_address
                 );
                 assert_eq!(err_message, expected_message);
@@ -154,7 +154,7 @@ fn mints_and_transfers() {
             sov_modules_api::Error::ModuleError(anyhow_err) => {
                 let err_message = anyhow_err.to_string();
                 let expected_message = format!(
-                    "Collection with name {} by sender {} does not exist",
+                    "Collection with name: {} does not exist for creator {}",
                     ne_collection_name, creator_address
                 );
                 assert_eq!(err_message, expected_message);
@@ -202,7 +202,7 @@ fn mints_and_transfers() {
             sov_modules_api::Error::ModuleError(anyhow_err) => {
                 let err_message = anyhow_err.to_string();
                 let expected_message = format!(
-                    "Collection with name {} by sender {} is frozen and cannot be updated",
+                    "Collection with name: {} , creator: {} is frozen",
                     collection_name, creator_address
                 );
                 assert_eq!(err_message, expected_message);
@@ -240,7 +240,7 @@ fn mints_and_transfers() {
             sov_modules_api::Error::ModuleError(anyhow_err) => {
                 let err_message = anyhow_err.to_string();
                 let expected_message = format!(
-                    "Collection with name {} by sender {} is already frozen",
+                    "Collection with name: {} , creator: {} is frozen",
                     collection_name, creator_address
                 );
                 assert_eq!(err_message, expected_message);
@@ -272,11 +272,8 @@ fn mints_and_transfers() {
             sov_modules_api::Error::ModuleError(anyhow_err) => {
                 let err_message = anyhow_err.to_string();
                 let expected_message = format!(
-                    "Transfer sent with owner {}, NFT id {} in Collection with address {} is owned by {}",
-                    creator_address,
-                    token_id,
-                    &collection_address.0,
-                    &owner.0
+                    "user: {} does not own nft: {} from collection address: {} , owner is: {}",
+                    creator_address, token_id, &collection_address.0, &owner.0
                 );
                 assert_eq!(err_message, expected_message);
             }
@@ -300,7 +297,7 @@ fn mints_and_transfers() {
             sov_modules_api::Error::ModuleError(anyhow_err) => {
                 let err_message = anyhow_err.to_string();
                 let expected_message = format!(
-                    "NFT id {} in Collection with address {} does not exist",
+                    "Nft with token_id: {} in collection_address: {} does not exist",
                     1000,
                     collection_address.0.clone()
                 );
@@ -342,7 +339,7 @@ fn mints_and_transfers() {
     let token_id = 42;
     let new_token_uri = "http://foo.bar/test_collection/new_url/42";
     let update_nft_message = CallMessage::UpdateNft {
-        collection_address: collection_address.clone(),
+        collection_name: collection_name.to_string(),
         token_id,
         token_uri: Some(new_token_uri.to_string()),
         frozen: None,
@@ -366,7 +363,7 @@ fn mints_and_transfers() {
     // Freeze NFT
     let token_id = 42;
     let update_nft_message = CallMessage::UpdateNft {
-        collection_address: collection_address.clone(),
+        collection_name: collection_name.to_string(),
         token_id,
         token_uri: None,
         frozen: Some(true),
@@ -391,7 +388,7 @@ fn mints_and_transfers() {
     let token_id = 42;
     let new_token_uri_fail = "http://foo.bar/test_collection/new_url_fail/42";
     let update_nft_message = CallMessage::UpdateNft {
-        collection_address: collection_address.clone(),
+        collection_name: collection_name.to_string(),
         token_id,
         token_uri: Some(new_token_uri_fail.to_string()),
         frozen: None,
@@ -402,7 +399,7 @@ fn mints_and_transfers() {
             sov_modules_api::Error::ModuleError(anyhow_err) => {
                 let err_message = anyhow_err.to_string();
                 let expected_message = format!(
-                    "NFT id {} in Collection with address {} is frozen",
+                    "NFT with token id {} in collection address {} is frozen",
                     token_id,
                     collection_address.0.clone()
                 );

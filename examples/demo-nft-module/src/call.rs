@@ -1,4 +1,4 @@
-use anyhow::{bail, Result};
+use anyhow::{anyhow, ensure, Result};
 use sov_modules_api::{CallResponse, Context};
 use sov_state::WorkingSet;
 
@@ -54,7 +54,7 @@ pub enum CallMessage<C: Context> {
     /// Update nft metadata url or frozen status
     UpdateNft {
         /// Name of the collection
-        collection_address: CollectionAddress<C>,
+        collection_name: String,
         /// nft id
         token_id: TokenId,
         /// Meta data url for collection
@@ -83,17 +83,8 @@ impl<C: Context> NonFungibleToken<C> {
     ) -> Result<CallResponse> {
         let creator = context.sender();
         let collection_address = get_collection_address::<C>(collection_name, creator.as_ref());
-        if self
-            .collections
-            .get(&collection_address, working_set)
-            .is_some()
-        {
-            bail!(
-                "Collection with name {} by sender {} already exists",
-                collection_name,
-                creator.to_string()
-            );
-        }
+        self.exit_if_collection_exists(collection_name, context, working_set)?;
+
         let c = Collection::<C> {
             name: collection_name.to_string(),
             creator: UserAddress(creator.clone()),
@@ -112,26 +103,12 @@ impl<C: Context> NonFungibleToken<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let creator = context.sender();
-        let collection_address = get_collection_address::<C>(collection_name, creator.as_ref());
-        if let Some(mut c) = self.collections.get(&collection_address, working_set) {
-            if c.frozen {
-                bail!(
-                    "Collection with name {} by sender {} is frozen and cannot be updated",
-                    collection_name,
-                    creator.to_string()
-                );
-            } else {
-                c.collection_uri = collection_uri.to_string();
-                self.collections.set(&collection_address, &c, working_set);
-            }
-        } else {
-            bail!(
-                "Collection with name {} by sender {} does not exist",
-                collection_name,
-                creator.to_string()
-            );
-        }
+        let (collection_address, mut collection) =
+            self.get_collection_by_name(collection_name, context, working_set)?;
+        collection.exit_if_frozen()?;
+        collection.collection_uri = collection_uri.to_string();
+        self.collections
+            .set(&collection_address, &collection, working_set);
         Ok(CallResponse::default())
     }
 
@@ -141,27 +118,12 @@ impl<C: Context> NonFungibleToken<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let creator = context.sender();
-        let collection_address = get_collection_address::<C>(collection_name, creator.as_ref());
-
-        if let Some(mut c) = self.collections.get(&collection_address, working_set) {
-            if c.frozen {
-                bail!(
-                    "Collection with name {} by sender {} is already frozen",
-                    collection_name,
-                    creator.to_string()
-                )
-            } else {
-                c.frozen = true;
-                self.collections.set(&collection_address, &c, working_set);
-            }
-        } else {
-            bail!(
-                "Collection with name {} by sender {} does not exist",
-                collection_name,
-                creator.to_string()
-            );
-        }
+        let (collection_address, mut collection) =
+            self.get_collection_by_name(collection_name, context, working_set)?;
+        collection.exit_if_frozen()?;
+        collection.frozen = true;
+        self.collections
+            .set(&collection_address, &collection, working_set);
         Ok(CallResponse::default())
     }
 
@@ -176,43 +138,27 @@ impl<C: Context> NonFungibleToken<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let creator = context.sender();
-        let collection_address = get_collection_address::<C>(collection_name, creator.as_ref());
+        let (collection_address, mut collection) =
+            self.get_collection_by_name(collection_name, context, working_set)?;
+        collection.exit_if_frozen()?;
+        self.exit_if_nft_exists(token_id, &collection_address, working_set)?;
 
-        if let Some(mut c) = self.collections.get(&collection_address, working_set) {
-            let nft_identifier = NftIdentifier(token_id, collection_address.clone());
-            if c.frozen {
-                bail!(
-                    "Collection with name {} by sender {} is already frozen",
-                    collection_name,
-                    creator.to_string()
-                )
-            } else if self.nfts.get(&nft_identifier, working_set).is_some() {
-                bail!(
-                    "NFT id {} in Collection with name {}, creator {} already exists",
-                    token_id,
-                    collection_name,
-                    creator.to_string()
-                );
-            } else {
-                let new_nft = Nft {
-                    token_id,
-                    collection_address: collection_address.clone(),
-                    owner: mint_to_address.clone(),
-                    frozen,
-                    token_uri: collection_uri.to_string(),
-                };
-                self.nfts.set(&nft_identifier, &new_nft, working_set);
-                c.supply += 1;
-                self.collections.set(&collection_address, &c, working_set);
-            }
-        } else {
-            bail!(
-                "Collection with name {} by sender {} does not exist",
-                collection_name,
-                creator.to_string()
-            );
-        }
+        let new_nft = Nft {
+            token_id,
+            collection_address: collection_address.clone(),
+            owner: mint_to_address.clone(),
+            frozen,
+            token_uri: collection_uri.to_string(),
+        };
+
+        self.nfts.set(
+            &NftIdentifier(token_id, collection_address.clone()),
+            &new_nft,
+            working_set,
+        );
+        collection.supply += 1;
+        self.collections
+            .set(&collection_address, &collection, working_set);
 
         Ok(CallResponse::default())
     }
@@ -225,91 +171,130 @@ impl<C: Context> NonFungibleToken<C> {
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let owner = context.sender();
-
-        if self
-            .collections
-            .get(collection_address, working_set)
-            .is_some()
-        {
-            let nft_identifier = NftIdentifier(nft_id, collection_address.clone());
-            if let Some(mut n) = self.nfts.get(&nft_identifier, working_set) {
-                if owner.as_ref() == n.owner.as_ref() {
-                    n.owner = to.clone();
-                    self.nfts.set(&nft_identifier, &n, working_set);
-                } else {
-                    bail!("Transfer sent with owner {}, NFT id {} in Collection with address {} is owned by {}",
-                        owner,
-                        nft_id,
-                        collection_address.to_string(),
-                        n.owner.to_string()
-                    );
-                }
-            } else {
-                bail!(
-                    "NFT id {} in Collection with address {} does not exist",
-                    nft_id,
-                    collection_address.to_string()
-                );
-            }
-        } else {
-            bail!(
-                "Collection with address {} does not exist",
-                collection_address.to_string()
-            );
-        }
-
+        self.get_collection_by_address(collection_address, working_set)?;
+        let token_identifier = NftIdentifier(nft_id, collection_address.clone());
+        let mut nft = self.get_nft_by_id(&token_identifier, working_set)?;
+        nft.exit_if_not_owned(context)?;
+        nft.owner = to.clone();
+        self.nfts.set(&token_identifier, &nft, working_set);
         Ok(CallResponse::default())
     }
 
     pub(crate) fn update_nft(
         &self,
-        collection_address: &CollectionAddress<C>,
+        collection_name: &str,
         token_id: u64,
         token_uri: Option<String>,
         frozen: Option<bool>,
         context: &C,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> Result<CallResponse> {
-        let creator = context.sender();
-
-        if let Some(c) = self.collections.get(collection_address, working_set) {
-            let nft_identifier = NftIdentifier(token_id, collection_address.clone());
-            if c.creator.as_ref() == creator.as_ref() {
-                if let Some(mut n) = self.nfts.get(&nft_identifier, working_set) {
-                    if !n.frozen {
-                        if Some(true) == frozen {
-                            n.frozen = true;
-                        }
-                        if let Some(murl) = token_uri {
-                            n.token_uri = murl;
-                        }
-                        self.nfts.set(&nft_identifier, &n, working_set);
-                    } else {
-                        bail!(
-                            "NFT id {} in Collection with address {} is frozen",
-                            token_id,
-                            collection_address.to_string()
-                        );
-                    }
-                } else {
-                    bail!(
-                        "NFT id {} in Collection with address {} does not exist",
-                        token_id,
-                        collection_address.to_string()
-                    );
-                }
-            } else {
-                bail!("Nfts in collection name:{} collection_address:{} cannot be frozen by {} .collection owner is {}",
-                    c.name,collection_address.to_string(),creator, c.creator.to_string());
-            }
-        } else {
-            bail!(
-                "Collection with address {} does not exist",
-                collection_address.to_string()
-            );
-        }
+        let (collection_address, _) =
+            self.get_collection_by_name(collection_name, context, working_set)?;
+        let token_identifier = NftIdentifier(token_id, collection_address);
+        let mut nft = self.get_nft_by_id(&token_identifier, working_set)?;
+        nft.exit_if_frozen()?;
+        if let Some(val) = frozen {
+            nft.frozen = val
+        };
+        if let Some(murl) = token_uri {
+            nft.token_uri = murl
+        };
+        self.nfts.set(&token_identifier, &nft, working_set);
 
         Ok(CallResponse::default())
+    }
+
+    fn exit_if_collection_exists(
+        &self,
+        collection_name: &str,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<()> {
+        let creator = context.sender();
+        let ca = get_collection_address(collection_name, creator.as_ref());
+        ensure!(
+            self.collections.get(&ca, working_set).is_none(),
+            format!(
+                "Collection with name: {} already exists creator {}",
+                collection_name, creator
+            )
+        );
+        Ok(())
+    }
+
+    fn exit_if_nft_exists(
+        &self,
+        token_id: TokenId,
+        collection_address: &CollectionAddress<C>,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<()> {
+        let msg = format!(
+            "Collection with address {} already exists",
+            collection_address.0
+        );
+        ensure!(
+            self.nfts
+                .get(
+                    &NftIdentifier(token_id, collection_address.clone()),
+                    working_set
+                )
+                .is_none(),
+            msg
+        );
+        Ok(())
+    }
+
+    fn get_collection_by_address(
+        &self,
+        collection_address: &CollectionAddress<C>,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<Collection<C>> {
+        let c = self.collections.get(collection_address, working_set);
+        if let Some(collection) = c {
+            Ok(collection)
+        } else {
+            Err(anyhow!(
+                "Collection with address: {} does not exist",
+                collection_address.0
+            ))
+        }
+    }
+
+    fn get_collection_by_name(
+        &self,
+        collection_name: &str,
+        context: &C,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<(CollectionAddress<C>, Collection<C>)> {
+        let creator = context.sender();
+        let ca = get_collection_address(collection_name, creator.as_ref());
+        let c = self.collections.get(&ca, working_set);
+        if let Some(collection) = c {
+            Ok((ca, collection))
+        } else {
+            Err(anyhow!(
+                "Collection with name: {} does not exist for creator {}",
+                collection_name,
+                creator
+            ))
+        }
+    }
+
+    fn get_nft_by_id(
+        &self,
+        token_identifier: &NftIdentifier<C>,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> Result<Nft<C>> {
+        let n = self.nfts.get(token_identifier, working_set);
+        if let Some(nft) = n {
+            Ok(nft)
+        } else {
+            Err(anyhow!(
+                "Nft with token_id: {} in collection_address: {} does not exist",
+                token_identifier.0,
+                token_identifier.1 .0
+            ))
+        }
     }
 }
