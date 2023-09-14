@@ -1,10 +1,7 @@
 use std::sync::Mutex;
 
-use risc0_zkvm::receipt::Receipt;
 use risc0_zkvm::serde::to_vec;
-use risc0_zkvm::{
-    Executor, ExecutorEnvBuilder, LocalExecutor, SegmentReceipt, Session, SessionReceipt,
-};
+use risc0_zkvm::{Executor, ExecutorEnvBuilder, InnerReceipt, Receipt, Session};
 use sov_rollup_interface::zk::{Zkvm, ZkvmHost};
 #[cfg(feature = "bench")]
 use sov_zk_cycle_utils::{cycle_count_callback, get_syscall_name, get_syscall_name_cycles};
@@ -51,11 +48,11 @@ impl<'a> Risc0Host<'a> {
             .add_input(&self.env.lock().unwrap())
             .build()
             .unwrap();
-        let mut executor = LocalExecutor::from_elf(env, self.elf)?;
+        let mut executor = Executor::from_elf(env, self.elf)?;
         executor.run()
     }
     /// Run a computation in the zkvm and generate a receipt.
-    pub fn run(&mut self) -> anyhow::Result<SessionReceipt> {
+    pub fn run(&mut self) -> anyhow::Result<Receipt> {
         let session = self.run_without_proving()?;
         session.prove()
     }
@@ -129,16 +126,10 @@ fn verify_from_slice<'a>(
     code_commitment: &Risc0MethodId,
 ) -> Result<&'a [u8], anyhow::Error> {
     let Risc0Proof::<'a> {
-        segment_receipts,
-        journal,
-        ..
+        receipt, journal, ..
     } = bincode::deserialize(serialized_proof)?;
 
-    let receipts = segment_receipts
-        .into_iter()
-        .map(|r| r as Box<dyn Receipt>)
-        .collect::<Vec<_>>();
-    SessionReceipt::new(receipts, journal.to_vec()).verify(code_commitment.0)?;
+    receipt.verify(code_commitment.0, journal)?;
     Ok(journal)
 }
 
@@ -146,6 +137,6 @@ fn verify_from_slice<'a>(
 /// data. This allows to avoid one unnecessary copy during proof verification.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Risc0Proof<'a> {
-    pub segment_receipts: Vec<Box<SegmentReceipt>>,
+    pub receipt: InnerReceipt,
     pub journal: &'a [u8],
 }
