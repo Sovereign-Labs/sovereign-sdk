@@ -10,3 +10,7 @@ fuzz/Cargo.lock
 
 demo_data/
 /.vscode/*
+
+/examples/celestia-docker/credentials/*
+!/examples/celestia-docker/credentials/bridge-0.addr
+!/examples/celestia-docker/credentials/bridge-0.key
