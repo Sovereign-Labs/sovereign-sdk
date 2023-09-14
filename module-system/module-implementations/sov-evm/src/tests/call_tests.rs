@@ -5,7 +5,7 @@ use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::{Context, Module, PrivateKey, PublicKey, Spec};
 
 use crate::call::CallMessage;
-use crate::evm::transaction::Receipt;
+use crate::evm::primitive_types::Receipt;
 use crate::smart_contracts::SimpleStorageContract;
 use crate::tests::dev_signer::TestSigner;
 use crate::tests::genesis_tests::get_evm;

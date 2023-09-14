@@ -81,8 +81,7 @@ pub mod experimental {
             &self,
             raw_tx: RlpEvmTransaction,
         ) -> Result<(H256, Vec<u8>), jsonrpsee::core::Error> {
-            let signed_transaction: RethTransactionSignedNoHash =
-                raw_tx.clone().try_into().map_err(|e| e)?;
+            let signed_transaction: RethTransactionSignedNoHash = raw_tx.clone().try_into()?;
 
             let tx_hash = signed_transaction.hash();
             let sender = signed_transaction.recover_signer().ok_or(

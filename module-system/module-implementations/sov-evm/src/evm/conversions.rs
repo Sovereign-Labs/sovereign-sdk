@@ -7,7 +7,6 @@ use revm::primitives::{
     AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, Bytecode, CreateScheme, TransactTo,
     TxEnv, U256,
 };
-use thiserror::Error;
 
 use super::primitive_types::{
     BlockEnv, RawEvmTxConversionError, RlpEvmTransaction, TransactionSignedAndRecovered,
@@ -68,6 +67,9 @@ pub(crate) fn create_tx_env(tx: &TransactionSignedEcRecovered) -> TxEnv {
         nonce: Some(tx.nonce()),
         // TODO handle access list
         access_list: vec![],
+    }
+}
+
 impl TryFrom<RlpEvmTransaction> for TransactionSignedNoHash {
     type Error = RawEvmTxConversionError;
 
@@ -95,15 +97,6 @@ impl TryFrom<RlpEvmTransaction> for TransactionSignedEcRecovered {
             .ok_or(RawEvmTxConversionError::FailedToDecodeSignedTransaction)?;
 
         Ok(tx)
-    }
-}
-
-impl From<TransactionSignedAndRecovered> for TransactionSignedEcRecovered {
-    fn from(value: TransactionSignedAndRecovered) -> Self {
-        TransactionSignedEcRecovered::from_signed_transaction(
-            value.signed_transaction,
-            value.signer,
-        )
     }
 }
 
