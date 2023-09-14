@@ -14,8 +14,8 @@ resolver = "2"
 
 [dependencies]
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
+sov-state = { path = "../../sov-state", version = "0.2" }
 
 anyhow = { workspace = true }
 thiserror = { workspace = true }

@@ -20,10 +20,10 @@ bincode = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1" }
-sov-sequencer-registry = { path = "../sov-sequencer-registry", version = "0.1" }
-sov-chain-state = { path = "../sov-chain-state" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
+sov-state = { path = "../../sov-state", version = "0.2" }
+sov-sequencer-registry = { path = "../sov-sequencer-registry", version = "0.2" }
+sov-chain-state = { path = "../sov-chain-state", version = "0.2" }
 
 schemars = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
@@ -40,12 +40,4 @@ tempfile = { workspace = true }
 
 [features]
 default = []
-native = [
-    "jsonrpsee",
-    "schemars",
-    "serde",
-    "serde_json",
-    "sov-modules-api/native",
-    "sov-state/native",
-    "sov-sequencer-registry/native",
-]
+native = ["jsonrpsee", "schemars", "serde", "serde_json", "sov-modules-api/native", "sov-state/native", "sov-sequencer-registry/native"]

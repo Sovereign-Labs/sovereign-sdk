@@ -582,7 +582,7 @@ checksum = "795bc6e66a8e340f075fcf6227e417a2dc976b92b91f3cdc778bb858778b6747"
 
 [[package]]
 name = "const-rollup-config"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "constant_time_eq"
@@ -757,7 +757,7 @@ dependencies = [
 
 [[package]]
 name = "demo-stf"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -2182,7 +2182,7 @@ dependencies = [
 
 [[package]]
 name = "methods"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "risc0-build",
 ]
@@ -3579,7 +3579,7 @@ dependencies = [
 
 [[package]]
 name = "sov-accounts"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3595,7 +3595,7 @@ dependencies = [
 
 [[package]]
 name = "sov-bank"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3613,7 +3613,7 @@ dependencies = [
 
 [[package]]
 name = "sov-blob-storage"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3632,7 +3632,7 @@ dependencies = [
 
 [[package]]
 name = "sov-celestia-adapter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3662,7 +3662,7 @@ dependencies = [
 
 [[package]]
 name = "sov-chain-state"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3676,7 +3676,7 @@ dependencies = [
 
 [[package]]
 name = "sov-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3693,7 +3693,7 @@ dependencies = [
 
 [[package]]
 name = "sov-db"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3709,7 +3709,7 @@ dependencies = [
 
 [[package]]
 name = "sov-demo-prover-host"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3746,7 +3746,7 @@ dependencies = [
 
 [[package]]
 name = "sov-demo-rollup"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3778,14 +3778,14 @@ dependencies = [
 
 [[package]]
 name = "sov-first-read-last-write-cache"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "sov-modules-api"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bech32",
@@ -3809,7 +3809,7 @@ dependencies = [
 
 [[package]]
 name = "sov-modules-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3823,7 +3823,7 @@ dependencies = [
 
 [[package]]
 name = "sov-modules-stf-template"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3839,7 +3839,7 @@ dependencies = [
 
 [[package]]
 name = "sov-risc0-adapter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bincode",
@@ -3857,7 +3857,7 @@ dependencies = [
 
 [[package]]
 name = "sov-rollup-interface"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3873,7 +3873,7 @@ dependencies = [
 
 [[package]]
 name = "sov-schema-db"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "once_cell",
@@ -3885,7 +3885,7 @@ dependencies = [
 
 [[package]]
 name = "sov-sequencer"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3898,7 +3898,7 @@ dependencies = [
 
 [[package]]
 name = "sov-sequencer-registry"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3914,7 +3914,7 @@ dependencies = [
 
 [[package]]
 name = "sov-state"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "bcs",
@@ -3932,7 +3932,7 @@ dependencies = [
 
 [[package]]
 name = "sov-stf-runner"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3954,7 +3954,7 @@ dependencies = [
 
 [[package]]
 name = "sov-value-setter"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3970,7 +3970,7 @@ dependencies = [
 
 [[package]]
 name = "sov-zk-cycle-macros"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "borsh",
@@ -3981,7 +3981,7 @@ dependencies = [
 
 [[package]]
 name = "sov-zk-cycle-utils"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
