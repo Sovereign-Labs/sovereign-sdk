@@ -10,6 +10,7 @@ pub mod hooks;
 #[cfg(feature = "experimental")]
 mod query;
 #[cfg(feature = "native")]
+#[cfg(feature = "experimental")]
 pub use query::*;
 #[cfg(feature = "experimental")]
 pub mod signer;
