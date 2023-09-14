@@ -92,9 +92,11 @@ jsonrpsee = { version = "0.18.2", features = ["jsonrpsee-types"] }
 schemars = { version = "0.8.12", features = ["derive"] }
 tempfile = "3.5"
 tokio = { version = "1", features = ["full"] }
+lazy_static = "1.4.0"
 
 
 # EVM dependencies
+ethereum-types = "0.14.1"
 ethers = "=2.0.8"
 ethers-core = "=2.0.8"
 ethers-contract = "=2.0.8"
