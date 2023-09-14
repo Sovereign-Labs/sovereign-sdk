@@ -13,5 +13,6 @@ resolver = "2"
 autotests = false
 
 [dependencies]
-risc0-zkvm = { workspace = true, default-features = false, features = ['std', 'prove'] }
+risc0-zkvm = { workspace = true, default-features = false, features = ['std'] }
 risc0-zkvm-platform = { workspace = true }
+bytes = "=1.4.0" # Risc0 re-exports bytes, but it's feature gated. So, we re-import the correct version

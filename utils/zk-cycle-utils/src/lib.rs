@@ -1,4 +1,4 @@
-use risc0_zkvm::Bytes;
+use bytes::Bytes;
 use risc0_zkvm_platform::syscall::SyscallName;
 
 pub fn get_syscall_name() -> SyscallName {

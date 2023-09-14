@@ -6923,6 +6923,7 @@ dependencies = [
 name = "sov-zk-cycle-utils"
 version = "0.2.0"
 dependencies = [
+ "bytes",
  "risc0-zkvm",
  "risc0-zkvm-platform",
 ]
