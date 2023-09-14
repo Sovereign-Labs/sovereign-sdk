@@ -10,7 +10,7 @@ use sov_state::{ProverStorage, WorkingSet};
 use super::db::EvmDb;
 use super::db_init::InitEvmDb;
 use super::executor;
-use crate::evm::transaction::BlockEnv;
+use crate::evm::primitive_types::BlockEnv;
 use crate::evm::AccountInfo;
 use crate::smart_contracts::SimpleStorageContract;
 use crate::tests::dev_signer::TestSigner;

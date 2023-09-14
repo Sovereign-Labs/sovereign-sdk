@@ -8,13 +8,13 @@ pub(crate) mod db;
 mod db_commit;
 pub(crate) mod db_init;
 pub(crate) mod executor;
+pub mod primitive_types;
 #[cfg(test)]
 mod tests;
-pub(crate) mod transaction;
 
 pub use conversions::prepare_call_env;
+pub use primitive_types::RlpEvmTransaction;
 use sov_state::codec::BcsCodec;
-pub use transaction::RlpEvmTransaction;
 
 // Stores information about an EVM account
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone, Default)]

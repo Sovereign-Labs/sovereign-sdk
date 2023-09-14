@@ -1,7 +1,7 @@
 use revm::primitives::{CfgEnv, SpecId, U256};
 
 use crate::call::{get_cfg_env, get_spec_id};
-use crate::evm::transaction::BlockEnv;
+use crate::evm::primitive_types::BlockEnv;
 use crate::evm::EvmChainConfig;
 
 #[test]

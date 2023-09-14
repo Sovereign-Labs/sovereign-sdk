@@ -7,7 +7,7 @@ use sov_state::WorkingSet;
 
 use crate::evm::db::EvmDb;
 use crate::evm::executor::{self};
-use crate::evm::transaction::{BlockEnv, Receipt, TransactionSignedAndRecovered};
+use crate::evm::primitive_types::{BlockEnv, Receipt, TransactionSignedAndRecovered};
 use crate::evm::{EvmChainConfig, RlpEvmTransaction};
 use crate::experimental::PendingTransaction;
 use crate::Evm;
