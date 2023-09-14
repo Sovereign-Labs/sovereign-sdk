@@ -29,12 +29,15 @@ serde_json = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true }
-sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
+sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.2", optional = true }
 risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
 risc0-zkvm-platform = { version = "0.16", optional = true }
 
-sov-rollup-interface = { path = "../../rollup-interface" }
-nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "dd37588444fca72825d11fe4a46838f66525c49f", features = ["serde", "borsh"] }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
+nmt-rs = { git = "https://github.com/Sovereign-Labs/nmt-rs.git", rev = "dd37588444fca72825d11fe4a46838f66525c49f", features = [
+	"serde",
+	"borsh",
+] }
 
 
 [dev-dependencies]

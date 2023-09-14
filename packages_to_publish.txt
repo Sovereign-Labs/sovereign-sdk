@@ -20,4 +20,4 @@ sov-blob-storage
 
 # Adapters
 sov-risc0-adapter
-sov-celestia-adapter
+# TODO: sov-celestia-adapter (https://github.com/Sovereign-Labs/nmt-rs/issues/17)
