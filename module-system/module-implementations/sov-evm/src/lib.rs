@@ -8,7 +8,9 @@ pub mod genesis;
 pub mod hooks;
 #[cfg(feature = "native")]
 #[cfg(feature = "experimental")]
-pub mod query;
+mod query;
+#[cfg(feature = "native")]
+pub use query::*;
 #[cfg(feature = "experimental")]
 pub mod signer;
 #[cfg(feature = "smart_contracts")]
