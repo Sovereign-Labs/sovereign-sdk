@@ -1,6 +1,7 @@
 [package]
 name = "sov-zk-cycle-utils"
 authors = { workspace = true }
+description = "Utilities for counting risc0 cycles consumed by Sovereign SDK functions"
 edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }

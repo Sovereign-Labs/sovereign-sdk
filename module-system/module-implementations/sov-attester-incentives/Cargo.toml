@@ -12,24 +12,24 @@ readme = "README.md"
 resolver = "2"
 
 [dev-dependencies]
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1", features = ["mocks"] }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.2", features = ["mocks"] }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
 sov-attester-incentives = { path = ".", features = ["native"] }
 tempfile = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
-bcs = { workspace = true }
+bcs = { git = "https://github.com/preston-evans98/bcs.git", rev = "e4f1861" }
 jmt = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 
-sov-bank = { path = "../sov-bank", version = "0.1" }
-sov-chain-state = { path = "../sov-chain-state", version = "0.1" }
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1" }
+sov-bank = { path = "../sov-bank", version = "0.2" }
+sov-chain-state = { path = "../sov-chain-state", version = "0.2" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
+sov-state = { path = "../../sov-state", version = "0.2" }
 
 
 [features]

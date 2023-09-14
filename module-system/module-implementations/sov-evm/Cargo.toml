@@ -14,8 +14,8 @@ resolver = "2"
 
 [dependencies]
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
+sov-state = { path = "../../sov-state", version = "0.2" }
 
 anyhow = { workspace = true }
 thiserror = { workspace = true }
@@ -32,23 +32,21 @@ derive_more = { workspace = true }
 lazy_static = "1.4.0"
 
 
-ethereum-types = "0.14.1"
+ethereum-types = { workspace = true }
 ethers-core = { workspace = true }
 ethers-contract = { workspace = true }
 ethers-middleware = { workspace = true }
 ethers-signers = { workspace = true }
 ethers = { workspace = true }
 
-revm = { workspace = true }
+revm = { workspace = true, features = ["optional_block_gas_limit", "optional_eip3607", "optional_no_base_fee"] }
 reth-primitives = { workspace = true }
 reth-rpc-types = { workspace = true }
-reth-rpc = { workspace = true }
 reth-revm = { workspace = true }
 secp256k1 = { workspace = true }
 
 [dev-dependencies]
 sov-evm = { path = ".", features = ["smart_contracts"] }
-primitive-types = "0.12.1"
 tokio = { workspace = true }
 tempfile = { workspace = true }
 bytes = { workspace = true }

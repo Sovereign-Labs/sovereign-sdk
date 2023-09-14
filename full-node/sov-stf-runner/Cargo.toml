@@ -23,11 +23,11 @@ tracing = { workspace = true }
 futures = "0.3"
 tracing-subscriber = "0.3.17"
 
-sov-db = { path = "../db/sov-db", optional = true }
-sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
-sov-state = { path = "../../module-system/sov-state", version = "0.1" }
-sov-modules-api = { path = "../../module-system/sov-modules-api", version = "0.1" }
-sov-celestia-adapter = { path = "../../adapters/celestia" }
+sov-db = { path = "../db/sov-db", version = "0.2", optional = true }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
+sov-state = { path = "../../module-system/sov-state", version = "0.2" }
+sov-modules-api = { path = "../../module-system/sov-modules-api", version = "0.2" }
+sov-celestia-adapter = { path = "../../adapters/celestia", version = "0.2" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -42,8 +42,8 @@ sov-accounts = { path = "../../module-system/module-implementations/sov-accounts
 [features]
 default = []
 native = [
-	"sov-db",
-	"sov-celestia-adapter/native",
+    "sov-db",
+    "sov-celestia-adapter/native",
     "sov-sequencer-registry/native",
     "sov-bank/native",
     "sov-state/native",

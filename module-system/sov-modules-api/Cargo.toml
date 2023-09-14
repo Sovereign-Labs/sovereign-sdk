@@ -15,10 +15,10 @@ resolver = "2"
 jsonrpsee = { workspace = true, optional = true }
 anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
-sov-state = { path = "../sov-state", version = "0.1" }
-sov-rollup-interface = { path = "../../rollup-interface", version = "0.1" }
-sov-modules-macros = { path = "../sov-modules-macros", version = "0.1", optional = true }
-sov-sequencer = { path = "../../full-node/sov-sequencer", optional = true }
+sov-state = { path = "../sov-state", version = "0.2" }
+sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
+sov-modules-macros = { path = "../sov-modules-macros", version = "0.2", optional = true }
+sov-sequencer = { path = "../../full-node/sov-sequencer", version = "0.2", optional = true }
 serde = { workspace = true }
 borsh = { workspace = true }
 thiserror = { workspace = true }
@@ -33,17 +33,31 @@ schemars = { workspace = true, optional = true, features = [] }
 ed25519-dalek = { version = "2.0.0", default-features = false }
 rand = { version = "0.8", optional = true }
 
-sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", optional = true }
+sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros", version = "0.2", optional = true }
 risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
 risc0-zkvm-platform = { version = "0.16", optional = true }
 
 [dev-dependencies]
 bincode = { workspace = true }
 sov-modules-api = { path = ".", features = ["native"] }
-sov-bank = { path = "../module-implementations/sov-bank", version = "0.1", features = ["native"] }
+sov-bank = { path = "../module-implementations/sov-bank", features = ["native"] }
 
 [features]
 bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]
 default = ["macros"]
-native = ["serde_json", "rand", "hex", "schemars", "ed25519-dalek/default", "ed25519-dalek/serde", "ed25519-dalek/rand_core", "clap", "jsonrpsee", "macros", "sov-modules-macros/native", "sov-state/native", "sov-sequencer"]
+native = [
+	"serde_json",
+	"rand",
+	"hex",
+	"schemars",
+	"ed25519-dalek/default",
+	"ed25519-dalek/serde",
+	"ed25519-dalek/rand_core",
+	"clap",
+	"jsonrpsee",
+	"macros",
+	"sov-modules-macros/native",
+	"sov-state/native",
+	"sov-sequencer",
+]
 macros = ["sov-modules-macros"]

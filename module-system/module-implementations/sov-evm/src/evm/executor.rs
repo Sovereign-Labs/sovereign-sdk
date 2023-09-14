@@ -6,11 +6,11 @@ use revm::primitives::{CfgEnv, EVMError, Env, ExecutionResult, ResultAndState, T
 use revm::{self, Database, DatabaseCommit};
 
 use super::conversions::create_tx_env;
-use super::transaction::BlockEnv;
+use super::primitive_types::BlockEnv;
 
 pub(crate) fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
     db: DB,
-    block_env: BlockEnv,
+    block_env: &BlockEnv,
     tx: &TransactionSignedEcRecovered,
     config_env: CfgEnv,
 ) -> Result<ExecutionResult, EVMError<Infallible>> {
@@ -29,7 +29,7 @@ pub(crate) fn execute_tx<DB: Database<Error = Infallible> + DatabaseCommit>(
 
 pub(crate) fn inspect<DB: Database<Error = Infallible> + DatabaseCommit>(
     db: DB,
-    block_env: BlockEnv,
+    block_env: &BlockEnv,
     tx: TxEnv,
     config_env: CfgEnv,
 ) -> Result<ResultAndState, EVMError<Infallible>> {

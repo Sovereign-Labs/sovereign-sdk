@@ -1,12 +1,27 @@
 use std::collections::HashMap;
 
 use reth_primitives::{sign_message, Address, Transaction, TransactionSigned, H256};
-use reth_rpc::eth::error::SignError;
 use secp256k1::{PublicKey, SecretKey};
 
 /// Ethereum transaction signer.
 pub struct DevSigner {
     signers: HashMap<Address, SecretKey>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum SignError {
+    /// Error occured while trying to sign data.
+    #[error("Could not sign")]
+    CouldNotSign,
+    /// Signer for requested account not found.
+    #[error("Unknown account")]
+    NoAccount,
+    /// TypedData has invalid format.
+    #[error("Given typed data is not valid")]
+    TypedData,
+    /// No chainid
+    #[error("No chainid")]
+    NoChainId,
 }
 
 impl DevSigner {

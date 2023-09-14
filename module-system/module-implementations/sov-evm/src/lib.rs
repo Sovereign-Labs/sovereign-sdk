@@ -28,12 +28,14 @@ mod experimental {
     use reth_primitives::{Address, H256};
     use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo};
-    use sov_state::codec::{BcsCodec, JsonCodec};
+    use sov_state::codec::BcsCodec;
     use sov_state::WorkingSet;
 
     use super::evm::db::EvmDb;
-    use super::evm::transaction::BlockEnv;
     use super::evm::{DbAccount, EvmChainConfig};
+    use crate::evm::primitive_types::{
+        Block, BlockEnv, Receipt, SealedBlock, TransactionSignedAndRecovered,
+    };
     #[derive(Clone, Debug)]
     pub struct AccountData {
         pub address: Address,
@@ -66,6 +68,12 @@ mod experimental {
         pub block_timestamp_delta: u64,
     }
 
+    #[derive(Clone, Debug, serde::Serialize, serde::Deserialize)]
+    pub(crate) struct PendingTransaction {
+        pub(crate) transaction: TransactionSignedAndRecovered,
+        pub(crate) receipt: Receipt,
+    }
+
     impl Default for EvmConfig {
         fn default() -> Self {
             Self {
@@ -83,7 +91,7 @@ mod experimental {
     }
 
     #[allow(dead_code)]
-    #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
+    // #[cfg_attr(feature = "native", derive(sov_modules_api::ModuleCallJsonSchema))]
     #[derive(ModuleInfo, Clone)]
     pub struct Evm<C: sov_modules_api::Context> {
         #[address]
@@ -99,36 +107,30 @@ mod experimental {
         pub(crate) pending_block: sov_state::StateValue<BlockEnv, BcsCodec>,
 
         #[state]
-        pub(crate) head_number: sov_state::StateValue<u64>,
-
-        // TODO JsonCodec: This is a workaround for https://github.com/bincode-org/bincode/issues/245 which affects all
-        // binary serialization formats.
-        // 1. Implement custom types for Block, Transaction etc.. with borsh derived.
-        // 2. Remove JsonCodec.
-        #[state]
-        pub(crate) blocks: sov_state::AccessoryStateMap<u64, reth_rpc_types::Block, JsonCodec>,
+        pub(crate) pending_transactions: sov_state::StateVec<PendingTransaction, BcsCodec>,
 
         #[state]
-        pub(crate) block_hashes:
-            sov_state::AccessoryStateMap<reth_primitives::H256, u64, JsonCodec>,
+        pub(crate) head: sov_state::StateValue<Block, BcsCodec>,
 
         #[state]
-        pub(crate) pending_transactions:
-            sov_state::AccessoryStateVec<reth_rpc_types::Transaction, JsonCodec>,
+        pub(crate) pending_head: sov_state::AccessoryStateValue<Block, BcsCodec>,
 
         #[state]
-        pub(crate) transactions: sov_state::AccessoryStateMap<
-            reth_primitives::H256,
-            reth_rpc_types::Transaction,
-            JsonCodec,
-        >,
+        pub(crate) blocks: sov_state::AccessoryStateVec<SealedBlock, BcsCodec>,
 
         #[state]
-        pub(crate) receipts: sov_state::AccessoryStateMap<
-            reth_primitives::U256,
-            reth_rpc_types::TransactionReceipt,
-            JsonCodec,
-        >,
+        pub(crate) block_hashes: sov_state::AccessoryStateMap<reth_primitives::H256, u64, BcsCodec>,
+
+        #[state]
+        pub(crate) transactions:
+            sov_state::AccessoryStateVec<TransactionSignedAndRecovered, BcsCodec>,
+
+        #[state]
+        pub(crate) transaction_hashes:
+            sov_state::AccessoryStateMap<reth_primitives::H256, u64, BcsCodec>,
+
+        #[state]
+        pub(crate) receipts: sov_state::AccessoryStateVec<Receipt, BcsCodec>,
 
         #[state]
         pub(crate) code:

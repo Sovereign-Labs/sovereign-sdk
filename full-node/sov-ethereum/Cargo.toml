@@ -26,7 +26,6 @@ serde_json = { workspace = true }
 
 reth-primitives = { workspace = true }
 reth-rpc-types = { workspace = true }
-reth-rpc = { workspace = true }
 
 ethers = { workspace = true }
 
