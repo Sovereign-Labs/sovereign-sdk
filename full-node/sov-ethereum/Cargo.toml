@@ -35,6 +35,6 @@ tokio = { workspace = true }
 
 
 [features]
-default = ["experimental"]
+default = []
 experimental = ["demo-stf/experimental", "sov-evm/experimental"]
 native = ["demo-stf/native", "sov-evm/native"]
