@@ -15,7 +15,7 @@ pub mod hooks;
 pub mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
-pub use query::{ChainStateRpcImpl, ChainStateRpcServer};
+pub use query::*;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::{DaSpec, Error, ModuleInfo, ValidityConditionChecker};
 use sov_state::codec::BcsCodec;
