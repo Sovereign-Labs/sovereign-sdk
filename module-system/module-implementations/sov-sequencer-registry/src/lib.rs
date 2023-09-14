@@ -15,10 +15,7 @@ pub mod query;
 
 pub use call::CallMessage;
 #[cfg(feature = "native")]
-pub use query::{
-    SequencerAddressResponse, SequencerRegistryRpcClient, SequencerRegistryRpcImpl,
-    SequencerRegistryRpcServer,
-};
+pub use query::*;
 use sov_modules_api::{CallResponse, Error, ModuleInfo, Spec};
 use sov_state::{StateMap, StateValue, WorkingSet};
 
