@@ -1,0 +1,15 @@
+[da]
+celestia_rpc_auth_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJBbGxvdyI6WyJwdWJsaWMiLCJyZWFkIiwid3JpdGUiLCJhZG1pbiJdfQ.Ie5-ulwuVPjzs6ahngRXunEsU4oLV46-AYfbJLz94Pw"
+celestia_rpc_address = "http://127.0.0.1:0.0.0.0:26658"
+max_celestia_response_body_size = 104_857_600
+celestia_rpc_timeout_seconds = 60
+
+[storage]
+path = "demo_data_0"
+
+[runner]
+start_height = 1
+
+[runner.rpc_config]
+bind_host = "127.0.0.1"
+bind_port = 12340
