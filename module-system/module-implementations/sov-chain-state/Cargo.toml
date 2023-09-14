@@ -1,6 +1,7 @@
 [package]
 name = "sov-chain-state"
 authors = { workspace = true }
+description = "A Sovereign SDK module for storing a rollup's historical state"
 edition = { workspace = true }
 homepage = { workspace = true }
 license = { workspace = true }
