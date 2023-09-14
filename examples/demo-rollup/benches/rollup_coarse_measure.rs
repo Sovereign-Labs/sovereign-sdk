@@ -126,8 +126,8 @@ async fn main() -> Result<(), anyhow::Error> {
             header: MockBlockHeader {
                 prev_hash: [0u8; 32].into(),
                 hash: barray.into(),
+                height,
             },
-            height,
             validity_cond: Default::default(),
             blobs: Default::default(),
         };

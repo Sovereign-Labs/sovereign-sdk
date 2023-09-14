@@ -115,6 +115,7 @@ pub(crate) fn create_demo_genesis_config<C: Context, Da: DaSpec>(
     let value_setter_config = ValueSetterConfig { admin };
     let chain_state_config = ChainStateConfig {
         initial_slot_height: 0,
+        current_time: Default::default(),
     };
     GenesisConfig::new(value_setter_config, chain_state_config)
 }

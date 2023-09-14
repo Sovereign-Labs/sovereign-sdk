@@ -18,6 +18,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 pub use query::{ChainStateRpcImpl, ChainStateRpcServer};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::{DaSpec, Error, ModuleInfo, ValidityConditionChecker};
+use sov_rollup_interface::da::Time;
 use sov_state::codec::BcsCodec;
 use sov_state::WorkingSet;
 
@@ -110,6 +111,10 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
     #[state]
     slot_height: sov_state::StateValue<TransitionHeight>,
 
+    /// The current time, as reported by the DA layer
+    #[state]
+    time: sov_state::StateValue<Time>,
+
     /// A record of all previous state transitions which are available to the VM.
     /// Currently, this includes *all* historical state transitions, but that may change in the future.
     /// This state map is delayed by one transition. In other words - the transition that happens in time i
@@ -136,6 +141,8 @@ pub struct ChainState<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> 
 pub struct ChainStateConfig {
     /// Initial slot height
     pub initial_slot_height: TransitionHeight,
+    /// The time at genesis
+    pub current_time: Time,
 }
 
 impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da> {
@@ -144,6 +151,13 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da>
         self.slot_height
             .get(working_set)
             .expect("Slot height should be set at initialization")
+    }
+
+    /// Returns the current time, as reported by the DA layer
+    pub fn get_time(&self, working_set: &mut WorkingSet<C::Storage>) -> Time {
+        self.time
+            .get(working_set)
+            .expect("Time must be set at initialization")
     }
 
     /// Return the genesis hash of the module.
