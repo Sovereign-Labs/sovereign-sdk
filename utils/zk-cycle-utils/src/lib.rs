@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use risc0_zkvm_platform::syscall::SyscallName;
 
 pub fn get_syscall_name() -> SyscallName {
@@ -7,7 +6,8 @@ pub fn get_syscall_name() -> SyscallName {
     SyscallName::from_bytes_with_nul(bytes.as_ptr())
 }
 
-pub fn cycle_count_callback(input: Bytes) -> risc0_zkvm::Result<Bytes> {
+#[cfg(feature = "native")]
+pub fn cycle_count_callback(input: risc0_zkvm::Bytes) -> risc0_zkvm::Result<risc0_zkvm::Bytes> {
     if input.len() == std::mem::size_of::<usize>() {
         let mut array = [0u8; std::mem::size_of::<usize>()];
         array.copy_from_slice(&input);

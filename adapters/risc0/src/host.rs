@@ -133,8 +133,8 @@ fn verify_from_slice<'a>(
     Ok(journal)
 }
 
-/// A convenience type which contains the same data a Risc0 [`SessionReceipt`] but borrows the journal
-/// data. This allows to avoid one unnecessary copy during proof verification.
+/// A convenience type which contains the same data a Risc0 [`Receipt`] but borrows the journal
+/// data. This allows us to avoid one unnecessary copy during proof verification.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct Risc0Proof<'a> {
     pub receipt: InnerReceipt,
