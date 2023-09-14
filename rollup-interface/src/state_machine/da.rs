@@ -250,7 +250,7 @@ impl Time {
     /// Returns the number of whole seconds since the epoch
     ///
     /// The returned value does not include the fractional (nanosecond) part of the duration,
-    /// which can be obtained using [`subsec_nanos`].
+    /// which can be obtained using `subsec_nanos`.
     pub fn secs(&self) -> i64 {
         self.secs
     }
