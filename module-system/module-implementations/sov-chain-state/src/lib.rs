@@ -12,7 +12,7 @@ pub mod hooks;
 
 /// The query interface with the module
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
 pub use query::*;

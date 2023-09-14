@@ -20,14 +20,14 @@ use sov_rollup_interface::da::DaSpec;
 #[cfg(feature = "native")]
 use sov_sequencer_registry::{SequencerRegistryRpcImpl, SequencerRegistryRpcServer};
 #[cfg(feature = "native")]
-use sov_value_setter::query::{ValueSetterRpcImpl, ValueSetterRpcServer};
+use sov_value_setter::{ValueSetterRpcImpl, ValueSetterRpcServer};
 
 #[cfg(feature = "native")]
 pub mod query {
-    pub use sov_chain_state::query as chain_state;
-    pub use sov_sequencer_registry::query as sequencer_registry;
-    pub use sov_value_setter::query as value_setter;
-    pub use {sov_accounts as accounts, sov_bank as bank};
+    pub use {
+        sov_accounts as accounts, sov_bank as bank, sov_chain_state as chain_state,
+        sov_sequencer_registry as sequencer_registry, sov_value_setter as value_setter,
+    };
 }
 
 /// The Rollup entrypoint.
