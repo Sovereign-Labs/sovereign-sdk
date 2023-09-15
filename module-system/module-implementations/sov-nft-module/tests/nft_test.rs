@@ -1,8 +1,8 @@
-use demo_nft_module::utils::get_collection_address;
-use demo_nft_module::{CallMessage, NonFungibleToken, UserAddress};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
 use sov_modules_api::{Context, Module};
+use sov_nft_module::utils::get_collection_address;
+use sov_nft_module::{CallMessage, NonFungibleToken, UserAddress};
 use sov_state::{DefaultStorageSpec, ProverStorage, WorkingSet};
 
 const PK1: [u8; 32] = [
