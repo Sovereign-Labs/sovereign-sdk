@@ -9,6 +9,7 @@ members = [
     "examples/demo-simple-stf",
     "examples/demo-rollup",
     "examples/demo-nft-module",
+    "examples/demo-prover/host",
 
     "full-node/db/sov-db",
     "full-node/sov-sequencer",
@@ -39,9 +40,6 @@ members = [
     "module-system/module-implementations/examples/sov-vec-setter",
     "module-system/module-implementations/examples/sov-accessory-state",
     "module-system/module-implementations/integration-tests",
-]
-exclude = [
-    "examples/demo-prover",
 ]
 
 [workspace.package]
@@ -76,6 +74,8 @@ proptest = "1.0.0"
 proptest-derive = "0.3.0"
 rand = "0.8"
 rayon = "1.5.2"
+risc0-zkvm = { version = "0.16" }
+risc0-build = { version = "0.16" }
 rocksdb = { version = "0.21.0", features = ["lz4"] }
 serde = { version = "1.0.188", features = ["derive", "rc"] }
 serde_json = { version = "1.0" }

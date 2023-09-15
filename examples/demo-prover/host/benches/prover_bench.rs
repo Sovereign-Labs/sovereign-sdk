@@ -17,7 +17,7 @@ use sov_celestia_adapter::types::{FilteredCelestiaBlock, NamespaceId};
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
 use sov_celestia_adapter::CelestiaService;
-use sov_modules_api::PrivateKey;
+use sov_modules_api::{PrivateKey, SlotData};
 use sov_risc0_adapter::host::Risc0Host;
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -222,7 +222,12 @@ async fn main() -> Result<(), anyhow::Error> {
             num_blobs += blob_txs.len();
         }
 
-        let result = demo.apply_slot(Default::default(), filtered_block, &mut blob_txs);
+        let result = demo.apply_slot(
+            Default::default(),
+            &filtered_block.header,
+            &filtered_block.validity_condition(),
+            &mut blob_txs,
+        );
         for r in result.batch_receipts {
             let num_tx = r.tx_receipts.len();
             num_total_transactions += num_tx;

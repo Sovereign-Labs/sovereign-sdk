@@ -31,8 +31,32 @@ where
     ledger_db: LedgerDB,
     state_root: StateRoot<ST, Vm, Da::Spec>,
     listen_address: SocketAddr,
-    #[allow(clippy::type_complexity)]
-    verifier: Option<(Vm, StateTransitionVerifier<V, Da::Verifier, Vm::Guest>)>,
+    prover: Option<Prover<V, Da, Vm>>,
+}
+
+/// Represents the possible modes of execution for a zkvm program
+pub enum ProofGenConfig<ST, Da: DaService, Vm: ZkvmHost>
+where
+    ST: StateTransitionFunction<Vm::Guest, Da::Spec>,
+{
+    /// The simulator runs the rollup verifier logic without even emulating the zkvm
+    Simulate(StateTransitionVerifier<ST, Da::Verifier, Vm::Guest>),
+    /// The executor runs the rollup verification logic in the zkvm, but does not actually
+    /// produce a zk proof
+    Execute,
+    /// The prover runs the rollup verification logic in the zkvm and produces a zk proof
+    Prover,
+}
+
+/// A prover for the demo rollup. Consists of a VM and a config
+pub struct Prover<ST, Da: DaService, Vm: ZkvmHost>
+where
+    ST: StateTransitionFunction<Vm::Guest, Da::Spec>,
+{
+    /// The Zkvm Host to use
+    pub vm: Vm,
+    /// The prover configuration
+    pub config: ProofGenConfig<ST, Da, Vm>,
 }
 
 impl<ST, Da, Vm, V, Root, Witness> StateTransitionRunner<ST, Da, Vm, V>
@@ -50,8 +74,7 @@ where
     Witness: Default,
     Root: Clone,
 {
-    /// Creates a new `StateTransitionRunner` runner.
-    #[allow(clippy::type_complexity)]
+    /// Creates a new `StateTransitionRunner`.
     pub fn new(
         runner_config: RunnerConfig,
         da_service: Da,
@@ -59,7 +82,7 @@ where
         mut app: ST,
         should_init_chain: bool,
         genesis_config: InitialState<ST, Vm, Da::Spec>,
-        verifier: Option<(Vm, StateTransitionVerifier<V, Da::Verifier, Vm::Guest>)>,
+        prover: Option<Prover<V, Da, Vm>>,
     ) -> Result<Self, anyhow::Error> {
         let rpc_config = runner_config.rpc_config;
 
@@ -90,7 +113,7 @@ where
             ledger_db,
             state_root: prev_state_root,
             listen_address,
-            verifier,
+            prover,
         })
     }
 
@@ -119,7 +142,7 @@ where
     }
 
     /// Runs the rollup.
-    pub async fn run(&mut self) -> Result<(), anyhow::Error> {
+    pub async fn run_in_process(&mut self) -> Result<(), anyhow::Error> {
         for height in self.start_height.. {
             debug!("Requesting data for height {}", height,);
 
@@ -151,7 +174,7 @@ where
             for receipt in slot_result.batch_receipts {
                 data_to_commit.add_batch(receipt);
             }
-            if let Some((host, verifier)) = self.verifier.as_mut() {
+            if let Some(Prover { vm, config }) = self.prover.as_mut() {
                 let (inclusion_proof, completeness_proof) = self
                     .da_service
                     .get_extraction_proof(&filtered_block, &blobs)
@@ -166,13 +189,17 @@ where
                         blobs,
                         state_transition_witness: slot_result.witness,
                     };
-                host.add_hint(transition_data);
+                vm.add_hint(transition_data);
 
-                verifier
-                    .run_block(host.simulate_with_hints())
-                    .map_err(|e| {
-                        anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
-                    })?;
+                match config {
+                    ProofGenConfig::Simulate(verifier) => {
+                        verifier.run_block(vm.simulate_with_hints()).map_err(|e| {
+                            anyhow::anyhow!("Guest execution must succeed but failed with {:?}", e)
+                        })?;
+                    }
+                    ProofGenConfig::Execute => vm.run(false)?,
+                    ProofGenConfig::Prover => vm.run(true)?,
+                }
             }
             let next_state_root = slot_result.state_root;
 
