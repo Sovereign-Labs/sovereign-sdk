@@ -1,0 +1,9 @@
+[package]
+name = "bashtestmd"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.4", features = ["derive"] }
+markdown = "1.0.0-alpha.12"
+shell-escape = "0.1.5"
