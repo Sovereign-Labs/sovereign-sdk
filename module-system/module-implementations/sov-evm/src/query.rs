@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ethereum_types::U64;
 use jsonrpsee::core::RpcResult;
 use reth_primitives::contract::create_address;
@@ -9,7 +11,7 @@ use tracing::info;
 
 use crate::call::get_cfg_env;
 use crate::evm::db::EvmDb;
-use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered};
+use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered, Block};
 use crate::evm::{executor, prepare_call_env};
 use crate::Evm;
 
@@ -29,38 +31,96 @@ impl<C: sov_modules_api::Context> Evm<C> {
     #[rpc_method(name = "getBlockByNumber")]
     pub fn get_block_by_number(
         &self,
-        _block_number: Option<String>,
-        _details: Option<bool>,
-        _working_set: &mut WorkingSet<C::Storage>,
+        block_number: Option<String>,
+        details: Option<bool>,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<reth_rpc_types::RichBlock>> {
         info!("evm module: eth_getBlockByNumber");
 
-        let header = reth_rpc_types::Header {
-            hash: Default::default(),
-            parent_hash: Default::default(),
-            uncles_hash: Default::default(),
-            miner: Default::default(),
-            state_root: Default::default(),
-            transactions_root: Default::default(),
-            receipts_root: Default::default(),
-            logs_bloom: Default::default(),
-            difficulty: Default::default(),
-            number: Default::default(),
-            gas_limit: Default::default(),
-            gas_used: Default::default(),
-            timestamp: Default::default(),
-            extra_data: Default::default(),
-            mix_hash: Default::default(),
-            nonce: Default::default(),
-            base_fee_per_gas: Some(reth_primitives::U256::from(100)),
-            withdrawals_root: Default::default(),
+        // "safe" and "finalized" are not implemented
+        let block = match block_number {
+            Some(ref block_number) if block_number == "earliest" => {
+                self
+                    .blocks
+                    .get(0, &mut working_set.accessory_state())
+                    .expect("Genesis block must be set")
+            },
+            Some(ref block_number) if block_number == "latest" => {
+                self
+                    .head
+                    .get(working_set)
+                    .expect("Head block must be set")
+                    .seal()
+            },
+            Some(ref block_number) if block_number == "pending" => {
+                self
+                    .pending_head
+                    .get(&mut working_set.accessory_state())
+                    .expect("Pending head block must be set")
+                    .seal()
+            },
+            Some(ref block_number) => {
+                let block_number = usize::from_str_radix(block_number, 16).unwrap();
+                self
+                    .blocks
+                    .get(block_number, &mut working_set.accessory_state())
+                    .expect("Block must be set")
+            },
+            None => {
+                self
+                    .head
+                    .get(working_set)
+                    .expect("Head block must be set")
+                    .seal()
+            },
+        };
+
+        let (header, transactions) = {
+            let header = reth_rpc_types::Header::from_primitive_with_hash(
+                block.header.clone(),
+            );
+
+            let transaction_hashes = self.transactions
+                .iter(&mut working_set.accessory_state())
+                .map(|tx| tx.signed_transaction.hash)
+                .collect::<Vec<_>>();
+
+            let tx_numbers = transaction_hashes
+                .iter()
+                .map(|hash| (
+                    hash,
+                    self.transaction_hashes.get(hash, &mut working_set.accessory_state()).unwrap()
+                ))
+                .collect::<HashMap<_, _>>();
+
+            let transactions = match details {
+                Some(true) => reth_rpc_types::BlockTransactions::Full(
+                    self.transactions
+                        .iter(&mut working_set.accessory_state())
+                        .map(|tx| {
+                            let tx_number = tx_numbers.get(&tx.signed_transaction.hash).unwrap();
+
+                            reth_rpc_types::Transaction::from_recovered_with_block_context(
+                                tx.into(),
+                                block.header.hash,
+                                block.header.number,
+                                block.header.base_fee_per_gas,
+                                U256::from(tx_number - block.transactions.start),
+                            )
+                        })
+                        .collect::<Vec<_>>()
+                ),
+                _ => reth_rpc_types::BlockTransactions::Hashes(transaction_hashes),
+            };
+
+            (header, transactions)
         };
 
         let block = reth_rpc_types::Block {
             header,
             total_difficulty: Default::default(),
             uncles: Default::default(),
-            transactions: reth_rpc_types::BlockTransactions::Hashes(Default::default()),
+            transactions,
             size: Default::default(),
             withdrawals: Default::default(),
         };
