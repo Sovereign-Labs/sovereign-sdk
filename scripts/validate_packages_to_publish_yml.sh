@@ -34,7 +34,7 @@ done <<< "$releasable_packages"
 echo ""
 echo "Validating the present of package metadata for all packages_to_publish.yml entries..."
 
-yq '.[]' packages_to_publish.yml | while read -r pkg; do
+while read -r pkg; do
 	# Capture both stdour and stderr.
 	output=$(cargo package --allow-dirty -p $pkg --list 2>&1)
     if echo "$output" | grep -q "warning:"; then
@@ -42,11 +42,13 @@ yq '.[]' packages_to_publish.yml | while read -r pkg; do
 		echo "$output" | grep "warning:"
 		status=1
 	fi
-done
+done < <(yq '.[]' packages_to_publish.yml)
 
+echo ""
 if [ $status -eq 1 ]; then
-	echo "Done. Validation failed!"
+	echo "Validation failed."
 	exit 1
 fi
 
-echo "Everything is up to date! Goodbye."
+echo "Validation successful, everything okay."
+echo "Goodbye!"
