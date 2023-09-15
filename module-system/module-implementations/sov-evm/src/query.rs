@@ -22,13 +22,14 @@ impl<C: sov_modules_api::Context> Evm<C> {
     ) -> RpcResult<Option<reth_primitives::U64>> {
         info!("evm module: eth_chainId");
 
-        let chain_id = self
-            .cfg
-            .get(working_set)
-            .expect("Evm config must be set")
-            .chain_id;
+        let chain_id = reth_primitives::U64::from(
+            self.cfg
+                .get(working_set)
+                .expect("Evm config must be set")
+                .chain_id,
+        );
 
-        Ok(Some(reth_primitives::U64::from(chain_id)))
+        Ok(Some(chain_id))
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
