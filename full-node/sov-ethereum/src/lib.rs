@@ -178,6 +178,12 @@ pub mod experimental {
             Ok::<_, ErrorObjectOwned>(ethereum.eth_rpc_config.eth_signer.signers())
         })?;
 
+        // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
+        rpc.register_async_method("eth_sendTransaction", |parameters, _ethereum| async move {
+            let _data: reth_rpc_types::TransactionRequest = parameters.one().unwrap();
+            unimplemented!("eth_sendTransaction not implemented")
+        })?;
+
         Ok(())
     }
 }
