@@ -29,8 +29,8 @@ serde_json = { workspace = true, optional = true }
 borsh = { workspace = true, features = ["rc"] }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 sov-zk-cycle-macros = { path = "../../../utils/zk-cycle-macros", version = "0.2", optional = true }
-risc0-zkvm = { version = "0.16", default-features = false, features = ["std"], optional = true }
-risc0-zkvm-platform = { version = "0.16", optional = true }
+risc0-zkvm = { workspace = true, default-features = false, features = ["std"], optional = true }
+risc0-zkvm-platform = { workspace = true, optional = true }
 sov-zk-cycle-utils = { path = "../../../utils/zk-cycle-utils", version = "0.2", optional = true }
 
 [features]
