@@ -11,7 +11,7 @@ use tracing::info;
 
 use crate::call::get_cfg_env;
 use crate::evm::db::EvmDb;
-use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered, Block};
+use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered};
 use crate::evm::{executor, prepare_call_env};
 use crate::Evm;
 
@@ -38,58 +38,52 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         // "safe" and "finalized" are not implemented
         let block = match block_number {
-            Some(ref block_number) if block_number == "earliest" => {
-                self
-                    .blocks
-                    .get(0, &mut working_set.accessory_state())
-                    .expect("Genesis block must be set")
-            },
-            Some(ref block_number) if block_number == "latest" => {
-                self
-                    .head
-                    .get(working_set)
-                    .expect("Head block must be set")
-                    .seal()
-            },
-            Some(ref block_number) if block_number == "pending" => {
-                self
-                    .pending_head
-                    .get(&mut working_set.accessory_state())
-                    .expect("Pending head block must be set")
-                    .seal()
-            },
+            Some(ref block_number) if block_number == "earliest" => self
+                .blocks
+                .get(0, &mut working_set.accessory_state())
+                .expect("Genesis block must be set"),
+            Some(ref block_number) if block_number == "latest" => self
+                .head
+                .get(working_set)
+                .expect("Head block must be set")
+                .seal(),
+            Some(ref block_number) if block_number == "pending" => self
+                .pending_head
+                .get(&mut working_set.accessory_state())
+                .expect("Pending head block must be set")
+                .seal(),
             Some(ref block_number) => {
                 let block_number = usize::from_str_radix(block_number, 16).unwrap();
-                self
-                    .blocks
+                self.blocks
                     .get(block_number, &mut working_set.accessory_state())
                     .expect("Block must be set")
-            },
-            None => {
-                self
-                    .head
-                    .get(working_set)
-                    .expect("Head block must be set")
-                    .seal()
-            },
+            }
+            None => self
+                .head
+                .get(working_set)
+                .expect("Head block must be set")
+                .seal(),
         };
 
         let (header, transactions) = {
-            let header = reth_rpc_types::Header::from_primitive_with_hash(
-                block.header.clone(),
-            );
+            let header = reth_rpc_types::Header::from_primitive_with_hash(block.header.clone());
 
-            let transaction_hashes = self.transactions
+            let transaction_hashes = self
+                .transactions
                 .iter(&mut working_set.accessory_state())
                 .map(|tx| tx.signed_transaction.hash)
                 .collect::<Vec<_>>();
 
             let tx_numbers = transaction_hashes
                 .iter()
-                .map(|hash| (
-                    hash,
-                    self.transaction_hashes.get(hash, &mut working_set.accessory_state()).unwrap()
-                ))
+                .map(|hash| {
+                    (
+                        hash,
+                        self.transaction_hashes
+                            .get(hash, &mut working_set.accessory_state())
+                            .unwrap(),
+                    )
+                })
                 .collect::<HashMap<_, _>>();
 
             let transactions = match details {
@@ -107,7 +101,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
                                 U256::from(tx_number - block.transactions.start),
                             )
                         })
-                        .collect::<Vec<_>>()
+                        .collect::<Vec<_>>(),
                 ),
                 _ => reth_rpc_types::BlockTransactions::Hashes(transaction_hashes),
             };
