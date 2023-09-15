@@ -211,6 +211,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         unimplemented!("eth_blockNumber not implemented")
     }
 
+    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "estimateGas")]
     pub fn eth_estimate_gas(
         &self,
@@ -218,6 +219,12 @@ impl<C: sov_modules_api::Context> Evm<C> {
         _block_number: Option<reth_primitives::BlockId>,
         _working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<reth_primitives::U256> {
+        unimplemented!("eth_sendTransaction not implemented")
+    }
+
+    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
+    #[rpc_method(name = "gasPrice")]
+    pub fn gas_price(&self) -> RpcResult<reth_primitives::U256> {
         unimplemented!("eth_sendTransaction not implemented")
     }
 }
