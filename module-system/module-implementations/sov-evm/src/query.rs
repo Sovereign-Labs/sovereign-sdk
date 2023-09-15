@@ -43,67 +43,61 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 .get(0, &mut working_set.accessory_state())
                 .expect("Genesis block must be set"),
             Some(ref block_number) if block_number == "latest" => self
-                .head
-                .get(working_set)
-                .expect("Head block must be set")
-                .seal(),
+                .blocks
+                .last(&mut working_set.accessory_state())
+                .expect("Head block must be set"),
             Some(ref block_number) if block_number == "pending" => self
                 .pending_head
                 .get(&mut working_set.accessory_state())
                 .expect("Pending head block must be set")
                 .seal(),
             Some(ref block_number) => {
-                let block_number = usize::from_str_radix(block_number, 16).unwrap();
+                let block_number = usize::from_str_radix(block_number, 16).expect("Block number must be hex");
                 self.blocks
                     .get(block_number, &mut working_set.accessory_state())
                     .expect("Block must be set")
             }
             None => self
-                .head
-                .get(working_set)
-                .expect("Head block must be set")
-                .seal(),
+                .blocks
+                .last(&mut working_set.accessory_state())
+                .expect("Head block must be set"),
         };
 
         let (header, transactions) = {
             let header = reth_rpc_types::Header::from_primitive_with_hash(block.header.clone());
-
-            let transaction_hashes = self
-                .transactions
-                .iter(&mut working_set.accessory_state())
-                .map(|tx| tx.signed_transaction.hash)
-                .collect::<Vec<_>>();
-
-            let tx_numbers = transaction_hashes
-                .iter()
-                .map(|hash| {
-                    (
-                        hash,
-                        self.transaction_hashes
-                            .get(hash, &mut working_set.accessory_state())
-                            .unwrap(),
-                    )
+            
+            let transactions_with_id = block.transactions
+                .clone()
+                .map(|id| {
+                    let tx = self.transactions
+                        .get(id as usize, &mut working_set.accessory_state())
+                        .expect("Transaction must be set");
+                    (id, tx)
                 })
-                .collect::<HashMap<_, _>>();
+                .collect::<Vec<_>>();
+        
 
             let transactions = match details {
                 Some(true) => reth_rpc_types::BlockTransactions::Full(
-                    self.transactions
-                        .iter(&mut working_set.accessory_state())
-                        .map(|tx| {
-                            let tx_number = tx_numbers.get(&tx.signed_transaction.hash).unwrap();
-
+                    transactions_with_id
+                        .iter()
+                        .map(|(id, tx)| {
                             reth_rpc_types::Transaction::from_recovered_with_block_context(
-                                tx.into(),
+                                tx.clone().into(),
                                 block.header.hash,
                                 block.header.number,
                                 block.header.base_fee_per_gas,
-                                U256::from(tx_number - block.transactions.start),
+                                U256::from(id - block.transactions.start),
                             )
                         })
                         .collect::<Vec<_>>(),
                 ),
-                _ => reth_rpc_types::BlockTransactions::Hashes(transaction_hashes),
+                _ => reth_rpc_types::BlockTransactions::Hashes({
+                    transactions_with_id
+                        .iter()
+                        .map(|(_, tx)| tx.signed_transaction.hash)
+                        .collect::<Vec<_>>()
+                }),
             };
 
             (header, transactions)
