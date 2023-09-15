@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ethereum_types::U64;
 use jsonrpsee::core::RpcResult;
 use reth_primitives::contract::create_address;
@@ -9,7 +11,7 @@ use tracing::info;
 
 use crate::call::get_cfg_env;
 use crate::evm::db::EvmDb;
-use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered};
+use crate::evm::primitive_types::{Receipt, SealedBlock, TransactionSignedAndRecovered, Block};
 use crate::evm::{executor, prepare_call_env};
 use crate::Evm;
 
