@@ -186,14 +186,12 @@ where
         }
     }
 
+    /// Returns the last value in the [`StateVec`], or [`None`] if
+    /// empty.
     pub fn last<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
         let len = self.len(working_set);
-
-        if len == 0usize {
-            None
-        } else {
-            self.elems.get(&(len - 1), working_set)
-        }
+        let i = len.checked_sub(1)?;
+        self.elems.get(&i, working_set)
     }
 }
 

@@ -183,7 +183,7 @@ where
         }
     }
 
-    /// Returns the last value in the [`AccessoryStateVec`], or [`None`] is
+    /// Returns the last value in the [`AccessoryStateVec`], or [`None`] if
     /// empty.
     pub fn last<S: Storage>(&self, working_set: &mut AccessoryWorkingSet<S>) -> Option<V> {
         let len = self.len(working_set);
