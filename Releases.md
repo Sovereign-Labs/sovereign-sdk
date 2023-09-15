@@ -7,14 +7,15 @@ This document describes how to cut a release of the Sovereign SDK.
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
-- [Before starting](#before-starting)
-- [Pick a version number](#pick-a-version-number)
-- [Make sure the documentation and tutorials are up to date](#make-sure-the-documentation-and-tutorials-are-up-to-date)
-- [Update all crate versions](#update-all-crate-versions)
-- [Prepare the PR](#prepare-the-pr)
-- [Release to `crates.io`](#release-to-cratesio)
-- [Create a tag and a GitHub release](#create-a-tag-and-a-github-release)
-- [Merge to `nightly` and `stable`](#merge-to-nightly-and-stable)
+- [Releases](#releases)
+  - [Before starting](#before-starting)
+  - [Pick a version number](#pick-a-version-number)
+  - [Make sure the documentation and tutorials are up to date](#make-sure-the-documentation-and-tutorials-are-up-to-date)
+  - [Update all crate versions](#update-all-crate-versions)
+  - [Prepare the PR](#prepare-the-pr)
+  - [Release to `crates.io`](#release-to-cratesio)
+  - [Create a tag and a GitHub release](#create-a-tag-and-a-github-release)
+  - [Merge to `nightly` and `stable`](#merge-to-nightly-and-stable)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -38,7 +39,7 @@ Before starting, ensure your local copy of the repository is up to date with the
   - [ ] `examples/demo-simple-stf/README.md`
   - [ ] `examples/demo-stf/README.md`
   - [ ] `examples/demo-nft-module/README.md`
-- [ ] Audit `packages_to_publish.txt` and ensure that all relevant _library_ crates are included. Binaries (such as `demo-rollup`) and other internal crates not intended to be used by SDK users (such as `sov-modules-schemas`) should not be included. The list must remain pre-sorted by dependencies, so that crates are published in the correct order.
+- [ ] Audit `packages_to_publish.yml` and ensure that all relevant _library_ crates are included. Binaries (such as `demo-rollup`) and other internal crates not intended to be used by SDK users (such as `sov-modules-schemas`) should not be included. The list must remain pre-sorted by dependencies, so that crates are published in the correct order.
 - [ ] Commit any changes.
 
 ## Update all crate versions
@@ -71,7 +72,7 @@ After committing these changes, you should open a new PR **against `nightly`**. 
 
 ## Release to `crates.io`
 
-**After** the PR is approved but **before** it's merged, you should release the crates in `packages_to_publish.txt` to <https://crates.io>. Go through the list of crates to release _in order_ and run these commands:
+**After** the PR is approved but **before** it's merged, you should release the crates in `packages_to_publish.yml` to <https://crates.io>. Go through the list of crates to release _in order_ and run these commands:
 
 - [ ] `$ cargo publish --dry-run -p {crate}` to ensure there are no issues.
 - [ ] `$ cargo publish -p {crate}` to actually release the crate.
@@ -85,4 +86,4 @@ After committing these changes, you should open a new PR **against `nightly`**. 
 ## Merge to `nightly` and `stable`
 
 - [ ] Merge your PR to `nightly`.
-- [ ] Merge `nightly` to `stable` with a new PR. Make sure no commits that are not part of the release get merged accidentally into `stable`.
+- [ ] Merge `nightly` to `stable` with a new PR (example [here](https://github.com/Sovereign-Labs/sovereign-sdk/pull/866#pullrequestreview-1627315759)). Make sure no commits that are not part of the release get merged accidentally into `stable`.

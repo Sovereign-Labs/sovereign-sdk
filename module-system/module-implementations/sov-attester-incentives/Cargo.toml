@@ -10,6 +10,7 @@ rust-version = { workspace = true }
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
+publish = false
 
 [dev-dependencies]
 sov-rollup-interface = { path = "../../../rollup-interface", version = "0.2", features = ["mocks"] }
