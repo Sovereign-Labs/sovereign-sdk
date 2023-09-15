@@ -31,7 +31,7 @@ risc0_zkvm::guest::entry!(main);
 //  6. Output (Da hash, start_root, end_root, event_root)
 pub fn main() {
     env::write(&"Start guest\n");
-    let guest = Risc0Guest{};
+    let guest = Risc0Guest {};
 
     #[cfg(feature = "bench")]
     let start_cycles = env::get_cycle_count();
@@ -98,9 +98,8 @@ pub fn main() {
 
         // calculate the syscall name.
         let cycle_string = String::from("cycle_metrics\0");
-        let metrics_syscall_name = unsafe {
-            risc0_zkvm_platform::syscall::SyscallName::from_bytes_with_nul(cycle_string.as_ptr())
-        };
+        let metrics_syscall_name =
+            risc0_zkvm_platform::syscall::SyscallName::from_bytes_with_nul(cycle_string.as_ptr());
         risc0_zkvm::guest::env::send_recv_slice::<u8, u8>(metrics_syscall_name, &serialized);
     }
 }

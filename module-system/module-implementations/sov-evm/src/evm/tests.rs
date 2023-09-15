@@ -2,6 +2,7 @@ use std::convert::Infallible;
 
 use reth_primitives::TransactionKind;
 use revm::db::CacheDB;
+use revm::precompile::B160;
 use revm::primitives::{CfgEnv, ExecutionResult, Output, KECCAK_EMPTY, U256};
 use revm::{Database, DatabaseCommit};
 use sov_state::{ProverStorage, WorkingSet};
@@ -9,8 +10,8 @@ use sov_state::{ProverStorage, WorkingSet};
 use super::db::EvmDb;
 use super::db_init::InitEvmDb;
 use super::executor;
-use crate::evm::transaction::BlockEnv;
-use crate::evm::{contract_address, AccountInfo};
+use crate::evm::primitive_types::BlockEnv;
+use crate::evm::AccountInfo;
 use crate::smart_contracts::SimpleStorageContract;
 use crate::tests::dev_signer::TestSigner;
 use crate::Evm;
@@ -61,7 +62,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
 
     let contract = SimpleStorageContract::default();
 
-    let contract_address = {
+    let contract_address: B160 = {
         let tx = dev_signer
             .sign_default_transaction(TransactionKind::Create, contract.byte_code().to_vec(), 1)
             .unwrap();
@@ -71,8 +72,8 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
             gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT,
             ..Default::default()
         };
-        let result = executor::execute_tx(&mut evm_db, block_env, tx, CfgEnv::default()).unwrap();
-        contract_address(result).expect("Expected successful contract creation")
+        let result = executor::execute_tx(&mut evm_db, &block_env, tx, CfgEnv::default()).unwrap();
+        contract_address(&result).expect("Expected successful contract creation")
     };
 
     let set_arg = 21989;
@@ -82,14 +83,14 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
 
         let tx = dev_signer
             .sign_default_transaction(
-                TransactionKind::Call(contract_address.as_fixed_bytes().into()),
+                TransactionKind::Call(contract_address.into()),
                 hex::decode(hex::encode(&call_data)).unwrap(),
                 2,
             )
             .unwrap();
 
         let tx = &tx.try_into().unwrap();
-        executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
+        executor::execute_tx(&mut evm_db, &BlockEnv::default(), tx, CfgEnv::default()).unwrap();
     }
 
     let get_res = {
@@ -97,7 +98,7 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
 
         let tx = dev_signer
             .sign_default_transaction(
-                TransactionKind::Call(contract_address.as_fixed_bytes().into()),
+                TransactionKind::Call(contract_address.into()),
                 hex::decode(hex::encode(&call_data)).unwrap(),
                 3,
             )
@@ -105,11 +106,21 @@ fn simple_contract_execution<DB: Database<Error = Infallible> + DatabaseCommit +
 
         let tx = &tx.try_into().unwrap();
         let result =
-            executor::execute_tx(&mut evm_db, BlockEnv::default(), tx, CfgEnv::default()).unwrap();
+            executor::execute_tx(&mut evm_db, &BlockEnv::default(), tx, CfgEnv::default()).unwrap();
 
         let out = output(result);
         ethereum_types::U256::from(out.as_ref())
     };
 
     assert_eq!(set_arg, get_res.as_u32())
+}
+
+fn contract_address(result: &ExecutionResult) -> Option<B160> {
+    match result {
+        ExecutionResult::Success {
+            output: Output::Create(_, Some(addr)),
+            ..
+        } => Some(**addr),
+        _ => None,
+    }
 }

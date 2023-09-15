@@ -133,12 +133,8 @@ The `make test-create-token` command above was useful to test if everything is r
 You'll need the `sov-cli` binary in order to create transactions. Build it with these commands:
 
 ```sh
-$ cd ../demo-stf   # Assuming you're still in examples/demo-rollup/
-$ cargo build --bin sov-cli
-$ cd ../..   # Go back to the root of the repository
-$ ./target/debug/sov-cli -h
-Main entry point for CLI
-
+# Make sure you're still in `examples/demo-rollup`
+$ cargo run --bin sov-cli
 Usage: sov-cli <COMMAND>
 
 Commands:
@@ -204,7 +200,7 @@ pub enum CallMessage<C: sov_modules_api::Context> {
 }
 ```
 
-In the above snippet, we can see that `CallMessage` in `Bank` supports five different types of calls. The `sov-cli` has the ability to parse a JSON file that aligns with any of these calls and subsequently serialize them. The structure of the JSON file, which represents the call, closely mirrors that of the Enum member. Consider the `Transfer` message as an example:
+In the above snippet, we can see that `CallMessage` in `Bank` supports five different types of calls. The `sov-cli` has the ability to parse a JSON file that aligns with any of these calls and subsequently serialize them. The structure of the JSON file, which represents the call, closely mirrors that of the Enum member. You can view the relevant JSON Schema for `Bank` [here](../../module-system/module-schemas/schemas/sov-bank.json) Consider the `Transfer` message as an example:
 
 ```rust
 use sov_bank::Coins;
@@ -233,7 +229,7 @@ Here's an example of a JSON representing the above call:
 
 #### 2. Generate the Transaction
 
-The JSON above is the contents of the file `examples/test-data/requests/transfer.json`. We'll use this transaction as our example for the rest of the tutorial. In order to send the transaction, we need to perform 2 operations:
+The JSON above is the contents of the file [`examples/test-data/requests/transfer.json`](../../examples/test-data/requests/transfer.json). We'll use this transaction as our example for the rest of the tutorial. In order to send the transaction, we need to perform 2 operations:
 
 - Import the transaction data into the wallet
 - Sign and submit the transaction
@@ -243,7 +239,7 @@ Note: we're able to make a `Transfer` call here because we already created the t
 To generate transactions you can use the `transactions import from-file` subcommand, as shown below:
 
 ```sh
-$ ./target/debug/sov-cli transactions import from-file -h
+$ cargo run --bin sov-cli -- transactions import from-file -h
 Import a transaction from a JSON file at the provided path
 
 Usage: sov-cli transactions import from-file <COMMAND>
@@ -251,7 +247,6 @@ Usage: sov-cli transactions import from-file <COMMAND>
 Commands:
   bank                Generates a transaction for the `bank` module
   sequencer-registry  Generates a transaction for the `sequencer_registry` module
-  election            Generates a transaction for the `election` module
   value-setter        Generates a transaction for the `value_setter` module
   accounts            Generates a transaction for the `accounts` module
   help                Print this message or the help of the given subcommand(s)
@@ -263,7 +258,7 @@ Options:
 Let's go ahead and import the transaction into the wallet
 
 ```bash
-$ ./target/debug/sov-cli transactions import from-file bank --path ./examples/test-data/requests/transfer.json
+$ cargo run --bin sov-cli -- transactions import from-file bank --path ../test-data/requests/transfer.json
 Adding the following transaction to batch:
 {
   "bank": {
@@ -286,10 +281,10 @@ You now have a batch with a single transaction in your wallet. If you want to su
 batch, you can import them now. Finally, let's submit your transaction to the rollup.
 
 ```bash
-$ ./target/debug/sov-cli rpc submit-batch by-address sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94
+$ cargo run --bin sov-cli rpc submit-batch by-address sov1l6n2cku82yfqld30lanm2nfw43n2auc8clw7r5u5m6s7p8jrm4zqrr8r94
 ```
 
-This command will use your default private key
+This command will use your default private key.
 
 #### 4. Verify the Token Supply
 

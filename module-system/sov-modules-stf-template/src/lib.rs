@@ -96,17 +96,24 @@ where
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn end_slot(&mut self) -> (jmt::RootHash, <<C as Spec>::Storage as Storage>::Witness) {
-        let mut checkpoint = self.checkpoint.take().unwrap();
-        let (cache_log, witness) = checkpoint.freeze();
+        let checkpoint = self.checkpoint.take().unwrap();
 
+        // Run end end_slot_hook
         let mut working_set = checkpoint.to_revertable();
+        self.runtime.end_slot_hook(&mut working_set);
+        // Save checkpoint
+        let mut checkpoint = working_set.checkpoint();
+
+        let (cache_log, witness) = checkpoint.freeze();
 
         let (root_hash, authenticated_node_batch) = self
             .current_storage
             .compute_state_update(cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
 
-        self.runtime.end_slot_hook(root_hash, &mut working_set);
+        let mut working_set = checkpoint.to_revertable();
+        self.runtime
+            .finalize_slot_hook([0; 32], &mut working_set.accessory_state());
 
         let accessory_log = working_set.checkpoint().freeze_non_provable();
 

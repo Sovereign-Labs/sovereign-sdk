@@ -1,0 +1,23 @@
+name: "Pre-release checks"
+on:
+  schedule:
+    # At 10:00am UTC every Monday.
+    # See:
+    # - https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule
+    # - https://crontab.guru/
+    - cron: "0 10 * * 1"
+  # Allow manual triggering: <https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#workflow_dispatch>.
+  workflow_dispatch:
+  # Anytime a PR modifies the list of packages to publish.
+  pull_request:
+    paths:
+      - "packages_to_publish.yml"
+
+jobs:
+  check-missing-dependency-versions:
+    runs-on: buildjet-4vcpu-ubuntu-2204
+    steps:
+      - uses: actions/checkout@v3
+      - run: ./scripts/check_missing_dependency_versions.sh
+        shell: bash
+        working-directory: .

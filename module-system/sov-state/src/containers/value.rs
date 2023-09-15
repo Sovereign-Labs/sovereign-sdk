@@ -24,6 +24,7 @@ pub struct StateValue<V, Codec = BorshCodec> {
 /// Error type for `StateValue` get method.
 #[derive(Debug, Error)]
 pub enum Error {
+    /// Value not found.
     #[error("Value not found for prefix: {0}")]
     MissingValue(Prefix),
 }

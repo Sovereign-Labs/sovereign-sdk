@@ -47,21 +47,43 @@ pub trait StateValueCodec<V> {
 
 /// A trait for types that can serialize keys for storage
 /// access.
+///
+/// Note that, unlike [`StateValueCodec`], this trait does not provide
+/// deserialization logic as it's not needed nor supported.
 pub trait StateKeyCodec<K> {
+    /// Serializes a key into a bytes vector.
+    ///
+    /// # Determinism
+    ///
+    /// All implementations of this trait method **MUST** provide deterministic
+    /// serialization behavior:
+    ///
+    /// 1. Equal (as defined by [`Eq`]) values **MUST** be serialized to the same
+    ///    byte sequence.
+    /// 2. The serialization result **MUST NOT** depend on the compilation target
+    ///    and other runtime environment parameters. If that were the case, zkVM
+    ///    code and native code wouldn't produce the same keys.
     fn encode_key(&self, key: &K) -> Vec<u8>;
 }
 
 /// A trait for types that can serialize keys and values, as well
 /// as deserializing values for storage access.
+///
+/// # Type bounds
+/// There are no type bounds on [`StateCodec::KeyCodec`] and
+/// [`StateCodec::ValueCodec`], so they can be any type at well. That said,
+/// you'll find many APIs require these two to implement [`StateKeyCodec`] and
+/// [`StateValueCodec`] respectively.
 pub trait StateCodec {
-    /// The codec used to serialize keys
+    /// The codec used to serialize keys. See [`StateKeyCodec`].
     type KeyCodec;
-    /// The codec used to serialize and deserialize values
+    /// The codec used to serialize and deserialize values. See
+    /// [`StateValueCodec`].
     type ValueCodec;
 
-    /// Returns a reference to the type's key codec
+    /// Returns a reference to the type's key codec.
     fn key_codec(&self) -> &Self::KeyCodec;
-    /// Returns a reference to the type's value codec
+    /// Returns a reference to the type's value codec.
     fn value_codec(&self) -> &Self::ValueCodec;
 }
 
@@ -97,13 +119,26 @@ where
     }
 }
 
-#[test]
-fn test_borsh_slice_encode_alike() {
-    let codec = BorshCodec;
-    let slice = [1, 2, 3];
-    let vec = vec![1, 2, 3];
-    assert_eq!(
-        <BorshCodec as EncodeKeyLike<[i32], Vec<i32>>>::encode_key_like(&codec, &slice),
-        codec.encode_value(&vec)
-    );
+#[cfg(test)]
+mod tests {
+    use proptest::collection::vec;
+    use proptest::prelude::any;
+    use proptest::strategy::Strategy;
+
+    use super::*;
+
+    fn arb_vec_i32() -> impl Strategy<Value = Vec<i32>> {
+        vec(any::<i32>(), 0..2048)
+    }
+
+    proptest::proptest! {
+        #[test]
+        fn test_borsh_slice_encode_alike(vec in arb_vec_i32()) {
+            let codec = BorshCodec;
+            assert_eq!(
+                <BorshCodec as EncodeKeyLike<[i32], Vec<i32>>>::encode_key_like(&codec, &vec[..]),
+                codec.encode_value(&vec)
+            );
+        }
+    }
 }

@@ -11,12 +11,14 @@ pub mod genesis;
 mod tests;
 
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 
 use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use call::Role;
+#[cfg(feature = "native")]
+pub use query::*;
 use sov_bank::Amount;
 use sov_chain_state::TransitionHeight;
 use sov_modules_api::{Context, DaSpec, Error, ModuleInfo, ValidityConditionChecker, Zkvm};

@@ -31,6 +31,7 @@ pub struct StateMap<K, V, Codec = BorshCodec> {
 /// Error type for the [`StateMap::get`] method.
 #[derive(Debug, Error)]
 pub enum StateMapError {
+    /// Value not found.
     #[error("Value not found for prefix: {0} and: storage key {1}")]
     MissingValue(Prefix, StorageKey),
 }
@@ -53,6 +54,7 @@ impl<K, V, Codec> StateMap<K, V, Codec> {
         }
     }
 
+    /// Returns a reference to the codec used by this [`StateMap`].
     pub fn codec(&self) -> &Codec {
         &self.codec
     }
@@ -206,6 +208,9 @@ where
     Codec::KeyCodec: StateKeyCodec<K>,
     Codec::ValueCodec: StateValueCodec<V>,
 {
+    /// Returns an arbitrary [`StateMap`] instance.
+    ///
+    /// See the [`arbitrary`] crate for more information.
     pub fn arbitrary_workset<S>(
         u: &mut arbitrary::Unstructured<'a>,
         working_set: &mut WorkingSet<S>,
