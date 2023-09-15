@@ -1,4 +1,3 @@
-use demo_nft_module::NonFungibleTokenConfig;
 use sov_chain_state::ChainStateConfig;
 #[cfg(feature = "experimental")]
 use sov_evm::{AccountData, EvmConfig, SpecId};
@@ -55,7 +54,7 @@ pub fn create_demo_genesis_config<C: Context, Da: DaSpec>(
         admin: value_setter_admin_private_key.pub_key().to_address(),
     };
 
-    let nft_config = NonFungibleTokenConfig {};
+    let nft_config = sov_nft_module::NonFungibleTokenConfig {};
 
     let chain_state_config = ChainStateConfig {
         // TODO: Put actual value

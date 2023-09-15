@@ -12,7 +12,7 @@ and a powerful templating system for implementing complex state transitions.
 ## Modules: The Basic Building Block
 
 The basic building block of the Module System is a `module`. Modules are structs in Rust, and are _required_ to implement the `Module` trait.
-You can find a complete tutorial showing how to implement a custom module [here](../examples/demo-nft-module/README.md).
+You can find a complete tutorial showing how to implement a custom module [here](../examples/simple-nft-module/README.md).
 Modules typically live in their own crates (you can find a template [here](./module-implementations/module-template/)) so that they're easily
 re-usable. A typical struct definition for a module looks something like this:
 

@@ -8,7 +8,6 @@ members = [
     "examples/demo-stf",
     "examples/demo-simple-stf",
     "examples/demo-rollup",
-    "examples/demo-nft-module",
     "examples/simple-nft-module",
 
     "full-node/db/sov-db",
@@ -29,6 +28,7 @@ members = [
     "module-system/utils/sov-data-generators",
     "module-system/module-implementations/sov-accounts",
     "module-system/module-implementations/sov-bank",
+    "module-system/module-implementations/sov-nft-module",
     "module-system/module-implementations/sov-chain-state",
     "module-system/module-implementations/sov-blob-storage",
     "module-system/module-implementations/sov-evm",
