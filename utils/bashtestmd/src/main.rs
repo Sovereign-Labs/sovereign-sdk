@@ -167,13 +167,12 @@ fn convert_code_blocks_into_commands(
         let mut cmd: Option<String> = None;
         let mut output = String::new();
 
-        let mut lines = code_block.value.lines();
-        while let Some(line) = lines.next() {
-            if line.starts_with(PROMPT) {
+        for line in code_block.value.lines() {
+            if let Some(cmd_string) = line.strip_prefix(PROMPT) {
                 if let Some(cmd) = cmd {
                     commands.push(Command::new(&cmd));
                 }
-                cmd = Some((&line[PROMPT.len()..]).to_string());
+                cmd = Some(cmd_string.to_string());
             } else {
                 output.push_str(line);
                 output.push('\n');
