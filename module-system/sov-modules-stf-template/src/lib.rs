@@ -154,7 +154,6 @@ where
 
         let mut checkpoint = working_set.checkpoint();
         let (log, witness) = checkpoint.freeze();
-        let accessory_log = checkpoint.freeze_non_provable();
 
         let (genesis_hash, node_batch) = self
             .current_storage
@@ -165,6 +164,8 @@ where
 
         self.runtime
             .finalize_slot_hook(genesis_hash, &mut working_set.accessory_state());
+
+        let accessory_log = working_set.checkpoint().freeze_non_provable();
 
         self.current_storage.commit(&node_batch, &accessory_log);
         jmt::RootHash(genesis_hash)
