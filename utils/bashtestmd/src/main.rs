@@ -1,5 +1,5 @@
 use std::collections::VecDeque;
-use std::io::Write;
+use std::io::{self, Write};
 
 use clap::Parser;
 use markdown::mdast;
@@ -47,60 +47,62 @@ impl Command {
             exit_code: Some(0),
         }
     }
+
+    fn compile(&self, mut w: impl io::Write) -> io::Result<()> {
+        writeln!(
+            w,
+            "echo {}",
+            shell_escape::escape(format!("Running: '{}'", self.cmd).into())
+        )?;
+
+        if self.long_running {
+            writeln!(w, "{} &", self.cmd)?;
+            writeln!(w, "sleep 20")?;
+            return Ok(());
+        }
+
+        if let Some(output) = &self.expected_output {
+            writeln!(
+                w,
+                r#"
+output=$({})
+expected={}
+# Either of the two must be a substring of the other. This kinda protects us
+# against whitespace differences, trimming, etc.
+if ! [[ $output == *"$expected"* || $expected == *"$output"* ]]; then
+    echo "'$expected' not found in text:"
+    echo "'$output'"
+    exit 1
+fi
+"#,
+                self.cmd,
+                shell_escape::escape(output.into())
+            )?;
+        } else {
+            writeln!(w, "{}", self.cmd)?;
+        }
+
+        if let Some(exit_code) = self.exit_code {
+            writeln!(w, "if [ $? -ne {} ]; then", exit_code)?;
+            writeln!(w, "    echo \"Expected exit code {}, got $?\"", exit_code)?;
+            writeln!(w, "    exit 1")?;
+            writeln!(w, "fi")?;
+        }
+
+        Ok(())
+    }
 }
 
 fn compile_commands_into_bash(cmds: Vec<Command>) -> String {
     let mut script = Vec::<u8>::new();
     // Shebang.
     writeln!(&mut script, "#!/usr/bin/env bash").unwrap();
-    writeln!(
-        &mut script,
-        // https://stackoverflow.com/a/2173421/5148606
-        "trap 'trap - SIGTERM && kill -- -$$' SIGINT SIGTERM EXIT"
-    )
-    .unwrap();
-    // write commands
-    for cmd in cmds {
-        if cmd.long_running {
-            writeln!(&mut script, "{} &", cmd.cmd).unwrap();
-            continue;
-        }
-        if let Some(output) = cmd.expected_output {
-            writeln!(
-                &mut script,
-                r#"
-                output=$({})
-                expected={}
-                if [[ $output == *"$expected"* ]]; then
-                    echo "'$expected' found"
-                else
-                    echo "'$expected' not found in text:"
-                    echo "'$output'"
-                    exit 1
-                fi
-                "#,
-                cmd.cmd,
-                shell_escape::escape(output.into())
-            )
-            .unwrap();
-        } else {
-            writeln!(&mut script, "{}", cmd.cmd).unwrap();
-        }
+    writeln!(&mut script, r#"trap 'jobs -p | xargs -r kill' EXIT"#).unwrap();
 
-        if let Some(exit_code) = cmd.exit_code {
-            writeln!(&mut script, "if [[ $? -ne {} ]]; then", exit_code).unwrap();
-            writeln!(&mut script, "    exit 1").unwrap();
-            writeln!(&mut script, "fi").unwrap();
-        }
+    for cmd in cmds {
+        cmd.compile(&mut script).unwrap();
     }
-    writeln!(
-        &mut script,
-        r#"
-        echo "All tests passed!"
-        exit 0
-        "#
-    )
-    .unwrap();
+    writeln!(&mut script, r#"echo "All tests passed!"; exit 0"#).unwrap();
     String::from_utf8(script).unwrap()
 }
 
