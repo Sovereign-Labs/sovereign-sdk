@@ -4,11 +4,11 @@ description = "Defines traits and types for state storage in the Sovereign SDK m
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
-#license = { workspace = true }
+license = { workspace = true }
 repository = { workspace = true }
 rust-version = { workspace = true }
 version = { workspace = true }
-#readme = "README.md"
+readme = "README.md"
 resolver = "2"
 
 [dependencies]

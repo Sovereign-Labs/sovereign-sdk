@@ -10,7 +10,7 @@ rust-version = { workspace = true }
 version = { workspace = true }
 readme = "README.md"
 resolver = "2"
-
+publish = false
 
 [dependencies]
 
@@ -57,4 +57,3 @@ default = []
 native = ["serde", "serde_json", "jsonrpsee", "schemars", "clap", "sov-state/native", "sov-modules-api/native"]
 experimental = ["native"]
 smart_contracts = ["experimental"]
-

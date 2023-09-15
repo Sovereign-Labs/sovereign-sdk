@@ -331,3 +331,10 @@ jobs:
         # Exit status 0 means no changes were made, so the table of contents is
         # up to date.
         run: git diff --exit-code
+  validate-packages-to-publish-yml:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - run: ./scripts/validate_packages_to_publish_yml.sh
+        shell: bash
+        working-directory: .

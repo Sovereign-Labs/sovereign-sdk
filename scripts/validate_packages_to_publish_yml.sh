@@ -6,6 +6,9 @@ set -Euo pipefail
 # are also listed in packages_to_publish.yml. In addition, it makes sure that
 # all packages listed in packages_to_publish.yml have all basic crate metadata and don't
 # generate warnings when packaged.
+#
+# Important: this script is assumed to be cheap to run by our GH Actions
+# workflows. Create another script if you need to add checks that are more expensive.
 
 # Somewhat unintuitively, `cargo metadata` returns `"publish": null` for publishable packages.
 # From the docs at https://doc.rust-lang.org/cargo/commands/cargo-metadata.html#output-format:
