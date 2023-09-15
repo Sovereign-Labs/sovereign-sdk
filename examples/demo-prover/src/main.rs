@@ -30,6 +30,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let rollup_config_path = env::args()
         .nth(1)
         .unwrap_or_else(|| "rollup_config.toml".to_string());
+    println!("Read rollup config");
 
     let prover = Risc0Host::new(ROLLUP_ELF);
 
