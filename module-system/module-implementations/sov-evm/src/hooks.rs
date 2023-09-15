@@ -132,10 +132,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         root_hash: [u8; 32],
         accesorry_working_set: &mut AccessoryWorkingSet<C::Storage>,
     ) {
-        let expected_block_number = self
-            .blocks
-            .last(accesorry_working_set)
-            .map_or(0, |b| b.header.number + 1);
+        let expected_block_number = self.blocks.len(accesorry_working_set) as u64;
 
         let mut block = self
             .pending_head
