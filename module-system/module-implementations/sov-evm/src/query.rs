@@ -217,6 +217,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
         &self,
         working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<reth_primitives::U256> {
+        info!("evm module: eth_blockNumber");
+
         let block_number = U256::from(
             self.blocks
                 .last(&mut working_set.accessory_state())
