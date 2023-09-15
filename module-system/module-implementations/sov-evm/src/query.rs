@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+
 
 use ethereum_types::U64;
 use jsonrpsee::core::RpcResult;
@@ -17,6 +17,40 @@ use crate::Evm;
 
 #[rpc_gen(client, server, namespace = "eth")]
 impl<C: sov_modules_api::Context> Evm<C> {
+    fn get_sealed_block_by_number(
+        &self,
+        block_number: Option<String>,
+        working_set: &mut WorkingSet<C::Storage>,
+    ) -> SealedBlock {
+        // "safe" and "finalized" are not implemented
+        match block_number {
+            Some(ref block_number) if block_number == "earliest" => self
+                .blocks
+                .get(0, &mut working_set.accessory_state())
+                .expect("Genesis block must be set"),
+            Some(ref block_number) if block_number == "latest" => self
+                .blocks
+                .last(&mut working_set.accessory_state())
+                .expect("Head block must be set"),
+            Some(ref block_number) if block_number == "pending" => self
+                .pending_head
+                .get(&mut working_set.accessory_state())
+                .expect("Pending head block must be set")
+                .seal(),
+            Some(ref block_number) => {
+                let block_number =
+                    usize::from_str_radix(block_number, 16).expect("Block number must be hex");
+                self.blocks
+                    .get(block_number, &mut working_set.accessory_state())
+                    .expect("Block must be set")
+            }
+            None => self
+                .blocks
+                .last(&mut working_set.accessory_state())
+                .expect("Head block must be set"),
+        }
+    }
+
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "chainId")]
     pub fn chain_id(
@@ -36,73 +70,49 @@ impl<C: sov_modules_api::Context> Evm<C> {
     ) -> RpcResult<Option<reth_rpc_types::RichBlock>> {
         info!("evm module: eth_getBlockByNumber");
 
-        // "safe" and "finalized" are not implemented
-        let block = match block_number {
-            Some(ref block_number) if block_number == "earliest" => self
-                .blocks
-                .get(0, &mut working_set.accessory_state())
-                .expect("Genesis block must be set"),
-            Some(ref block_number) if block_number == "latest" => self
-                .blocks
-                .last(&mut working_set.accessory_state())
-                .expect("Head block must be set"),
-            Some(ref block_number) if block_number == "pending" => self
-                .pending_head
-                .get(&mut working_set.accessory_state())
-                .expect("Pending head block must be set")
-                .seal(),
-            Some(ref block_number) => {
-                let block_number = usize::from_str_radix(block_number, 16).expect("Block number must be hex");
-                self.blocks
-                    .get(block_number, &mut working_set.accessory_state())
-                    .expect("Block must be set")
-            }
-            None => self
-                .blocks
-                .last(&mut working_set.accessory_state())
-                .expect("Head block must be set"),
+        let block = self.get_sealed_block_by_number(block_number, working_set);
+
+        // Build rpc header response
+        let header = reth_rpc_types::Header::from_primitive_with_hash(block.header.clone());
+
+        // Collect transactions with ids from db
+        let transactions_with_ids = block
+            .transactions
+            .clone()
+            .map(|id| {
+                let tx = self
+                    .transactions
+                    .get(id as usize, &mut working_set.accessory_state())
+                    .expect("Transaction must be set");
+                (id, tx)
+            })
+            .collect::<Vec<_>>();
+
+        // Build rpc transactions response
+        let transactions = match details {
+            Some(true) => reth_rpc_types::BlockTransactions::Full(
+                transactions_with_ids
+                    .iter()
+                    .map(|(id, tx)| {
+                        reth_rpc_types::Transaction::from_recovered_with_block_context(
+                            tx.clone().into(),
+                            block.header.hash,
+                            block.header.number,
+                            block.header.base_fee_per_gas,
+                            U256::from(id - block.transactions.start),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            _ => reth_rpc_types::BlockTransactions::Hashes({
+                transactions_with_ids
+                    .iter()
+                    .map(|(_, tx)| tx.signed_transaction.hash)
+                    .collect::<Vec<_>>()
+            }),
         };
 
-        let (header, transactions) = {
-            let header = reth_rpc_types::Header::from_primitive_with_hash(block.header.clone());
-            
-            let transactions_with_id = block.transactions
-                .clone()
-                .map(|id| {
-                    let tx = self.transactions
-                        .get(id as usize, &mut working_set.accessory_state())
-                        .expect("Transaction must be set");
-                    (id, tx)
-                })
-                .collect::<Vec<_>>();
-        
-
-            let transactions = match details {
-                Some(true) => reth_rpc_types::BlockTransactions::Full(
-                    transactions_with_id
-                        .iter()
-                        .map(|(id, tx)| {
-                            reth_rpc_types::Transaction::from_recovered_with_block_context(
-                                tx.clone().into(),
-                                block.header.hash,
-                                block.header.number,
-                                block.header.base_fee_per_gas,
-                                U256::from(id - block.transactions.start),
-                            )
-                        })
-                        .collect::<Vec<_>>(),
-                ),
-                _ => reth_rpc_types::BlockTransactions::Hashes({
-                    transactions_with_id
-                        .iter()
-                        .map(|(_, tx)| tx.signed_transaction.hash)
-                        .collect::<Vec<_>>()
-                }),
-            };
-
-            (header, transactions)
-        };
-
+        // Build rpc block response
         let block = reth_rpc_types::Block {
             header,
             total_difficulty: Default::default(),
