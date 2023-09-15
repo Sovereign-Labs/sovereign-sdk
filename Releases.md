@@ -7,14 +7,15 @@ This document describes how to cut a release of the Sovereign SDK.
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 
-- [Before starting](#before-starting)
-- [Pick a version number](#pick-a-version-number)
-- [Make sure the documentation and tutorials are up to date](#make-sure-the-documentation-and-tutorials-are-up-to-date)
-- [Update all crate versions](#update-all-crate-versions)
-- [Prepare the PR](#prepare-the-pr)
-- [Release to `crates.io`](#release-to-cratesio)
-- [Create a tag and a GitHub release](#create-a-tag-and-a-github-release)
-- [Merge to `nightly` and `stable`](#merge-to-nightly-and-stable)
+- [Releases](#releases)
+  - [Before starting](#before-starting)
+  - [Pick a version number](#pick-a-version-number)
+  - [Make sure the documentation and tutorials are up to date](#make-sure-the-documentation-and-tutorials-are-up-to-date)
+  - [Update all crate versions](#update-all-crate-versions)
+  - [Prepare the PR](#prepare-the-pr)
+  - [Release to `crates.io`](#release-to-cratesio)
+  - [Create a tag and a GitHub release](#create-a-tag-and-a-github-release)
+  - [Merge to `nightly` and `stable`](#merge-to-nightly-and-stable)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
@@ -85,4 +86,4 @@ After committing these changes, you should open a new PR **against `nightly`**. 
 ## Merge to `nightly` and `stable`
 
 - [ ] Merge your PR to `nightly`.
-- [ ] Merge `nightly` to `stable` with a new PR. Make sure no commits that are not part of the release get merged accidentally into `stable`.
+- [ ] Merge `nightly` to `stable` with a new PR (example [here](https://github.com/Sovereign-Labs/sovereign-sdk/pull/866#pullrequestreview-1627315759)). Make sure no commits that are not part of the release get merged accidentally into `stable`.
