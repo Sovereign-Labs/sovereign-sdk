@@ -13,5 +13,9 @@ resolver = "2"
 autotests = false
 
 [dependencies]
-risc0-zkvm = { version = "0.16", default-features = false, features = ['std'] }
-risc0-zkvm-platform = { version = "0.16" }
+risc0-zkvm = { workspace = true, default-features = false, features = ['std'] }
+risc0-zkvm-platform = { workspace = true }
+
+[features]
+default = []
+native = ["risc0-zkvm/prove"]

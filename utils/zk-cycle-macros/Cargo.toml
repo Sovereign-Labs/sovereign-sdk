@@ -30,8 +30,8 @@ borsh = { workspace = true }
 trybuild = "1.0"
 sov-zk-cycle-macros = { path = "../../utils/zk-cycle-macros" }
 sov-zk-cycle-utils = { path = "../../utils/zk-cycle-utils" }
-risc0-zkvm = { version = "0.16", default-features = false, features = ["std"] }
-risc0-zkvm-platform = { version = "0.16" }
+risc0-zkvm = { workspace = true, default-features = false, features = ["std"] }
+risc0-zkvm-platform = { workspace = true }
 
 [features]
 bench = []

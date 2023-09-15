@@ -17,7 +17,6 @@ fn get_guest_options() -> HashMap<&'static str, risc0_build::GuestOptions> {
         "sov-demo-prover-guest",
         risc0_build::GuestOptions {
             features: vec!["bench".to_string()],
-            std: true,
         },
     );
     guest_pkg_to_options

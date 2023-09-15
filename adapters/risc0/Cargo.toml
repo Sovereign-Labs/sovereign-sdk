@@ -15,10 +15,10 @@ readme = "README.md"
 [dependencies]
 anyhow = { workspace = true }
 bincode = { workspace = true }
-risc0-zkvm = { version = "0.16", default-features = false, features = ["std"] }
-risc0-zkvm-platform = { version = "0.16" }
-risc0-zkp = { version = "0.16", optional = true }
-risc0-circuit-rv32im = { version = "0.16", optional = true }
+risc0-zkvm = { workspace = true, default-features = false, features = ["std"] }
+risc0-zkvm-platform = { workspace = true }
+risc0-zkp = { workspace = true, optional = true }
+risc0-circuit-rv32im = { workspace = true, optional = true }
 serde = { workspace = true }
 bytemuck = "1.13.1"
 once_cell = { version = "1.7.2", optional = true }
@@ -29,4 +29,4 @@ sov-rollup-interface = { path = "../../rollup-interface", version = "0.2" }
 [features]
 default = []
 native = ["risc0-zkvm/prove", "dep:risc0-zkp", "dep:risc0-circuit-rv32im"]
-bench = ["once_cell", "parking_lot"]
+bench = ["once_cell", "parking_lot", "native", "sov-zk-cycle-utils/native"]
