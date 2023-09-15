@@ -37,7 +37,7 @@ pub use scratchpad::*;
 pub use sov_first_read_last_write_cache::cache::CacheLog;
 use sov_rollup_interface::digest::Digest;
 pub use storage::Storage;
-use utils::AlignedVec;
+pub use utils::AlignedVec;
 
 pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 
@@ -84,7 +84,8 @@ impl Prefix {
         }
     }
 
-    pub(crate) fn as_aligned_vec(&self) -> &AlignedVec {
+    /// Returns a reference to the [`AlignedVec`] containing the prefix.
+    pub fn as_aligned_vec(&self) -> &AlignedVec {
         &self.prefix
     }
 
