@@ -19,7 +19,6 @@ pub mod experimental {
     use reth_primitives::{
         Address as RethAddress, TransactionSignedNoHash as RethTransactionSignedNoHash,
     };
-    use reth_rpc::eth::error::EthApiError;
     use sov_evm::call::CallMessage;
     use sov_evm::evm::RlpEvmTransaction;
     use sov_modules_api::transaction::Transaction;
@@ -82,13 +81,12 @@ pub mod experimental {
             &self,
             raw_tx: RlpEvmTransaction,
         ) -> Result<(H256, Vec<u8>), jsonrpsee::core::Error> {
-            let signed_transaction: RethTransactionSignedNoHash =
-                raw_tx.clone().try_into().map_err(EthApiError::from)?;
+            let signed_transaction: RethTransactionSignedNoHash = raw_tx.clone().try_into()?;
 
             let tx_hash = signed_transaction.hash();
-            let sender = signed_transaction
-                .recover_signer()
-                .ok_or(EthApiError::InvalidTransactionSignature)?;
+            let sender = signed_transaction.recover_signer().ok_or(
+                sov_evm::evm::primitive_types::RawEvmTxConversionError::FailedToRecoverSigner,
+            )?;
 
             let mut nonces = self.nonces.lock().unwrap();
             let nonce = *nonces.entry(sender).and_modify(|n| *n += 1).or_insert(0);

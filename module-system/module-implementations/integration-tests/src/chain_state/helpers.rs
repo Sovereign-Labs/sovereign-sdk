@@ -74,8 +74,16 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
 
     fn end_slot_hook(
         &self,
-        _root_hash: [u8; 32],
         _working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
+    ) {
+    }
+
+    fn finalize_slot_hook(
+        &self,
+        _root_hash: [u8; 32],
+        _accesorry_working_set: &mut sov_state::AccessoryWorkingSet<
+            <Self::Context as Spec>::Storage,
+        >,
     ) {
     }
 }
@@ -107,6 +115,7 @@ pub(crate) fn create_demo_genesis_config<C: Context, Da: DaSpec>(
     let value_setter_config = ValueSetterConfig { admin };
     let chain_state_config = ChainStateConfig {
         initial_slot_height: 0,
+        current_time: Default::default(),
     };
     GenesisConfig::new(value_setter_config, chain_state_config)
 }

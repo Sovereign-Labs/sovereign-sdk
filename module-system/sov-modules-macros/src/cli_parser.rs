@@ -107,9 +107,7 @@ impl CliParserMacro {
         let where_clause_with_deserialize_bounds = match where_clause {
             Some(where_clause) => {
                 let mut result = where_clause.clone();
-                result
-                    .predicates
-                    .extend(deserialize_constraints.into_iter());
+                result.predicates.extend(deserialize_constraints);
                 result
             }
             None => syn::parse_quote! {

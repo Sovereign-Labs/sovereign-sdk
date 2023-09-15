@@ -8,7 +8,7 @@ use nmt_rs::NamespacedHash;
 use prost::bytes::Buf;
 use prost::Message;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::da::{BlockHeaderTrait as BlockHeader, CountedBufReader};
+use sov_rollup_interface::da::{BlockHeaderTrait as BlockHeader, CountedBufReader, Time};
 use sov_rollup_interface::services::da::SlotData;
 pub use tendermint::block::Header as TendermintHeader;
 use tendermint::block::Height;
@@ -298,6 +298,19 @@ impl BlockHeader for CelestiaHeader {
 
     fn hash(&self) -> Self::Hash {
         TmHash(self.header.hash())
+    }
+
+    fn height(&self) -> u64 {
+        let height = tendermint::block::Height::decode(self.header.height.as_slice())
+            .expect("Height must be valid");
+        height.value()
+    }
+
+    fn time(&self) -> Time {
+        let protobuf_time = tendermint::time::Time::decode(self.header.time.as_slice())
+            .expect("Timestamp must be valid");
+
+        Time::from_secs(protobuf_time.unix_timestamp())
     }
 }
 

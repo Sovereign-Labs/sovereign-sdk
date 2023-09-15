@@ -4,12 +4,13 @@
   <a href="https://github.com/Sovereign-Labs/sovereign-sdk/blob/stable/LICENSE">
     <img alt="License: Apache-2.0" src="https://img.shields.io/github/license/Sovereign-Labs/sovereign-sdk.svg" />
   </a>
-  <a href="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk" > 
-      <img alt="Coverage" src="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk/branch/stable/graph/badge.svg"/> 
-  </a>
-   <a href="https://discord.gg/kbykCcPrcA" > 
+  <a href="https://discord.gg/kbykCcPrcA" > 
       <img alt="Discord" src="https://img.shields.io/discord/1050059327626555462?label=discord"/> 
   </a>
+  <a href="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk" > 
+      <img alt="Coverage" src="https://codecov.io/gh/Sovereign-Labs/sovereign-sdk/branch/nightly/graph/badge.svg"/> 
+  </a>
+  <img alt="GitHub Workflow Status (with event)" src="https://img.shields.io/github/actions/workflow/status/sovereign-labs/sovereign-sdk/prerelease_checks.yml?label=Pre-release%20checks">
 </div>
 
 ## What is the Sovereign SDK?
