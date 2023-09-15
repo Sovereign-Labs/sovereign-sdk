@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+
 
 use ethereum_types::U64;
 use jsonrpsee::core::RpcResult;
@@ -20,9 +20,9 @@ impl<C: sov_modules_api::Context> Evm<C> {
     fn get_sealed_block_by_number(
         &self,
         block_number: Option<String>,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> SealedBlock {
-        // "safe" and "finalized" are not implemented
+        // safe, finalized, and pending are not supported
         match block_number {
             Some(ref block_number) if block_number == "earliest" => self
                 .blocks
@@ -32,11 +32,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
                 .blocks
                 .last(&mut working_set.accessory_state())
                 .expect("Head block must be set"),
-            Some(ref block_number) if block_number == "pending" => self
-                .pending_head
-                .get(&mut working_set.accessory_state())
-                .expect("Pending head block must be set")
-                .seal(),
             Some(ref block_number) => {
                 let block_number =
                     usize::from_str_radix(block_number, 16).expect("Block number must be hex");
