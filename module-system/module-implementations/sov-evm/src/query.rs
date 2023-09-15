@@ -27,7 +27,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(Some(reth_primitives::U64::from(1u64)))
     }
 
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "getBlockByNumber")]
     pub fn get_block_by_number(
         &self,
