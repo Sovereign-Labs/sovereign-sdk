@@ -12,7 +12,7 @@ use sov_modules_api::{
     BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, Spec, Zkvm,
 };
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
-use sov_state::{StateCheckpoint, Storage};
+use sov_state::{AccessoryWorkingSet, StateCheckpoint, Storage};
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
 use tracing::info;
@@ -114,8 +114,8 @@ where
 
         let mut working_set = checkpoint.to_revertable();
 
-        self.runtime
-            .finalize_slot_hook(root_hash, &mut working_set.accessory_state());
+        #[cfg(feature = "native")]
+        self.finalize_slot_hook(root_hash, &mut working_set.accessory_state());
 
         let accessory_log = working_set.checkpoint().freeze_non_provable();
 
@@ -123,6 +123,15 @@ where
             .commit(&authenticated_node_batch, &accessory_log);
 
         (jmt::RootHash(root_hash), witness)
+    }
+
+    #[cfg(feature = "native")]
+    fn finalize_slot_hook(
+        &mut self,
+        state_hash: [u8; 32],
+        accessory_state: &mut AccessoryWorkingSet<<C as Spec>::Storage>,
+    ) {
+        self.runtime.finalize_slot_hook(state_hash, accessory_state);
     }
 }
 
@@ -162,12 +171,13 @@ where
 
         let mut working_set = checkpoint.to_revertable();
 
-        self.runtime
-            .finalize_slot_hook(genesis_hash, &mut working_set.accessory_state());
+        #[cfg(feature = "native")]
+        self.finalize_slot_hook(genesis_hash, &mut working_set.accessory_state());
 
         let accessory_log = working_set.checkpoint().freeze_non_provable();
 
         self.current_storage.commit(&node_batch, &accessory_log);
+
         jmt::RootHash(genesis_hash)
     }
 
