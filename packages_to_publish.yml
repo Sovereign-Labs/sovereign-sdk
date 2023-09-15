@@ -1,0 +1,23 @@
+- sov-rollup-interface
+- sov-first-read-last-write-cache
+- sov-schema-db
+- sov-db
+- sov-sequencer
+- sov-zk-cycle-macros
+- sov-zk-cycle-utils
+- sov-state
+- sov-modules-macros
+- sov-modules-api
+- sov-modules-stf-template
+
+# Modules
+- sov-accounts
+- sov-bank
+- sov-sequencer-registry
+- sov-prover-incentives
+- sov-chain-state
+- sov-blob-storage
+
+# Adapters
+- sov-risc0-adapter
+# TODO: sov-celestia-adapter (https://github.com/Sovereign-Labs/nmt-rs/issues/17)

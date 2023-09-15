@@ -38,7 +38,7 @@ Before starting, ensure your local copy of the repository is up to date with the
   - [ ] `examples/demo-simple-stf/README.md`
   - [ ] `examples/demo-stf/README.md`
   - [ ] `examples/demo-nft-module/README.md`
-- [ ] Audit `packages_to_publish.txt` and ensure that all relevant _library_ crates are included. Binaries (such as `demo-rollup`) and other internal crates not intended to be used by SDK users (such as `sov-modules-schemas`) should not be included. The list must remain pre-sorted by dependencies, so that crates are published in the correct order.
+- [ ] Audit `packages_to_publish.yml` and ensure that all relevant _library_ crates are included. Binaries (such as `demo-rollup`) and other internal crates not intended to be used by SDK users (such as `sov-modules-schemas`) should not be included. The list must remain pre-sorted by dependencies, so that crates are published in the correct order.
 - [ ] Commit any changes.
 
 ## Update all crate versions
@@ -71,7 +71,7 @@ After committing these changes, you should open a new PR **against `nightly`**. 
 
 ## Release to `crates.io`
 
-**After** the PR is approved but **before** it's merged, you should release the crates in `packages_to_publish.txt` to <https://crates.io>. Go through the list of crates to release _in order_ and run these commands:
+**After** the PR is approved but **before** it's merged, you should release the crates in `packages_to_publish.yml` to <https://crates.io>. Go through the list of crates to release _in order_ and run these commands:
 
 - [ ] `$ cargo publish --dry-run -p {crate}` to ensure there are no issues.
 - [ ] `$ cargo publish -p {crate}` to actually release the crate.
