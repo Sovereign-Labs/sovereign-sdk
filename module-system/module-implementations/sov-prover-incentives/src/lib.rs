@@ -13,7 +13,7 @@ mod query;
 pub use call::CallMessage;
 /// The response type used by RPC queries.
 #[cfg(feature = "native")]
-pub use query::Response;
+pub use query::*;
 use sov_modules_api::{Context, Error, ModuleInfo, Zkvm};
 use sov_state::codec::BcsCodec;
 use sov_state::WorkingSet;

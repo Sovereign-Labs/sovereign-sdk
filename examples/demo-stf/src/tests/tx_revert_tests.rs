@@ -1,4 +1,4 @@
-use sov_accounts::query::Response;
+use sov_accounts::Response;
 use sov_data_generators::bank_data::{get_default_private_key, get_default_token_address};
 use sov_data_generators::{has_tx_events, new_test_blob_from_batch};
 use sov_modules_api::default_context::DefaultContext;

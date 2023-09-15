@@ -8,7 +8,7 @@ mod query;
 
 pub use call::CallMessage;
 #[cfg(feature = "native")]
-pub use query::{VecSetterRpcImpl, VecSetterRpcServer};
+pub use query::*;
 use sov_modules_api::{Error, ModuleInfo};
 use sov_state::WorkingSet;
 
