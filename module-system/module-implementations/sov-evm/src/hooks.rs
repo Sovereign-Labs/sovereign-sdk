@@ -11,7 +11,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         da_root_hash: [u8; 32],
         working_set: &mut WorkingSet<C::Storage>,
     ) {
-        println!("Beginning slot with root hash: {:?} ", da_root_hash);
         let parent_block = self
             .head
             .get(working_set)
@@ -33,7 +32,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
     }
 
     pub fn end_slot_hook(&self, working_set: &mut WorkingSet<C::Storage>) {
-        println!("end slot hook");
         let pending_block = self
             .pending_block
             .get(working_set)
@@ -135,10 +133,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         accesorry_working_set: &mut AccessoryWorkingSet<C::Storage>,
     ) {
         let expected_block_number = self.blocks.len(accesorry_working_set) as u64;
-        println!(
-            "Finalizing slot with root hash: {:?}, blocks length {}",
-            root_hash, expected_block_number
-        );
 
         let mut block = self
             .pending_head
@@ -167,11 +161,5 @@ impl<C: sov_modules_api::Context> Evm<C> {
             accesorry_working_set,
         );
         self.pending_head.delete(accesorry_working_set);
-
-        println!(
-            "Finalized block {}, now blocks {}",
-            sealed_block.header.number,
-            self.blocks.len(accesorry_working_set)
-        );
     }
 }
