@@ -15,7 +15,6 @@ use crate::Evm;
 
 #[rpc_gen(client, server, namespace = "eth")]
 impl<C: sov_modules_api::Context> Evm<C> {
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "chainId")]
     pub fn chain_id(
         &self,
@@ -23,7 +22,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
     ) -> RpcResult<Option<reth_primitives::U64>> {
         info!("evm module: eth_chainId");
 
-        let chain_id = self.cfg
+        let chain_id = self
+            .cfg
             .get(working_set)
             .expect("Evm config must be set")
             .chain_id;
