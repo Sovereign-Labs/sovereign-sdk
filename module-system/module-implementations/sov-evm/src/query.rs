@@ -1,5 +1,3 @@
-
-
 use ethereum_types::U64;
 use jsonrpsee::core::RpcResult;
 use reth_primitives::contract::create_address;
