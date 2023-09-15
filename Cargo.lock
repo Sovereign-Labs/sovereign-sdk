@@ -6541,7 +6541,6 @@ dependencies = [
  "sov-celestia-adapter",
  "sov-cli",
  "sov-db",
- "sov-demo-rollup",
  "sov-ethereum",
  "sov-evm",
  "sov-modules-api",
