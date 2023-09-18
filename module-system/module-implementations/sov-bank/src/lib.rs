@@ -3,7 +3,9 @@
 mod call;
 mod genesis;
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
+#[cfg(feature = "native")]
+pub use query::*;
 mod token;
 /// Util functions for bank
 pub mod utils;
