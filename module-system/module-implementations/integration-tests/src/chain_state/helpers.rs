@@ -1,10 +1,11 @@
 use sov_chain_state::{ChainState, ChainStateConfig};
 use sov_modules_api::capabilities::{BlobRefOrOwned, BlobSelector};
-use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
+use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::macros::DefaultRuntime;
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{
-    BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, MessageCodec, PublicKey, Spec,
+    AccessoryWorkingSet, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, MessageCodec,
+    PublicKey, Spec,
 };
 use sov_modules_stf_template::{AppTemplate, Runtime, SequencerOutcome};
 use sov_rollup_interface::mocks::MockZkvm;
@@ -77,13 +78,15 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for TestRuntime<C, Da> {
         _working_set: &mut sov_modules_api::WorkingSet<<Self::Context as Spec>::Storage>,
     ) {
     }
+}
+
+impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for TestRuntime<C, Da> {
+    type Context = C;
 
     fn finalize_slot_hook(
         &self,
         _root_hash: [u8; 32],
-        _accesorry_working_set: &mut sov_modules_api::AccessoryWorkingSet<
-            <Self::Context as Spec>::Storage,
-        >,
+        _accesorry_working_set: &mut AccessoryWorkingSet<<Self::Context as Spec>::Storage>,
     ) {
     }
 }

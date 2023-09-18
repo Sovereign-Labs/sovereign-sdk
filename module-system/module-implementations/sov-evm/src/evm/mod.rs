@@ -44,7 +44,11 @@ impl DbAccount {
         }
     }
 
-    fn new_with_info(parent_prefix: &Prefix, address: Address, info: AccountInfo) -> Self {
+    pub(crate) fn new_with_info(
+        parent_prefix: &Prefix,
+        address: Address,
+        info: AccountInfo,
+    ) -> Self {
         let prefix = Self::create_storage_prefix(parent_prefix, address);
         Self {
             info,

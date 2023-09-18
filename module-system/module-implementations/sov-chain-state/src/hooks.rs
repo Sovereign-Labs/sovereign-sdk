@@ -1,5 +1,5 @@
-use sov_modules_api::hooks::SlotHooks;
-use sov_modules_api::{AccessoryWorkingSet, Context, Spec, WorkingSet};
+use sov_modules_api::hooks::{FinalizeHook, SlotHooks};
+use sov_modules_api::{AccessoryWorkingSet, Context, Spec};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_state::Storage;
 
@@ -64,6 +64,10 @@ impl<C: Context, Da: sov_modules_api::DaSpec> SlotHooks<Da> for ChainState<C, Da
     }
 
     fn end_slot_hook(&self, _working_set: &mut WorkingSet<<Self::Context as Spec>::Storage>) {}
+}
+
+impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for ChainState<C, Da> {
+    type Context = C;
 
     fn finalize_slot_hook(
         &self,

@@ -54,13 +54,12 @@ impl<C: sov_modules_api::Context> Evm<C> {
 
         self.cfg.set(&chain_cfg, working_set);
 
-        let genesis_block_number = 0u64;
-
         let header = reth_primitives::Header {
             parent_hash: H256::default(),
             ommers_hash: EMPTY_OMMER_ROOT,
             beneficiary: config.coinbase,
-            state_root: KECCAK_EMPTY, // TODO: Can we get state from working set now?
+            // This will be set in finalize_slot_hook or in the next begin_slot_hook
+            state_root: KECCAK_EMPTY,
             transactions_root: EMPTY_TRANSACTIONS,
             receipts_root: EMPTY_RECEIPTS,
             withdrawals_root: None,
@@ -82,17 +81,8 @@ impl<C: sov_modules_api::Context> Evm<C> {
         };
 
         self.head.set(&block, working_set);
-
-        let sealead_block = block.seal();
-
-        let mut accessory_state = working_set.accessory_state();
-
-        self.block_hashes.set(
-            &sealead_block.header.hash,
-            &genesis_block_number,
-            &mut accessory_state,
-        );
-        self.blocks.push(&sealead_block, &mut accessory_state);
+        self.pending_head
+            .set(&block, &mut working_set.accessory_state());
 
         Ok(())
     }
