@@ -22,7 +22,19 @@ impl<'a, C: sov_modules_api::Context> DatabaseCommit for EvmDb<'a, C> {
                 .get(&address, self.working_set)
                 .unwrap_or_else(|| DbAccount::new(accounts_prefix, address));
 
-            db_account.info = account.info.into();
+            let account_info = account.info;
+
+            if account.storage_cleared {
+                if let Some(new_code) = &account_info.code {
+                    self.code.set(
+                        &account_info.code_hash,
+                        &new_code.bytecode.as_ref().into(),
+                        self.working_set,
+                    );
+                }
+            }
+
+            db_account.info = account_info.into();
 
             for (key, value) in account.storage.into_iter() {
                 let value = value.present_value();

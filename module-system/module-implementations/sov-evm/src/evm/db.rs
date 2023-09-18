@@ -36,8 +36,16 @@ impl<'a, C: sov_modules_api::Context> Database for EvmDb<'a, C> {
         Ok(db_account.map(|acc| acc.info.into()))
     }
 
-    fn code_by_hash(&mut self, _code_hash: B256) -> Result<Bytecode, Self::Error> {
-        panic!("Should not be called. Contract code is already loaded");
+    fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
+        // TODO move to new_raw_with_hash for better performance
+        let bytecode = Bytecode::new_raw(
+            self.code
+                .get(&code_hash, self.working_set)
+                .unwrap_or(Bytes::default())
+                .into(),
+        );
+
+        Ok(bytecode)
     }
 
     fn storage(&mut self, address: B160, index: U256) -> Result<U256, Self::Error> {

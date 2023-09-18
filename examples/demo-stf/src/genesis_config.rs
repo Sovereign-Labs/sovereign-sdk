@@ -1,3 +1,4 @@
+#[cfg(feature = "experimental")]
 use reth_primitives::Bytes;
 use sov_chain_state::ChainStateConfig;
 #[cfg(feature = "experimental")]
