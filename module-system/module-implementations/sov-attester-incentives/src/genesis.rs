@@ -18,7 +18,7 @@ where
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         anyhow::ensure!(
             !config.initial_attesters.is_empty(),

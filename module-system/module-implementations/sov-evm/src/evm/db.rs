@@ -10,13 +10,13 @@ use super::DbAccount;
 
 pub(crate) struct EvmDb<'a, C: sov_modules_api::Context> {
     pub(crate) accounts: sov_modules_api::StateMap<Address, DbAccount, BcsCodec>,
-    pub(crate) working_set: &'a mut WorkingSet<C::Storage>,
+    pub(crate) working_set: &'a mut WorkingSet<C>,
 }
 
 impl<'a, C: sov_modules_api::Context> EvmDb<'a, C> {
     pub(crate) fn new(
         accounts: sov_modules_api::StateMap<Address, DbAccount, BcsCodec>,
-        working_set: &'a mut WorkingSet<C::Storage>,
+        working_set: &'a mut WorkingSet<C>,
     ) -> Self {
         Self {
             accounts,

@@ -153,7 +153,7 @@ mod experimental {
         fn genesis(
             &self,
             config: &Self::Config,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<C>,
         ) -> Result<(), Error> {
             Ok(self.init_module(config, working_set)?)
         }
@@ -162,17 +162,14 @@ mod experimental {
             &self,
             msg: Self::CallMessage,
             context: &Self::Context,
-            working_set: &mut WorkingSet<C::Storage>,
+            working_set: &mut WorkingSet<C>,
         ) -> Result<sov_modules_api::CallResponse, Error> {
             Ok(self.execute_call(msg.tx, context, working_set)?)
         }
     }
 
     impl<C: sov_modules_api::Context> Evm<C> {
-        pub(crate) fn get_db<'a>(
-            &self,
-            working_set: &'a mut WorkingSet<C::Storage>,
-        ) -> EvmDb<'a, C> {
+        pub(crate) fn get_db<'a>(&self, working_set: &'a mut WorkingSet<C>) -> EvmDb<'a, C> {
             EvmDb::new(self.accounts.clone(), working_set)
         }
     }

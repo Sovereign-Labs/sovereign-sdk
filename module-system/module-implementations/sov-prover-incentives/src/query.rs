@@ -16,7 +16,7 @@ impl<C: sov_modules_api::Context, Vm: sov_modules_api::Zkvm> ProverIncentives<C,
     pub fn get_bond_amount(
         &self,
         address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Response {
         Response {
             value: self

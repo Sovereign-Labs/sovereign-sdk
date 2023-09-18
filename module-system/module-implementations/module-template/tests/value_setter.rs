@@ -36,7 +36,7 @@ fn test_value_setter() {
 fn test_value_setter_helper<C: Context>(
     context: C,
     config: &ExampleModuleConfig,
-    working_set: &mut WorkingSet<C::Storage>,
+    working_set: &mut WorkingSet<C>,
 ) {
     let module = ExampleModule::<C>::default();
     module.genesis(config, working_set).unwrap();

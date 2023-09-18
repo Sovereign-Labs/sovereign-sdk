@@ -35,7 +35,7 @@ where
         + 'static,
 {
     #[rpc_method(name = "firstMethod")]
-    pub fn first_method(&self, _working_set: &mut WorkingSet<C::Storage>) -> RpcResult<u32> {
+    pub fn first_method(&self, _working_set: &mut WorkingSet<C>) -> RpcResult<u32> {
         Ok(11)
     }
 
@@ -43,7 +43,7 @@ where
     pub fn second_method(
         &self,
         result: D,
-        _working_set: &mut WorkingSet<C::Storage>,
+        _working_set: &mut WorkingSet<C>,
     ) -> RpcResult<(D, u64)> {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         let value = result.clone();
@@ -67,7 +67,7 @@ struct RpcStorage<C: Context> {
 impl TestStructRpcImpl<ZkDefaultContext, u32> for RpcStorage<ZkDefaultContext> {
     fn get_working_set(
         &self,
-    ) -> ::sov_modules_api::WorkingSet<<ZkDefaultContext as ::sov_modules_api::Spec>::Storage> {
+    ) -> ::sov_modules_api::WorkingSet<ZkDefaultContext> {
         ::sov_modules_api::WorkingSet::new(self.storage.clone())
     }
 }

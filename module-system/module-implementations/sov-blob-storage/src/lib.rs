@@ -42,7 +42,7 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> BlobStorage<C, Da
         &self,
         slot_height: TransitionHeight,
         blobs: &[&Da::BlobTransaction],
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> anyhow::Result<()> {
         let mut raw_blobs: Vec<Vec<u8>> = Vec::with_capacity(blobs.len());
         for blob in blobs {
@@ -57,7 +57,7 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> BlobStorage<C, Da
     pub fn take_blobs_for_slot_height(
         &self,
         slot_height: TransitionHeight,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Vec<Da::BlobTransaction> {
         self.blobs
             .remove(&slot_height, working_set)
@@ -70,22 +70,19 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> BlobStorage<C, Da
     // TODO: Migrate to generic: https://github.com/Sovereign-Labs/sovereign-sdk/issues/622
     pub(crate) fn get_preferred_sequencer(
         &self,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Option<Vec<u8>> {
         self.sequencer_registry.get_preferred_sequencer(working_set)
     }
 
     pub(crate) fn get_current_slot_height(
         &self,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> TransitionHeight {
         self.chain_state.get_slot_height(working_set)
     }
 
-    pub(crate) fn get_deferred_slots_count(
-        &self,
-        _working_set: &mut WorkingSet<C::Storage>,
-    ) -> u64 {
+    pub(crate) fn get_deferred_slots_count(&self, _working_set: &mut WorkingSet<C>) -> u64 {
         DEFERRED_SLOTS_COUNT
     }
 }

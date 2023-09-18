@@ -130,7 +130,7 @@ fn freeze_token() {
     };
 
     let query_total_supply = |token_address: Address,
-                              working_set: &mut WorkingSet<Storage>|
+                              working_set: &mut WorkingSet<DefaultContext>|
      -> Option<u64> {
         let total_supply: TotalSupplyResponse = bank.supply_of(token_address, working_set).unwrap();
         total_supply.amount
@@ -178,7 +178,7 @@ fn freeze_token() {
     let query_user_balance =
         |token_address: Address,
          user_address: Address,
-         working_set: &mut WorkingSet<Storage>|
+         working_set: &mut WorkingSet<DefaultContext>|
          -> Option<u64> { bank.get_balance_of(user_address, token_address, working_set) };
     let bal = query_user_balance(token_address_2, minter_address, &mut working_set);
 

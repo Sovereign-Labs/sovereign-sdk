@@ -6,11 +6,7 @@ use crate::experimental::PendingTransaction;
 use crate::Evm;
 
 impl<C: sov_modules_api::Context> Evm<C> {
-    pub fn begin_slot_hook(
-        &self,
-        da_root_hash: [u8; 32],
-        working_set: &mut WorkingSet<C::Storage>,
-    ) {
+    pub fn begin_slot_hook(&self, da_root_hash: [u8; 32], working_set: &mut WorkingSet<C>) {
         let parent_block = self
             .head
             .get(working_set)
@@ -31,7 +27,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         self.pending_block.set(&new_pending_block, working_set);
     }
 
-    pub fn end_slot_hook(&self, working_set: &mut WorkingSet<C::Storage>) {
+    pub fn end_slot_hook(&self, working_set: &mut WorkingSet<C>) {
         let pending_block = self
             .pending_block
             .get(working_set)
@@ -130,7 +126,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     pub fn finalize_slot_hook(
         &self,
         root_hash: [u8; 32],
-        accesorry_working_set: &mut AccessoryWorkingSet<C::Storage>,
+        accesorry_working_set: &mut AccessoryWorkingSet<C>,
     ) {
         let expected_block_number = self.blocks.len(accesorry_working_set) as u64;
 
