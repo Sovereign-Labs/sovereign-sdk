@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use demo_stf::app::App;
-use demo_stf::genesis_config::create_demo_genesis_config;
+use demo_stf::genesis_config::create_demo_config_data;
 use prometheus::{Histogram, HistogramOpts, Registry};
 use rng_xfers::{RngDaService, RngDaSpec, SEQUENCER_DA_ADDRESS};
 use sov_db::ledger_db::{LedgerDB, SlotCommit};
@@ -102,16 +102,14 @@ async fn main() -> Result<(), anyhow::Error> {
     let demo_runner = App::<Risc0Verifier, RngDaSpec>::new(rollup_config.storage);
 
     let mut demo = demo_runner.stf;
-    let sequencer_private_key = DefaultPrivateKey::generate();
     let sequencer_da_address = MockAddress::from(SEQUENCER_DA_ADDRESS);
-    let demo_genesis_config = create_demo_genesis_config(
+    let demo_genesis_config = create_demo_config_data(
         100000000,
-        sequencer_private_key.default_address(),
         sequencer_da_address.as_ref().to_vec(),
-        &sequencer_private_key,
         #[cfg(feature = "experimental")]
         Default::default(),
-    );
+    )
+    .genesis;
 
     demo.init_chain(demo_genesis_config);
 

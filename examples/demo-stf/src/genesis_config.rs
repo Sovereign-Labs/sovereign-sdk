@@ -1,10 +1,8 @@
-use sov_chain_state::{genesis, ChainStateConfig};
+use sov_chain_state::ChainStateConfig;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 #[cfg(feature = "experimental")]
 use sov_evm::{AccountData, EvmConfig, SpecId};
 pub use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::default_signature::private_key::DefaultPrivateKey;
-use sov_modules_api::utils::generate_address;
 use sov_modules_api::{Context, PrivateKey, PublicKey};
 use sov_rollup_interface::da::DaSpec;
 pub use sov_state::config::Config as StorageConfig;
