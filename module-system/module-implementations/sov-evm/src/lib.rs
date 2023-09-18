@@ -29,7 +29,7 @@ mod experimental {
     use std::collections::HashMap;
 
     use reth_primitives::{Address, H256};
-    use revm::primitives::{SpecId, U256};
+    use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
     use sov_modules_api::{Error, ModuleInfo};
     use sov_state::codec::BcsCodec;
     use sov_state::WorkingSet;
@@ -46,6 +46,16 @@ mod experimental {
         pub code_hash: H256,
         pub code: Vec<u8>,
         pub nonce: u64,
+    }
+
+    impl AccountData {
+        pub fn empty_code() -> H256 {
+            KECCAK_EMPTY
+        }
+
+        pub fn balance(balance: u64) -> U256 {
+            U256::from(balance)
+        }
     }
 
     #[derive(Clone, Debug)]
