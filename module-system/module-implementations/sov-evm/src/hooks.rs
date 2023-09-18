@@ -29,9 +29,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
             gas_limit: cfg.block_gas_limit,
         };
         self.pending_block.set(&new_pending_block, working_set);
-
-        // println!("new_pending_block: {:?}", new_pending_block);
-        // self.pending_transactions.clear(working_set); ?
     }
 
     pub fn end_slot_hook(&self, working_set: &mut WorkingSet<C::Storage>) {
