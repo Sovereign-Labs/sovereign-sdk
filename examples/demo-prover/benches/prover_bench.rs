@@ -106,10 +106,7 @@ fn print_cycle_averages(metric_map: HashMap<String, (u64, u64)>) {
         .map(|(k, (sum, count))| {
             (
                 k.clone(),
-                (
-                    ((*sum as f64) / (*count as f64)).round() as u64,
-                    *count,
-                ),
+                (((*sum as f64) / (*count as f64)).round() as u64, *count),
             )
         })
         .collect();
