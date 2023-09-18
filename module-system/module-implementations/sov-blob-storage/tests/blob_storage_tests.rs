@@ -18,6 +18,7 @@ fn empty_test() {
     let initial_slot_height = 1;
     let chain_state_config = ChainStateConfig {
         initial_slot_height,
+        current_time: Default::default(),
     };
     chain_state
         .genesis(&chain_state_config, &mut working_set)
@@ -40,6 +41,7 @@ fn store_and_retrieve_standard() {
     let initial_slot_height = 1;
     let chain_state_config = ChainStateConfig {
         initial_slot_height,
+        current_time: Default::default(),
     };
     chain_state
         .genesis(&chain_state_config, &mut working_set)

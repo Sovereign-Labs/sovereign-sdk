@@ -113,8 +113,8 @@ fn regular_test_helper(payload: serde_json::Value, expected: &serde_json::Value)
         header: MockBlockHeader {
             prev_hash: sha2::Sha256::digest(b"prev_header").into(),
             hash: sha2::Sha256::digest(b"slot_data").into(),
+            height: 0,
         },
-        height: 0,
         validity_cond: Default::default(),
         blobs: Default::default(),
     })];
@@ -318,8 +318,8 @@ prop_compose! {
                 header: MockBlockHeader {
                 hash: hash.into(),
                     prev_hash,
-                },
                 height: 0,
+                },
                 validity_cond: Default::default(),
                 blobs: Default::default()
             });

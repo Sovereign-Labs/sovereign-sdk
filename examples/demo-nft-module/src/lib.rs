@@ -7,7 +7,7 @@ mod genesis;
 #[cfg(feature = "native")]
 mod query;
 #[cfg(feature = "native")]
-pub use query::{NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer, OwnerResponse};
+pub use query::*;
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, WorkingSet};
 
 #[derive(ModuleInfo, Clone)]

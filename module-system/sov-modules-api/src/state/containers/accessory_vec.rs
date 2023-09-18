@@ -7,6 +7,8 @@ use sov_state::Prefix;
 
 use crate::state::{AccessoryStateMap, AccessoryStateValue, AccessoryWorkingSet, StateVecError};
 
+/// A variant of [`StateVec`](crate::StateVec) that stores its elements as
+/// "accessory" state, instead of in the JMT.
 #[derive(
     Debug,
     Clone,
@@ -140,6 +142,7 @@ where
         Some(elem)
     }
 
+    /// Removes all values from this [`AccessoryStateVec`].
     pub fn clear<S: Storage>(&self, working_set: &mut AccessoryWorkingSet<S>) {
         let len = self.len_value.remove(working_set).unwrap_or_default();
 
@@ -179,6 +182,14 @@ where
             len,
             next_i: 0,
         }
+    }
+
+    /// Returns the last value in the [`AccessoryStateVec`], or [`None`] if
+    /// empty.
+    pub fn last<S: Storage>(&self, working_set: &mut AccessoryWorkingSet<S>) -> Option<V> {
+        let len = self.len(working_set);
+        let i = len.checked_sub(1)?;
+        self.elems.get(&i, working_set)
     }
 }
 
@@ -238,6 +249,23 @@ where
 {
 }
 
+impl<'a, 'ws, V, Codec, S> DoubleEndedIterator for AccessoryStateVecIter<'a, 'ws, V, Codec, S>
+where
+    Codec: StateCodec + Clone,
+    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
+    Codec::KeyCodec: StateKeyCodec<usize>,
+    S: Storage,
+{
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.len == 0 {
+            return None;
+        }
+
+        self.len -= 1;
+        self.state_vec.get(self.len, self.ws)
+    }
+}
+
 #[cfg(all(test, feature = "native"))]
 mod test {
     use std::fmt::Debug;
@@ -250,10 +278,12 @@ mod test {
     enum TestCaseAction<T> {
         Push(T),
         Pop(T),
+        Last(T),
         Set(usize, T),
         SetAll(Vec<T>),
         CheckLen(usize),
         CheckContents(Vec<T>),
+        CheckContentsReverse(Vec<T>),
         CheckGet(usize, Option<T>),
         Clear,
     }
@@ -287,6 +317,8 @@ mod test {
             TestCaseAction::CheckGet(0, None),
             TestCaseAction::SetAll(vec![1, 2, 3]),
             TestCaseAction::CheckContents(vec![1, 2, 3]),
+            TestCaseAction::CheckContentsReverse(vec![3, 2, 1]),
+            TestCaseAction::Last(3),
         ]
     }
 
@@ -345,6 +377,14 @@ mod test {
             }
             TestCaseAction::Clear => {
                 state_vec.clear(ws);
+            }
+            TestCaseAction::Last(expected) => {
+                let actual = state_vec.last(ws);
+                assert_eq!(actual, Some(expected));
+            }
+            TestCaseAction::CheckContentsReverse(expected) => {
+                let contents: Vec<T> = state_vec.iter(ws).rev().collect();
+                assert_eq!(expected, contents);
             }
         }
     }

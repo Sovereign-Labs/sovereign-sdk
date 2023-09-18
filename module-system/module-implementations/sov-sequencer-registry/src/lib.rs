@@ -11,14 +11,11 @@ mod call;
 mod genesis;
 mod hooks;
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 
 pub use call::CallMessage;
 #[cfg(feature = "native")]
-pub use query::{
-    SequencerAddressResponse, SequencerRegistryRpcClient, SequencerRegistryRpcImpl,
-    SequencerRegistryRpcServer,
-};
+pub use query::*;
 use sov_modules_api::{CallResponse, Error, ModuleInfo, Spec, StateMap, StateValue, WorkingSet};
 
 /// A type alias for DA addresses.

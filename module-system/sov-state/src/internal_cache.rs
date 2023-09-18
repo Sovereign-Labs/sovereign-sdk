@@ -8,7 +8,9 @@ use crate::storage::{Storage, StorageKey, StorageValue};
 /// the cache checks if the value we read was inserted before.
 #[derive(Default)]
 pub struct StorageInternalCache {
+    /// Transaction cache.
     pub tx_cache: CacheLog,
+    /// Ordered reads and writes.
     pub ordered_db_reads: Vec<(CacheKey, Option<CacheValue>)>,
 }
 
@@ -16,7 +18,9 @@ pub struct StorageInternalCache {
 /// deterministic order.
 #[derive(Debug, Default)]
 pub struct OrderedReadsAndWrites {
+    /// Ordered reads.
     pub ordered_reads: Vec<(CacheKey, Option<CacheValue>)>,
+    /// Ordered writes.
     pub ordered_writes: Vec<(CacheKey, Option<CacheValue>)>,
 }
 
@@ -62,17 +66,20 @@ impl StorageInternalCache {
         }
     }
 
+    /// Gets a keyed value from the cache, returning a wrapper on whether it exists.
     pub fn try_get(&self, key: &StorageKey) -> ValueExists {
         let cache_key = key.to_cache_key();
         self.get_value_from_cache(&cache_key)
     }
 
+    /// Replaces the keyed value on the storage.
     pub fn set(&mut self, key: &StorageKey, value: StorageValue) {
         let cache_key = key.to_cache_key();
         let cache_value = value.into_cache_value();
         self.tx_cache.add_write(cache_key, Some(cache_value));
     }
 
+    /// Deletes a keyed value from the cache.
     pub fn delete(&mut self, key: &StorageKey) {
         let cache_key = key.to_cache_key();
         self.tx_cache.add_write(cache_key, None);
@@ -82,6 +89,7 @@ impl StorageInternalCache {
         self.tx_cache.get_value(cache_key)
     }
 
+    /// Merges the provided `StorageInternalCache` into this one.
     pub fn merge_left(
         &mut self,
         rhs: Self,
@@ -89,6 +97,7 @@ impl StorageInternalCache {
         self.tx_cache.merge_left(rhs.tx_cache)
     }
 
+    /// Merges the reads of the provided `StorageInternalCache` into this one.
     pub fn merge_reads_left(
         &mut self,
         rhs: Self,
@@ -96,6 +105,7 @@ impl StorageInternalCache {
         self.tx_cache.merge_reads_left(rhs.tx_cache)
     }
 
+    /// Merges the writes of the provided `StorageInternalCache` into this one.
     pub fn merge_writes_left(
         &mut self,
         rhs: Self,

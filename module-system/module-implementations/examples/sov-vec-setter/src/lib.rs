@@ -8,8 +8,9 @@ mod query;
 
 pub use call::CallMessage;
 #[cfg(feature = "native")]
-pub use query::{VecSetterRpcImpl, VecSetterRpcServer};
+pub use query::*;
 use sov_modules_api::{Error, ModuleInfo, WorkingSet};
+use sov_state::WorkingSet;
 
 /// Initial configuration for sov-vec-setter module.
 pub struct VecSetterConfig<C: sov_modules_api::Context> {

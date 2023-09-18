@@ -5,7 +5,9 @@ mod hooks;
 mod call;
 mod genesis;
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
+#[cfg(feature = "native")]
+pub use query::*;
 #[cfg(test)]
 mod tests;
 

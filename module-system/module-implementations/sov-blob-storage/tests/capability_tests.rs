@@ -75,6 +75,7 @@ fn priority_sequencer_flow() {
     let initial_slot_height = 0;
     let chain_state_config = ChainStateConfig {
         initial_slot_height,
+        current_time: Default::default(),
     };
     let valid_condition = MockValidityCond { is_valid: true };
 
@@ -128,8 +129,8 @@ fn priority_sequencer_flow() {
         header: MockBlockHeader {
             prev_hash: [0; 32].into(),
             hash: [1; 32].into(),
+            height: 1,
         },
-        height: 1,
         validity_cond: valid_condition,
         blobs: slot_1_blobs,
     };
@@ -165,8 +166,8 @@ fn priority_sequencer_flow() {
         header: MockBlockHeader {
             prev_hash: slot_1_data.header.hash,
             hash: [2; 32].into(),
+            height: 2,
         },
-        height: 2,
         validity_cond: valid_condition,
         blobs: slot_2_blobs,
     };
@@ -191,8 +192,8 @@ fn priority_sequencer_flow() {
         header: MockBlockHeader {
             prev_hash: slot_2_data.header.hash,
             hash: [3; 32].into(),
+            height: 3,
         },
-        height: 3,
         validity_cond: valid_condition,
         blobs: slot_3_blobs,
     };
@@ -216,8 +217,8 @@ fn priority_sequencer_flow() {
         header: MockBlockHeader {
             prev_hash: slot_3_data.header.hash,
             hash: [4; 32].into(),
+            height: 4,
         },
-        height: 4,
         validity_cond: valid_condition,
         blobs: Vec::new(),
     };
@@ -270,6 +271,7 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
     let initial_slot_height = 0;
     let chain_state_config = ChainStateConfig {
         initial_slot_height,
+        current_time: Default::default(),
     };
 
     let bank = sov_bank::Bank::<C>::default();
@@ -311,8 +313,8 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
         header: MockBlockHeader {
             prev_hash: [0; 32].into(),
             hash: [1; 32].into(),
+            height: 1,
         },
-        height: 1,
         validity_cond: valid_condition,
         blobs: slot_1_blobs,
     };
@@ -334,8 +336,8 @@ fn test_blobs_from_non_registered_sequencers_are_not_saved() {
         header: MockBlockHeader {
             prev_hash: slot_1_data.header.hash,
             hash: [2; 32].into(),
+            height: 2,
         },
-        height: 2,
         validity_cond: valid_condition,
         blobs: Vec::new(),
     };
@@ -385,6 +387,7 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
     let initial_slot_height = 0;
     let chain_state_config = ChainStateConfig {
         initial_slot_height,
+        current_time: Default::default(),
     };
 
     let bank = sov_bank::Bank::<C>::default();
@@ -426,8 +429,8 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
         header: MockBlockHeader {
             prev_hash: [0; 32].into(),
             hash: [1; 32].into(),
+            height: 1,
         },
-        height: 1,
         validity_cond: valid_condition,
         blobs: slot_1_blobs,
     };
@@ -451,8 +454,8 @@ fn test_blobs_no_deferred_without_preferred_sequencer() {
         header: MockBlockHeader {
             prev_hash: slot_1_data.header.hash,
             hash: [2; 32].into(),
+            height: 2,
         },
-        height: 2,
         validity_cond: valid_condition,
         blobs: Vec::new(),
     };
@@ -501,6 +504,7 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
     let initial_slot_height = 0;
     let chain_state_config = ChainStateConfig {
         initial_slot_height,
+        current_time: Default::default(),
     };
     let valid_condition = MockValidityCond { is_valid: true };
 
@@ -545,8 +549,8 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
         header: MockBlockHeader {
             prev_hash: [0; 32].into(),
             hash: [1; 32].into(),
+            height: 1,
         },
-        height: 1,
         validity_cond: valid_condition,
         blobs: slot_1_blobs,
     };
@@ -585,8 +589,8 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
         header: MockBlockHeader {
             prev_hash: slot_1_data.header.hash,
             hash: [2; 32].into(),
+            height: 2,
         },
-        height: 2,
         validity_cond: valid_condition,
         blobs: slot_2_blobs,
     };
@@ -611,8 +615,8 @@ fn deferred_blobs_are_first_after_preferred_sequencer_exit() {
         header: MockBlockHeader {
             prev_hash: slot_2_data.header.hash,
             hash: [3; 32].into(),
+            height: 3,
         },
-        height: 3,
         validity_cond: valid_condition,
         blobs: Vec::new(),
     };

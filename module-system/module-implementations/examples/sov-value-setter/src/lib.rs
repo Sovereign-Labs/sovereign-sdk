@@ -7,9 +7,11 @@ mod genesis;
 mod tests;
 
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 
 pub use call::CallMessage;
+#[cfg(feature = "native")]
+pub use query::*;
 use sov_modules_api::{Error, ModuleInfo, WorkingSet};
 
 /// Initial configuration for sov-value-setter module.

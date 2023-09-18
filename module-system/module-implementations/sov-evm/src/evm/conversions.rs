@@ -1,18 +1,16 @@
 use bytes::Bytes;
-use ethereum_types::U64;
-use ethers_core::types::{Bytes as EthBytes, OtherFields, Transaction};
 use reth_primitives::{
     Bytes as RethBytes, TransactionSigned, TransactionSignedEcRecovered, TransactionSignedNoHash,
 };
-use reth_rpc::eth::error::EthApiError;
 use reth_rpc_types::CallRequest;
 use revm::primitives::{
     AccountInfo as ReVmAccountInfo, BlockEnv as ReVmBlockEnv, Bytecode, CreateScheme, TransactTo,
     TxEnv, U256,
 };
-use thiserror::Error;
 
-use super::transaction::{BlockEnv, RlpEvmTransaction};
+use super::primitive_types::{
+    BlockEnv, RawEvmTxConversionError, RlpEvmTransaction, TransactionSignedAndRecovered,
+};
 use super::AccountInfo;
 
 impl From<AccountInfo> for ReVmAccountInfo {
@@ -37,15 +35,14 @@ impl From<ReVmAccountInfo> for AccountInfo {
     }
 }
 
-impl From<BlockEnv> for ReVmBlockEnv {
-    fn from(block_env: BlockEnv) -> Self {
+impl From<&BlockEnv> for ReVmBlockEnv {
+    fn from(block_env: &BlockEnv) -> Self {
         Self {
             number: U256::from(block_env.number),
             coinbase: block_env.coinbase,
-            timestamp: block_env.timestamp,
-            // TODO: handle difficulty
+            timestamp: U256::from(block_env.timestamp),
             difficulty: U256::ZERO,
-            prevrandao: block_env.prevrandao,
+            prevrandao: Some(block_env.prevrandao),
             basefee: U256::from(block_env.basefee),
             gas_limit: U256::from(block_env.gas_limit),
         }
@@ -70,65 +67,6 @@ pub(crate) fn create_tx_env(tx: &TransactionSignedEcRecovered) -> TxEnv {
         nonce: Some(tx.nonce()),
         // TODO handle access list
         access_list: vec![],
-    }
-}
-
-impl TryFrom<RlpEvmTransaction> for Transaction {
-    type Error = RawEvmTxConversionError;
-    fn try_from(evm_tx: RlpEvmTransaction) -> Result<Self, Self::Error> {
-        let tx: TransactionSignedEcRecovered = evm_tx.try_into()?;
-
-        Ok(Self {
-            hash: tx.hash().into(),
-            nonce: tx.nonce().into(),
-
-            from: tx.signer().into(),
-            to: tx.to().map(|addr| addr.into()),
-            value: tx.value().into(),
-            gas_price: Some(tx.effective_gas_price(None).into()),
-
-            input: EthBytes::from(tx.input().to_vec()),
-            v: tx.signature().v(tx.chain_id()).into(),
-            r: tx.signature().r.into(),
-            s: tx.signature().s.into(),
-            transaction_type: Some(U64::from(tx.tx_type() as u8)),
-            // TODO handle access list
-            access_list: None,
-            max_priority_fee_per_gas: tx.max_priority_fee_per_gas().map(From::from),
-            max_fee_per_gas: Some(tx.max_fee_per_gas().into()),
-            chain_id: tx.chain_id().map(|id| id.into()),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
-            block_hash: Some([0; 32].into()),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
-            block_number: Some(1.into()),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
-            transaction_index: Some(1.into()),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
-            gas: Default::default(),
-            // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/503
-            other: OtherFields::default(),
-        })
-    }
-}
-
-#[derive(Error, Debug)]
-pub enum RawEvmTxConversionError {
-    #[error("Empty raw transaction data")]
-    EmptyRawTransactionData,
-    #[error("Failed to decode signed transaction")]
-    FailedToDecodeSignedTransaction,
-}
-
-impl From<RawEvmTxConversionError> for EthApiError {
-    fn from(e: RawEvmTxConversionError) -> Self {
-        match e {
-            RawEvmTxConversionError::EmptyRawTransactionData => {
-                EthApiError::EmptyRawTransactionData
-            }
-            RawEvmTxConversionError::FailedToDecodeSignedTransaction => {
-                EthApiError::FailedToDecodeSignedTransaction
-            }
-        }
     }
 }
 
@@ -162,6 +100,15 @@ impl TryFrom<RlpEvmTransaction> for TransactionSignedEcRecovered {
     }
 }
 
+impl From<TransactionSignedAndRecovered> for TransactionSignedEcRecovered {
+    fn from(value: TransactionSignedAndRecovered) -> Self {
+        TransactionSignedEcRecovered::from_signed_transaction(
+            value.signed_transaction,
+            value.signer,
+        )
+    }
+}
+
 // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/576
 // https://github.com/paradigmxyz/reth/blob/d8677b4146f77c7c82d659c59b79b38caca78778/crates/rpc/rpc/src/eth/revm_utils.rs#L201
 pub fn prepare_call_env(request: CallRequest) -> TxEnv {
@@ -186,8 +133,4 @@ pub fn prepare_call_env(request: CallRequest) -> TxEnv {
         // TODO handle access list
         access_list: Default::default(),
     }
-}
-
-pub fn to_u64(value: U256) -> u64 {
-    value.try_into().unwrap()
 }

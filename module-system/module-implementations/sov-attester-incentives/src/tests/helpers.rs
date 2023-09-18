@@ -95,6 +95,7 @@ pub(crate) fn setup(
     // Initialize chain state
     let chain_state_config = sov_chain_state::ChainStateConfig {
         initial_slot_height: INIT_HEIGHT,
+        current_time: Default::default(),
     };
 
     let chain_state = sov_chain_state::ChainState::<C, MockDaSpec>::default();
@@ -168,8 +169,8 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
             header: MockBlockHeader {
                 prev_hash: [i; 32].into(),
                 hash: [i + 1; 32].into(),
+                height: INIT_HEIGHT + u64::from(i + 1),
             },
-            height: INIT_HEIGHT + u64::from(i + 1),
             validity_cond: MockValidityCond { is_valid: true },
             blobs: Default::default(),
         };

@@ -193,6 +193,9 @@ where
     Codec::KeyCodec: StateKeyCodec<K>,
     Codec::ValueCodec: StateValueCodec<V>,
 {
+    /// Generates an arbitrary [`AccessoryStateMap`] instance.
+    ///
+    /// See the [`arbitrary`] crate for more information.
     pub fn arbitrary_workset<S>(
         u: &mut arbitrary::Unstructured<'a>,
         working_set: &mut AccessoryWorkingSet<S>,
