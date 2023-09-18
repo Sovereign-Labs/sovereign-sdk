@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 use super::ProverIncentives;
 

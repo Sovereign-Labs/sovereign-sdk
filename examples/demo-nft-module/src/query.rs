@@ -1,7 +1,6 @@
 use jsonrpsee::core::RpcResult;
 use sov_modules_api::macros::rpc_gen;
-use sov_modules_api::Context;
-use sov_state::WorkingSet;
+use sov_modules_api::{Context, WorkingSet};
 
 use crate::NonFungibleToken;
 

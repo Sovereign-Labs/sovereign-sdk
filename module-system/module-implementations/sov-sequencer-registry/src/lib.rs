@@ -16,8 +16,7 @@ mod query;
 pub use call::CallMessage;
 #[cfg(feature = "native")]
 pub use query::*;
-use sov_modules_api::{CallResponse, Error, ModuleInfo, Spec};
-use sov_state::{StateMap, StateValue, WorkingSet};
+use sov_modules_api::{CallResponse, Error, ModuleInfo, Spec, StateMap, StateValue, WorkingSet};
 
 /// A type alias for DA addresses.
 ///

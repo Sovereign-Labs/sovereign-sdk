@@ -9,8 +9,7 @@ mod query;
 pub use call::CallMessage;
 #[cfg(feature = "native")]
 pub use query::*;
-use sov_modules_api::{Error, ModuleInfo};
-use sov_state::WorkingSet;
+use sov_modules_api::{Error, ModuleInfo, WorkingSet};
 
 /// Initial configuration for sov-vec-setter module.
 pub struct VecSetterConfig<C: sov_modules_api::Context> {
@@ -31,11 +30,11 @@ pub struct VecSetter<C: sov_modules_api::Context> {
 
     /// Some vector kept in the state.
     #[state]
-    pub vector: sov_state::StateVec<u32>,
+    pub vector: sov_modules_api::StateVec<u32>,
 
     /// Holds the address of the admin user who is allowed to update the vector.
     #[state]
-    pub admin: sov_state::StateValue<C::Address>,
+    pub admin: sov_modules_api::StateValue<C::Address>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for VecSetter<C> {

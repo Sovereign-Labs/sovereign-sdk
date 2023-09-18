@@ -1,6 +1,5 @@
 use sov_modules_api::hooks::ApplyBlobHooks;
-use sov_modules_api::{BlobReaderTrait, Context};
-use sov_state::WorkingSet;
+use sov_modules_api::{BlobReaderTrait, Context, WorkingSet};
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]

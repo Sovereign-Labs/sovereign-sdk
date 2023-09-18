@@ -12,8 +12,7 @@ pub use query::*;
 mod tests;
 
 pub use call::{CallMessage, UPDATE_ACCOUNT_MSG};
-use sov_modules_api::{Context, Error, ModuleInfo};
-use sov_state::WorkingSet;
+use sov_modules_api::{Context, Error, ModuleInfo, WorkingSet};
 
 /// Initial configuration for sov-accounts module.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,11 +48,11 @@ pub struct Accounts<C: Context> {
 
     /// Mapping from an account address to a corresponding public key.
     #[state]
-    pub(crate) public_keys: sov_state::StateMap<C::Address, C::PublicKey>,
+    pub(crate) public_keys: sov_modules_api::StateMap<C::Address, C::PublicKey>,
 
     /// Mapping from a public key to a corresponding account.
     #[state]
-    pub(crate) accounts: sov_state::StateMap<C::PublicKey, Account<C>>,
+    pub(crate) accounts: sov_modules_api::StateMap<C::PublicKey, Account<C>>,
 }
 
 impl<C: Context> sov_modules_api::Module for Accounts<C> {

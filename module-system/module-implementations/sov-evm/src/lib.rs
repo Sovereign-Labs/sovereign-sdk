@@ -30,9 +30,8 @@ mod experimental {
 
     use reth_primitives::{Address, Bytes, H256};
     use revm::primitives::{SpecId, KECCAK_EMPTY, U256};
-    use sov_modules_api::{Error, ModuleInfo};
+    use sov_modules_api::{Error, ModuleInfo, WorkingSet};
     use sov_state::codec::BcsCodec;
-    use sov_state::WorkingSet;
 
     use super::evm::db::EvmDb;
     use super::evm::{DbAccount, EvmChainConfig};
@@ -101,43 +100,44 @@ mod experimental {
         pub(crate) address: C::Address,
 
         #[state]
-        pub(crate) accounts: sov_state::StateMap<Address, DbAccount, BcsCodec>,
+        pub(crate) accounts: sov_modules_api::StateMap<Address, DbAccount, BcsCodec>,
 
         #[state]
         pub(crate) code:
-            sov_state::StateMap<reth_primitives::H256, reth_primitives::Bytes, BcsCodec>,
+            sov_modules_api::StateMap<reth_primitives::H256, reth_primitives::Bytes, BcsCodec>,
 
         #[state]
-        pub(crate) cfg: sov_state::StateValue<EvmChainConfig, BcsCodec>,
+        pub(crate) cfg: sov_modules_api::StateValue<EvmChainConfig, BcsCodec>,
 
         #[state]
-        pub(crate) pending_block: sov_state::StateValue<BlockEnv, BcsCodec>,
+        pub(crate) pending_block: sov_modules_api::StateValue<BlockEnv, BcsCodec>,
 
         #[state]
-        pub(crate) pending_transactions: sov_state::StateVec<PendingTransaction, BcsCodec>,
+        pub(crate) pending_transactions: sov_modules_api::StateVec<PendingTransaction, BcsCodec>,
 
         #[state]
-        pub(crate) head: sov_state::StateValue<Block, BcsCodec>,
+        pub(crate) head: sov_modules_api::StateValue<Block, BcsCodec>,
 
         #[state]
-        pub(crate) pending_head: sov_state::AccessoryStateValue<Block, BcsCodec>,
+        pub(crate) pending_head: sov_modules_api::AccessoryStateValue<Block, BcsCodec>,
 
         #[state]
-        pub(crate) blocks: sov_state::AccessoryStateVec<SealedBlock, BcsCodec>,
+        pub(crate) blocks: sov_modules_api::AccessoryStateVec<SealedBlock, BcsCodec>,
 
         #[state]
-        pub(crate) block_hashes: sov_state::AccessoryStateMap<reth_primitives::H256, u64, BcsCodec>,
+        pub(crate) block_hashes:
+            sov_modules_api::AccessoryStateMap<reth_primitives::H256, u64, BcsCodec>,
 
         #[state]
         pub(crate) transactions:
-            sov_state::AccessoryStateVec<TransactionSignedAndRecovered, BcsCodec>,
+            sov_modules_api::AccessoryStateVec<TransactionSignedAndRecovered, BcsCodec>,
 
         #[state]
         pub(crate) transaction_hashes:
-            sov_state::AccessoryStateMap<reth_primitives::H256, u64, BcsCodec>,
+            sov_modules_api::AccessoryStateMap<reth_primitives::H256, u64, BcsCodec>,
 
         #[state]
-        pub(crate) receipts: sov_state::AccessoryStateVec<Receipt, BcsCodec>,
+        pub(crate) receipts: sov_modules_api::AccessoryStateVec<Receipt, BcsCodec>,
     }
 
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {

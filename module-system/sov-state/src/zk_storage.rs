@@ -7,9 +7,9 @@ use jmt::{JellyfishMerkleTree, KeyHash, Version};
 use sov_zk_cycle_macros::cycle_tracker;
 
 use crate::internal_cache::OrderedReadsAndWrites;
-use crate::storage::{StorageKey, StorageProof, StorageValue};
+use crate::storage::{Storage, StorageKey, StorageProof, StorageValue};
 use crate::witness::{TreeWitnessReader, Witness};
-use crate::{MerkleProofSpec, Storage};
+use crate::MerkleProofSpec;
 
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 extern crate risc0_zkvm;

@@ -1,5 +1,5 @@
 use anyhow::{bail, Result};
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 use crate::token::Token;
 use crate::Bank;

@@ -1,5 +1,5 @@
 use reth_primitives::{Bloom, Bytes, U256};
-use sov_state::{AccessoryWorkingSet, WorkingSet};
+use sov_modules_api::{AccessoryWorkingSet, WorkingSet};
 
 use crate::evm::primitive_types::{Block, BlockEnv};
 use crate::experimental::PendingTransaction;

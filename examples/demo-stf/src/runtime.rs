@@ -110,7 +110,7 @@ impl<C: Context, Da: DaSpec> BlobSelector<Da> for Runtime<C, Da> {
     fn get_blobs_for_this_slot<'a, I>(
         &self,
         current_blobs: I,
-        working_set: &mut sov_state::WorkingSet<<Self::Context as Spec>::Storage>,
+        working_set: &mut sov_modules_api::WorkingSet<<Self::Context as Spec>::Storage>,
     ) -> anyhow::Result<Vec<BlobRefOrOwned<'a, Da::BlobTransaction>>>
     where
         I: IntoIterator<Item = &'a mut Da::BlobTransaction>,

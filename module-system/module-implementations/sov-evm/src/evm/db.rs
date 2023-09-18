@@ -3,8 +3,8 @@ use std::convert::Infallible;
 use reth_primitives::{Address, Bytes, H256};
 use revm::primitives::{AccountInfo as ReVmAccountInfo, Bytecode, B160, B256, U256};
 use revm::Database;
+use sov_modules_api::WorkingSet;
 use sov_state::codec::BcsCodec;
-use sov_state::WorkingSet;
 
 use super::DbAccount;
 
