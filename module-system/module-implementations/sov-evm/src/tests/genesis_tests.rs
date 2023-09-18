@@ -38,6 +38,10 @@ pub(crate) const GENESIS_HASH: H256 = H256(hex!(
     "3441c3084e43183a53aabbbe3e94512bb3db4aca826af8f23b38f0613811571d"
 ));
 
+pub(crate) const GENESIS_STATE_ROOT: H256 = H256(hex!(
+    "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
+));
+
 lazy_static! {
     pub(crate) static ref BENEFICIARY: Address = Address::from([3u8; 20]);
 }
@@ -99,7 +103,9 @@ fn genesis_block() {
             header: SealedHeader {
                 header: Header {
                     parent_hash: H256::default(),
-                    state_root: KECCAK_EMPTY,
+                    state_root: H256(hex!(
+                        "0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a"
+                    )),
                     transactions_root: EMPTY_TRANSACTIONS,
                     receipts_root: EMPTY_RECEIPTS,
                     logs_bloom: Bloom::default(),
@@ -134,9 +140,7 @@ fn genesis_head() {
         Block {
             header: Header {
                 parent_hash: H256::default(),
-                state_root: H256(hex!(
-                    "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470"
-                )),
+                state_root: GENESIS_STATE_ROOT,
                 transactions_root: EMPTY_TRANSACTIONS,
                 receipts_root: EMPTY_RECEIPTS,
                 logs_bloom: Bloom::default(),

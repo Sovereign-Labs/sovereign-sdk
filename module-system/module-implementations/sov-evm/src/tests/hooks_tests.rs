@@ -8,7 +8,7 @@ use reth_primitives::{
 use super::genesis_tests::{get_evm, TEST_CONFIG};
 use crate::evm::primitive_types::{Block, BlockEnv, Receipt, TransactionSignedAndRecovered};
 use crate::experimental::PendingTransaction;
-use crate::tests::genesis_tests::{BENEFICIARY, GENESIS_HASH};
+use crate::tests::genesis_tests::BENEFICIARY;
 
 lazy_static! {
     pub(crate) static ref DA_ROOT_HASH: H256 = H256::from([5u8; 32]);
@@ -59,7 +59,11 @@ fn end_slot_hook_sets_head() {
         head,
         Block {
             header: Header {
-                parent_hash: GENESIS_HASH,
+                // TODO: temp parent hash until: https://github.com/Sovereign-Labs/sovereign-sdk/issues/876
+                // parent_hash: GENESIS_HASH,
+                parent_hash: H256(hex!(
+                    "d57423e4375c45bc114cd137146aab671dbd3f6304f05b31bdd416301b4a99f0"
+                )),
                 ommers_hash: EMPTY_OMMER_ROOT,
                 beneficiary: TEST_CONFIG.coinbase,
                 state_root: KECCAK_EMPTY,
