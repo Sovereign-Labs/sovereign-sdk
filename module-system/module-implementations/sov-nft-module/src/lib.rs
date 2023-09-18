@@ -6,6 +6,7 @@ pub use call::CallMessage;
 mod genesis;
 #[cfg(feature = "native")]
 mod query;
+mod offchain;
 #[cfg(feature = "native")]
 pub use query::{CollectionResponse, NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer};
 use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};

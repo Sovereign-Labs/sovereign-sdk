@@ -1,11 +1,11 @@
 use anyhow::{anyhow, ensure, Result};
 use sov_modules_api::{CallResponse, Context};
 use sov_state::WorkingSet;
-
 use crate::utils::get_collection_address;
 use crate::{
     Collection, CollectionAddress, Nft, NftIdentifier, NonFungibleToken, TokenId, UserAddress,
 };
+use crate::offchain::{track_collection, track_nft, update_top_owners};
 
 #[cfg_attr(
     feature = "native",
@@ -93,6 +93,12 @@ impl<C: Context> NonFungibleToken<C> {
             collection_uri: metadata_url.to_string(),
         };
         self.collections.set(&collection_address, &c, working_set);
+        track_collection(&collection_address.to_string(),
+                         &collection_name.to_string(),
+                         &creator.to_string(),
+                         false,
+                         &metadata_url.to_string(),
+                         0);
         Ok(CallResponse::default())
     }
 
@@ -109,6 +115,12 @@ impl<C: Context> NonFungibleToken<C> {
         collection.collection_uri = collection_uri.to_string();
         self.collections
             .set(&collection_address, &collection, working_set);
+        track_collection(&collection_address.to_string(),
+                         &collection.name.to_string(),
+                         &collection.creator.to_string(),
+                         collection.frozen,
+                         &collection.collection_uri,
+                         collection.supply);
         Ok(CallResponse::default())
     }
 
@@ -124,6 +136,12 @@ impl<C: Context> NonFungibleToken<C> {
         collection.frozen = true;
         self.collections
             .set(&collection_address, &collection, working_set);
+        track_collection(&collection_address.to_string(),
+                         &collection.name.to_string(),
+                         &collection.creator.to_string(),
+                         collection.frozen,
+                         &collection.collection_uri,
+                         collection.supply);
         Ok(CallResponse::default())
     }
 
@@ -132,7 +150,7 @@ impl<C: Context> NonFungibleToken<C> {
         &self,
         token_id: u64,
         collection_name: &str,
-        collection_uri: &str,
+        token_uri: &str,
         mint_to_address: &UserAddress<C>,
         frozen: bool,
         context: &C,
@@ -148,7 +166,7 @@ impl<C: Context> NonFungibleToken<C> {
             collection_address: collection_address.clone(),
             owner: mint_to_address.clone(),
             frozen,
-            token_uri: collection_uri.to_string(),
+            token_uri: token_uri.to_string(),
         };
 
         self.nfts.set(
@@ -156,9 +174,23 @@ impl<C: Context> NonFungibleToken<C> {
             &new_nft,
             working_set,
         );
+        track_nft(&collection_address.to_string(),
+                  token_id,
+                  &mint_to_address.to_string(),
+                  frozen,
+                  &token_uri.to_string());
         collection.supply += 1;
         self.collections
             .set(&collection_address, &collection, working_set);
+        track_collection(&collection_address.to_string(),
+                         &collection.name.to_string(),
+                         &collection.creator.to_string(),
+                         collection.frozen,
+                         &collection.collection_uri,
+                         collection.supply);
+        update_top_owners(&collection_address.to_string(),
+                          Some(&[(mint_to_address.to_string(), 1)]),
+                          None);
 
         Ok(CallResponse::default())
     }
@@ -175,8 +207,17 @@ impl<C: Context> NonFungibleToken<C> {
         let token_identifier = NftIdentifier(nft_id, collection_address.clone());
         let mut nft = self.get_nft_by_id(&token_identifier, working_set)?;
         nft.exit_if_not_owned(context)?;
+        let original_owner = nft.owner;
         nft.owner = to.clone();
         self.nfts.set(&token_identifier, &nft, working_set);
+        track_nft(&collection_address.to_string(),
+                  nft.token_id,
+                  &nft.owner.to_string(),
+                  nft.frozen,
+                  &nft.token_uri);
+        update_top_owners(&collection_address.to_string(),
+                          Some(&[(to.to_string(), 1)]),
+                          Some(&[(original_owner.to_string(), 1)]));
         Ok(CallResponse::default())
     }
 
@@ -191,7 +232,7 @@ impl<C: Context> NonFungibleToken<C> {
     ) -> Result<CallResponse> {
         let (collection_address, _) =
             self.get_collection_by_name(collection_name, context, working_set)?;
-        let token_identifier = NftIdentifier(token_id, collection_address);
+        let token_identifier = NftIdentifier(token_id, collection_address.clone());
         let mut nft = self.get_nft_by_id(&token_identifier, working_set)?;
         nft.exit_if_frozen()?;
         if let Some(val) = frozen {
@@ -201,6 +242,11 @@ impl<C: Context> NonFungibleToken<C> {
             nft.token_uri = murl
         };
         self.nfts.set(&token_identifier, &nft, working_set);
+        track_nft(&collection_address.to_string(),
+                  nft.token_id,
+                  &nft.owner.to_string(),
+                  nft.frozen,
+                  &nft.token_uri);
 
         Ok(CallResponse::default())
     }
