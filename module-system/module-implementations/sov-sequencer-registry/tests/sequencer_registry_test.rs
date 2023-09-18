@@ -1,6 +1,6 @@
-use sov_modules_api::{Context, Error, Module, ModuleInfo};
+use sov_modules_api::{Context, Error, Module, ModuleInfo, WorkingSet};
 use sov_sequencer_registry::CallMessage;
-use sov_state::{ProverStorage, WorkingSet};
+use sov_state::ProverStorage;
 
 mod helpers;
 

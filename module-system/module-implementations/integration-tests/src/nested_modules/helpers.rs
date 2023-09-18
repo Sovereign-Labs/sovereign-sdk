@@ -1,5 +1,4 @@
-use sov_modules_api::{Context, ModuleInfo};
-use sov_state::{StateMap, StateValue, WorkingSet};
+use sov_modules_api::{Context, ModuleInfo, StateMap, StateValue, WorkingSet};
 
 pub mod module_a {
     use super::*;

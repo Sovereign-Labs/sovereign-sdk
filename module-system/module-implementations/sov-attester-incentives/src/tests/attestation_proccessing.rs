@@ -1,6 +1,7 @@
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::optimistic::Attestation;
-use sov_state::{ProverStorage, WorkingSet};
+use sov_modules_api::WorkingSet;
+use sov_state::ProverStorage;
 
 use crate::call::AttesterIncentiveErrors;
 use crate::tests::helpers::{

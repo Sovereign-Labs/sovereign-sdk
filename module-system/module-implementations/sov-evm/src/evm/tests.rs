@@ -5,7 +5,8 @@ use revm::db::CacheDB;
 use revm::precompile::B160;
 use revm::primitives::{CfgEnv, ExecutionResult, Output, KECCAK_EMPTY, U256};
 use revm::{Database, DatabaseCommit};
-use sov_state::{ProverStorage, WorkingSet};
+use sov_modules_api::WorkingSet;
+use sov_state::ProverStorage;
 
 use super::db::EvmDb;
 use super::db_init::InitEvmDb;

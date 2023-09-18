@@ -1,12 +1,11 @@
-use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
+use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{Context, Spec};
+use sov_modules_api::{AccessoryWorkingSet, Context, Spec, WorkingSet};
 use sov_modules_stf_template::SequencerOutcome;
 #[cfg(feature = "experimental")]
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
 use sov_sequencer_registry::SequencerRegistry;
-use sov_state::{AccessoryWorkingSet, WorkingSet};
 use tracing::info;
 
 use crate::runtime::Runtime;
@@ -83,7 +82,7 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
         &self,
         #[allow(unused_variables)] slot_header: &Da::BlockHeader,
         #[allow(unused_variables)] validity_condition: &Da::ValidityCondition,
-        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
+        #[allow(unused_variables)] working_set: &mut sov_modules_api::WorkingSet<
             <Self::Context as Spec>::Storage,
         >,
     ) {
@@ -94,13 +93,17 @@ impl<C: Context, Da: DaSpec> SlotHooks<Da> for Runtime<C, Da> {
 
     fn end_slot_hook(
         &self,
-        #[allow(unused_variables)] working_set: &mut sov_state::WorkingSet<
+        #[allow(unused_variables)] working_set: &mut sov_modules_api::WorkingSet<
             <Self::Context as Spec>::Storage,
         >,
     ) {
         #[cfg(feature = "experimental")]
         self.evm.end_slot_hook(working_set);
     }
+}
+
+impl<C: Context, Da: sov_modules_api::DaSpec> FinalizeHook<Da> for Runtime<C, Da> {
+    type Context = C;
 
     fn finalize_slot_hook(
         &self,

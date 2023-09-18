@@ -8,9 +8,8 @@
 //! [See here for docs](https://github.com/Sovereign-Labs/sovereign-sdk/blob/nightly/examples/demo-stf/README.md)
 
 use sov_rollup_interface::da::{BlobReaderTrait, DaSpec};
-use sov_state::WorkingSet;
 
-use crate::{Context, Spec};
+use crate::{Context, Spec, WorkingSet};
 
 /// Container type for mixing borrowed and owned blobs.
 pub enum BlobRefOrOwned<'a, B: BlobReaderTrait> {

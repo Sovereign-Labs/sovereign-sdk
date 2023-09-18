@@ -25,7 +25,7 @@ fn main() {
     let runtime = &mut RT::default();
 
     let storage = ZkStorage::new();
-    let mut working_set = &mut sov_state::WorkingSet::new(storage);
+    let mut working_set = &mut sov_modules_api::WorkingSet::new(storage);
     let config = GenesisConfig::new((), (), ());
     runtime.genesis(&config, working_set).unwrap();
     let context = ZkDefaultContext::new(Address::try_from([0; 32].as_ref()).unwrap());

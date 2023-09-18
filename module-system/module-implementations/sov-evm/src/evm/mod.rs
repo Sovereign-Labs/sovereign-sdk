@@ -1,7 +1,8 @@
 use reth_primitives::{Address, H256, U256};
 use revm::primitives::specification::SpecId;
 use serde::{Deserialize, Serialize};
-use sov_state::{Prefix, StateMap};
+use sov_modules_api::StateMap;
+use sov_state::Prefix;
 
 pub(crate) mod conversions;
 pub(crate) mod db;
@@ -43,7 +44,11 @@ impl DbAccount {
         }
     }
 
-    fn new_with_info(parent_prefix: &Prefix, address: Address, info: AccountInfo) -> Self {
+    pub(crate) fn new_with_info(
+        parent_prefix: &Prefix,
+        address: Address,
+        info: AccountInfo,
+    ) -> Self {
         let prefix = Self::create_storage_prefix(parent_prefix, address);
         Self {
             info,
