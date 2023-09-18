@@ -144,7 +144,7 @@ fn invalid_proof_helper(
         MockDaSpec,
         MockValidityCondChecker<MockValidityCond>,
     >,
-    working_set: &mut WorkingSet<ProverStorage<sov_state::DefaultStorageSpec>>,
+    working_set: &mut WorkingSet<DefaultContext>,
 ) {
     // Let's bond the challenger and try to publish a false challenge
     module

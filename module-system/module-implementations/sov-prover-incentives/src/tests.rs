@@ -35,9 +35,7 @@ fn create_bank_config() -> (sov_bank::BankConfig<C>, <C as Spec>::Address) {
     )
 }
 
-fn setup(
-    working_set: &mut WorkingSet<<C as Spec>::Storage>,
-) -> (ProverIncentives<C, MockZkvm>, Address) {
+fn setup(working_set: &mut WorkingSet<C>) -> (ProverIncentives<C, MockZkvm>, Address) {
     // Initialize bank
     let (bank_config, prover_address) = create_bank_config();
     let bank = sov_bank::Bank::<C>::default();

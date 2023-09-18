@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_modules_api::default_context::{DefaultContext, ZkDefaultContext};
 use sov_modules_api::*;
 use sov_state::{ArrayWitness, DefaultStorageSpec, Prefix, ProverStorage, Storage, ZkStorage};
 
@@ -10,7 +11,7 @@ enum Operation {
 }
 
 impl Operation {
-    fn execute<S: Storage>(&self, working_set: WorkingSet<S>) -> StateCheckpoint<S> {
+    fn execute<C: Context>(&self, working_set: WorkingSet<C>) -> StateCheckpoint<C> {
         match self {
             Operation::Merge => working_set.checkpoint(),
             Operation::Finalize => {
@@ -31,7 +32,7 @@ struct StorageOperation {
 }
 
 impl StorageOperation {
-    fn execute<S: Storage>(&self, mut working_set: WorkingSet<S>) -> WorkingSet<S> {
+    fn execute<C: Context>(&self, mut working_set: WorkingSet<C>) -> WorkingSet<C> {
         for op in self.operations.iter() {
             working_set = op.execute(working_set).to_revertable()
         }
@@ -79,10 +80,7 @@ fn create_state_map_and_storage(
     key: u32,
     value: u32,
     path: impl AsRef<Path>,
-) -> (
-    StateMap<u32, u32>,
-    WorkingSet<ProverStorage<DefaultStorageSpec>>,
-) {
+) -> (StateMap<u32, u32>, WorkingSet<DefaultContext>) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
     let state_map = StateMap::new(Prefix::new(vec![0]));
@@ -127,10 +125,7 @@ fn test_state_map_with_delete() {
 fn create_state_value_and_storage(
     value: u32,
     path: impl AsRef<Path>,
-) -> (
-    StateValue<u32>,
-    WorkingSet<ProverStorage<DefaultStorageSpec>>,
-) {
+) -> (StateValue<u32>, WorkingSet<DefaultContext>) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
     let state_value = StateValue::new(Prefix::new(vec![0]));
@@ -179,7 +174,7 @@ fn test_witness_roundtrip() {
     // Native execution
     let witness: ArrayWitness = {
         let storage = ProverStorage::<DefaultStorageSpec>::with_path(path).unwrap();
-        let mut working_set = WorkingSet::new(storage.clone());
+        let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(storage.clone());
         state_value.set(&11, &mut working_set);
         let _ = state_value.get(&mut working_set);
         state_value.set(&22, &mut working_set);
@@ -193,7 +188,8 @@ fn test_witness_roundtrip() {
 
     {
         let storage = ZkStorage::<DefaultStorageSpec>::new();
-        let mut working_set = WorkingSet::with_witness(storage.clone(), witness);
+        let mut working_set: WorkingSet<ZkDefaultContext> =
+            WorkingSet::with_witness(storage.clone(), witness);
         state_value.set(&11, &mut working_set);
         let _ = state_value.get(&mut working_set);
         state_value.set(&22, &mut working_set);
@@ -208,7 +204,7 @@ fn test_witness_roundtrip() {
 fn create_state_vec_and_storage<T: BorshDeserialize + BorshSerialize>(
     values: Vec<T>,
     path: impl AsRef<Path>,
-) -> (StateVec<T>, WorkingSet<ProverStorage<DefaultStorageSpec>>) {
+) -> (StateVec<T>, WorkingSet<DefaultContext>) {
     let mut working_set = WorkingSet::new(ProverStorage::with_path(&path).unwrap());
 
     let state_vec = StateVec::new(Prefix::new(vec![0]));

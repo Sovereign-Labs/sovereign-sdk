@@ -62,11 +62,7 @@ impl<C: Context> sov_modules_api::Module for Accounts<C> {
 
     type CallMessage = call::CallMessage<C>;
 
-    fn genesis(
-        &self,
-        config: &Self::Config,
-        working_set: &mut WorkingSet<C::Storage>,
-    ) -> Result<(), Error> {
+    fn genesis(&self, config: &Self::Config, working_set: &mut WorkingSet<C>) -> Result<(), Error> {
         Ok(self.init_module(config, working_set)?)
     }
 
@@ -74,7 +70,7 @@ impl<C: Context> sov_modules_api::Module for Accounts<C> {
         &self,
         msg: Self::CallMessage,
         context: &Self::Context,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<sov_modules_api::CallResponse, Error> {
         match msg {
             call::CallMessage::UpdatePublicKey(new_pub_key, sig) => {
@@ -122,7 +118,7 @@ where
     /// Creates an arbitrary set of accounts and stores it under `working_set`.
     pub fn arbitrary_workset(
         u: &mut arbitrary::Unstructured<'a>,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> arbitrary::Result<Self> {
         use sov_modules_api::Module;
 

@@ -28,7 +28,7 @@ pub struct AppTemplate<C: Context, Da: DaSpec, Vm, RT: Runtime<C, Da>> {
     pub current_storage: C::Storage,
     /// The runtime includes all the modules that the rollup supports.
     pub runtime: RT,
-    pub(crate) checkpoint: Option<StateCheckpoint<C::Storage>>,
+    pub(crate) checkpoint: Option<StateCheckpoint<C>>,
     phantom_vm: PhantomData<Vm>,
     phantom_da: PhantomData<Da>,
 }

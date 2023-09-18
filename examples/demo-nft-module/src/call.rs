@@ -35,7 +35,7 @@ impl<C: Context> NonFungibleToken<C> {
         &self,
         id: u64,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         if self.owners.get(&id, working_set).is_some() {
             bail!("Token with id {} already exists", id);
@@ -52,7 +52,7 @@ impl<C: Context> NonFungibleToken<C> {
         id: u64,
         to: C::Address,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         let token_owner = match self.owners.get(&id, working_set) {
             None => {
@@ -75,7 +75,7 @@ impl<C: Context> NonFungibleToken<C> {
         &self,
         id: u64,
         context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         let token_owner = match self.owners.get(&id, working_set) {
             None => {

@@ -40,7 +40,7 @@ pub mod first_test_module {
         fn genesis(
             &self,
             _config: &Self::Config,
-            _working_set: &mut WorkingSet<C::Storage>,
+            _working_set: &mut WorkingSet<C>,
         ) -> Result<(), Error> {
             Ok(())
         }
@@ -49,7 +49,7 @@ pub mod first_test_module {
             &self,
             _msg: Self::CallMessage,
             _context: &Self::Context,
-            _working_set: &mut WorkingSet<C::Storage>,
+            _working_set: &mut WorkingSet<C>,
         ) -> Result<CallResponse, Error> {
             Ok(CallResponse::default())
         }
@@ -90,7 +90,7 @@ pub mod second_test_module {
         fn genesis(
             &self,
             _config: &Self::Config,
-            _working_set: &mut WorkingSet<Ctx::Storage>,
+            _working_set: &mut WorkingSet<Ctx>,
         ) -> Result<(), Error> {
             Ok(())
         }
@@ -99,7 +99,7 @@ pub mod second_test_module {
             &self,
             _msg: Self::CallMessage,
             _context: &Self::Context,
-            _working_set: &mut WorkingSet<Ctx::Storage>,
+            _working_set: &mut WorkingSet<Ctx>,
         ) -> Result<CallResponse, Error> {
             Ok(CallResponse::default())
         }

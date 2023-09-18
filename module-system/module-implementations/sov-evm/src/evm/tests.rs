@@ -31,7 +31,7 @@ pub(crate) fn output(result: ExecutionResult) -> bytes::Bytes {
 #[test]
 fn simple_contract_execution_sov_state() {
     let tmpdir = tempfile::tempdir().unwrap();
-    let mut working_set: WorkingSet<<C as sov_modules_api::Spec>::Storage> =
+    let mut working_set: WorkingSet<C> =
         WorkingSet::new(ProverStorage::with_path(tmpdir.path()).unwrap());
 
     let evm = Evm::<C>::default();

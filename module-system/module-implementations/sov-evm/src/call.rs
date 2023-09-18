@@ -26,7 +26,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         &self,
         tx: RlpEvmTransaction,
         _context: &C,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<CallResponse> {
         let evm_tx_recovered: TransactionSignedEcRecovered = tx.try_into()?;
         let block_env = self

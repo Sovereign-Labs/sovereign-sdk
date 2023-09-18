@@ -13,7 +13,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
     pub(crate) fn init_module(
         &self,
         config: &<Self as sov_modules_api::Module>::Config,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<()> {
         let mut evm_db = self.get_db(working_set);
 

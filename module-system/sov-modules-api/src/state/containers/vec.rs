@@ -2,10 +2,11 @@ use std::iter::FusedIterator;
 use std::marker::PhantomData;
 
 use sov_state::codec::{BorshCodec, StateCodec, StateKeyCodec, StateValueCodec};
-use sov_state::{Prefix, Storage};
+use sov_state::Prefix;
 use thiserror::Error;
 
 use crate::state::{StateMap, StateValue, WorkingSet};
+use crate::Context;
 
 /// A growable array of values stored as JMT-backed state.
 #[derive(
@@ -73,18 +74,18 @@ where
         &self.prefix
     }
 
-    fn set_len<S: Storage>(&self, length: usize, working_set: &mut WorkingSet<S>) {
+    fn set_len<C: Context>(&self, length: usize, working_set: &mut WorkingSet<C>) {
         self.len_value.set(&length, working_set);
     }
 
     /// Sets a value in the [`StateVec`].
     /// If the index is out of bounds, returns an error.
     /// To push a value to the end of the StateVec, use [`StateVec::push`].
-    pub fn set<S: Storage>(
+    pub fn set<C: Context>(
         &self,
         index: usize,
         value: &V,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<(), Error> {
         let len = self.len(working_set);
 
@@ -97,17 +98,17 @@ where
     }
 
     /// Returns the value for the given index.
-    pub fn get<S: Storage>(&self, index: usize, working_set: &mut WorkingSet<S>) -> Option<V> {
+    pub fn get<C: Context>(&self, index: usize, working_set: &mut WorkingSet<C>) -> Option<V> {
         self.elems.get(&index, working_set)
     }
 
     /// Returns the value for the given index.
     /// If the index is out of bounds, returns an error.
     /// If the value is absent, returns an error.
-    pub fn get_or_err<S: Storage>(
+    pub fn get_or_err<C: Context>(
         &self,
         index: usize,
-        working_set: &mut WorkingSet<S>,
+        working_set: &mut WorkingSet<C>,
     ) -> Result<V, Error> {
         let len = self.len(working_set);
 
@@ -121,12 +122,12 @@ where
     }
 
     /// Returns the length of the [`StateVec`].
-    pub fn len<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> usize {
+    pub fn len<C: Context>(&self, working_set: &mut WorkingSet<C>) -> usize {
         self.len_value.get(working_set).unwrap_or_default()
     }
 
     /// Pushes a value to the end of the [`StateVec`].
-    pub fn push<S: Storage>(&self, value: &V, working_set: &mut WorkingSet<S>) {
+    pub fn push<C: Context>(&self, value: &V, working_set: &mut WorkingSet<C>) {
         let len = self.len(working_set);
 
         self.elems.set(&len, value, working_set);
@@ -134,7 +135,7 @@ where
     }
 
     /// Pops a value from the end of the [`StateVec`] and returns it.
-    pub fn pop<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
+    pub fn pop<C: Context>(&self, working_set: &mut WorkingSet<C>) -> Option<V> {
         let len = self.len(working_set);
         let last_i = len.checked_sub(1)?;
         let elem = self.elems.remove(&last_i, working_set)?;
@@ -146,7 +147,7 @@ where
     }
 
     /// Removes all values from this [`StateVec`].
-    pub fn clear<S: Storage>(&self, working_set: &mut WorkingSet<S>) {
+    pub fn clear<C: Context>(&self, working_set: &mut WorkingSet<C>) {
         let len = self.len_value.remove(working_set).unwrap_or_default();
 
         for i in 0..len {
@@ -158,7 +159,7 @@ where
     ///
     /// If the length of the provided values is less than the length of the
     /// [`StateVec`], the remaining values will be removed from storage.
-    pub fn set_all<S: Storage>(&self, values: Vec<V>, working_set: &mut WorkingSet<S>) {
+    pub fn set_all<C: Context>(&self, values: Vec<V>, working_set: &mut WorkingSet<C>) {
         let old_len = self.len(working_set);
         let new_len = values.len();
 
@@ -174,10 +175,10 @@ where
     }
 
     /// Returns an iterator over all the values in the [`StateVec`].
-    pub fn iter<'a, 'ws, S: Storage>(
+    pub fn iter<'a, 'ws, C: Context>(
         &'a self,
-        working_set: &'ws mut WorkingSet<S>,
-    ) -> StateVecIter<'a, 'ws, V, Codec, S> {
+        working_set: &'ws mut WorkingSet<C>,
+    ) -> StateVecIter<'a, 'ws, V, Codec, C> {
         let len = self.len(working_set);
         StateVecIter {
             state_vec: self,
@@ -189,7 +190,7 @@ where
 
     /// Returns the last value in the [`StateVec`], or [`None`] if
     /// empty.
-    pub fn last<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
+    pub fn last<C: Context>(&self, working_set: &mut WorkingSet<C>) -> Option<V> {
         let len = self.len(working_set);
         let i = len.checked_sub(1)?;
         self.elems.get(&i, working_set)
@@ -199,25 +200,25 @@ where
 /// An [`Iterator`] over a [`StateVec`].
 ///
 /// See [`StateVec::iter`] for more details.
-pub struct StateVecIter<'a, 'ws, V, Codec, S>
+pub struct StateVecIter<'a, 'ws, V, Codec, C>
 where
     Codec: StateCodec + Clone,
     Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
     Codec::KeyCodec: StateKeyCodec<usize>,
-    S: Storage,
+    C: Context,
 {
     state_vec: &'a StateVec<V, Codec>,
-    ws: &'ws mut WorkingSet<S>,
+    ws: &'ws mut WorkingSet<C>,
     len: usize,
     next_i: usize,
 }
 
-impl<'a, 'ws, V, Codec, S> Iterator for StateVecIter<'a, 'ws, V, Codec, S>
+impl<'a, 'ws, V, Codec, C> Iterator for StateVecIter<'a, 'ws, V, Codec, C>
 where
     Codec: StateCodec + Clone,
     Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
     Codec::KeyCodec: StateKeyCodec<usize>,
-    S: Storage,
+    C: Context,
 {
     type Item = V;
 
@@ -231,33 +232,33 @@ where
     }
 }
 
-impl<'a, 'ws, V, Codec, S> ExactSizeIterator for StateVecIter<'a, 'ws, V, Codec, S>
+impl<'a, 'ws, V, Codec, C> ExactSizeIterator for StateVecIter<'a, 'ws, V, Codec, C>
 where
     Codec: StateCodec + Clone,
     Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
     Codec::KeyCodec: StateKeyCodec<usize>,
-    S: Storage,
+    C: Context,
 {
     fn len(&self) -> usize {
         self.len - self.next_i
     }
 }
 
-impl<'a, 'ws, V, Codec, S> FusedIterator for StateVecIter<'a, 'ws, V, Codec, S>
+impl<'a, 'ws, V, Codec, C> FusedIterator for StateVecIter<'a, 'ws, V, Codec, C>
 where
     Codec: StateCodec + Clone,
     Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
     Codec::KeyCodec: StateKeyCodec<usize>,
-    S: Storage,
+    C: Context,
 {
 }
 
-impl<'a, 'ws, V, Codec, S> DoubleEndedIterator for StateVecIter<'a, 'ws, V, Codec, S>
+impl<'a, 'ws, V, Codec, C> DoubleEndedIterator for StateVecIter<'a, 'ws, V, Codec, C>
 where
     Codec: StateCodec + Clone,
     Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
     Codec::KeyCodec: StateKeyCodec<usize>,
-    S: Storage,
+    C: Context,
 {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.len == 0 {
@@ -273,6 +274,7 @@ where
 mod test {
     use std::fmt::Debug;
 
+    use crate::default_context::DefaultContext;
     use sov_state::{DefaultStorageSpec, ProverStorage};
 
     use super::*;
@@ -328,7 +330,7 @@ mod test {
     fn test_state_vec() {
         let tmpdir = tempfile::tempdir().unwrap();
         let storage = ProverStorage::<DefaultStorageSpec>::with_path(tmpdir.path()).unwrap();
-        let mut working_set = WorkingSet::new(storage);
+        let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(storage);
 
         let prefix = Prefix::new("test".as_bytes().to_vec());
         let state_vec = StateVec::<u32>::new(prefix);
@@ -338,12 +340,12 @@ mod test {
         }
     }
 
-    fn check_test_case_action<T, S>(
+    fn check_test_case_action<T, C>(
         state_vec: &StateVec<T>,
         action: TestCaseAction<T>,
-        ws: &mut WorkingSet<S>,
+        ws: &mut WorkingSet<C>,
     ) where
-        S: Storage,
+        C: Context,
         BorshCodec: StateValueCodec<T>,
         T: Eq + Debug,
     {

@@ -29,7 +29,7 @@ impl<C: Context> Bank<C> {
         &self,
         user_address: C::Address,
         token_address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) ->  RpcResult<BalanceResponse> {
     ...
     }
@@ -38,7 +38,7 @@ impl<C: Context> Bank<C> {
     pub(crate) fn supply_of(
         &self,
         token_address: C::Address,
-        working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C>,
     ) -> RpcResult<TotalSupplyResponse> {
      ...
     }
