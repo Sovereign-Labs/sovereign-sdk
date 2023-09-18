@@ -1,6 +1,7 @@
 /target
 
 .idea/
+target-path
 
 target/
 fuzz/Cargo.lock

@@ -5,7 +5,9 @@ use super::{StateCodec, StateKeyCodec, StateValueCodec};
 /// A [`StateValueCodec`] that uses one pre-existing codec for keys and a different one values.
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
 pub struct SplitCodec<KC, VC> {
+    /// The codec to use for keys.
     pub key_codec: KC,
+    /// The codec to use for values.
     pub value_codec: VC,
 }
 
@@ -36,6 +38,7 @@ where
 impl<KC, VC> StateCodec for SplitCodec<KC, VC> {
     type KeyCodec = KC;
     type ValueCodec = VC;
+
     fn key_codec(&self) -> &Self::KeyCodec {
         &self.key_codec
     }

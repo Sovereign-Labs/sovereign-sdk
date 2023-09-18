@@ -32,6 +32,7 @@ risc0-zkvm-platform = { workspace = true, optional = true }
 
 [dev-dependencies]
 tempfile = { workspace = true }
+proptest = { workspace = true }
 
 [features]
 bench = ["sov-zk-cycle-macros", "risc0-zkvm", "risc0-zkvm-platform"]

@@ -7,7 +7,7 @@ mod tx_verifier;
 pub use app_template::AppTemplate;
 pub use batch::Batch;
 use sov_modules_api::capabilities::BlobSelector;
-use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
+use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::{
     BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, Spec, Zkvm,
 };
@@ -24,6 +24,7 @@ pub trait Runtime<C: Context, Da: DaSpec>:
     + Genesis<Context = C>
     + TxHooks<Context = C>
     + SlotHooks<Da, Context = C>
+    + FinalizeHook<Da, Context = C>
     + ApplyBlobHooks<
         Da::BlobTransaction,
         Context = C,
@@ -112,8 +113,9 @@ where
             .expect("jellyfish merkle tree update must succeed");
 
         let mut working_set = checkpoint.to_revertable();
+
         self.runtime
-            .finalize_slot_hook([0; 32], &mut working_set.accessory_state());
+            .finalize_slot_hook(root_hash, &mut working_set.accessory_state());
 
         let accessory_log = working_set.checkpoint().freeze_non_provable();
 
@@ -152,14 +154,21 @@ where
 
         let mut checkpoint = working_set.checkpoint();
         let (log, witness) = checkpoint.freeze();
-        let accessory_log = checkpoint.freeze_non_provable();
 
         let (genesis_hash, node_batch) = self
             .current_storage
             .compute_state_update(log, &witness)
             .expect("Storage update must succeed");
 
+        let mut working_set = checkpoint.to_revertable();
+
+        self.runtime
+            .finalize_slot_hook(genesis_hash, &mut working_set.accessory_state());
+
+        let accessory_log = working_set.checkpoint().freeze_non_provable();
+
         self.current_storage.commit(&node_batch, &accessory_log);
+
         jmt::RootHash(genesis_hash)
     }
 

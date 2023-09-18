@@ -6,6 +6,7 @@ use thiserror::Error;
 use crate::codec::{BorshCodec, StateCodec, StateKeyCodec, StateValueCodec};
 use crate::{Prefix, StateMap, StateValue, Storage, WorkingSet};
 
+/// A growable array of values stored as JMT-backed state.
 #[derive(
     Debug,
     Clone,
@@ -25,8 +26,10 @@ pub struct StateVec<V, Codec = BorshCodec> {
 /// Error type for `StateVec` get method.
 #[derive(Debug, Error)]
 pub enum Error {
+    /// Operation failed because the index was out of bounds.
     #[error("Index out of bounds for index: {0}")]
     IndexOutOfBounds(usize),
+    /// Value not found.
     #[error("Value not found for prefix: {0} and index: {1}")]
     MissingValue(Prefix, usize),
 }
@@ -141,6 +144,7 @@ where
         Some(elem)
     }
 
+    /// Removes all values from this [`StateVec`].
     pub fn clear<S: Storage>(&self, working_set: &mut WorkingSet<S>) {
         let len = self.len_value.remove(working_set).unwrap_or_default();
 
@@ -182,18 +186,16 @@ where
         }
     }
 
+    /// Returns the last value in the [`StateVec`], or [`None`] if
+    /// empty.
     pub fn last<S: Storage>(&self, working_set: &mut WorkingSet<S>) -> Option<V> {
         let len = self.len(working_set);
-
-        if len == 0usize {
-            None
-        } else {
-            self.elems.get(&(len - 1), working_set)
-        }
+        let i = len.checked_sub(1)?;
+        self.elems.get(&i, working_set)
     }
 }
 
-/// An [`Iterator`] over a [`StateVec`]
+/// An [`Iterator`] over a [`StateVec`].
 ///
 /// See [`StateVec::iter`] for more details.
 pub struct StateVecIter<'a, 'ws, V, Codec, S>

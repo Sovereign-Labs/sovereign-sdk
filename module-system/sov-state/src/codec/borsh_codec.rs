@@ -1,7 +1,7 @@
 use super::{StateCodec, StateKeyCodec};
 use crate::codec::StateValueCodec;
 
-/// A [`StateValueCodec`] that uses [`borsh`] for all values.
+/// A [`StateCodec`] that uses [`borsh`] for all keys and values.
 #[derive(Debug, Default, PartialEq, Eq, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
 pub struct BorshCodec;
 
@@ -10,7 +10,7 @@ where
     K: borsh::BorshSerialize + borsh::BorshDeserialize,
 {
     fn encode_key(&self, value: &K) -> Vec<u8> {
-        value.try_to_vec().expect("Failed to serialize value")
+        value.try_to_vec().expect("Failed to serialize key")
     }
 }
 
@@ -32,6 +32,7 @@ where
 impl StateCodec for BorshCodec {
     type KeyCodec = Self;
     type ValueCodec = Self;
+
     fn key_codec(&self) -> &Self::KeyCodec {
         self
     }

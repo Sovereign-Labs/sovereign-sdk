@@ -73,6 +73,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
                     logs: vec![],
                 },
                 // TODO: Do we want failed transactions to use all gas?
+                // https://github.com/Sovereign-Labs/sovereign-sdk/issues/505
                 gas_used: 0,
                 log_index_start,
                 error: Some(match err {

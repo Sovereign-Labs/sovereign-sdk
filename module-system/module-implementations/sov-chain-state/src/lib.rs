@@ -12,10 +12,10 @@ pub mod hooks;
 
 /// The query interface with the module
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
 use borsh::{BorshDeserialize, BorshSerialize};
 #[cfg(feature = "native")]
-pub use query::{ChainStateRpcImpl, ChainStateRpcServer};
+pub use query::*;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::{DaSpec, Error, ModuleInfo, ValidityConditionChecker};
 use sov_rollup_interface::da::Time;
