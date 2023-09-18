@@ -37,10 +37,9 @@ pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 
 /// A prefix prepended to each key before insertion and retrieval from the storage.
 ///
-/// When interfacing with state containers like [`StateMap`] or [`StateVec`],
-/// you will usually use the same [`WorkingSet`] instance to access them, as
-/// required by the module API. This also means that you might get key
-/// collisions, so it becomes necessary to prepend a prefix to each key.
+/// When interacing with state containers, you will usually use the same working set instance to
+/// access them, as required by the module API. This also means that you might get key collisions,
+/// so it becomes necessary to prepend a prefix to each key.
 #[derive(
     borsh::BorshDeserialize,
     borsh::BorshSerialize,
