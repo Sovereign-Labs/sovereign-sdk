@@ -61,7 +61,7 @@ fn main() {
     let module: TestModule<DefaultContext> = TestModule::default();
 
     catch_unwind(|| {
-        let mut working_set = WorkingSet::new(storage);
+        let mut working_set: WorkingSet<DefaultContext> = WorkingSet::new(storage);
         module.state_value.set(&0u32, &mut working_set);
     })
     .unwrap_err();
