@@ -15,14 +15,21 @@ use crate::Evm;
 
 #[rpc_gen(client, server, namespace = "eth")]
 impl<C: sov_modules_api::Context> Evm<C> {
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "chainId")]
     pub fn chain_id(
         &self,
-        _working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<Option<reth_primitives::U64>> {
         info!("evm module: eth_chainId");
-        Ok(Some(reth_primitives::U64::from(1u64)))
+
+        let chain_id = reth_primitives::U64::from(
+            self.cfg
+                .get(working_set)
+                .expect("Evm config must be set")
+                .chain_id,
+        );
+
+        Ok(Some(chain_id))
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
