@@ -9,14 +9,14 @@ use crate::rocks_db_config::gen_rocksdb_options;
 use crate::schema::tables::{JmtNodes, JmtValues, KeyHashToKey, STATE_TABLES};
 use crate::schema::types::StateKey;
 
-/// A typed wrapper around RocksDB for storing rollup state. Internally,
+/// A typed wrapper around the db for storing rollup state. Internally,
 /// this is roughly just an `Arc<SchemaDB>`.
 ///
 /// StateDB implements several convenience functions for state storage -
 /// notably the `TreeReader` and `TreeWriter` traits.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct StateDB {
-    /// The underlying RocksDB instance, wrapped in an [`Arc`] for convenience and [`SchemaDB`] for type safety
+    /// The underlying database instance, wrapped in an [`Arc`] for convenience and [`SchemaDB`] for type safety
     db: Arc<DB>,
     /// The [`Version`] that will be used for the next batch of writes to the DB.
     next_version: Arc<Mutex<Version>>,
@@ -154,6 +154,83 @@ impl TreeWriter for StateDB {
             self.db.put::<JmtValues>(&(key_preimage, *version), value)?;
         }
         Ok(())
+    }
+}
+
+#[cfg(feature = "arbitrary")]
+pub mod arbitrary {
+    //! Arbitrary definitions for the [`StateDB`].
+
+    use core::ops::{Deref, DerefMut};
+
+    use proptest::strategy::LazyJust;
+    use tempfile::TempDir;
+
+    use super::*;
+
+    /// Arbitrary instance of [`StateDB`].
+    ///
+    /// This is a db wrapper bound to its temporary path that will be deleted once the type is
+    /// dropped.
+    #[derive(Debug)]
+    pub struct ArbitraryDB {
+        /// The underlying RocksDB instance.
+        pub db: StateDB,
+        /// The temporary directory used to create the [`StateDB`].
+        pub path: TempDir,
+    }
+
+    /// A fallible, arbitrary instance of [`StateDB`].
+    ///
+    /// This type is suitable for operations that are expected to be infallible. The internal
+    /// implementation of the db requires I/O to create the temporary dir, making it fallible.
+    #[derive(Debug)]
+    pub struct FallibleArbitraryStateDB {
+        /// The result of the new db instance.
+        pub result: anyhow::Result<ArbitraryDB>,
+    }
+
+    impl Deref for ArbitraryDB {
+        type Target = StateDB;
+
+        fn deref(&self) -> &Self::Target {
+            &self.db
+        }
+    }
+
+    impl DerefMut for ArbitraryDB {
+        fn deref_mut(&mut self) -> &mut Self::Target {
+            &mut self.db
+        }
+    }
+
+    impl<'a> ::arbitrary::Arbitrary<'a> for ArbitraryDB {
+        fn arbitrary(_u: &mut ::arbitrary::Unstructured<'a>) -> ::arbitrary::Result<Self> {
+            let path = TempDir::new().map_err(|_| ::arbitrary::Error::NotEnoughData)?;
+            let db = StateDB::with_path(&path).map_err(|_| ::arbitrary::Error::IncorrectFormat)?;
+            Ok(Self { db, path })
+        }
+    }
+
+    impl proptest::arbitrary::Arbitrary for FallibleArbitraryStateDB {
+        type Parameters = ();
+        type Strategy = LazyJust<Self, fn() -> FallibleArbitraryStateDB>;
+
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            fn gen() -> FallibleArbitraryStateDB {
+                FallibleArbitraryStateDB {
+                    result: TempDir::new()
+                        .map_err(|e| {
+                            anyhow::anyhow!(format!("failed to generate path for StateDB: {e}"))
+                        })
+                        .and_then(|path| {
+                            let db = StateDB::with_path(&path)?;
+                            Ok(ArbitraryDB { db, path })
+                        }),
+                }
+            }
+            LazyJust::new(gen)
+        }
     }
 }
 
