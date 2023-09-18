@@ -259,23 +259,6 @@ where
     S: Storage,
 {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let elem = self.state_vec.get(self.len - 1, self.ws);
-        if elem.is_some() {
-            self.len -= 1;
-        }
-
-        elem
-    }
-}
-
-impl<'a, 'ws, V, Codec, S> DoubleEndedIterator for StateVecIter<'a, 'ws, V, Codec, S>
-where
-    Codec: StateCodec + Clone,
-    Codec::ValueCodec: StateValueCodec<V> + StateValueCodec<usize>,
-    Codec::KeyCodec: StateKeyCodec<usize>,
-    S: Storage,
-{
-    fn next_back(&mut self) -> Option<Self::Item> {
         if self.len == 0 {
             return None;
         }

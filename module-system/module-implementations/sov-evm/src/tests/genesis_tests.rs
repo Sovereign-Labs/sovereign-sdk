@@ -71,7 +71,6 @@ fn genesis_data() {
             AccountInfo {
                 balance: account.balance,
                 code_hash: account.code_hash,
-                code: account.code.clone(),
                 nonce: account.nonce,
             }
         ),

@@ -138,9 +138,6 @@ mod experimental {
 
         #[state]
         pub(crate) receipts: sov_state::AccessoryStateVec<Receipt, BcsCodec>,
-
-        #[state]
-        pub(crate) receipts: sov_state::AccessoryStateVec<Receipt, BcsCodec>,
     }
 
     impl<C: sov_modules_api::Context> sov_modules_api::Module for Evm<C> {

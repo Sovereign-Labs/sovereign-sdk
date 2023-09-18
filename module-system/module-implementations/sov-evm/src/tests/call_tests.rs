@@ -57,7 +57,7 @@ fn evm_test() {
             address: dev_signer.address(),
             balance: U256::from(1000000000),
             code_hash: KECCAK_EMPTY,
-            code: vec![],
+            code: Bytes::default(),
             nonce: 0,
         }],
         spec: vec![(0, SpecId::LATEST)].into_iter().collect(),

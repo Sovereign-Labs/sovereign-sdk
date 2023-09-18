@@ -34,7 +34,7 @@ impl<C: sov_modules_api::Context> Evm<C> {
         // self.pending_transactions.clear(working_set); ?
     }
 
-    pub fn end_slot_hook(&self, _root_hash: [u8; 32], working_set: &mut WorkingSet<C::Storage>) {
+    pub fn end_slot_hook(&self, working_set: &mut WorkingSet<C::Storage>) {
         let pending_block = self
             .pending_block
             .get(working_set)
