@@ -82,7 +82,7 @@ fn get_evm_config(genesis_addresses: Vec<reth_primitives::Address>) -> EvmConfig
             address,
             balance: AccountData::balance(u64::MAX),
             code_hash: AccountData::empty_code(),
-            code: vec![],
+            code: Bytes::default(),
             nonce: 0,
         })
         .collect();
