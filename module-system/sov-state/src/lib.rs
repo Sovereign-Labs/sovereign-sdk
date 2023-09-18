@@ -1,8 +1,8 @@
-pub mod codec;
-mod internal_cache;
+//! Storage and state management interfaces for Sovereign SDK modules.
 
-mod containers;
-pub use containers::*;
+#![deny(missing_docs)]
+
+pub mod codec;
 
 #[cfg(feature = "native")]
 mod prover_storage;
@@ -10,15 +10,18 @@ mod prover_storage;
 #[cfg(feature = "native")]
 mod tree_db;
 
-mod scratchpad;
+mod internal_cache;
 
+/// Trait and type definitions related to the [`Storage`] trait.
 pub mod storage;
-
 mod utils;
 mod witness;
-
 mod zk_storage;
 
+pub use internal_cache::{OrderedReadsAndWrites, StorageInternalCache};
+#[cfg(feature = "native")]
+pub use prover_storage::ProverStorage;
+pub use storage::Storage;
 pub use zk_storage::ZkStorage;
 
 pub mod config;
@@ -26,20 +29,17 @@ pub mod config;
 use std::fmt::Display;
 use std::str;
 
-#[cfg(feature = "native")]
-pub use prover_storage::{delete_storage, ProverStorage};
-pub use scratchpad::*;
 pub use sov_first_read_last_write_cache::cache::CacheLog;
 use sov_rollup_interface::digest::Digest;
-pub use storage::Storage;
-use utils::AlignedVec;
+pub use utils::AlignedVec;
 
 pub use crate::witness::{ArrayWitness, TreeWitnessReader, Witness};
 
-// A prefix prepended to each key before insertion and retrieval from the storage.
-// All the collection types in this crate are backed by the same storage instance, this means that insertions of the same key
-// to two different `StorageMaps` would collide with each other. We solve it by instantiating every collection type with a unique
-// prefix that is prepended to each key.
+/// A prefix prepended to each key before insertion and retrieval from the storage.
+///
+/// When interacing with state containers, you will usually use the same working set instance to
+/// access them, as required by the module API. This also means that you might get key collisions,
+/// so it becomes necessary to prepend a prefix to each key.
 #[derive(
     borsh::BorshDeserialize,
     borsh::BorshSerialize,
@@ -70,25 +70,31 @@ impl Display for Prefix {
 }
 
 impl Prefix {
+    /// Creates a new prefix from a byte vector.
     pub fn new(prefix: Vec<u8>) -> Self {
         Self {
             prefix: AlignedVec::new(prefix),
         }
     }
 
+    /// Returns a reference to the [`AlignedVec`] containing the prefix.
     pub fn as_aligned_vec(&self) -> &AlignedVec {
         &self.prefix
     }
 
+    /// Returns the length in bytes of the prefix.
     pub fn len(&self) -> usize {
         self.prefix.len()
     }
 
+    /// Returns `true` if the prefix is empty, `false` otherwise.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.prefix.is_empty()
     }
 
+    /// Returns a new prefix allocated on the fly, by extending the current
+    /// prefix with the given bytes.
     pub fn extended(&self, bytes: &[u8]) -> Self {
         let mut prefix = self.clone();
         prefix.extend(bytes.iter().copied());
@@ -114,6 +120,9 @@ pub trait MerkleProofSpec {
 
 use sha2::Sha256;
 
+/// The default [`MerkleProofSpec`] implementation.
+///
+/// This type is typically found as a type parameter for [`ProverStorage`].
 #[derive(Clone)]
 pub struct DefaultStorageSpec;
 

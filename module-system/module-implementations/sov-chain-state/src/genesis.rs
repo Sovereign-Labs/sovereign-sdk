@@ -1,5 +1,5 @@
 use anyhow::Result;
-use sov_state::WorkingSet;
+use sov_modules_api::WorkingSet;
 
 use crate::ChainState;
 
@@ -14,6 +14,8 @@ impl<C: sov_modules_api::Context, Da: sov_modules_api::DaSpec> ChainState<C, Da>
 
         self.slot_height
             .set(&config.initial_slot_height, working_set);
+
+        self.time.set(&config.current_time, working_set);
         Ok(())
     }
 }

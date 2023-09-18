@@ -3,19 +3,19 @@ use std::convert::Infallible;
 use reth_primitives::Address;
 use revm::primitives::{AccountInfo as ReVmAccountInfo, Bytecode, B160, B256, U256};
 use revm::Database;
+use sov_modules_api::WorkingSet;
 use sov_state::codec::BcsCodec;
-use sov_state::WorkingSet;
 
 use super::DbAccount;
 
 pub(crate) struct EvmDb<'a, C: sov_modules_api::Context> {
-    pub(crate) accounts: sov_state::StateMap<Address, DbAccount, BcsCodec>,
+    pub(crate) accounts: sov_modules_api::StateMap<Address, DbAccount, BcsCodec>,
     pub(crate) working_set: &'a mut WorkingSet<C::Storage>,
 }
 
 impl<'a, C: sov_modules_api::Context> EvmDb<'a, C> {
     pub(crate) fn new(
-        accounts: sov_state::StateMap<Address, DbAccount, BcsCodec>,
+        accounts: sov_modules_api::StateMap<Address, DbAccount, BcsCodec>,
         working_set: &'a mut WorkingSet<C::Storage>,
     ) -> Self {
         Self {

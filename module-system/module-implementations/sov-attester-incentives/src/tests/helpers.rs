@@ -3,13 +3,13 @@ use sov_bank::{BankConfig, TokenConfig};
 use sov_modules_api::default_context::DefaultContext;
 use sov_modules_api::hooks::SlotHooks;
 use sov_modules_api::utils::generate_address;
-use sov_modules_api::{Address, Genesis, Spec, ValidityConditionChecker};
+use sov_modules_api::{Address, Genesis, Spec, ValidityConditionChecker, WorkingSet};
 use sov_rollup_interface::mocks::{
     MockBlock, MockBlockHeader, MockCodeCommitment, MockDaSpec, MockValidityCond,
     MockValidityCondChecker, MockZkvm,
 };
 use sov_state::storage::StorageProof;
-use sov_state::{DefaultStorageSpec, ProverStorage, Storage, WorkingSet};
+use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
 
 use crate::AttesterIncentives;
 
@@ -95,6 +95,7 @@ pub(crate) fn setup(
     // Initialize chain state
     let chain_state_config = sov_chain_state::ChainStateConfig {
         initial_slot_height: INIT_HEIGHT,
+        current_time: Default::default(),
     };
 
     let chain_state = sov_chain_state::ChainState::<C, MockDaSpec>::default();
@@ -168,8 +169,8 @@ pub(crate) fn execution_simulation<Checker: ValidityConditionChecker<MockValidit
             header: MockBlockHeader {
                 prev_hash: [i; 32].into(),
                 hash: [i + 1; 32].into(),
+                height: INIT_HEIGHT + u64::from(i + 1),
             },
-            height: INIT_HEIGHT + u64::from(i + 1),
             validity_cond: MockValidityCond { is_valid: true },
             blobs: Default::default(),
         };

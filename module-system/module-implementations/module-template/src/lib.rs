@@ -1,13 +1,11 @@
 mod call;
 mod genesis;
 #[cfg(feature = "native")]
-pub mod query;
-
+mod query;
 pub use call::CallMessage;
 #[cfg(feature = "native")]
-pub use query::Response;
-use sov_modules_api::{Error, ModuleInfo};
-use sov_state::WorkingSet;
+pub use query::*;
+use sov_modules_api::{Error, ModuleInfo, WorkingSet};
 
 pub struct ExampleModuleConfig {}
 
@@ -28,7 +26,7 @@ pub struct ExampleModule<C: sov_modules_api::Context> {
 
     /// Some value kept in the state.
     #[state]
-    pub value: sov_state::StateValue<u32>,
+    pub value: sov_modules_api::StateValue<u32>,
 
     /// Reference to the Bank module.
     #[module]

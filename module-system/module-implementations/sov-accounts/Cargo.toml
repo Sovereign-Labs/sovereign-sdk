@@ -22,8 +22,8 @@ thiserror = { workspace = true }
 clap = { workspace = true, optional = true }
 jsonrpsee = { workspace = true, features = ["macros", "client-core", "server"], optional = true }
 
-sov-modules-api = { path = "../../sov-modules-api", version = "0.1" }
-sov-state = { path = "../../sov-state", version = "0.1" }
+sov-modules-api = { path = "../../sov-modules-api", version = "0.2" }
+sov-state = { path = "../../sov-state", version = "0.2" }
 
 
 [dev-dependencies]
@@ -31,5 +31,5 @@ tempfile = { workspace = true }
 
 [features]
 default = []
-arbitrary = ["dep:arbitrary", "sov-state/arbitrary"]
+arbitrary = ["dep:arbitrary", "sov-state/arbitrary", "sov-modules-api/arbitrary"]
 native = ["serde", "serde_json", "jsonrpsee", "schemars", "clap", "sov-state/native", "sov-modules-api/native"]

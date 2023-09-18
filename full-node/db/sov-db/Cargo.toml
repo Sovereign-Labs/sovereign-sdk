@@ -16,8 +16,8 @@ resolver = "2"
 [dependencies]
 # Maintained by sovereign labs
 jmt = { workspace = true }
-sov-schema-db = { path = "../sov-schema-db", version = "0.1" }
-sov-rollup-interface = { path = "../../../rollup-interface", version = "0.1", features = ["native", "mocks"] }
+sov-schema-db = { path = "../sov-schema-db", version = "0.2" }
+sov-rollup-interface = { path = "../../../rollup-interface", version = "0.2", features = ["native", "mocks"] }
 
 # External
 anyhow = { workspace = true }

@@ -3,15 +3,16 @@
 mod call;
 mod genesis;
 #[cfg(feature = "native")]
-pub mod query;
+mod query;
+#[cfg(feature = "native")]
+pub use query::*;
 mod token;
 /// Util functions for bank
 pub mod utils;
 
 /// Specifies the call methods using in that module.
 pub use call::CallMessage;
-use sov_modules_api::{CallResponse, Error, ModuleInfo};
-use sov_state::WorkingSet;
+use sov_modules_api::{CallResponse, Error, ModuleInfo, WorkingSet};
 use token::Token;
 /// Specifies an interface to interact with tokens.
 pub use token::{Amount, Coins};
@@ -50,7 +51,7 @@ pub struct Bank<C: sov_modules_api::Context> {
 
     /// A mapping of addresses to tokens in the sov-bank.
     #[state]
-    pub(crate) tokens: sov_state::StateMap<C::Address, Token<C>>,
+    pub(crate) tokens: sov_modules_api::StateMap<C::Address, Token<C>>,
 }
 
 impl<C: sov_modules_api::Context> sov_modules_api::Module for Bank<C> {

@@ -1,9 +1,10 @@
 use std::marker::PhantomData;
 
+use sov_state::codec::{BorshCodec, StateCodec, StateValueCodec};
+use sov_state::{Prefix, Storage};
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, StateCodec, StateValueCodec};
-use crate::{Prefix, StateReaderAndWriter, Storage, WorkingSet};
+use crate::state::{StateReaderAndWriter, WorkingSet};
 
 /// Container for a single value.
 #[derive(
@@ -24,6 +25,7 @@ pub struct StateValue<V, Codec = BorshCodec> {
 /// Error type for `StateValue` get method.
 #[derive(Debug, Error)]
 pub enum Error {
+    /// Value not found.
     #[error("Value not found for prefix: {0}")]
     MissingValue(Prefix),
 }

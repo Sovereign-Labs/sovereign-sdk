@@ -111,9 +111,8 @@ pub fn codec(input: TokenStream) -> TokenStream {
 /// This is exactly equivalent to hand-writing
 ///
 /// ```
-/// use sov_modules_api::{Context, ModuleInfo};
+/// use sov_modules_api::{Context, ModuleInfo, WorkingSet};
 /// use sov_modules_api::macros::rpc_gen;
-/// use sov_state::WorkingSet;
 /// use jsonrpsee::core::RpcResult;
 ///
 /// #[derive(ModuleInfo)]

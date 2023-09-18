@@ -1,21 +1,21 @@
 use reth_primitives::{Address, H256, U256};
 use revm::primitives::specification::SpecId;
-use revm::primitives::{ExecutionResult, Output, B160};
 use serde::{Deserialize, Serialize};
-use sov_state::{Prefix, StateMap};
+use sov_modules_api::StateMap;
+use sov_state::Prefix;
 
 pub(crate) mod conversions;
 pub(crate) mod db;
 mod db_commit;
 pub(crate) mod db_init;
 pub(crate) mod executor;
+pub mod primitive_types;
 #[cfg(test)]
 mod tests;
-pub(crate) mod transaction;
 
 pub use conversions::prepare_call_env;
+pub use primitive_types::RlpEvmTransaction;
 use sov_state::codec::BcsCodec;
-pub use transaction::RlpEvmTransaction;
 
 // Stores information about an EVM account
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone, Default)]
@@ -44,7 +44,11 @@ impl DbAccount {
         }
     }
 
-    fn new_with_info(parent_prefix: &Prefix, address: Address, info: AccountInfo) -> Self {
+    pub(crate) fn new_with_info(
+        parent_prefix: &Prefix,
+        address: Address,
+        info: AccountInfo,
+    ) -> Self {
         let prefix = Self::create_storage_prefix(parent_prefix, address);
         Self {
             info,
@@ -56,16 +60,6 @@ impl DbAccount {
         let mut prefix = parent_prefix.as_aligned_vec().clone().into_inner();
         prefix.extend_from_slice(&address.0);
         Prefix::new(prefix)
-    }
-}
-
-pub(crate) fn contract_address(result: ExecutionResult) -> Option<B160> {
-    match result {
-        ExecutionResult::Success {
-            output: Output::Create(_, Some(addr)),
-            ..
-        } => Some(addr),
-        _ => None,
     }
 }
 

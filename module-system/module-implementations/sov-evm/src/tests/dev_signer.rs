@@ -4,11 +4,10 @@ use reth_primitives::{
     Address, Bytes as RethBytes, Transaction as RethTransaction, TransactionKind,
     TxEip1559 as RethTxEip1559,
 };
-use reth_rpc::eth::error::SignError;
 use secp256k1::{PublicKey, SecretKey};
 
 use crate::evm::RlpEvmTransaction;
-use crate::signer::DevSigner;
+use crate::signer::{DevSigner, SignError};
 
 /// ETH transactions signer used in tests.
 pub(crate) struct TestSigner {
@@ -51,7 +50,8 @@ impl TestSigner {
             input: RethBytes::from(data),
             nonce,
             chain_id: 1,
-            gas_limit: reth_primitives::constants::ETHEREUM_BLOCK_GAS_LIMIT / 2,
+            gas_limit: 1_000_000u64,
+            max_fee_per_gas: u128::from(reth_primitives::constants::MIN_PROTOCOL_BASE_FEE * 2),
             ..Default::default()
         };
 

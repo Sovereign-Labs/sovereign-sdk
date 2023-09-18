@@ -4,8 +4,7 @@ use libfuzzer_sys::arbitrary::Unstructured;
 use libfuzzer_sys::fuzz_target;
 use sov_accounts::{Accounts, CallMessage};
 use sov_modules_api::default_context::DefaultContext;
-use sov_modules_api::{Module, Spec};
-use sov_state::WorkingSet;
+use sov_modules_api::{Module, Spec, WorkingSet};
 
 type C = DefaultContext;
 

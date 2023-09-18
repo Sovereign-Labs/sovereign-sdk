@@ -13,10 +13,9 @@ mod query;
 pub use call::CallMessage;
 /// The response type used by RPC queries.
 #[cfg(feature = "native")]
-pub use query::Response;
-use sov_modules_api::{Context, Error, ModuleInfo, Zkvm};
+pub use query::*;
+use sov_modules_api::{Context, Error, ModuleInfo, WorkingSet, Zkvm};
 use sov_state::codec::BcsCodec;
-use sov_state::WorkingSet;
 
 /// Configuration of the prover incentives module. Specifies the
 /// address of the bonding token, the minimum bond, the commitment to
@@ -46,19 +45,20 @@ pub struct ProverIncentives<C: Context, Vm: Zkvm> {
 
     /// The address of the token used for bonding provers
     #[state]
-    pub bonding_token_address: sov_state::StateValue<C::Address>,
+    pub bonding_token_address: sov_modules_api::StateValue<C::Address>,
 
     /// The code commitment to be used for verifying proofs
     #[state]
-    pub commitment_of_allowed_verifier_method: sov_state::StateValue<Vm::CodeCommitment, BcsCodec>,
+    pub commitment_of_allowed_verifier_method:
+        sov_modules_api::StateValue<Vm::CodeCommitment, BcsCodec>,
 
     /// The set of registered provers and their bonded amount.
     #[state]
-    pub bonded_provers: sov_state::StateMap<C::Address, u64>,
+    pub bonded_provers: sov_modules_api::StateMap<C::Address, u64>,
 
     /// The minimum bond for a prover to be eligible for onchain verification
     #[state]
-    pub minimum_bond: sov_state::StateValue<u64>,
+    pub minimum_bond: sov_modules_api::StateValue<u64>,
 
     /// Reference to the Bank module.
     #[module]

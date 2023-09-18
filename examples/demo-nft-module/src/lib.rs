@@ -7,9 +7,8 @@ mod genesis;
 #[cfg(feature = "native")]
 mod query;
 #[cfg(feature = "native")]
-pub use query::{NonFungibleTokenRpcImpl, NonFungibleTokenRpcServer, OwnerResponse};
-use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
-use sov_state::WorkingSet;
+pub use query::*;
+use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, WorkingSet};
 
 #[derive(ModuleInfo, Clone)]
 /// Module for non-fungible tokens (NFT).
@@ -21,11 +20,11 @@ pub struct NonFungibleToken<C: Context> {
 
     #[state]
     /// Admin of the NonFungibleToken module.
-    admin: sov_state::StateValue<C::Address>,
+    admin: sov_modules_api::StateValue<C::Address>,
 
     #[state]
     /// Mapping of tokens to their owners
-    owners: sov_state::StateMap<u64, C::Address>,
+    owners: sov_modules_api::StateMap<u64, C::Address>,
 }
 
 /// Config for the NonFungibleToken module.

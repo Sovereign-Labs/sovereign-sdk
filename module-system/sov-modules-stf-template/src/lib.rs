@@ -7,12 +7,13 @@ mod tx_verifier;
 pub use app_template::AppTemplate;
 pub use batch::Batch;
 use sov_modules_api::capabilities::BlobSelector;
-use sov_modules_api::hooks::{ApplyBlobHooks, SlotHooks, TxHooks};
+use sov_modules_api::hooks::{ApplyBlobHooks, FinalizeHook, SlotHooks, TxHooks};
 use sov_modules_api::{
-    BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, Spec, Zkvm,
+    BasicAddress, BlobReaderTrait, Context, DaSpec, DispatchCall, Genesis, Spec, StateCheckpoint,
+    Zkvm,
 };
 use sov_rollup_interface::stf::{SlotResult, StateTransitionFunction};
-use sov_state::{StateCheckpoint, Storage};
+use sov_state::Storage;
 #[cfg(all(target_os = "zkvm", feature = "bench"))]
 use sov_zk_cycle_macros::cycle_tracker;
 use tracing::info;
@@ -24,6 +25,7 @@ pub trait Runtime<C: Context, Da: DaSpec>:
     + Genesis<Context = C>
     + TxHooks<Context = C>
     + SlotHooks<Da, Context = C>
+    + FinalizeHook<Da, Context = C>
     + ApplyBlobHooks<
         Da::BlobTransaction,
         Context = C,
@@ -96,17 +98,25 @@ where
 
     #[cfg_attr(all(target_os = "zkvm", feature = "bench"), cycle_tracker)]
     fn end_slot(&mut self) -> (jmt::RootHash, <<C as Spec>::Storage as Storage>::Witness) {
-        let mut checkpoint = self.checkpoint.take().unwrap();
-        let (cache_log, witness) = checkpoint.freeze();
+        let checkpoint = self.checkpoint.take().unwrap();
 
+        // Run end end_slot_hook
         let mut working_set = checkpoint.to_revertable();
+        self.runtime.end_slot_hook(&mut working_set);
+        // Save checkpoint
+        let mut checkpoint = working_set.checkpoint();
+
+        let (cache_log, witness) = checkpoint.freeze();
 
         let (root_hash, authenticated_node_batch) = self
             .current_storage
             .compute_state_update(cache_log, &witness)
             .expect("jellyfish merkle tree update must succeed");
 
-        self.runtime.end_slot_hook(root_hash, &mut working_set);
+        let mut working_set = checkpoint.to_revertable();
+
+        self.runtime
+            .finalize_slot_hook(root_hash, &mut working_set.accessory_state());
 
         let accessory_log = working_set.checkpoint().freeze_non_provable();
 
@@ -145,14 +155,21 @@ where
 
         let mut checkpoint = working_set.checkpoint();
         let (log, witness) = checkpoint.freeze();
-        let accessory_log = checkpoint.freeze_non_provable();
 
         let (genesis_hash, node_batch) = self
             .current_storage
             .compute_state_update(log, &witness)
             .expect("Storage update must succeed");
 
+        let mut working_set = checkpoint.to_revertable();
+
+        self.runtime
+            .finalize_slot_hook(genesis_hash, &mut working_set.accessory_state());
+
+        let accessory_log = working_set.checkpoint().freeze_non_provable();
+
         self.current_storage.commit(&node_batch, &accessory_log);
+
         jmt::RootHash(genesis_hash)
     }
 

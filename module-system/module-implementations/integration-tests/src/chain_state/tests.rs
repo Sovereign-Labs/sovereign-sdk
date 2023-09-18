@@ -49,8 +49,8 @@ fn test_simple_value_setter_with_chain_state() {
         header: MockBlockHeader {
             prev_hash: [0; 32].into(),
             hash: [10; 32].into(),
+            height: 0,
         },
-        height: 0,
         validity_cond: MockValidityCond::default(),
         blobs: Default::default(),
     };
@@ -118,8 +118,8 @@ fn test_simple_value_setter_with_chain_state() {
         header: MockBlockHeader {
             prev_hash: [10; 32].into(),
             hash: [20; 32].into(),
+            height: 1,
         },
-        height: 1,
         validity_cond: MockValidityCond::default(),
         blobs: Default::default(),
     };

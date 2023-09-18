@@ -25,6 +25,7 @@ bytes = { workspace = true }
 hex = { workspace = true, features = ["serde"] }
 digest = { workspace = true }
 sha2 = { workspace = true, optional = true }
+thiserror = { workspace = true }
 
 # TODO: Replace with serde-compatible borsh implementation when it becomes availabile 
 #    see https://github.com/Sovereign-Labs/sovereign-sdk/issues/215

@@ -19,11 +19,14 @@ pub use reexport_macros::*;
 mod prefix;
 mod response;
 mod serde_address;
+mod state;
 #[cfg(test)]
 mod tests;
 pub mod transaction;
 #[cfg(feature = "native")]
 pub mod utils;
+
+pub use state::*;
 
 #[cfg(feature = "macros")]
 extern crate sov_modules_macros;
@@ -54,7 +57,7 @@ pub use sov_rollup_interface::zk::{
     StateTransition, ValidityCondition, ValidityConditionChecker, Zkvm,
 };
 pub use sov_rollup_interface::{digest, BasicAddress, RollupAddress};
-use sov_state::{Storage, Witness, WorkingSet};
+use sov_state::{Storage, Witness};
 use thiserror::Error;
 
 pub use crate::bech32::AddressBech32;

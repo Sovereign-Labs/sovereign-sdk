@@ -1,10 +1,11 @@
 use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_state::codec::{BorshCodec, StateCodec, StateValueCodec};
+use sov_state::{Prefix, Storage};
 use thiserror::Error;
 
-use crate::codec::{BorshCodec, StateCodec, StateValueCodec};
-use crate::{AccessoryWorkingSet, Prefix, StateReaderAndWriter, Storage};
+use crate::state::{AccessoryWorkingSet, StateReaderAndWriter};
 
 /// Container for a single value stored as "accessory" state, outside of the
 /// JMT.

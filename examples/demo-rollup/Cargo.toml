@@ -58,7 +58,7 @@ prometheus = "0.11.0"
 prettytable-rs = "^0.10"
 criterion = "0.5.1"
 
-ethereum-types = "0.14.1"
+ethereum-types = { workspace = true }
 ethers-core = { workspace = true }
 ethers-contract = { workspace = true }
 ethers-middleware = { workspace = true }
@@ -67,10 +67,9 @@ ethers-signers = { workspace = true }
 ethers = { workspace = true }
 revm = { workspace = true }
 
-
 [features]
 default = []
-experimental = ["sov-ethereum/experimental", "reth-primitives", "secp256k1"]
+experimental = ["sov-ethereum/experimental", "reth-primitives", "secp256k1", "demo-stf/experimental"]
 
 [[bench]]
 name = "rollup_bench"

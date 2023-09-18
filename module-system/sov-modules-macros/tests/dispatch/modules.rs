@@ -1,5 +1,4 @@
-use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo};
-use sov_state::{StateValue, WorkingSet};
+use sov_modules_api::{CallResponse, Context, Error, Module, ModuleInfo, StateValue, WorkingSet};
 
 pub mod first_test_module {
     use super::*;
