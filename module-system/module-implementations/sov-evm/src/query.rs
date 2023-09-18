@@ -202,16 +202,6 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(output.into_data().into())
     }
 
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
-    #[rpc_method(name = "sendTransaction")]
-    pub fn send_transaction(
-        &self,
-        _request: reth_rpc_types::TransactionRequest,
-        _working_set: &mut WorkingSet<C::Storage>,
-    ) -> RpcResult<reth_primitives::U256> {
-        unimplemented!("eth_sendTransaction not implemented")
-    }
-
     #[rpc_method(name = "blockNumber")]
     pub fn block_number(
         &self,
