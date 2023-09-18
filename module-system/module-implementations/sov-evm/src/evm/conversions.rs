@@ -1,6 +1,7 @@
 use bytes::Bytes;
 use reth_primitives::{
-    Bytes as RethBytes, TransactionSigned, TransactionSignedEcRecovered, TransactionSignedNoHash,
+    AccessList, Bytes as RethBytes, TransactionSigned, TransactionSignedEcRecovered,
+    TransactionSignedNoHash,
 };
 use reth_rpc_types::CallRequest;
 use revm::primitives::{
@@ -130,7 +131,9 @@ pub fn prepare_call_env(request: CallRequest) -> TxEnv {
             .unwrap_or_default(),
         chain_id: request.chain_id.map(|c| c.as_u64()),
         nonce: request.nonce.map(|n| TryInto::<u64>::try_into(n).unwrap()),
-        // TODO handle access list
-        access_list: Default::default(),
+        access_list: request
+            .access_list
+            .map(AccessList::flattened)
+            .unwrap_or_default(),
     }
 }
