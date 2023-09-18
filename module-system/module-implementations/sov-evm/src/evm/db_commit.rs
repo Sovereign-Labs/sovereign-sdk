@@ -24,11 +24,12 @@ impl<'a, C: sov_modules_api::Context> DatabaseCommit for EvmDb<'a, C> {
 
             let account_info = account.info;
 
-            if account.storage_cleared {
-                if let Some(new_code) = &account_info.code {
+            if let Some(ref code) = account_info.code {
+                if !code.is_empty() {
+                    // TODO: would be good to have a contains_key method on the StateMap that would be optimized, so we can check the hash before storing the code
                     self.code.set(
                         &account_info.code_hash,
-                        &new_code.bytecode.as_ref().into(),
+                        &code.bytecode.as_ref().into(),
                         self.working_set,
                     );
                 }
