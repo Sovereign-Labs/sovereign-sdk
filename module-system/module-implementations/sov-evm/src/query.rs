@@ -209,13 +209,19 @@ impl<C: sov_modules_api::Context> Evm<C> {
         Ok(output.into_data().into())
     }
 
-    // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
     #[rpc_method(name = "blockNumber")]
     pub fn block_number(
         &self,
-        _working_set: &mut WorkingSet<C::Storage>,
+        working_set: &mut WorkingSet<C::Storage>,
     ) -> RpcResult<reth_primitives::U256> {
-        unimplemented!("eth_blockNumber not implemented")
+        info!("evm module: eth_blockNumber");
+
+        let block_number = U256::from(
+            self.blocks
+                .len(&mut working_set.accessory_state())
+                .saturating_sub(1),
+        );
+        Ok(block_number)
     }
 
     // TODO https://github.com/Sovereign-Labs/sovereign-sdk/issues/502
