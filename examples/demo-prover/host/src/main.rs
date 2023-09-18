@@ -3,14 +3,14 @@ use std::str::FromStr;
 
 use anyhow::Context;
 use const_rollup_config::{ROLLUP_NAMESPACE_RAW, SEQUENCER_DA_ADDRESS};
-use demo_stf::app::{App, DefaultPrivateKey};
-use demo_stf::genesis_config::create_demo_genesis_config;
+use demo_stf::app::App;
+use demo_stf::genesis_config::create_demo_config_data;
 use methods::{ROLLUP_ELF, ROLLUP_ID};
 use sov_celestia_adapter::types::NamespaceId;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::{CelestiaSpec, RollupParams};
 use sov_celestia_adapter::{CelestiaService, DaServiceConfig};
-use sov_modules_api::{PrivateKey, SlotData};
+use sov_modules_api::SlotData;
 use sov_risc0_adapter::host::{Risc0Host, Risc0Verifier};
 use sov_rollup_interface::services::da::DaService;
 use sov_rollup_interface::stf::StateTransitionFunction;
@@ -55,9 +55,6 @@ async fn main() -> Result<(), anyhow::Error> {
     )
     .await;
 
-    // This is the private key of the sequencer on the rollup itself (NOT the DA layer. The DA layer address would be SEQUENCER_DA_ADDRESS)
-    let sequencer_private_key = DefaultPrivateKey::generate();
-
     let mut app: App<Risc0Verifier, CelestiaSpec> = App::new(rollup_config.storage.clone());
 
     let is_storage_empty = app.get_storage().is_empty();
@@ -65,12 +62,10 @@ async fn main() -> Result<(), anyhow::Error> {
     // If storage is empty, we're starting from scratch, so we need to initialize
     if is_storage_empty {
         let sequencer_da_address = CelestiaAddress::from_str(SEQUENCER_DA_ADDRESS).unwrap();
-        let genesis_config = create_demo_genesis_config(
+        let genesis_config = create_demo_config_data(
             100000000,
-            sequencer_private_key.default_address(),
             sequencer_da_address.as_ref().to_vec(),
-            &sequencer_private_key,
-        );
+        ).genesis;
         info!("Starting from empty storage, initialization chain");
         app.stf.init_chain(genesis_config);
     }
