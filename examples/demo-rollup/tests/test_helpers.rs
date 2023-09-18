@@ -28,8 +28,7 @@ pub async fn start_rollup<Vm: ZkvmHost>(
     };
     let prover = prover.map(|vm| (vm, DemoProverConfig::Simulate));
     let rollup =
-        new_rollup_with_mock_da_from_config(rollup_config, prover)
-            .expect("Rollup config is valid");
+        new_rollup_with_mock_da_from_config(rollup_config, prover).expect("Rollup config is valid");
     rollup
         .run_and_report_rpc_port(Some(rpc_reporting_channel))
         .await
