@@ -6826,6 +6826,7 @@ dependencies = [
  "borsh",
  "hex",
  "jmt",
+ "proptest",
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "serde",
