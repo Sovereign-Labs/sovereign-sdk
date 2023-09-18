@@ -93,7 +93,8 @@ where
     /// using your chosen codec.
     ///
     /// ```
-    /// use sov_modules_api::{StateMap, Storage, WorkingSet};
+    /// use sov_modules_api::{StateMap, WorkingSet};
+    /// use sov_state::Storage;
     ///
     /// fn foo<S>(map: StateMap<Vec<u8>, u64>, key: &[u8], ws: &mut WorkingSet<S>) -> Option<u64>
     /// where
@@ -111,7 +112,8 @@ where
     /// maps:
     ///
     /// ```
-    /// use sov_modules_api::{StateMap, Storage, WorkingSet};
+    /// use sov_modules_api::{StateMap, WorkingSet};
+    /// use sov_state::Storage;
     ///
     /// fn foo<S>(map: StateMap<Vec<u8>, u64>, key: [u8; 32], ws: &mut WorkingSet<S>) -> Option<u64>
     /// where
