@@ -89,7 +89,7 @@ derive_more = "0.99.11"
 clap = { version = "4.2.7", features = ["derive"] }
 toml = "0.8.0"
 jsonrpsee = { version = "0.18.2", features = ["jsonrpsee-types"] }
-schemars = { version = "0.8.12", features = ["derive"] }
+schemars = { version = "0.8.15", features = ["derive"] }
 tempfile = "3.5"
 tokio = { version = "1", features = ["full"] }
 lazy_static = "1.4.0"
