@@ -6,7 +6,6 @@ pub use call::CallMessage;
 #[cfg(feature = "native")]
 pub use query::*;
 use sov_modules_api::{Error, ModuleInfo, WorkingSet};
-use sov_state::WorkingSet;
 
 pub struct ExampleModuleConfig {}
 
