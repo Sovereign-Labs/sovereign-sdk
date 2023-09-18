@@ -34,11 +34,8 @@ async fn main() -> Result<(), anyhow::Error> {
 
     let prover = Risc0Host::new(ROLLUP_ELF);
 
-    let rollup = new_rollup_with_celestia_da(
-        &rollup_config_path,
-        Some((prover, prover_config)),
-    )
-    .await?;
+    let rollup =
+        new_rollup_with_celestia_da(&rollup_config_path, Some((prover, prover_config))).await?;
     rollup.run().await?;
 
     Ok(())
