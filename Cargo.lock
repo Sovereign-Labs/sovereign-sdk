@@ -6672,6 +6672,7 @@ dependencies = [
  "bincode",
  "borsh",
  "const-rollup-config",
+ "demo-stf",
  "env_logger",
  "hex",
  "jsonrpsee",
