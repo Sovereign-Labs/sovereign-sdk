@@ -108,7 +108,7 @@ fn print_cycle_averages(metric_map: HashMap<String, (u64, u64)>) {
                 k.clone(),
                 (
                     ((*sum as f64) / (*count as f64)).round() as u64,
-                    count.clone(),
+                    *count,
                 ),
             )
         })
@@ -139,7 +139,7 @@ fn chain_stats(num_blocks: usize, num_blocks_with_txns: usize, num_txns: usize, 
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
-    if let Some(rollup_trace) = env::var("ROLLUP_TRACE").ok() {
+    if let Ok(rollup_trace) = env::var("ROLLUP_TRACE") {
         if let Err(e) = log4rs::init_config(get_config(&rollup_trace)) {
             eprintln!("Error initializing logger: {:?}", e);
         }
@@ -213,7 +213,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let _header_hash = hex::encode(filtered_block.header.header.hash());
         host.add_hint(&filtered_block.header);
         let (mut blob_txs, inclusion_proof, completeness_proof) = da_service
-            .extract_relevant_txs_with_proof(&filtered_block)
+            .extract_relevant_txs_with_proof(filtered_block)
             .await;
 
         host.add_hint(&inclusion_proof);
