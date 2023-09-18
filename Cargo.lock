@@ -6649,10 +6649,13 @@ name = "sov-db"
 version = "0.2.0"
 dependencies = [
  "anyhow",
+ "arbitrary",
  "bincode",
  "borsh",
  "byteorder",
  "jmt",
+ "proptest",
+ "proptest-derive",
  "rocksdb",
  "serde",
  "sov-rollup-interface",
