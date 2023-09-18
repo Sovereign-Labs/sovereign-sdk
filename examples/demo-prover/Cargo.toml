@@ -47,6 +47,7 @@ regex = "1.5"
 [[bench]]
 name = "prover_bench"
 harness = false
+required-features = ["bench"]
 
 [features]
 bench = ["sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "methods/bench", "demo-stf"]
