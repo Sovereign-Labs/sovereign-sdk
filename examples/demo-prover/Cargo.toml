@@ -50,3 +50,4 @@ harness = false
 
 [features]
 bench = ["sov-risc0-adapter/bench", "sov-zk-cycle-macros/bench", "methods/bench", "demo-stf"]
+experimental = ["sov-demo-rollup/experimental"]
